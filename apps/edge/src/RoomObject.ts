@@ -20,6 +20,8 @@ interface Attachment {
 const HELLO_TIMEOUT_MS = 5_000;
 const IDLE_CLOSE_MS = 90_000;
 const ALARM_EVERY_MS = 60_000;
+/** Population counts go out at most this often (welcome frames always carry fresh counts). */
+const COUNTS_EVERY_MS = 10_000;
 /** Default sockets per address per object; a household or office shares one address. Override with MAX_SOCKETS_PER_IP. */
 const DEFAULT_MAX_SOCKETS_PER_IP = 8;
 
@@ -39,6 +41,8 @@ function peerOf(ws: WebSocket): Peer {
 export class RoomObject extends DurableObject<Env> {
   private readonly rooms = new Map<string, Room>();
   private lastCounts = '';
+  private lastCountsAt = 0;
+  private countsDirty = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -167,11 +171,22 @@ export class RoomObject extends DurableObject<Env> {
     this.emitCounts();
   }
 
-  private emitCounts(): void {
+  /** Broadcast populations when they changed, at most once per COUNTS_EVERY_MS; the alarm flushes the rest. */
+  private emitCounts(force = false): void {
     const counts = this.counts();
     const text = JSON.stringify(counts);
-    if (text === this.lastCounts) return;
+    if (text === this.lastCounts) {
+      this.countsDirty = false;
+      return;
+    }
+    const now = Date.now();
+    if (!force && now - this.lastCountsAt < COUNTS_EVERY_MS) {
+      this.countsDirty = true;
+      return;
+    }
     this.lastCounts = text;
+    this.lastCountsAt = now;
+    this.countsDirty = false;
     for (const room of this.rooms.values()) room.broadcast({ t: 'counts', rooms: counts });
   }
 
@@ -198,7 +213,7 @@ export class RoomObject extends DurableObject<Env> {
         this.drop(ws);
       }
     }
-    this.emitCounts();
+    this.emitCounts(true);
     if (this.ctx.getWebSockets().length > 0) await this.ctx.storage.setAlarm(now + ALARM_EVERY_MS);
   }
 }

@@ -58,8 +58,9 @@ export default {
       const headers = new Headers(request.headers);
       headers.set('X-Room', roomId);
       headers.set('X-Visitor-Id', pass.id);
+      // Local load tests set TRUST_FORWARDED_FOR so each bot can claim its own address; never in production.
       const forwarded = env.TRUST_FORWARDED_FOR === 'true' ? request.headers.get('X-Forwarded-For') : null;
-      headers.set('X-Visitor-Ip', request.headers.get('CF-Connecting-IP') ?? forwarded ?? 'unknown');
+      headers.set('X-Visitor-Ip', forwarded ?? request.headers.get('CF-Connecting-IP') ?? 'unknown');
       return objectFor(env, roomId).fetch(new Request(request, { headers }));
     }
 
