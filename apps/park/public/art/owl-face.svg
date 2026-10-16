@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240">
+<desc>Visitor owl avatar, face layer: two big round cream eyes with navy pupils and highlights, and a gold beak, set in a slight three-quarter turn (near eye larger, on the left). Fixed colours. Original placeholder art for Owl Park.</desc>
+<g>
+  <circle cx="85" cy="94" r="24" fill="#F6F1E3"/>
+  <circle cx="134" cy="94" r="20.5" fill="#F6F1E3"/>
+  <circle cx="87" cy="95" r="12" fill="#0C1E36"/>
+  <circle cx="136" cy="95" r="10.2" fill="#0C1E36"/>
+  <circle cx="83" cy="90" r="4.2" fill="#FFFFFF"/>
+  <circle cx="132" cy="90" r="3.6" fill="#FFFFFF"/>
+  <circle cx="91" cy="100" r="1.8" fill="#FFFFFF" fill-opacity="0.7"/>
+  <circle cx="140" cy="100" r="1.5" fill="#FFFFFF" fill-opacity="0.7"/>
+</g>
+<path d="M100,110 C105,106 115,106 120,110 C119,120 115,127 110,131 C105,127 101,120 100,110 Z" fill="#C9A227"/>
+<path d="M102,118 C107,117 113,117 118,118 C117,124 114,128 110,131 C106,128 103,124 102,118 Z" fill="#000" fill-opacity="0.18"/>
+</svg>

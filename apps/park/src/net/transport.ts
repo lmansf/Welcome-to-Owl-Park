@@ -1,4 +1,4 @@
-import type { ParkMessage, PlayerState, Walk } from '@owl-park/shared';
+import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
@@ -11,6 +11,15 @@ export interface RoomHandlers {
   /** A peer left the room or timed out. */
   onPeerLeave(id: string): void;
   onStatus(status: ConnectionStatus): void;
+  /** Authoritative transports place the local owl where the server put it. */
+  onSelf?(pos: Vec2): void;
+  /** The server corrected one of our walks (clamped, or started from a different point). */
+  onSelfWalk?(walk: Walk): void;
+  onPeerLook?(id: string, look: OwlLook): void;
+  /** Park-wide room populations, when the transport knows them. */
+  onCounts?(rooms: Record<string, number>): void;
+  /** The room we tried to enter is full. */
+  onFull?(room: string): void;
 }
 
 export interface RoomConnection {
@@ -24,10 +33,10 @@ export interface RoomConnection {
 /**
  * A transport connects one owl to one room at a time. Implementations:
  *  - LocalTransport: BroadcastChannel between tabs of one browser (zero backend).
- *  - SupabaseTransport: Supabase Realtime Presence + Broadcast (shared over the internet).
- * A dedicated room server would be a third implementation of this same interface.
+ *  - SupabaseTransport: Supabase Realtime Presence + Broadcast (shared over the internet, no server code).
+ *  - EdgeTransport: the authoritative room server (Cloudflare Durable Object) over one WebSocket.
  */
 export interface ParkTransport {
-  readonly kind: 'local' | 'supabase';
+  readonly kind: 'local' | 'supabase' | 'edge';
   join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection>;
 }

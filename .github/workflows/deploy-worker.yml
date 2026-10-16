@@ -1,0 +1,49 @@
+# Deploys the park (client + room server) to Cloudflare Workers on every push to main.
+# One-time setup (all free):
+#   1. Create a Cloudflare account and an API token with "Edit Cloudflare Workers" permissions.
+#   2. Repository Settings -> Secrets and variables -> Actions:
+#        secrets:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#        variables: CLOUDFLARE_DEPLOY=true   (the switch that enables this workflow)
+#                   VITE_SHOP_URL            (optional gift shop link)
+#   3. Once, from a machine with wrangler logged in:  wrangler secret put PASS_SIGNING_KEY
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the client for the room server
+        run: pnpm build
+        env:
+          VITE_TRANSPORT: edge
+          VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
+      - name: Deploy Worker, Durable Object and static assets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: deploy

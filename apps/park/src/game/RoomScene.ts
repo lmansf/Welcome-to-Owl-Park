@@ -5,7 +5,7 @@ import {
   findSpawn,
   pointInRect,
   positionAlongWalk,
-  snapToWalkable,
+  resolveTarget,
   type OwlLook,
   type PlayerState,
   type RoomDef,
@@ -23,6 +23,8 @@ import { Owl } from './Owl';
 export interface RoomStart {
   room: string;
   spawn: string | undefined;
+  /** Where we came from, so a full room can send us back. */
+  from?: { room: string; spawn: string | undefined } | undefined;
 }
 
 /** How far a tap may drift before it counts as a drag (game pixels). */
@@ -47,6 +49,7 @@ export class RoomScene extends Phaser.Scene {
   private playerId!: string;
   private look!: OwlLook;
   private inShop = false;
+  private cameFrom: RoomStart['from'];
 
   constructor() {
     super('room');
@@ -63,6 +66,7 @@ export class RoomScene extends Phaser.Scene {
     this.conn = null;
     this.leaving = false;
     this.inShop = false;
+    this.cameFrom = data.from;
     this.registry.set('currentRoom', this.room.id);
     this.registry.set('spawnName', data.spawn);
   }
@@ -109,11 +113,24 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async connect(): Promise<void> {
-    const conn = await this.transport.join(this.room.id, this.snapshot(), {
+    const spawnName = this.registry.get('spawnName') as string | undefined;
+    const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}) } as PlayerState, {
       onPeerState: (s) => this.onPeerState(s),
       onPeerMove: (id, walk) => this.onPeerMove(id, walk),
       onPeerLeave: (id) => this.onPeerLeave(id),
       onStatus: (s) => this.onStatus(s),
+      onSelf: (pos) => {
+        if (!this.leaving) this.me.place(pos);
+      },
+      onSelfWalk: (walk) => {
+        if (!this.leaving) this.me.startWalk({ ...walk, from: { ...this.me.pos } });
+      },
+      onPeerLook: (id, look) => this.peers.get(id)?.applyLook(look),
+      onCounts: (rooms) => {
+        this.registry.set('counts', rooms);
+        this.hud.setParkCount(Object.values(rooms).reduce((a, b) => a + b, 0));
+      },
+      onFull: (roomId) => void this.roomFull(roomId),
     });
     if (this.leaving || !this.scene.isActive()) {
       await conn.leave();
@@ -124,7 +141,15 @@ export class RoomScene extends Phaser.Scene {
 
   private onStatus(s: ConnectionStatus): void {
     this.hud.setStatus(s, this.transport.kind);
-    if (s === 'offline') this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
+    if (s === 'offline' && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
+  }
+
+  private async roomFull(roomId: string): Promise<void> {
+    if (this.leaving) return;
+    this.hud.toast('That part of the park is full right now. Try again in a moment.', 3500);
+    const back = this.cameFrom ?? { room: 'hub', spawn: undefined };
+    if (back.room === roomId) return;
+    await this.goTo(back.room, back.spawn ?? 'default', undefined);
   }
 
   private onPeerState(s: PlayerState): void {
@@ -208,7 +233,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Public for tests and future features: walk the local owl to a room point. */
   walkTo(target: Vec2): void {
-    const to = snapToWalkable(target, this.room.walkable);
+    const to = resolveTarget({ ...this.me.pos }, target, this.room.walkable);
     if (distance(to, this.me.pos) < 3) return;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
     this.me.startWalk(walk);
@@ -232,7 +257,7 @@ export class RoomScene extends Phaser.Scene {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
       if (door.to) {
-        void this.goTo(door.to.room, door.to.spawn);
+        void this.goTo(door.to.room, door.to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
         return;
       }
       if (door.id === 'shop') shopNow = true;
@@ -249,14 +274,14 @@ export class RoomScene extends Phaser.Scene {
     else this.hud.toast('The gift shop opens soon.');
   }
 
-  private async goTo(roomId: string, spawn: string): Promise<void> {
+  private async goTo(roomId: string, spawn: string, from: RoomStart['from']): Promise<void> {
     if (this.leaving) return;
     this.leaving = true;
     this.me.walk = null;
     this.cameras.main.fadeOut(220, 12, 30, 54);
     await new Promise<void>((r) => this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => r()));
     await this.teardown();
-    this.scene.start('room', { room: roomId, spawn } satisfies RoomStart);
+    this.scene.start('room', { room: roomId, spawn, from } satisfies RoomStart);
   }
 
   private async teardown(): Promise<void> {

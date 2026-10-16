@@ -17,11 +17,15 @@ export async function walkToDoor(page: Page, doorId: string): Promise<void> {
   await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: door.x, y: door.y });
 }
 
-/** Open the park with the zero-backend local transport and wait for the room to be live. */
+/** Open the park (zero-backend local transport unless overridden) and wait for the room to be live. */
 export async function openPark(page: Page, params: Record<string, string> = {}): Promise<void> {
   const q = new URLSearchParams({ transport: 'local', ...params });
   await page.goto(`/?${q.toString()}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+  if (q.get('transport') === 'edge') {
+    // Connected means the socket exists; wait for the server's welcome (status dot goes online).
+    await page.waitForFunction(() => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout: 20_000 });
+  }
 }
 
 export async function state(page: Page): Promise<ParkState> {

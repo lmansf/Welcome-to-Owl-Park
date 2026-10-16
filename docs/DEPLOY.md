@@ -1,44 +1,64 @@
 # Deploying Owl Park (free tiers only)
 
-The park is a static site plus, optionally, a Supabase project for internet multiplayer.
-Nothing here costs money at small scale.
+The park is a static site plus a multiplayer backend. There are three ways to run it, all
+free at a small scale. The code is the same; only configuration differs.
 
-## 1. Static hosting on GitHub Pages
+| Mode | Backend | Multiplayer | Accounts needed |
+| --- | --- | --- | --- |
+| A. Static demo | none | tabs on one device | GitHub only |
+| B. Static + Supabase Realtime | Supabase (no server code) | internet | GitHub + Supabase |
+| C. Room server (recommended) | Cloudflare Worker + Durable Object | internet, authoritative | GitHub + Cloudflare |
 
-1. In the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Merge to `main`. The workflow in `.github/workflows/deploy-pages.yml` builds the app and
-   publishes it at `https://<owner>.github.io/<repo>/`.
-3. The build reads these **repository variables** (Settings → Secrets and variables → Actions → Variables).
-   All of them ship in the browser bundle, so they are public values, not secrets:
+## A. Static site on GitHub Pages
 
-   | Variable | Purpose |
-   | --- | --- |
-   | `VITE_SUPABASE_URL` | Supabase project URL (`https://xxxx.supabase.co`) |
-   | `VITE_SUPABASE_ANON_KEY` | Supabase anon (publishable) key |
-   | `VITE_SHOP_URL` | Link opened by the gift shop button; leave unset until the store opens |
+1. Repository **Settings → Pages → Source: GitHub Actions**.
+2. Merge to `main`. `.github/workflows/deploy-pages.yml` builds and publishes to `https://<owner>.github.io/<repo>/`.
+3. Optional repository variables (Settings → Secrets and variables → Actions → Variables; all are
+   public values that ship in the bundle): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (mode B),
+   `VITE_EDGE_URL` (point the static client at a room server hosted in mode C), `VITE_SHOP_URL`.
 
-Without the Supabase variables the park still deploys and runs; visitors simply only see
-other owls from tabs on their own device.
+## B. Supabase Realtime (no server code)
 
-Any other static host works the same way (Cloudflare Pages, Netlify): build with
-`pnpm build` and serve `apps/park/dist`. Set `BASE_PATH=/` when the site is at a domain root.
+Version 1 needs no tables and no auth: public Realtime channels only (Presence for who is here,
+Broadcast for walks).
 
-## 2. Internet multiplayer on Supabase (free tier)
+1. Create a Supabase project (free plan is enough to start; note that the free plan allows two
+   active projects per organisation and pauses projects after a week without activity).
+2. Project **Settings → API**: copy the Project URL and the anon key into the variables above
+   (or `apps/park/.env.local` locally).
+3. Budget: Realtime bills one message per sender plus one per recipient. The park sends one
+   message per tap and a presence refresh at most every 3 s per owl, but a 20-owl room still
+   uses a few million messages a month under normal play. See `docs/ARCHITECTURE.md` §2.
 
-Version 1 needs **no database tables and no auth**: it uses Supabase Realtime public
-channels only (Presence for who is here, Broadcast for walks).
+## C. Room server on Cloudflare (recommended)
 
-1. Create a project at supabase.com (free plan). Any region; closest to most visitors is best.
-2. Project **Settings → API**: copy the Project URL and the anon public key.
-3. Put them in the repository variables above (for Pages) or in `apps/park/.env.local` (for local runs).
-4. Realtime is on by default. Nothing else to configure for v1.
+The Worker serves the built client and runs the authoritative rooms. Local development needs no account:
 
-What the free plan allows today is tracked in `docs/ARCHITECTURE.md` (connection and
-message limits, and the upgrade path when they are reached). The park sends one message
-per tap plus a throttled presence refresh, not a stream of positions, to stay well inside them.
+```bash
+pnpm dev:edge         # builds the client, then wrangler dev on http://localhost:8787
+```
 
-## 3. Checking a deployment
+Deploying:
+
+1. Create a free Cloudflare account. Create an API token with the "Edit Cloudflare Workers" template.
+2. Repository **Settings → Secrets and variables → Actions**:
+   - secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+   - variable `CLOUDFLARE_DEPLOY=true` (this switch enables `.github/workflows/deploy-worker.yml`)
+   - optional variable `VITE_SHOP_URL`
+3. Set the pass-signing secret once, from any machine with `wrangler login`:
+   `cd apps/edge && pnpm exec wrangler secret put PASS_SIGNING_KEY` (32+ random characters).
+   Without it the Worker uses a development key and logs a warning.
+4. Merge to `main`. The park is live at `https://owl-park.<account>.workers.dev`.
+5. Operations: in the Cloudflare dashboard set a usage notification at 50 % of the free daily
+   Durable Object request cap, and buy Workers Paid ($5/month) before the first promoted weekend.
+   The free plan fails closed at the daily cap.
+
+Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
+`GATE` (`open` now; `ticket` once tickets exist), and optional `ROOM_CAPS` JSON.
+
+## Checking a deployment
 
 - Open the site in two browsers (or a phone and a laptop) and watch the owls see each other.
-- `?debug=1` on the URL draws the walkable areas and doors.
+- `?debug=1` draws the walkable areas and doors. `?transport=local|supabase|edge` forces a transport.
 - The status dot in the top-right pill is gold when connected, grey when the park is offline.
+- `node tools/load/swarm.mjs --url https://<host> --bots 20 --seconds 30` runs a small bot swarm and reports echo latency.

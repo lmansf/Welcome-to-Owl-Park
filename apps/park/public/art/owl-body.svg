@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240">
+<desc>Visitor owl avatar, body layer: flat white silhouette of head, ear tufts, body and stubby wings, with subtle translucent-black shading. Drawn in a slight three-quarter turn (near side on the left, far side on the right). Tinted by the game. Original placeholder art for Owl Park.</desc>
+<defs>
+<path id="headShape" d="M100,28 C152,28 168,70 166,98 C164,132 137,148 104,148 C68,148 36,132 34,98 C32,70 48,28 100,28 Z"/>
+<path id="bodyShape" d="M100,118 C142,118 158,162 158,192 C158,216 132,224 100,224 C68,224 42,216 42,192 C42,162 58,118 100,118 Z"/>
+<path id="wingL" d="M72,134 C50,134 28,158 28,186 L28,194 A10,10 0 0 0 43,206 A9.5,9.5 0 0 0 60,212 A10,10 0 0 0 76,200 C77,180 77,152 72,134 Z"/>
+<path id="wingR" d="M136,134 C152,134 167,156 167,184 L167,192 A8.5,8.5 0 0 1 155,202 A7.5,7.5 0 0 1 142,207 A8.5,8.5 0 0 1 130,197 C128,180 128,152 136,134 Z"/>
+<path id="tuftL" d="M52,58 C50,42 48,26 44,12 C58,22 76,30 94,36 C78,42 62,50 52,58 Z"/>
+<path id="tuftR" d="M146,54 C148,40 149,26 149,14 C140,23 130,30 118,36 C127,42 137,47 146,54 Z"/>
+<clipPath id="bodyClip"><use href="#bodyShape"/></clipPath>
+<clipPath id="headClip"><use href="#headShape"/></clipPath>
+<linearGradient id="bodyShade" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0.55" stop-color="#000" stop-opacity="0"/>
+  <stop offset="1" stop-color="#000" stop-opacity="0.16"/>
+</linearGradient>
+<linearGradient id="shoulderShade" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#000" stop-opacity="0.16"/>
+  <stop offset="1" stop-color="#000" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="headShade" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
+  <stop offset="1" stop-color="#000" stop-opacity="0.1"/>
+</linearGradient>
+<linearGradient id="farShade" x1="0" y1="0" x2="1" y2="0">
+  <stop offset="0.78" stop-color="#000" stop-opacity="0"/>
+  <stop offset="1" stop-color="#000" stop-opacity="0.09"/>
+</linearGradient>
+<linearGradient id="wingShade" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#000" stop-opacity="0.05"/>
+  <stop offset="1" stop-color="#000" stop-opacity="0.12"/>
+</linearGradient>
+</defs>
+<!-- flat white silhouette -->
+<g fill="#FFFFFF">
+  <use href="#tuftL"/>
+  <use href="#tuftR"/>
+  <use href="#bodyShape"/>
+  <use href="#wingL"/>
+  <use href="#wingR"/>
+  <use href="#headShape"/>
+</g>
+<!-- subtle shading, translucent black only -->
+<g clip-path="url(#bodyClip)">
+  <rect x="42" y="118" width="116" height="106" fill="url(#bodyShade)"/>
+  <rect x="42" y="140" width="116" height="26" fill="url(#shoulderShade)"/>
+</g>
+<g clip-path="url(#headClip)">
+  <rect x="34" y="28" width="132" height="120" fill="url(#headShade)"/>
+  <rect x="34" y="28" width="132" height="120" fill="url(#farShade)"/>
+</g>
+<use href="#wingL" fill="url(#wingShade)"/>
+<use href="#wingR" fill="url(#wingShade)"/>
+<!-- the far wing sits a touch deeper in shadow, which helps the turn read -->
+<use href="#wingR" fill="#000" fill-opacity="0.04"/>
+<g fill="#000" fill-opacity="0.06">
+  <path d="M52,58 C50,42 48,26 44,12 C52,30 62,42 78,46 C68,50 58,54 52,58 Z"/>
+  <path d="M146,54 C148,40 149,26 149,14 C143,30 134,41 124,46 C131,49 138,51 146,54 Z"/>
+</g>
+</svg>

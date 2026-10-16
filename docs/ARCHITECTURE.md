@@ -1,0 +1,139 @@
+# Owl Park architecture
+
+Status: accepted for version 1 (presence only). This document names no unreleased realm
+names and no reference products; the detailed reverse-engineering notes behind it live in
+the team's internal drive, not in this public repository.
+
+## 1. What we replicate from the classic tap-to-move room worlds
+
+The 2000s browser worlds that Owl Park takes its feel from all shared one simple model,
+and so does Owl Park:
+
+| Mechanic | Classic model | Owl Park |
+| --- | --- | --- |
+| Rooms | A fixed-size painted stage per room with a hidden "block" layer marking where an avatar may not stand, a foreground layer drawn in front of avatars, and trigger zones that lead to other rooms | A 1600 x 900 room with `walkable` polygons, an optional foreground image, and `doors` (trigger rectangles) in `packages/shared/rooms` |
+| Movement | Click a spot; the avatar walks there in a straight line at constant speed; the client sends only the destination and every other client animates the same walk itself | Tap; `resolveTarget` snaps the tap into the walkable area and stops at the first blocked sample; one `move` message carries the target; every client animates from (from, to, startedAt) with `positionAlongWalk` |
+| Depth | Avatars and props sorted by their y coordinate | `depth = y` for owls and set pieces; foreground always on top |
+| Entering a room | Spawn near a named point with a little random scatter so avatars do not stack | Named `spawns`; the room server scatters new arrivals (door entry 60 px, map entry 220 px) |
+| Doors | Walking into a trigger zone changes room and places you at a spawn in the destination | `doors[].to = { room, spawn }`; closed doors show an approved sign instead |
+| Server | An authoritative room server per world with room caps (around 80 to 120), one connection per player, join/leave/move messages | One Durable Object per park (or per room) with caps, validation, rate limits and fan-out |
+
+Deferred, exactly as the originals did it later: chat, emotes, names, inventories, mini-games.
+
+## 2. Decision: an authoritative room server at the edge
+
+Three architectures were proposed and scored independently (cost at 20 / 200 / 2,000
+concurrent visitors, time to a playable v1, operations burden, path to ticket gating,
+movement feel, licensing):
+
+1. **Serverless first**: Supabase Realtime as the transport (Presence + Broadcast), no server code.
+   Lost on cost: Realtime bills one message per sender plus one per recipient, so a 20-owl room
+   tapping normally uses ~4 million messages a month against a 2 million free quota, and 200
+   concurrent is roughly $300 a month at the plan's 500 messages-per-second ceiling. Nothing is
+   validated server-side.
+2. **Classic Node WebSocket server** on a free host (Render, Fly, Oracle). Best game feel, but
+   free hosts spin down or have no free tier any more, and someone must babysit a process.
+3. **Edge room server**: one Cloudflare Worker serving the client as static assets and
+   upgrading `/ws/<room>` to a WebSocket held by a Durable Object using the hibernation API.
+   Incoming WebSocket messages are billed 20:1, outgoing messages are free, idle objects cost
+   nothing, and the Workers free plan covers the first ~20 concurrent visitors; $5 a month
+   covers hundreds. **Chosen.**
+
+The client keeps a transport interface, so all three exist in the repository:
+
+| Transport | Backend | Use |
+| --- | --- | --- |
+| `local` | none (BroadcastChannel between tabs) | development, demos on one device, tests |
+| `supabase` | Supabase Realtime public channels | a small start with the team's existing account; no server code; message costs grow with room size |
+| `edge` | the room server in `apps/edge` | the production path; authoritative, cheap at scale |
+
+## 3. Components and licences
+
+| Component | Choice | Licence |
+| --- | --- | --- |
+| Client | Phaser 3.90, Vite 8, TypeScript 5.9 | MIT / MIT / Apache-2.0 |
+| Shared rules | `packages/shared`: protocol, geometry, walk maths, room data | MIT (this repo) |
+| Room server | `apps/edge`: Worker + Durable Object; `workerd` runtime | code MIT; workerd Apache-2.0; the hosted service is proprietary |
+| Static hosting | Workers static assets (free, unlimited) or GitHub Pages | service |
+| Identity (v1) | HMAC-signed guest "park pass" minted by the Worker | our code |
+| Tickets (v2) | Supabase Postgres + Auth for the ticket ledger and magic links | PostgreSQL licence / MIT |
+| CI | GitHub Actions, Playwright | service / Apache-2.0 |
+
+### Cost model (room server, assumptions: visitor-hours per day = 8 x peak; ~30 billed object requests per visitor-hour)
+
+| | 20 peak | 200 peak | 2,000 peak |
+| --- | --- | --- | --- |
+| Durable Object requests per day | ~6k to 9k (6 to 9 % of the 100k free cap) | ~48k to 77k | ~0.5M to 0.75M |
+| Object duration | one object, under the 13,000 GB-s per day free cap | one object, within free; on Paid well under the included 400k GB-s per month | sharded per room instance, ~2M to 6.5M GB-s per month |
+| **Cloudflare bill** | **$0** | **$5** (Workers Paid) | **~$26 to $85 per month** |
+
+The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rather than
+degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
+the first promoted weekend.
+
+## 4. Wire protocol v2 (`packages/shared/src/edge.ts`)
+
+One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
+JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
+Durable Object answers without waking. Coordinates are integers in room space. All timestamps
+are server milliseconds; clients never put their own clock on the wire.
+
+Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
+`move` (target and a per-connection `seq`), `look` (new colours), `bye`.
+
+Server to client: `welcome` (your id and position, every owl in the room with any walk in
+progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
+everyone including the sender; only the sender's copy carries `seq`, which is the
+acknowledgement), `look`, `leave`, `counts`, `full`.
+
+Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
+normally match the client's prediction; a walk in progress is continued from its current
+point when redirected; moves use a token bucket (burst 5, refill 2 per second) and repeated
+excess closes the socket (4003); more than 40 frames in 5 s closes it; a second session for
+the same visitor replaces the first (4005); full rooms answer `full` then close (4010);
+idle sockets (no heartbeat for 90 s) are reaped by a one-minute alarm; at most 3 sockets per
+IP address per object.
+
+Client rules: the clock offset is set from `welcome` and refined with a min-filter over
+later `move` frames; remote owls are drawn 100 ms behind server time so jitter never shows;
+the local owl walks immediately on the tap and is corrected only if the echo differs by more
+than 2 px; reconnects back off from 0.5 s to 8 s and resume near the last position; a stale
+bundle (protocol mismatch) reloads itself.
+
+Everything about a visitor that must survive hibernation (id, look, position, walk) is kept
+in the socket attachment, so an object that was evicted rebuilds every room from its sockets.
+
+## 5. Room data (`packages/shared/rooms/index.ts`)
+
+Rooms are data shared by the client and the server: `walkable` polygons, `spawns`, `doors`
+(open with `to`, or closed with an approved `closedSign`), `mood` for ambience, and anchors
+for large set pieces. Art is referenced by key; artists replace files under
+`apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
+variable (defaults: hub 80, grove 40, market 40).
+
+## 6. Scaling knobs
+
+1. `ROOM_SHARDING=single` (default): the whole park in one object. Cheapest; fine to a few
+   hundred concurrent.
+2. `ROOM_SHARDING=room`: one object per room; more fan-out capacity, more awake time billed.
+3. Instances (`hub-1`, `hub-2`): not built yet; the protocol and ids leave room for it.
+4. The `Room` class in `apps/edge/src/Room.ts` has no platform dependency. Porting to a plain
+   Node WebSocket process is a small adapter, which is the exit from the hosted platform.
+
+## 7. Ticket gating (v2, designed, not built)
+
+Shopify `orders/paid` webhook -> the Worker records the order -> after the fraud review the
+order is tagged approved -> the Worker mints a long-lived claim token and emails a link ->
+the link creates a Supabase session for the buyer -> `/api/pass` mints admitted passes only for
+visitors with a valid ticket window -> `GATE=ticket` makes the room server refuse guest passes.
+Refunds revoke the session and the pass expires within the hour. Nothing in this flow changes
+the wire protocol; v1 already carries the pass and the gate flag.
+
+## 8. Open questions for the owner (with the defaults in the code)
+
+1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
+2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.
+3. Which transport to launch with: the room server (needs a free Cloudflare account) or Supabase Realtime (existing account, higher message cost as rooms fill).
+4. Hostname: `*.workers.dev` for a soft launch, or a park subdomain on the brand's DNS.
+5. Room caps: hub 80 / grove 40 / market 40, or flat.
+6. Pre-ticket access: open to all guests (today), or a bot check on `/api/pass` if abuse shows.

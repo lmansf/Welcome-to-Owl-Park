@@ -14,13 +14,23 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    { name: 'phone', use: { ...devices['Pixel 7'], browserName: 'chromium' } },
+    { name: 'desktop', testMatch: /park\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    { name: 'phone', testMatch: /park\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
+    // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
+    { name: 'edge', testMatch: /edge\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: 'pnpm dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: true,
+      timeout: 60_000,
+    },
+    {
+      command: 'pnpm build && pnpm --filter @owl-park/edge dev',
+      url: 'http://localhost:8787/api/counts',
+      reuseExistingServer: true,
+      timeout: 180_000,
+    },
+  ],
 });

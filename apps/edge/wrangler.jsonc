@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "owl-park",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // The built client is served as static assets by the same Worker (free, unlimited).
+  // Build it first: pnpm --filter @owl-park/park build  (with VITE_TRANSPORT=edge).
+  "assets": {
+    "directory": "../park/dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/ws/*", "/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "RoomObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomObject"] }],
+  "vars": {
+    // "single": the whole park lives in one Durable Object (cheapest on the free tier).
+    // "room": one object per room (more fan-out capacity, more awake-time billed).
+    "ROOM_SHARDING": "single",
+    // "open": anyone gets a guest pass. "ticket": only admitted visitors (v2).
+    "GATE": "open"
+  },
+  "observability": { "enabled": true }
+}

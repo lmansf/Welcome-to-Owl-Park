@@ -3,7 +3,9 @@ import type { ConnectionStatus } from '../net';
 
 export interface Hud {
   setCount(n: number): void;
-  setStatus(s: ConnectionStatus, kind: 'local' | 'supabase'): void;
+  /** Owls in the whole park, when known (authoritative transports). */
+  setParkCount(n: number | null): void;
+  setStatus(s: ConnectionStatus, kind: 'local' | 'supabase' | 'edge'): void;
   toast(message: string, ms?: number): void;
   showShop(show: boolean): void;
   setLook(look: OwlLook): void;
@@ -83,6 +85,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   let lookCb: ((l: OwlLook) => void) | null = null;
   let shopCb: (() => void) | null = null;
   let busy = false;
+  let here = 1;
+  let park: number | null = null;
+  const renderCount = () => {
+    const base = here === 1 ? '1 owl here' : `${here} owls here`;
+    count.textContent = park !== null && park > here ? `${base} · ${park} in the park` : base;
+  };
 
   const groups: Array<[keyof OwlLook, string[]]> = [
     ['body', BODY_COLOURS],
@@ -128,11 +136,17 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       return busy;
     },
     setCount(n) {
-      count.textContent = n === 1 ? '1 owl here' : `${n} owls here`;
+      here = n;
+      renderCount();
+    },
+    setParkCount(n) {
+      park = n;
+      renderCount();
     },
     setStatus(s, kind) {
       dot.className = `dot ${s === 'online' ? '' : s}`.trim();
       dot.title = s === 'online' ? (kind === 'local' ? 'Connected (this device only)' : 'Connected') : s === 'connecting' ? 'Connecting…' : 'Offline';
+      dot.dataset['status'] = s;
     },
     toast(message, ms = 2600) {
       const el = document.createElement('div');

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240">
+<desc>Visitor owl avatar, belly layer: white belly patch and heart-shaped facial disc, aligned to the body layer and offset toward the side the owl faces. Tinted by the game. Original placeholder art for Owl Park.</desc>
+<defs>
+<path id="bellyShape" d="M107,146 C133,146 147,172 147,196 C147,214 131,220 107,220 C83,220 67,214 67,196 C67,172 81,146 107,146 Z"/>
+<path id="discShape" d="M110,74 C98,56 54,60 52,94 C50,124 92,138 110,134 C125,138 161,124 160,94 C158,60 121,56 110,74 Z"/>
+<clipPath id="bellyClip"><use href="#bellyShape"/></clipPath>
+<linearGradient id="bellyShade" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
+  <stop offset="1" stop-color="#000" stop-opacity="0.1"/>
+</linearGradient>
+</defs>
+<g fill="#FFFFFF">
+  <use href="#discShape"/>
+  <use href="#bellyShape"/>
+</g>
+<g clip-path="url(#bellyClip)">
+  <rect x="67" y="146" width="80" height="74" fill="url(#bellyShade)"/>
+  <g fill="none" stroke="#000" stroke-opacity="0.08" stroke-width="2.5" stroke-linecap="round">
+    <path d="M81,176 A9,9 0 0 0 99,176 A9,9 0 0 0 117,176 A9,9 0 0 0 135,176"/>
+    <path d="M89,194 A9,9 0 0 0 107,194 A9,9 0 0 0 125,194"/>
+  </g>
+</g>
+</svg>

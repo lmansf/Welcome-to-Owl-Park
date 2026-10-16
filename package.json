@@ -14,9 +14,13 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "e2e": "pnpm --filter @owl-park/park e2e",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
+    "build:edge": "VITE_TRANSPORT=edge pnpm build",
+    "load": "node tools/load/swarm.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1"
+    "@playwright/test": "1.56.1",
+    "ws": "^8.21.0"
   }
 }

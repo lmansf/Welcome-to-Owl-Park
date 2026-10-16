@@ -29,7 +29,7 @@ jobs:
       - run: pnpm build
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
-      - name: End-to-end tests (zero-backend local transport)
+      - name: End-to-end tests (local transport on desktop and phone, then the room server)
         run: pnpm e2e
         env:
           CI: 'true'
