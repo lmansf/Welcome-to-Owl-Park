@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { cameraView, dist, openPark, state, tapRoomPoint, waitForArrival } from './helpers';
+import { cameraView, dist, openPark, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 test.describe('single visitor', () => {
   test('the park opens in the hub with one owl present', async ({ page }) => {
@@ -34,23 +34,23 @@ test.describe('single visitor', () => {
 
   test('walking into an open doorway changes room and back', async ({ page }) => {
     await openPark(page);
-    await page.evaluate(() => window.owlPark.walkTo(40, 760)); // the left exit
+    await walkToDoor(page, 'to-grove');
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
     await page.waitForFunction(() => window.owlPark.state()?.connected === true);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-grove.png` });
-    await page.evaluate(() => window.owlPark.walkTo(1560, 760)); // the right exit
+    await walkToDoor(page, 'to-hub');
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
   });
 
   test('a closed doorway shows its sign wording', async ({ page }) => {
     await openPark(page);
-    await page.evaluate(() => window.owlPark.walkTo(410, 500));
+    await walkToDoor(page, 'closed-a');
     await expect(page.getByText(/Not Yet Fledged|Closed for Molting|Pardon Our Feathers|Hatching Soon/)).toBeVisible({ timeout: 15_000 });
   });
 
   test('the neon realm offers the gift shop near the kiosk', async ({ page }) => {
     await openPark(page, { room: 'market' });
-    await page.evaluate(() => window.owlPark.walkTo(1100, 540));
+    await walkToDoor(page, 'shop');
     await expect(page.getByRole('button', { name: 'Gift shop' })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-market.png` });
   });
@@ -77,7 +77,7 @@ test.describe('two visitors on one device', () => {
     await a.screenshot({ path: `e2e-screenshots/${test.info().project.name}-two-owls.png` });
 
     // A leaves for another room; B is alone again.
-    await a.evaluate(() => window.owlPark.walkTo(40, 760));
+    await walkToDoor(a, 'to-grove');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('grove');
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(0);
     await expect(b.getByText('1 owl here')).toBeVisible();

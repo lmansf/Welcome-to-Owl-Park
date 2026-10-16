@@ -6,6 +6,15 @@ export interface ParkState {
   walking: boolean;
   peers: Array<{ id: string; pos: { x: number; y: number }; walking: boolean; look: { body: string; belly: string; accent: string } }>;
   connected: boolean;
+  doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+}
+
+/** Walk the local owl into the middle of a doorway by id (from the live room definition). */
+export async function walkToDoor(page: Page, doorId: string): Promise<void> {
+  const s = await state(page);
+  const door = s.doors.find((d) => d.id === doorId);
+  if (!door) throw new Error(`no door ${doorId} in ${s.room}`);
+  await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: door.x, y: door.y });
 }
 
 /** Open the park with the zero-backend local transport and wait for the room to be live. */

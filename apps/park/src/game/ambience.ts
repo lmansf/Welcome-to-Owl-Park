@@ -39,20 +39,27 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
   }
 }
 
+/** Scale so a set piece anchored at its feet keeps its head inside the frame. */
+function fitBelowTop(scene: Phaser.Scene, key: string, anchorY: number, margin = 24): number {
+  const h = scene.textures.get(key).getSourceImage().height || 1;
+  return Math.min(1, Math.max(0.2, (anchorY - margin) / h));
+}
+
 /** Large set pieces (guardian, giant robot owl, signs) sorted into the owl depth range. */
 export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
   const anchors = ANCHORS[room.id] ?? {};
   if (room.id === 'grove' && anchors['guardian']) {
     const a = anchors['guardian'];
     const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const guardian = scene.add.image(a.x, a.y, 'guardian').setOrigin(0.5, 1).setDepth(a.y);
-    scene.tweens.add({ targets: guardian, scaleY: 1.015, scaleX: 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const k = fitBelowTop(scene, 'guardian', a.y);
+    const guardian = scene.add.image(a.x, a.y, 'guardian').setOrigin(0.5, 1).setScale(k).setDepth(a.y);
+    scene.tweens.add({ targets: guardian, scaleY: k * 1.015, scaleX: k * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
   if (room.id === 'market' && anchors['robot']) {
     const a = anchors['robot'];
     const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const robot = scene.add.image(a.x, a.y, 'robot-owl').setOrigin(0.5, 1).setDepth(a.y);
+    const robot = scene.add.image(a.x, a.y, 'robot-owl').setOrigin(0.5, 1).setScale(fitBelowTop(scene, 'robot-owl', a.y)).setDepth(a.y);
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }

@@ -83,8 +83,18 @@ export class BootScene extends Phaser.Scene {
     }
     for (const [key, s] of Object.entries(SET_PIECES)) {
       need(key, s.w, s.h, (g) => {
-        g.fillStyle(0xc9a227, 0.25);
-        g.fillRoundedRect(0, 0, s.w, s.h, 40);
+        if (key.startsWith('sign-')) {
+          // A small wooden post and board near the bottom of the canvas.
+          g.fillStyle(0x5c4033, 1);
+          g.fillRect(s.w / 2 - 10, s.h - 150, 20, 150);
+          g.fillStyle(0x8b5a2b, 1);
+          g.fillRoundedRect(s.w / 2 - 110, s.h - 230, 220, 100, 14);
+          g.fillStyle(0xf6f1e3, 1);
+          g.fillEllipse(s.w / 2, s.h - 180, 70, 60);
+          return;
+        }
+        g.fillStyle(0xc9a227, 0.18);
+        g.fillEllipse(s.w / 2, s.h / 2, s.w * 0.6, s.h * 0.8);
       });
     }
     // Owl placeholder layers: simple shapes so the avatar is readable without art.

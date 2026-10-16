@@ -188,9 +188,17 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /** Read-only snapshot for tests and the console. */
-  debugState(): { room: string; pos: Vec2; walking: boolean; peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook }>; connected: boolean } {
+  debugState(): {
+    room: string;
+    pos: Vec2;
+    walking: boolean;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook }>;
+    connected: boolean;
+    doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+  } {
     return {
       room: this.room.id,
+      doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: d.to?.room })),
       pos: { ...this.me.pos },
       walking: this.me.walking,
       peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look })),
