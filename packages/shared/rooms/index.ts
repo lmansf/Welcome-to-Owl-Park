@@ -107,5 +107,5 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
 };
 
 export function getRoom(id: string): RoomDef {
-  return ROOMS[id] ?? ROOMS['hub']!;
+  return Object.hasOwn(ROOMS, id) ? ROOMS[id]! : ROOMS['hub']!;
 }

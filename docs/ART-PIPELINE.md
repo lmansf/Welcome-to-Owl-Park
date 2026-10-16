@@ -2,7 +2,8 @@
 
 Every image in the park is an SVG under `apps/park/public/art/`. The game rasterizes each
 one once at a fixed size when it opens. Swap a file and the park picks it up; the code does
-not change. PNG works too if you rename the loader entries in `apps/park/src/game/BootScene.ts`.
+not change. SVG only: the loader requests `<key>.svg` and rejects anything whose root is not `<svg>`,
+so a PNG dropped in its place is silently replaced by the flat placeholder.
 
 ## Files and sizes
 
@@ -18,7 +19,9 @@ not change. PNG works too if you rename the loader entries in `apps/park/src/gam
 | `owl-face.svg`, `owl-blink.svg` | 200 x 240 | Eyes and beak in fixed colours; the blink frame replaces the face for a moment |
 
 Owl layers share one canvas: feet at (100, 232), facing slightly to one side so a horizontal
-flip reads as turning around. Owls render at half size, about 55 px tall in a 1600-wide room.
+flip reads as turning around. Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
+the 200 x 240 canvas becomes 100 x 120, so an owl stands about 100 px tall from head to toes and
+about 70 px wide in a 1600-wide room.
 
 ## Rules every asset must follow
 
@@ -31,12 +34,14 @@ flip reads as turning around. Owls render at half size, about 55 px tall in a 16
 ## Preview exactly what the game will show
 
 ```bash
+pnpm exec playwright install chromium    # once: the renderer uses the test browser
 node tools/render-svg.mjs apps/park/public/art/grove.svg /tmp/grove.png 1600 900
 ```
 
 ## Room geometry
 
-Each room's walkable area, doors and spawn points live in `apps/park/src/rooms/index.ts`,
+Each room's walkable area, doors and spawn points live in `packages/shared/rooms/index.ts`
+(shared by the client and the room server),
 in room pixels (1600 x 900). When a room's layout changes, update:
 
 - `walkable`: one or more simple polygons the owl may stand on (feet position).

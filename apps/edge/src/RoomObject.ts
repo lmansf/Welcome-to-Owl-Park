@@ -64,7 +64,7 @@ export class RoomObject extends DurableObject<Env> {
   private room(id: string): Room {
     let r = this.rooms.get(id);
     if (!r) {
-      const def = ROOMS[id];
+      const def = Object.hasOwn(ROOMS, id) ? ROOMS[id] : undefined;
       if (!def) throw new Error(`unknown room ${id}`);
       r = new Room(def, {
         now: () => Date.now(),
@@ -97,7 +97,7 @@ export class RoomObject extends DurableObject<Env> {
     const roomId = request.headers.get('X-Room') ?? '';
     const id = request.headers.get('X-Visitor-Id') ?? '';
     const ip = request.headers.get('X-Visitor-Ip') ?? 'unknown';
-    if (!ROOMS[roomId] || !id) return new Response('bad room', { status: 400 });
+    if (!Object.hasOwn(ROOMS, roomId) || !id) return new Response('bad room', { status: 400 });
     const perIp = Number(this.env.MAX_SOCKETS_PER_IP) || DEFAULT_MAX_SOCKETS_PER_IP;
     if (this.ctx.getWebSockets(`ip:${ip}`).length >= perIp) return new Response('too many connections from this address', { status: 429 });
 

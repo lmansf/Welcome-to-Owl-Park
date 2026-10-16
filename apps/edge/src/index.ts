@@ -50,7 +50,7 @@ export default {
 
     if (url.pathname.startsWith('/ws/')) {
       const roomId = url.pathname.slice(4);
-      if (!ROOMS[roomId]) return new Response('unknown room', { status: 404 });
+      if (!Object.hasOwn(ROOMS, roomId)) return new Response('unknown room', { status: 404 });
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
       const pass = await verifyPass(signingSecret(env), url.searchParams.get('pass'));
       if (!pass) return new Response('bad pass', { status: 401 });

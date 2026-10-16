@@ -14,7 +14,7 @@ export interface ParkConfig {
   /** Starting room id and spawn, from the query string. */
   room: string;
   spawn: string | undefined;
-  /** Fixed player id for tests; otherwise a per-tab id is generated. */
+  /** Fixed player id for tests; otherwise a fresh id is generated per page load. */
   id: string | undefined;
   /** "body,belly,accent" hex colours for tests. */
   look: string | undefined;

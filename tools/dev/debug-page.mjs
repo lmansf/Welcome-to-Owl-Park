@@ -1,3 +1,4 @@
+// Dump console output, page errors and a screenshot of the running dev server: node tools/dev/debug-page.mjs [out.png]
 import { chromium } from '@playwright/test';
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -8,5 +9,7 @@ await page.goto('http://localhost:5173/?transport=local');
 await page.waitForTimeout(4000);
 console.log('state:', JSON.stringify(await page.evaluate(() => window.owlPark ? window.owlPark.state() : 'no owlPark')));
 console.log('scenes:', JSON.stringify(await page.evaluate(() => window.owlPark?.game.scene.getScenes(true).map(s => s.scene.key))));
-await page.screenshot({ path: '/tmp/claude-0/-home-user-Welcome-to-Owl-Park/d6e79295-a049-5412-8532-46fb197ac115/scratchpad/debug.png' });
+const out = process.argv[2] ?? 'debug.png';
+await page.screenshot({ path: out });
+console.log('wrote', out);
 await browser.close();

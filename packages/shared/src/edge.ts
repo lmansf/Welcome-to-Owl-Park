@@ -3,8 +3,8 @@
  * Every frame is one JSON object (≤ 1 KiB) except the literal heartbeat text frame `hb`.
  * All timestamps (`at`, `now`) are server milliseconds; clients never put their clock on the wire.
  */
-import { isHexColour } from './look';
 import type { OwlLook, Vec2 } from './protocol';
+import { isLook, isObj, isVec2 } from './validate';
 
 export const EDGE_PROTOCOL_VERSION = 2;
 export const MAX_FRAME_BYTES = 1024;
@@ -105,18 +105,6 @@ export interface ServerFull {
 export type ServerFrame = ServerWelcome | ServerEnter | ServerMove | ServerLook | ServerLeave | ServerCounts | ServerFull;
 
 // ---- validation (server side, strict) ----
-
-function isObj(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v);
-}
-
-export function isVec2(v: unknown, maxX = 1600, maxY = 900): v is Vec2 {
-  return isObj(v) && typeof v['x'] === 'number' && typeof v['y'] === 'number' && Number.isFinite(v['x']) && Number.isFinite(v['y']) && v['x'] >= 0 && v['x'] <= maxX && v['y'] >= 0 && v['y'] <= maxY;
-}
-
-export function isLook(v: unknown): v is OwlLook {
-  return isObj(v) && isHexColour(v['body']) && isHexColour(v['belly']) && isHexColour(v['accent']);
-}
 
 const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 

@@ -1,9 +1,13 @@
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
-import { isParkMessage, type ParkMessage, type PlayerState } from '@owl-park/shared';
+import { isParkMessage, isPlayerState, type ParkMessage, type PlayerState } from '@owl-park/shared';
 import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
 
 /** Presence re-tracks at most this often, so rapid clicking costs one message, not two. */
 const TRACK_THROTTLE_MS = 3000;
+/** Moves go out at most this often; a faster tap replaces the pending one (last tap wins). */
+const MOVE_MIN_INTERVAL_MS = 250;
+/** Untrusted roster: ignore new ids beyond this (above the largest room cap). */
+const MAX_PEERS = 128;
 
 /**
  * Internet multiplayer on Supabase Realtime, with no server code of our own:
@@ -31,14 +35,17 @@ export class SupabaseTransport implements ParkTransport {
     let current = self;
     let lastTrack = 0;
     let pendingTrack: ReturnType<typeof setTimeout> | null = null;
+    let lastMove = 0;
+    let pendingMove: { msg: ParkMessage; timer: ReturnType<typeof setTimeout> } | null = null;
+    /** Presence keys of the peers in the room: the only ids a broadcast may speak for. */
     const known = new Set<string>();
 
-    const upsert = (state: unknown) => {
-      if (!state || typeof state !== 'object') return;
-      const s = state as PlayerState;
-      if (!s.id || s.id === current.id) return;
-      known.add(s.id);
-      handlers.onPeerState(s);
+    /** Presence payloads must describe the key they were tracked under. */
+    const upsert = (key: string, state: unknown) => {
+      if (key === current.id || !isPlayerState(state) || state.id !== key) return;
+      if (!known.has(key) && known.size >= MAX_PEERS) return;
+      known.add(key);
+      handlers.onPeerState(state);
     };
 
     channel
@@ -49,7 +56,7 @@ export class SupabaseTransport implements ParkTransport {
           if (key === current.id) continue;
           present.add(key);
           const latest = metas[metas.length - 1];
-          if (latest) upsert(latest);
+          if (latest) upsert(key, latest);
         }
         for (const id of known) {
           if (!present.has(id)) {
@@ -61,27 +68,27 @@ export class SupabaseTransport implements ParkTransport {
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         if (key === current.id) return;
         const latest = newPresences[newPresences.length - 1];
-        if (latest) upsert(latest);
+        if (latest) upsert(key, latest);
       })
-      .on('presence', { event: 'leave' }, ({ key }) => {
-        if (key === current.id) return;
+      .on('presence', { event: 'leave' }, ({ key, currentPresences }) => {
+        // A re-track shows up as a leave of the old meta while the key still has metas: not a departure.
+        if (key === current.id || (currentPresences?.length ?? 0) > 0) return;
         known.delete(key);
         handlers.onPeerLeave(key);
       })
       .on('broadcast', { event: 'park' }, ({ payload }) => {
+        // Broadcasts may only refresh owls the presence roster already lists; the roster is the truth.
         if (!isParkMessage(payload)) return;
         switch (payload.t) {
           case 'move':
-            if (payload.id !== current.id) handlers.onPeerMove(payload.id, payload.walk);
+            if (known.has(payload.id)) handlers.onPeerMove(payload.id, payload.walk);
             break;
           case 'state':
+            if (known.has(payload.state.id)) handlers.onPeerState(payload.state);
+            break;
           case 'hello':
-            upsert(payload.state);
-            break;
           case 'bye':
-            known.delete(payload.id);
-            handlers.onPeerLeave(payload.id);
-            break;
+            break; // never sent by this transport; presence join/leave is the roster
         }
       });
 
@@ -106,9 +113,25 @@ export class SupabaseTransport implements ParkTransport {
       });
     });
 
+    const sendNow = (msg: ParkMessage) => {
+      lastMove = msg.t === 'move' ? Date.now() : lastMove;
+      void channel.send({ type: 'broadcast', event: 'park', payload: msg });
+    };
+
     return {
       send(msg: ParkMessage) {
-        void channel.send({ type: 'broadcast', event: 'park', payload: msg });
+        if (msg.t !== 'move') return sendNow(msg);
+        const wait = MOVE_MIN_INTERVAL_MS - (Date.now() - lastMove);
+        if (wait <= 0 && !pendingMove) return sendNow(msg);
+        if (pendingMove) clearTimeout(pendingMove.timer);
+        pendingMove = {
+          msg,
+          timer: setTimeout(() => {
+            const m = pendingMove?.msg;
+            pendingMove = null;
+            if (m) sendNow(m);
+          }, Math.max(wait, 0)),
+        };
       },
       track(state: PlayerState) {
         current = state;
@@ -118,11 +141,11 @@ export class SupabaseTransport implements ParkTransport {
       },
       async leave() {
         if (pendingTrack) clearTimeout(pendingTrack);
-        try {
-          await channel.untrack();
-        } finally {
-          await client.removeChannel(channel);
-        }
+        if (pendingMove) clearTimeout(pendingMove.timer);
+        // Only a joined channel can deliver the untrack; otherwise phoenix buffers the push and settles
+        // it on its 10 s timeout, which would hold the door fade on black. Leaving drops our presence anyway.
+        if (channel.state === 'joined') await channel.untrack({ timeout: 1000 });
+        await client.removeChannel(channel);
       },
     };
   }

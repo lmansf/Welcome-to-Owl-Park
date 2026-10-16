@@ -18,7 +18,6 @@ import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
 const RENDER_DELAY_MS = 100;
 const BACKOFF_MIN_MS = 500;
 const BACKOFF_MAX_MS = 8_000;
-const PASS_KEY = 'owl-park:pass';
 
 interface Pass {
   pass: string;
@@ -38,27 +37,15 @@ export class EdgeTransport implements ParkTransport {
     this.base = baseUrl.replace(/\/$/, '');
   }
 
+  /** The pass lives in memory only: one visitor identity per page load, never shared by a duplicated tab. */
+  private pass: Pass | null = null;
+
   private async getPass(force = false): Promise<Pass> {
-    if (!force) {
-      try {
-        const raw = sessionStorage.getItem(PASS_KEY);
-        if (raw) {
-          const p = JSON.parse(raw) as Pass;
-          if (p.exp * 1000 > Date.now() + 60_000) return p;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
+    if (!force && this.pass && this.pass.exp * 1000 > Date.now() + 60_000) return this.pass;
     const res = await fetch(`${this.base}/api/pass`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`pass refused (${res.status})`);
-    const p = (await res.json()) as Pass;
-    try {
-      sessionStorage.setItem(PASS_KEY, JSON.stringify(p));
-    } catch {
-      /* ignore */
-    }
-    return p;
+    this.pass = (await res.json()) as Pass;
+    return this.pass;
   }
 
   async join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection> {

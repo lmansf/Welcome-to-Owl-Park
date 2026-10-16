@@ -65,9 +65,3 @@ export interface ByeMessage {
 }
 
 export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage;
-
-export function isParkMessage(value: unknown): value is ParkMessage {
-  if (!value || typeof value !== 'object') return false;
-  const t = (value as { t?: unknown }).t;
-  return t === 'hello' || t === 'state' || t === 'move' || t === 'bye';
-}

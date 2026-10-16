@@ -20,7 +20,20 @@ test.describe('single visitor', () => {
     // A point to the right of the owl that is on screen even on a narrow portrait phone.
     const target = { x: before.pos.x + Math.min(220, view.viewW * 0.3), y: before.pos.y + 40 };
     await tapRoomPoint(page, target.x, target.y);
-    await expect.poll(async () => (await state(page)).walking).toBe(true);
+    await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
+  });
+
+  test('using the HUD never stops the owl from walking afterwards', async ({ page }) => {
+    await openPark(page);
+    const before = await state(page);
+    await page.locator('#hud .pill').hover();
+    await page.getByRole('button', { name: 'Your owl' }).click();
+    await page.getByRole('button', { name: 'Your owl' }).click();
+    expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
+    await page.waitForTimeout(400);
+    const view = await cameraView(page);
+    const target = { x: before.pos.x - Math.min(200, view.viewW * 0.3), y: before.pos.y + 30 };
+    await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y);
   });
 
@@ -71,7 +84,6 @@ test.describe('two visitors on one device', () => {
     // A walks; B's copy of A follows the same path and ends at the same spot.
     const target = { x: 600, y: 760 };
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
-    await expect.poll(async () => (await state(b)).peers[0]?.walking).toBe(true);
     await waitForArrival(a, target.x, target.y);
     await expect.poll(async () => dist((await state(b)).peers[0]!.pos, target), { timeout: 15_000 }).toBeLessThan(6);
     await a.screenshot({ path: `e2e-screenshots/${test.info().project.name}-two-owls.png` });

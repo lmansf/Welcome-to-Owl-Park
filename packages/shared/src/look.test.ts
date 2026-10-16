@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, hexToInt, isHexColour, lookFromSeed, sanitizeLook } from './look';
-import { isParkMessage } from './protocol';
+import { isParkMessage } from './validate';
 
 describe('looks', () => {
   it('accepts only 6-digit hex colours', () => {
@@ -24,7 +24,12 @@ describe('looks', () => {
 
 describe('protocol guard', () => {
   it('recognises message shapes', () => {
-    expect(isParkMessage({ t: 'move', id: 'a', walk: {} })).toBe(true);
+    const walk = { from: { x: 1, y: 2 }, to: { x: 3, y: 4 }, startedAt: 5 };
+    expect(isParkMessage({ t: 'move', id: 'a', walk })).toBe(true);
+    expect(isParkMessage({ t: 'move', id: 'a', walk: {} })).toBe(false);
+    expect(isParkMessage({ t: 'state', state: { id: 'x' } })).toBe(false);
+    expect(isParkMessage({ t: 'state', state: { id: 'x', look: DEFAULT_LOOK, pos: { x: 1, y: 1 }, walk: null, v: 1 } })).toBe(true);
+    expect(isParkMessage({ t: 'bye', id: 'a'.repeat(65) })).toBe(false);
     expect(isParkMessage({ t: 'nope' })).toBe(false);
     expect(isParkMessage(null)).toBe(false);
     expect(isParkMessage('move')).toBe(false);

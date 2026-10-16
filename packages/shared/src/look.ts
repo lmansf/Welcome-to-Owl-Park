@@ -1,17 +1,5 @@
 import type { OwlLook } from './protocol';
 
-/** Brand anchors and realm palettes from the creative canon. */
-export const PALETTE = {
-  heartwoodNavy: '#0C1E36',
-  owlGold: '#C9A227',
-  moonCream: '#F6F1E3',
-  signalMagenta: '#FF2AA1',
-  circuitCyan: '#00E5FF',
-  nightAsphalt: '#0B0B16',
-  chrome: '#C7CEDA',
-  violetHaze: '#6E3AFF',
-} as const;
-
 /** Colour choices offered in the owl customiser. All are original picks. */
 export const BODY_COLOURS = ['#8B5A2B', '#5C4033', '#A67B5B', '#6B6B6B', '#D9C7A5', '#2F3E5C', '#7A5C99', '#3E6B48'];
 export const BELLY_COLOURS = ['#F6F1E3', '#E8D8B8', '#D6C7B0', '#BFC9D6', '#F2E1C1', '#E0D4F0'];

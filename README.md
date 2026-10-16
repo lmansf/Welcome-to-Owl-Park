@@ -42,6 +42,7 @@ Useful query parameters while developing:
 pnpm typecheck    # TypeScript, strict
 pnpm test         # unit tests: geometry, walks, protocol, transports, the room server's rules
 pnpm build        # production bundle in apps/park/dist
+pnpm exec playwright install chromium   # once: downloads the test browser (add --with-deps on a bare Linux box)
 pnpm e2e          # Playwright: desktop + phone on the local transport, then the room server over real WebSockets
 pnpm load -- --url http://localhost:8787 --bots 3 --seconds 30   # bot swarm against a running room server
 ```

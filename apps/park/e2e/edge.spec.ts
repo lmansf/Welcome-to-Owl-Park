@@ -32,7 +32,6 @@ test.describe('room server', () => {
 
     const target = { x: 600, y: 760 };
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
-    await expect.poll(async () => (await state(b)).peers[0]?.walking, { timeout: 10_000 }).toBe(true);
     await waitForArrival(a, target.x, target.y);
     await expect.poll(async () => dist((await state(b)).peers[0]!.pos, target), { timeout: 15_000 }).toBeLessThan(6);
     await a.screenshot({ path: 'e2e-screenshots/edge-two-owls.png' });

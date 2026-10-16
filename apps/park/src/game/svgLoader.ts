@@ -8,7 +8,7 @@ import type Phaser from 'phaser';
  */
 export async function loadSvgTexture(scene: Phaser.Scene, key: string, url: string, w: number, h: number): Promise<boolean> {
   try {
-    const res = await fetch(url, { cache: 'force-cache' });
+    const res = await fetch(url); // default cache mode: stale copies are revalidated, so swapped art shows up
     if (!res.ok) return false;
     const text = await res.text();
     if (!/^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE[^>]*>\s*)?<svg[\s>]/i.test(text)) return false;

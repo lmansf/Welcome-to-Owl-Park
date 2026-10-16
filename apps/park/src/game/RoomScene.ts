@@ -32,6 +32,8 @@ const TAP_SLOP = 16;
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
 
+const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
+
 /**
  * One scene renders any room from its RoomDef: background, set pieces, the local owl,
  * every remote owl, doors, ambience and the camera. Walking is time-based so every
@@ -50,6 +52,9 @@ export class RoomScene extends Phaser.Scene {
   private look!: OwlLook;
   private inShop = false;
   private cameFrom: RoomStart['from'];
+  /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
+  private gen = 0;
+  private lastStatus: ConnectionStatus | null = null;
 
   constructor() {
     super('room');
@@ -67,6 +72,8 @@ export class RoomScene extends Phaser.Scene {
     this.leaving = false;
     this.inShop = false;
     this.cameFrom = data.from;
+    this.gen += 1;
+    this.lastStatus = null;
     this.registry.set('currentRoom', this.room.id);
     this.registry.set('spawnName', data.spawn);
   }
@@ -113,26 +120,25 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async connect(): Promise<void> {
+    const gen = this.gen;
+    const live = () => gen === this.gen && !this.leaving;
     const spawnName = this.registry.get('spawnName') as string | undefined;
     const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}) } as PlayerState, {
-      onPeerState: (s) => this.onPeerState(s),
-      onPeerMove: (id, walk) => this.onPeerMove(id, walk),
-      onPeerLeave: (id) => this.onPeerLeave(id),
-      onStatus: (s) => this.onStatus(s),
-      onSelf: (pos) => {
-        if (!this.leaving) this.me.place(pos);
-      },
-      onSelfWalk: (walk) => {
-        if (!this.leaving) this.me.startWalk({ ...walk, from: { ...this.me.pos } });
-      },
-      onPeerLook: (id, look) => this.peers.get(id)?.applyLook(look),
+      onPeerState: (s) => live() && this.onPeerState(s),
+      onPeerMove: (id, walk) => live() && this.onPeerMove(id, walk),
+      onPeerLeave: (id) => live() && this.onPeerLeave(id),
+      onStatus: (s) => live() && this.onStatus(s),
+      onSelf: (pos) => live() && this.me.place(pos),
+      onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
+      onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
       onCounts: (rooms) => {
+        if (!live()) return;
         this.registry.set('counts', rooms);
         this.hud.setParkCount(Object.values(rooms).reduce((a, b) => a + b, 0));
       },
-      onFull: (roomId) => void this.roomFull(roomId),
+      onFull: (roomId) => live() && void this.roomFull(roomId),
     });
-    if (this.leaving || !this.scene.isActive()) {
+    if (!live() || !this.scene.isActive()) {
       await conn.leave();
       return;
     }
@@ -141,7 +147,9 @@ export class RoomScene extends Phaser.Scene {
 
   private onStatus(s: ConnectionStatus): void {
     this.hud.setStatus(s, this.transport.kind);
-    if (s === 'offline' && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
+    const wentOffline = s === 'offline' && this.lastStatus !== 'offline';
+    this.lastStatus = s;
+    if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
   }
 
   private async roomFull(roomId: string): Promise<void> {
@@ -166,12 +174,19 @@ export class RoomScene extends Phaser.Scene {
       owl.applyLook(s.look);
     }
     if (s.walk) {
-      const walk = this.rebase(s.walk, now);
-      const { done } = positionAlongWalk(walk, now);
-      if (done) owl.place(walk.to);
-      else {
-        owl.place(walk.from);
-        owl.startWalk(walk);
+      // A snapshot keeps the last walk until the next one: a future-dated start is pulled back to
+      // now, an old one is played out to its end, and one we already animate (or already finished)
+      // is left alone, so heartbeats never replay a walk.
+      const raw = s.walk;
+      const walk = now - raw.startedAt < -CLOCK_TOLERANCE_MS ? { ...raw, startedAt: now } : raw;
+      const already = owl.walk ? sameWalk(owl.walk, raw) : distance(owl.pos, raw.to) < 1;
+      if (!already) {
+        const { done } = positionAlongWalk(walk, now);
+        if (done) owl.place(walk.to);
+        else {
+          owl.place(walk.from);
+          owl.startWalk(walk);
+        }
       }
     } else if (!owl.walking) {
       owl.place(s.pos);
@@ -205,7 +220,8 @@ export class RoomScene extends Phaser.Scene {
 
   private setupInput(): void {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
-      if (this.leaving || this.hud.busy) return;
+      // Phaser only emits POINTER_UP for releases on the canvas; also require the press to have been on it.
+      if (this.leaving || p.downElement !== this.game.canvas) return;
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
       this.walkTo({ x: world.x, y: world.y });

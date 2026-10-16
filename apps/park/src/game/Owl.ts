@@ -10,6 +10,25 @@ const FEET = { x: 100, y: 232 };
 
 const LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face'] as const;
 
+/** A copy of a white layer multiplied by a colour, for renderers without tint support. */
+function tintedLayer(scene: Phaser.Scene, key: string, hex: string): string {
+  const out = `${key}:${hex.toLowerCase()}`;
+  if (scene.textures.exists(out)) return out;
+  const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+  const canvas = scene.textures.createCanvas(out, src.width, src.height);
+  if (!canvas) return key;
+  const ctx = canvas.context;
+  ctx.drawImage(src, 0, 0);
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, src.width, src.height);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(src, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  canvas.refresh();
+  return out;
+}
+
 /**
  * A visitor's owl: tintable layered sprites in a container whose origin is at the feet.
  * Walking is driven from wall-clock time via positionAlongWalk, so local and remote
@@ -47,12 +66,19 @@ export class Owl extends Phaser.GameObjects.Container {
     this.add([this.shadow, this.art]);
     this.setScale(OWL_SCALE);
     this.applyLook(look);
-    this.nextBlinkAt = scene.time.now + 1500 + Math.random() * 4000;
+    this.nextBlinkAt = Date.now() + 1500 + Math.random() * 4000;
     scene.add.existing(this);
   }
 
   applyLook(look: OwlLook): void {
     this.look = look;
+    if (this.scene.renderer.type === Phaser.CANVAS) {
+      // Tint is WebGL-only; on the Canvas renderer bake the colour into a texture instead.
+      this.bodyImg.setTexture(tintedLayer(this.scene, LAYERS[0], look.body));
+      this.bellyImg.setTexture(tintedLayer(this.scene, LAYERS[1], look.belly));
+      this.accentImg.setTexture(tintedLayer(this.scene, LAYERS[2], look.accent));
+      return;
+    }
     this.bodyImg.setTint(hexToInt(look.body));
     this.bellyImg.setTint(hexToInt(look.belly));
     this.accentImg.setTint(hexToInt(look.accent));

@@ -15,7 +15,7 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame('[]')).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 2, look: { body: 'red' } }))).toBeNull();
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 2, look, spawn: 'Hoot Hollow' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 2, look, spawn: 'Not A Spawn' }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: -5, y: 2 }, seq: 1 }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 5, y: 2 }, seq: 1.5 }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: Infinity, y: 2 }, seq: 1 }))).toBeNull();

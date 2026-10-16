@@ -5,6 +5,7 @@ type Handler = (payload: any) => void;
 
 /** A minimal stand-in for a Supabase RealtimeChannel that records what the transport does. */
 class FakeChannel {
+  state = 'joined';
   handlers: Array<{ type: string; filter: { event: string }; fn: Handler }> = [];
   tracked: unknown[] = [];
   sent: unknown[] = [];
@@ -96,8 +97,17 @@ describe('SupabaseTransport', () => {
     ch.presence = { me: [me] };
     ch.fire('presence', 'sync', {});
     expect(handlers.onPeerLeave).toHaveBeenCalledWith('other');
-    ch.fire('presence', 'leave', { key: 'someone', leftPresences: [] });
+    ch.fire('presence', 'leave', { key: 'someone', currentPresences: [], leftPresences: [] });
     expect(handlers.onPeerLeave).toHaveBeenLastCalledWith('someone');
+    // A re-track (leave of the old meta while metas remain) is not a departure.
+    handlers.onPeerLeave.mockClear();
+    ch.fire('presence', 'leave', { key: 'other', currentPresences: [other], leftPresences: [other] });
+    expect(handlers.onPeerLeave).not.toHaveBeenCalled();
+    // A presence payload may not claim another visitor's id, and broadcasts only speak for listed peers.
+    ch.fire('presence', 'join', { key: 'evil', newPresences: [{ ...other, id: 'victim' }] });
+    ch.fire('broadcast', 'park', { payload: { t: 'move', id: 'ghost', walk } });
+    expect(handlers.onPeerState).toHaveBeenCalledTimes(1);
+    expect(handlers.onPeerMove).toHaveBeenCalledTimes(1);
   });
 
   it('broadcasts sends and throttles presence re-tracking', async () => {
@@ -106,6 +116,15 @@ describe('SupabaseTransport', () => {
     const ch = channels[0]!;
     conn.send({ t: 'bye', id: 'me' });
     expect(ch.sent).toEqual([{ type: 'broadcast', event: 'park', payload: { t: 'bye', id: 'me' } }]);
+    // Moves are rate limited: the first goes out, a burst collapses to the latest.
+    const walk = (x: number) => ({ from: { x: 0, y: 0 }, to: { x, y: 0 }, startedAt: 1 });
+    conn.send({ t: 'move', id: 'me', walk: walk(1) });
+    conn.send({ t: 'move', id: 'me', walk: walk(2) });
+    conn.send({ t: 'move', id: 'me', walk: walk(3) });
+    expect(ch.sent).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(ch.sent).toHaveLength(3);
+    expect((ch.sent[2] as { payload: { walk: { to: { x: number } } } }).payload.walk.to.x).toBe(3);
 
     const s1 = { ...me, pos: { x: 10, y: 10 } };
     const s2 = { ...me, pos: { x: 20, y: 20 } };
@@ -118,6 +137,16 @@ describe('SupabaseTransport', () => {
 
     await conn.leave();
     expect(ch.untracked).toBe(1);
+    expect(removed).toBe(1);
+  });
+
+  it('does not untrack through a channel that never joined', async () => {
+    const t = new SupabaseTransport('https://example.supabase.co', 'anon');
+    const conn = await t.join('hub', me, handlers);
+    const ch = channels[0]!;
+    ch.state = 'errored';
+    await conn.leave();
+    expect(ch.untracked).toBe(0);
     expect(removed).toBe(1);
   });
 });

@@ -11,8 +11,6 @@ export interface Hud {
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
   onShop(cb: () => void): void;
-  /** True while a pointer is over HUD chrome (so taps there never move the owl). */
-  readonly busy: boolean;
 }
 
 const CSS = `
@@ -31,7 +29,8 @@ const CSS = `
 #hud .bottom{position:absolute;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
 #hud button{pointer-events:auto;cursor:pointer;font:inherit;color:#0C1E36;background:#C9A227;border:0;border-radius:999px;padding:10px 16px;font-weight:700;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.35);min-height:44px}
 #hud button.ghost{background:rgba(12,30,54,.72);color:#F6F1E3;border:1px solid rgba(246,241,227,.18)}
-#hud .panel{pointer-events:auto;background:rgba(12,30,54,.92);border:1px solid rgba(246,241,227,.18);border-radius:16px;padding:14px;width:min(320px,calc(100vw - 24px));display:none;flex-direction:column;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#hud .owl{position:relative}
+#hud .panel{position:absolute;left:0;bottom:calc(100% + 8px);pointer-events:auto;background:rgba(12,30,54,.92);border:1px solid rgba(246,241,227,.18);border-radius:16px;padding:14px;width:min(320px,calc(100vw - 24px));display:none;flex-direction:column;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
 #hud .panel.open{display:flex}
 #hud .panel h2{margin:0;font-size:15px;font-weight:700}
 #hud .row{display:flex;flex-direction:column;gap:6px}
@@ -60,7 +59,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     </div>
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom">
-      <div>
+      <div class="owl">
         <div class="panel" data-panel aria-label="Your owl">
           <h2>Your owl</h2>
           <div class="row"><span>Feathers</span><div class="swatches" data-sw="body"></div></div>
@@ -84,7 +83,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   let look: OwlLook = { ...initialLook };
   let lookCb: ((l: OwlLook) => void) | null = null;
   let shopCb: (() => void) | null = null;
-  let busy = false;
   let here = 1;
   let park: number | null = null;
   const renderCount = () => {
@@ -125,16 +123,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     customize.setAttribute('aria-expanded', String(open));
   });
   shop.addEventListener('click', () => shopCb?.());
-  root.addEventListener('pointerenter', () => (busy = true), true);
-  for (const el of root.querySelectorAll<HTMLElement>('.pill,.panel,button')) {
-    el.addEventListener('pointerdown', (e) => e.stopPropagation());
-    el.addEventListener('pointerup', (e) => e.stopPropagation());
-  }
 
   return {
-    get busy() {
-      return busy;
-    },
     setCount(n) {
       here = n;
       renderCount();

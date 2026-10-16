@@ -1,7 +1,6 @@
 import { DEFAULT_LOOK, isHexColour, lookFromSeed, sanitizeLook, type OwlLook } from '@owl-park/shared';
 import type { ParkConfig } from './config';
 
-const ID_KEY = 'owl-park:id';
 const LOOK_KEY = 'owl-park:look';
 
 function randomId(): string {
@@ -10,18 +9,9 @@ function randomId(): string {
   return `owl-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** One owl per browser tab: the id lives in sessionStorage. */
+/** One owl per page load: a fresh id each time, so a duplicated or restored tab never shares one. */
 export function loadPlayerId(cfg: ParkConfig): string {
-  if (cfg.id) return cfg.id;
-  try {
-    const existing = sessionStorage.getItem(ID_KEY);
-    if (existing) return existing;
-    const fresh = randomId();
-    sessionStorage.setItem(ID_KEY, fresh);
-    return fresh;
-  } catch {
-    return randomId();
-  }
+  return cfg.id ?? randomId();
 }
 
 /** The owl's colours follow the visitor across tabs and visits (localStorage). */

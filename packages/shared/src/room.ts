@@ -42,5 +42,6 @@ export const ROOM_W = 1600;
 export const ROOM_H = 900;
 
 export function findSpawn(room: RoomDef, name: string | undefined): Vec2 {
-  return room.spawns[name ?? 'default'] ?? room.spawns['default'] ?? { x: room.size.w / 2, y: room.size.h / 2 };
+  const key = name ?? 'default';
+  return (Object.hasOwn(room.spawns, key) ? room.spawns[key] : undefined) ?? room.spawns['default'] ?? { x: room.size.w / 2, y: room.size.h / 2 };
 }
