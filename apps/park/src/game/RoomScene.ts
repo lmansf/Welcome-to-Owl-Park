@@ -128,7 +128,13 @@ export class RoomScene extends Phaser.Scene {
       onPeerMove: (id, walk) => live() && this.onPeerMove(id, walk),
       onPeerLeave: (id) => live() && this.onPeerLeave(id),
       onStatus: (s) => live() && this.onStatus(s),
-      onSelf: (pos) => live() && this.me.place(pos),
+      onSelf: (pos) => {
+        if (!live()) return;
+        // The server decided where we stand. A walk already under way restarts from there.
+        const target = this.me.walk?.to;
+        this.me.place(pos);
+        if (target) this.walkTo(target);
+      },
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
       onCounts: (rooms) => {

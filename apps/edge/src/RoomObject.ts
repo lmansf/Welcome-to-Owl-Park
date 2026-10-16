@@ -12,6 +12,8 @@ import type { Env } from './env';
 interface Attachment {
   room: string;
   id: string;
+  /** Random per-socket session id, so a replaced socket's close never removes its successor. */
+  sid: string;
   ip: string;
   joinedAt: number;
   state: VisitorState | null;
@@ -35,7 +37,16 @@ function peerOf(ws: WebSocket): Peer {
         /* already closed */
       }
     },
+    persist: (state) => {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att) ws.serializeAttachment({ ...att, state } satisfies Attachment);
+    },
   };
+}
+
+function randomSid(): string {
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
 export class RoomObject extends DurableObject<Env> {
@@ -47,11 +58,20 @@ export class RoomObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_FRAME, HEARTBEAT_FRAME));
-    // Wake-up: rebuild rooms from the hibernated sockets' attachments.
+    // Wake-up: rebuild rooms from the hibernated sockets' attachments. A socket whose
+    // attachment no longer makes sense (room removed, corrupt data) is closed, not fatal.
     for (const ws of ctx.getWebSockets()) {
-      const att = ws.deserializeAttachment() as Attachment | null;
-      if (!att?.state) continue;
-      this.room(att.room).restore(peerOf(ws), att.state);
+      try {
+        const att = ws.deserializeAttachment() as Attachment | null;
+        if (!att?.state) continue;
+        this.room(att.room).restore(peerOf(ws), att.state, att.sid);
+      } catch {
+        try {
+          ws.close(1011, 'room unavailable');
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 
@@ -70,22 +90,10 @@ export class RoomObject extends DurableObject<Env> {
         now: () => Date.now(),
         cap: roomCap(this.env, id),
         counts: () => this.counts(),
-        onState: (vid, st) => this.persist(vid, st),
       });
       this.rooms.set(id, r);
     }
     return r;
-  }
-
-  private socketFor(id: string): WebSocket | undefined {
-    return this.ctx.getWebSockets(`id:${id}`)[0];
-  }
-
-  private persist(id: string, state: VisitorState): void {
-    const ws = this.socketFor(id);
-    if (!ws) return;
-    const att = ws.deserializeAttachment() as Attachment | null;
-    if (att) ws.serializeAttachment({ ...att, state } satisfies Attachment);
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -104,7 +112,7 @@ export class RoomObject extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server, [`id:${id}`, `ip:${ip}`, `room:${roomId}`]);
-    server.serializeAttachment({ room: roomId, id, ip, joinedAt: Date.now(), state: null } satisfies Attachment);
+    server.serializeAttachment({ room: roomId, id, sid: randomSid(), ip, joinedAt: Date.now(), state: null } satisfies Attachment);
     await this.ensureAlarm();
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -126,7 +134,7 @@ export class RoomObject extends DurableObject<Env> {
       if (this.env.GATE === 'ticket' && att.ip !== 'admitted') {
         // v2 hook: the Worker marks admitted passes; guests are refused when the gate is closed.
       }
-      const result = room.join(peerOf(ws), att.id, frame);
+      const result = room.join(peerOf(ws), att.id, frame, att.sid);
       if (result === 'full') {
         ws.send(JSON.stringify({ t: 'full', room: att.room, cap: room.cap } satisfies ServerFrame));
         return ws.close(CLOSE.ROOM_FULL, 'room full');
@@ -143,7 +151,7 @@ export class RoomObject extends DurableObject<Env> {
       case 'look':
         return room.look(att.id, frame.look);
       case 'bye':
-        room.leave(att.id);
+        room.leave(att.id, att.sid);
         ws.serializeAttachment({ ...att, state: null } satisfies Attachment);
         ws.close(1000, 'bye');
         this.emitCounts();
@@ -163,10 +171,8 @@ export class RoomObject extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment | null;
     if (!att) return;
     if (att.state) {
-      const room = this.rooms.get(att.room);
-      // Only remove if this socket is still the one registered for the id (a replacement may have taken over).
-      if (room && this.socketFor(att.id) === ws) room.leave(att.id);
-      else if (room && !this.socketFor(att.id)) room.leave(att.id);
+      // Only the session that owns the visitor may remove it; a replaced socket's close is ignored.
+      this.rooms.get(att.room)?.leave(att.id, att.sid);
     }
     this.emitCounts();
   }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CLOSE, EDGE_PROTOCOL_VERSION, WALK_SPEED, type ClientHello, type RoomDef, type ServerFrame } from '@owl-park/shared';
-import { Room, LIMITS, type Peer } from '../src/Room';
+import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
 
 const def: RoomDef = {
   id: 'test',
@@ -23,8 +23,12 @@ const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 class FakePeer implements Peer {
   frames: ServerFrame[] = [];
   closed: { code: number; reason: string } | null = null;
+  persisted: VisitorState[] = [];
   send(text: string) {
     this.frames.push(JSON.parse(text));
+  }
+  persist(st: VisitorState) {
+    this.persisted.push(structuredClone(st));
   }
   close(code: number, reason: string) {
     this.closed = { code, reason };
@@ -42,16 +46,14 @@ const hello = (extra: Partial<ClientHello> = {}): ClientHello => ({ t: 'hello', 
 describe('Room', () => {
   let now = 1_000_000;
   let room: Room;
-  const states: string[] = [];
   beforeEach(() => {
     now = 1_000_000;
-    states.length = 0;
     let seed = 42;
     const random = () => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
       return seed / 0x7fffffff;
     };
-    room = new Room(def, { now: () => now, random, cap: 3, onState: (id) => states.push(id), counts: () => ({ test: room.count }) });
+    room = new Room(def, { now: () => now, random, cap: 3, counts: () => ({ test: room.count }) });
   });
 
   it('welcomes a visitor on walkable ground and announces it to the others', () => {
@@ -70,22 +72,57 @@ describe('Room', () => {
     // door entries scatter within the small radius
     const bp = b.last('welcome')!.you.pos;
     expect(Math.abs(bp.x - 200)).toBeLessThanOrEqual(LIMITS.scatterDoor);
-    expect(states).toContain('b');
+    expect(b.persisted.at(-1)?.pos).toEqual(bp); // the adapter can rebuild the room from what was persisted
+  });
+
+  it('keeps door arrivals close to the door even when the spawn is named "default"', () => {
+    const a = new FakePeer();
+    room.join(a, 'a', hello({ spawn: 'default' }));
+    const p = a.last('welcome')!.you.pos;
+    expect(Math.abs(p.x - 800)).toBeLessThanOrEqual(LIMITS.scatterDoor);
+  });
+
+  it('never scatters an arrival into an exit doorway', () => {
+    const withExit: RoomDef = { ...def, spawns: { default: { x: 650, y: 700 } }, doors: [{ id: 'out', rect: { x: 700, y: 600, w: 200, h: 200 }, to: { room: 'other', spawn: 'default' } }] };
+    const r2 = new Room(withExit, { now: () => now, cap: 50 });
+    for (let i = 0; i < 40; i++) {
+      const p = new FakePeer();
+      r2.join(p, `v${i}`, hello());
+      const pos = p.last('welcome')!.you.pos;
+      const inside = pos.x >= 700 && pos.x <= 900 && pos.y >= 600 && pos.y <= 800;
+      expect(inside).toBe(false);
+    }
   });
 
   it('refuses when full and replaces a duplicate session', () => {
-    const peers = ['a', 'b', 'c'].map((id) => {
+    const peers = ['a', 'b', 'c'].map((id, i) => {
       const p = new FakePeer();
-      room.join(p, id, hello());
+      room.join(p, id, hello(), `s${i}`);
       return p;
     });
     const d = new FakePeer();
     expect(room.join(d, 'd', hello())).toBe('full');
     const a2 = new FakePeer();
-    expect(room.join(a2, 'a', hello())).toBe('ok');
+    expect(room.join(a2, 'a', hello(), 's9')).toBe('ok');
     expect(peers[0]!.closed?.code).toBe(CLOSE.REPLACED);
     expect(peers[1]!.last('leave')!.id).toBe('a');
     expect(peers[1]!.last('enter')!.owl.id).toBe('a');
+    // The replaced socket's late close must not remove the new session.
+    room.leave('a', 's0');
+    expect(room.has('a')).toBe(true);
+    expect(room.sessionOf('a')).toBe('s9');
+    room.leave('a', 's9');
+    expect(room.has('a')).toBe(false);
+  });
+
+  it('lets a replacement session resume where the old one stood', () => {
+    const a = new FakePeer();
+    room.join(a, 'a', hello(), 's0');
+    room.move('a', { t: 'move', to: { x: 1300, y: 800 }, seq: 1 });
+    now += 60_000;
+    const a2 = new FakePeer();
+    room.join(a2, 'a', hello({ pos: { x: 1295, y: 795 } }), 's1');
+    expect(a2.last('welcome')!.you.pos).toEqual({ x: 1295, y: 795 });
   });
 
   it('clamps walks to the walkable area, echoes with seq, and fans out without it', () => {

@@ -4,6 +4,7 @@ import {
   HEARTBEAT_FRAME,
   HEARTBEAT_INTERVAL_MS,
   parseServerFrame,
+  positionAlongWalk,
   type ClientFrame,
   type OwlSnapshot,
   type ParkMessage,
@@ -18,6 +19,12 @@ import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
 const RENDER_DELAY_MS = 100;
 const BACKOFF_MIN_MS = 500;
 const BACKOFF_MAX_MS = 8_000;
+/** A move with no echo by then is assumed dropped (rate limited) and re-sent once. */
+const ECHO_TIMEOUT_MS = 1_500;
+/** No frame at all for this long (heartbeat replies included) means the socket is dead. */
+const DEAD_AFTER_MS = HEARTBEAT_INTERVAL_MS * 2 + 10_000;
+const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
+const RELOAD_GUARD_KEY = 'owl-park:reloaded';
 
 interface Pass {
   pass: string;
@@ -57,17 +64,32 @@ export class EdgeTransport implements ParkTransport {
     let offset = 0; // serverNow - localNow
     let offsetKnown = false;
     let current = self;
-    let spawn = (self as PlayerState & { spawn?: string }).spawn;
+    const requestedSpawn = (self as PlayerState & { spawn?: string }).spawn;
+    let spawn = requestedSpawn && SPAWN_NAME.test(requestedSpawn) ? requestedSpawn : undefined;
     let backoff = BACKOFF_MIN_MS;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let welcomed = false;
+    let opened = false;
+    let lastRx = Date.now();
+    /** Our id as the server knows it (from the pass), which differs from the scene's local id. */
+    let selfId: string | null = null;
     const knownPeers = new Set<string>();
-    const pending = new Map<number, Vec2>(); // seq -> predicted target
+    const pending = new Map<number, { to: Vec2; timer: ReturnType<typeof setTimeout>; resent: boolean }>();
 
     const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS });
     const sendFrame = (f: ClientFrame) => {
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(f));
+    };
+    /** Where our owl is right now according to the last tracked state (a walk may be in progress). */
+    const currentPos = (): Vec2 => (current.walk ? positionAlongWalk(current.walk, Date.now()).pos : current.pos);
+    const clearPending = (upTo?: number) => {
+      for (const [k, p] of pending) {
+        if (upTo === undefined || k <= upTo) {
+          clearTimeout(p.timer);
+          pending.delete(k);
+        }
+      }
     };
 
     const onFrame = (f: ServerFrame) => {
@@ -77,7 +99,9 @@ export class EdgeTransport implements ParkTransport {
           offset = f.now - localNow;
           offsetKnown = true;
           welcomed = true;
+          selfId = f.id;
           backoff = BACKOFF_MIN_MS;
+          clearPending();
           handlers.onSelf?.(f.you.pos);
           current = { ...current, pos: f.you.pos, walk: null };
           const seen = new Set<string>();
@@ -97,17 +121,18 @@ export class EdgeTransport implements ParkTransport {
           break;
         }
         case 'enter':
+          if (f.owl.id === selfId) break;
           knownPeers.add(f.owl.id);
           handlers.onPeerState(fromSnapshot(f.owl, toLocalWalk));
           break;
         case 'move': {
-          // Refine the clock: at - receive time is skew plus one-way latency; keep the minimum.
-          if (offsetKnown) offset = Math.min(offset, f.at - Date.now());
-          if (f.id === current.id) {
+          // Refine the clock: (at - receive time) is the skew minus one-way latency, so the
+          // largest value seen is the closest to the true skew.
+          if (offsetKnown) offset = Math.max(offset, f.at - Date.now());
+          if (f.id === selfId) {
             if (f.seq !== undefined) {
-              const predicted = pending.get(f.seq);
-              pending.delete(f.seq);
-              for (const k of pending.keys()) if (k < f.seq) pending.delete(k);
+              const predicted = pending.get(f.seq)?.to;
+              clearPending(f.seq);
               const differs = !predicted || Math.hypot(predicted.x - f.to.x, predicted.y - f.to.y) > 2;
               if (differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now() });
             }
@@ -118,9 +143,10 @@ export class EdgeTransport implements ParkTransport {
           break;
         }
         case 'look':
-          if (f.id !== current.id) handlers.onPeerLook?.(f.id, f.look);
+          if (f.id !== selfId) handlers.onPeerLook?.(f.id, f.look);
           break;
         case 'leave':
+          if (f.id === selfId) break;
           knownPeers.delete(f.id);
           handlers.onPeerLeave(f.id);
           break;
@@ -155,19 +181,29 @@ export class EdgeTransport implements ParkTransport {
       }
       if (closed) return;
       welcomed = false;
+      opened = false;
       const socket = new WebSocket(`${wsBase}/ws/${encodeURIComponent(roomId)}?pass=${encodeURIComponent(pass.pass)}`);
       ws = socket;
       socket.onopen = () => {
+        opened = true;
+        lastRx = Date.now();
         const hello: ClientFrame = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: current.look };
         if (spawn) hello.spawn = spawn;
-        if (current.pos) hello.pos = { x: Math.round(current.pos.x), y: Math.round(current.pos.y) };
+        const pos = currentPos();
+        hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));
         if (heartbeat) clearInterval(heartbeat);
         heartbeat = setInterval(() => {
-          if (socket.readyState === WebSocket.OPEN) socket.send(HEARTBEAT_FRAME);
+          if (socket.readyState !== WebSocket.OPEN) return;
+          if (Date.now() - lastRx > DEAD_AFTER_MS) {
+            socket.close(4000, 'no reply'); // a dead connection: onclose schedules the reconnect
+            return;
+          }
+          socket.send(HEARTBEAT_FRAME);
         }, HEARTBEAT_INTERVAL_MS);
       };
       socket.onmessage = (ev: MessageEvent<unknown>) => {
+        lastRx = Date.now();
         if (typeof ev.data !== 'string' || ev.data === HEARTBEAT_FRAME) return;
         const f = parseServerFrame(ev.data);
         if (f) onFrame(f);
@@ -181,13 +217,25 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop
         }
-        if (ev.code === CLOSE.BAD_PROTOCOL && welcomed === false && ev.reason === 'malformed frame') {
-          location.reload();
-          return;
+        if (ev.code === CLOSE.BAD_PROTOCOL && !welcomed) {
+          // A stale bundle speaking an old protocol reloads itself, once.
+          let already = false;
+          try {
+            already = sessionStorage.getItem(RELOAD_GUARD_KEY) === '1';
+            sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+          } catch {
+            already = true;
+          }
+          if (!already) {
+            location.reload();
+            return;
+          }
         }
         handlers.onStatus('offline');
-        if (ev.code === CLOSE.BAD_PASS) void connect(true);
-        else scheduleReconnect();
+        // A refused handshake (bad pass, too many connections) surfaces as 1006 before open:
+        // fetch a fresh pass for the next attempt rather than retrying a rejected one for hours.
+        if (ev.code === CLOSE.BAD_PASS || !opened) this.pass = null;
+        scheduleReconnect();
       };
       socket.onerror = () => {
         /* onclose follows */
@@ -204,8 +252,22 @@ export class EdgeTransport implements ParkTransport {
         switch (msg.t) {
           case 'move': {
             seq += 1;
-            pending.set(seq, msg.walk.to);
-            sendFrame({ t: 'move', to: { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) }, seq });
+            const mine = seq;
+            const frame: ClientFrame = { t: 'move', to: { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) }, seq: mine };
+            const arm = (resent: boolean) =>
+              setTimeout(() => {
+                const p = pending.get(mine);
+                if (!p) return;
+                if (p.resent) {
+                  pending.delete(mine); // dropped twice: the server refused it; the echo-less walk stays local
+                  return;
+                }
+                p.resent = true;
+                p.timer = arm(true);
+                sendFrame(frame);
+              }, ECHO_TIMEOUT_MS);
+            pending.set(mine, { to: msg.walk.to, timer: arm(false), resent: false });
+            sendFrame(frame);
             break;
           }
           case 'state':
@@ -227,6 +289,7 @@ export class EdgeTransport implements ParkTransport {
         window.removeEventListener('pagehide', onPageHide);
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (heartbeat) clearInterval(heartbeat);
+        clearPending();
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ t: 'bye' } satisfies ClientFrame));
           ws.close(1000, 'leaving');

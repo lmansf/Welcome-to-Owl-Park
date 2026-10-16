@@ -25,6 +25,8 @@ import {
 export interface Peer {
   send(text: string): void;
   close(code: number, reason: string): void;
+  /** Persist the visitor's durable state next to this socket (the adapter writes the attachment). */
+  persist?(st: VisitorState): void;
 }
 
 /** Everything about one visitor that must survive hibernation (kept ≤ 2 KiB by design). */
@@ -37,6 +39,8 @@ export interface VisitorState {
 
 interface Visitor {
   peer: Peer;
+  /** Session id of the socket that currently owns this visitor; a replacement gets a new one. */
+  sid: string;
   st: VisitorState;
   seq: number;
   tokens: number;
@@ -49,8 +53,6 @@ export interface RoomOptions {
   now: () => number;
   random?: () => number;
   cap: number;
-  /** Called whenever a visitor's durable state changes (the adapter persists it). */
-  onState?: (id: string, st: VisitorState) => void;
   /** Provides park-wide counts for welcome frames. */
   counts?: () => Record<string, number>;
 }
@@ -155,15 +157,28 @@ export class Room {
     return false;
   }
 
+  /** Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. */
+  private inExit(p: Vec2): boolean {
+    return this.def.doors.some((d) => d.to !== undefined && p.x >= d.rect.x && p.x <= d.rect.x + d.rect.w && p.y >= d.rect.y && p.y <= d.rect.y + d.rect.h);
+  }
+
+  /** A point the owl may be put on: walkable, not in an exit, not on top of another owl. */
+  private free(p: Vec2, except?: string): boolean {
+    return isWalkable(p, this.def.walkable) && !this.inExit(p) && !this.occupied(p, except);
+  }
+
   /** Pick a free walkable point near the spawn, shrinking the search each failed attempt. */
   scatter(spawn: Vec2, radius: number, except?: string): Vec2 {
     let r = radius;
+    let fallback: Vec2 | null = null; // walkable and outside exits, but possibly on top of someone
     for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++) {
       const p = { x: Math.round(spawn.x + (this.rnd() * 2 - 1) * r), y: Math.round(spawn.y + (this.rnd() * 2 - 1) * r * 0.5) };
-      if (isWalkable(p, this.def.walkable) && !this.occupied(p, except)) return p;
+      if (this.free(p, except)) return p;
+      if (!fallback && isWalkable(p, this.def.walkable) && !this.inExit(p)) fallback = p;
       r -= LIMITS.scatterShrink;
     }
-    return { ...spawn };
+    if (isWalkable(spawn, this.def.walkable) && !this.inExit(spawn)) return { ...spawn };
+    return fallback ?? { ...spawn };
   }
 
   /**
@@ -171,20 +186,22 @@ export class Room {
    * the welcome and enter frames have been sent. A second session for the same id
    * replaces the first (closed 4005).
    */
-  join(peer: Peer, id: string, hello: ClientHello): 'ok' | 'full' {
+  join(peer: Peer, id: string, hello: ClientHello, sid = ''): 'ok' | 'full' {
     const existing = this.visitors.get(id);
     if (existing) {
+      // The newer session wins; remember where the old one stood so the newcomer can resume there.
+      this.leavers.set(id, { pos: this.currentPos(existing), leftAt: this.now() });
       existing.peer.close(CLOSE.REPLACED, 'replaced by a newer session');
       this.visitors.delete(id);
       this.broadcast({ t: 'leave', id });
     } else if (this.visitors.size >= this.opts.cap) {
       return 'full';
     }
-    const spawnName = hello.spawn ?? 'default';
-    const spawn = findSpawn(this.def, spawnName);
-    const isDoorEntry = spawnName !== 'default' && this.def.spawns[spawnName] !== undefined;
+    // An explicit spawn name means the visitor came through a door: keep them close to it.
+    const isDoorEntry = hello.spawn !== undefined;
+    const spawn = findSpawn(this.def, hello.spawn);
     let pos: Vec2 | null = null;
-    if (hello.pos && isWalkable(hello.pos, this.def.walkable)) {
+    if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !this.inExit(hello.pos)) {
       const recent = this.leavers.get(id);
       const nearSpawn = distance(hello.pos, spawn) <= LIMITS.resumeRadius;
       const nearLeave = recent !== undefined && this.now() - recent.leftAt <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius;
@@ -193,10 +210,10 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [] };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [] };
     this.visitors.set(id, v);
     this.leavers.delete(id);
-    this.opts.onState?.(id, v.st);
+    peer.persist?.(v.st);
 
     this.send(v, {
       t: 'welcome',
@@ -214,9 +231,14 @@ export class Room {
   }
 
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
-  restore(peer: Peer, st: VisitorState): void {
+  restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [] });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [] });
+  }
+
+  /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
+  sessionOf(id: string): string | undefined {
+    return this.visitors.get(id)?.sid;
   }
 
   /** Count a frame against the per-socket flood limit. Returns false when the socket must go. */
@@ -264,7 +286,7 @@ export class Room {
     const at = this.now();
     v.st.walk = { from, to: target, at };
     v.st.pos = from;
-    this.opts.onState?.(id, v.st);
+    v.peer.persist?.(v.st);
     const frame: ServerFrame = { t: 'move', id, from, to: target, at };
     this.broadcast(frame, id);
     this.send(v, { ...frame, seq: msg.seq });
@@ -275,14 +297,15 @@ export class Room {
     if (!v) return;
     if (!this.admitFrame(v)) return void v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
     v.st.look = look;
-    this.opts.onState?.(id, v.st);
+    v.peer.persist?.(v.st);
     this.broadcast({ t: 'look', id, look }, id);
   }
 
-  /** Remove a visitor (graceful bye, socket close, or idle reap). */
-  leave(id: string): void {
+  /** Remove a visitor (graceful bye, socket close, or idle reap). A stale session's close is ignored. */
+  leave(id: string, sid?: string): void {
     const v = this.visitors.get(id);
     if (!v) return;
+    if (sid !== undefined && v.sid !== sid) return;
     const pos = this.currentPos(v);
     this.visitors.delete(id);
     this.leavers.set(id, { pos, leftAt: this.now() });
