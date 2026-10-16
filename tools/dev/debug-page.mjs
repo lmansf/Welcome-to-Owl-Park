@@ -1,0 +1,12 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+page.on('console', (m) => console.log('[console]', m.type(), m.text().slice(0, 400)));
+page.on('pageerror', (e) => console.log('[pageerror]', e.message, e.stack?.split('\n').slice(0,4).join(' | ')));
+page.on('requestfailed', (r) => console.log('[reqfail]', r.url(), r.failure()?.errorText));
+await page.goto('http://localhost:5173/?transport=local');
+await page.waitForTimeout(4000);
+console.log('state:', JSON.stringify(await page.evaluate(() => window.owlPark ? window.owlPark.state() : 'no owlPark')));
+console.log('scenes:', JSON.stringify(await page.evaluate(() => window.owlPark?.game.scene.getScenes(true).map(s => s.scene.key))));
+await page.screenshot({ path: '/tmp/claude-0/-home-user-Welcome-to-Owl-Park/d6e79295-a049-5412-8532-46fb197ac115/scratchpad/debug.png' });
+await browser.close();

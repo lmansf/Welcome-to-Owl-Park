@@ -1,0 +1,22 @@
+{
+  "name": "owl-park",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Owl Park: a 2D multiplayer virtual owl park that runs in the browser.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @owl-park/park dev",
+    "build": "pnpm --filter @owl-park/park build",
+    "preview": "pnpm --filter @owl-park/park preview",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @owl-park/shared test",
+    "e2e": "pnpm --filter @owl-park/park e2e",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

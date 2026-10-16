@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0C1E36" />
+    <meta name="description" content="Owl Park: a virtual owl park you visit online. Wander the park as an owl, alongside everyone else who is here right now." />
+    <title>Owl Park</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='34' r='26' fill='%23C9A227'/%3E%3Ccircle cx='22' cy='30' r='8' fill='%23F6F1E3'/%3E%3Ccircle cx='42' cy='30' r='8' fill='%23F6F1E3'/%3E%3Ccircle cx='22' cy='30' r='4' fill='%230C1E36'/%3E%3Ccircle cx='42' cy='30' r='4' fill='%230C1E36'/%3E%3Cpath d='M32 36 l-4 6 h8 z' fill='%230C1E36'/%3E%3C/svg%3E" />
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #0C1E36; overflow: hidden; overscroll-behavior: none; }
+      body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #F6F1E3; -webkit-user-select: none; user-select: none; touch-action: none; }
+      #game { position: fixed; inset: 0; }
+      #game canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
