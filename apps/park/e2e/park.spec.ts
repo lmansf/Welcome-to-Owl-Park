@@ -37,6 +37,20 @@ test.describe('single visitor', () => {
     await waitForArrival(page, target.x, target.y);
   });
 
+  test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {
+    await openPark(page);
+    const dpr = (await cameraView(page)).dpr; // 1 on the desktop project, 2 (capped) on the phone project
+    const hub = await page.evaluate(() => window.owlPark.textureSize('hub'));
+    const owl = await page.evaluate(() => window.owlPark.textureSize('owl-body'));
+    expect(hub?.w).toBe(1600 * Math.min(dpr, 1.5));
+    expect(owl?.w).toBe(200 * Math.min(dpr, 2));
+    await walkToDoor(page, 'to-market');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('market');
+    // The previous room's art is released; the new room's is loaded at the same scale.
+    expect(await page.evaluate(() => window.owlPark.textureSize('hub'))).toBeNull();
+    expect((await page.evaluate(() => window.owlPark.textureSize('market')))?.w).toBe(1600 * Math.min(dpr, 1.5));
+  });
+
   test('tapping outside the walkable area snaps to its edge', async ({ page }) => {
     await openPark(page);
     await page.evaluate(() => window.owlPark.walkTo(800, 50)); // far up in the sky

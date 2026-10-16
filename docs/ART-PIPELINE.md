@@ -1,25 +1,36 @@
 # Art pipeline: replacing the placeholder art
 
-Every image in the park is an SVG under `apps/park/public/art/`. The game rasterizes each
-one once at a fixed size when it opens. Swap a file and the park picks it up; the code does
-not change. SVG only: the loader requests `<key>.svg` and rejects anything whose root is not `<svg>`,
-so a PNG dropped in its place is silently replaced by the flat placeholder.
+Every image in the park lives under `apps/park/public/art/` and is referenced by key. For each
+key the game tries, in order: `<key>.svg`, then `<key>@2x.png`, then `<key>.png`. Swap a file and
+the park picks it up; the code does not change. Whatever the file's resolution, it is drawn at the
+logical size in the table below.
+
+- **SVG** is rasterized when the room opens, at the device's pixel density (rooms and big set pieces
+  capped at 1.5x by default, `VITE_ART_SCALE_MAX`; owls and signs up to 2x), so one file is sharp on
+  every screen.
+- **PNG** is used as-is. Supply `<key>@2x.png` at twice the logical size for phones and `<key>.png`
+  at the logical size; the game picks the 2x file on dense screens when it exists.
+- Art for a room is loaded when the room opens and released when the visitor leaves it, so memory
+  stays at one room's worth whatever the park grows to.
 
 ## Files and sizes
 
-| File | Size (px) | What it is |
+| Key | Logical size (px) | What it is |
 | --- | --- | --- |
-| `hub.svg`, `hub-fg.svg` | 1600 x 900 | Hub room background, and a transparent foreground overlay drawn in front of the owls |
-| `grove.svg`, `grove-fg.svg` | 1600 x 900 | Storybook realm background and foreground |
-| `guardian.svg` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
-| `market.svg`, `market-fg.svg` | 1600 x 900 | Neon market background and foreground |
-| `robot-owl.svg` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored |
-| `sign-*.svg` (four files) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
-| `owl-body.svg`, `owl-belly.svg`, `owl-accent.svg` | 200 x 240 | Visitor owl layers drawn pure white; the game tints them with the visitor's colours |
-| `owl-face.svg`, `owl-blink.svg` | 200 x 240 | Eyes and beak in fixed colours; the blink frame replaces the face for a moment |
+| `hub`, `hub-fg` | 1600 x 900 | Hub room background, and a transparent foreground overlay drawn in front of the owls |
+| `grove`, `grove-fg` | 1600 x 900 | Storybook realm background and foreground |
+| `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
+| `market`, `market-fg` | 1600 x 900 | Neon market background and foreground |
+| `robot-owl` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored |
+| `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
+| `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers drawn pure white; the game tints them with the visitor's colours |
+| `owl-face`, `owl-blink` | 200 x 240 | Eyes and beak in fixed colours (not tinted); the blink frame replaces the face for a moment, so it must include the beak |
 
-Owl layers share one canvas: feet at (100, 232), facing slightly to one side so a horizontal
-flip reads as turning around. Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
+The owl is five layers, not three: three white tintable layers plus the face and the blink frame.
+
+Owl layers share one canvas: feet at (100, 232) (not the very bottom edge; the 8 px below are
+clear), facing slightly to one side so a horizontal flip reads as turning around. A 2x PNG
+set is 400 x 480 with the feet at (200, 464). Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
 the 200 x 240 canvas becomes 100 x 120, so an owl stands about 100 px tall from head to toes and
 about 70 px wide in a 1600-wide room.
 
@@ -28,6 +39,8 @@ about 70 px wide in a 1600-wide room.
 - Original work only. No text except the four approved closed-realm phrases on the signs.
 - No realm names, no company or zoo names, no personal names, in file names, ids, comments or metadata.
 - Self-contained SVG: no external images, scripts, fonts or `foreignObject`. Generic font families only.
+- A PNG carries no walkable layer, so after replacing a room's art the walkable polygons, doors and
+  spawns still need checking with `?debug=1` (see Room geometry below).
 - Keep each file under about 200 KB. Modest filters; the image is rasterized once, so detail is free but filters are not.
 - Rooms need a clear ground plane in the lower half, nearer is lower, and visible doorways at ground level.
 

@@ -29,11 +29,14 @@ export async function openPark(page: Page, params: Record<string, string> = {}):
 }
 
 export async function state(page: Page): Promise<ParkState> {
-  // During a room change the scene restarts and reports no state for a moment; wait it out.
-  await page.waitForFunction(() => window.owlPark?.state() !== null, null, { timeout: 10_000 });
-  const s = await page.evaluate(() => window.owlPark.state());
-  if (!s) throw new Error('room scene not active');
-  return s as ParkState;
+  // During a room change the scene restarts and loads its art, reporting no state for a while.
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    const s = await page.evaluate(() => window.owlPark?.state() ?? null);
+    if (s) return s as ParkState;
+    if (Date.now() > deadline) throw new Error('room scene not active');
+    await page.waitForTimeout(100);
+  }
 }
 
 export type CameraView = { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number };

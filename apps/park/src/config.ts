@@ -21,6 +21,8 @@ export interface ParkConfig {
   debug: boolean;
   /** Draw at devicePixelRatio for crisp phones (capped). */
   pixelRatio: number;
+  /** Max texture pixels per room pixel for rooms and big set pieces (GPU memory cap). */
+  artScaleMax: number;
 }
 
 export function readConfig(): ParkConfig {
@@ -51,5 +53,6 @@ export function readConfig(): ParkConfig {
     look: q.get('look') ?? undefined,
     debug: q.get('debug') === '1',
     pixelRatio: Math.min(2, Math.max(1, dpr)),
+    artScaleMax: Math.min(2, Math.max(1, Number(env.VITE_ART_SCALE_MAX) || 1.5)),
   };
 }

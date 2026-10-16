@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { facing, hexToInt, positionAlongWalk, type OwlLook, type Vec2, type Walk } from '@owl-park/shared';
 
-/** Native size of the avatar layers; drawn at OWL_SCALE in 1600-wide rooms. */
-export const OWL_W = 200;
-export const OWL_H = 240;
+import { OWL_H, OWL_W } from './art';
+
+export { OWL_H, OWL_W };
+/** The 200 x 240 layer canvas is drawn at this scale in 1600-wide rooms. */
 export const OWL_SCALE = 0.5;
 /** Feet position inside the layer canvas. */
 const FEET = { x: 100, y: 232 };
@@ -56,7 +57,8 @@ export class Owl extends Phaser.GameObjects.Container {
     this.pos = { ...pos };
 
     this.shadow = scene.add.ellipse(0, 0, 54, 18, 0x000000, 0.28);
-    const mk = (key: string) => scene.add.image(-FEET.x, -FEET.y, key).setOrigin(0, 0);
+    // Textures may be rasterized at any resolution; every layer is drawn at the logical canvas size.
+    const mk = (key: string) => scene.add.image(-FEET.x, -FEET.y, key).setOrigin(0, 0).setDisplaySize(OWL_W, OWL_H);
     this.bodyImg = mk(LAYERS[0]);
     this.bellyImg = mk(LAYERS[1]);
     this.accentImg = mk(LAYERS[2]);
@@ -74,9 +76,9 @@ export class Owl extends Phaser.GameObjects.Container {
     this.look = look;
     if (this.scene.renderer.type === Phaser.CANVAS) {
       // Tint is WebGL-only; on the Canvas renderer bake the colour into a texture instead.
-      this.bodyImg.setTexture(tintedLayer(this.scene, LAYERS[0], look.body));
-      this.bellyImg.setTexture(tintedLayer(this.scene, LAYERS[1], look.belly));
-      this.accentImg.setTexture(tintedLayer(this.scene, LAYERS[2], look.accent));
+      this.bodyImg.setTexture(tintedLayer(this.scene, LAYERS[0], look.body)).setDisplaySize(OWL_W, OWL_H);
+      this.bellyImg.setTexture(tintedLayer(this.scene, LAYERS[1], look.belly)).setDisplaySize(OWL_W, OWL_H);
+      this.accentImg.setTexture(tintedLayer(this.scene, LAYERS[2], look.accent)).setDisplaySize(OWL_W, OWL_H);
       return;
     }
     this.bodyImg.setTint(hexToInt(look.body));

@@ -56,6 +56,8 @@ declare global {
       state(): ReturnType<RoomScene['debugState']> | null;
       walkTo(x: number, y: number): void;
       camera(): { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number } | null;
+      /** Texture resolution actually loaded for an art key (tests check per-device rasterization). */
+      textureSize(key: string): { w: number; h: number } | null;
     };
   }
 }
@@ -75,5 +77,10 @@ window.owlPark = {
     const c = s.cameras.main;
     const v = c.worldView;
     return { viewX: v.x, viewY: v.y, viewW: v.width, viewH: v.height, zoom: c.zoom, dpr };
+  },
+  textureSize: (key) => {
+    if (!game.textures.exists(key)) return null;
+    const src = game.textures.get(key).getSourceImage() as { width: number; height: number };
+    return { w: src.width, h: src.height };
   },
 };

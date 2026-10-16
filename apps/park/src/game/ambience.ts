@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ROOM_H, ROOM_W, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
+import { ART } from './art';
 
 /** Generated helper textures shared by every room. */
 export function ensureFxTextures(scene: Phaser.Scene): void {
@@ -39,9 +40,17 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
   }
 }
 
+/** A set piece drawn at its logical size whatever the texture's resolution. */
+function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
+  const spec = ART[key];
+  const img = scene.add.image(x, y, key).setOrigin(0.5, 1);
+  if (spec) img.setDisplaySize(spec.w, spec.h);
+  return img;
+}
+
 /** Scale so a set piece anchored at its feet keeps its head inside the frame. */
-function fitBelowTop(scene: Phaser.Scene, key: string, anchorY: number, margin = 24): number {
-  const h = scene.textures.get(key).getSourceImage().height || 1;
+function fitBelowTop(key: string, anchorY: number, margin = 24): number {
+  const h = ART[key]?.h ?? 1;
   return Math.min(1, Math.max(0.2, (anchorY - margin) / h));
 }
 
@@ -51,15 +60,20 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
   if (room.id === 'grove' && anchors['guardian']) {
     const a = anchors['guardian'];
     const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const k = fitBelowTop(scene, 'guardian', a.y);
-    const guardian = scene.add.image(a.x, a.y, 'guardian').setOrigin(0.5, 1).setScale(k).setDepth(a.y);
-    scene.tweens.add({ targets: guardian, scaleY: k * 1.015, scaleX: k * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const k = fitBelowTop('guardian', a.y);
+    const guardian = piece(scene, a.x, a.y, 'guardian').setDepth(a.y);
+    const sx = guardian.scaleX * k;
+    const sy = guardian.scaleY * k;
+    guardian.setScale(sx, sy);
+    scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
   if (room.id === 'market' && anchors['robot']) {
     const a = anchors['robot'];
     const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const robot = scene.add.image(a.x, a.y, 'robot-owl').setOrigin(0.5, 1).setScale(fitBelowTop(scene, 'robot-owl', a.y)).setDepth(a.y);
+    const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
+    const kr = fitBelowTop('robot-owl', a.y);
+    robot.setScale(robot.scaleX * kr, robot.scaleY * kr);
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
@@ -68,7 +82,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
     if (!m) continue;
     if (door.closedSign) {
       const key = `sign-${door.closedSign.toLowerCase().replace(/\s+/g, '-')}`;
-      scene.add.image(m.x, m.y, scene.textures.exists(key) ? key : 'sign-hatching-soon').setOrigin(0.5, 1).setDepth(m.y);
+      piece(scene, m.x, m.y, scene.textures.exists(key) ? key : 'sign-hatching-soon').setDepth(m.y);
     } else if (door.to) {
       const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
       const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(tint).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);

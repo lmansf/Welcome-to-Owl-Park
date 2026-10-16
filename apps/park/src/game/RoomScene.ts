@@ -18,6 +18,7 @@ import type { ConnectionStatus, ParkTransport, RoomConnection } from '../net';
 import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
 import { addAmbience, addSetPieces, ensureFxTextures } from './ambience';
+import { loadArt, releaseArt, roomArtKeys } from './art';
 import { Owl } from './Owl';
 
 export interface RoomStart {
@@ -43,6 +44,7 @@ export class RoomScene extends Phaser.Scene {
   private room!: RoomDef;
   private me!: Owl;
   private peers = new Map<string, Owl>();
+  private built = false;
   private conn: RoomConnection | null = null;
   private leaving = false;
   private cfg!: ParkConfig;
@@ -68,6 +70,7 @@ export class RoomScene extends Phaser.Scene {
     this.playerId = this.registry.get('playerId') as string;
     this.look = this.registry.get('look') as OwlLook;
     this.peers = new Map();
+    this.built = false;
     this.conn = null;
     this.leaving = false;
     this.inShop = false;
@@ -79,6 +82,24 @@ export class RoomScene extends Phaser.Scene {
   }
 
   create(): void {
+    void this.open();
+  }
+
+  /** Load this room's art (releasing the previous room's), then build the scene. */
+  private async open(): Promise<void> {
+    const gen = this.gen;
+    const previous = this.registry.get('loadedRoom') as string | undefined;
+    if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
+    const { width, height } = this.scale.gameSize;
+    const label = this.add.text(width / 2, height / 2, 'Opening…', { fontSize: '26px', color: '#F6F1E3', fontFamily: 'system-ui, sans-serif' }).setOrigin(0.5).setScrollFactor(0).setDepth(1e6);
+    await loadArt(this, roomArtKeys(this.room.id), this.cfg.pixelRatio, this.cfg.artScaleMax);
+    if (gen !== this.gen || !this.scene.isActive()) return; // the scene moved on while we loaded
+    this.registry.set('loadedRoom', this.room.id);
+    label.destroy();
+    this.build();
+  }
+
+  private build(): void {
     const { room } = this;
     ensureFxTextures(this);
 
@@ -103,10 +124,12 @@ export class RoomScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
+    this.built = true;
     void this.connect();
   }
 
   override update(): void {
+    if (!this.built) return;
     const now = Date.now();
     const finished = this.me.tick(now);
     if (!this.leaving) this.checkDoors(finished);
@@ -242,7 +265,8 @@ export class RoomScene extends Phaser.Scene {
     peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook }>;
     connected: boolean;
     doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
-  } {
+  } | null {
+    if (!this.built) return null;
     return {
       room: this.room.id,
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: d.to?.room })),
@@ -255,6 +279,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Public for tests and future features: walk the local owl to a room point. */
   walkTo(target: Vec2): void {
+    if (!this.built) return;
     const to = resolveTarget({ ...this.me.pos }, target, this.room.walkable);
     if (distance(to, this.me.pos) < 3) return;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
