@@ -58,7 +58,8 @@ export default {
       const headers = new Headers(request.headers);
       headers.set('X-Room', roomId);
       headers.set('X-Visitor-Id', pass.id);
-      headers.set('X-Visitor-Ip', request.headers.get('CF-Connecting-IP') ?? 'unknown');
+      const forwarded = env.TRUST_FORWARDED_FOR === 'true' ? request.headers.get('X-Forwarded-For') : null;
+      headers.set('X-Visitor-Ip', request.headers.get('CF-Connecting-IP') ?? forwarded ?? 'unknown');
       return objectFor(env, roomId).fetch(new Request(request, { headers }));
     }
 

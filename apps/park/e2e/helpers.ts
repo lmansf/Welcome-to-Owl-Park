@@ -29,6 +29,8 @@ export async function openPark(page: Page, params: Record<string, string> = {}):
 }
 
 export async function state(page: Page): Promise<ParkState> {
+  // During a room change the scene restarts and reports no state for a moment; wait it out.
+  await page.waitForFunction(() => window.owlPark?.state() !== null, null, { timeout: 10_000 });
   const s = await page.evaluate(() => window.owlPark.state());
   if (!s) throw new Error('room scene not active');
   return s as ParkState;

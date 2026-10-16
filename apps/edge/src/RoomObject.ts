@@ -20,7 +20,8 @@ interface Attachment {
 const HELLO_TIMEOUT_MS = 5_000;
 const IDLE_CLOSE_MS = 90_000;
 const ALARM_EVERY_MS = 60_000;
-const MAX_SOCKETS_PER_IP = 3;
+/** Default sockets per address per object; a household or office shares one address. Override with MAX_SOCKETS_PER_IP. */
+const DEFAULT_MAX_SOCKETS_PER_IP = 8;
 
 function peerOf(ws: WebSocket): Peer {
   return {
@@ -93,7 +94,8 @@ export class RoomObject extends DurableObject<Env> {
     const id = request.headers.get('X-Visitor-Id') ?? '';
     const ip = request.headers.get('X-Visitor-Ip') ?? 'unknown';
     if (!ROOMS[roomId] || !id) return new Response('bad room', { status: 400 });
-    if (this.ctx.getWebSockets(`ip:${ip}`).length >= MAX_SOCKETS_PER_IP) return new Response('too many connections from this address', { status: 429 });
+    const perIp = Number(this.env.MAX_SOCKETS_PER_IP) || DEFAULT_MAX_SOCKETS_PER_IP;
+    if (this.ctx.getWebSockets(`ip:${ip}`).length >= perIp) return new Response('too many connections from this address', { status: 429 });
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];

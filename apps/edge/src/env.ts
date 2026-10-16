@@ -8,4 +8,8 @@ export interface Env {
   PASS_SIGNING_KEY?: string;
   /** Optional JSON object of per-room caps, e.g. {"hub":80,"grove":40}. */
   ROOM_CAPS?: string;
+  /** Sockets allowed per client address per object (default 8). */
+  MAX_SOCKETS_PER_IP?: string;
+  /** Local load testing only: trust X-Forwarded-For as the client address. Never set in production. */
+  TRUST_FORWARDED_FOR?: string;
 }
