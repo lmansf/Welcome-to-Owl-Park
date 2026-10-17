@@ -54,9 +54,25 @@ function fitBelowTop(key: string, anchorY: number, margin = 24): number {
   return Math.min(1, Math.max(0.2, (anchorY - margin) / h));
 }
 
+export interface Idol {
+  /** The tappable mythical owl. */
+  image: Phaser.GameObjects.Image;
+  /** Play the idol's reaction to a pledge. */
+  react(): void;
+}
+
+export interface SetPieces {
+  idol?: Idol;
+}
+
 /** Large set pieces (guardian, giant robot owl, signs) sorted into the owl depth range. */
-export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
+export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData) => void): SetPieces {
   const anchors = ANCHORS[room.id] ?? {};
+  const pieces: SetPieces = {};
+  const tappable = (img: Phaser.GameObjects.Image) => {
+    img.setInteractive({ useHandCursor: true });
+    img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event));
+  };
   if (room.id === 'grove' && anchors['guardian']) {
     const a = anchors['guardian'];
     const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
@@ -67,6 +83,28 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
     guardian.setScale(sx, sy);
     scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    tappable(guardian);
+    pieces.idol = {
+      image: guardian,
+      react: () => {
+        // The guardian stirs: its glow swells and a drift of fireflies rises from the bough.
+        scene.tweens.add({ targets: glow, alpha: 0.9, scaleX: 6.4, scaleY: 5, duration: 500, yoyo: true, ease: 'Sine.easeOut' });
+        scene.tweens.add({ targets: guardian, scaleY: sy * 1.04, scaleX: sx * 0.985, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        scene.add
+          .particles(a.x, a.y - 40, 'fx-dot', {
+            lifespan: { min: 1500, max: 2600 },
+            speed: { min: 40, max: 120 },
+            angle: { min: 200, max: 340 },
+            scale: { start: 0.5, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [0xffe08a, 0xfff2b3, 0xc9a227],
+            blendMode: Phaser.BlendModes.ADD,
+            emitting: false,
+          })
+          .setDepth(a.y + 1)
+          .explode(36);
+      },
+    };
   }
   if (room.id === 'market' && anchors['robot']) {
     const a = anchors['robot'];
@@ -74,6 +112,28 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
     const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
     const kr = fitBelowTop('robot-owl', a.y);
     robot.setScale(robot.scaleX * kr, robot.scaleY * kr);
+    tappable(robot);
+    pieces.idol = {
+      image: robot,
+      react: () => {
+        // The robot owl flares: a cyan flash and a swell of its glow.
+        robot.setTint(0x9ffcff);
+        scene.time.delayedCall(180, () => robot.clearTint());
+        scene.tweens.add({ targets: glow, alpha: 0.7, scaleX: 6.5, scaleY: 6.5, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        scene.add
+          .particles(a.x, a.y - 320, 'fx-dot', {
+            lifespan: { min: 600, max: 1200 },
+            speed: { min: 120, max: 260 },
+            scale: { start: 0.45, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [0x00e5ff, 0xff2aa1, 0xc7ceda],
+            blendMode: Phaser.BlendModes.ADD,
+            emitting: false,
+          })
+          .setDepth(a.y + 1)
+          .explode(40);
+      },
+    };
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
@@ -96,6 +156,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
       scene.tweens.add({ targets: ring, alpha: 0.4, scaleX: 1.3, scaleY: 0.52, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
+  return pieces;
 }
 
 /** Mood particles: fireflies, neon rain, drifting gold dust. */

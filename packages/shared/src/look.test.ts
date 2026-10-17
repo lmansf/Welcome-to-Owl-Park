@@ -9,6 +9,12 @@ describe('looks', () => {
     expect(isHexColour('red')).toBe(false);
     expect(isHexColour(42)).toBe(false);
   });
+  it('keeps a well-formed pledge and drops a bad one', () => {
+    expect(sanitizeLook({ ...DEFAULT_LOOK, pledge: 'grove' }).pledge).toBe('grove');
+    expect(sanitizeLook({ ...DEFAULT_LOOK, pledge: 'Hoot<script>' }).pledge).toBeUndefined();
+    expect(sanitizeLook({ ...DEFAULT_LOOK })).not.toHaveProperty('pledge');
+  });
+
   it('sanitizes untrusted input field by field', () => {
     expect(sanitizeLook({ body: '#123456', belly: 'javascript:alert(1)', accent: null })).toEqual({ body: '#123456', belly: DEFAULT_LOOK.belly, accent: DEFAULT_LOOK.accent });
     expect(sanitizeLook(undefined)).toEqual(DEFAULT_LOOK);

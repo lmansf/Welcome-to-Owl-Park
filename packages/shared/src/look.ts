@@ -8,6 +8,11 @@ export const ACCENT_COLOURS = ['#C9A227', '#FF2AA1', '#00E5FF', '#6E3AFF', '#E07
 export const DEFAULT_LOOK: OwlLook = { body: '#8B5A2B', belly: '#F6F1E3', accent: '#C9A227' };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+const PLEDGE = /^[a-z][a-z0-9-]{0,23}$/;
+
+export function isPledge(s: unknown): s is string {
+  return typeof s === 'string' && PLEDGE.test(s);
+}
 
 export function isHexColour(s: unknown): s is string {
   return typeof s === 'string' && HEX.test(s);
@@ -16,11 +21,13 @@ export function isHexColour(s: unknown): s is string {
 /** Accepts only well-formed colours; anything else falls back to the default. */
 export function sanitizeLook(input: unknown): OwlLook {
   const o = (input ?? {}) as Partial<Record<keyof OwlLook, unknown>>;
-  return {
+  const look: OwlLook = {
     body: isHexColour(o.body) ? o.body : DEFAULT_LOOK.body,
     belly: isHexColour(o.belly) ? o.belly : DEFAULT_LOOK.belly,
     accent: isHexColour(o.accent) ? o.accent : DEFAULT_LOOK.accent,
   };
+  if (isPledge(o.pledge)) look.pledge = o.pledge;
+  return look;
 }
 
 export function hexToInt(hex: string): number {

@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { dist, openPark, state, waitForArrival, walkToDoor } from './helpers';
+import { dist, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -74,8 +74,9 @@ test.describe('room server', () => {
     const a = await visitor(browser, { room: 'market' });
     await walkToDoor(a, 'idol');
     await expect(a.getByRole('button', { name: 'Vote for this realm' })).toBeVisible({ timeout: 15_000 });
-    await a.getByRole('button', { name: 'Vote for this realm' }).click();
-    await expect(a.getByText(/Voting opens with tickets/)).toBeVisible();
+    await settleCamera(a);
+    await tapRoomPoint(a, 1240, 270); // tap the robot owl itself
+    await expect(a.getByText(/Voting opens with tickets/).first()).toBeVisible({ timeout: 10_000 });
     await a.context().close();
 
     // The API itself: no pass, a guest pass, and the private tally.

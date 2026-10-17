@@ -15,6 +15,8 @@ export interface OwlLook {
   body: string;
   belly: string;
   accent: string;
+  /** Realm this owl pledged to today in the Realm Vote (a gold mark at its feet); cosmetic. */
+  pledge?: string;
 }
 
 /**

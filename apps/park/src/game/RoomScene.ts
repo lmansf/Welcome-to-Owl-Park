@@ -18,7 +18,7 @@ import type { ConnectionStatus, ParkTransport, RoomConnection } from '../net';
 import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
-import { addAmbience, addSetPieces, ensureFxTextures } from './ambience';
+import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { Owl } from './Owl';
 
@@ -56,6 +56,10 @@ export class RoomScene extends Phaser.Scene {
   private inShop = false;
   private atIdol = false;
   private voting = false;
+  /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
+  private pendingVote = false;
+  private pieces: SetPieces = {};
+  private idolTapAt = 0;
   private cameFrom: RoomStart['from'];
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
@@ -79,6 +83,8 @@ export class RoomScene extends Phaser.Scene {
     this.inShop = false;
     this.atIdol = false;
     this.voting = false;
+    this.pendingVote = false;
+    this.pieces = {};
     this.cameFrom = data.from;
     this.gen += 1;
     this.lastStatus = null;
@@ -109,7 +115,7 @@ export class RoomScene extends Phaser.Scene {
     ensureFxTextures(this);
 
     this.add.image(0, 0, room.background).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(-1);
-    addSetPieces(this, room);
+    this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     addAmbience(this, room);
     if (room.foreground && this.textures.exists(room.foreground)) {
       this.add.image(0, 0, room.foreground).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(room.size.h + 100);
@@ -258,10 +264,27 @@ export class RoomScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
       // Phaser only emits POINTER_UP for releases on the canvas; also require the press to have been on it.
       if (this.leaving || p.downElement !== this.game.canvas) return;
+      if (Date.now() - this.idolTapAt < 100) return; // the idol took this tap
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
+      this.pendingVote = false; // a new destination cancels a walk to the idol
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
       this.walkTo({ x: world.x, y: world.y });
     });
+  }
+
+  /** Tapping the realm's idol: pledge now if standing at it, otherwise walk up and pledge on arrival. */
+  private onIdolTap(pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
+    if (this.leaving || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
+    event.stopPropagation();
+    this.idolTapAt = Date.now();
+    if (this.atIdol) {
+      void this.vote();
+      return;
+    }
+    const spot = this.room.doors.find((d) => d.id === 'idol');
+    if (!spot) return;
+    this.pendingVote = true;
+    this.walkTo({ x: spot.rect.x + spot.rect.w / 2, y: spot.rect.y + spot.rect.h / 2 });
   }
 
   /** Read-only snapshot for tests and the console. */
@@ -327,6 +350,21 @@ export class RoomScene extends Phaser.Scene {
       this.atIdol = idolNow;
       this.hud.showVote(idolNow);
     }
+    if (idolNow && walkFinished && this.pendingVote) {
+      this.pendingVote = false;
+      void this.vote();
+    }
+  }
+
+  /** Remember today's pledge on the owl (visible to everyone) and tell the idol. */
+  private pledged(realm: string): void {
+    this.pieces.idol?.react();
+    if (this.look.pledge === realm) return;
+    this.look = { ...this.look, pledge: realm };
+    this.registry.set('look', this.look);
+    this.me.applyLook(this.look);
+    this.conn?.send({ t: 'state', state: this.snapshot() });
+    this.conn?.track(this.snapshot());
   }
 
   /** The Realm Vote: one vote per ticket-holder per park day, cast here at the idol. */
@@ -337,9 +375,11 @@ export class RoomScene extends Phaser.Scene {
       const outcome = await castVote(this.transport, this.room.id);
       switch (outcome.kind) {
         case 'voted':
+          this.pledged(outcome.realm);
           this.hud.toast('Your vote for this realm is in. One vote a day, so come back tomorrow.', 4000);
           break;
         case 'already':
+          if (outcome.votedFor === this.room.id) this.pledged(this.room.id);
           this.hud.toast(outcome.votedFor === this.room.id ? 'You already voted for this realm today.' : 'You already voted today. Each day brings one vote.', 3500);
           break;
         case 'tickets-required':

@@ -31,7 +31,9 @@ export function loadLook(cfg: ParkConfig, playerId: string): OwlLook {
 
 export function saveLook(look: OwlLook): void {
   try {
-    localStorage.setItem(LOOK_KEY, JSON.stringify(sanitizeLook(look)));
+    // Colours persist; a pledge is today's state and comes back from the server, not storage.
+    const { pledge: _pledge, ...colours } = sanitizeLook(look);
+    localStorage.setItem(LOOK_KEY, JSON.stringify(colours));
   } catch {
     /* ignore */
   }

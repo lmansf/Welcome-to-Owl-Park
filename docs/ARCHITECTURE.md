@@ -126,9 +126,14 @@ Canon: every ticket-holder gets one vote per park day, cast by walking up to a r
 mythical owl) and tapping; votes are tied to ticket identity and guests cannot vote; the month's
 winner sets the next merch drop; ties go to the realm with the fewest all-time wins.
 
-- **In the park**: each open realm has an `idol` spot in its room data (the gathering spot under
-  the guardian, the ground beneath the robot owl). Standing there shows a "Vote for this realm"
-  button; the ground glows softly to invite visitors over.
+- **In the park**: each open realm's mythical owl is its idol and is tappable. Tap it from anywhere
+  in the realm and your owl walks up to the `idol` spot (the gathering circle under the guardian,
+  the ground beneath the robot owl) and pledges on arrival; tap it while standing there and the
+  pledge is immediate. The idol reacts (the guardian's glow swells and fireflies rise; the robot
+  owl flares cyan), and a gold pledge mark shows at the owl's feet for the rest of the park day,
+  visible to everyone (carried as `look.pledge`, cosmetic and client-asserted). A "Vote for this
+  realm" button appears at the spot as a fallback for small screens and assistive input.
+- **Closed realms** take no votes until they open; each has its own release.
 - **Server**: `POST /api/vote` with the visitor's pass. The Worker verifies the pass and refuses
   guests (403 `tickets-required`) until the ticket gate admits them; an admitted pass carries the
   ticket-holder's identity, which is what the vote is keyed on. `GET /api/vote/me` reports today's

@@ -46,6 +46,7 @@ export class Owl extends Phaser.GameObjects.Container {
   private readonly faceImg: Phaser.GameObjects.Image;
   private readonly blinkImg: Phaser.GameObjects.Image;
   private readonly shadow: Phaser.GameObjects.Ellipse;
+  private readonly pledgeMark: Phaser.GameObjects.Image;
   private readonly art: Phaser.GameObjects.Container;
   private dir: -1 | 1 = 1;
   private nextBlinkAt = 0;
@@ -57,6 +58,8 @@ export class Owl extends Phaser.GameObjects.Container {
     this.pos = { ...pos };
 
     this.shadow = scene.add.ellipse(0, 0, 54, 18, 0x000000, 0.28);
+    // The pledge mark: a small gold glow at the feet, shown for the day after a Realm Vote.
+    this.pledgeMark = scene.add.image(0, 2, 'fx-glow').setTint(0xffd36a).setScale(0.5, 0.2).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
     // Textures may be rasterized at any resolution; every layer is drawn at the logical canvas size.
     const mk = (key: string) => scene.add.image(-FEET.x, -FEET.y, key).setOrigin(0, 0).setDisplaySize(OWL_W, OWL_H);
     this.bodyImg = mk(LAYERS[0]);
@@ -65,7 +68,7 @@ export class Owl extends Phaser.GameObjects.Container {
     this.faceImg = mk(LAYERS[3]);
     this.blinkImg = mk('owl-blink').setVisible(false);
     this.art = scene.add.container(0, 0, [this.bodyImg, this.bellyImg, this.accentImg, this.faceImg, this.blinkImg]);
-    this.add([this.shadow, this.art]);
+    this.add([this.pledgeMark, this.shadow, this.art]);
     this.setScale(OWL_SCALE);
     this.applyLook(look);
     this.nextBlinkAt = Date.now() + 1500 + Math.random() * 4000;
@@ -74,6 +77,7 @@ export class Owl extends Phaser.GameObjects.Container {
 
   applyLook(look: OwlLook): void {
     this.look = look;
+    this.pledgeMark.setAlpha(look.pledge ? 0.75 : 0);
     if (this.scene.renderer.type === Phaser.CANVAS) {
       // Tint is WebGL-only; on the Canvas renderer bake the colour into a texture instead.
       this.bodyImg.setTexture(tintedLayer(this.scene, LAYERS[0], look.body)).setDisplaySize(OWL_W, OWL_H);
@@ -135,6 +139,8 @@ export class Owl extends Phaser.GameObjects.Container {
       this.art.scaleY = 1 + breathe;
       this.shadow.setScale(1, 1);
     }
+
+    if (this.look.pledge) this.pledgeMark.setAlpha(0.6 + Math.sin(now / 500) * 0.15);
 
     // Blink now and then.
     if (now >= this.nextBlinkAt) {

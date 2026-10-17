@@ -136,8 +136,12 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (!isVec2(v['to']) || typeof v['seq'] !== 'number' || !Number.isInteger(v['seq']) || v['seq'] < 0 || v['seq'] > 1e9) return null;
       return { t: 'move', to: { x: Math.round(v['to'].x), y: Math.round(v['to'].y) }, seq: v['seq'] };
     }
-    case 'look':
-      return isLook(v['look']) ? { t: 'look', look: { body: v['look'].body, belly: v['look'].belly, accent: v['look'].accent } } : null;
+    case 'look': {
+      if (!isLook(v['look'])) return null;
+      const look: ClientLook['look'] = { body: v['look'].body, belly: v['look'].belly, accent: v['look'].accent };
+      if (v['look'].pledge !== undefined) look.pledge = v['look'].pledge;
+      return { t: 'look', look };
+    }
     case 'bye':
       return { t: 'bye' };
     default:

@@ -47,6 +47,18 @@ export async function cameraView(page: Page): Promise<CameraView> {
   return cam;
 }
 
+/** Wait until the camera stops panning (it follows the owl with a lerp). */
+export async function settleCamera(page: Page): Promise<CameraView> {
+  let last = await cameraView(page);
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(100);
+    const now = await cameraView(page);
+    if (Math.abs(now.viewX - last.viewX) < 0.5 && Math.abs(now.viewY - last.viewY) < 0.5) return now;
+    last = now;
+  }
+  return last;
+}
+
 /** Convert a room point to a CSS-pixel screen point using the live camera's visible world rectangle. */
 export async function toScreen(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
   const cam = await cameraView(page);

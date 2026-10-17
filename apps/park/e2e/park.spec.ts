@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { cameraView, dist, openPark, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { cameraView, dist, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 test.describe('single visitor', () => {
   test('the park opens in the hub with one owl present', async ({ page }) => {
@@ -15,8 +15,7 @@ test.describe('single visitor', () => {
   test('tapping the ground walks the owl there', async ({ page }) => {
     await openPark(page);
     const before = await state(page);
-    await page.waitForTimeout(600); // let the camera settle on the owl
-    const view = await cameraView(page);
+    const view = await settleCamera(page);
     // A point to the right of the owl that is on screen even on a narrow portrait phone.
     const target = { x: before.pos.x + Math.min(220, view.viewW * 0.3), y: before.pos.y + 40 };
     await tapRoomPoint(page, target.x, target.y);
@@ -30,8 +29,7 @@ test.describe('single visitor', () => {
     await page.getByRole('button', { name: 'Your owl' }).click();
     await page.getByRole('button', { name: 'Your owl' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
-    await page.waitForTimeout(400);
-    const view = await cameraView(page);
+    const view = await settleCamera(page);
     const target = { x: before.pos.x - Math.min(200, view.viewW * 0.3), y: before.pos.y + 30 };
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y);
@@ -88,8 +86,21 @@ test.describe('single visitor', () => {
     await walkToDoor(page, 'idol');
     await expect(page.getByRole('button', { name: 'Vote for this realm' })).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Vote for this realm' }).click();
-    await expect(page.getByText(/Voting opens/)).toBeVisible();
+    await expect(page.getByText(/Voting opens/).first()).toBeVisible();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-idol.png` });
+  });
+
+  test('tapping the idol from afar walks the owl up to it and pledges on arrival', async ({ page }) => {
+    await openPark(page, { room: 'grove' });
+    // Stand near the gathering spot (outside it) so the guardian is on screen even on a phone.
+    await page.evaluate(() => window.owlPark.walkTo(900, 720));
+    await waitForArrival(page, 900, 720);
+    await settleCamera(page);
+    await tapRoomPoint(page, 800, 260); // the guardian's chest
+    const s = await state(page);
+    const spot = s.doors.find((d) => d.id === 'idol')!;
+    await waitForArrival(page, spot.x, spot.y); // the tap sent the owl to the gathering spot
+    await expect(page.getByText(/Voting opens/).first()).toBeVisible({ timeout: 10_000 });
   });
 });
 
