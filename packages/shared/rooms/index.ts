@@ -67,7 +67,11 @@ export const ROOMS: Record<string, RoomDef> = {
       ],
     ],
     spawns: { 'default': { x: 1406, y: 760 } },
-    doors: [{ id: 'to-hub', rect: { x: 1486, y: 630, w: 114, h: 250 }, to: { room: 'hub', spawn: 'from-grove' }, marker: { x: 1545, y: 745 } }],
+    doors: [
+      { id: 'to-hub', rect: { x: 1486, y: 630, w: 114, h: 250 }, to: { room: 'hub', spawn: 'from-grove' }, marker: { x: 1545, y: 745 } },
+      // The gathering spot beneath the guardian: standing here lets a ticket-holder vote for this realm.
+      { id: 'idol', rect: { x: 690, y: 560, w: 220, h: 120 }, marker: { x: 800, y: 612 } },
+    ],
   },
   market: {
     id: 'market',
@@ -95,6 +99,8 @@ export const ROOMS: Record<string, RoomDef> = {
     doors: [
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, marker: { x: 70, y: 580 } },
       { id: 'shop', rect: { x: 730, y: 590, w: 256, h: 90 }, marker: { x: 857, y: 234 } },
+      // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
+      { id: 'idol', rect: { x: 1130, y: 590, w: 220, h: 110 }, marker: { x: 1240, y: 640 } },
     ],
   },
 };

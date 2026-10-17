@@ -15,6 +15,7 @@ import {
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import type { ConnectionStatus, ParkTransport, RoomConnection } from '../net';
+import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
 import { addAmbience, addSetPieces, ensureFxTextures } from './ambience';
@@ -53,6 +54,8 @@ export class RoomScene extends Phaser.Scene {
   private playerId!: string;
   private look!: OwlLook;
   private inShop = false;
+  private atIdol = false;
+  private voting = false;
   private cameFrom: RoomStart['from'];
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
@@ -74,6 +77,8 @@ export class RoomScene extends Phaser.Scene {
     this.conn = null;
     this.leaving = false;
     this.inShop = false;
+    this.atIdol = false;
+    this.voting = false;
     this.cameFrom = data.from;
     this.gen += 1;
     this.lastStatus = null;
@@ -119,8 +124,10 @@ export class RoomScene extends Phaser.Scene {
 
     this.hud.setCount(1);
     this.hud.showShop(false);
+    this.hud.showVote(false);
     this.hud.onLookChange((look) => this.changeLook(look));
     this.hud.onShop(() => this.openShop());
+    this.hud.onVote(() => void this.vote());
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
@@ -300,6 +307,7 @@ export class RoomScene extends Phaser.Scene {
   private checkDoors(walkFinished: boolean): void {
     const pos = this.me.pos;
     let shopNow = false;
+    let idolNow = false;
     for (const door of this.room.doors) {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
@@ -308,11 +316,43 @@ export class RoomScene extends Phaser.Scene {
         return;
       }
       if (door.id === 'shop') shopNow = true;
+      if (door.id === 'idol') idolNow = true;
       if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
     }
     if (shopNow !== this.inShop) {
       this.inShop = shopNow;
       this.hud.showShop(shopNow);
+    }
+    if (idolNow !== this.atIdol) {
+      this.atIdol = idolNow;
+      this.hud.showVote(idolNow);
+    }
+  }
+
+  /** The Realm Vote: one vote per ticket-holder per park day, cast here at the idol. */
+  private async vote(): Promise<void> {
+    if (this.voting || !this.atIdol) return;
+    this.voting = true;
+    try {
+      const outcome = await castVote(this.transport, this.room.id);
+      switch (outcome.kind) {
+        case 'voted':
+          this.hud.toast('Your vote for this realm is in. One vote a day, so come back tomorrow.', 4000);
+          break;
+        case 'already':
+          this.hud.toast(outcome.votedFor === this.room.id ? 'You already voted for this realm today.' : 'You already voted today. Each day brings one vote.', 3500);
+          break;
+        case 'tickets-required':
+          this.hud.toast('Voting opens with tickets: ticket-holders get one vote a day.', 4000);
+          break;
+        case 'unavailable':
+          this.hud.toast('Voting opens when the park is online with tickets.', 3500);
+          break;
+        default:
+          this.hud.toast('The idol did not hear you. Try again in a moment.', 3500);
+      }
+    } finally {
+      this.voting = false;
     }
   }
 

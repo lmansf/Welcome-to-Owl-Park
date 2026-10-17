@@ -54,7 +54,10 @@ Deploying:
    The free plan fails closed at the daily cap.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (`open` now; `ticket` once tickets exist), and optional `ROOM_CAPS` JSON.
+`GATE` (`open` now; `ticket` once tickets exist), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
+day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
+`PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally
+and to close a month by hand). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 

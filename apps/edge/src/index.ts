@@ -7,13 +7,31 @@ import { ROOMS } from './rooms';
 import type { Env } from './env';
 
 export { RoomObject } from './RoomObject';
+export { VoteLedger } from './VoteLedger';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key',
   'Cache-Control': 'no-store',
 };
+
+function votes(env: Env): DurableObjectStub {
+  return env.VOTES.get(env.VOTES.idFromName('park'));
+}
+
+function isAdmin(request: Request, env: Env): boolean {
+  const key = env.ADMIN_KEY;
+  const given = request.headers.get('X-Admin-Key') ?? '';
+  return !!key && key.length >= 16 && given === key;
+}
+
+/** The pass from the Authorization header (Bearer) or the query string. */
+async function passFrom(request: Request, env: Env) {
+  const auth = request.headers.get('Authorization') ?? '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : new URL(request.url).searchParams.get('pass');
+  return verifyPass(signingSecret(env), token);
+}
 
 function objectFor(env: Env, roomId: string): DurableObjectStub {
   const name = env.ROOM_SHARDING === 'room' ? `room:${roomId}` : 'park';
@@ -30,6 +48,41 @@ export default {
       const exp = Math.floor(Date.now() / 1000) + GUEST_PASS_TTL_S;
       const pass = await mintPass(signingSecret(env), { id: randomVisitorId(), exp, adm: false });
       return Response.json({ pass, exp }, { headers: CORS });
+    }
+
+    // ---- Realm Vote ----
+    if (url.pathname.startsWith('/api/vote')) {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (url.pathname === '/api/vote/tally') {
+        if (env.VOTE_TALLY_PUBLIC !== 'true' && !isAdmin(request, env)) return Response.json({ error: 'private' }, { status: 403, headers: CORS });
+        const r = await votes(env).fetch(`https://park/tally${url.search}`);
+        return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+      if (url.pathname === '/api/vote/close') {
+        if (request.method !== 'POST' || !isAdmin(request, env)) return Response.json({ error: 'forbidden' }, { status: 403, headers: CORS });
+        const r = await votes(env).fetch(`https://park/close${url.search}`, { method: 'POST' });
+        return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+      const pass = await passFrom(request, env);
+      if (!pass) return Response.json({ error: 'bad-pass' }, { status: 401, headers: CORS });
+      // Only ticket-holders vote: a guest pass is refused until the ticket gate admits the visitor.
+      if (!pass.adm) return Response.json({ error: 'tickets-required' }, { status: 403, headers: CORS });
+      if (url.pathname === '/api/vote/me') {
+        const r = await votes(env).fetch(`https://park/status?visitor=${encodeURIComponent(pass.id)}`);
+        return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+      if (url.pathname === '/api/vote' && request.method === 'POST') {
+        let realm = '';
+        try {
+          realm = String(((await request.json()) as { realm?: unknown }).realm ?? '');
+        } catch {
+          return Response.json({ error: 'bad request' }, { status: 400, headers: CORS });
+        }
+        if (!/^[a-z][a-z0-9-]{0,23}$/.test(realm)) return Response.json({ error: 'bad request' }, { status: 400, headers: CORS });
+        const r = await votes(env).fetch('https://park/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visitor: pass.id, realm }) });
+        return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+      return Response.json({ error: 'not found' }, { status: 404, headers: CORS });
     }
 
     if (url.pathname === '/api/counts') {
@@ -65,5 +118,10 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+  },
+
+  /** Month-end: decide the previous park month's Realm Vote. */
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await votes(env).fetch('https://park/close', { method: 'POST' });
   },
 } satisfies ExportedHandler<Env>;

@@ -8,6 +8,9 @@ export interface Hud {
   setStatus(s: ConnectionStatus, kind: 'local' | 'supabase' | 'edge'): void;
   toast(message: string, ms?: number): void;
   showShop(show: boolean): void;
+  /** Show the Realm Vote button (standing at a realm's idol). */
+  showVote(show: boolean): void;
+  onVote(cb: () => void): void;
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
   onShop(cb: () => void): void;
@@ -41,8 +44,9 @@ const CSS = `
 #hud .toasts{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 @keyframes hud-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-#hud .shop{display:none}
-#hud .shop.show{display:inline-block;animation:hud-in .25s ease-out}
+#hud .shop,#hud .vote{display:none}
+#hud .shop.show,#hud .vote.show{display:inline-block;animation:hud-in .25s ease-out}
+#hud .actions{display:flex;gap:8px;align-items:flex-end}
 `;
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
@@ -68,7 +72,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
         </div>
         <button class="ghost" data-customize aria-expanded="false">Your owl</button>
       </div>
-      <button class="shop" data-shop>Gift shop</button>
+      <div class="actions">
+        <button class="vote" data-vote>Vote for this realm</button>
+        <button class="shop" data-shop>Gift shop</button>
+      </div>
     </div>`;
   parent.appendChild(root);
 
@@ -79,10 +86,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const panel = $<HTMLElement>('[data-panel]');
   const customize = $<HTMLButtonElement>('[data-customize]');
   const shop = $<HTMLButtonElement>('[data-shop]');
+  const vote = $<HTMLButtonElement>('[data-vote]');
 
   let look: OwlLook = { ...initialLook };
   let lookCb: ((l: OwlLook) => void) | null = null;
   let shopCb: (() => void) | null = null;
+  let voteCb: (() => void) | null = null;
   let here = 1;
   let park: number | null = null;
   const renderCount = () => {
@@ -123,6 +132,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     customize.setAttribute('aria-expanded', String(open));
   });
   shop.addEventListener('click', () => shopCb?.());
+  vote.addEventListener('click', () => voteCb?.());
 
   return {
     setCount(n) {
@@ -147,6 +157,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     },
     showShop(show) {
       shop.classList.toggle('show', show);
+    },
+    showVote(show) {
+      vote.classList.toggle('show', show);
+    },
+    onVote(cb) {
+      voteCb = cb;
     },
     setLook(l) {
       look = { ...l };

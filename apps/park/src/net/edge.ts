@@ -55,6 +55,16 @@ export class EdgeTransport implements ParkTransport {
     return this.pass;
   }
 
+  /** POST a vote with this visitor's pass; the server decides admission and the daily limit. */
+  async vote(realm: string): Promise<Response> {
+    const pass = await this.getPass();
+    return fetch(`${this.base}/api/vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pass.pass}` },
+      body: JSON.stringify({ realm }),
+    });
+  }
+
   async join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection> {
     handlers.onStatus('connecting');
     const wsBase = this.base ? this.base.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;

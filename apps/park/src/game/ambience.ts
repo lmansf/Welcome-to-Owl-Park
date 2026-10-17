@@ -90,6 +90,10 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef): void {
     } else if (door.id === 'shop') {
       const chevron = scene.add.image(m.x, m.y, 'fx-chevron').setTint(0xc9a227).setDepth(m.y + 1);
       scene.tweens.add({ targets: chevron, y: m.y + 14, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    } else if (door.id === 'idol') {
+      // A soft gold ring on the ground where visitors gather to vote.
+      const ring = scene.add.image(m.x, m.y, 'fx-glow').setTint(0xc9a227).setAlpha(0.22).setScale(1.1, 0.45).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({ targets: ring, alpha: 0.4, scaleX: 1.3, scaleY: 0.52, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
 }

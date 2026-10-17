@@ -120,7 +120,32 @@ variable (defaults: hub 80, grove 40, market 40).
 4. The `Room` class in `apps/edge/src/Room.ts` has no platform dependency. Porting to a plain
    Node WebSocket process is a small adapter, which is the exit from the hosted platform.
 
-## 7. Ticket gating (v2, designed, not built)
+## 7. The Realm Vote (built, opens with tickets)
+
+Canon: every ticket-holder gets one vote per park day, cast by walking up to a realm's idol (its
+mythical owl) and tapping; votes are tied to ticket identity and guests cannot vote; the month's
+winner sets the next merch drop; ties go to the realm with the fewest all-time wins.
+
+- **In the park**: each open realm has an `idol` spot in its room data (the gathering spot under
+  the guardian, the ground beneath the robot owl). Standing there shows a "Vote for this realm"
+  button; the ground glows softly to invite visitors over.
+- **Server**: `POST /api/vote` with the visitor's pass. The Worker verifies the pass and refuses
+  guests (403 `tickets-required`) until the ticket gate admits them; an admitted pass carries the
+  ticket-holder's identity, which is what the vote is keyed on. `GET /api/vote/me` reports today's
+  vote. A `VoteLedger` Durable Object (SQLite) applies the rules through the portable `Ledger`
+  class in `apps/edge/src/Ledger.ts`: one row per (park day, visitor), counts per realm per month,
+  and a `wins` table for the tie-break. The park day follows `PARK_TZ` (default America/New_York).
+- **Month end**: a cron (`5 5 1 * *`, just after midnight in the park's time zone) decides the
+  previous month: most votes wins; ties go to fewest all-time wins, then the park's fixed realm
+  order (an engineering default until canon says otherwise). `POST /api/vote/close?month=` does
+  the same by hand. Deciding is idempotent.
+- **Standings**: `GET /api/vote/tally?month=` is private (admin key) until the owner decides whether
+  the race should be visible in the park; set `VOTE_TALLY_PUBLIC=true` to open it.
+- **Data pipeline**: the ledger is the source of truth; the tally endpoint (or a scheduled export)
+  feeds the sales and data pipeline. Mirroring rows into the Supabase ticket ledger is a small
+  follow-up once that ledger exists.
+
+## 8. Ticket gating (v2, designed, not built)
 
 Shopify `orders/paid` webhook -> the Worker records the order -> after the fraud review the
 order is tagged approved -> the Worker mints a long-lived claim token and emails a link ->
@@ -129,7 +154,13 @@ visitors with a valid ticket window -> `GATE=ticket` makes the room server refus
 Refunds revoke the session and the pass expires within the hour. Nothing in this flow changes
 the wire protocol; v1 already carries the pass and the gate flag.
 
-## 8. Open questions for the owner (with the defaults in the code)
+**Opening-night entry with the Drop-1 pin (canon):** each pin order mints one entry token through
+the same flow at $0, with a validity window covering opening night only (date to be announced).
+In the ledger that is a ticket row whose `valid_from`/`valid_until` is that night and whose order
+line is the pin product; one pin, one token. The same admitted pass then also allows one Realm
+Vote that night.
+
+## 9. Open questions for the owner (with the defaults in the code)
 
 1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.

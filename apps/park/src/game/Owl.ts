@@ -6,8 +6,8 @@ import { OWL_H, OWL_W } from './art';
 export { OWL_H, OWL_W };
 /** The 200 x 240 layer canvas is drawn at this scale in 1600-wide rooms. */
 export const OWL_SCALE = 0.5;
-/** Feet position inside the layer canvas. */
-const FEET = { x: 100, y: 232 };
+/** Feet position inside the layer canvas: bottom-centre, per the art pipeline canon. */
+const FEET = { x: 100, y: 240 };
 
 const LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face'] as const;
 

@@ -39,4 +39,6 @@ export interface RoomConnection {
 export interface ParkTransport {
   readonly kind: 'local' | 'supabase' | 'edge';
   join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection>;
+  /** Cast a Realm Vote as this visitor; only transports with an authenticated server offer it. */
+  vote?(realm: string): Promise<Response>;
 }

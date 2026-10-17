@@ -70,6 +70,29 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
+  test('the Realm Vote refuses guests until tickets exist, and keeps standings private', async ({ browser, request }) => {
+    const a = await visitor(browser, { room: 'market' });
+    await walkToDoor(a, 'idol');
+    await expect(a.getByRole('button', { name: 'Vote for this realm' })).toBeVisible({ timeout: 15_000 });
+    await a.getByRole('button', { name: 'Vote for this realm' }).click();
+    await expect(a.getByText(/Voting opens with tickets/)).toBeVisible();
+    await a.context().close();
+
+    // The API itself: no pass, a guest pass, and the private tally.
+    const noPass = await request.post('/api/vote', { data: { realm: 'market' } });
+    expect(noPass.status()).toBe(401);
+    const pass = (await (await request.get('/api/pass')).json()) as { pass: string };
+    const guest = await request.post('/api/vote', { data: { realm: 'market' }, headers: { Authorization: `Bearer ${pass.pass}` } });
+    expect(guest.status()).toBe(403);
+    expect(await guest.json()).toEqual({ error: 'tickets-required' });
+    const me = await request.get('/api/vote/me', { headers: { Authorization: `Bearer ${pass.pass}` } });
+    expect(me.status()).toBe(403);
+    const tally = await request.get('/api/vote/tally');
+    expect(tally.status()).toBe(403);
+    const close = await request.post('/api/vote/close');
+    expect(close.status()).toBe(403);
+  });
+
   test('closing the tab removes the owl for everyone else', async ({ browser }) => {
     const a = await visitor(browser);
     const b = await visitor(browser);

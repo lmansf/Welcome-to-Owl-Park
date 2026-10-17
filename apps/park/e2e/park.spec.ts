@@ -81,6 +81,16 @@ test.describe('single visitor', () => {
     await expect(page.getByRole('button', { name: 'Gift shop' })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-market.png` });
   });
+
+  test('standing at a realm idol offers the Realm Vote; without a ticketed server it explains', async ({ page }) => {
+    await openPark(page, { room: 'grove' });
+    await expect(page.getByRole('button', { name: 'Vote for this realm' })).toBeHidden();
+    await walkToDoor(page, 'idol');
+    await expect(page.getByRole('button', { name: 'Vote for this realm' })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Vote for this realm' }).click();
+    await expect(page.getByText(/Voting opens/)).toBeVisible();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-idol.png` });
+  });
 });
 
 test.describe('two visitors on one device', () => {

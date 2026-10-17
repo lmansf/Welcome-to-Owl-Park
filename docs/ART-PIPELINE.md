@@ -28,9 +28,8 @@ logical size in the table below.
 
 The owl is five layers, not three: three white tintable layers plus the face and the blink frame.
 
-Owl layers share one canvas: feet at (100, 232) (not the very bottom edge; the 8 px below are
-clear), facing slightly to one side so a horizontal flip reads as turning around. A 2x PNG
-set is 400 x 480 with the feet at (200, 464). Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
+Owl layers share one canvas: feet on the bottom edge at (100, 240), facing slightly to one side
+so a horizontal flip reads as turning around. A 2x PNG set is 400 x 480 with the feet at (200, 480). Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
 the 200 x 240 canvas becomes 100 x 120, so an owl stands about 100 px tall from head to toes and
 about 70 px wide in a 1600-wide room.
 
@@ -59,7 +58,8 @@ in room pixels (1600 x 900). When a room's layout changes, update:
 
 - `walkable`: one or more simple polygons the owl may stand on (feet position).
 - `doors`: trigger rectangles. Open doors have `to: { room, spawn }`. Closed doors have `closedSign`
-  (one of the approved phrases) and show a sign at `marker`. The `shop` door is the gift-shop spot.
+  (one of the approved phrases) and show a sign at `marker`. Two spots are not doors: `shop` is the
+  gift-shop spot, and `idol` is where visitors stand at the realm's mythical owl to cast a Realm Vote.
 - `spawns`: where an owl appears when entering; `default` is required.
 - `ANCHORS`: bottom-centre points for large set pieces (guardian, robot owl, tree base).
 

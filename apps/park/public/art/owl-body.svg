@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240">
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240"><g transform="translate(0 8)" data-feet="bottom">
 <desc>Visitor owl avatar, body layer: flat white silhouette of head, ear tufts, body and stubby wings, with subtle translucent-black shading. Drawn in a slight three-quarter turn (near side on the left, far side on the right). Tinted by the game. Original placeholder art for Owl Park.</desc>
 <defs>
 <path id="headShape" d="M100,28 C152,28 168,70 166,98 C164,132 137,148 104,148 C68,148 36,132 34,98 C32,70 48,28 100,28 Z"/>
@@ -56,4 +56,4 @@
   <path d="M52,58 C50,42 48,26 44,12 C52,30 62,42 78,46 C68,50 58,54 52,58 Z"/>
   <path d="M146,54 C148,40 149,26 149,14 C143,30 134,41 124,46 C131,49 138,51 146,54 Z"/>
 </g>
-</svg>
+</g></svg>

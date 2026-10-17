@@ -11,9 +11,17 @@
     "run_worker_first": ["/ws/*", "/api/*"]
   },
   "durable_objects": {
-    "bindings": [{ "name": "ROOMS", "class_name": "RoomObject" }]
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomObject" },
+      { "name": "VOTES", "class_name": "VoteLedger" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomObject"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["VoteLedger"] }
+  ],
+  // Month close for the Realm Vote: 05:05 UTC on the 1st (just after midnight in the park's time zone).
+  "triggers": { "crons": ["5 5 1 * *"] },
   "vars": {
     // "single": the whole park lives in one Durable Object (cheapest on the free tier).
     // "room": one object per room (more fan-out capacity, more awake-time billed).
@@ -21,7 +29,11 @@
     // "open": anyone gets a guest pass. "ticket": only admitted visitors (v2).
     "GATE": "open",
     // Sockets per client address per object. Households and offices share one address.
-    "MAX_SOCKETS_PER_IP": "8"
+    "MAX_SOCKETS_PER_IP": "8",
+    // The park's calendar for the Realm Vote (one vote per person per park day).
+    "PARK_TZ": "America/New_York",
+    // Standings stay private until the owner decides otherwise; admin routes need: wrangler secret put ADMIN_KEY
+    "VOTE_TALLY_PUBLIC": "false"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },

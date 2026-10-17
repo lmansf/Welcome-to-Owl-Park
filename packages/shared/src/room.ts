@@ -20,7 +20,10 @@ export interface RoomDef {
   walkable: Polygon[];
   /** Named spawn points; `default` is required. */
   spawns: Record<string, Vec2>;
-  /** Doorways. Walking into one changes room (or shows a closed sign). */
+  /**
+   * Doorways and interaction spots. Walking into a door with `to` changes room; a closed door
+   * shows its sign; `shop` and `idol` are spots that offer the gift shop and the Realm Vote.
+   */
   doors: DoorDef[];
   /** Ambient mood used by the scene for lighting and particles. */
   mood: 'hub' | 'dusk' | 'neon';
