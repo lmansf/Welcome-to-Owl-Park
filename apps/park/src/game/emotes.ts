@@ -15,7 +15,10 @@ export interface EmoteHost {
   readonly depth: number;
   /** The container emotes move, in owl canvas units with its origin at the feet. */
   readonly pose: Phaser.GameObjects.Container;
+  /** Which way the owl faces in the room (for bursts, which fly in room space). */
   facing(): 1 | -1;
+  /** Which way the owl faces inside `pose` (the painting's own turn): pose tweens lean this way to lean forward. */
+  forward(): 1 | -1;
   anchor(name: AnchorName): { x: number; y: number };
   /** Close the eyes for a while (the blink frame). */
   closeEyes(ms: number): void;
@@ -71,7 +74,7 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
   switch (emote) {
     case 'hoot':
       tw({ scaleX: 1.08, scaleY: 1.1, duration: 140, yoyo: true, repeat: 1, ease: 'Quad.easeOut' });
-      burst(host, 'ring', 'beak', [cream, gold], { speedX: { min: 20, max: 50 }, speedY: { min: -30, max: -10 }, scale: { start: 0.2, end: 0.9 }, alpha: { start: 0.9, end: 0 }, lifespan: 700 }, 3);
+      burst(host, 'ring', 'beak', [cream, gold], { speedX: { min: 20 * host.facing(), max: 50 * host.facing() }, speedY: { min: -30, max: -10 }, scale: { start: 0.2, end: 0.9 }, alpha: { start: 0.9, end: 0 }, lifespan: 700 }, 3);
       return true;
     case 'flap':
       tw({ scaleX: 1.14, scaleY: 0.94, y: -10, duration: 110, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
@@ -84,10 +87,10 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
       tw({ y: -46, duration: 220, yoyo: true, ease: 'Quad.easeOut' });
       return true;
     case 'tilt':
-      tw({ angle: 14 * host.facing(), duration: 260, yoyo: true, hold: 500, ease: 'Sine.easeInOut' });
+      tw({ angle: 14 * host.forward(), duration: 260, yoyo: true, hold: 500, ease: 'Sine.easeInOut' });
       return true;
     case 'bow':
-      tw({ angle: 22 * host.facing(), y: 8, duration: 320, yoyo: true, hold: 300, ease: 'Sine.easeInOut' });
+      tw({ angle: 22 * host.forward(), y: 8, duration: 320, yoyo: true, hold: 300, ease: 'Sine.easeInOut' });
       return true;
     case 'wave':
       tw({ angle: { from: -8, to: 8 }, duration: 160, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
@@ -98,7 +101,7 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
       return true;
     case 'sleep':
       host.closeEyes(2200);
-      tw({ angle: 6 * host.facing(), y: 4, duration: 600, yoyo: true, hold: 1000, ease: 'Sine.easeInOut' });
+      tw({ angle: 6 * host.forward(), y: 4, duration: 600, yoyo: true, hold: 1000, ease: 'Sine.easeInOut' });
       for (let i = 0; i < 3; i++) scene.time.delayedCall(i * 500, () => burst(host, 'bubble', 'head', [cream, 0xbfe9ff], { speedY: { min: -40, max: -26 }, speedX: { min: 8, max: 18 }, scale: { start: 0.25 + i * 0.1, end: 0.45 + i * 0.1 }, alpha: { start: 0.9, end: 0 }, lifespan: 1200 }, 1));
       return true;
     case 'heart':
@@ -121,11 +124,11 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
       return true;
     case 'wink':
       host.closeEyes(260);
-      tw({ angle: 6 * host.facing(), duration: 130, yoyo: true, ease: 'Sine.easeOut' });
+      tw({ angle: 6 * host.forward(), duration: 130, yoyo: true, ease: 'Sine.easeOut' });
       burst(host, 'star4', 'eyes', [gold, cream], { speed: { min: 30, max: 60 }, scale: { start: 0.4, end: 0 }, alpha: { start: 1, end: 0 }, lifespan: 600 }, 3);
       return true;
     case 'nod':
-      tw({ y: 8, angle: 5 * host.facing(), duration: 150, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
+      tw({ y: 8, angle: 5 * host.forward(), duration: 150, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
       return true;
     case 'headshake':
       tw({ angle: { from: -7, to: 7 }, duration: 110, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
@@ -135,7 +138,7 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
       burst(host, 'star4', 'chest', [gold, cream, 0xc8a2ff], { speed: { min: 50, max: 120 }, scale: { start: 0.45, end: 0 }, alpha: { start: 1, end: 0 }, lifespan: 900 }, 12);
       return true;
     case 'flip':
-      spinAbout(host, -host.facing(), 650, 70);
+      spinAbout(host, -host.forward(), 650, 70);
       burst(host, 'star4', 'feet', [gold, cream], { speed: { min: 40, max: 100 }, angle: { min: 200, max: 340 }, scale: { start: 0.4, end: 0 }, alpha: { start: 1, end: 0 }, lifespan: 700 }, 8);
       return true;
     case 'stomp':
@@ -143,14 +146,14 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
       scene.time.delayedCall(240, () => burst(host, 'puff', 'feet', [0xd9c7a5, 0xbfa987], { speed: { min: 30, max: 70 }, angle: { min: 160, max: 380 }, scale: { start: 0.3, end: 0.6 }, alpha: { start: 0.7, end: 0 }, lifespan: 600 }, 6));
       return true;
     case 'preen':
-      tw({ angle: -10 * host.facing(), x: -4, duration: 300, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
+      tw({ angle: -10 * host.forward(), x: -4 * host.forward(), duration: 300, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
       burst(host, 'leaf', 'chest', [cream], { speed: { min: 10, max: 40 }, gravityY: 40, rotate: { min: 0, max: 360 }, scale: { start: 0.25, end: 0.1 }, alpha: { start: 1, end: 0 }, lifespan: 1200 }, 3);
       return true;
     case 'stretch':
       tw({ scaleY: 1.16, scaleX: 0.94, duration: 420, yoyo: true, hold: 260, ease: 'Sine.easeInOut' });
       return true;
     case 'sneeze':
-      tw({ x: 10 * host.facing(), angle: 8 * host.facing(), duration: 90, yoyo: true, ease: 'Quad.easeOut', delay: 300 });
+      tw({ x: 10 * host.forward(), angle: 8 * host.forward(), duration: 90, yoyo: true, ease: 'Quad.easeOut', delay: 300 });
       scene.time.delayedCall(320, () => burst(host, 'puff', 'beak', [cream, 0xbfe9ff], { speedX: { min: 60 * host.facing(), max: 120 * host.facing() }, speedY: { min: -20, max: 20 }, scale: { start: 0.2, end: 0.6 }, alpha: { start: 0.8, end: 0 }, lifespan: 600 }, 6));
       return true;
     case 'peek':

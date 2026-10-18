@@ -43,6 +43,42 @@ test.describe('single visitor', () => {
     await waitForArrival(page, target.x, target.y);
   });
 
+  test('WASD and the arrow keys walk the owl, facing the way it goes, and letting go stops it', async ({ page }) => {
+    await openPark(page);
+    const start = (await state(page)).pos;
+    await page.keyboard.down('KeyD');
+    await expect.poll(async () => (await state(page)).pos.x - start.x).toBeGreaterThan(60);
+    expect((await state(page)).eyes).toBeGreaterThan(0); // its face looks right, the way it walks
+    await page.keyboard.up('KeyD');
+    await expect.poll(async () => (await state(page)).walking).toBe(false);
+    const stopped = (await state(page)).pos;
+    await page.waitForTimeout(400);
+    expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
+
+    await page.keyboard.down('ArrowLeft');
+    await expect.poll(async () => stopped.x - (await state(page)).pos.x).toBeGreaterThan(60);
+    expect((await state(page)).eyes).toBeLessThan(0);
+    await page.keyboard.down('ArrowUp'); // up and to the left together
+    const turned = (await state(page)).pos;
+    await expect.poll(async () => turned.y - (await state(page)).pos.y).toBeGreaterThan(20);
+    await page.keyboard.up('ArrowUp');
+    await page.keyboard.up('ArrowLeft');
+    await expect.poll(async () => (await state(page)).walking).toBe(false);
+  });
+
+  test('Q opens the collection and closes it again, and Escape closes it too', async ({ page }) => {
+    await openPark(page);
+    const panel = page.getByRole('region', { name: 'Collection' });
+    await page.keyboard.press('KeyQ');
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('KeyQ');
+    await expect(panel).toBeHidden();
+    await page.keyboard.press('KeyQ');
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+  });
+
   test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {
     await openPark(page);
     const dpr = (await cameraView(page)).dpr; // 1 on the desktop project, 2 (capped) on the phone project
@@ -89,6 +125,8 @@ test.describe('single visitor', () => {
     await walkToDoor(page, 'shop');
     await expect(page.getByRole('button', { name: 'Gift shop' })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-market.png` });
+    await page.keyboard.press('KeyE'); // E does what the button does
+    await expect(page.getByText('The gift shop opens soon.')).toBeVisible();
   });
 
   test('standing at a realm idol offers the Realm Vote; without a ticketed server it explains', async ({ page }) => {

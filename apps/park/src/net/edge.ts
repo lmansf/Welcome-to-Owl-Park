@@ -15,13 +15,14 @@ import {
 } from '@owl-park/shared';
 import type { DropLink, DropsInfo, PickupResult } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
+import { MoveBudget } from './budget';
 import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
 const BACKOFF_MIN_MS = 500;
 const BACKOFF_MAX_MS = 8_000;
-/** A move with no echo by then is assumed dropped (rate limited) and re-sent once. */
+/** A move with no echo by then is assumed lost and re-sent once (if it is still the newest). */
 const ECHO_TIMEOUT_MS = 1_500;
 /** No frame at all for this long (heartbeat replies included) means the socket is dead. */
 const DEAD_AFTER_MS = HEARTBEAT_INTERVAL_MS * 2 + 10_000;
@@ -135,6 +136,10 @@ export class EdgeTransport implements ParkTransport {
     let selfId: string | null = null;
     const knownPeers = new Set<string>();
     const pending = new Map<number, { to: Vec2; timer: ReturnType<typeof setTimeout>; resent: boolean }>();
+    /** Moves wait here while the budget is spent; a newer one replaces the one waiting. */
+    const budget = new MoveBudget(Date.now());
+    let queued: Vec2 | null = null;
+    let queueTimer: ReturnType<typeof setTimeout> | null = null;
     /** Requests waiting for the server: drops answers in order, pickups by drop number. */
     const dropWaiters: Array<{ resolve: (d: DropsInfo) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }> = [];
     const pickupWaiters = new Map<number, { resolve: (r: PickupResult) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -154,6 +159,44 @@ export class EdgeTransport implements ParkTransport {
         }
       }
     };
+    const clearQueue = () => {
+      queued = null;
+      if (queueTimer) clearTimeout(queueTimer);
+      queueTimer = null;
+    };
+    /** Send the waiting move as soon as the budget allows. */
+    const flushMove = () => {
+      if (!queued || queueTimer) return;
+      const wait = budget.wait(Date.now());
+      if (wait > 0) {
+        queueTimer = setTimeout(() => {
+          queueTimer = null;
+          flushMove();
+        }, wait);
+        return;
+      }
+      budget.take(Date.now());
+      const to = queued;
+      queued = null;
+      seq += 1;
+      const mine = seq;
+      const frame: ClientFrame = { t: 'move', to, seq: mine };
+      clearPending(); // older moves are superseded: no resends, and their echoes are ignored
+      const arm = (): ReturnType<typeof setTimeout> =>
+        setTimeout(() => {
+          const p = pending.get(mine);
+          if (!p) return;
+          if (p.resent || mine !== seq || queued || !budget.take(Date.now())) {
+            pending.delete(mine); // the echo-less walk stays local
+            return;
+          }
+          p.resent = true;
+          p.timer = arm();
+          sendFrame(frame);
+        }, ECHO_TIMEOUT_MS);
+      pending.set(mine, { to, timer: arm(), resent: false });
+      sendFrame(frame);
+    };
 
     const onFrame = (f: ServerFrame) => {
       switch (f.t) {
@@ -165,6 +208,7 @@ export class EdgeTransport implements ParkTransport {
           selfId = f.id;
           backoff = BACKOFF_MIN_MS;
           clearPending();
+          clearQueue();
           handlers.onSelf?.(f.you.pos);
           current = { ...current, pos: f.you.pos, walk: null };
           const seen = new Set<string>();
@@ -197,8 +241,10 @@ export class EdgeTransport implements ParkTransport {
             if (f.seq !== undefined) {
               const predicted = pending.get(f.seq)?.to;
               clearPending(f.seq);
+              // Only the newest move may correct our walk: the echo of a superseded one is stale.
+              const newest = f.seq === seq && !queued;
               const differs = !predicted || Math.hypot(predicted.x - f.to.x, predicted.y - f.to.y) > 2;
-              if (differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now() });
+              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now() });
             }
             break;
           }
@@ -389,26 +435,10 @@ export class EdgeTransport implements ParkTransport {
     return {
       send(msg: ParkMessage) {
         switch (msg.t) {
-          case 'move': {
-            seq += 1;
-            const mine = seq;
-            const frame: ClientFrame = { t: 'move', to: { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) }, seq: mine };
-            const arm = (resent: boolean) =>
-              setTimeout(() => {
-                const p = pending.get(mine);
-                if (!p) return;
-                if (p.resent) {
-                  pending.delete(mine); // dropped twice: the server refused it; the echo-less walk stays local
-                  return;
-                }
-                p.resent = true;
-                p.timer = arm(true);
-                sendFrame(frame);
-              }, ECHO_TIMEOUT_MS);
-            pending.set(mine, { to: msg.walk.to, timer: arm(false), resent: false });
-            sendFrame(frame);
+          case 'move':
+            queued = { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) };
+            flushMove();
             break;
-          }
           case 'state':
             sendFrame({ t: 'look', look: msg.state.look });
             break;
@@ -433,6 +463,7 @@ export class EdgeTransport implements ParkTransport {
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (heartbeat) clearInterval(heartbeat);
         clearPending();
+        clearQueue();
         failWaiters();
         for (const ready of readyWaiters.splice(0)) ready(false);
         if (ws && ws.readyState === WebSocket.OPEN) {

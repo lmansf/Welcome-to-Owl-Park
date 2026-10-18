@@ -14,6 +14,7 @@ import {
   pointInRect,
   positionAlongWalk,
   resolveTarget,
+  steerTarget,
   variantName,
   type DropView,
   type EquipSlot,
@@ -32,6 +33,7 @@ import type { ConnectionStatus, ParkTransport, RoomConnection } from '../net';
 import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
+import type { Keys } from '../ui/keyboard';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { DropMarker } from './DropMarker';
@@ -53,6 +55,8 @@ const CLOCK_TOLERANCE_MS = 1500;
 const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
 /** Ask again after a failed pickup this long later (the owl may still be walking up). */
 const PICKUP_RETRY_MS = 800;
+/** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
+const KEY_TURNS = 8;
 /** Never wait longer than this for a window change (timers past ~24 days overflow). */
 const MAX_TIMER_MS = 6 * 60 * 60 * 1000;
 /** Ask for the drops again this long after a request failed (offline, or no answer in time). */
@@ -75,8 +79,15 @@ export class RoomScene extends Phaser.Scene {
   private transport!: ParkTransport;
   private playerId!: string;
   private look!: OwlLook;
-  private inShop = false;
   private atIdol = false;
+  /** Interactive spots the owl stands in (door ids with an entry in `interactions`), in room order. */
+  private spots: string[] = [];
+  private keys: Keys | null = null;
+  /** The direction the held keys walk in. */
+  private keyDir: Vec2 | null = null;
+  /** The walk under way came from the keys, so letting go of them stops it. */
+  private keyWalk = false;
+  private keyTurns = 0;
   private voting = false;
   /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
   private pendingVote = false;
@@ -109,8 +120,12 @@ export class RoomScene extends Phaser.Scene {
     this.built = false;
     this.conn = null;
     this.leaving = false;
-    this.inShop = false;
     this.atIdol = false;
+    this.spots = [];
+    this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
+    this.keyDir = null;
+    this.keyWalk = false;
+    this.keyTurns = 0;
     this.voting = false;
     this.pendingVote = false;
     this.pieces = {};
@@ -164,12 +179,10 @@ export class RoomScene extends Phaser.Scene {
     if (this.cfg.debug) this.drawDebug();
 
     this.hud.setCount(1);
-    this.hud.showShop(false);
-    this.hud.showVote(false);
+    this.hud.setActions([]);
     // The colour picker changes colours only: today's pledge and the worn collectibles stay.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent }));
-    this.hud.onShop(() => this.openShop());
-    this.hud.onVote(() => void this.vote());
+    this.hud.onAction((id) => this.interactions[id]?.run());
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
@@ -182,6 +195,7 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     const finished = this.me.tick(now);
     if (!this.leaving) {
+      this.steer();
       this.checkDoors(finished);
       this.checkDrops(now);
     }
@@ -208,7 +222,7 @@ export class RoomScene extends Phaser.Scene {
         // The server decided where we stand. A walk already under way restarts from there.
         const target = this.me.walk?.to;
         this.me.place(pos);
-        if (target) this.walkTo(target);
+        if (target) this.walkTo(target, this.keyWalk);
       },
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
@@ -317,6 +331,61 @@ export class RoomScene extends Phaser.Scene {
     });
   }
 
+  /** WASD and the arrow keys: walk while held (sliding along edges) and stop on letting go. */
+  private steer(): void {
+    const dir = this.keys?.direction() ?? null;
+    if (!dir) {
+      if (this.keyWalk && this.me.walking) this.stop();
+      this.keyDir = null;
+      this.keyWalk = false;
+      return;
+    }
+    const same = this.keyDir !== null && this.keyDir.x === dir.x && this.keyDir.y === dir.y;
+    if (same && this.me.walking) return; // keep going
+    if (!same) {
+      this.keyDir = dir;
+      this.keyTurns = KEY_TURNS;
+    }
+    if (this.keyTurns <= 0) return; // boxed in: wait for other keys
+    this.keyTurns -= 1;
+    const target = steerTarget(this.me.pos, dir, this.room.walkable);
+    if (!target) {
+      this.keyTurns = 0;
+      return;
+    }
+    this.pendingVote = false; // walking away cancels a walk to the idol
+    this.walkTo(target, true);
+  }
+
+  /** Stand still where the owl is and tell the room. */
+  private stop(): void {
+    const here = { x: Math.round(this.me.pos.x), y: Math.round(this.me.pos.y) };
+    this.me.walk = null;
+    this.me.pos = here;
+    const walk: Walk = { from: here, to: here, startedAt: Date.now() };
+    this.conn?.send({ t: 'move', id: this.playerId, walk });
+    this.conn?.track(this.snapshot());
+  }
+
+  /** E: use the interactive spot the owl stands in (the first, where two overlap). */
+  interact(): boolean {
+    if (!this.built || this.leaving) return false;
+    const id = this.spots[0];
+    if (!id) return false;
+    this.interactions[id]?.run();
+    return true;
+  }
+
+  /**
+   * What each interactive spot offers, by its door id in the room data (a door without `to`):
+   * standing in it shows a button with this label, and E or the button runs it. A new spot, such
+   * as a mini game, is a door in the room data plus an entry here.
+   */
+  private readonly interactions: Record<string, { label: string; run: () => void }> = {
+    shop: { label: 'Gift shop', run: () => this.openShop() },
+    idol: { label: 'Vote for this realm', run: () => void this.vote() },
+  };
+
   /** Tapping the realm's idol: pledge now if standing at it, otherwise walk up and pledge on arrival. */
   private onIdolTap(pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
     if (this.leaving || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
@@ -341,6 +410,8 @@ export class RoomScene extends Phaser.Scene {
     peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null }>;
     connected: boolean;
     doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+    /** Where the owl's eyes are, left (-) or right (+) of its feet: the way its painting faces. */
+    eyes: number;
     /** This window's unclaimed drops in every room (only this visitor sees them). */
     drops: DropView[];
   } | null {
@@ -353,6 +424,7 @@ export class RoomScene extends Phaser.Scene {
       look: this.look,
       peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
       connected: this.conn !== null,
+      eyes: this.me.anchor('eyes').x,
       drops: this.drops?.drops ?? [],
     };
   }
@@ -482,15 +554,20 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
-  /** Public for tests and future features: walk the local owl to a room point. */
-  walkTo(target: Vec2): void {
-    if (!this.built) return;
+  /**
+   * Public for tests and future features: walk the local owl to a room point. True if it set off.
+   * `fromKeys` marks a walk the held keys own, which letting go of them stops.
+   */
+  walkTo(target: Vec2, fromKeys = false): boolean {
+    if (!this.built) return false;
     const to = resolveTarget({ ...this.me.pos }, target, this.room.walkable);
-    if (distance(to, this.me.pos) < 3) return;
+    if (distance(to, this.me.pos) < 3) return false;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
+    this.keyWalk = fromKeys;
     this.me.startWalk(walk);
     this.conn?.send({ t: 'move', id: this.playerId, walk });
     this.conn?.track(this.snapshot());
+    return true;
   }
 
   private changeLook(look: OwlLook): void {
@@ -504,8 +581,7 @@ export class RoomScene extends Phaser.Scene {
 
   private checkDoors(walkFinished: boolean): void {
     const pos = this.me.pos;
-    let shopNow = false;
-    let idolNow = false;
+    const spots: string[] = [];
     for (const door of this.room.doors) {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
@@ -513,19 +589,15 @@ export class RoomScene extends Phaser.Scene {
         void this.goTo(door.to.room, door.to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
         return;
       }
-      if (door.id === 'shop') shopNow = true;
-      if (door.id === 'idol') idolNow = true;
+      if (this.interactions[door.id]) spots.push(door.id);
       if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
     }
-    if (shopNow !== this.inShop) {
-      this.inShop = shopNow;
-      this.hud.showShop(shopNow);
+    if (spots.join(' ') !== this.spots.join(' ')) {
+      this.spots = spots;
+      this.hud.setActions(spots.map((id) => ({ id, label: this.interactions[id]!.label })));
     }
-    if (idolNow !== this.atIdol) {
-      this.atIdol = idolNow;
-      this.hud.showVote(idolNow);
-    }
-    if (idolNow && walkFinished && this.pendingVote) {
+    this.atIdol = spots.includes('idol');
+    if (this.atIdol && walkFinished && this.pendingVote) {
       this.pendingVote = false;
       void this.vote();
     }

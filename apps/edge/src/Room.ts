@@ -5,6 +5,8 @@
  * rate limits, and the snapshot a newcomer receives.
  */
 import {
+  MOVE_BURST,
+  MOVE_REFILL_PER_S,
   findSpawn,
   isWalkable,
   positionAlongWalk,
@@ -59,8 +61,8 @@ export interface RoomOptions {
 }
 
 export const LIMITS = {
-  moveBurst: 5,
-  moveRefillPerS: 2,
+  moveBurst: MOVE_BURST,
+  moveRefillPerS: MOVE_REFILL_PER_S,
   strikeWindowMs: 10_000,
   strikesToClose: 3,
   frameWindowMs: 5_000,
@@ -285,7 +287,12 @@ export class Room {
     const from = this.currentPos(v);
     const to = resolveTarget(from, msg.to, this.def.walkable);
     const target = { x: Math.round(to.x), y: Math.round(to.y) };
-    if (distance(from, target) < LIMITS.minMovePx) return;
+    if (distance(from, target) < LIMITS.minMovePx) {
+      // Asking to walk to where the owl already is means stop (letting go of the arrow keys): a walk
+      // under way ends here for everyone. A standing owl has nothing to stop.
+      if (v.st.walk) this.halt(id, v, msg.seq);
+      return;
+    }
     const at = this.now();
     v.st.walk = { from, to: target, at };
     v.st.pos = from;
@@ -293,6 +300,18 @@ export class Room {
     const frame: ServerFrame = { t: 'move', id, from, to: target, at };
     this.broadcast(frame, id);
     this.send(v, { ...frame, seq: msg.seq });
+  }
+
+  /** End a visitor's walk where it stands now, for everyone (the sender's copy carries its seq). */
+  private halt(id: string, v: Visitor, seq: number): void {
+    const from = this.currentPos(v);
+    const at = this.now();
+    v.st.walk = null;
+    v.st.pos = from;
+    v.peer.persist?.(v.st);
+    const frame: ServerFrame = { t: 'move', id, from, to: from, at };
+    this.broadcast(frame, id);
+    this.send(v, { ...frame, seq });
   }
 
   /**

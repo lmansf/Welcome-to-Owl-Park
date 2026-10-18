@@ -37,7 +37,9 @@ the published hub painting, and live outside `art/`, so `check` does not cover t
 The owl is five layers, not three: three white tintable layers plus the face and the blink frame.
 
 Owl layers share one canvas: feet on the bottom edge at (100, 240), facing slightly to one side
-so a horizontal flip reads as turning around. A 2x PNG set is 400 x 480 with the feet at (200, 480). Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
+so a horizontal flip reads as turning around. Either side works: the game reads which way the
+painting faces from where its eyes sit (left of the centre means it faces left) and mirrors it to
+face the way the owl walks. A 2x PNG set is 400 x 480 with the feet at (200, 480). Owls render at half size (`OWL_SCALE` in `apps/park/src/game/Owl.ts`):
 the 200 x 240 canvas becomes 100 x 120, so an owl stands about 100 px tall from head to toes and
 about 70 px wide in a 1600-wide room.
 

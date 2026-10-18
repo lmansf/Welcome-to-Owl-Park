@@ -18,11 +18,11 @@ export interface FxHost {
   readonly x: number;
   readonly y: number;
   readonly depth: number;
-  /** 1 facing right, -1 facing left. */
+  /** Which way the owl faces in the room: 1 right, -1 left. */
   facing(): 1 | -1;
   isWalking(): boolean;
   anchor(name: AnchorName): { x: number; y: number };
-  /** The same anchor in owl canvas units inside the owl's containers (origin at the feet, facing right). */
+  /** The same anchor in owl canvas units inside the owl's containers (origin at the feet, as painted). */
   localAnchor(name: AnchorName): { x: number; y: number };
   /** Containers inside the owl (owl canvas units, origin at the feet): behind and in front of the layers. */
   readonly back: Phaser.GameObjects.Container;

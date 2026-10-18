@@ -23,6 +23,8 @@ export interface RoomDef {
   /**
    * Doorways and interaction spots. Walking into a door with `to` changes room; a closed door
    * shows its sign; `shop` and `idol` are spots that offer the gift shop and the Realm Vote.
+   * What a spot does is the client's `interactions` table in RoomScene: standing in one shows
+   * its button, and E runs it.
    */
   doors: DoorDef[];
   /**

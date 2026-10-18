@@ -8,6 +8,7 @@ import { RoomScene, type RoomStart } from './game/RoomScene';
 import { loadLook, loadPlayerId } from './identity';
 import { createTransport } from './net';
 import { createHud } from './ui/hud';
+import { attachKeyboard } from './ui/keyboard';
 
 const cfg = readConfig();
 const playerId = loadPlayerId(cfg);
@@ -41,6 +42,15 @@ game.registry.set('hud', hud);
 game.registry.set('transport', transport);
 game.registry.set('collection', collection);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
+// WASD and the arrow keys walk (the room scene reads them every frame), E interacts, Q is the collection.
+game.registry.set(
+  'keys',
+  attachKeyboard(window, {
+    interact: () => void roomScene()?.interact(),
+    collection: () => hud.toggleCollection(),
+    close: () => hud.closePanels(),
+  }),
+);
 
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 window.addEventListener('resize', () => {

@@ -162,6 +162,24 @@ describe('Room', () => {
     expect(a.count('move')).toBe(1);
   });
 
+  it('stops a walking owl that asks to walk to where it already is', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const start = a.last('welcome')!.you.pos;
+    room.move('a', { t: 'move', to: { x: start.x + 400, y: start.y }, seq: 1 });
+    now += 500;
+    const here = { x: start.x + WALK_SPEED / 2, y: start.y };
+    room.move('a', { t: 'move', to: here, seq: 2 }); // letting go of the arrow keys
+    const seen = b.last('move')!;
+    expect(seen.from).toEqual(here);
+    expect(seen.to).toEqual(here);
+    expect(a.last('move')!.seq).toBe(2);
+    now += 2000;
+    expect(room.positionOf('a')).toEqual(here); // it stays where it stopped
+  });
+
   it('rate limits bursts of moves and closes after repeated strikes', () => {
     const a = new FakePeer();
     room.join(a, 'a', hello());

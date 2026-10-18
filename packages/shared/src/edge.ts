@@ -13,6 +13,9 @@ export const EDGE_PROTOCOL_VERSION = 3;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
+/** Moves the room server accepts from one visitor: a burst, then this many more per second. */
+export const MOVE_BURST = 5;
+export const MOVE_REFILL_PER_S = 2;
 
 /** Close codes the server uses; the client reacts to each differently. */
 export const CLOSE = {

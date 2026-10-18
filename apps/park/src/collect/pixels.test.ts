@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ANCHORS, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, type Mask } from './pixels';
+import { DEFAULT_ANCHORS, artFacing, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, type Mask } from './pixels';
 
 const px = (...rgba: number[]) => new Uint8ClampedArray(rgba);
 
@@ -139,5 +139,16 @@ describe('owl anchors', () => {
   it('falls back to defaults when the face layer is empty', () => {
     const empty = mask(() => undefined);
     expect(measureAnchors(empty, empty, empty)).toEqual(DEFAULT_ANCHORS);
+  });
+});
+
+describe('artFacing', () => {
+  it('reads the way a painted owl is turned from where its eyes sit', () => {
+    expect(artFacing({ ...DEFAULT_ANCHORS, eyes: { x: 68, y: 80, w: 82 } })).toBe(-1);
+    expect(artFacing({ ...DEFAULT_ANCHORS, eyes: { x: 132, y: 80, w: 82 } })).toBe(1);
+  });
+  it('counts a front-on owl (or unmeasured art) as facing right', () => {
+    expect(artFacing(DEFAULT_ANCHORS)).toBe(1);
+    expect(artFacing({ ...DEFAULT_ANCHORS, eyes: { x: 95, y: 80, w: 82 } })).toBe(1);
   });
 });

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { facing, hexToInt, positionAlongWalk, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
-import type { OwlAnchors } from '../collect/pixels';
+import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_W } from './art';
 import { playEmote, type EmoteHost } from './emotes';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
@@ -68,6 +68,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private readonly art: Phaser.GameObjects.Container;
   private readonly wearImgs: Record<WearImageSlot, Phaser.GameObjects.Image>;
   private readonly anchors: OwlAnchors;
+  /** Which way the painting itself is turned (1 right, -1 left): the art is mirrored when that differs from `dir`. */
+  private readonly drawnFacing: 1 | -1;
   private dir: -1 | 1 = 1;
   private nextBlinkAt = 0;
   private eyesClosedUntil = 0;
@@ -90,6 +92,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.look = look;
     this.pos = { ...pos };
     this.anchors = owlAnchors(scene);
+    this.drawnFacing = artFacing(this.anchors);
 
     this.shadow = scene.add.ellipse(0, 0, 54, 18, 0x000000, 0.28);
     // The pledge mark: a small gold glow at the feet, shown for the day after a Realm Vote.
@@ -192,6 +195,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return this.dir;
   }
 
+  /** Which way the owl faces inside `pose`, where emotes work: the painting's own turn. */
+  forward(): 1 | -1 {
+    return this.drawnFacing;
+  }
+
   isWalking(): boolean {
     return this.walk !== null;
   }
@@ -204,7 +212,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.jitter = dx;
   }
 
-  /** An anchor in owl canvas units inside the owl's containers (origin at the feet, facing right). */
+  /** An anchor in owl canvas units inside the owl's containers (origin at the feet, as painted). */
   localAnchor(name: AnchorName): { x: number; y: number } {
     const a = this.anchors;
     switch (name) {
@@ -228,7 +236,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   /** The same anchor as a world offset from the feet, turned with the owl. */
   anchor(name: AnchorName): { x: number; y: number } {
     const p = this.localAnchor(name);
-    return { x: p.x * OWL_SCALE * this.dir, y: p.y * OWL_SCALE };
+    return { x: p.x * OWL_SCALE * this.dir * this.drawnFacing, y: p.y * OWL_SCALE };
   }
 
   // ---------- movement ----------
@@ -266,8 +274,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.setPosition(this.pos.x, this.pos.y);
     this.setDepth(this.pos.y);
 
-    // Facing: art is drawn in a slight 3/4 turn; flipping it reads as turning around.
-    this.art.setScale(this.dir, 1);
+    // Facing: the art is painted in a slight 3/4 turn to one side; mirroring it reads as turning around.
+    this.art.setScale(this.dir * this.drawnFacing, 1);
     this.art.x = this.jitter;
 
     // Walk cycle: a gentle bob and squash while moving.

@@ -43,6 +43,26 @@ test.describe('room server', () => {
     await b.context().close();
   });
 
+  test('an owl walked with the keys stops in the same place for everyone', async ({ browser }) => {
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    const start = (await state(a)).pos;
+    const key = start.x < 800 ? 'KeyD' : 'KeyA'; // toward the middle, so there is floor to walk on
+    await a.keyboard.down(key);
+    await expect.poll(async () => Math.abs((await state(a)).pos.x - start.x), { timeout: 10_000 }).toBeGreaterThan(80);
+    await a.keyboard.up(key);
+    await expect.poll(async () => (await state(a)).walking).toBe(false);
+    const stopped = (await state(a)).pos;
+    // B sees A stop there too, rather than walk on to the edge of the floor.
+    await expect.poll(async () => dist((await state(b)).peers[0]!.pos, stopped), { timeout: 10_000 }).toBeLessThan(8);
+    await b.waitForTimeout(1500);
+    expect(dist((await state(b)).peers[0]!.pos, stopped)).toBeLessThan(8);
+    expect(dist((await state(a)).pos, stopped)).toBeLessThan(8);
+    await a.context().close();
+    await b.context().close();
+  });
+
   test('a late joiner sees an owl that is already mid-walk in the right place', async ({ browser }) => {
     const a = await visitor(browser);
     const start = (await state(a)).pos;

@@ -75,6 +75,14 @@ export const DEFAULT_ANCHORS: OwlAnchors = {
   neck: { x: 100, y: 128, w: 100 },
 };
 
+/**
+ * Which way an owl painting faces. Its three-quarter turn moves the eyes off the canvas centre,
+ * toward the side the owl looks at: -1 left, 1 right. A front-on owl counts as facing right.
+ */
+export function artFacing(a: OwlAnchors, canvasW = 200): 1 | -1 {
+  return a.eyes.x < canvasW / 2 - canvasW * 0.04 ? -1 : 1;
+}
+
 /** An alpha mask: `alpha[y * width + x]` is 0-255. */
 export interface Mask {
   width: number;

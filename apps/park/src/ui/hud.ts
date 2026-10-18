@@ -11,6 +11,12 @@ export interface FindsInfo {
   nextAt: string;
 }
 
+/** Something to do where the owl stands: one button each, and E runs the first. */
+export interface HudAction {
+  id: string;
+  label: string;
+}
+
 export interface Hud {
   setCount(n: number): void;
   /** Owls in the whole park, when known (authoritative transports). */
@@ -22,13 +28,15 @@ export interface Hud {
   setFinds(info: FindsInfo | null): void;
   /** Wire the collection panel and the emote tray to the visitor's collection. */
   attachCollection(state: CollectionState, actions: CollectionActions): CollectionPanel;
-  showShop(show: boolean): void;
-  /** Show the Realm Vote button (standing at a realm's idol). */
-  showVote(show: boolean): void;
-  onVote(cb: () => void): void;
+  /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
+  setActions(actions: HudAction[]): void;
+  onAction(cb: (id: string) => void): void;
+  /** Q: open or close the collection (closing the other panels). */
+  toggleCollection(): void;
+  /** Escape: close every open panel. */
+  closePanels(): void;
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
-  onShop(cb: () => void): void;
 }
 
 const CSS = `
@@ -59,8 +67,9 @@ const CSS = `
 #hud .toasts{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 @keyframes hud-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-#hud .shop,#hud .vote{display:none}
-#hud .shop.show,#hud .vote.show{display:inline-block;animation:hud-in .25s ease-out}
+#hud .actions button{animation:hud-in .25s ease-out}
+#hud kbd{display:none;margin-left:8px;padding:0 6px;border:1px solid currentColor;border-radius:5px;font:700 11px/1.5 system-ui,sans-serif;opacity:.7;vertical-align:1px}
+@media (hover:hover) and (pointer:fine){#hud kbd{display:inline-block}}
 #hud .actions{display:flex;gap:8px;align-items:flex-end}
 #hud .left{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 #hud .finds{display:none;font-size:13px}
@@ -96,13 +105,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
           </div>
           <button class="ghost" data-customize aria-expanded="false">Your owl</button>
         </div>
-        <button class="ghost" data-collection-btn aria-expanded="false">Collection</button>
+        <button class="ghost" data-collection-btn aria-expanded="false" aria-keyshortcuts="Q">Collection<kbd aria-hidden="true">Q</kbd></button>
         <div class="emote-wrap" data-emote-wrap><button class="ghost" data-emotes-btn aria-expanded="false">Emotes</button></div>
       </div>
-      <div class="actions">
-        <button class="vote" data-vote>Vote for this realm</button>
-        <button class="shop" data-shop>Gift shop</button>
-      </div>
+      <div class="actions" data-actions></div>
     </div>`;
   parent.appendChild(root);
 
@@ -112,8 +118,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const toasts = $<HTMLElement>('[data-toasts]');
   const panel = $<HTMLElement>('[data-panel]');
   const customize = $<HTMLButtonElement>('[data-customize]');
-  const shop = $<HTMLButtonElement>('[data-shop]');
-  const vote = $<HTMLButtonElement>('[data-vote]');
+  const actionsEl = $<HTMLElement>('[data-actions]');
   const finds = $<HTMLElement>('[data-finds]');
   const findsText = $<HTMLElement>('[data-finds-text]');
   const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
@@ -123,8 +128,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
 
   let look: OwlLook = { ...initialLook };
   let lookCb: ((l: OwlLook) => void) | null = null;
-  let shopCb: (() => void) | null = null;
-  let voteCb: (() => void) | null = null;
+  let actionCb: ((id: string) => void) | null = null;
+  let shownActions = '';
   let here = 1;
   let park: number | null = null;
   const renderCount = () => {
@@ -172,13 +177,15 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       closeEmotes();
     }
   });
-  collectionBtn.addEventListener('click', () => {
+  const toggleCollection = () => {
     if (!collectionPanel) return;
     collectionPanel.toggle();
     collectionBtn.setAttribute('aria-expanded', String(collectionPanel.isOpen()));
     panel.classList.remove('open');
+    customize.setAttribute('aria-expanded', 'false');
     closeEmotes();
-  });
+  };
+  collectionBtn.addEventListener('click', toggleCollection);
   emotesBtn.addEventListener('click', () => {
     const tray = emoteWrap.querySelector('.emotes');
     if (!tray) return;
@@ -190,8 +197,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       panel.classList.remove('open');
     }
   });
-  shop.addEventListener('click', () => shopCb?.());
-  vote.addEventListener('click', () => voteCb?.());
 
   return {
     setCount(n) {
@@ -225,14 +230,37 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       collectionPanel = createCollectionPanel(root, emoteWrap, state, actions);
       return collectionPanel;
     },
-    showShop(show) {
-      shop.classList.toggle('show', show);
+    setActions(list) {
+      const key = list.map((a) => `${a.id}:${a.label}`).join('|');
+      if (key === shownActions) return;
+      shownActions = key;
+      actionsEl.innerHTML = '';
+      list.forEach((a, i) => {
+        const b = document.createElement('button');
+        b.dataset['action'] = a.id;
+        b.textContent = a.label;
+        if (i === 0) {
+          // E runs the first action; the key cap shows only where there is a keyboard.
+          b.setAttribute('aria-keyshortcuts', 'E');
+          const k = document.createElement('kbd');
+          k.setAttribute('aria-hidden', 'true');
+          k.textContent = 'E';
+          b.appendChild(k);
+        }
+        b.addEventListener('click', () => actionCb?.(a.id));
+        actionsEl.appendChild(b);
+      });
     },
-    showVote(show) {
-      vote.classList.toggle('show', show);
+    onAction(cb) {
+      actionCb = cb;
     },
-    onVote(cb) {
-      voteCb = cb;
+    toggleCollection,
+    closePanels() {
+      panel.classList.remove('open');
+      customize.setAttribute('aria-expanded', 'false');
+      collectionPanel?.close();
+      collectionBtn.setAttribute('aria-expanded', 'false');
+      closeEmotes();
     },
     setLook(l) {
       look = { ...l };
@@ -240,9 +268,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     },
     onLookChange(cb) {
       lookCb = cb;
-    },
-    onShop(cb) {
-      shopCb = cb;
     },
   };
 }

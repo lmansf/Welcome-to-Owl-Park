@@ -116,7 +116,10 @@ every room from its sockets.
 
 Rooms are data shared by the client and the server: `walkable` polygons, `spawns`, `doors`
 (open with `to`, or closed with an approved `closedSign`), `mood` for ambience, `spots` where
-collectible finds appear, and anchors for large set pieces. Art is referenced by key; artists replace files under
+collectible finds appear, and anchors for large set pieces. A door without `to` can be an
+interactive spot (the gift shop, the idol): an entry in `interactions` in
+`apps/park/src/game/RoomScene.ts` gives it a button label and an action, and standing in it shows
+the button, which E also presses. New interactables, mini games included, follow that pattern. Art is referenced by key; artists replace files under
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
 variable (defaults: hub 80, grove 40, market 40).
 

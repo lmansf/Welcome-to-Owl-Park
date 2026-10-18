@@ -13,6 +13,8 @@ export interface ParkState {
   }>;
   connected: boolean;
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+  /** Where the owl's eyes are, left (-) or right (+) of its feet. */
+  eyes: number;
   drops: Array<{ n: number; room: string; x: number; y: number; kind: string }>;
 }
 
