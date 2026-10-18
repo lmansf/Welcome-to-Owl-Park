@@ -632,14 +632,84 @@ function envJson(v, name) {
   try { const o = JSON.parse(v); if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('not an object'); return o; } catch (e) { throw new Error(`${name} must be a JSON object: ${e.message}`); }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Seedream model families. Endpoints, size limits and prices are from the providers' public model
+// pages as of October 2026 (fal.ai lists all three; the BytePlus ids and prices are less certain,
+// override them with SEEDREAM_MODEL and ART_PRICE_USD). A job's size is the size it should be
+// generated at; `fitSize` scales it into the chosen family's limits, keeping the aspect ratio, and
+// the finishing stage resizes to the loader's exact sizes either way.
+
+export const MODELS = {
+  'seedream-v5-pro': {
+    label: 'Seedream 5.0 Pro',
+    fal: { endpoint: 'bytedance/seedream/v5/pro/text-to-image', edit: 'bytedance/seedream/v5/pro/edit' },
+    ark: { model: 'dola-seedream-5-0-pro-260628' },
+    minPixels: 1024 * 1024,
+    maxPixels: 2048 * 2048,
+    price: { fal: [{ maxPixels: 1536 * 1536, usd: 0.0675 }, { maxPixels: Infinity, usd: 0.135 }], ark: [{ maxPixels: Infinity, usd: 0.045 }] },
+    extraRefUsd: 0.0045,
+  },
+  'seedream-v4.5': {
+    label: 'Seedream 4.5',
+    fal: { endpoint: 'fal-ai/bytedance/seedream/v4.5/text-to-image', edit: 'fal-ai/bytedance/seedream/v4.5/edit' },
+    ark: { model: 'seedream-4-5-251128' },
+    minPixels: 2560 * 1440,
+    maxPixels: 4096 * 4096,
+    maxSide: 4096,
+    price: { fal: [{ maxPixels: Infinity, usd: 0.04 }], ark: [{ maxPixels: Infinity, usd: 0.04 }] },
+  },
+  'seedream-v4': {
+    label: 'Seedream 4.0',
+    fal: { endpoint: 'fal-ai/bytedance/seedream/v4/text-to-image', edit: 'fal-ai/bytedance/seedream/v4/edit' },
+    ark: { model: 'seedream-4-0-250828' },
+    minSide: 1024,
+    maxSide: 4096,
+    price: { fal: [{ maxPixels: Infinity, usd: 0.03 }], ark: [{ maxPixels: Infinity, usd: 0.03 }] },
+  },
+};
+export const DEFAULT_MODEL = 'seedream-v5-pro';
+
+/**
+ * Scale width x height into a model family's limits, keeping the aspect ratio. Sides land on a
+ * multiple of 8, rounded up when scaling up and down when scaling down, so the result is always
+ * inside the limits. Sizes already inside them come back unchanged.
+ */
+export function fitSize(width, height, m) {
+  const px = width * height;
+  let s = 1;
+  if (m.minPixels && px < m.minPixels) s = Math.sqrt(m.minPixels / px);
+  if (m.minSide) s = Math.max(s, m.minSide / Math.min(width, height));
+  if (m.maxPixels && px * s * s > m.maxPixels) s = Math.sqrt(m.maxPixels / px);
+  if (m.maxSide) s = Math.min(s, m.maxSide / Math.max(width, height));
+  if (s === 1) return { width, height, scaled: false };
+  const step = 8;
+  const r = (v) => (s > 1 ? Math.ceil(v / step) : Math.floor(v / step)) * step;
+  return { width: r(width * s), height: r(height * s), scaled: true };
+}
+
+/** Estimated USD for one image of this size with this many reference images. */
+export function priceFor(cfg, providerName, width, height, nRefs = 0) {
+  if (providerName === 'mock') return 0;
+  if (cfg.priceOverride !== null && cfg.priceOverride !== undefined) return cfg.priceOverride;
+  const m = MODELS[cfg.model];
+  const tiers = m?.price?.[providerName] ?? [{ maxPixels: Infinity, usd: 0.03 }];
+  const px = width * height;
+  const tier = tiers.find((t) => px <= t.maxPixels) ?? tiers[tiers.length - 1];
+  return tier.usd + Math.max(0, nRefs - 1) * (providerName === 'fal' ? m?.extraRefUsd ?? 0 : 0);
+}
+
 export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
   const nowFlag = flags.now ?? null;
   const nowEnv = env.ART_NOW || null;
   const now = nowFlag ?? nowEnv ?? new Date().toISOString();
   if (Number.isNaN(Date.parse(now))) throw new Error(`--now / ART_NOW must be an ISO-8601 timestamp, got ${now}`);
   const workDir = path.resolve(flags.out ?? flags.work ?? env.ART_WORK_DIR ?? path.join(REPO_ROOT, 'work', 'art'));
+  const model = flags.model ?? env.ART_MODEL ?? defaults.model ?? DEFAULT_MODEL;
+  if (!MODELS[model]) throw new Error(`unknown model ${JSON.stringify(model)} (${Object.keys(MODELS).join(', ')})`);
+  const prof = MODELS[model];
   return {
     provider: flags.provider ?? env.ART_PROVIDER ?? defaults.provider ?? 'mock',
+    model,
     workDir,
     repoRoot: REPO_ROOT,
     toolsDir: TOOLS_DIR,
@@ -654,7 +724,7 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
     dryRun: Boolean(flags['dry-run']),
     requireRefs: Boolean(flags['require-refs']),
     maxSpend: flags['max-spend'] ?? envNum(env.ART_MAX_SPEND, defaults.maxSpendUsd ?? 5, 'ART_MAX_SPEND'),
-    prices: { mock: 0, ark: 0.03, fal: 0.03, ...(defaults.prices ?? {}) },
+    priceOverride: envNum(env.ART_PRICE_USD, null, 'ART_PRICE_USD'),
     maxRefBytes: defaults.maxRefBytes ?? 2 * 1024 * 1024,
     warnBodyBytes: defaults.warnBodyBytes ?? 12 * 1024 * 1024,
     maxRefs: defaults.maxRefs ?? 14,
@@ -662,7 +732,7 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
       apiKey: env.ARK_API_KEY ?? '',
       baseUrl: (env.ARK_BASE_URL ?? 'https://ark.ap-southeast.bytepluses.com').replace(/\/$/, ''),
       imagesPath: env.ARK_IMAGES_PATH ?? '/api/v3/images/generations',
-      model: env.SEEDREAM_MODEL ?? 'seedream-4-0-250828',
+      model: env.SEEDREAM_MODEL ?? prof.ark.model,
       responseFormat: env.ARK_RESPONSE_FORMAT ?? 'url',
       sizeMode: env.ARK_SIZE_MODE ?? 'wxh',
       sizePreset: env.ARK_SIZE_PRESET ?? '',
@@ -675,8 +745,9 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
     },
     fal: {
       key: env.FAL_KEY ?? '',
-      endpoint: env.FAL_ENDPOINT ?? 'https://queue.fal.run/fal-ai/bytedance/seedream/v4/text-to-image',
-      editEndpoint: env.FAL_EDIT_ENDPOINT ?? 'https://queue.fal.run/fal-ai/bytedance/seedream/v4/edit',
+      endpoint: env.FAL_ENDPOINT ?? `https://queue.fal.run/${prof.fal.endpoint}`,
+      editEndpoint: env.FAL_EDIT_ENDPOINT ?? `https://queue.fal.run/${prof.fal.edit}`,
+      syncMode: envBool(env.FAL_SYNC_MODE, false),
       refField: env.FAL_REF_FIELD ?? 'image_urls',
       refMode: env.FAL_REF_MODE ?? 'data',
       pollMs: envInt(env.FAL_POLL_MS, 2000, 'FAL_POLL_MS'),
@@ -891,6 +962,7 @@ const falProvider = {
       enable_safety_checker: fal.safety,
     };
     if (tokens.length) body[fal.refField] = tokens;
+    if (fal.syncMode) body.sync_mode = true;
     if (fal.negativeField && job.negative) body[fal.negativeField] = job.negative;
     Object.assign(body, job.providers?.fal ?? {}, fal.extraJson);
     const model = url.replace(/^https?:\/\/[^/]+\//, '').replace(/\/$/, '');
@@ -916,13 +988,23 @@ const falProvider = {
     const result = await fetchJson(submitted.response_url, { method: 'GET', headers: auth }, http);
     const img = result?.images?.[0];
     if (!img?.url) throw new Error('fal result has no images[0].url');
-    const image = await downloadImage(img.url, http);
+    // With FAL_SYNC_MODE the image comes back inline as a data URL: no CDN download, no source URL.
+    const inline = decodeDataUrl(img.url);
+    const image = inline ? { bytes: inline, ...inspectImage(inline) } : await downloadImage(img.url, http);
     const providerMeta = { request_id: submitted.request_id ?? null };
     if (img.width && img.height) providerMeta.size = `${img.width}x${img.height}`;
     if (img.content_type) providerMeta.content_type = img.content_type;
-    return { ...image, sourceUrl: img.url, seedReturned: result.seed ?? null, providerMeta };
+    return { ...image, sourceUrl: inline ? null : img.url, seedReturned: result.seed ?? null, providerMeta };
   },
 };
+
+/** Bytes of a base64 `data:` URL, or null for any other URL. */
+export function decodeDataUrl(u) {
+  if (typeof u !== 'string' || !u.startsWith('data:')) return null;
+  const comma = u.indexOf(',');
+  if (comma < 0 || !/;base64$/i.test(u.slice(0, comma))) throw new Error('inline image is not a base64 data URL');
+  return Buffer.from(u.slice(comma + 1), 'base64');
+}
 
 export const PROVIDERS = { mock: mockProvider, ark: arkProvider, fal: falProvider };
 
@@ -1000,11 +1082,15 @@ export function planTasks(jobs, cfg, { variants = null, seed = null, defaults = 
     }
     if (refs.filter((r) => r.status === 'ok').length > cfg.maxRefs) throw new Error(`job ${job.key}: more than ${cfg.maxRefs} reference images`);
     for (const s of variantSeeds(job, { variants, seed, defaults })) {
-      const jobSeeded = { ...job, seed: s, negative };
-      const req = provider.buildRequest(jobSeeded, cfg, refs.filter((r) => r.status === 'ok'));
+      // Every provider, the mock included, generates at the size the chosen model accepts.
+      const fit = fitSize(job.width, job.height, MODELS[cfg.model]);
+      const jobSeeded = { ...job, seed: s, negative, width: fit.width, height: fit.height, size: `${fit.width}x${fit.height}`, requested_size: job.size };
+      const okRefs = refs.filter((r) => r.status === 'ok');
+      const req = provider.buildRequest(jobSeeded, cfg, okRefs);
       const { hash, hash16 } = cacheKey({ provider: provider.name, model: req.model, body: req.body });
       const cached = !cfg.force && isCached(cfg.workDir, job.key, hash16);
-      tasks.push({ job: jobSeeded, refs, req, hash, hash16, cached, costUsd: cached ? 0 : cfg.prices[provider.name] ?? 0 });
+      const priceUsd = priceFor(cfg, provider.name, fit.width, fit.height, okRefs.length);
+      tasks.push({ job: jobSeeded, refs, req, hash, hash16, cached, priceUsd, costUsd: cached ? 0 : priceUsd });
     }
   }
   return { tasks, skipped, provider };
@@ -1043,6 +1129,8 @@ function sidecarFor(task, cfg, result) {
     seed: job.seed,
     seed_returned: result.seedReturned ?? null,
     size: job.size,
+    requested_size: job.requested_size ?? job.size,
+    model_family: cfg.model,
     width: result.width,
     height: result.height,
     format: result.format,
@@ -1051,7 +1139,7 @@ function sidecarFor(task, cfg, result) {
     source_url: publicUrl(result.sourceUrl),
     generated_at: cfg.now,
     now_source: cfg.nowSource,
-    cost_estimate_usd: cfg.prices[cfg.provider] ?? 0,
+    cost_estimate_usd: task.priceUsd ?? 0,
     provider_meta: result.providerMeta ?? {},
   };
   if (job.regions) sc.regions = job.regions;
@@ -1134,9 +1222,11 @@ const USAGE = `usage: node tools/art/generate.mjs [run] [flags]
        node tools/art/generate.mjs list <key>
        node tools/art/generate.mjs select <key> <hash16|latest>
        node tools/art/generate.mjs cost [flags]
+       node tools/art/generate.mjs models
        node tools/art/generate.mjs geometry [--stdout]
 
-flags: --provider mock|ark|fal   --only k1,k2 (globs ok)   --variants N   --seed S
+flags: --provider mock|ark|fal   --model seedream-v5-pro|seedream-v4.5|seedream-v4
+       --only k1,k2 (globs ok)   --variants N   --seed S
        --dry-run   --out <dir> (alias --work; default work/art)   --now <ISO-8601>
        --concurrency N   --fail-fast   --force   --max-spend <usd>   --require-refs
        --prompts <file.mjs>   --help`;
@@ -1149,6 +1239,7 @@ export function parseFlags(argv) {
     allowPositionals: true,
     options: {
       provider: { type: 'string' },
+      model: { type: 'string' },
       only: { type: 'string' },
       variants: { type: 'string' },
       seed: { type: 'string' },
@@ -1205,6 +1296,17 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
   if (!forbidden) err('forbidden-word check: no list configured (OWL_PARK_FORBIDDEN, ART_FORBIDDEN_WORDS, ART_FORBIDDEN_WORDS_FILE or tools/art/.local/forbidden-words.txt); skipping');
   else err(`forbidden-word check: ${forbidden.entries.length} entries from ${forbidden.sources.join(', ')}`);
 
+  if (command === 'models') {
+    out(['model', 'name', 'fal endpoint', 'size limits', 'fal price per image'].join('\t'));
+    for (const [id, m] of Object.entries(MODELS)) {
+      const lim = [m.minPixels ? `>= ${(m.minPixels / 1e6).toFixed(2)} MP` : '', m.maxPixels ? `<= ${(m.maxPixels / 1e6).toFixed(2)} MP` : '', m.minSide ? `side >= ${m.minSide}` : '', m.maxSide ? `side <= ${m.maxSide}` : ''].filter(Boolean).join(', ');
+      const price = m.price.fal.map((t) => `$${t.usd}${Number.isFinite(t.maxPixels) ? ` up to ${(t.maxPixels / 1e6).toFixed(2)} MP` : ''}`).join(', ');
+      out([`${id}${id === cfg.model ? ' *' : ''}`, m.label, m.fal.endpoint, lim, price].join('\t'));
+    }
+    out(`* = selected (--model, ART_MODEL, or the default ${DEFAULT_MODEL})`);
+    return 0;
+  }
+
   if (command === 'geometry') {
     let geometry;
     try { geometry = await loadGeometry(cfg.repoRoot); } catch (e) { err(`geometry: ${e?.message ?? e}`); return 2; }
@@ -1257,7 +1359,7 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
 
   const uncached = tasks.filter((t) => !t.cached);
   const cost = uncached.reduce((a, t) => a + t.costUsd, 0);
-  const summary = `${tasks.length} request(s) for provider ${provider.name}: ${tasks.length - uncached.length} cached, ${uncached.length} to generate, estimated cost $${cost.toFixed(2)} (limit $${cfg.maxSpend})`;
+  const summary = `${tasks.length} request(s) for provider ${provider.name} (${MODELS[cfg.model].label}): ${tasks.length - uncached.length} cached, ${uncached.length} to generate, estimated cost $${cost.toFixed(2)} (limit $${cfg.maxSpend})`;
 
   if (command === 'cost') {
     const perKey = new Map();
@@ -1271,7 +1373,8 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
     for (const t of tasks) {
       const rel = showPath(imagePath(cfg.workDir, t.job.key, t.hash16, 'png'));
       const shown = { url: t.req.url, headers: redactHeaders(t.req.headers), body: t.req.body };
-      out(`# ${t.job.key} seed ${t.job.seed}: ${t.cached ? 'cache hit' : 'cache miss'} -> ${rel} ($${t.costUsd.toFixed(2)})`);
+      const sized = t.job.size === t.job.requested_size ? t.job.size : `${t.job.size} (job asks ${t.job.requested_size})`;
+      out(`# ${t.job.key} seed ${t.job.seed} at ${sized}: ${t.cached ? 'cache hit' : 'cache miss'} -> ${rel} ($${t.costUsd.toFixed(3)})`);
       out(JSON.stringify(shown, null, 2));
     }
     out(summary);

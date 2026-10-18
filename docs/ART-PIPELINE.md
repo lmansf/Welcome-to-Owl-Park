@@ -71,8 +71,9 @@ The placeholder SVGs can be replaced with painted art from an image model withou
 game: the pipeline under `tools/art/` produces exactly the files the loader expects. It has two
 offline-testable stages. **Generate** (`tools/art/generate.mjs`, Node 22.18 or newer, see
 `tools/art/README.md`) turns the job list in `tools/art/prompts.mjs` into raw candidates from a
-provider (`mock` for free, offline synthetic images; `ark` for BytePlus ModelArk / Volcengine Ark;
-`fal` for fal.ai; both run Seedream models at a few cents per image) and caches them under the
+provider (`mock` for free, offline synthetic images; `fal` for fal.ai, recommended, or `ark` for
+BytePlus ModelArk / Volcengine Ark; both run Seedream 5.0 Pro, 4.5 or 4.0 at a few cents per
+image, see `tools/art/README.md` for setup, models and prices) and caches them under the
 gitignored `work/art/raw/<key>/`. **Finish** (`tools/art/postprocess.py`, Python 3 with Pillow 12
 and numpy, aliased as `post.py`) turns one chosen candidate per key into finals, then publishes
 them. Nothing in either stage runs git.
@@ -90,17 +91,18 @@ are missing). `pnpm check` does not need Python.
 ### The loop
 
 ```bash
-pnpm art:generate --only tree-master --variants 6 --dry-run   # see the requests, no spend
-pnpm art:generate --provider ark --only tree-master --variants 6 --max-spend 1
+pnpm art:generate --provider fal --only tree-master --variants 4 --dry-run   # see the requests, no spend
+pnpm art:generate --provider fal --only tree-master --variants 4 --max-spend 1
 pnpm art:finish sheet tree-master                              # contact sheet in work/art/review/
 node tools/art/generate.mjs select tree-master <hash16>        # mark the winner (SELECTED)
 pnpm art:finish ref work/art/raw/tree-master/<hash16>.png tools/art/refs/tree-master.png
 
 pnpm art:geometry                     # work/art/geometry.json from packages/shared/rooms
 pnpm art:finish guide --all           # work/art/guides/<room>.png, the layout references
-pnpm art:generate --provider ark --only hub --variants 4
+pnpm art:generate --provider fal --only hub --variants 4
 pnpm art:finish sheet hub && node tools/art/generate.mjs select hub <hash16>
 pnpm art:finish room hub --grade hub --strength 0.35          # work/art/final/hub.png + review
+pnpm art:preview --rooms hub                                   # before/after in the game, desktop and phone
 pnpm art:finish publish hub --retire-svg --note "variant 3 of 4"
 pnpm dev                              # open http://localhost:5173/?debug=1 and walk the room
 ```
@@ -113,11 +115,14 @@ pnpm dev                              # open http://localhost:5173/?debug=1 and 
    block, the negative prompt) live in `prompts.mjs` and are sent with every request, together
    with the tree reference and the room's layout guide. Keep seeds locked (variants are
    `seed + i`), use low-denoise edits for variations, and never ask for another franchise's look.
-2. **The hub redo.** The brief: the same tree, seen from its roots, its trunk base at the centre
-   of the ground plane; an open root archway at the far left glowing amber with fireflies (the
-   storybook realm) and one at the far right spilling magenta and cyan neon and rain (the
-   market); two dark closed hollows between them where the closed-realm signs stand; lantern-lit
-   roots forming a shallow amphitheatre. The guide image shows where the data puts all of this.
+2. **The hub redo.** The hub is the inside of the tree: visitors stand on the floor of its
+   hollow base, a moonlit nave of living wood, with a knothole moon overhead, growth rings on the
+   floor and five root buttresses diving under it. The only ways out are four archways cut into
+   the wood, and the tree changes style around each: a cosy storybook arch with lanterns and
+   fireflies on the left, a chrome and neon arch on the right, and two sealed arches at the back
+   whose surrounding wood has turned to ink wash and to stained glass, with the closed-realm signs
+   standing in front of them. `BRIEF` in `prompts.mjs` has the full brief; the guide image shows
+   where the room data puts the floor, the doors and the signs.
 3. **Pick winners.** `sheet <key>` lays out every candidate with its hash and seed;
    `select <key> <hash16|latest>` marks the one to finish. A candidate from anywhere (a picks
    folder, a hand-edited file) can be finished with `--raw <file>`.
@@ -126,7 +131,9 @@ pnpm dev                              # open http://localhost:5173/?debug=1 and 
    spawns and anchors drawn over the art, and a `<key>.post.json` record of every parameter.
    Look at the review image before publishing: the ground plane must start at the polygon's top
    edge, doorways must sit where the door rectangles are, the tree base on its anchor.
-5. **Check in the game.** `publish` copies the finals into `apps/park/public/art/` and appends
+5. **Preview.** `pnpm art:preview` shows the finals in the running game, next to the current art,
+   on a desktop and a phone screen, without publishing anything.
+6. **Check in the game.** `publish` copies the finals into `apps/park/public/art/` and appends
    the provenance line. Then run the park with `?debug=1` and walk every door; adjust the
    polygons in `packages/shared/rooms/index.ts` if the art disagrees with the data, or rerun the
    finish with `--crop`, `--shift-y`, a different grade, or a different candidate.

@@ -10,6 +10,39 @@ Requirements: Node 22.18 or newer for the generator (built-ins only, no install 
 is on by default from 22.18 and passed explicitly by the script), and Python 3.11 or newer with
 Pillow 12 and numpy for the finish stage (`python3 -m pip install pillow numpy`; a venv is fine).
 
+## Setting up Seedream
+
+The recommended provider is **fal.ai**: sign in at <https://fal.ai>, add a few dollars of credit
+under Billing, and create a key under Keys. Expose it as `FAL_KEY`:
+
+- On your own machine: `export FAL_KEY=...` (or keep it in the gitignored `tools/art/.local/.env`
+  and `source` that file). Then `pnpm install`, `pnpm exec playwright install chromium` (for the
+  preview) and `python3 -m pip install pillow numpy`.
+- In a Claude Code cloud session: add `FAL_KEY` to the environment's secrets or environment
+  variables, and add these hosts under Network access, Allowed domains: `queue.fal.run` (requests
+  and results) and `fal.media`, `v3.fal.media`, `v3b.fal.media` (where fal serves the images).
+  Start a new session afterwards; settings apply to new sessions. With `FAL_SYNC_MODE=1` fal
+  returns images inline, which removes the need for the media hosts where the model supports it.
+
+BytePlus ModelArk (`--provider ark`, `ARK_API_KEY`, host `ark.ap-southeast.bytepluses.com`) works
+the same way; its model ids are less certain, so check the first response.
+
+### Which Seedream
+
+`node tools/art/generate.mjs models` lists the families the generator knows; pick one with
+`--model` or `ART_MODEL`. Each family has its own size limits, and every job is scaled into them
+with its aspect ratio kept (the finish stage resizes to the game's exact sizes either way), so the
+same job list works with all three. Prices are fal.ai's list prices as of October 2026.
+
+| `--model` | Model | Size limits | fal.ai price | Full default batch |
+| --- | --- | --- | --- | --- |
+| `seedream-v5-pro` (default) | Seedream 5.0 Pro, the newest | 1 to 4.2 megapixels (rooms come out 2728x1536) | $0.0675 up to 2.4 MP, $0.135 above | about $4.30 |
+| `seedream-v4.5` | Seedream 4.5 | 3.7 to 16.8 MP, sides up to 4096 (rooms native 3200x1800) | $0.04 | about $1.40 |
+| `seedream-v4` | Seedream 4.0 | sides 1024 to 4096 | $0.03 | about $1.05 |
+
+With 5.0 Pro the rooms are generated at 2728x1536 and upscaled about 17 percent to the 3200x1800
+file phones use; 4.5 generates them at full size, so compare both if phone sharpness matters.
+
 ## Running it
 
 ```bash
@@ -17,13 +50,16 @@ pnpm art:generate --dry-run                          # every request, redacted, 
 pnpm art:generate                                    # mock provider: synthetic PNGs, offline, free
 pnpm art:geometry                                    # work/art/geometry.json for the post stage's layout guides
 
-ARK_API_KEY=... pnpm art:generate --provider ark --only tree-master --variants 6 --dry-run
-ARK_API_KEY=... pnpm art:generate --provider ark --only tree-master --variants 6 --max-spend 1
-FAL_KEY=...     pnpm art:generate --provider fal --only hub --variants 4
+pnpm art:generate --provider fal --only tree-master --variants 4 --dry-run   # exact requests and cost, no spend
+pnpm art:generate --provider fal --only tree-master --variants 4             # needs FAL_KEY
+pnpm art:generate --provider fal --model seedream-v4.5 --only hub --variants 4
 
 node tools/art/generate.mjs list hub                 # candidates: hash, seed, size, bytes, selected
 node tools/art/generate.mjs select hub <hash16|latest>   # marks the winner for the post stage (SELECTED)
-node tools/art/generate.mjs cost --provider ark      # what a run would cost before running it
+node tools/art/generate.mjs cost --provider fal      # what a run would cost before running it
+node tools/art/generate.mjs models                   # the Seedream families, limits and prices
+
+pnpm art:preview                                     # before/after screenshots of finished art in the game
 ```
 
 Providers:
@@ -33,13 +69,25 @@ Providers:
   in tests. Identical request, identical bytes.
 - `ark`: BytePlus ModelArk (international) or Volcengine Ark (China) images API, Seedream models.
   Needs `ARK_API_KEY`.
-- `fal`: fal.ai queue API for the same models. Needs `FAL_KEY`.
+- `fal`: fal.ai queue API for the same models. Needs `FAL_KEY`. Recommended.
 
-Cost: a few cents per image (defaults assume $0.03; edit `DEFAULTS.prices` in `prompts.mjs`).
-The whole default job list is 36 images, so a full real run is about a dollar; `--max-spend`
-(default $5) refuses to start a run that would cost more, and the cache means reruns cost nothing.
-Start a provider with one cheap job and `--variants 1`; the API field names below are documented
-defaults, not verified facts, so check the first response.
+Cost: the estimate follows the chosen model, the generated size and the number of reference
+images (table above; `ART_PRICE_USD` overrides it with a flat per-image price when the list
+prices change). The whole default job list is 35 images; `--max-spend` (default $5) refuses to
+start a run that would cost more, and the cache means reruns cost nothing. Start a provider with
+one cheap job and `--variants 1`: the endpoints, size limits and prices come from the providers'
+model pages as of October 2026, but no real request could be made while the tool was built, so
+check the first response.
+
+### Preview before publishing
+
+`pnpm art:preview` builds the client, lays every PNG in `work/art/final/` over a copy of it, and
+screenshots each affected room on a desktop and a phone screen with a few visitor owls walking
+about, next to the same room with the current art. It writes
+`work/art/preview/<room>-<view>-compare.png` (plus the two halves) and changes nothing under
+`apps/park`. Options: `--rooms hub,grove`, `--views desktop`, `--owls 1..8`, `--finals <dir>`,
+`--out <dir>`. It renders the game in a headless browser, which takes about two minutes per room
+and screen on a small machine without a GPU (all three rooms on both screens took 13 minutes).
 
 Secrets come from the environment only and are never printed or written. You may keep them in
 `tools/art/.local/.env` (gitignored) and `source` it in your shell; the tool never reads it.
@@ -49,6 +97,7 @@ Secrets come from the environment only and are never printed or written. You may
 | Flag | Meaning |
 | --- | --- |
 | `--provider mock\|ark\|fal` | default `ART_PROVIDER`, else `mock` |
+| `--model <family>` | `seedream-v5-pro` (default), `seedream-v4.5` or `seedream-v4`; default `ART_MODEL` |
 | `--only k1,k2` | job keys to run; globs allowed (`owl-*`, `*-fg`) |
 | `--variants N` | seeds `seed .. seed+N-1` for each job, overriding the job's own count |
 | `--seed S` | override every job's base seed |
@@ -77,12 +126,14 @@ Resolution order: flag, then environment, then `DEFAULTS` in `prompts.mjs`, then
 | `ART_HTTP_TIMEOUT_MS` | `120000` | per request |
 | `ART_CONCURRENCY` | `2` | |
 | `ART_MAX_SPEND` | `5` | USD |
+| `ART_MODEL` | `seedream-v5-pro` | the Seedream family: sets the endpoints, the ark model id, size limits and prices |
+| `ART_PRICE_USD` | unset | a flat estimated price per image, replacing the model's list prices |
 | `OWL_PARK_FORBIDDEN`, `ART_FORBIDDEN_WORDS` | unset | comma-separated private word list (see below) |
 | `ART_FORBIDDEN_WORDS_FILE` | `tools/art/.local/forbidden-words.txt` | one entry per line, `#` comments |
 | `ARK_API_KEY` | unset | required for `ark` |
 | `ARK_BASE_URL` | `https://ark.ap-southeast.bytepluses.com` | Volcengine: `https://ark.cn-beijing.volces.com` |
 | `ARK_IMAGES_PATH` | `/api/v3/images/generations` | |
-| `SEEDREAM_MODEL` | `seedream-4-0-250828` | Volcengine `doubao-seedream-4-0-250828`; 4.5 ids differ |
+| `SEEDREAM_MODEL` | from `ART_MODEL`: `dola-seedream-5-0-pro-260628`, `seedream-4-5-251128` or `seedream-4-0-250828` | Volcengine ids start with `doubao-`; check BytePlus's model list |
 | `ARK_RESPONSE_FORMAT` | `url` | or `b64_json` |
 | `ARK_SIZE_MODE` | `wxh` | `preset` sends `1K`/`2K`/`4K` by the larger side, or `ARK_SIZE_PRESET` |
 | `ARK_REF_MODE` | `data` | `url` requires `https://` refs you host |
@@ -92,8 +143,9 @@ Resolution order: flag, then environment, then `DEFAULTS` in `prompts.mjs`, then
 | `ARK_NEGATIVE_FIELD` | unset | when set, `NEGATIVE_PROMPT` is sent in that field |
 | `ARK_EXTRA_JSON` | `{}` | merged into the body last, e.g. `{"output_format":"png"}` |
 | `FAL_KEY` | unset | required for `fal` |
-| `FAL_ENDPOINT` | `https://queue.fal.run/fal-ai/bytedance/seedream/v4/text-to-image` | |
-| `FAL_EDIT_ENDPOINT` | `https://queue.fal.run/fal-ai/bytedance/seedream/v4/edit` | used when a job has references |
+| `FAL_ENDPOINT` | from `ART_MODEL`, e.g. `https://queue.fal.run/bytedance/seedream/v5/pro/text-to-image` | |
+| `FAL_EDIT_ENDPOINT` | from `ART_MODEL`, e.g. `https://queue.fal.run/bytedance/seedream/v5/pro/edit` | used when a job has references |
+| `FAL_SYNC_MODE` | `false` | `sync_mode`: the image comes back inline, no media-host download |
 | `FAL_REF_FIELD` | `image_urls` | |
 | `FAL_REF_MODE` | `data` | as for ARK |
 | `FAL_POLL_MS` | `2000` | status polling interval |

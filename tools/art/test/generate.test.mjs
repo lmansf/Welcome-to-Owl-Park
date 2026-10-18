@@ -273,7 +273,7 @@ test('ark buildRequest follows the env configuration and redacts the key', () =>
   const req2 = G.PROVIDERS.ark.buildRequest(job, plain, []);
   assert.equal(req2.url, 'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations');
   assert.equal(req2.body.size, '3200x1800');
-  assert.equal(req2.body.model, 'seedream-4-0-250828');
+  assert.equal(req2.body.model, 'dola-seedream-5-0-pro-260628');
   assert.ok(!('image' in req2.body));
   const sent = G.materialise(req.body, refs, 'data');
   assert.match(sent.images[0], /^data:image\/png;base64,/);
@@ -311,11 +311,11 @@ test('fal buildRequest picks the edit endpoint when refs exist; generate polls t
   const job = { key: 'guardian', kind: 'piece', realm: 'grove', size: '2x2', width: 2, height: 2, seed: 9, prompt: 'p', refs: [], key_colour: '#00FF00' };
   const refs = [{ status: 'ok', token: 'sha256:bb', bytes: png, mime: 'image/png', ref: 'refs/x.png' }];
   const edit = G.PROVIDERS.fal.buildRequest(job, cfg, refs);
-  assert.equal(edit.url, 'https://queue.fal.run/fal-ai/bytedance/seedream/v4/edit');
+  assert.equal(edit.url, 'https://queue.fal.run/bytedance/seedream/v5/pro/edit');
   assert.deepEqual(edit.body, { prompt: 'p', image_size: { width: 2, height: 2 }, num_images: 1, seed: 9, enable_safety_checker: true, image_urls: ['sha256:bb'], output_format: 'png' });
-  assert.equal(edit.model, 'fal-ai/bytedance/seedream/v4/edit');
+  assert.equal(edit.model, 'bytedance/seedream/v5/pro/edit');
   const text = G.PROVIDERS.fal.buildRequest(job, cfg, []);
-  assert.equal(text.url, 'https://queue.fal.run/fal-ai/bytedance/seedream/v4/text-to-image');
+  assert.equal(text.url, 'https://queue.fal.run/bytedance/seedream/v5/pro/text-to-image');
   assert.equal(text.headers.Authorization, 'Key fk');
 
   const calls = [];
@@ -375,7 +375,7 @@ test('fetchRetry retries 429 and 5xx with backoff, honours Retry-After, and fail
 
 test('--dry-run prints redacted requests, makes no calls and writes nothing', () => {
   const out = tmp('dry');
-  const r = spawnSync(process.execPath, [GEN, '--provider', 'ark', '--only', 'hub', '--variants', '2', '--dry-run', '--out', out], { encoding: 'utf8', env: { ...process.env, ARK_API_KEY: 'super-secret-key', ART_HTTP_RETRIES: '0' } });
+  const r = spawnSync(process.execPath, [GEN, '--provider', 'ark', '--only', 'hub', '--variants', '2', '--dry-run', '--out', out], { encoding: 'utf8', env: { ...process.env, ARK_API_KEY: 'super-secret-key', ART_HTTP_RETRIES: '0', ART_MODEL: 'seedream-v4' } });
   assert.equal(r.status, 0, r.stderr);
   assert.ok(!r.stdout.includes('super-secret-key') && !r.stderr.includes('super-secret-key'));
   assert.ok(r.stdout.includes('"Authorization": "***"'));
@@ -391,7 +391,7 @@ test('--max-spend refuses an expensive run before any call; --only, --variants a
   assert.equal(r.status, 1);
   assert.match(r.stderr, /refusing to start/);
   assert.ok(!fs.existsSync(tmp('spend')));
-  const c = spawnSync(process.execPath, [GEN, 'cost', '--provider', 'ark', '--only', 'owl-*', '--variants', '3', '--seed', '42'], { encoding: 'utf8', env: { ...process.env, ARK_API_KEY: 'k' } });
+  const c = spawnSync(process.execPath, [GEN, 'cost', '--provider', 'ark', '--only', 'owl-*', '--variants', '3', '--seed', '42', '--out', tmp('cost')], { encoding: 'utf8', env: { ...process.env, ARK_API_KEY: 'k', ART_MODEL: 'seedream-v4' } });
   assert.equal(c.status, 0, c.stderr);
   assert.match(c.stdout, /owl-master\t3 variant\(s\)\t3 uncached\t\$0\.09/);
   assert.match(c.stderr, /skipping optional job owl-blink-src/);
@@ -563,4 +563,93 @@ test('log lines are allowlisted, scrubbed of personal markers, free of absolute 
   const file = tmp('blocked.jsonl');
   await assert.rejects(G.appendLog(file, entry, { forbidden: list, markers: [], repoRoot: G.REPO_ROOT }), /forbidden words/);
   assert.ok(!fs.existsSync(file), 'nothing written when a forbidden word matches');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Model families: size limits, prices, inline results
+
+test('fitSize keeps every job inside each model family\'s limits and keeps its aspect ratio', () => {
+  const inside = (w, h, m) => (!m.minPixels || w * h >= m.minPixels) && (!m.maxPixels || w * h <= m.maxPixels)
+    && (!m.minSide || Math.min(w, h) >= m.minSide) && (!m.maxSide || Math.max(w, h) <= m.maxSide);
+  for (const [id, m] of Object.entries(G.MODELS)) {
+    for (const job of P.JOBS) {
+      const { width, height } = G.parseSize(job.size);
+      const f = G.fitSize(width, height, m);
+      assert.ok(inside(f.width, f.height, m), `${id} ${job.key}: ${f.width}x${f.height} outside the limits`);
+      assert.ok(Math.abs(f.width / f.height - width / height) / (width / height) < 0.01, `${id} ${job.key}: aspect drifted`);
+      if (!f.scaled) assert.deepEqual([f.width, f.height], [width, height]);
+      else assert.equal(f.width % 8 + f.height % 8, 0);
+    }
+  }
+  // The cases that motivated the profiles: 5.0 Pro caps rooms near 2K, 4.5 refuses small images.
+  assert.deepEqual(G.fitSize(3200, 1800, G.MODELS['seedream-v5-pro']), { width: 2728, height: 1536, scaled: true });
+  assert.deepEqual(G.fitSize(1040, 1248, G.MODELS['seedream-v5-pro']), { width: 1040, height: 1248, scaled: false });
+  const owl45 = G.fitSize(1040, 1248, G.MODELS['seedream-v4.5']);
+  assert.ok(owl45.scaled && owl45.width * owl45.height >= 2560 * 1440);
+  assert.deepEqual(G.fitSize(3200, 1800, G.MODELS['seedream-v4.5']), { width: 3200, height: 1800, scaled: false });
+});
+
+test('config picks the model family from --model, ART_MODEL or the default, and refuses unknown ones', () => {
+  assert.equal(G.resolveConfig({}, {}, P.DEFAULTS).model, 'seedream-v5-pro');
+  const v45 = G.resolveConfig({}, { ART_MODEL: 'seedream-v4.5' }, P.DEFAULTS);
+  assert.equal(v45.fal.endpoint, 'https://queue.fal.run/fal-ai/bytedance/seedream/v4.5/text-to-image');
+  assert.equal(v45.fal.editEndpoint, 'https://queue.fal.run/fal-ai/bytedance/seedream/v4.5/edit');
+  assert.equal(v45.ark.model, 'seedream-4-5-251128');
+  assert.equal(G.resolveConfig({ model: 'seedream-v4' }, { ART_MODEL: 'seedream-v4.5' }, P.DEFAULTS).model, 'seedream-v4');
+  assert.equal(G.resolveConfig({}, { FAL_ENDPOINT: 'https://example/x' }, P.DEFAULTS).fal.endpoint, 'https://example/x');
+  assert.equal(G.resolveConfig({}, { SEEDREAM_MODEL: 'custom-id' }, P.DEFAULTS).ark.model, 'custom-id');
+  assert.throws(() => G.resolveConfig({ model: 'seedream-v9' }, {}, P.DEFAULTS), /unknown model/);
+});
+
+test('prices follow the model family, its size tiers and extra references; ART_PRICE_USD overrides', () => {
+  const v5 = G.resolveConfig({}, {}, P.DEFAULTS);
+  assert.equal(G.priceFor(v5, 'mock', 2728, 1536), 0);
+  assert.equal(G.priceFor(v5, 'fal', 1040, 1248), 0.0675);
+  assert.equal(G.priceFor(v5, 'fal', 2728, 1536), 0.135);
+  assert.equal(G.priceFor(v5, 'fal', 2728, 1536, 3), 0.135 + 2 * 0.0045);
+  assert.equal(G.priceFor(v5, 'ark', 2728, 1536, 3), 0.045);
+  const v4 = G.resolveConfig({}, { ART_MODEL: 'seedream-v4' }, P.DEFAULTS);
+  assert.equal(G.priceFor(v4, 'fal', 3200, 1800), 0.03);
+  assert.equal(G.priceFor(G.resolveConfig({}, { ART_PRICE_USD: '0.5' }, P.DEFAULTS), 'fal', 10, 10), 0.5);
+  assert.throws(() => G.resolveConfig({}, { ART_PRICE_USD: 'cheap' }, P.DEFAULTS), /ART_PRICE_USD/);
+});
+
+test('planned tasks are generated at the fitted size and keep the requested size for the record', () => {
+  const cfg = G.resolveConfig({ out: tmp('plan-fit'), provider: 'fal' }, { FAL_KEY: 'k' }, P.DEFAULTS);
+  const jobs = G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS ?? [], blocks: P.BLOCKS ?? {} });
+  const { tasks } = G.planTasks(jobs.filter((j) => j.key === 'hub'), cfg, { variants: 1 });
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].job.size, '2728x1536');
+  assert.equal(tasks[0].job.requested_size, '3200x1800');
+  assert.deepEqual(tasks[0].req.body.image_size, { width: 2728, height: 1536 });
+  assert.equal(tasks[0].priceUsd, 0.135);
+});
+
+test('fal sync mode asks for an inline image and an inline result is decoded without a download', async () => {
+  const png = tinyPng();
+  const cfg = G.resolveConfig({}, { FAL_KEY: 'fk', FAL_POLL_MS: '1', FAL_SYNC_MODE: '1' }, P.DEFAULTS);
+  const job = { key: 'hub', kind: 'room', realm: 'hub', size: '2x2', width: 2, height: 2, seed: 3, prompt: 'p', refs: [] };
+  const req = G.PROVIDERS.fal.buildRequest(job, cfg, []);
+  assert.equal(req.body.sync_mode, true);
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    if (url === req.url) return new Response(JSON.stringify({ request_id: 'q', status_url: 'https://q/s', response_url: 'https://q/r' }), { status: 200 });
+    if (url === 'https://q/s') return new Response(JSON.stringify({ status: 'COMPLETED' }), { status: 200 });
+    if (url === 'https://q/r') return new Response(JSON.stringify({ images: [{ url: `data:image/png;base64,${png.toString('base64')}`, width: 2, height: 2 }] }), { status: 200 });
+    throw new Error(`unexpected ${url}`);
+  };
+  const res = await G.PROVIDERS.fal.generate(req, { job, cfg, refs: [], http: { fetchImpl, retries: 0, timeoutMs: 1000, sleep: async () => {} } });
+  assert.ok(res.bytes.equals(png));
+  assert.equal(res.sourceUrl, null, 'an inline image has no source URL to record');
+  assert.equal(urls.length, 3, 'no CDN download');
+  assert.equal(G.decodeDataUrl('https://x/y.png'), null);
+  assert.throws(() => G.decodeDataUrl('data:image/png,notbase64'), /base64/);
+});
+
+test('the models command lists every family and marks the selected one', () => {
+  const r = spawnSync(process.execPath, [GEN, 'models', '--model', 'seedream-v4.5'], { encoding: 'utf8', env: { ...process.env } });
+  assert.equal(r.status, 0, r.stderr);
+  for (const id of Object.keys(G.MODELS)) assert.ok(r.stdout.includes(id), id);
+  assert.match(r.stdout, /seedream-v4\.5 \*/);
 });

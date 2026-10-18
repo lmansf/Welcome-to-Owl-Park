@@ -10,6 +10,11 @@ used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec
   and ignored by git. Never hand-write the `Env` bindings; change `wrangler.jsonc` instead.
 - Cloudflare guidance for agents is vendored in `.claude/skills/` (refresh with
   `tools/cloudflare-skills.sh`); prefer it over memory for Wrangler, Workers and Durable Objects.
+- Art comes from Seedream through `tools/art` (`tools/art/README.md`, `docs/ART-PIPELINE.md`).
+  With `FAL_KEY` set: `pnpm art:generate --provider fal --only <key> --dry-run` first, then without
+  `--dry-run`; show the owner the contact sheet (`pnpm art:finish sheet <key>`) and let them pick;
+  finish, then `pnpm art:preview` and show them the compare images before publishing anything.
+  The owner approves art; never publish or commit generated art without that.
 - Secrets (`PASS_SIGNING_KEY`, `ADMIN_KEY`) are set with `wrangler secret put`, never committed.
   `TRUST_FORWARDED_FOR` is for local load tests only. Deploy steps live in `docs/DEPLOY.md`.
 - This repository is public. Internal working names for unreleased realms, the owner's personal
