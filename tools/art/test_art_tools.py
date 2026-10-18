@@ -29,9 +29,9 @@ from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
-from artlib.guide import render_guide, review_composite  # noqa: E402
+from artlib.guide import render_guide, review_composite, room_of  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
-from artlib.overlaycheck import check_overlay  # noqa: E402
+from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
                           synth_overlay, synth_owl_master, synth_room)
@@ -474,6 +474,39 @@ class TestGuideOverlay(unittest.TestCase):
         self.assertFalse(rep2["ok"])
         self.assertTrue(any("coverage" in v for v in rep2["violations"]))
         self.assertTrue(any("spawn default" in v for v in rep2["violations"]))
+
+    def test_overlay_rules_keep_sign_boards_readable_and_catch_key_haze(self):
+        geom = fixture_geometry()
+        good, _ = key_out(synth_overlay(1600, 900, "#FF00FF", good=True), ChromaParams(key="#FF00FF"))
+        self.assertTrue(check_overlay(good, geom, "hub", key_colour="#FF00FF")["ok"])
+        # A root dangling over a closed sign's board hides the phrase, even if the footprint is mostly clear.
+        door = next(d for d in room_of(geom, "hub")["doors"] if d.get("closedSign"))
+        mx, my = door["marker"]["x"], door["marker"]["y"]
+        hidden = good.copy()
+        ImageDraw.Draw(hidden).rectangle((mx - 30, my - 500, mx + 30, my - 400), fill=(60, 40, 20, 255))
+        rep = check_overlay(hidden, geom, "hub")
+        self.assertFalse(rep["ok"])
+        self.assertTrue(any("sign board" in v for v in rep["violations"]), rep["violations"])
+        # Bright magenta-ish haze left behind by a glow over the magenta key.
+        hazy = good.copy()
+        ImageDraw.Draw(hazy).ellipse((40, 40, 240, 240), fill=(255, 60, 230, 200))
+        rep2 = check_overlay(hazy, geom, "hub", key_colour="#FF00FF")
+        self.assertFalse(rep2["ok"])
+        self.assertTrue(any("haze" in v for v in rep2["violations"]), rep2["violations"])
+        self.assertGreater(rep2["key_spill"], 0.005)
+        # The finish options fix both deterministically, and the check then passes.
+        fixed, n = clear_sign_boards(hidden, geom, "hub")
+        self.assertGreater(n, 0)
+        self.assertTrue(check_overlay(fixed, geom, "hub")["ok"])
+        fixed2, n2 = clear_key_haze(hazy, "#FF00FF")
+        self.assertGreater(n2, 0)
+        rep3 = check_overlay(fixed2, geom, "hub", key_colour="#FF00FF")
+        self.assertTrue(rep3["ok"], rep3["violations"])
+        self.assertEqual(np.asarray(fixed2)[..., 3].sum() > 0, True, "the real props survive")
+        # At 2x the same board is cleared at twice the coordinates.
+        big = hidden.resize((3200, 1800))
+        fixed_big, _ = clear_sign_boards(big, geom, "hub", scale=2)
+        self.assertTrue(check_overlay(fixed_big.resize((1600, 900)), geom, "hub")["ok"])
 
 
 class TestForbiddenAndProvenance(unittest.TestCase):

@@ -28,6 +28,9 @@ CLOSED_LINE = (138, 138, 160)
 MAGENTA = (255, 42, 161)
 CYAN = (0, 229, 255)
 SIGN_W, SIGN_H = 420, 520
+# The lettered board inside the 420 x 520 sign canvas (x0, y0, x1, y1), the same in all four sign
+# arts: the approved phrase lives here, so overlays must leave it readable.
+SIGN_BOARD = (9, 8, 411, 183)
 
 
 def load_geometry(path: Path | str) -> dict:

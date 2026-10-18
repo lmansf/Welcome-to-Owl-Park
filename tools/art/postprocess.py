@@ -61,7 +61,7 @@ from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of  # noqa: E402
-from artlib.overlaycheck import check_overlay  # noqa: E402
+from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.resize import downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 import owl_layers  # noqa: E402
@@ -372,20 +372,34 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     if gline:
         tools.append(gline)
     outputs = {}
-    one = apply_grade(resize_exact(rgba, W, H, a.crop, a.shift_y), pal, strength)
+    geom = ctx.geometry()
+
+    def cleared(im: Image.Image, scale: float) -> Image.Image:
+        # Deterministic fixes for what prompts cannot pin down: glow keyed out as opaque key colour,
+        # and props drifting over a closed sign's lettered board.
+        if a.clear_haze:
+            im, n = clear_key_haze(im, cinfo["backdrop"])
+            if scale == 1:
+                tools.append(f"overlay: clear-haze {n} px")
+        if a.clear_signs:
+            im, n = clear_sign_boards(im, geom, room, scale)
+            if scale == 1:
+                tools.append(f"overlay: clear-signs {n} px")
+        return im
+
+    one = cleared(apply_grade(resize_exact(rgba, W, H, a.crop, a.shift_y), pal, strength), 1)
     data, info = encode_final(one, ctx.budget, None, a.dither, f"{key}.png")
     outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
     tools.append(budget_line(info))
     if a.with_2x:
-        two = apply_grade(resize_exact(rgba, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength)
+        two = cleared(apply_grade(resize_exact(rgba, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength), 2)
         data2, info2 = encode_final(two, ctx.budget, a.budget_2x, a.dither, f"{key}@2x.png")
         outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), max(ctx.budget, a.budget_2x)), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
     elif (ctx.out / f"{key}@2x.png").exists():
         (ctx.out / f"{key}@2x.png").unlink()
     remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
-    geom = ctx.geometry()
     final = Image.open(ctx.out / f"{key}.png").convert("RGBA")
-    report = check_overlay(final, geom, room)
+    report = check_overlay(final, geom, room, key_colour=cinfo["backdrop"])
     bg = background_for(ctx, room).convert("RGBA")
     bg.alpha_composite(final)
     rv = write_review(ctx, f"{key}.png", review_composite(bg, geom, room, 0.4, ctx.assets))
@@ -682,7 +696,7 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
                 if want and want != sha256_bytes(p.read_bytes()):
                     problems.append(f"{name}: contents differ from the latest provenance line (stale or hand-edited; republish it)")
         if key in OVERLAY_KEYS and f"{key}.png" in pngs:
-            rep = check_overlay(Image.open(pngs[f"{key}.png"]), ctx.geometry(), ctx.room_for(key))
+            rep = check_overlay(Image.open(pngs[f"{key}.png"]), ctx.geometry(), ctx.room_for(key), key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"))
             for v in rep["violations"]:
                 problems.append(f"{key}.png: {v}")
         if key in OWL_LAYERS:
@@ -907,6 +921,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--with-2x", action="store_true")
     sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_RELAXED)
     sp.add_argument("--check", action="store_true", help="fail when the overlay rules are violated")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze (keyed glow) transparent")
+    sp.add_argument("--clear-signs", action="store_true", help="make the overlay transparent over closed signs' lettered boards")
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_overlay)
