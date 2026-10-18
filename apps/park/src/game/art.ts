@@ -1,12 +1,14 @@
 /**
  * Art loading. Every piece of art has a key, a logical size in room pixels, and a kind.
  * For each key the loader tries, in order: `<key>.svg` (rasterized at the device's scale),
- * `<key>@2x.png` when a sharper copy is wanted, then `<key>.png`. Whatever resolution the
- * file has, the game draws it at the logical size, so artists can hand in SVG or PNG.
+ * then `<key>@2x.webp` and `<key>@2x.png` when a sharper copy is wanted, then `<key>.webp` and
+ * `<key>.png` (painted rooms ship as WebP, everything else as PNG). Whatever resolution the
+ * file has, the game draws it at the logical size, so artists can hand in SVG, WebP or PNG.
  * Missing or broken files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
 import { ROOM_H, ROOM_W } from '@owl-park/shared';
+import { rasterCandidates } from './artFiles';
 import { loadSvgTexture } from './svgLoader';
 
 export const ART_PATH = 'art/';
@@ -84,8 +86,7 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   if (!spec) return false;
   const url = baseUrl();
   if (await loadSvgTexture(scene, key, `${url}${key}.svg`, Math.round(spec.w * scale), Math.round(spec.h * scale))) return true;
-  const candidates = scale > 1.25 ? [`${url}${key}@2x.png`, `${url}${key}.png`] : [`${url}${key}.png`];
-  for (const c of candidates) {
+  for (const c of rasterCandidates(url, key, scale)) {
     const img = await loadImage(c);
     if (img) {
       if (!scene.textures.exists(key)) scene.textures.addImage(key, img);

@@ -6,7 +6,7 @@
  *                    [--owls 4] [--views desktop,phone] [--keep-site]
  *
  * Builds the client once and makes two copies of it: "current", with the art in
- * apps/park/public/art as it is now, and "new", with every final PNG from the finals folder laid
+ * apps/park/public/art as it is now, and "new", with every final PNG and WebP from the finals folder laid
  * over it (the matching placeholder SVG removed, since the loader prefers an SVG). Both are served
  * locally and each room is opened in a headless browser with a few visitor owls walking about
  * (local transport, no server or account). For every room and view it writes
@@ -49,12 +49,12 @@ export function loadKeys(toolsDir = TOOLS_DIR) {
   return new Set(Object.keys(assets.keys ?? {}));
 }
 
-/** The final PNGs in a folder that the loader would use: `<key>.png` and `<key>@2x.png` for known keys. */
+/** The finals in a folder that the loader would use: `<key>[@2x].webp` and `<key>[@2x].png` for known keys. */
 export function scanFinals(dir, keys) {
   const files = [];
   if (!fs.existsSync(dir)) return { files, keys: new Set() };
   for (const name of fs.readdirSync(dir).sort()) {
-    const m = /^([a-z][a-z0-9-]*)(@2x)?\.png$/.exec(name);
+    const m = /^([a-z][a-z0-9-]*)(@2x)?\.(?:png|webp)$/.exec(name);
     if (m && keys.has(m[1])) files.push({ name, key: m[1], two: Boolean(m[2]) });
   }
   return { files, keys: new Set(files.map((f) => f.key)) };
@@ -67,22 +67,28 @@ export function roomsTouched(keys) {
   return ROOMS.filter((r) => set.has(r));
 }
 
-/** Lay the finals over a built site's art folder; returns the placeholder SVGs it removed. */
+/**
+ * Lay the finals over a built site's art folder; returns what it removed: the placeholder SVGs the
+ * loader would prefer, and published files of the same keys that the finals replace (a PNG the new
+ * WebP supersedes, a 2x the finish no longer has), as `publish` would.
+ */
 export function overlayFinals(siteDir, finalsDir, files) {
   const art = path.join(siteDir, 'art');
   fs.mkdirSync(art, { recursive: true });
   const removed = [];
-  for (const f of files) fs.copyFileSync(path.join(finalsDir, f.name), path.join(art, f.name));
+  const incoming = new Set(files.map((f) => f.name));
   for (const key of new Set(files.map((f) => f.key))) {
-    const svg = path.join(art, `${key}.svg`);
-    if (fs.existsSync(svg)) { fs.rmSync(svg); removed.push(`${key}.svg`); }
+    for (const name of [`${key}.svg`, `${key}.webp`, `${key}@2x.webp`, `${key}.png`, `${key}@2x.png`]) {
+      if (!incoming.has(name) && fs.existsSync(path.join(art, name))) { fs.rmSync(path.join(art, name)); removed.push(name); }
+    }
   }
+  for (const f of files) fs.copyFileSync(path.join(finalsDir, f.name), path.join(art, f.name));
   return removed;
 }
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
-  '.png': 'image/png', '.json': 'application/json', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png', '.webp': 'image/webp', '.json': 'application/json', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
 };
 
 /** A static file server for one folder on a free local port. Missing files are a plain 404. */
@@ -189,7 +195,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
   for (const v of viewNames) if (!VIEWS[v]) { err(`unknown view ${v} (${Object.keys(VIEWS).join(', ')})`); return 2; }
 
   const { files, keys } = scanFinals(finalsDir, loadKeys());
-  if (!files.length) { err(`no final PNGs in ${path.relative(REPO_ROOT, finalsDir) || finalsDir}: run pnpm art:finish room|piece|overlay|owl first`); return 1; }
+  if (!files.length) { err(`no final PNG or WebP files in ${path.relative(REPO_ROOT, finalsDir) || finalsDir}: run pnpm art:finish room|piece|overlay|owl first`); return 1; }
   const rooms = values.rooms ? values.rooms.split(',').map((s) => s.trim()).filter(Boolean) : roomsTouched(keys);
   for (const r of rooms) if (!ROOMS.includes(r)) { err(`unknown room ${r} (${ROOMS.join(', ')})`); return 2; }
   out(`new art: ${[...keys].join(', ')} (${files.length} file(s)); rooms: ${rooms.join(', ')}; views: ${viewNames.join(', ')}`);
@@ -203,7 +209,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
     buildSite(current);
     fs.cpSync(current, next, { recursive: true });
     const removed = overlayFinals(next, finalsDir, files);
-    if (removed.length) out(`placeholders hidden in the new copy: ${removed.join(', ')}`);
+    if (removed.length) out(`replaced in the new copy: ${removed.join(', ')}`);
 
     const a = await serve(current);
     const b = await serve(next);

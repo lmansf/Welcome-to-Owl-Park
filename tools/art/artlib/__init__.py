@@ -29,8 +29,10 @@ LOCAL_DIR = TOOLS_ART_DIR / ".local"
 
 #: Every shipped file must encode under this many bytes (the "about 200 KB" rule).
 BUDGET_BYTES = 200_000
-#: Opt-in relaxed budget for a 3200x1800 room, which cannot meet 200 KB as PNG.
+#: Opt-in relaxed budget for a 3200x1800 PNG (an overlay), which cannot meet 200 KB.
 BUDGET_2X_RELAXED = 640_000
+#: The budget of a room's 3200x1800 WebP (rooms ship as WebP; their 1x keeps BUDGET_BYTES).
+BUDGET_2X_ROOM = 640_000
 #: The only chunks a published PNG may carry: no text, time, physical or colour-profile chunks.
 ALLOWED_CHUNKS = frozenset({"IHDR", "PLTE", "tRNS", "IDAT", "IEND"})
 

@@ -25,7 +25,7 @@ import numpy as np  # noqa: E402
 from PIL import Image, ImageDraw, ImageOps, PngImagePlugin  # noqa: E402
 
 from artlib import ALLOWED_CHUNKS, BUDGET_BYTES, ArtError, load_assets, parse_hex  # noqa: E402
-from artlib import forbidden, pngmeta, prov  # noqa: E402
+from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
@@ -601,7 +601,112 @@ class TestPngMeta(unittest.TestCase):
             self.assertIn(f"'{key}'" if "-" in key else f"{key}:", src)
 
 
+class TestWebpMeta(unittest.TestCase):
+    def test_clean_encode_chunks_and_determinism(self):
+        img = synth_room(320, 180, 5, "hub")
+        img.info["icc_profile"] = b"\0" * 128
+        img.info["exif"] = b"Exif\0\0MM"
+        data = webpmeta.encode(img, 80)
+        self.assertEqual(webpmeta.chunk_types(data), ["VP8 "])
+        self.assertEqual(webpmeta.webp_size(data), (320, 180))
+        self.assertEqual(data, webpmeta.encode(img, 80))
+        with self.assertRaises(ArtError):
+            webpmeta.chunk_types(b"RIFF\0\0\0\0WAVE")
+        # A file carrying EXIF or an ICC profile is refused by the verifier.
+        buf = io.BytesIO()
+        img.save(buf, "WEBP", quality=80, icc_profile=b"\0" * 128, exif=b"Exif\0\0MM\0*\0\0\0\x08\0\0")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "hub.webp"
+            p.write_bytes(buf.getvalue())
+            v = webpmeta.verify_file(p, (320, 180), BUDGET_BYTES)
+            self.assertFalse(v["ok"])
+            self.assertTrue(any("disallowed WebP chunks" in x for x in v["problems"]))
+            p.write_bytes(data)
+            self.assertTrue(webpmeta.verify_file(p, (320, 180), BUDGET_BYTES)["ok"])
+            self.assertIn("is not 640x360", " ".join(webpmeta.verify_file(p, (640, 360), BUDGET_BYTES)["problems"]))
+            self.assertIn("exceeds", " ".join(webpmeta.verify_file(p, None, 10)["problems"]))
+
+    def test_quality_ladder_descends_and_raises(self):
+        img = synth_room(640, 360, 7, "grove")
+        top = len(webpmeta.encode(img, webpmeta.QUALITIES[0]))
+        data, info = webpmeta.encode_under_budget(img, top)
+        self.assertEqual((info["format"], info["quality"]), ("webp", webpmeta.QUALITIES[0]))
+        data, info = webpmeta.encode_under_budget(img, top - 1)
+        self.assertLess(info["quality"], webpmeta.QUALITIES[0])
+        self.assertLessEqual(len(data), top - 1)
+        with self.assertRaises(BudgetError):
+            webpmeta.encode_under_budget(img, 100)
+
+
 class TestCli(unittest.TestCase):
+    def _room_raw(self, work: Path, seed: int = 3) -> None:
+        d = work / "raw" / "hub"
+        d.mkdir(parents=True, exist_ok=True)
+        h = f"{seed:016x}"
+        (d / f"{h}.png").write_bytes(pngmeta.encode(synth_room(800, 450, seed, "hub")))
+        (d / f"{h}.json").write_text(json.dumps({"schema": 1, "key": "hub", "kind": "room", "provider": "mock", "model": "m", "hash16": h, "prompt_sha256": "ab" * 32, "seed": seed, "size": "800x450", "generated_at": "t"}), encoding="utf-8")
+        (d / "SELECTED").write_text(h + "\n", encoding="utf-8")
+
+    def test_room_ships_webp_and_replaces_png_everywhere(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            (work / "final").mkdir(parents=True)
+            public.mkdir()
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--provenance", str(provp), "--now", "2026-10-18T09:00:00Z"]
+            self._room_raw(work)
+            with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
+                # The PNG era: a published hub.png and hub@2x.png, and a stale PNG final.
+                pngmeta.save(Image.new("RGB", (1600, 900), (5, 5, 5)), work / "final" / "hub.png")
+                pngmeta.save(Image.new("RGB", (3200, 1800), (5, 5, 5)), work / "final" / "hub@2x.png")
+                self.assertEqual(postprocess.main(["publish", "hub"] + common), 0)
+                self.assertTrue((public / "hub@2x.png").exists())
+                # The room finish writes WebP only and clears the PNG finals.
+                self.assertEqual(postprocess.main(["room", "hub", "--grade", "none", "--with-2x", "--work", str(work), "--now", "2026-10-18T09:00:00Z"]), 0)
+                self.assertEqual(sorted(p.name for p in (work / "final").glob("hub*") if p.suffix != ".json"), ["hub.webp", "hub@2x.webp"])
+                rec = json.loads((work / "final" / "hub.post.json").read_text(encoding="utf-8"))
+                self.assertEqual(rec["outputs"]["1x"]["format"], "webp")
+                self.assertTrue(any(t.startswith("budget: webp q") for t in rec["tools"]))
+                self.assertTrue(any(t.startswith("budget@2x: webp q") for t in rec["tools"]))
+                # Publishing it removes the PNGs the loader would otherwise still find.
+                self.assertEqual(postprocess.main(["publish", "hub"] + common), 0)
+                self.assertEqual(sorted(p.name for p in public.iterdir()), ["hub.webp", "hub@2x.webp"])
+                self.assertIn("removed stale hub.png", out.getvalue())
+                lines = prov.read_lines(provp)
+                self.assertEqual(lines[-1]["asset"], "hub@2x.webp")
+                self.assertEqual(lines[-1]["sha256"], postprocess.sha256_bytes((public / "hub@2x.webp").read_bytes()))
+                self.assertEqual(postprocess.main(["check", "--all"] + common), 0)
+                # A PNG left beside the WebP is a conflict, and so is a 2x with no 1x.
+                pngmeta.save(Image.new("RGB", (1600, 900), (5, 5, 5)), public / "hub.png")
+                self.assertEqual(postprocess.main(["check", "hub"] + common), 1)
+                self.assertIn("both PNG and WebP", out.getvalue())
+                (public / "hub.png").unlink()
+                (public / "hub.webp").unlink()
+                self.assertEqual(postprocess.main(["check", "hub"] + common), 1)
+                self.assertIn("published without hub.webp", out.getvalue())
+                # A finish without a 2x drops the old 2x from the finals and, on publish, from the park.
+                self.assertEqual(postprocess.main(["room", "hub", "--grade", "none", "--work", str(work), "--now", "2026-10-18T09:00:00Z"]), 0)
+                self.assertFalse((work / "final" / "hub@2x.webp").exists())
+                self.assertEqual(postprocess.main(["publish", "hub"] + common), 0)
+                self.assertEqual(sorted(p.name for p in public.iterdir()), ["hub.webp"])
+                self.assertEqual(postprocess.main(["check", "--all"] + common), 0)
+
+    def test_check_refuses_webp_metadata_and_webp_outside_rooms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            (work / "final").mkdir(parents=True)
+            public.mkdir()
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--provenance", str(provp), "--now", "2026-10-18T09:00:00Z"]
+            buf = io.BytesIO()
+            Image.new("RGB", (1600, 900), (9, 9, 9)).save(buf, "WEBP", quality=80, exif=b"Exif\0\0MM\0*\0\0\0\x08\0\0")
+            (public / "hub.webp").write_bytes(buf.getvalue())
+            (public / "guardian.webp").write_bytes(webpmeta.encode(Image.new("RGB", (720, 820), (9, 9, 9)), 80))
+            with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
+                self.assertEqual(postprocess.main(["check", "hub", "guardian"] + common), 1)
+            self.assertIn("hub.webp: disallowed WebP chunks: EXIF", out.getvalue())
+            self.assertIn("guardian: published as WebP, but only room backgrounds ship as WebP", out.getvalue())
+
     def test_demo_runs_the_whole_chain(self):
         with tempfile.TemporaryDirectory() as tmp:
             cmd = [sys.executable, "-I", "-B", str(HERE / "postprocess.py"), "demo", "--scale", "0.25", "--keep", tmp, "--now", "2026-10-18T09:00:00Z"]
@@ -609,7 +714,8 @@ class TestCli(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
             self.assertIn("demo ok", r.stdout)
             public = Path(tmp) / "public"
-            self.assertTrue((public / "hub.png").exists())
+            self.assertTrue((public / "hub.webp").exists())
+            self.assertFalse((public / "hub.png").exists())
             self.assertTrue((public / "owl-body@2x.png").exists())
             lines = prov.read_lines(Path(tmp) / "provenance.jsonl")
             self.assertEqual(len(lines), 14)

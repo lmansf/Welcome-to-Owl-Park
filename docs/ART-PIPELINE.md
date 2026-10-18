@@ -1,15 +1,17 @@
 # Art pipeline: replacing the placeholder art
 
 Every image in the park lives under `apps/park/public/art/` and is referenced by key. For each
-key the game tries, in order: `<key>.svg`, then `<key>@2x.png`, then `<key>.png`. Swap a file and
-the park picks it up; the code does not change. Whatever the file's resolution, it is drawn at the
-logical size in the table below.
+key the game tries, in order: `<key>.svg`, then (on dense screens) `<key>@2x.webp` and
+`<key>@2x.png`, then `<key>.webp` and `<key>.png`. Swap a file and the park picks it up; the code
+does not change. Whatever the file's resolution, it is drawn at the logical size in the table below.
 
 - **SVG** is rasterized when the room opens, at the device's pixel density (rooms and big set pieces
   capped at 1.5x by default, `VITE_ART_SCALE_MAX`; owls and signs up to 2x), so one file is sharp on
   every screen.
-- **PNG** is used as-is. Supply `<key>@2x.png` at twice the logical size for phones and `<key>.png`
-  at the logical size; the game picks the 2x file on dense screens when it exists.
+- **WebP and PNG** are used as-is. Supply `<key>@2x.*` at twice the logical size for phones and
+  `<key>.*` at the logical size; the game picks the 2x file on dense screens when it exists. Painted
+  room backgrounds (`hub`, `grove`, `market`) ship as lossy WebP, everything else as PNG (overlays,
+  set pieces and owl layers need exact alpha and grey levels).
 - Art for a room is loaded when the room opens and released when the visitor leaves it, so memory
   stays at one room's worth whatever the park grows to.
 
@@ -17,10 +19,10 @@ logical size in the table below.
 
 | Key | Logical size (px) | What it is |
 | --- | --- | --- |
-| `hub`, `hub-fg` | 1600 x 900 | Hub room background, and a transparent foreground overlay drawn in front of the owls |
-| `grove`, `grove-fg` | 1600 x 900 | Storybook realm background and foreground |
+| `hub`, `hub-fg` | 1600 x 900 | Hub room background (WebP), and a transparent foreground overlay (PNG) drawn in front of the owls |
+| `grove`, `grove-fg` | 1600 x 900 | Storybook realm background (WebP) and foreground (PNG) |
 | `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
-| `market`, `market-fg` | 1600 x 900 | Neon market background and foreground |
+| `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |
 | `robot-owl` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored |
 | `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
@@ -101,7 +103,7 @@ pnpm art:geometry                     # work/art/geometry.json from packages/sha
 pnpm art:finish guide --all           # work/art/guides/<room>.png, the layout references
 pnpm art:generate --provider fal --only hub --variants 4
 pnpm art:finish sheet hub && node tools/art/generate.mjs select hub <hash16>
-pnpm art:finish room hub --grade hub --strength 0.35          # work/art/final/hub.png + review
+pnpm art:finish room hub --grade hub --strength 0.35          # work/art/final/hub.webp + review
 pnpm art:preview --rooms hub                                   # before/after in the game, desktop and phone
 pnpm art:finish publish hub --retire-svg --note "variant 3 of 4"
 pnpm dev                              # open http://localhost:5173/?debug=1 and walk the room
@@ -127,7 +129,7 @@ pnpm dev                              # open http://localhost:5173/?debug=1 and 
    `select <key> <hash16|latest>` marks the one to finish. A candidate from anywhere (a picks
    folder, a hand-edited file) can be finished with `--raw <file>`.
 4. **Finish.** `room`, `piece`, `overlay` and `owl` write `work/art/final/<key>.png` (and
-   `<key>@2x.png`), a `work/art/review/<key>.png` composite with the walkable area, doors,
+   `<key>@2x.png`; `room` writes `<key>.webp` and `<key>@2x.webp`), a `work/art/review/<key>.png` composite with the walkable area, doors,
    spawns and anchors drawn over the art, and a `<key>.post.json` record of every parameter.
    Look at the review image before publishing: the ground plane must start at the polygon's top
    edge, doorways must sit where the door rectangles are, the tree base on its anchor.
@@ -207,33 +209,40 @@ yellow) when a master needs a manual fix.
 
 ### File budget and the 2x policy
 
-Every published PNG must encode under 200 000 bytes. The finish stage tries truecolour first,
-then palettes of 256 down to 64 colours (alpha-preserving for keyed assets), takes the first that
-fits and records the colour count; it warns below 128 colours. Dithering is off by default
-because it inflates PNGs about tenfold on smooth gradients; `--dither ordered` breaks sky
-banding at little cost. Rooms ship at 1600 x 900 only: a 3200 x 1800 painterly room cannot meet
-the budget as PNG and the loader falls back to `<key>.png`, which phones upscale (fine for
-painterly art, and half the GPU memory). `room --with-2x` opts a room in under a relaxed
-640 000 byte budget with a warning and a `budget_relaxed` flag in provenance. Pieces and owl
-layers always ship 1x and 2x (2x pieces land at 120-230 KB). Owl layers are a few KB each and
-bypass quantization so their grey levels stay exact. Finals are rewritten by Pillow with only
-IHDR/PLTE/tRNS/IDAT/IEND chunks, so no provider metadata survives; `check` fails on anything
-else.
+Every published file must encode under 200 000 bytes. Room backgrounds are WebP: a painted
+1600 x 900 room does not fit as PNG even at 64 colours (the first real hub was 569 KB there),
+while lossy WebP fits at high quality. `room` encodes with libwebp (method 6), tries quality 90
+and steps down to 50 until the file fits, and records the quality in the post record and the
+provenance `tools` (`budget: webp q86`). `room --with-2x` adds a 3200 x 1800 WebP for dense
+screens under `--budget-2x` (default 640 000 bytes; a painted room lands around 500 KB); without
+it the loader falls back to `<key>.webp`, which phones upscale (fine for painterly art, and half
+the GPU memory). Everything else is PNG: the finish tries truecolour first, then palettes of 256
+down to 64 colours (alpha-preserving for keyed assets), takes the first that fits and records
+the colour count; it warns below 128 colours. Dithering is off by default because it inflates
+PNGs about tenfold on smooth gradients; `--dither ordered` breaks sky banding at little cost. An
+overlay's `--with-2x` PNG may use a relaxed 640 000 byte budget, with a warning and a
+`budget_relaxed` flag in provenance. Pieces and owl layers always ship 1x and 2x (2x pieces land
+at 120-230 KB). Owl layers are a few KB each and bypass quantization so their grey levels stay
+exact. Finals are rewritten by Pillow with no metadata: PNGs carry only IHDR/PLTE/tRNS/IDAT/IEND
+chunks, WebPs only VP8/VP8L/VP8X/ALPH (no EXIF, XMP or ICC profile), so no provider metadata
+survives; `check` fails on anything else.
 
 ### Publish, SVG retirement, the e2e assertion
 
-The loader tries `<key>.svg` first, so a published PNG is invisible while the placeholder SVG
-exists. `publish --retire-svg` moves the SVG to `work/art/retired-svg/` (gitignored); commit the
-deletion along with the PNG. Also note `apps/park/e2e/park.spec.ts` asserts room texture widths
-of `1600 * min(dpr, 1.5)`, which only holds for rasterized SVG: when the first room ships as PNG
-that assertion must accept 1600 (1x only) or 3200 (with `@2x`). `publish` validates every
-provenance line before it moves or writes anything, so a refused note (a user name, an absolute
-path, a forbidden word) leaves the tree untouched; and a finish without a 2x removes a stale
-`<key>@2x.png` left by an earlier publish, since dense screens would otherwise keep showing the
-old art. `pnpm art:finish check --all` verifies everything published: sizes equal the logical
-size or exactly twice it, budgets, chunk allowlist, SVG/PNG conflicts, overlay rules, owl layer
-modes and feet, that every published PNG has a provenance line whose hash matches the file (a
-stale or hand-edited PNG fails), that no `@2x` is older than its 1x, and the provenance file.
+The loader tries `<key>.svg` first, so a published WebP or PNG is invisible while the placeholder
+SVG exists. `publish --retire-svg` moves the SVG to `work/art/retired-svg/` (gitignored); commit
+the deletion along with the new file. `apps/park/e2e/park.spec.ts` asserts room texture widths of
+`1600 * min(dpr, 1.5)` for an SVG room and 1600 or 3200 (with `@2x`, on a dense screen) for a
+painted one. `publish` validates every provenance line before it moves or writes anything, so a
+refused note (a user name, an absolute path, a forbidden word) leaves the tree untouched; and it
+removes every other raster of the key from `apps/park/public/art/` (a `<key>@2x.*` the new
+finish does not have, a PNG the new WebP replaces or the reverse), since the loader prefers a 2x
+on dense screens and WebP over PNG and would otherwise keep showing the old art. `pnpm art:finish
+check --all` verifies everything published: sizes equal the logical size or exactly twice it,
+budgets, chunk allowlists, SVG/raster conflicts, a key published as both PNG and WebP, WebP only
+for room backgrounds, a `@2x` with no 1x, overlay rules, owl layer modes and feet, that every
+published file has a provenance line whose hash matches the file (a stale or hand-edited file
+fails), that no `@2x` is older than its 1x, and the provenance file.
 
 ### Provenance and the private word list
 

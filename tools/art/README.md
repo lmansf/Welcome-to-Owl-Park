@@ -81,7 +81,7 @@ check the first response.
 
 ### Preview before publishing
 
-`pnpm art:preview` builds the client, lays every PNG in `work/art/final/` over a copy of it, and
+`pnpm art:preview` builds the client, lays every final (WebP or PNG) in `work/art/final/` over a copy of it, and
 screenshots each affected room on a desktop and a phone screen with a few visitor owls walking
 about, next to the same room with the current art. It writes
 `work/art/preview/<room>-<view>-compare.png` (plus the two halves) and changes nothing under

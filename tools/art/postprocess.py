@@ -9,7 +9,7 @@ byte-identical files).
 Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
 
   guide <room>|--all   layout guides from work/art/geometry.json (text-free, used as references)
-  room <key>           crop/resize to 1600x900 (and opt-in 3200x1800), grade, budget, review
+  room <key>           crop/resize to 1600x900 (and opt-in 3200x1800), grade, WebP under budget, review
   piece <key>          chroma key, fit into the logical canvas at 2x, downsample, grade, budget
   overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
   owl                  split the owl master into the five layers at 200x240 and 400x480
@@ -20,11 +20,12 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   check [--all|keys]   verify what is published against the loader contract
   demo                 run the whole chain on synthetic (or mock) input in a temp dir and assert it
 
-Outputs: finals in work/art/final/<key>.png (and <key>@2x.png), a review composite in
+Outputs: finals in work/art/final/<key>.png (and <key>@2x.png; rooms as <key>.webp and
+<key>@2x.webp, since a painted room cannot meet the budget as PNG), a review composite in
 work/art/review/<key>.png with the room geometry drawn over it, and a work/art/final/<key>.post.json
 record of the parameters, from which ``publish`` writes the committed provenance line. Finals are
-re-encoded by Pillow with no ancillary chunks, re-read, and checked for size, dimensions and the
-chunk allowlist before the command returns.
+re-encoded by Pillow with no ancillary chunks (no EXIF, XMP or ICC in a WebP), re-read, and checked
+for size, dimensions and the chunk allowlist before the command returns.
 
 Raw candidates: ``--raw <file>`` or the key's SELECTED candidate under work/art/raw/<key>/
 (written by ``generate.mjs select``); a lone candidate is used with a notice. The candidate's JSON
@@ -52,10 +53,10 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
     print(f"pnpm art:finish needs Pillow 12 and numpy ({_missing.name or 'a module'} is missing): python3 -m pip install pillow numpy (a venv is fine)", file=sys.stderr)
     sys.exit(2)
 
-from artlib import (BUDGET_2X_RELAXED, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OVERLAY_KEYS, OWL_LAYERS,  # noqa: E402
+from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES,DEFAULT_WORK_DIR, HELPER_KEYS, OVERLAY_KEYS, OWL_LAYERS,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
                     TINTED_LAYERS, TOOLS_ART_DIR, ArtError, load_assets, load_key_colours, logical_size, now_iso, rel_to_repo, sha256_bytes, validate_key)
-from artlib import forbidden, pngmeta, prov  # noqa: E402
+from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade as grade_image, load_palette  # noqa: E402
@@ -157,16 +158,38 @@ def sidecar_subset(sc: dict | None) -> dict | None:
     return out
 
 
+#: Raster formats the loader tries after the SVG, in its order of preference.
+RASTER_EXTS = ("webp", "png")
+
+
+def verify_final(path: Path, expect: tuple[int, int] | None, budget: int | None) -> dict:
+    """pngmeta.verify_file or webpmeta.verify_file, by the file's extension."""
+    return (webpmeta if Path(path).suffix.lower() == ".webp" else pngmeta).verify_file(path, expect, budget)
+
+
+def remove_rasters(d: Path, key: str, keep: set[str]) -> list[str]:
+    """Delete <key>.png|webp and <key>@2x.png|webp in d except the names in keep; returns what went."""
+    removed = []
+    for ext in RASTER_EXTS:
+        for name in (f"{key}.{ext}", f"{key}@2x.{ext}"):
+            if name not in keep and (d / name).exists():
+                (d / name).unlink()
+                removed.append(name)
+    return removed
+
+
 def write_final(ctx: Ctx, name: str, data: bytes, expect: tuple[int, int], budget: int) -> dict:
     path = ctx.out / name
     pngmeta.write_bytes(path, data)
-    v = pngmeta.verify_file(path, expect, budget)
+    v = verify_final(path, expect, budget)
     if not v["ok"]:
         raise ArtError(f"{name}: " + "; ".join(v["problems"]))
     return {"file": name, "bytes": v["bytes"], "sha256": sha256_bytes(data), "size": f"{expect[0]}x{expect[1]}"}
 
 
 def budget_line(info: dict) -> str:
+    if info.get("format") == "webp":
+        return f"budget: webp q{info['quality']}"
     if info.get("colors"):
         return f"budget: P{info['colors']}" + (" relaxed" if info.get("budget_relaxed") else "") + (f" dither={info['dither']}" if info.get("dither", "none") != "none" else "")
     return f"budget: {info.get('mode', 'truecolour')}" + (" relaxed" if info.get("budget_relaxed") else "")
@@ -222,7 +245,7 @@ def chroma_params(a: argparse.Namespace, key_colour: str | None) -> ChromaParams
 
 
 def background_for(ctx: Ctx, room: str) -> Image.Image:
-    for cand in (ctx.public / f"{room}.png", ctx.out / f"{room}.png"):
+    for cand in (ctx.public / f"{room}.webp", ctx.public / f"{room}.png", ctx.out / f"{room}.webp", ctx.out / f"{room}.png"):
         if cand.exists():
             return Image.open(cand).convert("RGB").resize((ROOM_W, ROOM_H), Image.Resampling.LANCZOS)
     return render_guide(ctx.geometry(), room, ctx.assets)
@@ -250,30 +273,35 @@ def cmd_guide(ctx: Ctx, a: argparse.Namespace) -> int:
 
 
 def cmd_room(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Rooms ship as lossy WebP: a painted 1600x900 room cannot meet the budget as PNG."""
     key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
     W, H = logical_size(key, ctx.assets)
     raw, sc = resolve_raw(ctx, key, a.raw)
     img = open_raw(raw).convert("RGB")
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
     tools = [f"room: crop={a.crop} shift={a.shift_y} source={img.width}x{img.height}"]
-    outputs = {}
-
-    one = apply_grade(resize_exact(img, W, H, a.crop, a.shift_y), pal, strength)
-    data, info = encode_final(one, ctx.budget, None, a.dither, f"{key}.png")
-    outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
-    if a.with_2x:
-        two = apply_grade(resize_exact(img, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength)
-        data2, info2 = encode_final(two, ctx.budget, a.budget_2x, a.dither, f"{key}@2x.png")
-        outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), max(ctx.budget, a.budget_2x)), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
-    elif (ctx.out / f"{key}@2x.png").exists():
-        (ctx.out / f"{key}@2x.png").unlink()
     if gline:
         tools.append(gline)
+    outputs = {}
+    fields = ("format", "quality", "colors", "mode", "budget_relaxed")
+
+    one = apply_grade(resize_exact(img, W, H, a.crop, a.shift_y), pal, strength)
+    data, info = webpmeta.encode_under_budget(one, ctx.budget)
+    outputs["1x"] = {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in fields}}
     tools.append(budget_line(info))
-    rv = write_review(ctx, f"{key}.png", review_composite(Image.open(ctx.out / f"{key}.png"), ctx.geometry(), ctx.room_for(key), 0.4, ctx.assets))
-    save_post_record(ctx, key, {"key": key, "kind": "room", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "params": {"crop": a.crop, "shift_y": a.shift_y, "with_2x": a.with_2x, "dither": a.dither}})
+    if a.with_2x:
+        two = apply_grade(resize_exact(img, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength)
+        data2, info2 = webpmeta.encode_under_budget(two, a.budget_2x)
+        outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), a.budget_2x), **{k: info2.get(k) for k in fields}}
+        tools.append("budget@2x: " + budget_line(info2)[8:])
+    # Only this finish's files may remain: a PNG from an earlier finish, or a 2x this one did not
+    # write, would otherwise be published with it.
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    rv = write_review(ctx, f"{key}.png", review_composite(Image.open(ctx.out / f"{key}.webp"), ctx.geometry(), ctx.room_for(key), 0.4, ctx.assets))
+    save_post_record(ctx, key, {"key": key, "kind": "room", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "params": {"crop": a.crop, "shift_y": a.shift_y, "with_2x": a.with_2x}})
     for k, o in outputs.items():
-        note(f"{key} {k}: {o['file']} {o['bytes']} bytes" + (f" P{o['colors']}" if o.get("colors") else " truecolour") + (" (relaxed budget)" if o.get("budget_relaxed") else ""))
+        note(f"{key} {k}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
     note(f"review: {rel_to_repo(rv)}")
     return 0
 
@@ -311,6 +339,7 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
         tools.append("budget@2x: " + budget_line(info2)[8:])
     elif (ctx.out / f"{key}@2x.png").exists():
         (ctx.out / f"{key}@2x.png").unlink()
+    remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
     # Review: the piece in its room at the anchor, scaled as ambience.ts does.
     room, anchor = PIECE_ANCHOR.get(key, (None, None))
     geom = ctx.geometry()
@@ -353,6 +382,7 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
         outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), max(ctx.budget, a.budget_2x)), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
     elif (ctx.out / f"{key}@2x.png").exists():
         (ctx.out / f"{key}@2x.png").unlink()
+    remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
     geom = ctx.geometry()
     final = Image.open(ctx.out / f"{key}.png").convert("RGBA")
     report = check_overlay(final, geom, room)
@@ -509,16 +539,20 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
     # Pass 1: validate everything (finals, SVG conflicts and the provenance lines themselves)
     # before the tree is touched, so a refused line (a note naming the user, an absolute path, a
     # forbidden word) cannot leave a PNG in the public dir with no provenance and the SVG gone.
-    plan: list[tuple[str, Path | None, list[tuple[Path, bytes, dict]], bool]] = []
+    plan: list[tuple[str, Path | None, list[tuple[Path, bytes, dict]]]] = []
     for key in keys:
         W, H = logical_size(key, ctx.assets)
-        one = ctx.out / f"{key}.png"
-        two = ctx.out / f"{key}@2x.png"
-        if not one.exists():
-            raise ArtError(f"no final for {key!r} at {one}; run the room/piece/overlay/owl command first")
+        found = [ext for ext in RASTER_EXTS if (ctx.out / f"{key}.{ext}").exists()]
+        if not found:
+            raise ArtError(f"no final for {key!r} at {ctx.out / f'{key}.png'} (or .webp); run the room/piece/overlay/owl command first")
+        if len(found) > 1:
+            raise ArtError(f"{key!r} has both {key}.png and {key}.webp in {ctx.out}; rerun its finish (which removes the other) or delete the stale one")
+        ext = found[0]
+        one = ctx.out / f"{key}.{ext}"
+        two = ctx.out / f"{key}@2x.{ext}"
         svg = ctx.public / f"{key}.svg"
         if svg.exists() and not a.retire_svg:
-            raise ArtError(f"{svg.name} exists and the loader prefers SVG, so the PNG would never show; pass --retire-svg to move it to work/art/retired-svg/")
+            raise ArtError(f"{svg.name} exists and the loader prefers SVG, so the {ext.upper()} would never show; pass --retire-svg to move it to work/art/retired-svg/")
         record_key = "owl-master" if key in OWL_LAYERS else key
         rec = load_post_record(ctx, record_key) or {}
         outs = rec.get("outputs", {})
@@ -526,8 +560,11 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
         for path, expect, logical in [(one, (W, H), "1x")] + ([(two, (2 * W, 2 * H), "2x")] if two.exists() else []):
             oinfo = outs.get(path.name) if key in OWL_LAYERS else outs.get(logical)
             relaxed = bool(oinfo and oinfo.get("budget_relaxed"))
-            budget = BUDGET_2X_RELAXED if (relaxed and logical == "2x" and key in PUBLIC_ROOMS + OVERLAY_KEYS) else ctx.budget
-            v = pngmeta.verify_file(path, expect, budget)
+            if ext == "webp" and logical == "2x":
+                budget = BUDGET_2X_ROOM
+            else:
+                budget = BUDGET_2X_RELAXED if (relaxed and logical == "2x" and key in PUBLIC_ROOMS + OVERLAY_KEYS) else ctx.budget
+            v = verify_final(path, expect, budget)
             if not v["ok"]:
                 raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
             data = path.read_bytes()
@@ -538,13 +575,13 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
             if probs:
                 raise ArtError(f"{path.name}: nothing published, its provenance line would be refused: " + "; ".join(probs))
             files.append((path, data, line))
-        plan.append((key, svg if svg.exists() else None, files, two.exists()))
+        plan.append((key, svg if svg.exists() else None, files))
 
     # Pass 2: retire the SVG, copy the finals and append the pre-validated lines. A write that
     # still fails midway puts that key back as it was (SVG restored, targets removed or restored).
     ctx.public.mkdir(parents=True, exist_ok=True)
     written = 0
-    for key, svg, files, has_2x in plan:
+    for key, svg, files in plan:
         retired: tuple[Path, Path] | None = None
         previous: dict[Path, bytes | None] = {}
         try:
@@ -573,12 +610,11 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
             if retired is not None:
                 shutil.move(str(retired[1]), str(retired[0]))
             raise
-        # A finish without a 2x must not leave an older <key>@2x.png behind: the loader prefers
-        # it on every dense screen, so phones would keep showing the retired art.
-        stale = ctx.public / f"{key}@2x.png"
-        if not has_2x and stale.exists():
-            stale.unlink()
-            note(f"removed stale {stale.name} (this finish has no 2x; dense screens would have kept showing the old one)")
+        # Only the files just published may remain for this key: the loader prefers a 2x on every
+        # dense screen and WebP over PNG, so an older <key>@2x.png, or a PNG left beside a new
+        # WebP (or the reverse), would keep showing the retired art somewhere.
+        for name in remove_rasters(ctx.public, key, {path.name for path, _, _ in files}):
+            note(f"removed stale {name} (not part of this finish; the loader would have kept showing the old art)")
     note(f"{written} file(s) published; provenance appended to {rel_to_repo(prov_path)}")
     return 0
 
@@ -606,33 +642,45 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
 
     keys = a.keys if a.keys else [k for k in ctx.assets if not k.startswith("sign-")]
     pngs = {p.name: p for p in pub.glob("*.png")} if pub.is_dir() else {}
+    rasters = {p.name: p for ext in RASTER_EXTS for p in pub.glob(f"*.{ext}")} if pub.is_dir() else {}
     checked = 0
     for key in keys:
         if key not in ctx.assets:
             problems.append(f"{key}: not an art key")
             continue
         W, H = logical_size(key, ctx.assets)
-        for name, expect in ((f"{key}.png", (W, H)), (f"{key}@2x.png", (2 * W, 2 * H))):
-            p = pngs.get(name)
+        formats = [ext for ext in RASTER_EXTS if f"{key}.{ext}" in rasters or f"{key}@2x.{ext}" in rasters]
+        if len(formats) > 1:
+            problems.append(f"{key}: both PNG and WebP files are published; the loader uses the WebP, so the PNG is stale (republish {key})")
+        if "webp" in formats and key not in PUBLIC_ROOMS:
+            problems.append(f"{key}: published as WebP, but only room backgrounds ship as WebP")
+        for ext in RASTER_EXTS:
+            one_name, two_name = f"{key}.{ext}", f"{key}@2x.{ext}"
+            if two_name in rasters and one_name not in rasters:
+                problems.append(f"{two_name}: published without {one_name} (screens that are not dense have nothing to load)")
+            if two_name in rasters and one_name in latest and two_name in latest and latest[one_name][0] > latest[two_name][0]:
+                problems.append(f"{two_name}: older than the latest {one_name} (the 1x was republished without a 2x; dense screens would show the old art)")
+        for name, expect in [(f"{key}.{ext}", (W, H)) for ext in RASTER_EXTS] + [(f"{key}@2x.{ext}", (2 * W, 2 * H)) for ext in RASTER_EXTS]:
+            p = rasters.get(name)
             if not p:
                 continue
             checked += 1
-            budget = BUDGET_2X_RELAXED if (name in relaxed and name.endswith("@2x.png")) else BUDGET_BYTES
-            v = pngmeta.verify_file(p, expect, budget)
+            if name.endswith("@2x.webp"):
+                budget = BUDGET_2X_ROOM
+            else:
+                budget = BUDGET_2X_RELAXED if (name in relaxed and name.endswith("@2x.png")) else BUDGET_BYTES
+            v = verify_final(p, expect, budget)
             for pr in v["problems"]:
                 problems.append(f"{name}: {pr}")
             if (pub / f"{key}.svg").exists():
                 warnings.append(f"{key}: both {key}.svg and {name} exist; the loader uses the SVG")
-            # Every published PNG needs a provenance line, and the file must be the one that line describes.
+            # Every published file needs a provenance line, and the file must be the one that line describes.
             if name not in latest:
                 problems.append(f"{name}: no provenance line (publish it with `pnpm art:finish publish {key}`)")
             else:
                 want = latest[name][1].get("sha256")
                 if want and want != sha256_bytes(p.read_bytes()):
                     problems.append(f"{name}: contents differ from the latest provenance line (stale or hand-edited; republish it)")
-        one_name, two_name = f"{key}.png", f"{key}@2x.png"
-        if two_name in pngs and one_name in latest and two_name in latest and latest[one_name][0] > latest[two_name][0]:
-            problems.append(f"{two_name}: older than the latest {one_name} (the 1x was republished without a 2x; dense screens would show the old art)")
         if key in OVERLAY_KEYS and f"{key}.png" in pngs:
             rep = check_overlay(Image.open(pngs[f"{key}.png"]), ctx.geometry(), ctx.room_for(key))
             for v in rep["violations"]:
@@ -665,7 +713,7 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
         warn(w)
     for p in problems:
         print(f"FAIL: {p}")
-    note(f"check: {checked} published PNG(s), {len(lines)} provenance line(s), {len(problems)} problem(s), {len(warnings)} warning(s)")
+    note(f"check: {checked} published PNG/WebP file(s), {len(lines)} provenance line(s), {len(problems)} problem(s), {len(warnings)} warning(s)")
     return 1 if problems else 0
 
 
@@ -755,7 +803,7 @@ def cmd_demo(ctx: Ctx, a: argparse.Namespace) -> int:
             print(f"demo FAILED at: {' '.join(step)}", file=sys.stderr)
             return 1
     # Contract assertions on what was published.
-    expect = {"hub.png": (1600, 900), "guardian.png": (720, 820), "guardian@2x.png": (1440, 1640), "hub-fg.png": (1600, 900)}
+    expect = {"hub.webp": (1600, 900), "guardian.png": (720, 820), "guardian@2x.png": (1440, 1640), "hub-fg.png": (1600, 900)}
     for name in OWL_LAYERS:
         expect[f"{name}.png"] = (200, 240)
         expect[f"{name}@2x.png"] = (400, 480)
@@ -765,7 +813,7 @@ def cmd_demo(ctx: Ctx, a: argparse.Namespace) -> int:
         if not p.exists():
             failures.append(f"missing {name}")
             continue
-        v = pngmeta.verify_file(p, size, BUDGET_BYTES)
+        v = verify_final(p, size, BUDGET_BYTES)
         failures += [f"{name}: {x}" for x in v["problems"]]
     body = np.asarray(Image.open(public / "owl-body.png").convert("LA")) if (public / "owl-body.png").exists() else None
     if body is not None:
@@ -825,13 +873,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(sp)
     sp.set_defaults(fn=cmd_guide)
 
-    sp = sub.add_parser("room", help="room background -> 1600x900 (+ optional 3200x1800)")
+    sp = sub.add_parser("room", help="room background -> 1600x900 WebP (+ optional 3200x1800)")
     sp.add_argument("key")
     sp.add_argument("--raw", default=None)
     sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
     sp.add_argument("--shift-y", type=int, default=0)
-    sp.add_argument("--with-2x", action="store_true", help="also write <key>@2x.png under --budget-2x")
-    sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_RELAXED)
+    sp.add_argument("--with-2x", action="store_true", help="also write <key>@2x.webp under --budget-2x")
+    sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_ROOM, help=f"byte budget of the 2x WebP (default {BUDGET_2X_ROOM})")
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_room)

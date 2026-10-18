@@ -13,10 +13,10 @@ test.after(() => fs.rmSync(tmpRoot, { recursive: true, force: true }));
 test('scanFinals keeps only loader files for known keys', () => {
   const dir = path.join(tmpRoot, 'finals');
   fs.mkdirSync(dir);
-  for (const f of ['hub.png', 'hub@2x.png', 'hub.post.json', 'guardian.png', 'owl-body.png', 'bogus.png', 'hub-copy.png', 'grove.PNG']) fs.writeFileSync(path.join(dir, f), 'x');
+  for (const f of ['hub.png', 'hub@2x.png', 'hub.post.json', 'guardian.png', 'owl-body.png', 'bogus.png', 'hub-copy.png', 'grove.PNG', 'market.webp', 'market@2x.webp', 'market.jpg']) fs.writeFileSync(path.join(dir, f), 'x');
   const { files, keys } = V.scanFinals(dir, V.loadKeys());
-  assert.deepEqual(files.map((f) => f.name), ['guardian.png', 'hub.png', 'hub@2x.png', 'owl-body.png']);
-  assert.deepEqual([...keys].sort(), ['guardian', 'hub', 'owl-body']);
+  assert.deepEqual(files.map((f) => f.name), ['guardian.png', 'hub.png', 'hub@2x.png', 'market.webp', 'market@2x.webp', 'owl-body.png']);
+  assert.deepEqual([...keys].sort(), ['guardian', 'hub', 'market', 'owl-body']);
   assert.deepEqual(V.scanFinals(path.join(tmpRoot, 'nope'), V.loadKeys()).files, []);
 });
 
@@ -39,11 +39,24 @@ test('overlayFinals copies the finals and hides the placeholder SVG the loader w
   assert.deepEqual(fs.readdirSync(path.join(site, 'art')).sort(), ['grove.svg', 'hub.png', 'hub@2x.png', 'owl-body.svg']);
 });
 
+test('overlayFinals drops the published files a WebP final replaces', () => {
+  const site = path.join(tmpRoot, 'site3');
+  const finals = path.join(tmpRoot, 'finals3');
+  fs.mkdirSync(path.join(site, 'art'), { recursive: true });
+  fs.mkdirSync(finals);
+  for (const f of ['hub.png', 'hub@2x.png', 'grove.png', 'owl-body.png']) fs.writeFileSync(path.join(site, 'art', f), 'png');
+  fs.writeFileSync(path.join(finals, 'hub.webp'), 'webp');
+  const removed = V.overlayFinals(site, finals, V.scanFinals(finals, V.loadKeys()).files);
+  assert.deepEqual(removed, ['hub.png', 'hub@2x.png']);
+  assert.deepEqual(fs.readdirSync(path.join(site, 'art')).sort(), ['grove.png', 'hub.webp', 'owl-body.png']);
+});
+
 test('serve answers files under its root and refuses paths outside it', async () => {
   const root = path.join(tmpRoot, 'www');
   fs.mkdirSync(path.join(root, 'art'), { recursive: true });
   fs.writeFileSync(path.join(root, 'index.html'), '<p>hi</p>');
   fs.writeFileSync(path.join(root, 'art', 'hub.png'), 'png');
+  fs.writeFileSync(path.join(root, 'art', 'grove.webp'), 'webp');
   fs.writeFileSync(path.join(tmpRoot, 'secret.txt'), 'no');
   const { server, base } = await V.serve(root);
   try {
@@ -52,6 +65,7 @@ test('serve answers files under its root and refuses paths outside it', async ()
     assert.match(home.headers.get('content-type'), /text\/html/);
     const png = await fetch(`${base}/art/hub.png`);
     assert.equal(png.headers.get('content-type'), 'image/png');
+    assert.equal((await fetch(`${base}/art/grove.webp`)).headers.get('content-type'), 'image/webp');
     assert.equal((await fetch(`${base}/art/hub.svg`)).status, 404);
     assert.notEqual((await fetch(`${base}/%2e%2e/secret.txt`)).status, 200);
   } finally {

@@ -1,5 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { cameraView, dist, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+
+/** Whether the park ships `<key>.svg` (the loader's first choice); a dev server may answer a miss with index.html. */
+async function hasSvg(page: Page, key: string): Promise<boolean> {
+  return page.evaluate(async (k) => {
+    const res = await fetch(new URL(`art/${k}.svg`, document.baseURI));
+    return res.ok && (res.headers.get('content-type') ?? '').includes('svg');
+  }, key);
+}
 
 test.describe('single visitor', () => {
   test('the park opens in the hub with one owl present', async ({ page }) => {
@@ -38,15 +46,18 @@ test.describe('single visitor', () => {
   test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {
     await openPark(page);
     const dpr = (await cameraView(page)).dpr; // 1 on the desktop project, 2 (capped) on the phone project
+    // An SVG room is rasterized at min(dpr, 1.5); a painted room (WebP or PNG) is used as shipped,
+    // 1600 wide, or 3200 when a 2x copy exists and the screen is dense.
+    const roomWidths = async (key: string) => ((await hasSvg(page, key)) ? [1600 * Math.min(dpr, 1.5)] : dpr > 1.25 ? [1600, 3200] : [1600]);
     const hub = await page.evaluate(() => window.owlPark.textureSize('hub'));
     const owl = await page.evaluate(() => window.owlPark.textureSize('owl-body'));
-    expect(hub?.w).toBe(1600 * Math.min(dpr, 1.5));
+    expect(await roomWidths('hub')).toContain(hub?.w);
     expect(owl?.w).toBe(200 * Math.min(dpr, 2));
     await walkToDoor(page, 'to-market');
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('market');
     // The previous room's art is released; the new room's is loaded at the same scale.
     expect(await page.evaluate(() => window.owlPark.textureSize('hub'))).toBeNull();
-    expect((await page.evaluate(() => window.owlPark.textureSize('market')))?.w).toBe(1600 * Math.min(dpr, 1.5));
+    expect(await roomWidths('market')).toContain((await page.evaluate(() => window.owlPark.textureSize('market')))?.w);
   });
 
   test('tapping outside the walkable area snaps to its edge', async ({ page }) => {
