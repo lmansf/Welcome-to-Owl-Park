@@ -181,7 +181,14 @@ Overlays must leave the owls visible: `overlay --check` fails when opaque pixels
 5 % of the walkable interior (eroded by 60 px; the frame edge is not an edge, owls stand right
 at the bottom of the hub, which is why the hub overlay keeps its whole lower half empty) or sit
 within 24 px of a spawn, a door centre, a sign, the shop or the gathering spot, and it draws the
-composite for you.
+composite for you. Two more rules guard what the disc test misses: a closed sign's lettered board
+(the top band of the 420 x 520 sign, the same in all four sign arts) may be at most 1 % covered,
+because every sign phrase must stay readable; and glow painted over the key colour must not
+survive keying (more than 0.5 % of the visible pixels bright, saturated and within 45 degrees of
+the key's hue fails: green halos round lanterns, while cyan neon next to a green key passes).
+Prompts cannot pin props to exact places, so the finish has two deterministic fixes, each recorded
+in provenance: `overlay <key> --clear-signs` makes the overlay transparent over the sign boards
+(hanging roots then read as passing behind the board) and `--clear-haze` removes keyed glow.
 
 ### The owl key-colour convention
 
