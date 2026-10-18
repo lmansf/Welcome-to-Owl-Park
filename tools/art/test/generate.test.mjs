@@ -163,6 +163,24 @@ test('collectible item keys: named item-*, one of the four slot sizes, a backdro
   }
 });
 
+test('the item keys in assets.json are exactly the catalogue wearables and pets, at their slot sizes', () => {
+  // Parsed from the shared catalogue source, like the ART table above, so a new item cannot ship without art jobs.
+  const src = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/collectibles.ts'), 'utf8');
+  const tuples = (from, to) => [...src.slice(from, to).matchAll(/\['([a-z][a-z0-9-]*)', (?:'[^']*'|"[^"]*"), [A-Z]\]/g)].map((m) => m[1]);
+  const at = (needle) => { const i = src.indexOf(needle); assert.ok(i >= 0, `catalogue has ${needle}`); return i; };
+  const head = at("wear('head'"), face = at("wear('face'"), neck = at("wear('neck'"), petEnd = at("kind: 'pet'");
+  const neckEnd = src.indexOf(']),', neck);
+  const SIZE = { head: [140, 100], face: [120, 60], neck: [130, 80], pet: [90, 90] };
+  const want = {};
+  for (const id of tuples(head, face)) want[`item-${id}`] = SIZE.head;
+  for (const id of tuples(face, neck)) want[`item-${id}`] = SIZE.face;
+  for (const id of tuples(neck, neckEnd)) want[`item-${id}`] = SIZE.neck;
+  for (const id of tuples(neckEnd, petEnd)) want[`item-${id}`] = SIZE.pet;
+  assert.equal(Object.keys(want).length, 70, 'parsed 50 wearables and 20 pets');
+  const have = Object.fromEntries(Object.entries(ASSETS.keys).filter(([, v]) => v.kind === 'item').map(([k, v]) => [k, [v.w, v.h]]));
+  assert.deepEqual(have, want);
+});
+
 test('every generated asset key in art.ts has a job (directly or derived) and the committed list validates', () => {
   const jobs = G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS });
   const covered = new Set();

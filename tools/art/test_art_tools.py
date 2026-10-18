@@ -433,6 +433,9 @@ class TestResize(unittest.TestCase):
         self.assertAlmostEqual((rows[0] + rows[-1]) / 2, 59.5, delta=1.5, msg="centred on the canvas' middle row")
         self.assertGreaterEqual(rows[0], 4)
         self.assertEqual(info["valign"], "centre")
+        top_canvas, _ = fit_contain(rgba, 260, 160, margin=0.04, valign="top")
+        trows = np.nonzero((np.asarray(top_canvas)[..., 3] > 0).any(1))[0]
+        self.assertAlmostEqual(trows[0], round(160 * 0.04), delta=1, msg="neckwear hangs from the canvas top")
         with self.assertRaises(ArtError):
             fit_contain(rgba, 240, 120, valign="middle")
 

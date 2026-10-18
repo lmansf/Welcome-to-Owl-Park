@@ -71,7 +71,8 @@ def fit_contain(img: Image.Image, canvas_w: int, canvas_h: int, margin: float = 
     """Scale the alpha bbox to fit the canvas; bottom opaque row on the last row minus pad_bottom.
 
     With ``valign="centre"`` the bbox is centred vertically instead (margin on all four sides), for
-    items worn at a point (glasses on the eye line, neckwear at the neck) rather than standing on one.
+    items worn at a point (glasses on the eye line); with ``valign="top"`` its top row sits a margin
+    below the canvas top, for items that hang from a line (neckwear: the band at the top).
 
     The point at ``anchor_x`` of the bbox width lands on the canvas' horizontal centre. The real
     bbox after resampling is measured and the paste shifted so the registration is exact.
@@ -85,16 +86,21 @@ def fit_contain(img: Image.Image, canvas_w: int, canvas_h: int, margin: float = 
     crop = img.crop((x0, y0, x1, y1))
     bw, bh = crop.size
     avail_w = canvas_w * (1.0 - 2.0 * margin)
-    if valign not in ("bottom", "centre"):
-        raise ArtError(f"fit_contain: valign must be bottom or centre, not {valign!r}")
-    avail_h = canvas_h * (1.0 - 2.0 * margin) if valign == "centre" else canvas_h * (1.0 - margin) - pad_bottom
+    if valign not in ("bottom", "centre", "top"):
+        raise ArtError(f"fit_contain: valign must be bottom, centre or top, not {valign!r}")
+    avail_h = canvas_h * (1.0 - 2.0 * margin) if valign in ("centre", "top") else canvas_h * (1.0 - margin) - pad_bottom
     s = min(avail_w / bw, avail_h / bh)
     nw, nh = max(1, int(round(bw * s))), max(1, int(round(bh * s)))
     scaled = crop.resize((nw, nh), LANCZOS) if (nw, nh) != (bw, bh) else crop
     sb = alpha_bbox(scaled) or (0, 0, nw, nh)
     canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
     left = int(round(canvas_w / 2.0 - anchor_x * (sb[2] - sb[0]))) - sb[0]
-    top = int(round((canvas_h - (sb[3] - sb[1])) / 2.0)) - sb[1] if valign == "centre" else canvas_h - pad_bottom - sb[3]
+    if valign == "centre":
+        top = int(round((canvas_h - (sb[3] - sb[1])) / 2.0)) - sb[1]
+    elif valign == "top":
+        top = int(round(canvas_h * margin)) - sb[1]
+    else:
+        top = canvas_h - pad_bottom - sb[3]
     canvas.paste(scaled, (left, top))
     info = {"scale": round(s, 5), "bbox": [x0, y0, x1, y1], "placed": [left + sb[0], top + sb[1], left + sb[2], top + sb[3]], "margin": margin, "anchor_x": anchor_x, "pad_bottom": pad_bottom, "valign": valign}
     return canvas, info
