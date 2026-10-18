@@ -27,6 +27,7 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
 | `owl-face`, `owl-blink` | 200 x 240 | Eyes and beak in fixed colours (not tinted); the blink frame replaces the face for a moment, so it must include the beak |
+| `item-<id>` (70 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
 
 The owl is five layers, not three: three white tintable layers plus the face and the blink frame.
 
@@ -189,6 +190,25 @@ the key's hue fails: green halos round lanterns, while cyan neon next to a green
 Prompts cannot pin props to exact places, so the finish has two deterministic fixes, each recorded
 in provenance: `overlay <key> --clear-signs` makes the overlay transparent over the sign boards
 (hanging roots then read as passing behind the board) and `--clear-haze` removes keyed glow.
+
+### Collectible items
+
+Each wearable and pet in the catalogue (`packages/shared/src/collectibles.ts`) has an art key
+`item-<id>` in `config/assets.json` (kind `item`) and a job in `prompts.mjs`: the item alone on a
+chroma backdrop (magenta for green subjects, green for everything else), generated at twice its
+logical size and finished as a keyed piece. Colourways are hue rotations done by the game, so
+each item is painted once; a test keeps `assets.json` and the catalogue in step. Finish them with
+the slot's placement, which matches how `Owl.ts` and `Pet.ts` draw them:
+
+```bash
+pnpm art:finish piece item-witch-hat --margin 0.04                     # head: bottom-centre on the crown
+pnpm art:finish piece item-round-glasses --margin 0.04 --valign centre # face: centred on the eye line
+pnpm art:finish piece item-knit-scarf --margin 0.04 --valign top       # neck: hangs from the top of the canvas
+pnpm art:finish piece item-mouse --margin 0.04 --flip                  # pet: feet on the bottom edge, facing right
+```
+
+The prompts ask for pets facing left (the way the model draws them most reliably) and `--flip`
+turns them to the game's facing-right convention.
 
 ### The owl key-colour convention
 
