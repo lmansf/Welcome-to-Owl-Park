@@ -1,0 +1,287 @@
+/**
+ * The art generator's job list: one entry per image the pipeline generates, with the prompt,
+ * the generation size, the base seed, the key (chroma) colour for keyed assets and the
+ * reference-image slots. This file is data; the art director edits it. `generate.mjs` reads it.
+ *
+ * Prompts and style blocks below are the approved defaults. Keys are the public asset ids from
+ * `apps/park/src/game/art.ts` plus three helper keys (`tree-master`, `owl-master`,
+ * `owl-blink-src`) whose output is turned into shipped assets by the post-processing stage.
+ *
+ * Rules for anything added here: no text in images except the four approved sign phrases, no
+ * names of realms, people, companies or other games, no requests for another work's style.
+ */
+
+export const VERSION = 1;
+
+/** Built-in defaults; flags and environment variables override them (see README.md). */
+export const DEFAULTS = {
+  provider: 'mock',
+  seed: 1000,
+  variants: 1,
+  concurrency: 2,
+  /** Refuse to start a run whose uncached jobs would cost more than this (USD). */
+  maxSpendUsd: 5,
+  /** Estimated USD per generated image, per provider, for --dry-run, `cost` and the spend guard. */
+  prices: { mock: 0, ark: 0.03, fal: 0.03 },
+  /** Reference images larger than this are refused when sent inline as data URLs. */
+  maxRefBytes: 2 * 1024 * 1024,
+  /** A warning is printed when one request body grows past this. */
+  warnBodyBytes: 12 * 1024 * 1024,
+  /** Most reference images one request may carry. */
+  maxRefs: 14,
+};
+
+/** Brand anchors and the realm accents the mock provider and the docs refer to. */
+export const PALETTE = {
+  navy: '#0C1E36',
+  deepNavy: '#07122A',
+  gold: '#C9A227',
+  goldLight: '#FFD36A',
+  cream: '#F6F1E3',
+  amber: '#F2B24A',
+  duskBlue: '#2E4C7A',
+  moss: '#3E5A3A',
+  mossLight: '#6E8B4E',
+  bark: '#4A3322',
+  barkDark: '#2B1C12',
+  innerWood: '#5C4632',
+  innerWoodLit: '#8F8068',
+  coolShadow: '#1B2E4C',
+  magenta: '#FF2AA1',
+  cyan: '#00E5FF',
+  asphalt: '#0B0B16',
+  chrome: '#C7CEDA',
+  violet: '#6E3AFF',
+};
+
+/**
+ * The hub redo brief: what the hub is, how the same tree reads in every realm, and how the
+ * images are meant to be generated. Kept next to the prompts so edits stay consistent with it.
+ */
+export const BRIEF = `The hub is the inside of the tree. Visitors stand on the inner-wood floor of the colossal tree's hollow base, inside a moonlit nave of living wood, and the only ways out of it are the four realms. There is no sky, no lawn, no building and no tree "in front of" the visitor: the tree is the architecture, the floor and the light source at once, and that is the answer to "the hub is quite standard".
+
+Composition: camera straight on and slightly elevated, looking into the hollow from its mouth. The far wall is the curved inner trunk; the side walls sweep forward and leave the frame at the left and right edges; the ceiling converges into a tall dark shaft. At the top centre a ragged knothole, cut by the top edge, shows a slice of cream moon and a couple of stars, and a soft cone of cream moonlight falls down the shaft onto the centre of the floor with a few dry gold leaves drifting in it. The floor is the lower 36 percent: pale worn inner wood, mid value so coloured owls read on it, with wide uneven growth rings centred just below the middle of the floor and the moon pool at the default spawn. Thick roots dive under the floor from the walls like buttresses. At the back centre a narrow sealed cleft of exposed golden inner wood glows gold behind amber resin: the heart of the tree, too narrow to be a door, and the foot of the tree-base anchor. Four archways are cut into the living wood at floor level and the wood changes style around each: storybook left wall (to-grove), chrome and neon right wall (to-market), ink wash back-left (closed-a), stained glass back-right (closed-b).
+
+What every realm shares:
+
+1. The tree signature. One master "tree signature sheet" fixes the individual: the LEAN (the trunk drifts slightly left as it rises), the EYE (one tall almond knothole left of centre, about two thirds up, always lit), the GOLD SEAM (a narrow bright cleft of exposed golden inner wood running up the front of the trunk from the base hollow toward the eye), the TALON CROWN (five great buttress roots splayed like an owl's foot) and the SHOULDER (a broken limb stub high on the right). Inside the hub the visitor is standing in the base hollow, looking up the inside of the eye at the moon, with the gold seam glowing in the back wall and the five toes converging under the floor. The sheet (exterior silhouette plus the hub interior render) is a locked reference image in every realm prompt, and these marks are never redrawn differently per realm, only restyled.
+
+2. The spiral of lit hollows. A loose spiral of small round knotholes climbs the trunk; from outside they glow gold, and from inside the hub they are the small warm windows up the dark shaft, which is what keeps the interior reading as a tree rather than a cave or a chapel. In grove they are amber lamplit windows with tiny balconies on the same tree; in market the same spiral becomes neon-edged ports with chrome collars; in the sign eggs they are ink dots and leaded roundels.
+
+3. Platform guides. Thin gold inlay lines, worn into the inner-wood floor, radiate from the moon pool toward the four arches. They make the exits legible under a crowd, give taps a direction, and stay low-contrast so owl drop shadows remain the main separation.
+
+4. Closed bays and their signs. The game draws a 420 x 520 closed-realm sign in front of each sealed bay with its base at the door marker (closed-a at x 500, closed-b at x 1100 in the 1600 x 900 room), which hides the bay opening and the wall straight above it. So the ink and glass treatments are painted spreading outward from each sealed opening onto the surrounding wall and the floor in front of it, where they stay visible beside the sign, and the openings themselves are kept plain and dark. The layout guide (pnpm art:finish guide) shows the sign footprints.
+
+5. Scale cue: a single fallen leaf on the floor, about the size of an owl, painted into the hub background near the bottom left corner. It is not part of hub-fg: the hub's walkable area reaches the bottom edge of the frame, so the overlay's whole lower half stays empty and nothing in it can ever sit over the crowd.
+
+Through-line into the open realms: in grove the same tree stands storybook-style at the right edge of the clearing, its base hollow being the to-hub door at x 1486..1600, the eye lamplit amber, the gold seam a soft honey line, moss and lanterns on the talon crown, the spiral windows glowing, and through the hollow a glimpse of the cream moon pool on growth rings inside. The guardian perches on the upper-middle stage area in front of the trunk, so the colossal owl is literally seated among the roots of the hub's tree. In market the same silhouette is traced in neon on the skyline right of centre (left of the robot owl's open sky), eye as a magenta ring, seam as one cyan tube, spiral ports as neon-edged portholes, talon crown as chrome-plated buttresses behind the rooftops; the to-hub passage at the left edge is the base hollow with chrome riveted onto the toes and a magenta tube tracing the arch, cream-lit growth rings visible inside.
+
+Light plan for the hub: cool cream from above (moon), warm gold from the back centre (heart seam) and the spiral windows, amber from the left arch, magenta and cyan from the right arch, small jewel patches from the glass. Everything else sits in navy and warm dark wood. Brightest: the moon pool on the floor centre. Darkest: the top of the shaft and the bottom corners.`;
+
+/** Style blocks, one per realm. New prompts for a realm include its block verbatim. */
+export const STYLE = {
+  hub: `STYLE (use verbatim in every hub prompt): hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Night interior inside a colossal living tree, lit by cream moonlight from above and warm gold sap-light from within the wood. PALETTE: navy #0C1E36 and deep navy #07122A for shadow and the vault; gold #C9A227 and warm gold light #FFD36A for sap-light, lit knotholes and highlights; cream #F6F1E3 for moonlight; inner bark warm darks #2B1C12 to #4A3322; inner-wood floor #5C4632 lifting to #8F8068 under the moon; cool shadow #1B2E4C in the corners. Realm accents appear ONLY inside their own archway and its spill: left arch amber #F2B24A and dusk blue #2E4C7A; right arch magenta #FF2AA1, cyan #00E5FF, chrome #C7CEDA, violet #6E3AFF on near-black #0B0B16; ink bay only black #111111, grey #6B6B6B and cream #F6F1E3; glass panes gold #C9A227, ruby #A3202F, emerald #1E6B4C, sapphire #1F4A9C, amber #E6A530 with navy #0C1E36 lead lines. SHAPE LANGUAGE: tall vertical ribs of inner bark, rounded knotty arches, a broad smooth floor with low-contrast growth rings and thin worn gold guide lines, a loose spiral of small lit knotholes climbing the dark shaft, five thick root buttresses converging under the floor, soft volumetric light. READABILITY: a clear, uncluttered, mid-value floor in the lower part of the frame so small colourful figures added later stand out; doorways at floor level, each clearly an opening. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; extra doors or arches beyond those described; exact mirror symmetry; photographic textures; busy noisy detail; lens flare; daylight; sky or landscape beyond the knothole.`,
+  grove: `STYLE (use verbatim in every grove prompt): cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Dusk in a forest clearing with a treehouse village. PALETTE: warm amber lantern light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; dusk blue sky #2E4C7A deepening to navy #0C1E36 at the top; mossy greens #3E5A3A and #6E8B4E; warm bark #4A3322 and #6E4E36; firefly points in pale gold #FFE28A. SHAPE LANGUAGE: round lanterns, rope bridges, little shingled treehouse roofs, soft moss cushions, drifting fireflies, the same colossal ancient tree with its locked silhouette (slight leftward lean, one tall almond knothole lit from inside left of centre, a narrow gold seam up the front of the trunk from the base hollow, five splayed buttress roots, a broken limb stub high on the right, a loose spiral of small lit windows up the trunk). READABILITY: a clear mid-value ground plane in the lower half of the frame, nearer is lower, doorways at ground level. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters unless the prompt is for a character; photographic textures; busy noisy detail; lens flare; harsh daylight; exact mirror symmetry.`,
+  market: `STYLE (use verbatim in every market prompt): cyberpunk neon market illustration, hand-painted 2D game background with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. Rainy night in a chrome market street. PALETTE: Night Asphalt #0B0B16 base; Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon; Chrome #C7CEDA plating; Violet Haze #6E3AFF mist and mid tones; small touches of brand gold #C9A227 and cream #F6F1E3 in the tree's glow only. SHAPE LANGUAGE: riveted chrome plates, neon tubes and conduit, stacked market stalls with awnings and hanging cables, puddles reflecting neon, rain streaks, the same colossal ancient tree with its locked silhouette (slight leftward lean, one tall almond knothole as a magenta neon ring left of centre, a narrow seam up the front of the trunk as a single cyan tube, five splayed buttress roots in chrome plating, a broken limb stub high on the right strung with cables, a loose spiral of small neon-edged ports up the trunk). READABILITY: a clear mid-value rain-slick street as the ground plane in the lower half of the frame, nearer is lower, doorways at ground level, neon signs and displays as abstract glowing shapes only. AVOID: any text, letters, numbers, glyphs, writing, signage lettering, logos or watermarks; any owls, birds, animals, people, faces or characters unless the prompt is for a character; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`,
+};
+
+/**
+ * Sent only when a provider is given a field for it (ARK_NEGATIVE_FIELD / FAL_NEGATIVE_FIELD);
+ * the prompts already carry their own AVOID lists.
+ */
+export const NEGATIVE_PROMPT = `text, letters, numbers, words, writing, calligraphy, glyphs, signage lettering, labels, logos, watermark, signature, caption, frame, border, owls, birds, animals, people, humans, faces, characters, figures, crowd, extra doors, extra arches, duplicated doorway, mirror symmetry, photorealistic, photograph, 3D render, film grain, noise, heavy texture, lens flare, blur, bokeh, chromatic aberration, daylight, sun, canopy or sky where the prompt forbids it, green tint on props, soft or semi-transparent edges on keyed assets, shadows cast onto the chroma backdrop, gradient or vignette on the chroma backdrop, arms or hands on the robot owl, colour mixing between the red, green and blue regions of the owl master`;
+
+/** Full prompts, one per job key. Edit here; the job list below points at them. */
+export const PROMPTS = {
+  hub: `Interior of the hollow base of a colossal ancient living tree, seen straight on from its mouth, camera slightly elevated, 16:9 wide shot, 3200x1800. We are inside the trunk: the inner bark rises in tall vertical ribs that bow inward like the columns of a nave and vanish into a dark shaft overhead. A loose spiral of small round knotholes climbs the dark shaft, each glowing warm gold from the wood as if lamplit, drifting from lower left to upper right. At the top centre a ragged knothole opening, cut off by the top edge and leaning a little to the left, shows a slice of a cream moon and a couple of stars; a soft cone of cream moonlight falls straight down the shaft onto the centre of the floor, with a few dry gold leaves drifting in it. High on the right inner wall a dark knot marks a broken limb stump. The floor fills the lower third: a broad, gently dished floor of pale worn inner wood with wide, uneven concentric growth rings, lit brightest in the centre where the moonlight lands and falling into cool navy shadow in the bottom corners, with thin worn gold inlay lines radiating from the lit centre toward the four openings like old guide lines; five thick smooth root buttresses dive under the floor from the base of the walls. In the back wall at dead centre a narrow vertical seam of exposed golden inner wood, sealed with translucent amber resin, glows warm gold from within and runs up toward the shaft, far too narrow to walk through. Four archways are cut into the living wood at floor level and the tree changes style around each one. On the left wall at the left edge: a rounded, knotty, cosy arch with moss cushions, a few small carved round windows glowing amber, a string of paper lanterns across its head and fireflies drifting out; inside it amber light fading to dusk blue, and a wedge of warm light spilling onto the floor. On the right wall at the right edge: an arch sheathed in riveted chrome plates grown out of the bark, a plain magenta neon tube tracing the arch with a thin cyan underline, loose cables, rain mist, near-black inside with magenta and cyan haze, and a wet reflection spilling cool magenta onto the floor. In the back wall left of centre: a sealed pointed arch, a plain dark hollow closed off by living wood, and around it the wall itself has turned to ink: black dry-brush ribs and soft washes on cream rice paper spread outward from the sealed opening across the wall to its left toward the cosy arch and upward into the shaft, with one ink-painted bare branch reaching sideways along the wall, and a faint ink mist drifting onto the floor in front of the opening. In the back wall right of centre: a second sealed pointed arch, also a plain dark closed hollow, and around it the wood has turned to stained glass: dark navy lead lines and jewel panes of gold, ruby, emerald and sapphire in abstract feather and leaf shapes only, set into the wall to its right toward the chrome arch and climbing upward beside the shaft, lit from within by moonlight and throwing soft coloured patches onto the floor in front of the opening. The two sealed openings themselves stay simple, dark and undecorated, because a large sign will stand in front of each one. A single dry fallen leaf, navy-green with cream edges and gold veins and about one tenth of the frame's height long, lies on the floor near the bottom left corner. Nothing else stands on the floor; the room is empty and still. STYLE: hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Night interior inside a colossal living tree, lit by cream moonlight from above and warm gold sap-light from within the wood. PALETTE: navy #0C1E36 and deep navy #07122A for shadow and the vault; gold #C9A227 and warm gold light #FFD36A for sap-light, lit knotholes and highlights; cream #F6F1E3 for moonlight; inner bark warm darks #2B1C12 to #4A3322; inner-wood floor #5C4632 lifting to #8F8068 under the moon; cool shadow #1B2E4C in the corners. Realm accents appear ONLY inside their own archway and its spill: left arch amber #F2B24A and dusk blue #2E4C7A; right arch magenta #FF2AA1, cyan #00E5FF, chrome #C7CEDA, violet #6E3AFF on near-black #0B0B16; ink bay only black #111111, grey #6B6B6B and cream #F6F1E3; glass panes gold #C9A227, ruby #A3202F, emerald #1E6B4C, sapphire #1F4A9C, amber #E6A530 with navy #0C1E36 lead lines. SHAPE LANGUAGE: tall vertical ribs of inner bark, rounded knotty arches, a broad smooth floor with low-contrast growth rings and thin worn gold guide lines, a loose spiral of small lit knotholes climbing the dark shaft, five thick root buttresses converging under the floor, soft volumetric light. READABILITY: a clear, uncluttered, mid-value floor in the lower part of the frame so small colourful figures added later stand out; doorways at floor level, each clearly an opening. No text, no watermark. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; extra doors or arches beyond the four described; exact mirror symmetry; photographic textures; busy noisy detail; lens flare; daylight; sky or landscape beyond the knothole.`,
+
+  'hub-fg': `Foreground props for a 2D game room overlay, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadows on the backdrop, no ground plane, 16:9, 3200x1800. The whole lower half of the frame and the entire centre are completely empty green: nothing touches the bottom edge or the bottom corners, and nothing hangs down past the middle of the frame. Props only, hanging from the top edge and the upper corners: from the upper left corner and the upper right corner a sparse curtain of fine hanging roots and tendrils of ancient tree root in warm dark root wood dangling a short way into the frame, catching cool cream moonlight on their edges, with a couple of small glowing gold bracket fungi on the thickest root; along the top edge a few more thin tendrils; on the far left and far right edges, in the upper third of the frame only, a thin sliver of ribbed inner bark wall with one small glowing gold knothole each. Crisp clean opaque silhouettes against the green, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. STYLE: hand-painted 2D game art, clean cel-shaded shapes with soft painted gradients, no outlines, no photorealism, no film grain, night lighting with cream moonlight #F6F1E3 from above and warm gold #C9A227 and #FFD36A glow on the fungi and knotholes, inner wood and root tones #2B1C12 to #5C4632, cool shadow #1B2E4C. No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; anything in the lower half of the frame or touching the bottom edge or the bottom corners; anything on the left or right edges below the upper third; green tint on the props.`,
+
+  grove: `A cozy storybook forest clearing at dusk with a treehouse village, 16:9 wide shot, 3200x1800, hand-painted 2D game background. The ground plane fills the lower half: a soft mossy clearing floor in mid-value greens and warm earth, nearer is lower, open and uncluttered in its centre and running to the bottom edge, with a worn path curving in from the right edge. At the right edge of the frame stands the colossal ancient tree, its trunk filling the right side and leaving the frame at the top: it leans very slightly to the left as it rises, has one tall almond-shaped knothole left of centre on the trunk glowing amber as if lamplit from inside, a narrow soft honey-gold seam of exposed golden inner wood running up the front of the trunk from the base hollow toward the knothole, five great buttress roots splayed at its base like a bird's foot with moss cushions and little hanging lanterns on them, a broken limb stub high on the right with a rope bridge tied to it, and a loose spiral of small round windows up the trunk glowing warm amber with tiny balconies. At the base of this tree, at ground level on the right edge of the frame, a rounded hollow opens into the trunk, and through it a glimpse of a cream moonlit floor with growth rings inside; fireflies drift around the hollow. Behind and around the clearing, a treehouse village: little shingled roofs, round windows glowing amber, rope bridges and ladders between the trees, strings of paper lanterns, fireflies everywhere as soft pale gold points. The upper middle of the frame, above the clearing and in front of the deep forest, is a clear calm stage: a broad mossy branch or root ledge at about mid height with open dusk sky and soft haze above it, with nothing standing on it, left empty for a figure to be added later. Dusk sky grading from warm amber at the horizon through dusk blue to navy at the top, a few early stars, soft mist between distant trunks. STYLE: cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. PALETTE: warm amber lantern light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; dusk blue sky #2E4C7A deepening to navy #0C1E36 at the top; mossy greens #3E5A3A and #6E8B4E; warm bark #4A3322 and #6E4E36; firefly points in pale gold #FFE28A. READABILITY: a clear mid-value ground plane in the lower half of the frame, nearer is lower, the doorway at ground level on the right edge. No text, no watermark. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; photographic textures; busy noisy detail; lens flare; harsh daylight; exact mirror symmetry.`,
+
+  'grove-fg': `Foreground props for a 2D storybook game room overlay, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadows on the backdrop, no ground plane, 16:9, 3200x1800. The centre of the frame and the whole middle band are completely empty green. Props only, each fully inside the frame: in the bottom left corner a clump of tall soft ferns and a round moss-covered stone with two small glowing paper lanterns on a short stake; in the bottom right corner a low mossy log end with a few mushrooms and a hanging lantern on a bent twig; from the upper left corner a single leafy branch with a string of three paper lanterns dipping a short way into the frame; from the upper right corner a few hanging vine tendrils with small leaves. Crisp clean opaque silhouettes against the green, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. STYLE: cozy storybook illustration, hand-painted 2D game art, soft rounded shapes, gentle cel shading with warm painted gradients, no hard outlines, no photorealism, no film grain. PALETTE: amber lantern light #F2B24A and #FFB347, honey gold #C9A227, cream #F6F1E3 highlights, mossy greens #3E5A3A and #6E8B4E, warm bark #4A3322 and #6E4E36. No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; anything on the left or right edges between the top corner props and the bottom corner props; green tint on the props.`,
+
+  market: `A cyberpunk neon market street on a rainy night, 16:9 wide shot, 3200x1800, hand-painted 2D game background. The ground plane fills the lower half: a rain-slick dark asphalt street in mid-dark values reflecting magenta and cyan neon in long soft streaks and puddles, nearer is lower, open and uncluttered in its centre and running to the bottom edge. A row of stacked market stalls lines the far side of the street at mid height, with chrome counters, striped awnings, hanging cables, glowing abstract neon tubes and blank glowing display panels; at the centre of the row stands one larger storefront, a gift-shop front with a wide glowing window full of small bright shapes, a chrome doorway at street level and an abstract neon shape above its door where a sign would hang, with no letters on it. At the left edge of the frame, at street level, a passage opens into the base of a colossal ancient tree: its five great buttress roots are riveted with chrome plating, a plain magenta neon tube traces the rounded opening, and through the opening a glimpse of a cream-lit wooden floor with growth rings. The same colossal tree rises behind the skyline right of centre, traced in neon lines against the night: a trunk leaning very slightly to the left, one tall almond-shaped knothole left of centre drawn as a magenta neon ring, a narrow seam up the front of the trunk drawn as a single cyan tube, a broken limb stub high on the right strung with cables, and a loose spiral of small neon-edged ports with chrome collars climbing the trunk; its lower trunk and chrome-plated roots stand behind the rooftops. The upper right of the frame, above the stalls on the right side and to the right of the tree, is open hazy night sky in violet and near-black with faint rain, left clear for a large figure to be added later. Violet haze and rain in the distance, a few far towers with scattered abstract lights. STYLE: cyberpunk neon market illustration, hand-painted 2D game background with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. PALETTE: Night Asphalt #0B0B16 base; Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon; Chrome #C7CEDA plating; Violet Haze #6E3AFF mist and mid tones; small touches of brand gold #C9A227 and cream #F6F1E3 in the tree's glow only. READABILITY: a clear mid-value rain-slick street as the ground plane in the lower half of the frame, nearer is lower, the doorway at ground level on the left edge, neon signs and displays as abstract glowing shapes only. No text, no watermark. AVOID: any text, letters, numbers, glyphs, writing, signage lettering, logos or watermarks; any owls, birds, animals, people, robots, faces or characters; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`,
+
+  'market-fg': `Foreground props for a 2D cyberpunk game room overlay, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadows on the backdrop, no ground plane, 16:9, 3200x1800. The centre of the frame and the whole middle band are completely empty green. Props only, each fully inside the frame: in the bottom left corner a chrome street bollard with a glowing cyan ring and a coil of loose cable beside it; in the bottom right corner a stack of two chrome crates with a magenta neon strip along one edge and a small puddle-free base; from the upper left corner a bundle of hanging cables with one small unlit lantern; from the upper right corner a torn awning edge in dark fabric with a thin cyan light strip. Crisp clean opaque silhouettes against the green, no soft haze or neon glow bleeding onto the backdrop, no semi-transparent edges. STYLE: cyberpunk neon market illustration, hand-painted 2D game art with crisp graphic shapes, cel shading with glowing neon gradients, no photorealism, no film grain. PALETTE: Night Asphalt #0B0B16, Signal Magenta #FF2AA1, Circuit Cyan #00E5FF, Chrome #C7CEDA, Violet Haze #6E3AFF. No text, no watermark. AVOID: any text, letters, glyphs or writing; any owls, birds, animals, people, robots, faces or characters; anything in the middle of the frame; anything on the left or right edges between the top corner props and the bottom corner props; green tint on the props.`,
+
+  guardian: `A towering, ancient guardian great horned owl, a single character, full body, perched calmly on a broad mossy branch, facing the viewer and gazing slightly downward with gentle, knowing eyes, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the owl and its perch, no gradient, no vignette, no cast shadows on the backdrop. Portrait proportions 720x820, generated at 1440x1640, the owl centred with its perch touching the bottom edge of the frame and the owl bottom-centre anchored, the ear tufts near the top edge. The great horned owl silhouette is unmistakable: tall ear tufts, broad rounded head, large round eyes, a stout body, talons gripping the branch. Its feathers are old and weathered, with cushions of soft moss and pale lichen growing among them on the shoulders, brow and chest, a few small ferns and tiny glowing fireflies resting in the plumage, and a soft warm inner glow in honey gold that lights the feather edges and the eyes from within, calm and benevolent, not fierce. Colours: feathers in warm bark browns #4A3322 and #6E4E36 with cream #F6F1E3 barring on the chest and face, moss greens #3E5A3A and #6E8B4E, lichen in pale cream-grey, eyes glowing amber gold #C9A227 and #FFD36A, beak and talons dark navy #0C1E36. STYLE: cozy storybook illustration, hand-painted 2D game character art, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, crisp clean opaque silhouette against the green, no glow bleeding onto the backdrop. No text, no watermark. AVOID: any text or writing; any second owl, bird, animal, person or character; any background scenery, sky, trees or ground beyond the single perch; the owl cut off by any edge except the perch at the bottom; green tint on the feathers; photographic textures; lens flare.`,
+
+  'robot-owl': `A giant robot owl, a single mechanical character, full body, standing upright on two heavy hydraulic legs with chrome talons, no arms of any kind, built in the shape of a great horned owl so the silhouette stays unmistakable: tall angular ear tufts, broad rounded head, two large round glowing eye lenses, a stout plated body, folded plated wings held against the sides. Facing the viewer three-quarters, calm and monumental, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the robot, no gradient, no vignette, no cast shadows on the backdrop. Square proportions 900x900, generated at 1800x1800, the robot centred with its feet on the bottom edge of the frame and bottom-centre anchored. Its body is built from large riveted chrome plates #C7CEDA with visible seams, pistons and hydraulic lines at the joints, cables looping along the neck and under the wings, vents and small blank panels on the chest, no printed markings. Neon accents trace the plate edges and the ear tufts in Signal Magenta #FF2AA1, with Circuit Cyan #00E5FF glowing in the eye lenses, the piston lines and a thin band around the neck; shadowed recesses in Night Asphalt #0B0B16 and Violet Haze #6E3AFF. Scale cues: the plates are the size of doors, the talons the size of cars, thin rain streaks on the chrome. STYLE: cyberpunk illustration, hand-painted 2D game character art with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, crisp clean opaque silhouette against the green, no neon glow bleeding onto the backdrop. No text, no watermark. AVOID: any text, letters, glyphs, numbers, decals or writing; arms, hands, claws on the wings, weapons; any second robot, owl, bird, animal, person or character; any background scenery, city, sky or ground; the robot cut off by any edge except the feet at the bottom; green tint on the chrome; photographic textures; lens flare.`,
+
+  'owl-master': `A cute cartoon great horned owl, a single character, full body, standing upright, front three-quarter view turned slightly toward the viewer's left, feet planted on the bottom edge of the frame, centred horizontally, bottom-centre anchored. Portrait proportions 200x240, generated at 1040x1248, the ear tufts near the top edge, the owl filling most of the height. The great horned owl silhouette must be unmistakable and simple: two pointed ear tufts, a broad round head with big round eyes, a plump oval body, short folded wings, a short tail, two small feet. This image is a colour-coded layer master for a game, so the colours are strict flat fills: the body (head, wings and most of the torso) is painted FLAT pure red #FF0000; the belly (a large oval on the chest) is painted FLAT pure green #00FF00; the accent parts (the two ear tufts, the wing tips and the tail) are painted FLAT pure blue #0000FF; any shading on those parts is ONLY a darker value of the same hue (darker red on red, darker green on green, darker blue on blue), with no highlights, no outlines and no colour mixing between the three regions, with crisp hard edges between them. Only the face is natural: two large round eyes with cream #F6F1E3 eye rings, dark navy #0C1E36 pupils with a small cream catchlight, and a small gold #C9A227 beak; the feet are also gold #C9A227. The owl is isolated on a flat, solid, uniform pure magenta #FF00FF background that fills everything not covered by the owl, no gradient, no vignette, no cast shadow on the backdrop. STYLE: clean flat 2D game character art, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain, friendly and cute. No text, no watermark. AVOID: any text or writing; any second owl, bird, animal, person or character; background scenery; the owl cut off by any edge except the feet at the bottom; any colour other than pure red, pure green, pure blue and their darker shades on the body, belly and accents; magenta tint on the owl; soft or feathered edges; outlines.`,
+
+  'owl-blink-src': `Edit the reference image of the cute cartoon great horned owl colour-coded layer master and change only one thing: the owl's eyes are closed, drawn as two gentle downward-curved dark navy #0C1E36 closed-eye lines on the cream #F6F1E3 eye rings, as if blinking contentedly. Keep everything else pixel-identical to the reference: the same pose, the same front three-quarter view turned slightly toward the viewer's left, the same size and position with the feet on the bottom edge and bottom-centre anchored, the same FLAT pure red #FF0000 body, FLAT pure green #00FF00 belly, FLAT pure blue #0000FF ear tufts, wing tips and tail, the same darker-value-only shading, the same small gold #C9A227 beak and gold feet, the same flat, solid, uniform pure magenta #FF00FF background with no gradient, no vignette and no cast shadow. Portrait proportions 200x240, generated at 1040x1248. STYLE: clean flat 2D game character art, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain. No text, no watermark. AVOID: any change to the pose, silhouette, colours, position or scale; any text or writing; any second character; background scenery; open eyes; soft or feathered edges; outlines.`,
+
+  /**
+   * The tree signature sheet: the one anchor every room prompt references so the same tree
+   * appears in every realm. The art director picks a winner and saves it as refs/tree-master.png.
+   */
+  'tree-master': `Reference sheet of one colossal ancient living tree seen from outside at night, the whole lower tree from its splayed roots up to where the trunk leaves the top edge, square 2048x2048, on a plain flat dark navy backdrop with no landscape, no horizon, no moon, no stars and no other trees. This single tree has fixed marks that must all be present and easy to read: the trunk drifts slightly to the left as it rises; one tall almond-shaped knothole sits left of centre about two thirds of the way up the visible trunk, lit warm gold from inside; a narrow bright cleft of exposed golden inner wood runs up the front of the trunk from the base hollow toward that knothole, glowing gold behind translucent amber resin; five great buttress roots splay at the base like a bird's foot; a broken limb stub juts out high on the right; and a loose spiral of small round knotholes climbs the trunk from lower left to upper right, each glowing soft gold. At the base, between the two centre roots, a rounded dark hollow opens into the trunk at ground level, and through it a glimpse of a cream-lit wooden floor with growth rings. Bark in warm dark browns with soft cream moonlight from the upper left and warm gold sap-light from within the wood. STYLE: hand-painted 2D game concept art, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. PALETTE: navy #0C1E36 and deep navy #07122A backdrop; gold #C9A227 and warm gold light #FFD36A for sap-light and lit knotholes; cream #F6F1E3 moonlight; bark #2B1C12 to #4A3322; inner wood #5C4632 to #8F8068; cool shadow #1B2E4C. No text, no watermark. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; landscape, horizon, sky gradients, moon, stars or other trees; exact mirror symmetry; photographic textures; busy noisy detail; lens flare; daylight.`,
+};
+
+/**
+ * Named blocks for prompts written as arrays: an array item `@name` is replaced by the block,
+ * and `{key_colour}` inside any prompt is replaced by the job's key colour.
+ */
+export const BLOCKS = {
+  'style.hub': STYLE.hub,
+  'style.grove': STYLE.grove,
+  'style.market': STYLE.market,
+  'layout.room': 'wide 16:9; the lower half is a clear mid-value ground plane where small figures will walk; nearer is lower; doorways stand at ground level; nothing important in the top fifth',
+  'layout.key': 'the subject alone, full view, centred, on a flat solid uniform {key_colour} background; no floor, no cast shadow, no ground, no glow or effects outside the subject; crisp opaque edges',
+  negative: NEGATIVE_PROMPT,
+};
+
+/** Keys that are not shipped assets themselves but feed the post-processing stage. */
+export const HELPER_KEYS = ['tree-master', 'owl-master', 'owl-blink-src'];
+
+/** Shipped owl layer keys produced from the owl master by the post-processing stage. */
+export const OWL_LAYER_KEYS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'owl-blink'];
+
+/**
+ * Reference-image slots. `ref` is one of:
+ *   refs/<file>        a committed anchor in tools/art/refs/ (chosen by the art director)
+ *   @guide:<room>      the layout guide rendered by the post stage, work/art/guides/<room>.png
+ *   @final:<key>       the published asset apps/park/public/art/<key>.png
+ *   @raw:<key>         the SELECTED raw candidate of another job
+ *   https://...        a hosted image, passed through as a URL
+ * An `optional` slot is skipped with a notice when its file does not exist yet (the first runs
+ * happen before any anchor or guide exists); a required slot that is missing fails the job, or
+ * skips it when the job itself is `optional`. `--require-refs` makes every slot required.
+ */
+const treeRef = { ref: 'refs/tree-master.png', role: 'tree signature', optional: true };
+const guide = (room) => ({ ref: `@guide:${room}`, role: 'layout guide', optional: true });
+const published = (key) => ({ ref: `@final:${key}`, role: 'style and lighting', optional: true });
+
+const OWL_REGIONS = { body: '#FF0000', belly: '#00FF00', accent: '#0000FF' };
+
+/**
+ * The job list. `kind` is one of room | overlay | piece | owl | owl-edit | anchor and tells the
+ * mock provider what to draw and the post stage how to treat the raw image. `size` is the
+ * generation size (post resizes to the logical size). `seed` is the base seed; variant i uses
+ * seed + i. `key_colour` is the flat backdrop that post keys out. `regions` are the flat fills
+ * the owl master uses for the three tintable layers. `derives` lists the shipped keys that post
+ * produces from this job's output. `providers` holds per-provider body overrides.
+ */
+export const JOBS = [
+  {
+    key: 'tree-master',
+    kind: 'anchor',
+    realm: 'hub',
+    size: '2048x2048',
+    seed: 1001,
+    variants: 6,
+    prompt: PROMPTS['tree-master'],
+  },
+  {
+    key: 'hub',
+    kind: 'room',
+    realm: 'hub',
+    size: '3200x1800',
+    seed: 1101,
+    variants: 4,
+    refs: [treeRef, guide('hub')],
+    prompt: PROMPTS.hub,
+  },
+  {
+    key: 'hub-fg',
+    kind: 'overlay',
+    realm: 'hub',
+    size: '3200x1800',
+    seed: 1601,
+    variants: 1,
+    key_colour: '#00FF00',
+    refs: [published('hub'), guide('hub')],
+    prompt: PROMPTS['hub-fg'],
+  },
+  {
+    key: 'grove',
+    kind: 'room',
+    realm: 'grove',
+    size: '3200x1800',
+    seed: 1201,
+    variants: 4,
+    refs: [treeRef, guide('grove')],
+    prompt: PROMPTS.grove,
+  },
+  {
+    key: 'grove-fg',
+    kind: 'overlay',
+    realm: 'grove',
+    size: '3200x1800',
+    seed: 1602,
+    variants: 1,
+    key_colour: '#00FF00',
+    refs: [published('grove'), guide('grove')],
+    prompt: PROMPTS['grove-fg'],
+  },
+  {
+    key: 'guardian',
+    kind: 'piece',
+    realm: 'grove',
+    size: '1440x1640',
+    seed: 1301,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('grove')],
+    prompt: PROMPTS.guardian,
+  },
+  {
+    key: 'market',
+    kind: 'room',
+    realm: 'market',
+    size: '3200x1800',
+    seed: 1401,
+    variants: 4,
+    refs: [treeRef, guide('market')],
+    prompt: PROMPTS.market,
+  },
+  {
+    key: 'market-fg',
+    kind: 'overlay',
+    realm: 'market',
+    size: '3200x1800',
+    seed: 1603,
+    variants: 1,
+    key_colour: '#00FF00',
+    refs: [published('market'), guide('market')],
+    prompt: PROMPTS['market-fg'],
+  },
+  {
+    key: 'robot-owl',
+    kind: 'piece',
+    realm: 'market',
+    size: '1800x1800',
+    seed: 1501,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('market')],
+    prompt: PROMPTS['robot-owl'],
+  },
+  {
+    key: 'owl-master',
+    kind: 'owl',
+    realm: 'hub',
+    size: '1040x1248',
+    seed: 1701,
+    variants: 6,
+    key_colour: '#FF00FF',
+    regions: OWL_REGIONS,
+    derives: OWL_LAYER_KEYS,
+    prompt: PROMPTS['owl-master'],
+  },
+  {
+    key: 'owl-blink-src',
+    kind: 'owl-edit',
+    realm: 'hub',
+    optional: true,
+    size: '1040x1248',
+    seed: 1702,
+    variants: 1,
+    key_colour: '#FF00FF',
+    regions: OWL_REGIONS,
+    refs: [{ ref: '@raw:owl-master', role: 'edit source', optional: false }],
+    prompt: PROMPTS['owl-blink-src'],
+  },
+];

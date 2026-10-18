@@ -1,0 +1,18 @@
+{
+  "backdrop": "#FF00FF",
+  "regions": {
+    "body": { "hue": 0, "window": 28 },
+    "belly": { "hue": 120, "window": 24 },
+    "accent": { "hue": 240, "window": 24 }
+  },
+  "min_sat": 0.45,
+  "min_val": 0.22,
+  "face_min_area_frac": 0.0004,
+  "face_rect": [0.18, 0.12, 0.64, 0.42],
+  "fixed_rects": [[0.18, 0.12, 0.64, 0.42], [0.0, 0.88, 1.0, 0.12]],
+  "luminance_floor": 0.45,
+  "lit_percentile": 92,
+  "shade_gamma": 1.0,
+  "blink": { "width_frac": 0.025, "bow_frac": 0.3, "colour": "#0C1E36" },
+  "registration": { "height": 220, "max_width": 196, "feet_rows_frac": 0.06 }
+}

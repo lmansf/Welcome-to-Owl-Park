@@ -10,3 +10,7 @@ e2e-screenshots/
 .DS_Store
 .wrangler/
 worker-configuration.d.ts
+# Art pipeline: raw candidates and per-machine files (keys, private word list)
+work/
+tools/art/.local/
+__pycache__/

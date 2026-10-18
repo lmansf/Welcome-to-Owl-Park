@@ -5,7 +5,7 @@
   "description": "Owl Park: a 2D multiplayer virtual owl park that runs in the browser.",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "dev": "pnpm --filter @owl-park/park dev",
@@ -18,7 +18,11 @@
     "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
     "build:edge": "VITE_TRANSPORT=edge pnpm build",
     "deploy:edge": "pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy",
-    "load": "node tools/load/swarm.mjs"
+    "load": "node tools/load/swarm.mjs",
+    "art:generate": "node tools/art/generate.mjs",
+    "art:geometry": "node --experimental-strip-types tools/art/generate.mjs geometry",
+    "art:finish": "python3 -B tools/art/postprocess.py",
+    "art:test": "node --test \"tools/art/**/*.test.mjs\" && python3 -B -m unittest discover -s tools/art -p \"test_*.py\""
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

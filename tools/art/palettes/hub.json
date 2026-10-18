@@ -1,0 +1,9 @@
+{
+  "realm": "hub",
+  "anchors": ["#0C1E36", "#1B3558", "#2E4A72", "#C9A227", "#E6C65A", "#F6F1E3", "#5C4033", "#8B5A2B", "#A67B5B"],
+  "black": "#0C1E36",
+  "white": "#F6F1E3",
+  "strength": 0.35,
+  "chroma_boost": 1.05,
+  "levels_percentiles": [0.5, 99.5]
+}

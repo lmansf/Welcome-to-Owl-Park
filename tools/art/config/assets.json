@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "source": "apps/park/src/game/art.ts",
+  "keys": {
+    "hub": { "w": 1600, "h": 900, "kind": "room", "with_2x": false },
+    "hub-fg": { "w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#00FF00", "with_2x": false },
+    "grove": { "w": 1600, "h": 900, "kind": "room", "with_2x": false },
+    "grove-fg": { "w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#00FF00", "with_2x": false },
+    "market": { "w": 1600, "h": 900, "kind": "room", "with_2x": false },
+    "market-fg": { "w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#00FF00", "with_2x": false },
+    "guardian": { "w": 720, "h": 820, "kind": "piece", "key_colour": "#00FF00", "with_2x": true },
+    "robot-owl": { "w": 900, "h": 900, "kind": "piece", "key_colour": "#00FF00", "with_2x": true },
+    "sign-not-yet-fledged": { "w": 420, "h": 520, "kind": "sign", "generated": false },
+    "sign-closed-for-molting": { "w": 420, "h": 520, "kind": "sign", "generated": false },
+    "sign-pardon-our-feathers": { "w": 420, "h": 520, "kind": "sign", "generated": false },
+    "sign-hatching-soon": { "w": 420, "h": 520, "kind": "sign", "generated": false },
+    "owl-body": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
+    "owl-belly": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
+    "owl-accent": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
+    "owl-face": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
+    "owl-blink": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true }
+  },
+  "helpers": {
+    "tree-master": { "role": "tree signature anchor", "ref": "refs/tree-master.png" },
+    "owl-master": { "role": "colour-coded owl layer master", "key_colour": "#FF00FF" },
+    "owl-blink-src": { "role": "edit of the owl master with closed eyes", "key_colour": "#FF00FF" }
+  }
+}
