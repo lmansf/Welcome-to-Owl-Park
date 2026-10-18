@@ -27,7 +27,7 @@
       "h": 900,
       "kind": "room",
       "overlay": true,
-      "key_colour": "#00FF00",
+      "key_colour": "#FF00FF",
       "with_2x": false
     },
     "market": {
