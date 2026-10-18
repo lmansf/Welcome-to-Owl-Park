@@ -17,7 +17,8 @@ free at a small scale. The code is the same; only configuration differs.
 2. Merge to `main`. `.github/workflows/deploy-pages.yml` builds and publishes to `https://<owner>.github.io/<repo>/`.
 3. Optional repository variables (Settings → Secrets and variables → Actions → Variables; all are
    public values that ship in the bundle): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (mode B),
-   `VITE_EDGE_URL` (point the static client at a room server hosted in mode C), `VITE_SHOP_URL`.
+   `VITE_EDGE_URL` (point the static client at a room server hosted in mode C), `VITE_SHOP_URL`,
+   `VITE_SITE_URL` (the site's https origin, for link previews).
 
 ## B. Supabase Realtime (no server code)
 
@@ -66,6 +67,9 @@ pnpm dev:edge         # builds the client, then wrangler dev on http://localhost
    - secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
    - variable `CLOUDFLARE_DEPLOY=true` (this switch enables `.github/workflows/deploy-worker.yml`)
    - optional variable `VITE_SHOP_URL`
+   - optional variable `VITE_SITE_URL`: the park's https origin (for example the workers.dev URL
+     wrangler prints). Link previews on some sites need the share image's absolute URL; without
+     it the image URL stays relative to the page.
    - optional secrets `PASS_SIGNING_KEY` and `ADMIN_KEY`: the workflow uploads each one it finds to
      the Worker after the deploy, so step 3 above is not needed when they are set here.
 3. Merge to `main`. The workflow builds and deploys. Worker secrets set either way are kept across

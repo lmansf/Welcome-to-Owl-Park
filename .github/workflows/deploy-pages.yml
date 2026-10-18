@@ -5,6 +5,7 @@
 # Optional repository variables (Settings -> Secrets and variables -> Actions -> Variables):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  -> internet multiplayer via Supabase Realtime
 #   VITE_SHOP_URL                              -> the gift shop link
+#   VITE_SITE_URL                              -> the site's https origin, for link previews
 # Without them the park still works, with multiplayer limited to tabs on one device.
 name: Deploy to GitHub Pages
 
@@ -42,6 +43,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -30,6 +30,10 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `item-<id>` (82 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
 | `icon-<id>` (48 keys) | 64 x 64 | Collection icons for the 24 effects and 24 emotes: white with grey shading on transparency; the game multiplies them by the effect's tint (or the emote colour), so one painting serves every colourway |
 
+The site icons and the link-preview card (`apps/park/public/favicon.png`, `apple-touch-icon.png`
+and `og-image.jpg`) are not pipeline keys: they are composed from the approved mascot headshot and
+the published hub painting, and live outside `art/`, so `check` does not cover them.
+
 The owl is five layers, not three: three white tintable layers plus the face and the blink frame.
 
 Owl layers share one canvas: feet on the bottom edge at (100, 240), facing slightly to one side

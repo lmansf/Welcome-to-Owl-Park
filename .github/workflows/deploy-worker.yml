@@ -5,6 +5,7 @@
 #        secrets:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 #        variables: CLOUDFLARE_DEPLOY=true   (the switch that enables this workflow)
 #                   VITE_SHOP_URL            (optional gift shop link)
+#                   VITE_SITE_URL            (optional: the park's https origin, for link previews)
 #   3. The Worker's own secrets, PASS_SIGNING_KEY (32+ random characters) and ADMIN_KEY (16+), can be
 #      added as repository secrets too: the workflow uploads each one it finds to the Worker after the
 #      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
@@ -46,6 +47,7 @@ jobs:
         env:
           VITE_TRANSPORT: edge
           VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
       - name: Deploy Worker, Durable Object and static assets
         uses: cloudflare/wrangler-action@v3
         with:
