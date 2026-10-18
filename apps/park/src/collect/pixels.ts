@@ -1,7 +1,8 @@
 /**
  * Pixel helpers for collectibles, free of DOM and Phaser so they are unit-tested in Node:
  * colourway hue rotation (the same matrix as CSS `hue-rotate()`, done by hand because Safari's
- * canvas has no `filter`) and the measurement of where wearables sit on an owl.
+ * canvas has no `filter`), the multiply tint of the white collection icons, and the measurement
+ * of where wearables sit on an owl.
  */
 
 /** The 3x3 RGB matrix of a hue rotation by `deg` degrees (luminance-preserving, as in CSS filters). */
@@ -35,6 +36,26 @@ export function rotateHue(data: Uint8ClampedArray, deg: number): void {
     data[i] = m[0]! * r + m[1]! * g + m[2]! * b;
     data[i + 1] = m[3]! * r + m[4]! * g + m[5]! * b;
     data[i + 2] = m[6]! * r + m[7]! * g + m[8]! * b;
+  }
+}
+
+/**
+ * Multiply RGBA pixels by a `#RRGGBB` colour in place: white becomes the colour and grey a darker
+ * shade of it, so a white icon painted with grey shading keeps its shading in every tint. Alpha is
+ * untouched; anything but a 6-digit hex colour leaves the pixels as they are.
+ */
+export function multiplyTint(data: Uint8ClampedArray, hex: string): void {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return;
+  const n = parseInt(m[1]!, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+    data[i] = (data[i]! * r) / 255;
+    data[i + 1] = (data[i + 1]! * g) / 255;
+    data[i + 2] = (data[i + 2]! * b) / 255;
   }
 }
 

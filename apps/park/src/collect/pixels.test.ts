@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ANCHORS, hueRotateMatrix, measureAnchors, rotateHue, type Mask } from './pixels';
+import { DEFAULT_ANCHORS, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, type Mask } from './pixels';
 
 const px = (...rgba: number[]) => new Uint8ClampedArray(rgba);
+
+describe('multiply tint', () => {
+  it('turns white into the colour and grey into a darker shade of it, keeping alpha', () => {
+    const px = new Uint8ClampedArray([255, 255, 255, 255, 128, 128, 128, 200, 9, 9, 9, 0]);
+    multiplyTint(px, '#4FA3FF');
+    expect([...px.slice(0, 4)]).toEqual([0x4f, 0xa3, 0xff, 255]);
+    expect([...px.slice(4, 8)]).toEqual([Math.round((128 * 0x4f) / 255), Math.round((128 * 0xa3) / 255), 128, 200]);
+    expect([...px.slice(8, 12)]).toEqual([9, 9, 9, 0]); // fully transparent pixels are left alone
+  });
+
+  it('ignores anything that is not a #RRGGBB colour', () => {
+    const px = new Uint8ClampedArray([200, 100, 50, 255]);
+    for (const bad of ['', 'red', '#fff', '4FA3FF', '#4FA3FG']) multiplyTint(px, bad);
+    expect([...px]).toEqual([200, 100, 50, 255]);
+  });
+});
 
 describe('hue rotation', () => {
   it('is the identity at 0 and 360 degrees and leaves alpha alone', () => {

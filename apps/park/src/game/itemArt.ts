@@ -75,6 +75,14 @@ function loadRealArt(key: string, scale: number): Promise<HTMLImageElement | nul
   return p;
 }
 
+/**
+ * The painted collection icon of an effect or emote (`art/icon-<id>`, white with grey shading so it
+ * can be tinted), or null while none has shipped: callers keep their drawn symbol then.
+ */
+export function iconArt(id: string, scale = 1): Promise<HTMLImageElement | null> {
+  return loadRealArt(`icon-${id}`, scale);
+}
+
 const canvases = new Map<string, Promise<HTMLCanvasElement>>();
 
 /** A variant's art at `scale` texture pixels per logical pixel (cached). */

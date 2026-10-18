@@ -42,14 +42,14 @@ const seedOf = (k: number): Uint8Array => {
 };
 
 describe('catalogue', () => {
-  it('has 50 wearables, 20 pets, 24 effects and 24 emotes: 1068 variants', () => {
+  it('has 58 wearables, 24 pets, 24 effects and 24 emotes: 1180 variants', () => {
     const by = (k: string) => CATALOGUE.filter((i) => i.kind === k).length;
-    expect([by('wear'), by('pet'), by('fx'), by('emote')]).toEqual([50, 20, 24, 24]);
-    expect(CATALOGUE.filter((i) => i.slot === 'head')).toHaveLength(30);
-    expect(CATALOGUE.filter((i) => i.slot === 'face')).toHaveLength(10);
-    expect(CATALOGUE.filter((i) => i.slot === 'neck')).toHaveLength(10);
-    expect(allVariants()).toHaveLength(500 + 160 + 384 + 24);
-    expect(new Set(allVariants()).size).toBe(1068);
+    expect([by('wear'), by('pet'), by('fx'), by('emote')]).toEqual([58, 24, 24, 24]);
+    expect(CATALOGUE.filter((i) => i.slot === 'head')).toHaveLength(35);
+    expect(CATALOGUE.filter((i) => i.slot === 'face')).toHaveLength(11);
+    expect(CATALOGUE.filter((i) => i.slot === 'neck')).toHaveLength(12);
+    expect(allVariants()).toHaveLength(580 + 192 + 384 + 24);
+    expect(new Set(allVariants()).size).toBe(1180);
     expect(new Set(CATALOGUE.map((i) => i.id)).size).toBe(CATALOGUE.length);
   });
 

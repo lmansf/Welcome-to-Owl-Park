@@ -27,7 +27,8 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
 | `owl-face`, `owl-blink` | 200 x 240 | Eyes and beak in fixed colours (not tinted); the blink frame replaces the face for a moment, so it must include the beak |
-| `item-<id>` (70 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
+| `item-<id>` (82 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
+| `icon-<id>` (48 keys) | 64 x 64 | Collection icons for the 24 effects and 24 emotes: white with grey shading on transparency; the game multiplies them by the effect's tint (or the emote colour), so one painting serves every colourway |
 
 The owl is five layers, not three: three white tintable layers plus the face and the blink frame.
 
@@ -209,6 +210,11 @@ pnpm art:finish piece item-mouse --margin 0.04 --flip                  # pet: fe
 
 The prompts ask for pets facing left (the way the model draws them most reliably) and `--flip`
 turns them to the game's facing-right convention.
+
+Collection icons (`icon-<id>`, one per effect and emote) are jobs too: a single emblem painted in
+white and pale grey only, finished like the face items with
+`pnpm art:finish piece icon-<id> --margin 0.04 --valign centre`. Until an icon ships, the panel
+and the emote tray draw the effect's or emote's simple symbol instead.
 
 ### The owl key-colour convention
 

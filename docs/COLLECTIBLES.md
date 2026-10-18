@@ -21,15 +21,20 @@ pieces fit.
 One server is enough for every time zone: windows are arithmetic on the collector's zone
 (`windowKeyAt`, `nextWindowAt` in `packages/shared/src/collectibles.ts`), not timers.
 
-## The catalogue (launch)
+## The catalogue
 
 | Kind | Items | Colourways | Variants |
 | --- | --- | --- | --- |
-| Wearables: head 30, face 10, neck 10 | 50 | 10 (hue rotations of the art) | 500 |
-| Pets | 20 | 8 (hue rotations) | 160 |
+| Wearables: head 35, face 11, neck 12 | 58 | 10 (hue rotations of the art) | 580 |
+| Pets | 24 | 8 (hue rotations) | 192 |
 | Effects | 24 | 16 (tint colours) | 384 |
 | Emotes | 24 | 1 | 24 |
-| **Total** | 118 | | **1,068** |
+| **Total** | 130 | | **1,180** |
+
+The launch set was 118 items (1,068 variants). Drop 1, for Owlloween and the first frost, adds
+eight wearables (Bat Headband, Candy Corn Cap, Earmuffs, Holly Crown, Mummy Wrap, Jack-o'-Lantern
+Shades, Candy Necklace, Vampire Collar) and four pets (Little Ghost, Pumpkin Sprite, Snow Bunny,
+Black Kitten). They are findable all year, like everything else.
 
 A visitor finding three things a day, every day, gets about 1,095 finds a year; with duplicates
 paying feathers and monthly drops adding items, there is always more to find. Ids, names and

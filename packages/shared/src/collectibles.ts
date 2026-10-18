@@ -153,6 +153,12 @@ export const CATALOGUE: readonly ItemDef[] = [
     ['snowflake-crown', 'Snowflake Crown', R],
     ['candle-crown', 'Candle Crown', E],
     ['moon-circlet', 'Moon Circlet', E],
+    // Drop 1 (Owlloween and first frost)
+    ['bat-headband', 'Bat Headband', U],
+    ['candy-corn-cap', 'Candy Corn Cap', C],
+    ['earmuffs', 'Earmuffs', C],
+    ['holly-crown', 'Holly Crown', U],
+    ['mummy-wrap', 'Mummy Wrap', C],
   ]),
   ...wear('face', [
     ['round-glasses', 'Round Glasses', C],
@@ -165,6 +171,7 @@ export const CATALOGUE: readonly ItemDef[] = [
     ['brass-goggles', 'Brass Goggles', R],
     ['pixel-shades', 'Pixel Shades', E],
     ['half-moon-specs', 'Half-Moon Specs', C],
+    ['jack-o-lantern-shades', "Jack-o'-Lantern Shades", R],
   ]),
   ...wear('neck', [
     ['knit-scarf', 'Knit Scarf', C],
@@ -177,6 +184,8 @@ export const CATALOGUE: readonly ItemDef[] = [
     ['ruffle-collar', 'Ruffle Collar', U],
     ['pearl-necklace', 'Pearl Necklace', R],
     ['medal-ribbon', 'Medal Ribbon', E],
+    ['candy-necklace', 'Candy Necklace', C],
+    ['vampire-collar', 'Vampire Collar', R],
   ]),
   ...(
     [
@@ -200,6 +209,10 @@ export const CATALOGUE: readonly ItemDef[] = [
       ['mole', 'Mole', R],
       ['tiny-dragon', 'Tiny Dragon', E],
       ['star-beetle', 'Star Beetle', E],
+      ['ghost', 'Little Ghost', E],
+      ['pumpkin-sprite', 'Pumpkin Sprite', U],
+      ['snow-bunny', 'Snow Bunny', U],
+      ['black-kitten', 'Black Kitten', R],
     ] as Array<[string, string, Rarity]>
   ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'pet', name, rarity, art: `item-${id}` })),
   ...(
@@ -315,7 +328,7 @@ export function variantName(id: string): string {
 }
 
 let allCache: string[] | null = null;
-/** Every collectible variant in catalogue order (1068 at launch). */
+/** Every collectible variant in catalogue order (1068 at launch, 1180 with drop 1). */
 export function allVariants(): readonly string[] {
   if (!allCache) {
     allCache = [];

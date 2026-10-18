@@ -67,7 +67,7 @@ test.describe('collectibles (this device)', () => {
     expect(await page.evaluate(() => window.owlPark.equip('witch-hat~3'))).toBe(true);
 
     await page.getByRole('button', { name: 'Collection' }).click();
-    await expect(page.getByText(/of 1068 · \d+ feathers/)).toBeVisible();
+    await expect(page.getByText(/of 1180 · \d+ feathers/)).toBeVisible();
     await page.locator('.card[data-item="witch-hat"]').click();
     await expect(page.getByRole('button', { name: 'Take off' })).toBeVisible();
     await page.locator('.card[data-item="crown"]').click();

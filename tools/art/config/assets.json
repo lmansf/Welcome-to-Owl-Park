@@ -606,6 +606,426 @@
       "kind": "item",
       "key_colour": "#00FF00",
       "with_2x": true
+    },
+    "item-bat-headband": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-candy-corn-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-earmuffs": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-holly-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-mummy-wrap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-jack-o-lantern-shades": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-candy-necklace": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-vampire-collar": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-ghost": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pumpkin-sprite": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-snow-bunny": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-black-kitten": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-aura": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sparkle": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-eye-flames": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-ember-trail": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-frost-breath": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-snowfall": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-fireflies": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-hearts": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-music-notes": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-star-halo": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-moon-halo": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-leaf-swirl": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-petal-swirl": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-bubbles": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-smoke-wisps": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-rainbow-trail": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-lightning": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-neon-outline": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-shadow-aura": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sunbeam": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-confetti": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-comet-tail": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-rune-ring": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-glitch": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-hoot": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-flap": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-spin": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-hop": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-tilt": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-bow": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-wave": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-dance": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sleep": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-heart": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-surprise": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-laugh": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-shiver": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-puff": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-wink": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-nod": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-headshake": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-twirl": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-flip": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-stomp": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-preen": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-stretch": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sneeze": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-peek": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
     }
   },
   "helpers": {

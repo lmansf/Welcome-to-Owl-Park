@@ -134,8 +134,8 @@ test('mock provider generate() honours the job size through the provider interfa
 test('config/assets.json mirrors the ART table in art.ts', () => {
   const art = parseArtTable();
   assert.ok(Object.keys(art).length >= 17, 'parsed the ART table');
-  // Collectible item art lives outside the literal ART table (the game derives it from the catalogue).
-  const nonItems = Object.keys(ASSETS.keys).filter((k) => ASSETS.keys[k].kind !== 'item');
+  // Collectible item art and collection icons live outside the literal ART table (the game derives them from the catalogue).
+  const nonItems = Object.keys(ASSETS.keys).filter((k) => ASSETS.keys[k].kind !== 'item' && ASSETS.keys[k].kind !== 'icon');
   assert.deepEqual(nonItems.sort(), Object.keys(art).sort());
   for (const [key, spec] of Object.entries(art)) {
     assert.equal(ASSETS.keys[key].w, spec.w, `${key} width`);
@@ -147,7 +147,7 @@ test('config/assets.json mirrors the ART table in art.ts', () => {
 test('collectible item keys: named item-*, one of the four slot sizes, a backdrop, a 2x copy and a job each', () => {
   const SIZES = new Set(['140x100', '120x60', '130x80', '90x90']); // head, face, neck, pet (owl canvas units)
   const items = Object.entries(ASSETS.keys).filter(([, v]) => v.kind === 'item');
-  assert.ok(items.length >= 70, `${items.length} item keys`);
+  assert.ok(items.length >= 82, `${items.length} item keys`);
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   for (const [key, v] of items) {
     assert.match(key, /^item-[a-z][a-z0-9-]*$/);
@@ -176,9 +176,31 @@ test('the item keys in assets.json are exactly the catalogue wearables and pets,
   for (const id of tuples(face, neck)) want[`item-${id}`] = SIZE.face;
   for (const id of tuples(neck, neckEnd)) want[`item-${id}`] = SIZE.neck;
   for (const id of tuples(neckEnd, petEnd)) want[`item-${id}`] = SIZE.pet;
-  assert.equal(Object.keys(want).length, 70, 'parsed 50 wearables and 20 pets');
+  assert.equal(Object.keys(want).length, 82, 'parsed 58 wearables and 24 pets');
   const have = Object.fromEntries(Object.entries(ASSETS.keys).filter(([, v]) => v.kind === 'item').map(([k, v]) => [k, [v.w, v.h]]));
   assert.deepEqual(have, want);
+});
+
+test('collection icons: one per catalogue effect and emote, 64x64 on green, 1x and 2x, with a job each', () => {
+  const src = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/collectibles.ts'), 'utf8');
+  // Each kind's tuples sit in a `...([...] as Array<...>).map(... kind: '<kind>' ...)` block.
+  const ids = (kind) => {
+    const at = src.indexOf(`kind: '${kind}'`);
+    assert.ok(at >= 0, `catalogue has ${kind}`);
+    return [...src.slice(src.lastIndexOf('...(', at), at).matchAll(/\['([a-z][a-z0-9-]*)', (?:'[^']*'|"[^"]*"), [A-Z]\]/g)].map((m) => m[1]);
+  };
+  const fx = ids('fx'), emote = ids('emote');
+  assert.equal(fx.length, 24, 'parsed 24 effects');
+  assert.equal(emote.length, 24, 'parsed 24 emotes');
+  const want = [...fx, ...emote].map((id) => `icon-${id}`).sort();
+  const icons = Object.entries(ASSETS.keys).filter(([, v]) => v.kind === 'icon');
+  assert.deepEqual(icons.map(([k]) => k).sort(), want);
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  for (const [key, v] of icons) {
+    assert.deepEqual([v.w, v.h, v.key_colour, v.with_2x], [64, 64, '#00FF00', true], key);
+    assert.equal(jobs.get(key)?.size, '128x128', `${key}: generated at twice the logical size`);
+    assert.ok(jobs.get(key).prompt.includes('white'), `${key}: painted white so the game can tint it`);
+  }
 });
 
 test('every generated asset key in art.ts has a job (directly or derived) and the committed list validates', () => {

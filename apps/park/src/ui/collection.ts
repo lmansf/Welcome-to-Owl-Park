@@ -16,7 +16,8 @@ import {
 } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { deviceTimeZone } from '../collect/service';
-import { itemCanvas } from '../game/itemArt';
+import { multiplyTint } from '../collect/pixels';
+import { iconArt, itemCanvas } from '../game/itemArt';
 import { symbolCanvas, type SymbolName } from '../game/symbols';
 
 export interface CollectionActions {
@@ -117,15 +118,16 @@ export function variantIcon(variant: string, w = 64, h = 48): HTMLCanvasElement 
   const ctx = canvas.getContext('2d');
   const v = parseVariant(variant);
   if (!ctx || !v) return canvas;
-  const symbol = (name: SymbolName, tint: string, glow: boolean) => {
+  const glow = (tint: string, s: number) => {
+    const g = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, s * 0.6);
+    g.addColorStop(0, `${tint}cc`);
+    g.addColorStop(1, `${tint}00`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  };
+  const symbol = (name: SymbolName, tint: string, withGlow: boolean) => {
     const s = Math.min(canvas.width, canvas.height) * 0.8;
-    if (glow) {
-      const g = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, s * 0.6);
-      g.addColorStop(0, `${tint}cc`);
-      g.addColorStop(1, `${tint}00`);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
+    if (withGlow) glow(tint, s);
     // Tint the white symbol: draw it, then colour it in with source-atop.
     const tmp = document.createElement('canvas');
     tmp.width = tmp.height = Math.round(s);
@@ -137,9 +139,29 @@ export function variantIcon(variant: string, w = 64, h = 48): HTMLCanvasElement 
     t.fillRect(0, 0, tmp.width, tmp.height);
     ctx.drawImage(tmp, (canvas.width - s) / 2, (canvas.height - s) / 2);
   };
-  if (v.item.kind === 'fx') symbol(FX_SYMBOL[v.item.id] ?? 'star4', v.colour?.tint ?? '#C9A227', true);
-  else if (v.item.kind === 'emote') symbol(EMOTE_SYMBOL[v.item.id] ?? 'star4', '#4FA3FF', false);
-  else {
+  // A painted icon replaces the symbol once it loads: white art multiplied by the tint keeps its shading.
+  const painted = (art: HTMLImageElement, tint: string, withGlow: boolean) => {
+    const s = Math.max(1, Math.round(Math.min(canvas.width, canvas.height) * 0.9));
+    const tmp = document.createElement('canvas');
+    tmp.width = tmp.height = s;
+    const t = tmp.getContext('2d', { willReadFrequently: true });
+    if (!t) return;
+    t.drawImage(art, 0, 0, s, s);
+    const px = t.getImageData(0, 0, s, s);
+    multiplyTint(px.data, tint);
+    t.putImageData(px, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (withGlow) glow(tint, s * 0.9);
+    ctx.drawImage(tmp, (canvas.width - s) / 2, (canvas.height - s) / 2);
+  };
+  if (v.item.kind === 'fx' || v.item.kind === 'emote') {
+    const isFx = v.item.kind === 'fx';
+    const tint = isFx ? (v.colour?.tint ?? '#C9A227') : '#4FA3FF';
+    symbol((isFx ? FX_SYMBOL : EMOTE_SYMBOL)[v.item.id] ?? 'star4', tint, isFx);
+    void iconArt(v.item.id, dpr).then((art) => {
+      if (art) painted(art, tint, isFx);
+    });
+  } else {
     void itemCanvas(variant, dpr).then((art) => {
       const k = Math.min(canvas.width / art.width, canvas.height / art.height);
       const dw = art.width * k;
