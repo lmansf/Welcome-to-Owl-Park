@@ -11,7 +11,9 @@ free at a small scale. The code is the same; only configuration differs.
 
 ## A. Static site on GitHub Pages
 
-1. Repository **Settings → Pages → Source: GitHub Actions**.
+1. Repository **Settings → Pages → Source: GitHub Actions**, then add the repository variable
+   `PAGES_DEPLOY=true` (Settings → Secrets and variables → Actions → Variables). Without it the
+   workflow is skipped, which keeps `main` green for a park that deploys to Cloudflare instead.
 2. Merge to `main`. `.github/workflows/deploy-pages.yml` builds and publishes to `https://<owner>.github.io/<repo>/`.
 3. Optional repository variables (Settings → Secrets and variables → Actions → Variables; all are
    public values that ship in the bundle): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (mode B),

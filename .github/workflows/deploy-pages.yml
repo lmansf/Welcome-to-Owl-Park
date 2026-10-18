@@ -1,5 +1,7 @@
-# Publishes the park to GitHub Pages on every push to main.
-# One-time setup: repository Settings -> Pages -> Source: "GitHub Actions".
+# Publishes the park to GitHub Pages on every push to main, once switched on.
+# One-time setup: repository Settings -> Pages -> Source: "GitHub Actions", then the repository
+# variable PAGES_DEPLOY=true (Settings -> Secrets and variables -> Actions -> Variables). Without the
+# variable the workflow is skipped, so a repository that deploys to Cloudflare instead stays green.
 # Optional repository variables (Settings -> Secrets and variables -> Actions -> Variables):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  -> internet multiplayer via Supabase Realtime
 #   VITE_SHOP_URL                              -> the gift shop link
@@ -22,6 +24,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ vars.PAGES_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
