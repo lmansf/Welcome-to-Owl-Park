@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="240" viewBox="0 0 200 240"><g transform="translate(0 8)" data-feet="bottom">
-<desc>Visitor owl avatar, blink frame: the two eyes closed as gentle curved lines at the face layer's eye positions, plus the same gold beak as the face layer so it does not vanish mid-blink. Transparent elsewhere. Original placeholder art for Owl Park.</desc>
-<g fill="none" stroke="#0C1E36" stroke-width="5" stroke-linecap="round">
-  <path d="M63,98 Q85,81 107,98"/>
-  <path d="M115,98 Q134,83 153,98"/>
-</g>
-<path d="M100,110 C105,106 115,106 120,110 C119,120 115,127 110,131 C105,127 101,120 100,110 Z" fill="#C9A227"/>
-<path d="M102,118 C107,117 113,117 118,118 C117,124 114,128 110,131 C106,128 103,124 102,118 Z" fill="#000" fill-opacity="0.18"/>
-</g></svg>
