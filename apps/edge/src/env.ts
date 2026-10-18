@@ -5,6 +5,10 @@
  * Only settings that are not in the config file are declared here.
  */
 export interface Env extends Cloudflare.Env {
+  /** Secret that signs guest passes (32+ random characters). Unset: a development key, with a warning. */
+  PASS_SIGNING_KEY?: string;
+  /** Secret for admin routes (private tally, month close), 16+ characters. Unset: admin routes stay closed. */
+  ADMIN_KEY?: string;
   /** Optional JSON object of per-room caps, e.g. {"hub":80,"grove":40}. */
   ROOM_CAPS?: string;
   /** Local load testing only: trust X-Forwarded-For as the client address. Never set in production. */
