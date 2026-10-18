@@ -293,6 +293,17 @@ class TestOwlSplit(unittest.TestCase):
         self.assertEqual(res3.info.get("labels"), "from file")
         self.assertEqual(np.asarray(res3.layers_1x["owl-belly"]).tolist(), np.asarray(self.res.layers_1x["owl-belly"]).tolist())
 
+    def test_a_beak_touching_the_eyes_does_not_hide_an_eye(self):
+        master, truth = synth_owl_master(800, 960, beak_touching=True)
+        res = owl_layers.split(master, self.keys)
+        self.assertEqual(res.info["eyes_found"], 2)
+        blink = np.asarray(res.layers_1x["owl-blink"])
+        opaque = blink[..., 3] > 128
+        cream = (np.abs(blink[..., :3].astype(int) - np.array([246, 241, 227])).max(-1) < 24) & opaque
+        self.assertEqual(cream.sum(), 0, "both eyes are cleared in the blink frame")
+        gold = (np.abs(blink[..., :3].astype(int) - np.array([201, 162, 39])).max(-1) < 24) & opaque
+        self.assertGreater(gold[: blink.shape[0] // 2].sum(), 0, "the beak stays in the blink frame")
+
     def test_fixed_colour_feet_go_to_the_face_layer(self):
         master, truth = synth_owl_master(800, 960, feet_fixed=True)
         res = owl_layers.split(master, self.keys)

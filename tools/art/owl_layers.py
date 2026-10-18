@@ -255,9 +255,16 @@ def _rgba(rgb: np.ndarray, A: np.ndarray) -> Image.Image:
     return Image.fromarray(out, "RGBA")
 
 
-def _eye_components(face: np.ndarray, sil_bbox: tuple[int, int, int, int], face_rect: list) -> tuple[np.ndarray, list[tuple[int, int, int, int]], np.ndarray]:
-    """The two eyes: the largest face components in the head rect, wider than 12 % of the owl, not the lowest one (the beak)."""
-    comps, n = label_components(face)
+def _eye_components(face: np.ndarray, sil_bbox: tuple[int, int, int, int], face_rect: list, gold: np.ndarray | None = None) -> tuple[np.ndarray, list[tuple[int, int, int, int]], np.ndarray]:
+    """The two eyes: the largest face components in the head rect, wider than 12 % of the owl.
+
+    Gold pixels (the beak) are left out while the eyes are found, so a beak painted touching an
+    eye cannot merge with it; each eye then takes back every face pixel its outline encloses (a
+    gold iris, the pupil, the catchlight). A third eye-sized component is the beak: the lowest one
+    is dropped.
+    """
+    base = face & ~gold if gold is not None else face
+    comps, n = label_components(base)
     if n == 0:
         return np.zeros_like(face), [], comps
     x0, y0, x1, y1 = sil_bbox
@@ -267,14 +274,15 @@ def _eye_components(face: np.ndarray, sil_bbox: tuple[int, int, int, int], face_
     areas = component_areas(comps, n)
     boxes = component_bboxes(comps, n)
     cents = component_centroids(comps, n)
-    ids = [i for i in range(1, n + 1) if fx0 <= cents[i][0] < fx1 and fy0 <= cents[i][1] < fy1]
-    if not ids:
-        return np.zeros_like(face), [], comps
-    lowest = max(ids, key=lambda i: cents[i][1]) if len(ids) > 1 else None
-    cand = [i for i in ids if i != lowest and (boxes[i][2] - boxes[i][0] + 1) > 0.12 * bw]
+    cand = [i for i in range(1, n + 1) if fx0 <= cents[i][0] < fx1 and fy0 <= cents[i][1] < fy1 and (boxes[i][2] - boxes[i][0] + 1) > 0.12 * bw]
+    if len(cand) > 2:
+        cand.remove(max(cand, key=lambda i: cents[i][1]))
     cand.sort(key=lambda i: -areas[i])
     eyes = cand[:2]
-    eye_mask = np.isin(comps, eyes) if eyes else np.zeros_like(face)
+    eye_mask = np.zeros_like(face)
+    for i in eyes:
+        comp = comps == i
+        eye_mask |= comp | (enclosed_by(comp) & face)
     return eye_mask, [tuple(int(v) for v in boxes[i]) for i in eyes], comps
 
 
@@ -357,7 +365,9 @@ def split(master: Image.Image, keys: dict | None = None, *, height: int | None =
     face_rgb = rgb.astype(np.float32)
 
     # Blink: eyes cleared, lids drawn (or lids taken from an eyes-closed edit).
-    eye_mask, eye_boxes, _ = _eye_components(face_m, (x0, y0, x1, y1), keys["face_rect"])
+    hdeg = hsv[..., 0].astype(np.float32) * (360.0 / 255.0)
+    gold = (hdeg >= 25) & (hdeg <= 60) & (hsv[..., 1] > 115) & (V > 0.45)
+    eye_mask, eye_boxes, _ = _eye_components(face_m, (x0, y0, x1, y1), keys["face_rect"], gold)
     info["eyes_found"] = len(eye_boxes)
     blink_face_m = face_m & ~dilate(eye_mask, 1)
     blink_a = A * _feather(blink_face_m)

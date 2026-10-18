@@ -105,13 +105,14 @@ def synth_overlay(w: int = 3200, h: int = 1800, key: str = "#FF00FF", good: bool
 
 
 def synth_owl_master(w: int = 1600, h: int = 1920, key: str = "#FF00FF", offset=(0.03, 0.0), eyes_closed: bool = False, feet_fixed: bool = False,
-                     wing_left: float = 0.0) -> tuple[Image.Image, np.ndarray]:
+                     wing_left: float = 0.0, beak_touching: bool = False) -> tuple[Image.Image, np.ndarray]:
     """The mock owl: returns (RGB image, truth label map with TRUTH_* values).
 
     Same colours as the generator's mock and the owl job: red body, green chest, blue accents on
     magenta. ``feet_fixed`` paints the feet gold (a fixed colour, as the generator's owl prompt
     asks) instead of the blue accent key. ``wing_left`` extends a wing that far (as a fraction of
     the width) to the left of the body, making the silhouette asymmetric about the feet.
+    ``beak_touching`` paints a bigger beak higher up, overlapping both eyes, as models sometimes do.
     """
     img = Image.new("RGB", (w, h), parse_hex(key))
     truth = Image.new("L", (w, h), TRUTH_BACKDROP)
@@ -169,7 +170,8 @@ def synth_owl_master(w: int = 1600, h: int = 1920, key: str = "#FF00FF", offset=
         ell(ex, ey, 0.042 * w, 0.042 * w, GOLD, TRUTH_EYES)
         ell(ex, ey, 0.026 * w, 0.026 * w, BLACK, TRUTH_EYES)
         ell(ex - 0.01 * w, ey - 0.012 * w, 0.009 * w, 0.009 * w, WHITE, TRUTH_EYES)
-    both("polygon", [(cx - 0.03 * w, oy + 0.37 * h), (cx + 0.03 * w, oy + 0.37 * h), (cx, oy + 0.45 * h)], GOLD, TRUTH_BEAK)
+    by = (0.30, 0.40) if beak_touching else (0.37, 0.45)
+    both("polygon", [(cx - 0.03 * w, oy + by[0] * h), (cx + 0.03 * w, oy + by[0] * h), (cx, oy + by[1] * h)], GOLD, TRUTH_BEAK)
     return img, np.asarray(truth).copy()
 
 
