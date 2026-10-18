@@ -37,10 +37,10 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 900 },
       ],
     ],
-    spawns: { 'default': { x: 800, y: 730 }, 'from-grove': { x: 220, y: 690 }, 'from-market': { x: 1380, y: 690 } },
+    spawns: { 'default': { x: 800, y: 730 }, 'from-grove': { x: 200, y: 740 }, 'from-market': { x: 1390, y: 750 } },
     doors: [
-      { id: 'to-grove', rect: { x: 0, y: 604, w: 140, h: 120 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 92, y: 560 } },
-      { id: 'to-market', rect: { x: 1460, y: 604, w: 140, h: 120 }, to: { room: 'market', spawn: 'default' }, marker: { x: 1508, y: 560 } },
+      { id: 'to-grove', rect: { x: 100, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 165, y: 560 } },
+      { id: 'to-market', rect: { x: 1340, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 1415, y: 560 } },
       { id: 'closed-a', rect: { x: 430, y: 560, w: 140, h: 90 }, closedSign: 'Not Yet Fledged', marker: { x: 500, y: 598 } },
       { id: 'closed-b', rect: { x: 1030, y: 560, w: 140, h: 90 }, closedSign: 'Hatching Soon', marker: { x: 1100, y: 598 } },
     ],
@@ -53,10 +53,14 @@ export const ROOMS: Record<string, RoomDef> = {
     mood: 'dusk',
     walkable: [
       [
+        // The lawn, then the trunk is cut out above the roots: owls walk in straight lines, so
+        // the floor stays open across the front of the roots and the hollow's threshold.
         { x: 330, y: 510 },
-        { x: 1270, y: 510 },
-        { x: 1420, y: 545 },
-        { x: 1600, y: 640 },
+        { x: 950, y: 510 },
+        { x: 925, y: 610 },
+        { x: 905, y: 705 },
+        { x: 1450, y: 705 },
+        { x: 1600, y: 660 },
         { x: 1600, y: 850 },
         { x: 1470, y: 870 },
         { x: 1250, y: 880 },
@@ -66,9 +70,9 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 262, y: 540 },
       ],
     ],
-    spawns: { 'default': { x: 1406, y: 760 } },
+    spawns: { 'default': { x: 1010, y: 860 } },
     doors: [
-      { id: 'to-hub', rect: { x: 1486, y: 630, w: 114, h: 250 }, to: { room: 'hub', spawn: 'from-grove' }, marker: { x: 1545, y: 745 } },
+      { id: 'to-hub', rect: { x: 1075, y: 775, w: 125, h: 80 }, to: { room: 'hub', spawn: 'from-grove' }, marker: { x: 1137, y: 700 } },
       // The gathering spot beneath the guardian: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 690, y: 560, w: 220, h: 120 }, marker: { x: 800, y: 612 } },
     ],
@@ -81,26 +85,25 @@ export const ROOMS: Record<string, RoomDef> = {
     mood: 'neon',
     walkable: [
       [
-        { x: 150, y: 590 },
-        { x: 1480, y: 590 },
-        { x: 1600, y: 660 },
-        { x: 1600, y: 690 },
-        { x: 1420, y: 720 },
+        // The street, from the curb in front of the stalls down; the doorway's threshold on the left.
+        { x: 0, y: 690 },
+        { x: 1500, y: 690 },
+        { x: 1600, y: 700 },
+        { x: 1600, y: 720 },
+        { x: 1420, y: 740 },
         { x: 1380, y: 885 },
         { x: 280, y: 885 },
         { x: 250, y: 830 },
         { x: 170, y: 760 },
         { x: 0, y: 760 },
-        { x: 0, y: 640 },
-        { x: 60, y: 600 },
       ],
     ],
-    spawns: { 'default': { x: 200, y: 700 } },
+    spawns: { 'default': { x: 330, y: 740 } },
     doors: [
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, marker: { x: 70, y: 580 } },
-      { id: 'shop', rect: { x: 730, y: 590, w: 256, h: 90 }, marker: { x: 857, y: 234 } },
+      { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
       // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
-      { id: 'idol', rect: { x: 1130, y: 590, w: 220, h: 110 }, marker: { x: 1240, y: 640 } },
+      { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
     ],
   },
 };
@@ -109,7 +112,7 @@ export const ROOMS: Record<string, RoomDef> = {
 export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> = {
   hub: { 'tree-base': { x: 800, y: 628 } },
   grove: { guardian: { x: 800, y: 430 }, gathering: { x: 800, y: 612 } },
-  market: { robot: { x: 1240, y: 520 }, shop: { x: 857, y: 234 } },
+  market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
 };
 
 export function getRoom(id: string): RoomDef {
