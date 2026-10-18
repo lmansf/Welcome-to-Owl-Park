@@ -68,7 +68,7 @@ docs/                 architecture, art pipeline, deployment
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the original tap-to-move room games worked, what we replicate, and the architecture decision for v1 and beyond.
 - [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
-- [docs/DEPLOY.md](docs/DEPLOY.md): GitHub Pages and Supabase setup, all on free tiers.
+- [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
 
 ## Ground rules baked into the code
 

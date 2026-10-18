@@ -3,6 +3,8 @@
   "name": "owl-park",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  // No compatibility flags: the Worker uses only Web APIs (WebSocket, Web Crypto, Durable Object
+  // SQLite). Wrangler reports Node.js compatibility as on at this date; nothing imports node: modules.
   // The built client is served as static assets by the same Worker (free, unlimited).
   // Build it first: pnpm --filter @owl-park/park build  (with VITE_TRANSPORT=edge).
   "assets": {
@@ -37,5 +39,13 @@
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },
-  "observability": { "enabled": true }
+  // Secrets are set with `wrangler secret put`, never written here. Listing them types `env`
+  // and makes `wrangler dev` warn when one is missing.
+  "secrets": { "required": ["PASS_SIGNING_KEY", "ADMIN_KEY"] },
+  // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  }
 }

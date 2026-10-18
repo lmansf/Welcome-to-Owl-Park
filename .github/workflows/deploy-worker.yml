@@ -5,7 +5,10 @@
 #        secrets:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 #        variables: CLOUDFLARE_DEPLOY=true   (the switch that enables this workflow)
 #                   VITE_SHOP_URL            (optional gift shop link)
-#   3. Once, from a machine with wrangler logged in:  wrangler secret put PASS_SIGNING_KEY
+#   3. The Worker's own secrets, PASS_SIGNING_KEY (32+ random characters) and ADMIN_KEY (16+), can be
+#      added as repository secrets too: the workflow uploads each one it finds to the Worker after the
+#      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
+#      See docs/DEPLOY.md for the first deploy from your own machine.
 name: Deploy to Cloudflare
 
 on:
@@ -25,6 +28,9 @@ jobs:
     if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
     environment: production
+    env:
+      PASS_SIGNING_KEY: ${{ secrets.PASS_SIGNING_KEY }}
+      ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -47,3 +53,25 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/edge
           command: deploy
+      # Each step below runs only when its repository secret exists; wrangler-action uploads the
+      # secret, then lists the Worker's secret names (never values) as confirmation.
+      - name: Upload PASS_SIGNING_KEY to the Worker
+        if: env.PASS_SIGNING_KEY != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            PASS_SIGNING_KEY
+      - name: Upload ADMIN_KEY to the Worker
+        if: env.ADMIN_KEY != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            ADMIN_KEY
