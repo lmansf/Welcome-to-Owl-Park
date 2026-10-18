@@ -67,8 +67,11 @@ def alpha_bbox(img: Image.Image, threshold: int = 0) -> tuple[int, int, int, int
     return bbox_of(a > threshold)
 
 
-def fit_contain(img: Image.Image, canvas_w: int, canvas_h: int, margin: float = 0.02, anchor_x: float = 0.5, pad_bottom: int = 0) -> tuple[Image.Image, dict]:
+def fit_contain(img: Image.Image, canvas_w: int, canvas_h: int, margin: float = 0.02, anchor_x: float = 0.5, pad_bottom: int = 0, valign: str = "bottom") -> tuple[Image.Image, dict]:
     """Scale the alpha bbox to fit the canvas; bottom opaque row on the last row minus pad_bottom.
+
+    With ``valign="centre"`` the bbox is centred vertically instead (margin on all four sides), for
+    items worn at a point (glasses on the eye line, neckwear at the neck) rather than standing on one.
 
     The point at ``anchor_x`` of the bbox width lands on the canvas' horizontal centre. The real
     bbox after resampling is measured and the paste shifted so the registration is exact.
@@ -82,14 +85,16 @@ def fit_contain(img: Image.Image, canvas_w: int, canvas_h: int, margin: float = 
     crop = img.crop((x0, y0, x1, y1))
     bw, bh = crop.size
     avail_w = canvas_w * (1.0 - 2.0 * margin)
-    avail_h = canvas_h * (1.0 - margin) - pad_bottom
+    if valign not in ("bottom", "centre"):
+        raise ArtError(f"fit_contain: valign must be bottom or centre, not {valign!r}")
+    avail_h = canvas_h * (1.0 - 2.0 * margin) if valign == "centre" else canvas_h * (1.0 - margin) - pad_bottom
     s = min(avail_w / bw, avail_h / bh)
     nw, nh = max(1, int(round(bw * s))), max(1, int(round(bh * s)))
     scaled = crop.resize((nw, nh), LANCZOS) if (nw, nh) != (bw, bh) else crop
     sb = alpha_bbox(scaled) or (0, 0, nw, nh)
     canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
     left = int(round(canvas_w / 2.0 - anchor_x * (sb[2] - sb[0]))) - sb[0]
-    top = canvas_h - pad_bottom - sb[3]
+    top = int(round((canvas_h - (sb[3] - sb[1])) / 2.0)) - sb[1] if valign == "centre" else canvas_h - pad_bottom - sb[3]
     canvas.paste(scaled, (left, top))
-    info = {"scale": round(s, 5), "bbox": [x0, y0, x1, y1], "placed": [left + sb[0], top + sb[1], left + sb[2], top + sb[3]], "margin": margin, "anchor_x": anchor_x, "pad_bottom": pad_bottom}
+    info = {"scale": round(s, 5), "bbox": [x0, y0, x1, y1], "placed": [left + sb[0], top + sb[1], left + sb[2], top + sb[3]], "margin": margin, "anchor_x": anchor_x, "pad_bottom": pad_bottom, "valign": valign}
     return canvas, info

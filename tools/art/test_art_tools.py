@@ -424,6 +424,18 @@ class TestResize(unittest.TestCase):
         self.assertGreaterEqual(cols[0], 14)
         self.assertLessEqual(cols[-1], 705)
 
+    def test_piece_fit_can_centre_vertically_for_items_worn_at_a_point(self):
+        img, _ = synth_keyed_subject(300, 300, "#FF00FF", radius_frac=0.3)
+        rgba, _ = key_out(img, ChromaParams(key="#FF00FF"))
+        canvas, info = fit_contain(rgba, 240, 120, margin=0.04, valign="centre")
+        a = np.asarray(canvas)[..., 3]
+        rows = np.nonzero((a > 0).any(1))[0]
+        self.assertAlmostEqual((rows[0] + rows[-1]) / 2, 59.5, delta=1.5, msg="centred on the canvas' middle row")
+        self.assertGreaterEqual(rows[0], 4)
+        self.assertEqual(info["valign"], "centre")
+        with self.assertRaises(ArtError):
+            fit_contain(rgba, 240, 120, valign="middle")
+
     def test_no_dark_fringe_after_downsampling(self):
         disc = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
         ImageDraw.Draw(disc).ellipse((50, 50, 350, 350), fill=(255, 255, 255, 255))

@@ -322,11 +322,11 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     kc = key_colour_for(ctx, key, a.key_colour, sc)
     rgba, cinfo = key_out(img, chroma_params(a, kc))
     rgba = _floor_cut(rgba, a.floor_cut)
-    canvas2x, finfo = fit_contain(rgba, 2 * W, 2 * H, a.margin, a.anchor_x, a.pad_bottom)
+    canvas2x, finfo = fit_contain(rgba, 2 * W, 2 * H, a.margin, a.anchor_x, a.pad_bottom, a.valign)
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
     canvas2x = apply_grade(canvas2x, pal, strength)
     one = downsample(canvas2x, W, H)
-    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} scale={finfo['scale']}" + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "")]
+    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "")]
     if gline:
         tools.append(gline)
     outputs = {}
@@ -907,6 +907,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--margin", type=float, default=0.02)
     sp.add_argument("--anchor-x", type=float, default=0.5)
     sp.add_argument("--pad-bottom", type=int, default=0)
+    sp.add_argument("--valign", choices=("bottom", "centre"), default="bottom", help="centre for items worn at a point (glasses, neckwear)")
     sp.add_argument("--no-2x", action="store_true")
     add_grade_flags(sp)
     add_common(sp)
