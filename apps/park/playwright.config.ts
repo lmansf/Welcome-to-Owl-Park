@@ -17,7 +17,9 @@ export default defineConfig({
     { name: 'desktop', testMatch: /park\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
     { name: 'phone', testMatch: /park\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
-    { name: 'edge', testMatch: /edge\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
+    // that chain runs close to a minute, so this project gets a longer per-test budget.
+    { name: 'edge', testMatch: /edge\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {
