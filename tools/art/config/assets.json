@@ -2,27 +2,624 @@
   "schema": 1,
   "source": "apps/park/src/game/art.ts",
   "keys": {
-    "hub": { "w": 1600, "h": 900, "kind": "room", "with_2x": false },
-    "hub-fg": { "w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#00FF00", "with_2x": false },
-    "grove": { "w": 1600, "h": 900, "kind": "room", "with_2x": false },
-    "grove-fg": { "w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#00FF00", "with_2x": false },
-    "market": { "w": 1600, "h": 900, "kind": "room", "with_2x": false },
-    "market-fg": { "w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#00FF00", "with_2x": false },
-    "guardian": { "w": 720, "h": 820, "kind": "piece", "key_colour": "#00FF00", "with_2x": true },
-    "robot-owl": { "w": 900, "h": 900, "kind": "piece", "key_colour": "#00FF00", "with_2x": true },
-    "sign-not-yet-fledged": { "w": 420, "h": 520, "kind": "sign", "generated": false },
-    "sign-closed-for-molting": { "w": 420, "h": 520, "kind": "sign", "generated": false },
-    "sign-pardon-our-feathers": { "w": 420, "h": 520, "kind": "sign", "generated": false },
-    "sign-hatching-soon": { "w": 420, "h": 520, "kind": "sign", "generated": false },
-    "owl-body": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
-    "owl-belly": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
-    "owl-accent": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
-    "owl-face": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true },
-    "owl-blink": { "w": 200, "h": 240, "kind": "owl", "from": "owl-master", "with_2x": true }
+    "hub": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": false
+    },
+    "hub-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": false
+    },
+    "grove": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": false
+    },
+    "grove-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": false
+    },
+    "market": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": false
+    },
+    "market-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": false
+    },
+    "guardian": {
+      "w": 720,
+      "h": 820,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "robot-owl": {
+      "w": 900,
+      "h": 900,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "sign-not-yet-fledged": {
+      "w": 420,
+      "h": 520,
+      "kind": "sign",
+      "generated": false
+    },
+    "sign-closed-for-molting": {
+      "w": 420,
+      "h": 520,
+      "kind": "sign",
+      "generated": false
+    },
+    "sign-pardon-our-feathers": {
+      "w": 420,
+      "h": 520,
+      "kind": "sign",
+      "generated": false
+    },
+    "sign-hatching-soon": {
+      "w": 420,
+      "h": 520,
+      "kind": "sign",
+      "generated": false
+    },
+    "owl-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "item-witch-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-top-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-wizard-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-beanie": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-flower-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-leaf-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-propeller-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-chef-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-party-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-beret": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-cowboy-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-tricorn": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-horned-helmet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-halo": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mushroom-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-acorn-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-ribbon-bow": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bobble-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pith-helmet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-jester-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-laurel-wreath": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-sailor-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mortarboard": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bucket-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-tiara": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pumpkin-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snowflake-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-candle-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-moon-circlet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-round-glasses": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-star-shades": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-heart-glasses": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-monocle": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-aviator-goggles": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-masquerade-mask": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-cat-eye-glasses": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-brass-goggles": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pixel-shades": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-half-moon-specs": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-knit-scarf": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bow-tie": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bandana": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-moon-pendant": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-flower-lei": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bell-collar": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-cape": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-ruffle-collar": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pearl-necklace": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-medal-ribbon": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mouse": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snake": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-grasshopper": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-ladybug": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-beetle": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snail": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-moth": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-firefly": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-frog": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-bat": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-hedgehog": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-caterpillar": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-cricket": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-butterfly": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-spider": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-dragonfly": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-salamander": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mole": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-tiny-dragon": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-star-beetle": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    }
   },
   "helpers": {
-    "tree-master": { "role": "tree signature anchor", "ref": "refs/tree-master.png" },
-    "owl-master": { "role": "colour-coded owl layer master", "key_colour": "#FF00FF" },
-    "owl-blink-src": { "role": "edit of the owl master with closed eyes", "key_colour": "#FF00FF" }
+    "tree-master": {
+      "role": "tree signature anchor",
+      "ref": "refs/tree-master.png"
+    },
+    "owl-master": {
+      "role": "colour-coded owl layer master",
+      "key_colour": "#FF00FF"
+    },
+    "owl-blink-src": {
+      "role": "edit of the owl master with closed eyes",
+      "key_colour": "#FF00FF"
+    }
   }
 }

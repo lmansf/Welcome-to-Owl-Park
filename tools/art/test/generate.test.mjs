@@ -134,11 +134,32 @@ test('mock provider generate() honours the job size through the provider interfa
 test('config/assets.json mirrors the ART table in art.ts', () => {
   const art = parseArtTable();
   assert.ok(Object.keys(art).length >= 17, 'parsed the ART table');
-  assert.deepEqual(Object.keys(ASSETS.keys).sort(), Object.keys(art).sort());
+  // Collectible item art lives outside the literal ART table (the game derives it from the catalogue).
+  const nonItems = Object.keys(ASSETS.keys).filter((k) => ASSETS.keys[k].kind !== 'item');
+  assert.deepEqual(nonItems.sort(), Object.keys(art).sort());
   for (const [key, spec] of Object.entries(art)) {
     assert.equal(ASSETS.keys[key].w, spec.w, `${key} width`);
     assert.equal(ASSETS.keys[key].h, spec.h, `${key} height`);
     assert.equal(ASSETS.keys[key].kind, spec.kind, `${key} kind`);
+  }
+});
+
+test('collectible item keys: named item-*, one of the four slot sizes, a backdrop, a 2x copy and a job each', () => {
+  const SIZES = new Set(['140x100', '120x60', '130x80', '90x90']); // head, face, neck, pet (owl canvas units)
+  const items = Object.entries(ASSETS.keys).filter(([, v]) => v.kind === 'item');
+  assert.ok(items.length >= 70, `${items.length} item keys`);
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  for (const [key, v] of items) {
+    assert.match(key, /^item-[a-z][a-z0-9-]*$/);
+    assert.ok(SIZES.has(`${v.w}x${v.h}`), `${key}: ${v.w}x${v.h} is not a slot size`);
+    assert.match(v.key_colour, /^#(00FF00|FF00FF)$/, `${key}: green or magenta backdrop`);
+    assert.equal(v.with_2x, true, `${key}: items ship 1x and 2x`);
+    const job = jobs.get(key);
+    assert.ok(job, `${key} has a generation job`);
+    assert.equal(job.kind, 'piece');
+    assert.equal(job.key_colour, v.key_colour, `${key}: job and table agree on the backdrop`);
+    assert.equal(job.size, `${2 * v.w}x${2 * v.h}`, `${key}: generated at twice the logical size`);
+    assert.ok(job.prompt.includes(v.key_colour), `${key}: the prompt names its backdrop`);
   }
 });
 
