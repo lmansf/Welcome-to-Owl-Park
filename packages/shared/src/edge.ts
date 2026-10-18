@@ -1,12 +1,15 @@
 /**
- * Protocol v2: the authoritative room server (Durable Object) and its clients.
- * Every frame is one JSON object (≤ 1 KiB) except the literal heartbeat text frame `hb`.
- * All timestamps (`at`, `now`) are server milliseconds; clients never put their clock on the wire.
+ * Protocol v3: the authoritative room server (Durable Object) and its clients.
+ * Every client frame is one JSON object (≤ 1 KiB) except the literal heartbeat text frame `hb`.
+ * All timestamps (`at`, `now`, `next`) are server milliseconds; clients never put their clock on the wire.
+ * v3 adds collectibles: looks may carry `wear`, and the `drops`, `pickup` and `emote` frames.
  */
+import type { DropView } from './collectibles';
+import { cleanLook } from './look';
 import type { OwlLook, Vec2 } from './protocol';
-import { isLook, isObj, isVec2 } from './validate';
+import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-export const EDGE_PROTOCOL_VERSION = 2;
+export const EDGE_PROTOCOL_VERSION = 3;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -57,7 +60,21 @@ export interface ClientLook {
 export interface ClientBye {
   t: 'bye';
 }
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye;
+/** Ask for this window's unclaimed drops (answered with `drops`). */
+export interface ClientDrops {
+  t: 'drops';
+}
+/** Pick up drop `n` of the current window; the server checks the owl stands on it. */
+export interface ClientPickup {
+  t: 'pickup';
+  n: number;
+}
+/** Play an owned emote for everyone in the room. */
+export interface ClientEmote {
+  t: 'emote';
+  e: string;
+}
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientDrops | ClientPickup | ClientEmote;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -102,7 +119,35 @@ export interface ServerFull {
   room: string;
   cap: number;
 }
-export type ServerFrame = ServerWelcome | ServerEnter | ServerMove | ServerLook | ServerLeave | ServerCounts | ServerFull;
+/** This window's unclaimed drops across the park (only the finder ever sees them). */
+export interface ServerDrops {
+  t: 'drops';
+  window: string;
+  /** Server ms when the next window starts. */
+  next: number;
+  drops: DropView[];
+  feathers: number;
+}
+/** A pickup succeeded: the variant found, whether it was a duplicate (paid in feathers), the new balance. */
+export interface ServerFound {
+  t: 'found';
+  n: number;
+  variant: string;
+  dup: boolean;
+  feathers: number;
+}
+/** A pickup was refused: too far from the drop, already taken or from a window that has ended. */
+export interface ServerMissed {
+  t: 'missed';
+  n: number;
+  reason: 'far' | 'gone' | 'busy';
+}
+export interface ServerEmote {
+  t: 'emote';
+  id: string;
+  e: string;
+}
+export type ServerFrame = ServerWelcome | ServerEnter | ServerMove | ServerLook | ServerLeave | ServerCounts | ServerFull | ServerDrops | ServerFound | ServerMissed | ServerEmote;
 
 // ---- validation (server side, strict) ----
 
@@ -121,7 +166,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   switch (v['t']) {
     case 'hello': {
       if (v['v'] !== EDGE_PROTOCOL_VERSION || !isLook(v['look'])) return null;
-      const out: ClientHello = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: v['look'] };
+      const out: ClientHello = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: cleanLook(v['look']) };
       if (v['spawn'] !== undefined) {
         if (typeof v['spawn'] !== 'string' || !SPAWN_NAME.test(v['spawn'])) return null;
         out.spawn = v['spawn'];
@@ -138,16 +183,25 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     }
     case 'look': {
       if (!isLook(v['look'])) return null;
-      const look: ClientLook['look'] = { body: v['look'].body, belly: v['look'].belly, accent: v['look'].accent };
-      if (v['look'].pledge !== undefined) look.pledge = v['look'].pledge;
-      return { t: 'look', look };
+      return { t: 'look', look: cleanLook(v['look']) };
     }
     case 'bye':
       return { t: 'bye' };
+    case 'drops':
+      return { t: 'drops' };
+    case 'pickup': {
+      const n = v['n'];
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 15) return null;
+      return { t: 'pickup', n };
+    }
+    case 'emote':
+      return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
     default:
       return null;
   }
 }
+
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'drops', 'found', 'missed', 'emote']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {
@@ -159,6 +213,6 @@ export function parseServerFrame(text: string): ServerFrame | null {
   }
   if (!isObj(v) || typeof v['t'] !== 'string') return null;
   const t = v['t'];
-  if (t === 'welcome' || t === 'enter' || t === 'move' || t === 'look' || t === 'leave' || t === 'counts' || t === 'full') return v as unknown as ServerFrame;
+  if (SERVER_FRAME_TYPES.has(t)) return v as unknown as ServerFrame;
   return null;
 }

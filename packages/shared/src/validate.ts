@@ -2,6 +2,7 @@
  * Structural validation for anything that arrives from another visitor. Peers share public
  * channels, so every field is untrusted until it has the expected shape and range.
  */
+import { EMOTE_IDS, isWear } from './collectibles';
 import { isHexColour, isPledge } from './look';
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from './protocol';
 import { ROOM_H, ROOM_W } from './room';
@@ -31,7 +32,18 @@ export function isVec2(v: unknown, maxX = ROOM_W, maxY = ROOM_H): v is Vec2 {
 }
 
 export function isLook(v: unknown): v is OwlLook {
-  return isObj(v) && isHexColour(v['body']) && isHexColour(v['belly']) && isHexColour(v['accent']) && (v['pledge'] === undefined || isPledge(v['pledge']));
+  return (
+    isObj(v) &&
+    isHexColour(v['body']) &&
+    isHexColour(v['belly']) &&
+    isHexColour(v['accent']) &&
+    (v['pledge'] === undefined || isPledge(v['pledge'])) &&
+    (v['wear'] === undefined || isWear(v['wear']))
+  );
+}
+
+export function isEmoteId(v: unknown): v is string {
+  return typeof v === 'string' && EMOTE_IDS.includes(v);
 }
 
 export function isWalk(v: unknown): v is Walk {
@@ -52,6 +64,8 @@ export function isParkMessage(value: unknown): value is ParkMessage {
       return isId(value['id']) && isWalk(value['walk']);
     case 'bye':
       return isId(value['id']);
+    case 'emote':
+      return isId(value['id']) && isEmoteId(value['e']);
     default:
       return false;
   }

@@ -1,4 +1,5 @@
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
+import type { DropLink } from '../collect/service';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
@@ -20,6 +21,8 @@ export interface RoomHandlers {
   onCounts?(rooms: Record<string, number>): void;
   /** The room we tried to enter is full. */
   onFull?(room: string): void;
+  /** A peer played an emote. */
+  onPeerEmote?(id: string, emote: string): void;
 }
 
 export interface RoomConnection {
@@ -28,6 +31,8 @@ export interface RoomConnection {
   /** Update the full state others will see when they join later. */
   track(state: PlayerState): void;
   leave(): Promise<void>;
+  /** Drops and pickups checked by an authoritative server (the room server only). */
+  link?: DropLink;
 }
 
 /**

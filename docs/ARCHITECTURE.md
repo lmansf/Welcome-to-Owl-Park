@@ -18,7 +18,8 @@ and so does Owl Park:
 | Doors | Walking into a trigger zone changes room and places you at a spawn in the destination | `doors[].to = { room, spawn }`; closed doors show an approved sign instead |
 | Server | An authoritative room server per world with room caps (around 80 to 120), one connection per player, join/leave/move messages | One Durable Object per park (or per room) with caps, validation, rate limits and fan-out |
 
-Deferred, exactly as the originals did it later: chat, emotes, names, inventories, mini-games.
+Deferred, exactly as the originals did it later: chat, names, mini-games. Emotes and inventories
+arrived with the collectibles (section 8 and `docs/COLLECTIBLES.md`).
 
 ## 2. Decision: an authoritative room server at the edge
 
@@ -56,6 +57,7 @@ The client keeps a transport interface, so all three exist in the repository:
 | Room server | `apps/edge`: Worker + Durable Object; `workerd` runtime | code MIT; workerd Apache-2.0; the hosted service is proprietary |
 | Static hosting | Workers static assets (free, unlimited) or GitHub Pages | service |
 | Identity (v1) | HMAC-signed guest "park pass" minted by the Worker | our code |
+| Collections | `Collections` Durable Object (SQLite) keyed by a per-device collector token; rules in `packages/shared/src/book.ts` | our code |
 | Tickets (v2) | Supabase Postgres + Auth for the ticket ledger and magic links | PostgreSQL licence / MIT |
 | CI | GitHub Actions, Playwright | service / Apache-2.0 |
 
@@ -71,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v2 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v3 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -79,12 +81,15 @@ Durable Object answers without waking. Coordinates are integers in room space. A
 are server milliseconds; clients never put their own clock on the wire.
 
 Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
-`move` (target and a per-connection `seq`), `look` (new colours), `bye`.
+`move` (target and a per-connection `seq`), `look` (new colours and worn items), `drops` (this
+window's finds), `pickup` (a find's number), `emote` (an emote id), `bye`.
 
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
 everyone including the sender; only the sender's copy carries `seq`, which is the
-acknowledgement), `look`, `leave`, `counts`, `full`.
+acknowledgement), `look`, `leave`, `counts`, `full`, and for the collectibles `drops` (where this
+window's finds are and what kind, never which item), `found`, `missed` (too far, already gone, or
+another pickup in flight) and `emote` (to everyone else in the room).
 
 Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
 normally match the client's prediction; a walk in progress is continued from its current
@@ -92,7 +97,10 @@ point when redirected; moves use a token bucket (burst 5, refill 2 per second) a
 excess closes the socket (4003); more than 40 frames in 5 s closes it; a second session for
 the same visitor replaces the first (4005); full rooms answer `full` then close (4010);
 idle sockets (no heartbeat for 90 s) are reaped by a one-minute alarm; at most 3 sockets per
-IP address per object.
+IP address per object. Collectibles: a pickup counts only within 56 px of the owl's position on
+the server clock, one at a time per visitor; worn items the visitor's collection does not hold
+are dropped from a look before it is broadcast; emotes must be owned and are limited to one per
+1.5 s; `drops`, `pickup` and `emote` frames count toward the frame limit.
 
 Client rules: the clock offset is set from `welcome` and refined with a min-filter over
 later `move` frames; remote owls are drawn 100 ms behind server time so jitter never shows;
@@ -100,14 +108,15 @@ the local owl walks immediately on the tap and is corrected only if the echo dif
 than 2 px; reconnects back off from 0.5 s to 8 s and resume near the last position; a stale
 bundle (protocol mismatch) reloads itself.
 
-Everything about a visitor that must survive hibernation (id, look, position, walk) is kept
-in the socket attachment, so an object that was evicted rebuilds every room from its sockets.
+Everything about a visitor that must survive hibernation (id, look, position, walk, collector
+id and home time zone) is kept in the socket attachment, so an object that was evicted rebuilds
+every room from its sockets.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
 Rooms are data shared by the client and the server: `walkable` polygons, `spawns`, `doors`
-(open with `to`, or closed with an approved `closedSign`), `mood` for ambience, and anchors
-for large set pieces. Art is referenced by key; artists replace files under
+(open with `to`, or closed with an approved `closedSign`), `mood` for ambience, `spots` where
+collectible finds appear, and anchors for large set pieces. Art is referenced by key; artists replace files under
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
 variable (defaults: hub 80, grove 40, market 40).
 
@@ -150,7 +159,25 @@ winner sets the next merch drop; ties go to the realm with the fewest all-time w
   feeds the sales and data pipeline. Mirroring rows into the Supabase ticket ledger is a small
   follow-up once that ledger exists.
 
-## 8. Ticket gating (v2, designed, not built)
+## 8. Collectibles (built)
+
+Visitors find wearables, pets, effects and emotes on each room's `spots`: two or three finds per
+half day in the visitor's home time zone, personal to the finder, so one server serves every time
+zone with arithmetic rather than timers. Identity is a per-device collector token: `/api/pass`
+mints one when none is sent and folds its `cid` and the home `tz` into the pass.
+
+- **`Collections`** Durable Object (SQLite, migration `v3`, one per park): collectors, owned
+  variants and each window's drops, generated from an HMAC of the collector and window and stored,
+  so they never shift. The rules are the portable `CollectionBook` in `packages/shared/src/book.ts`,
+  which the local mode reuses in the browser.
+- **Room object**: carries the collector per socket, checks pickups against the owl's server
+  position, and vets worn items and emotes against a short-lived cache of what each collector owns.
+- **HTTP**: `GET /api/collection`, `POST /api/collection/craft`, `POST /api/collection/tz` (with the
+  pass), and `POST /api/admin/grant` (admin key; the hook purchases will use).
+
+The design, the catalogue and every number: `docs/COLLECTIBLES.md`.
+
+## 9. Ticket gating (v2, designed, not built)
 
 Shopify `orders/paid` webhook -> the Worker records the order -> after the fraud review the
 order is tagged approved -> the Worker mints a long-lived claim token and emails a link ->
@@ -165,7 +192,7 @@ In the ledger that is a ticket row whose `valid_from`/`valid_until` is that nigh
 line is the pin product; one pin, one token. The same admitted pass then also allows one Realm
 Vote that night.
 
-## 9. Open questions for the owner (with the defaults in the code)
+## 10. Open questions for the owner (with the defaults in the code)
 
 1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.
@@ -173,3 +200,4 @@ Vote that night.
 4. Hostname: `*.workers.dev` for a soft launch, or a park subdomain on the brand's DNS.
 5. Room caps: hub 80 / grove 40 / market 40, or flat.
 6. Pre-ticket access: open to all guests (today), or a bot check on `/api/pass` if abuse shows.
+7. Collectibles: find rates, feather prices, the time zone rule and how purchases reach a collection (defaults in `docs/COLLECTIBLES.md`).

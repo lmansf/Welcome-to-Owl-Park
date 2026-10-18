@@ -18,6 +18,10 @@ export interface ParkConfig {
   id: string | undefined;
   /** "body,belly,accent" hex colours for tests. */
   look: string | undefined;
+  /** Local mode only: a fixed collector id (tests share or separate collections with it). */
+  collector: string | undefined;
+  /** Local mode only: the home time zone to use instead of the device's (tests). */
+  tz: string | undefined;
   debug: boolean;
   /** Draw at devicePixelRatio for crisp phones (capped). */
   pixelRatio: number;
@@ -51,6 +55,8 @@ export function readConfig(): ParkConfig {
     spawn: q.get('spawn') ?? undefined,
     id: q.get('id') ?? undefined,
     look: q.get('look') ?? undefined,
+    collector: q.get('collector') ?? undefined,
+    tz: q.get('tz') ?? undefined,
     debug: q.get('debug') === '1',
     pixelRatio: Math.min(2, Math.max(1, dpr)),
     artScaleMax: Math.min(2, Math.max(1, Number(env.VITE_ART_SCALE_MAX) || 1.5)),

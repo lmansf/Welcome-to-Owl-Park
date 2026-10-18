@@ -13,6 +13,8 @@ import {
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
+import type { DropLink, DropsInfo, PickupResult } from '../collect/service';
+import { deviceTimeZone } from '../collect/service';
 import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
@@ -25,10 +27,32 @@ const ECHO_TIMEOUT_MS = 1_500;
 const DEAD_AFTER_MS = HEARTBEAT_INTERVAL_MS * 2 + 10_000;
 const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const RELOAD_GUARD_KEY = 'owl-park:reloaded';
+/** The collector token this browser keeps (one collection per device until email linking exists). */
+const COLLECTOR_KEY = 'owl-park:collector';
+/** How long a drops or pickup request waits for the server's answer. */
+const REPLY_TIMEOUT_MS = 6_000;
 
 interface Pass {
   pass: string;
   exp: number;
+  collector?: string;
+}
+
+function readCollector(): string | null {
+  try {
+    return localStorage.getItem(COLLECTOR_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveCollector(token: string | undefined): void {
+  if (!token) return;
+  try {
+    localStorage.setItem(COLLECTOR_KEY, token);
+  } catch {
+    /* private mode: a new collection per visit */
+  }
 }
 
 /**
@@ -46,13 +70,38 @@ export class EdgeTransport implements ParkTransport {
 
   /** The pass lives in memory only: one visitor identity per page load, never shared by a duplicated tab. */
   private pass: Pass | null = null;
+  private passLoad: Promise<Pass> | null = null;
 
-  private async getPass(force = false): Promise<Pass> {
-    if (!force && this.pass && this.pass.exp * 1000 > Date.now() + 60_000) return this.pass;
-    const res = await fetch(`${this.base}/api/pass`, { cache: 'no-store' });
+  private getPass(force = false): Promise<Pass> {
+    if (!force && this.pass && this.pass.exp * 1000 > Date.now() + 60_000) return Promise.resolve(this.pass);
+    // One request at a time: on a first visit the room socket and the collection both ask at
+    // once, and two answers would start two collections.
+    this.passLoad ??= this.fetchPass().finally(() => {
+      this.passLoad = null;
+    });
+    return this.passLoad;
+  }
+
+  private async fetchPass(): Promise<Pass> {
+    const tz = deviceTimeZone();
+    const token = readCollector();
+    const res = await fetch(`${this.base}/api/pass${tz ? `?tz=${encodeURIComponent(tz)}` : ''}`, { cache: 'no-store', headers: token ? { 'X-Collector': token } : {} });
     if (!res.ok) throw new Error(`pass refused (${res.status})`);
     this.pass = (await res.json()) as Pass;
+    saveCollector(this.pass.collector);
     return this.pass;
+  }
+
+  /** An authenticated call to the park API; a refused pass is renewed once. */
+  async api(path: string, init: RequestInit = {}): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      const pass = await this.getPass(attempt > 0);
+      const headers = new Headers(init.headers);
+      headers.set('Authorization', `Bearer ${pass.pass}`);
+      if (init.body) headers.set('Content-Type', 'application/json');
+      const res = await fetch(`${this.base}${path}`, { ...init, headers, cache: 'no-store' });
+      if (res.status !== 401 || attempt > 0) return res;
+    }
   }
 
   /** POST a vote with this visitor's pass; the server decides admission and the daily limit. */
@@ -86,6 +135,10 @@ export class EdgeTransport implements ParkTransport {
     let selfId: string | null = null;
     const knownPeers = new Set<string>();
     const pending = new Map<number, { to: Vec2; timer: ReturnType<typeof setTimeout>; resent: boolean }>();
+    /** Requests waiting for the server: drops answers in order, pickups by drop number. */
+    const dropWaiters: Array<{ resolve: (d: DropsInfo) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }> = [];
+    const pickupWaiters = new Map<number, { resolve: (r: PickupResult) => void; timer: ReturnType<typeof setTimeout> }>();
+    const readyWaiters: Array<(ok: boolean) => void> = [];
 
     const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS });
     const sendFrame = (f: ClientFrame) => {
@@ -128,6 +181,7 @@ export class EdgeTransport implements ParkTransport {
           }
           handlers.onCounts?.(f.counts);
           handlers.onStatus('online');
+          for (const ready of readyWaiters.splice(0)) ready(true);
           break;
         }
         case 'enter':
@@ -166,7 +220,81 @@ export class EdgeTransport implements ParkTransport {
         case 'full':
           handlers.onFull?.(f.room);
           break;
+        case 'drops': {
+          const w = dropWaiters.shift();
+          if (!w) break;
+          clearTimeout(w.timer);
+          // `next` is on the server clock; the scene schedules on this device's clock.
+          w.resolve({ window: f.window, next: f.next ? f.next - offset : 0, drops: f.drops, feathers: f.feathers });
+          break;
+        }
+        case 'found':
+        case 'missed': {
+          const w = pickupWaiters.get(f.n);
+          if (!w) break;
+          clearTimeout(w.timer);
+          pickupWaiters.delete(f.n);
+          w.resolve(f.t === 'found' ? { ok: true, n: f.n, variant: f.variant, dup: f.dup, feathers: f.feathers } : { ok: false, n: f.n, reason: f.reason });
+          break;
+        }
+        case 'emote':
+          if (f.id !== selfId) handlers.onPeerEmote?.(f.id, f.e);
+          break;
       }
+    };
+
+    const isOpen = () => ws !== null && ws.readyState === WebSocket.OPEN && welcomed;
+    /** Resolves true once the server has welcomed us (the scene asks for drops right after joining). */
+    const whenWelcomed = (): Promise<boolean> => {
+      if (isOpen()) return Promise.resolve(true);
+      if (closed) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        const done = (ok: boolean) => {
+          clearTimeout(timer);
+          resolve(ok);
+        };
+        const timer = setTimeout(() => {
+          const i = readyWaiters.indexOf(done);
+          if (i >= 0) readyWaiters.splice(i, 1);
+          resolve(false);
+        }, REPLY_TIMEOUT_MS);
+        readyWaiters.push(done);
+      });
+    };
+    const link: DropLink = {
+      drops: async () => {
+        if (!(await whenWelcomed())) throw new Error('offline');
+        return new Promise<DropsInfo>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            const i = dropWaiters.findIndex((w) => w.timer === timer);
+            if (i >= 0) dropWaiters.splice(i, 1);
+            reject(new Error('no answer'));
+          }, REPLY_TIMEOUT_MS);
+          dropWaiters.push({ resolve, reject, timer });
+          sendFrame({ t: 'drops' });
+        });
+      },
+      pickup: (n: number) =>
+        new Promise<PickupResult>((resolve) => {
+          if (!isOpen() || pickupWaiters.has(n)) return resolve({ ok: false, n, reason: isOpen() ? 'busy' : 'offline' });
+          const timer = setTimeout(() => {
+            pickupWaiters.delete(n);
+            resolve({ ok: false, n, reason: 'offline' });
+          }, REPLY_TIMEOUT_MS);
+          pickupWaiters.set(n, { resolve, timer });
+          sendFrame({ t: 'pickup', n });
+        }),
+    };
+    const failWaiters = () => {
+      for (const w of dropWaiters.splice(0)) {
+        clearTimeout(w.timer);
+        w.reject(new Error('offline'));
+      }
+      for (const [n, w] of pickupWaiters) {
+        clearTimeout(w.timer);
+        w.resolve({ ok: false, n, reason: 'offline' });
+      }
+      pickupWaiters.clear();
     };
 
     const scheduleReconnect = () => {
@@ -222,6 +350,7 @@ export class EdgeTransport implements ParkTransport {
         if (heartbeat) clearInterval(heartbeat);
         heartbeat = null;
         if (ws === socket) ws = null;
+        failWaiters();
         if (closed) return;
         if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED) {
           handlers.onStatus('offline');
@@ -286,10 +415,14 @@ export class EdgeTransport implements ParkTransport {
           case 'bye':
             sendFrame({ t: 'bye' });
             break;
+          case 'emote':
+            sendFrame({ t: 'emote', e: msg.e });
+            break;
           case 'hello':
             break;
         }
       },
+      link,
       track(state: PlayerState) {
         current = state;
         spawn = undefined;
@@ -300,6 +433,8 @@ export class EdgeTransport implements ParkTransport {
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (heartbeat) clearInterval(heartbeat);
         clearPending();
+        failWaiters();
+        for (const ready of readyWaiters.splice(0)) ready(false);
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ t: 'bye' } satisfies ClientFrame));
           ws.close(1000, 'leaving');

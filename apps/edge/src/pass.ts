@@ -2,14 +2,37 @@
  * Park passes: a small signed token the client presents when opening a room socket.
  * v1 mints guest passes for everyone (GATE=open). v2 mints them only for admitted
  * ticket holders. HMAC-SHA256 over a JSON payload; verification is a constant-time compare.
+ *
+ * Collector tokens use the same signature over a different payload shape (`k: "col"`), so a
+ * pass is never a collector token and a collector token is never a pass.
  */
+import { isTimeZone } from '@owl-park/shared';
+
 export interface PassPayload {
-  /** Visitor id, stable for the pass lifetime. */
+  /** Visitor id, stable for the pass lifetime: one owl per page load. */
   id: string;
   /** Expiry, Unix seconds. */
   exp: number;
   /** Admitted through a ticket (v2). Guests are false. */
   adm: boolean;
+  /** The collector this page belongs to (several tabs of one browser share it). */
+  cid?: string;
+  /** The browser's IANA time zone when the pass was minted: the collector's home zone on first sight. */
+  tz?: string;
+}
+
+/** A collector's long-lived identity, kept by the browser (per device until email linking exists). */
+export interface CollectorPayload {
+  k: 'col';
+  cid: string;
+  /** Issued at, Unix seconds. */
+  iat: number;
+}
+
+const CID_RE = /^c_[A-Za-z0-9]{8,16}$/;
+
+export function isCollectorId(v: unknown): v is string {
+  return typeof v === 'string' && CID_RE.test(v);
 }
 
 export const GUEST_PASS_TTL_S = 12 * 60 * 60;
@@ -46,21 +69,31 @@ export function signingSecret(env: { PASS_SIGNING_KEY?: string }): string {
   return DEV_KEY;
 }
 
-export function randomVisitorId(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const bytes = crypto.getRandomValues(new Uint8Array(10));
-  let s = 'v_';
-  for (const b of bytes) s += alphabet[b % alphabet.length];
+const ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+function randomId(prefix: string, n: number): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(n));
+  let s = prefix;
+  for (const b of bytes) s += ALPHABET[b % ALPHABET.length];
   return s;
 }
 
-export async function mintPass(secret: string, payload: PassPayload): Promise<string> {
+export function randomVisitorId(): string {
+  return randomId('v_', 10);
+}
+
+export function randomCollectorId(): string {
+  return randomId('c_', 12);
+}
+
+async function sign(secret: string, payload: object): Promise<string> {
   const body = b64url(enc.encode(JSON.stringify(payload)));
   const sig = await crypto.subtle.sign('HMAC', await key(secret), enc.encode(body));
   return `${body}.${b64url(sig)}`;
 }
 
-export async function verifyPass(secret: string, token: string | null, nowS = Math.floor(Date.now() / 1000)): Promise<PassPayload | null> {
+/** The signed payload of a token, or null when the token is malformed or the signature is wrong. */
+async function verified(secret: string, token: string | null): Promise<Record<string, unknown> | null> {
   if (!token || token.length > 512) return null;
   const dot = token.indexOf('.');
   if (dot <= 0) return null;
@@ -72,10 +105,41 @@ export async function verifyPass(secret: string, token: string | null, nowS = Ma
   const raw = unb64url(body);
   if (!raw) return null;
   try {
-    const p = JSON.parse(new TextDecoder().decode(raw)) as Partial<PassPayload>;
-    if (typeof p.id !== 'string' || !/^v_[A-Za-z0-9]{6,16}$/.test(p.id) || typeof p.exp !== 'number' || p.exp < nowS) return null;
-    return { id: p.id, exp: p.exp, adm: p.adm === true };
+    const p = JSON.parse(new TextDecoder().decode(raw)) as unknown;
+    return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : null;
   } catch {
     return null;
   }
+}
+
+export async function mintPass(secret: string, payload: PassPayload): Promise<string> {
+  return sign(secret, payload);
+}
+
+export async function verifyPass(secret: string, token: string | null, nowS = Math.floor(Date.now() / 1000)): Promise<PassPayload | null> {
+  const p = await verified(secret, token);
+  if (!p || p['k'] !== undefined) return null; // a collector token is not a pass
+  const { id, exp } = p;
+  if (typeof id !== 'string' || !/^v_[A-Za-z0-9]{6,16}$/.test(id) || typeof exp !== 'number' || exp < nowS) return null;
+  const out: PassPayload = { id, exp, adm: p['adm'] === true };
+  if (isCollectorId(p['cid'])) out.cid = p['cid'];
+  if (isTimeZone(p['tz'])) out.tz = p['tz'];
+  return out;
+}
+
+export async function mintCollector(secret: string, cid: string, iat = Math.floor(Date.now() / 1000)): Promise<string> {
+  return sign(secret, { k: 'col', cid, iat } satisfies CollectorPayload);
+}
+
+/** The collector id in a collector token; null for anything else (including a park pass). */
+export async function verifyCollector(secret: string, token: string | null): Promise<string | null> {
+  const p = await verified(secret, token);
+  if (!p || p['k'] !== 'col' || !isCollectorId(p['cid']) || typeof p['iat'] !== 'number') return null;
+  return p['cid'];
+}
+
+/** The seed of a collector's drops for one window: HMAC-SHA256 under the server secret, 32 bytes. */
+export async function dropSeed(secret: string, cid: string, windowKey: string): Promise<Uint8Array> {
+  const mac = await crypto.subtle.sign('HMAC', await key(secret), enc.encode(`drops|${cid}|${windowKey}`));
+  return new Uint8Array(mac);
 }

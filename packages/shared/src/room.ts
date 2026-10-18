@@ -25,6 +25,12 @@ export interface RoomDef {
    * shows its sign; `shop` and `idol` are spots that offer the gift shop and the Realm Vote.
    */
   doors: DoorDef[];
+  /**
+   * Hiding spots where a visitor's collectible finds can appear (only the finder sees them).
+   * Each is on the floor, at least 60 px from every doorway and spot, and reachable by a straight
+   * walk from the default spawn that never crosses an exit (unit-tested in rooms.test.ts).
+   */
+  spots?: Vec2[];
   /** Ambient mood used by the scene for lighting and particles. */
   mood: 'hub' | 'dusk' | 'neon';
 }

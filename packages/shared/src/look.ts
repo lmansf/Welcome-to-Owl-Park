@@ -1,3 +1,4 @@
+import { sanitizeWear } from './collectibles';
 import type { OwlLook } from './protocol';
 
 /** Colour choices offered in the owl customiser. All are original picks. */
@@ -18,7 +19,7 @@ export function isHexColour(s: unknown): s is string {
   return typeof s === 'string' && HEX.test(s);
 }
 
-/** Accepts only well-formed colours; anything else falls back to the default. */
+/** Accepts only well-formed colours and catalogue wear; anything else falls back to the default or is dropped. */
 export function sanitizeLook(input: unknown): OwlLook {
   const o = (input ?? {}) as Partial<Record<keyof OwlLook, unknown>>;
   const look: OwlLook = {
@@ -27,7 +28,17 @@ export function sanitizeLook(input: unknown): OwlLook {
     accent: isHexColour(o.accent) ? o.accent : DEFAULT_LOOK.accent,
   };
   if (isPledge(o.pledge)) look.pledge = o.pledge;
+  const wear = sanitizeWear(o.wear);
+  if (wear) look.wear = wear;
   return look;
+}
+
+/** A copy of a look that already passed `isLook`, with only the known fields (drops stray keys). */
+export function cleanLook(look: OwlLook): OwlLook {
+  const out: OwlLook = { body: look.body, belly: look.belly, accent: look.accent };
+  if (look.pledge !== undefined) out.pledge = look.pledge;
+  if (look.wear && Object.keys(look.wear).length) out.wear = { ...look.wear };
+  return out;
 }
 
 export function hexToInt(hex: string): number {

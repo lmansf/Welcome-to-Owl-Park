@@ -5,6 +5,8 @@ Owl Park is a virtual owl park you visit online. Every visitor is an owl. You wa
 now doing the same. This repository holds the park application.
 
 Version 1 is **presence only**: owls appear, walk, change rooms, and leave. No chat yet.
+Owls also find **collectibles** around the park (wearables, pets, effects and emotes), a few
+every half day: see [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md).
 
 ## Run it locally
 
@@ -35,6 +37,7 @@ Useful query parameters while developing:
 | `?room=market` | Start in a given room (`hub`, `grove`, `market`) |
 | `?transport=local` | Force a transport: `local` (tabs on one device), `supabase`, or `edge` (room server) |
 | `?id=owl-a&look=%23C9A227,%23F6F1E3,%23FF2AA1` | Fixed id and colours (tests) |
+| `?collector=e2e-a&tz=UTC` | Fixed collection and home time zone when there is no room server (tests) |
 
 ## Check it
 
@@ -52,14 +55,16 @@ pnpm load -- --url http://localhost:8787 --bots 3 --seconds 30   # bot swarm aga
 ```
 apps/park/            the browser app (Vite + TypeScript + Phaser 3)
   public/art/         original SVG art: rooms, set pieces, owl layers (swappable)
-  src/game/           scenes, owl avatar, ambience, SVG loader
+  src/game/           scenes, owl avatar, ambience, SVG loader, worn items, pets, effects, emotes
+  src/collect/        the visitor's collection: room server or this device (local rules)
   src/net/            transport interface + local (tabs) + Supabase Realtime + room server
   src/ui/             HUD overlay (DOM)
   e2e/                Playwright tests (local transport, and the room server)
 apps/edge/            the room server: Cloudflare Worker + Durable Object (hibernating WebSockets)
   src/Room.ts         the rules, with no platform dependency (unit-tested in Node)
   src/RoomObject.ts   the Durable Object adapter; src/index.ts the router; src/pass.ts guest passes
-packages/shared/      protocol v1 + v2, geometry and walk maths, target resolution, room data
+  src/Collections.ts  every collection (Durable Object, SQLite)
+packages/shared/      protocol v1 + v3, geometry and walk maths, target resolution, room data, collectibles
 tools/                render-svg.mjs (rasterize art exactly as the game will), load/swarm.mjs (bot swarm)
 docs/                 architecture, art pipeline, deployment
 ```
@@ -68,6 +73,7 @@ docs/                 architecture, art pipeline, deployment
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the original tap-to-move room games worked, what we replicate, and the architecture decision for v1 and beyond.
 - [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
+- [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): finds, wearables, pets, effects and emotes: the rules, the numbers and the server.
 - [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
 
 ## Ground rules baked into the code

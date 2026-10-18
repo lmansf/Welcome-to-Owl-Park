@@ -117,6 +117,9 @@ test.describe('single visitor', () => {
 
 test.describe('two visitors on one device', () => {
   test('owls see each other appear, walk, and leave', async ({ context }) => {
+    // Two live parks in one browser, both drawn with software WebGL: on a loaded runner the walk
+    // and the room change alone use most of the default budget (about 45 s on a 4-core box).
+    test.slow();
     const a = await context.newPage();
     const b = await context.newPage();
     await openPark(a, { id: 'owl-a', look: '#8B5A2B,#F6F1E3,#C9A227' });

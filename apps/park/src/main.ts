@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { parseVariant, type DropView, type Inventory } from '@owl-park/shared';
+import { createCollections } from './collect';
+import { CollectionState } from './collect/state';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
@@ -12,6 +15,7 @@ const look = loadLook(cfg, playerId);
 const parent = document.getElementById('game') as HTMLElement;
 const hud = createHud(document.body, look);
 const transport = createTransport(cfg);
+const collection = new CollectionState(createCollections(cfg, transport));
 
 const dpr = cfg.pixelRatio;
 const size = () => ({ w: Math.round(window.innerWidth * dpr), h: Math.round(window.innerHeight * dpr) });
@@ -35,6 +39,7 @@ game.registry.set('playerId', playerId);
 game.registry.set('look', look);
 game.registry.set('hud', hud);
 game.registry.set('transport', transport);
+game.registry.set('collection', collection);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -58,6 +63,16 @@ declare global {
       camera(): { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number } | null;
       /** Texture resolution actually loaded for an art key (tests check per-device rasterization). */
       textureSize(key: string): { w: number; h: number } | null;
+      /** The visitor's collection as this page knows it (null until loaded). */
+      collection(): Inventory | null;
+      /** This window's unclaimed drops in every room. */
+      drops(): DropView[];
+      /** Walk to drop `n` if it is in this room (arriving picks it up). */
+      pickup(n: number): boolean;
+      /** Wear an owned variant in its slot. */
+      equip(variant: string): boolean;
+      /** Play an owned emote. */
+      emote(e: string): boolean;
     };
   }
 }
@@ -65,6 +80,16 @@ const roomScene = () => {
   const s = game.scene.getScene('room') as RoomScene | null;
   return s && s.scene.isActive() ? s : null;
 };
+
+hud.attachCollection(collection, {
+  equip: (slot, variant) => void roomScene()?.equip(slot, variant),
+  emote: (e) => void roomScene()?.emote(e),
+  toast: (message, ms, accent) => hud.toast(message, ms, accent),
+  wear: () => roomScene()?.wear(),
+});
+// Load the collection in the background; worn items this collector does not own come off.
+void collection.refresh().then(() => roomScene()?.pruneWear());
+collection.onChange(() => roomScene()?.pruneWear());
 window.owlPark = {
   game,
   playerId,
@@ -83,4 +108,14 @@ window.owlPark = {
     const src = game.textures.get(key).getSourceImage() as { width: number; height: number };
     return { w: src.width, h: src.height };
   },
+  collection: () => collection.inv,
+  drops: () => roomScene()?.debugState()?.drops ?? [],
+  pickup: (n) => roomScene()?.walkToDrop(n) ?? false,
+  equip: (variant) => {
+    const v = parseVariant(variant);
+    if (!v || v.item.kind === 'emote') return false;
+    const slot = v.item.kind === 'wear' ? v.item.slot : v.item.kind;
+    return slot ? (roomScene()?.equip(slot, variant) ?? false) : false;
+  },
+  emote: (e) => roomScene()?.emote(e) ?? false,
 };

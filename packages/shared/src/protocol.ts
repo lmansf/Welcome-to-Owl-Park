@@ -1,8 +1,11 @@
 /**
  * Wire protocol shared by every transport (local tabs, Supabase Realtime,
- * or a future dedicated room server). Version 1 is presence only: owls
- * appear, walk, and leave. Nothing here carries text written by visitors.
+ * or a future dedicated room server). Version 1 is presence: owls appear,
+ * walk, change their look (colours and collectible wear), play emotes and
+ * leave. Nothing here carries text written by visitors.
  */
+import type { Wear } from './collectibles';
+
 export const PROTOCOL_VERSION = 1;
 
 export interface Vec2 {
@@ -17,6 +20,8 @@ export interface OwlLook {
   accent: string;
   /** Realm this owl pledged to today in the Realm Vote (a gold mark at its feet); cosmetic. */
   pledge?: string;
+  /** Collectibles worn: one variant id per slot (head, face, neck, pet, fx). */
+  wear?: Wear;
 }
 
 /**
@@ -66,4 +71,11 @@ export interface ByeMessage {
   id: string;
 }
 
-export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage;
+/** A player played one of its emotes (an emote id from the collectibles catalogue). */
+export interface EmoteMessage {
+  t: 'emote';
+  id: string;
+  e: string;
+}
+
+export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage;

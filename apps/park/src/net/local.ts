@@ -48,6 +48,11 @@ export class LocalTransport implements ParkTransport {
           lastSeen.delete(msg.id);
           handlers.onPeerLeave(msg.id);
           break;
+        case 'emote':
+          if (msg.id === current.id) return;
+          lastSeen.set(msg.id, Date.now());
+          handlers.onPeerEmote?.(msg.id, msg.e);
+          break;
       }
     };
 

@@ -94,6 +94,34 @@ test.describe('room server', () => {
     expect(close.status()).toBe(403);
   });
 
+  test('collectibles live on the server: a find is checked, kept and listed', async ({ browser, request }) => {
+    const a = await visitor(browser);
+    await expect.poll(async () => (await a.evaluate(() => window.owlPark.drops())).length, { timeout: 15_000 }).toBeGreaterThan(0);
+    const d = (await a.evaluate(() => window.owlPark.drops()))[0]!;
+    if ((await state(a)).room !== d.room) {
+      // Same browser, same collector token: the same window's drops wait in the other room.
+      await openPark(a, { transport: 'edge', room: d.room });
+      await expect.poll(async () => (await a.evaluate(() => window.owlPark.drops())).some((x) => x.n === d.n), { timeout: 15_000 }).toBe(true);
+    }
+    expect(await a.evaluate((n) => window.owlPark.pickup(n), d.n)).toBe(true);
+    await expect(a.getByText(/^Found/)).toBeVisible({ timeout: 20_000 });
+
+    // The API agrees, for this collector only.
+    const inv = await a.evaluate(async () => {
+      const token = localStorage.getItem('owl-park:collector') ?? '';
+      const { pass } = (await (await fetch('/api/pass', { headers: { 'X-Collector': token } })).json()) as { pass: string };
+      const auth = { Authorization: `Bearer ${pass}` };
+      const inventory = (await (await fetch('/api/collection', { headers: auth })).json()) as { owned: string[]; feathers: number };
+      const craft = (await (await fetch('/api/collection/craft', { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ variant: 'crown~0' }) })).json()) as { ok: boolean; reason?: string };
+      return { inventory, craft };
+    });
+    expect(inv.inventory.owned.length).toBeGreaterThanOrEqual(3);
+    expect(inv.craft).toMatchObject({ ok: false, reason: 'feathers' });
+    expect((await request.get('/api/collection')).status()).toBe(401);
+    expect((await request.post('/api/admin/grant', { data: { cid: 'c_abcdefgh12', variant: 'crown~0' } })).status()).toBe(403);
+    await a.context().close();
+  });
+
   test('closing the tab removes the owl for everyone else', async ({ browser }) => {
     const a = await visitor(browser);
     const b = await visitor(browser);

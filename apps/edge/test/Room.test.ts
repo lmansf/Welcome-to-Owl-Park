@@ -210,3 +210,54 @@ describe('Room', () => {
     expect(room.snapshot()[0]!.id).toBe('z');
   });
 });
+
+describe('Room collectibles hooks', () => {
+  let now = 2_000_000;
+  let room: Room;
+  beforeEach(() => {
+    now = 2_000_000;
+    room = new Room(def, { now: () => now, random: () => 0.5, cap: 3 });
+  });
+
+  it('reports where a visitor stands on the server clock, mid-walk included', () => {
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const start = a.last('welcome')!.you.pos;
+    expect(room.positionOf('a')).toEqual(start);
+    room.move('a', { t: 'move', to: { x: start.x + 520, y: start.y }, seq: 1 });
+    now += 1000; // WALK_SPEED px along
+    const mid = room.positionOf('a')!;
+    expect(Math.abs(mid.x - (start.x + WALK_SPEED))).toBeLessThanOrEqual(1);
+    now += 5000;
+    expect(room.positionOf('a')).toEqual({ x: start.x + 520, y: start.y });
+    expect(room.positionOf('nobody')).toBeNull();
+  });
+
+  it('broadcasts emotes to the others, at most one per interval', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    expect(room.emote('a', 'hoot')).toBe(true);
+    expect(b.last('emote')).toEqual({ t: 'emote', id: 'a', e: 'hoot' });
+    expect(a.count('emote')).toBe(0); // the sender plays it locally
+    expect(room.emote('a', 'flap')).toBe(false);
+    now += LIMITS.emoteEveryMs;
+    expect(room.emote('a', 'flap')).toBe(true);
+    expect(b.count('emote')).toBe(2);
+  });
+
+  it('applies a vetted look without counting it twice, and closes floods on adapter frames', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const worn = { ...look, wear: { head: 'crown~0' } };
+    room.look('a', worn, true);
+    expect(b.last('look')).toEqual({ t: 'look', id: 'a', look: worn });
+    expect(room.lookOf('a')).toEqual(worn);
+    for (let i = 0; i < LIMITS.framesPerWindow; i++) expect(room.admit('a')).toBe(true);
+    expect(room.admit('a')).toBe(false);
+    expect(a.closed?.code).toBe(CLOSE.RATE_LIMITED);
+  });
+});

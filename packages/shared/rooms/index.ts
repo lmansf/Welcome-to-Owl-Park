@@ -44,6 +44,18 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'closed-a', rect: { x: 430, y: 560, w: 140, h: 90 }, closedSign: 'Not Yet Fledged', marker: { x: 500, y: 598 } },
       { id: 'closed-b', rect: { x: 1030, y: 560, w: 140, h: 90 }, closedSign: 'Hatching Soon', marker: { x: 1100, y: 598 } },
     ],
+    spots: [
+      { x: 60, y: 820 },
+      { x: 330, y: 820 },
+      { x: 380, y: 720 },
+      { x: 520, y: 760 },
+      { x: 650, y: 860 },
+      { x: 800, y: 650 },
+      { x: 960, y: 840 },
+      { x: 1120, y: 760 },
+      { x: 1270, y: 850 },
+      { x: 1480, y: 820 },
+    ],
   },
   grove: {
     id: 'grove',
@@ -76,6 +88,18 @@ export const ROOMS: Record<string, RoomDef> = {
       // The gathering spot beneath the guardian: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 690, y: 560, w: 220, h: 120 }, marker: { x: 800, y: 612 } },
     ],
+    // On the lawn and the root strip left of the hollow: walks to the right of the door cross it.
+    spots: [
+      { x: 320, y: 700 },
+      { x: 380, y: 840 },
+      { x: 420, y: 620 },
+      { x: 480, y: 530 },
+      { x: 520, y: 760 },
+      { x: 600, y: 540 },
+      { x: 700, y: 860 },
+      { x: 820, y: 800 },
+      { x: 960, y: 760 },
+    ],
   },
   market: {
     id: 'market',
@@ -104,6 +128,18 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
       // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
+    ],
+    spots: [
+      { x: 330, y: 860 },
+      { x: 480, y: 720 },
+      { x: 560, y: 850 },
+      { x: 600, y: 705 },
+      { x: 720, y: 760 },
+      { x: 860, y: 860 },
+      { x: 880, y: 720 },
+      { x: 1080, y: 860 },
+      { x: 1300, y: 875 },
+      { x: 1440, y: 715 },
     ],
   },
 };

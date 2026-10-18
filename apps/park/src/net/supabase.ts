@@ -86,6 +86,9 @@ export class SupabaseTransport implements ParkTransport {
           case 'state':
             if (known.has(payload.state.id)) handlers.onPeerState(payload.state);
             break;
+          case 'emote':
+            if (known.has(payload.id)) handlers.onPeerEmote?.(payload.id, payload.e);
+            break;
           case 'hello':
           case 'bye':
             break; // never sent by this transport; presence join/leave is the roster

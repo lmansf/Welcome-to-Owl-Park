@@ -1,17 +1,31 @@
 import Phaser from 'phaser';
 import {
+  EMOTE_IDS,
+  PICKUP_CLIENT_RADIUS,
   PROTOCOL_VERSION,
+  RARITY_COLOURS,
+  RARITY_NAMES,
   distance,
+  duplicatePayout,
+  filterOwnedWear,
   findSpawn,
+  localClock,
+  parseVariant,
   pointInRect,
   positionAlongWalk,
   resolveTarget,
+  variantName,
+  type DropView,
+  type EquipSlot,
   type OwlLook,
   type PlayerState,
   type RoomDef,
   type Vec2,
   type Walk,
+  type Wear,
 } from '@owl-park/shared';
+import type { DropsInfo } from '../collect/service';
+import type { CollectionState } from '../collect/state';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import type { ConnectionStatus, ParkTransport, RoomConnection } from '../net';
@@ -20,6 +34,8 @@ import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
+import { DropMarker } from './DropMarker';
+import { itemScale } from './items';
 import { Owl } from './Owl';
 
 export interface RoomStart {
@@ -35,6 +51,12 @@ const TAP_SLOP = 16;
 const CLOCK_TOLERANCE_MS = 1500;
 
 const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
+/** Ask again after a failed pickup this long later (the owl may still be walking up). */
+const PICKUP_RETRY_MS = 800;
+/** Never wait longer than this for a window change (timers past ~24 days overflow). */
+const MAX_TIMER_MS = 6 * 60 * 60 * 1000;
+/** Ask for the drops again this long after a request failed (offline, or no answer in time). */
+const DROPS_RETRY_MS = 5_000;
 
 /**
  * One scene renders any room from its RoomDef: background, set pieces, the local owl,
@@ -64,6 +86,13 @@ export class RoomScene extends Phaser.Scene {
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
   private lastStatus: ConnectionStatus | null = null;
+  private collection!: CollectionState;
+  private drops: DropsInfo | null = null;
+  private readonly markers = new Map<number, DropMarker>();
+  /** Pickups in flight, and when a failed one may be retried. */
+  private readonly picking = new Map<number, number>();
+  private windowTimer: Phaser.Time.TimerEvent | null = null;
+  private readonly peerEmotes = new Map<string, string>();
 
   constructor() {
     super('room');
@@ -88,6 +117,12 @@ export class RoomScene extends Phaser.Scene {
     this.cameFrom = data.from;
     this.gen += 1;
     this.lastStatus = null;
+    this.collection = this.registry.get('collection') as CollectionState;
+    this.drops = null;
+    this.markers.clear();
+    this.picking.clear();
+    this.windowTimer = null;
+    this.peerEmotes.clear();
     this.registry.set('currentRoom', this.room.id);
     this.registry.set('spawnName', data.spawn);
   }
@@ -122,7 +157,7 @@ export class RoomScene extends Phaser.Scene {
     }
 
     const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
-    this.me = new Owl(this, this.playerId, this.look, spawn);
+    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
 
     this.setupCamera();
     this.setupInput();
@@ -131,7 +166,8 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setCount(1);
     this.hud.showShop(false);
     this.hud.showVote(false);
-    this.hud.onLookChange((look) => this.changeLook(look));
+    // The colour picker changes colours only: today's pledge and the worn collectibles stay.
+    this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent }));
     this.hud.onShop(() => this.openShop());
     this.hud.onVote(() => void this.vote());
 
@@ -145,7 +181,10 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built) return;
     const now = Date.now();
     const finished = this.me.tick(now);
-    if (!this.leaving) this.checkDoors(finished);
+    if (!this.leaving) {
+      this.checkDoors(finished);
+      this.checkDrops(now);
+    }
     for (const owl of this.peers.values()) owl.tick(now);
   }
 
@@ -179,12 +218,18 @@ export class RoomScene extends Phaser.Scene {
         this.hud.setParkCount(Object.values(rooms).reduce((a, b) => a + b, 0));
       },
       onFull: (roomId) => live() && void this.roomFull(roomId),
+      onPeerEmote: (id, e) => {
+        if (!live()) return;
+        this.peerEmotes.set(id, e);
+        this.peers.get(id)?.playEmote(e);
+      },
     });
     if (!live() || !this.scene.isActive()) {
       await conn.leave();
       return;
     }
     this.conn = conn;
+    void this.refreshDrops();
   }
 
   private onStatus(s: ConnectionStatus): void {
@@ -207,7 +252,7 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     let owl = this.peers.get(s.id);
     if (!owl) {
-      owl = new Owl(this, s.id, s.look, s.pos);
+      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio));
       owl.setAlpha(0);
       this.tweens.add({ targets: owl, alpha: 1, duration: 400 });
       this.peers.set(s.id, owl);
@@ -292,9 +337,12 @@ export class RoomScene extends Phaser.Scene {
     room: string;
     pos: Vec2;
     walking: boolean;
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook }>;
+    look: OwlLook;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null }>;
     connected: boolean;
     doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+    /** This window's unclaimed drops in every room (only this visitor sees them). */
+    drops: DropView[];
   } | null {
     if (!this.built) return null;
     return {
@@ -302,9 +350,136 @@ export class RoomScene extends Phaser.Scene {
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: d.to?.room })),
       pos: { ...this.me.pos },
       walking: this.me.walking,
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look })),
+      look: this.look,
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
       connected: this.conn !== null,
+      drops: this.drops?.drops ?? [],
     };
+  }
+
+  // ---------- collectibles ----------
+
+  /** Ask for this window's drops, show the ones in this room, and come back when the window turns. */
+  private async refreshDrops(): Promise<void> {
+    const gen = this.gen;
+    let info: DropsInfo;
+    try {
+      info = await this.collection.service.drops(this.conn?.link ?? null);
+    } catch {
+      if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
+      if (!this.drops) this.hud.setFinds(null);
+      this.windowTimer?.remove();
+      this.windowTimer = this.time.delayedCall(DROPS_RETRY_MS, () => void this.refreshDrops());
+      return;
+    }
+    if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
+    this.drops = info;
+    for (const [n, m] of this.markers) {
+      if (!info.drops.some((d) => d.n === n && d.room === this.room.id)) {
+        m.destroy();
+        this.markers.delete(n);
+      }
+    }
+    for (const d of info.drops) {
+      if (d.room === this.room.id && !this.markers.has(d.n)) this.markers.set(d.n, new DropMarker(this, d));
+    }
+    this.updateFinds();
+    this.windowTimer?.remove();
+    this.windowTimer = info.next ? this.time.delayedCall(Math.min(MAX_TIMER_MS, Math.max(1000, info.next - Date.now() + 750)), () => void this.refreshDrops()) : null;
+  }
+
+  private updateFinds(): void {
+    const info = this.drops;
+    if (!info || !info.window) return this.hud.setFinds(null);
+    const tz = this.collection.inv?.tz;
+    const nextAt = tz ? localClock(info.next, tz) : new Date(info.next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    this.hud.setFinds({ left: info.drops.length, half: info.window.endsWith('AM') ? 'AM' : 'PM', nextAt });
+  }
+
+  /** Standing on a drop picks it up (the room server double-checks where the owl is). */
+  private checkDrops(now: number): void {
+    for (const [n, m] of this.markers) {
+      const retryAt = this.picking.get(n);
+      if (retryAt !== undefined && now < retryAt) continue;
+      const d = distance(this.me.pos, m);
+      if (d > PICKUP_CLIENT_RADIUS || (this.me.walking && d > PICKUP_CLIENT_RADIUS / 2)) continue;
+      void this.pickup(n);
+    }
+  }
+
+  private async pickup(n: number): Promise<void> {
+    const gen = this.gen;
+    this.picking.set(n, Number.POSITIVE_INFINITY);
+    const res = await this.collection.service.pickup(n, this.room.id, { ...this.me.pos }, this.conn?.link ?? null);
+    if (gen !== this.gen) return;
+    if (!res.ok) {
+      if (res.reason === 'gone') {
+        this.markers.get(n)?.destroy();
+        this.markers.delete(n);
+        this.picking.delete(n);
+        if (this.drops) this.drops = { ...this.drops, drops: this.drops.drops.filter((d) => d.n !== n) };
+        this.updateFinds();
+      } else {
+        this.picking.set(n, Date.now() + PICKUP_RETRY_MS);
+      }
+      return;
+    }
+    this.picking.delete(n);
+    this.markers.get(n)?.collect();
+    this.markers.delete(n);
+    if (this.drops) this.drops = { ...this.drops, drops: this.drops.drops.filter((d) => d.n !== n), feathers: res.feathers };
+    this.updateFinds();
+    this.collection.found(res.variant, res.feathers);
+    const v = parseVariant(res.variant);
+    const colour = v ? RARITY_COLOURS[v.rarity] : undefined;
+    const rarity = v ? ` (${RARITY_NAMES[v.rarity]})` : '';
+    if (res.dup) this.hud.toast(`Found ${variantName(res.variant)} again: +${duplicatePayout(res.variant)} feathers (${res.feathers} in all)`, 3400, colour);
+    else this.hud.toast(`Found: ${variantName(res.variant)}${rarity}`, 3600, colour);
+  }
+
+  /** Play an owned emote here and for everyone in the room. */
+  emote(e: string): boolean {
+    if (!this.built || !EMOTE_IDS.includes(e) || !this.collection.owns(e)) return false;
+    this.me.playEmote(e);
+    this.conn?.send({ t: 'emote', id: this.playerId, e });
+    return true;
+  }
+
+  /** What the owl wears now. */
+  wear(): Wear | undefined {
+    return this.look.wear;
+  }
+
+  /** Put an owned variant on (or take a slot off) and tell the room. */
+  equip(slot: EquipSlot, variant: string | null): boolean {
+    if (!this.built) return false;
+    if (variant !== null) {
+      const v = parseVariant(variant);
+      if (!v || !this.collection.owns(variant)) return false;
+    }
+    const wear: Wear = { ...(this.look.wear ?? {}) };
+    if (variant === null) delete wear[slot];
+    else wear[slot] = variant;
+    const { wear: _old, ...rest } = this.look;
+    this.changeLook(Object.keys(wear).length ? { ...rest, wear } : rest);
+    return true;
+  }
+
+  /** Take off anything the collection does not hold (a look saved on this device by another collection). */
+  pruneWear(): void {
+    if (!this.built || !this.look.wear || !this.collection.inv) return;
+    const kept = filterOwnedWear(this.look.wear, new Set(this.collection.inv.owned));
+    if (JSON.stringify(kept ?? null) === JSON.stringify(this.look.wear)) return;
+    const { wear: _old, ...rest } = this.look;
+    this.changeLook(kept ? { ...rest, wear: kept } : rest);
+  }
+
+  /** Test hook: walk to drop `n` if it is in this room. */
+  walkToDrop(n: number): boolean {
+    const m = this.markers.get(n);
+    if (!m) return false;
+    this.walkTo({ x: m.x, y: m.y });
+    return true;
   }
 
   /** Public for tests and future features: walk the local owl to a room point. */
@@ -412,6 +587,10 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async teardown(): Promise<void> {
+    this.windowTimer?.remove();
+    this.windowTimer = null;
+    for (const m of this.markers.values()) m.destroy();
+    this.markers.clear();
     const conn = this.conn;
     this.conn = null;
     if (conn) await conn.leave();

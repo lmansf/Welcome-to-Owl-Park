@@ -6,3 +6,5 @@ export * from './look';
 export * from './validate';
 export * from './resolveTarget';
 export * from './edge';
+export * from './collectibles';
+export * from './book';

@@ -47,6 +47,7 @@ interface Visitor {
   refilledAt: number;
   strikes: number[];
   frames: number[];
+  emotedAt: number;
 }
 
 export interface RoomOptions {
@@ -72,6 +73,8 @@ export const LIMITS = {
   scatterShrink: 20,
   resumeRadius: 240,
   leaverMemoryMs: 120_000,
+  /** One emote per visitor this often; faster ones are dropped quietly. */
+  emoteEveryMs: 1_500,
 } as const;
 
 export class Room {
@@ -210,7 +213,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [] };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -233,7 +236,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [] });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -292,13 +295,51 @@ export class Room {
     this.send(v, { ...frame, seq: msg.seq });
   }
 
-  look(id: string, look: OwlLook): void {
+  /**
+   * A new look for a visitor. `admitted` is for looks the adapter applies later (after checking
+   * collectible ownership): the frame that asked for it was already counted.
+   */
+  look(id: string, look: OwlLook, admitted = false): void {
     const v = this.visitors.get(id);
     if (!v) return;
-    if (!this.admitFrame(v)) return void v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
+    if (!admitted && !this.admitFrame(v)) return void v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
     v.st.look = look;
     v.peer.persist?.(v.st);
     this.broadcast({ t: 'look', id, look }, id);
+  }
+
+  /** The visitor's current look (what everyone else sees), if present. */
+  lookOf(id: string): OwlLook | null {
+    return this.visitors.get(id)?.st.look ?? null;
+  }
+
+  /** Where a visitor stands right now on the server clock (mid-walk positions included). */
+  positionOf(id: string): Vec2 | null {
+    const v = this.visitors.get(id);
+    return v ? this.currentPos(v) : null;
+  }
+
+  /**
+   * Count a frame the adapter handles itself (drops, pickup, emote) against the flood limit.
+   * Returns false, and closes the socket, when the visitor is sending too much.
+   */
+  admit(id: string): boolean {
+    const v = this.visitors.get(id);
+    if (!v) return false;
+    if (this.admitFrame(v)) return true;
+    v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
+    return false;
+  }
+
+  /** Play an emote for everyone else in the room (ownership is the adapter's check). Rate limited. */
+  emote(id: string, e: string): boolean {
+    const v = this.visitors.get(id);
+    if (!v) return false;
+    const now = this.now();
+    if (now - v.emotedAt < LIMITS.emoteEveryMs) return false;
+    v.emotedAt = now;
+    this.broadcast({ t: 'emote', id, e }, id);
+    return true;
   }
 
   /** Remove a visitor (graceful bye, socket close, or idle reap). A stale session's close is ignored. */

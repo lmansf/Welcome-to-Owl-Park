@@ -15,12 +15,15 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "RoomObject" },
-      { "name": "VOTES", "class_name": "VoteLedger" }
+      { "name": "VOTES", "class_name": "VoteLedger" },
+      // Every collector's collectibles (finds, feathers, home time zone): one object for the park.
+      { "name": "COLLECTIONS", "class_name": "Collections" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomObject"] },
-    { "tag": "v2", "new_sqlite_classes": ["VoteLedger"] }
+    { "tag": "v2", "new_sqlite_classes": ["VoteLedger"] },
+    { "tag": "v3", "new_sqlite_classes": ["Collections"] }
   ],
   // Month close for the Realm Vote: 05:05 UTC on the 1st (just after midnight in the park's time zone).
   "triggers": { "crons": ["5 5 1 * *"] },

@@ -1,12 +1,27 @@
 import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, type OwlLook } from '@owl-park/shared';
+import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
+import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
+
+/** What the finds counter shows: drops left in this half-day window and when new ones arrive. */
+export interface FindsInfo {
+  left: number;
+  half: 'AM' | 'PM';
+  /** "12:00": when the next window opens, in the collector's home time zone. */
+  nextAt: string;
+}
 
 export interface Hud {
   setCount(n: number): void;
   /** Owls in the whole park, when known (authoritative transports). */
   setParkCount(n: number | null): void;
   setStatus(s: ConnectionStatus, kind: 'local' | 'supabase' | 'edge'): void;
-  toast(message: string, ms?: number): void;
+  /** A short message; `accent` colours its edge (rarity colours for finds). */
+  toast(message: string, ms?: number, accent?: string): void;
+  /** The finds counter; null hides it (no collection, or offline). */
+  setFinds(info: FindsInfo | null): void;
+  /** Wire the collection panel and the emote tray to the visitor's collection. */
+  attachCollection(state: CollectionState, actions: CollectionActions): CollectionPanel;
   showShop(show: boolean): void;
   /** Show the Realm Vote button (standing at a realm's idol). */
   showVote(show: boolean): void;
@@ -25,7 +40,7 @@ const CSS = `
 #hud .brand i{width:22px;height:22px;border-radius:50%;background:#C9A227;display:inline-block;position:relative}
 #hud .brand i:before,#hud .brand i:after{content:"";position:absolute;top:6px;width:7px;height:7px;border-radius:50%;background:#F6F1E3;box-shadow:inset 0 0 0 2px #0C1E36}
 #hud .brand i:before{left:3px}#hud .brand i:after{right:3px}
-#hud .pill{pointer-events:auto;background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:999px;padding:8px 14px;font-size:14px;backdrop-filter:blur(6px);display:flex;align-items:center;gap:8px;white-space:nowrap}
+#hud .pill,#hud .finds{pointer-events:auto;background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:999px;padding:8px 14px;font-size:14px;backdrop-filter:blur(6px);display:flex;align-items:center;gap:8px;white-space:nowrap}
 #hud .dot{width:8px;height:8px;border-radius:50%;background:#C9A227;box-shadow:0 0 8px #C9A227}
 #hud .dot.offline{background:#999;box-shadow:none}
 #hud .dot.connecting{background:#F6F1E3;opacity:.6}
@@ -47,6 +62,13 @@ const CSS = `
 #hud .shop,#hud .vote{display:none}
 #hud .shop.show,#hud .vote.show{display:inline-block;animation:hud-in .25s ease-out}
 #hud .actions{display:flex;gap:8px;align-items:flex-end}
+#hud .left{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+#hud .finds{display:none;font-size:13px}
+#hud .finds.show{display:flex}
+#hud .finds i{width:10px;height:10px;display:inline-block;background:#FFD36A;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);box-shadow:0 0 8px #FFD36A}
+#hud .toast.accent{border-left:6px solid var(--accent)}
+#hud .emote-wrap{position:relative}
+@media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .finds{order:3}}
 `;
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
@@ -59,18 +81,23 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   root.innerHTML = `
     <div class="bar">
       <div class="brand" aria-label="Owl Park"><i aria-hidden="true"></i>Owl Park</div>
+      <div class="finds" role="status" aria-live="polite" data-finds><i aria-hidden="true"></i><span data-finds-text></span></div>
       <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
     </div>
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom">
-      <div class="owl">
-        <div class="panel" data-panel aria-label="Your owl">
-          <h2>Your owl</h2>
-          <div class="row"><span>Feathers</span><div class="swatches" data-sw="body"></div></div>
-          <div class="row"><span>Belly</span><div class="swatches" data-sw="belly"></div></div>
-          <div class="row"><span>Tufts and feet</span><div class="swatches" data-sw="accent"></div></div>
+      <div class="left">
+        <div class="owl">
+          <div class="panel" data-panel aria-label="Your owl">
+            <h2>Your owl</h2>
+            <div class="row"><span>Feathers</span><div class="swatches" data-sw="body"></div></div>
+            <div class="row"><span>Belly</span><div class="swatches" data-sw="belly"></div></div>
+            <div class="row"><span>Tufts and feet</span><div class="swatches" data-sw="accent"></div></div>
+          </div>
+          <button class="ghost" data-customize aria-expanded="false">Your owl</button>
         </div>
-        <button class="ghost" data-customize aria-expanded="false">Your owl</button>
+        <button class="ghost" data-collection-btn aria-expanded="false">Collection</button>
+        <div class="emote-wrap" data-emote-wrap><button class="ghost" data-emotes-btn aria-expanded="false">Emotes</button></div>
       </div>
       <div class="actions">
         <button class="vote" data-vote>Vote for this realm</button>
@@ -87,6 +114,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const customize = $<HTMLButtonElement>('[data-customize]');
   const shop = $<HTMLButtonElement>('[data-shop]');
   const vote = $<HTMLButtonElement>('[data-vote]');
+  const finds = $<HTMLElement>('[data-finds]');
+  const findsText = $<HTMLElement>('[data-finds-text]');
+  const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
+  const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
+  const emoteWrap = $<HTMLElement>('[data-emote-wrap]');
+  let collectionPanel: CollectionPanel | null = null;
 
   let look: OwlLook = { ...initialLook };
   let lookCb: ((l: OwlLook) => void) | null = null;
@@ -126,10 +159,36 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   };
   renderSwatches();
 
+  const closeEmotes = () => {
+    emoteWrap.querySelector('.emotes')?.classList.remove('open');
+    emotesBtn.setAttribute('aria-expanded', 'false');
+  };
   customize.addEventListener('click', () => {
     const open = !panel.classList.contains('open');
     panel.classList.toggle('open', open);
     customize.setAttribute('aria-expanded', String(open));
+    if (open) {
+      collectionPanel?.close();
+      closeEmotes();
+    }
+  });
+  collectionBtn.addEventListener('click', () => {
+    if (!collectionPanel) return;
+    collectionPanel.toggle();
+    collectionBtn.setAttribute('aria-expanded', String(collectionPanel.isOpen()));
+    panel.classList.remove('open');
+    closeEmotes();
+  });
+  emotesBtn.addEventListener('click', () => {
+    const tray = emoteWrap.querySelector('.emotes');
+    if (!tray) return;
+    const open = !tray.classList.contains('open');
+    tray.classList.toggle('open', open);
+    emotesBtn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      collectionPanel?.close();
+      panel.classList.remove('open');
+    }
   });
   shop.addEventListener('click', () => shopCb?.());
   vote.addEventListener('click', () => voteCb?.());
@@ -148,12 +207,23 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       dot.title = s === 'online' ? (kind === 'local' ? 'Connected (this device only)' : 'Connected') : s === 'connecting' ? 'Connecting…' : 'Offline';
       dot.dataset['status'] = s;
     },
-    toast(message, ms = 2600) {
+    toast(message, ms = 2600, accent) {
       const el = document.createElement('div');
-      el.className = 'toast';
+      el.className = accent ? 'toast accent' : 'toast';
+      if (accent) el.style.setProperty('--accent', accent);
       el.textContent = message;
       toasts.appendChild(el);
       setTimeout(() => el.remove(), ms);
+    },
+    setFinds(info) {
+      finds.classList.toggle('show', info !== null);
+      if (!info) return;
+      const when = info.half === 'AM' ? 'this morning' : 'this afternoon';
+      findsText.textContent = info.left > 0 ? `${info.left} ${info.left === 1 ? 'find' : 'finds'} left ${when} · new finds at ${info.nextAt}` : `All found ${when} · new finds at ${info.nextAt}`;
+    },
+    attachCollection(state, actions) {
+      collectionPanel = createCollectionPanel(root, emoteWrap, state, actions);
+      return collectionPanel;
     },
     showShop(show) {
       shop.classList.toggle('show', show);

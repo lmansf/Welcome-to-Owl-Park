@@ -1,0 +1,603 @@
+/**
+ * Collectibles: the catalogue, colourways, the half-day find windows, the per-window drops, the
+ * feather economy and the `wear` a look may carry. Pure and deterministic, so the room server,
+ * the local (zero-backend) mode and the tests all run exactly the same rules.
+ *
+ * Every name here is public-safe: these strings are shown to visitors.
+ */
+import type { Vec2 } from './protocol';
+
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic';
+export type ItemKind = 'wear' | 'pet' | 'fx' | 'emote';
+export type WearSlot = 'head' | 'face' | 'neck';
+/** Where an owned variant is worn. Emotes are played, not worn. */
+export type EquipSlot = WearSlot | 'pet' | 'fx';
+
+export interface ItemDef {
+  id: string;
+  kind: ItemKind;
+  /** Wearables only. */
+  slot?: WearSlot;
+  name: string;
+  rarity: Rarity;
+  /** Art key for wearables and pets: `item-<id>` (see apps/park/src/game/items.ts). */
+  art?: string;
+}
+
+export interface Colourway {
+  n: number;
+  name: string;
+  /** Wearables and pets: hue rotation in degrees applied to the item's art (0 is the original). */
+  hue?: number;
+  /** Effects: the tint colour. */
+  tint?: string;
+}
+
+export interface Variant {
+  /** `<itemId>~<n>`, or just `<itemId>` for emotes. */
+  id: string;
+  item: ItemDef;
+  colour: Colourway | null;
+  rarity: Rarity;
+}
+
+// ---------- defaults the owner may change (named constants) ----------
+
+/** Duplicate finds pay out feathers; feathers craft a chosen variant. */
+export const DUPLICATE_FEATHERS: Record<Rarity, number> = { common: 5, uncommon: 10, rare: 25, epic: 60 };
+export const CRAFT_COST: Record<Rarity, number> = { common: 50, uncommon: 100, rare: 250, epic: 600 };
+/** How often a drop's variant comes from each rarity class (percent). */
+export const RARITY_WEIGHTS: Record<Rarity, number> = { common: 60, uncommon: 28, rare: 10, epic: 2 };
+/** Within a rarity class, a variant the collector does not own yet is this many times as likely. */
+export const UNOWNED_BOOST = 4;
+/** Drops per half-day window: two or three, decided by the window's seed. */
+export const DROPS_MIN = 2;
+export const DROPS_MAX = 3;
+/** The server accepts a pickup when the owl stands this close to the drop (room pixels). */
+export const PICKUP_RADIUS = 56;
+/** The client asks for a pickup a little closer than the server's radius (latency headroom). */
+export const PICKUP_CLIENT_RADIUS = 40;
+/** A collector's home time zone may change once per this many days. */
+export const TZ_CHANGE_COOLDOWN_DAYS = 30;
+/** Every new collector starts with these. */
+export const STARTER_PACK = ['hoot', 'flap', 'sparkle~0'] as const;
+export const DEFAULT_TIME_ZONE = 'UTC';
+
+export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic'];
+export const RARITY_NAMES: Record<Rarity, string> = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic' };
+/** Display colours for rarity (toasts, card borders). */
+export const RARITY_COLOURS: Record<Rarity, string> = { common: '#F6F1E3', uncommon: '#7BC950', rare: '#4FA3FF', epic: '#C8A2FF' };
+
+// ---------- colourways ----------
+
+const WEAR_COLOUR_NAMES = ['Original', 'Dawn', 'Noon', 'Dusk', 'Midnight', 'Starlight', 'Moonrise', 'Aurora', 'Comet', 'Eclipse'];
+const PET_COLOUR_NAMES = ['Original', 'Dawn', 'Noon', 'Dusk', 'Midnight', 'Starlight', 'Aurora', 'Eclipse'];
+
+/** Wearables: ten colourways, hue rotations 0, 36, ... 324 degrees. */
+export const WEAR_COLOURWAYS: readonly Colourway[] = WEAR_COLOUR_NAMES.map((name, n) => ({ n, name, hue: n * 36 }));
+/** Pets: eight colourways, hue rotations 0, 45, ... 315 degrees. */
+export const PET_COLOURWAYS: readonly Colourway[] = PET_COLOUR_NAMES.map((name, n) => ({ n, name, hue: n * 45 }));
+/** Effects: sixteen tint colours. */
+export const FX_COLOURWAYS: readonly Colourway[] = (
+  [
+    ['Gold', '#C9A227'],
+    ['Cream', '#F6F1E3'],
+    ['Ember', '#FF7A1A'],
+    ['Rose', '#FF2AA1'],
+    ['Cyan', '#00E5FF'],
+    ['Violet', '#6E3AFF'],
+    ['Moss', '#7BC950'],
+    ['Frost', '#BFE9FF'],
+    ['Ruby', '#E0115F'],
+    ['Sun', '#FFD36A'],
+    ['Sky', '#4FA3FF'],
+    ['Lilac', '#C8A2FF'],
+    ['Mint', '#6EF2C2'],
+    ['Coral', '#FF8C69'],
+    ['Silver', '#C7CEDA'],
+    ['White', '#FFFFFF'],
+  ] as const
+).map(([name, tint], n) => ({ n, name, tint }));
+
+export function colourwaysFor(kind: ItemKind): readonly Colourway[] {
+  switch (kind) {
+    case 'wear':
+      return WEAR_COLOURWAYS;
+    case 'pet':
+      return PET_COLOURWAYS;
+    case 'fx':
+      return FX_COLOURWAYS;
+    case 'emote':
+      return [];
+  }
+}
+
+// ---------- the catalogue ----------
+
+const C: Rarity = 'common';
+const U: Rarity = 'uncommon';
+const R: Rarity = 'rare';
+const E: Rarity = 'epic';
+
+const wear = (slot: WearSlot, list: Array<[string, string, Rarity]>): ItemDef[] => list.map(([id, name, rarity]) => ({ id, kind: 'wear', slot, name, rarity, art: `item-${id}` }));
+
+export const CATALOGUE: readonly ItemDef[] = [
+  ...wear('head', [
+    ['witch-hat', 'Witch Hat', U],
+    ['top-hat', 'Top Hat', U],
+    ['wizard-hat', 'Wizard Hat', R],
+    ['beanie', 'Beanie', C],
+    ['crown', 'Crown', E],
+    ['flower-crown', 'Flower Crown', U],
+    ['leaf-crown', 'Leaf Crown', C],
+    ['propeller-cap', 'Propeller Cap', U],
+    ['chef-hat', "Chef's Hat", C],
+    ['party-hat', 'Party Hat', C],
+    ['beret', 'Beret', C],
+    ['cowboy-hat', 'Cowboy Hat', U],
+    ['tricorn', 'Tricorn', R],
+    ['horned-helmet', 'Horned Helmet', R],
+    ['halo', 'Halo', E],
+    ['mushroom-cap', 'Mushroom Cap', U],
+    ['acorn-cap', 'Acorn Cap', C],
+    ['ribbon-bow', 'Ribbon Bow', C],
+    ['bobble-hat', 'Bobble Hat', C],
+    ['pith-helmet', "Explorer's Helmet", U],
+    ['jester-hat', 'Jester Hat', R],
+    ['laurel-wreath', 'Laurel Wreath', R],
+    ['sailor-cap', 'Sailor Cap', C],
+    ['mortarboard', 'Mortarboard', U],
+    ['bucket-hat', 'Bucket Hat', C],
+    ['tiara', 'Tiara', R],
+    ['pumpkin-hat', 'Pumpkin Hat', U],
+    ['snowflake-crown', 'Snowflake Crown', R],
+    ['candle-crown', 'Candle Crown', E],
+    ['moon-circlet', 'Moon Circlet', E],
+  ]),
+  ...wear('face', [
+    ['round-glasses', 'Round Glasses', C],
+    ['star-shades', 'Star Shades', U],
+    ['heart-glasses', 'Heart Glasses', U],
+    ['monocle', 'Monocle', R],
+    ['aviator-goggles', 'Aviator Goggles', U],
+    ['masquerade-mask', 'Masquerade Mask', R],
+    ['cat-eye-glasses', 'Cat-Eye Glasses', C],
+    ['brass-goggles', 'Brass Goggles', R],
+    ['pixel-shades', 'Pixel Shades', E],
+    ['half-moon-specs', 'Half-Moon Specs', C],
+  ]),
+  ...wear('neck', [
+    ['knit-scarf', 'Knit Scarf', C],
+    ['bow-tie', 'Bow Tie', C],
+    ['bandana', 'Bandana', C],
+    ['moon-pendant', 'Moon Pendant', R],
+    ['flower-lei', 'Flower Lei', U],
+    ['bell-collar', 'Bell Collar', U],
+    ['cape', 'Cape', R],
+    ['ruffle-collar', 'Ruffle Collar', U],
+    ['pearl-necklace', 'Pearl Necklace', R],
+    ['medal-ribbon', 'Medal Ribbon', E],
+  ]),
+  ...(
+    [
+      ['mouse', 'Mouse', C],
+      ['snake', 'Snake', U],
+      ['grasshopper', 'Grasshopper', C],
+      ['ladybug', 'Ladybug', C],
+      ['beetle', 'Beetle', C],
+      ['snail', 'Snail', C],
+      ['moth', 'Moth', U],
+      ['firefly', 'Firefly', U],
+      ['frog', 'Frog', U],
+      ['bat', 'Bat', R],
+      ['hedgehog', 'Hedgehog', R],
+      ['caterpillar', 'Caterpillar', C],
+      ['cricket', 'Cricket', C],
+      ['butterfly', 'Butterfly', U],
+      ['spider', 'Spider', U],
+      ['dragonfly', 'Dragonfly', R],
+      ['salamander', 'Salamander', R],
+      ['mole', 'Mole', R],
+      ['tiny-dragon', 'Tiny Dragon', E],
+      ['star-beetle', 'Star Beetle', E],
+    ] as Array<[string, string, Rarity]>
+  ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'pet', name, rarity, art: `item-${id}` })),
+  ...(
+    [
+      ['aura', 'Aura', C],
+      ['sparkle', 'Sparkle', C],
+      ['eye-flames', 'Eye Flames', R],
+      ['ember-trail', 'Ember Trail', U],
+      ['frost-breath', 'Frost Breath', U],
+      ['snowfall', 'Snowfall', U],
+      ['fireflies', 'Fireflies', U],
+      ['hearts', 'Hearts', C],
+      ['music-notes', 'Music Notes', C],
+      ['star-halo', 'Star Halo', R],
+      ['moon-halo', 'Moon Halo', R],
+      ['leaf-swirl', 'Leaf Swirl', C],
+      ['petal-swirl', 'Petal Swirl', C],
+      ['bubbles', 'Bubbles', C],
+      ['smoke-wisps', 'Smoke Wisps', U],
+      ['rainbow-trail', 'Rainbow Trail', R],
+      ['lightning', 'Lightning', E],
+      ['neon-outline', 'Neon Outline', R],
+      ['shadow-aura', 'Shadow Aura', U],
+      ['sunbeam', 'Sunbeam', R],
+      ['confetti', 'Confetti', U],
+      ['comet-tail', 'Comet Tail', E],
+      ['rune-ring', 'Rune Ring', E],
+      ['glitch', 'Glitch', E],
+    ] as Array<[string, string, Rarity]>
+  ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'fx', name, rarity })),
+  ...(
+    [
+      ['hoot', 'Hoot', C],
+      ['flap', 'Wing Flap', C],
+      ['spin', 'Spin', U],
+      ['hop', 'Hop', C],
+      ['tilt', 'Head Tilt', C],
+      ['bow', 'Bow', U],
+      ['wave', 'Wave', C],
+      ['dance', 'Dance', U],
+      ['sleep', 'Sleep', U],
+      ['heart', 'Heart', C],
+      ['surprise', 'Surprise', U],
+      ['laugh', 'Laugh', C],
+      ['shiver', 'Shiver', U],
+      ['puff', 'Puff Up', C],
+      ['wink', 'Wink', U],
+      ['nod', 'Nod', C],
+      ['headshake', 'Head Shake', C],
+      ['twirl', 'Twirl', E],
+      ['flip', 'Backflip', E],
+      ['stomp', 'Stomp', U],
+      ['preen', 'Preen', R],
+      ['stretch', 'Stretch', U],
+      ['sneeze', 'Sneeze', R],
+      ['peek', 'Peek-a-boo', R],
+    ] as Array<[string, string, Rarity]>
+  ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'emote', name, rarity })),
+];
+
+export const ITEMS: Readonly<Record<string, ItemDef>> = Object.freeze(Object.fromEntries(CATALOGUE.map((i) => [i.id, i])));
+
+export const EMOTE_IDS: readonly string[] = CATALOGUE.filter((i) => i.kind === 'emote').map((i) => i.id);
+
+/** The variant id for an item and colourway number. Emotes have no colourways. */
+export function variantId(itemId: string, n = 0): string {
+  const item = ITEMS[itemId];
+  return item && item.kind === 'emote' ? itemId : `${itemId}~${n}`;
+}
+
+const VARIANT_RE = /^([a-z][a-z0-9-]{0,31})(?:~(\d{1,2}))?$/;
+
+/** Parse a variant id; null for anything that is not in the catalogue. */
+export function parseVariant(id: unknown): Variant | null {
+  if (typeof id !== 'string' || id.length > 40) return null;
+  const m = VARIANT_RE.exec(id);
+  if (!m) return null;
+  const item = Object.hasOwn(ITEMS, m[1]!) ? ITEMS[m[1]!] : undefined;
+  if (!item) return null;
+  if (item.kind === 'emote') return m[2] === undefined ? { id, item, colour: null, rarity: item.rarity } : null;
+  if (m[2] === undefined) return null;
+  const n = Number(m[2]);
+  if (String(n) !== m[2]) return null; // no leading zeros: one spelling per variant
+  const colour = colourwaysFor(item.kind)[n];
+  if (!colour) return null;
+  return { id, item, colour, rarity: item.rarity };
+}
+
+export function isVariantId(id: unknown): id is string {
+  return parseVariant(id) !== null;
+}
+
+/** Where a variant is worn, or null for emotes. */
+export function equipSlotOf(v: Variant): EquipSlot | null {
+  switch (v.item.kind) {
+    case 'wear':
+      return v.item.slot ?? null;
+    case 'pet':
+      return 'pet';
+    case 'fx':
+      return 'fx';
+    case 'emote':
+      return null;
+  }
+}
+
+/** A display name such as "Witch Hat · Dusk" (the original colourway has no suffix). */
+export function variantName(id: string): string {
+  const v = parseVariant(id);
+  if (!v) return id;
+  if (!v.colour || (v.item.kind !== 'fx' && v.colour.n === 0)) return v.item.name;
+  return `${v.item.name} · ${v.colour.name}`;
+}
+
+let allCache: string[] | null = null;
+/** Every collectible variant in catalogue order (1068 at launch). */
+export function allVariants(): readonly string[] {
+  if (!allCache) {
+    allCache = [];
+    for (const item of CATALOGUE) {
+      if (item.kind === 'emote') allCache.push(item.id);
+      else for (const c of colourwaysFor(item.kind)) allCache.push(`${item.id}~${c.n}`);
+    }
+  }
+  return allCache;
+}
+
+let byRarityCache: Record<Rarity, string[]> | null = null;
+function variantsByRarity(): Record<Rarity, string[]> {
+  if (!byRarityCache) {
+    byRarityCache = { common: [], uncommon: [], rare: [], epic: [] };
+    for (const id of allVariants()) byRarityCache[parseVariant(id)!.rarity].push(id);
+  }
+  return byRarityCache;
+}
+
+// ---------- wear on a look ----------
+
+/** What an owl wears: one owned variant per slot. Sent on the wire as part of the look. */
+export interface Wear {
+  head?: string;
+  face?: string;
+  neck?: string;
+  pet?: string;
+  fx?: string;
+}
+
+export const WEAR_SLOTS: readonly EquipSlot[] = ['head', 'face', 'neck', 'pet', 'fx'];
+
+function slotFits(slot: string, id: unknown): boolean {
+  const v = parseVariant(id);
+  return !!v && equipSlotOf(v) === slot;
+}
+
+/** Strict check: a plain object with known slots only, each holding a catalogue variant for that slot. */
+export function isWear(v: unknown): v is Wear {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  for (const [k, id] of Object.entries(v as Record<string, unknown>)) {
+    if (!(WEAR_SLOTS as readonly string[]).includes(k) || !slotFits(k, id)) return false;
+  }
+  return true;
+}
+
+/** Keep the valid slots of untrusted input; undefined when nothing valid remains. */
+export function sanitizeWear(v: unknown): Wear | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const out: Wear = {};
+  for (const slot of WEAR_SLOTS) if (slotFits(slot, o[slot])) out[slot] = o[slot] as string;
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** Only what the collector owns; undefined when nothing remains. */
+export function filterOwnedWear(wear: Wear | undefined, owned: ReadonlySet<string>): Wear | undefined {
+  if (!wear) return undefined;
+  const out: Wear = {};
+  for (const slot of WEAR_SLOTS) {
+    const id = wear[slot];
+    if (id !== undefined && owned.has(id)) out[slot] = id;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The variants a wear uses (for loading their art or checking ownership). */
+export function wearVariants(wear: Wear | undefined): string[] {
+  if (!wear) return [];
+  const out: string[] = [];
+  for (const slot of WEAR_SLOTS) {
+    const id = wear[slot];
+    if (id !== undefined) out.push(id);
+  }
+  return out;
+}
+
+// ---------- time zones and half-day windows ----------
+
+const TZ_SHAPE = /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/;
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatter(tz: string): Intl.DateTimeFormat {
+  let f = formatters.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    if (formatters.size > 256) formatters.clear();
+    formatters.set(tz, f);
+  }
+  return f;
+}
+
+/** An IANA time zone this runtime knows (e.g. "America/New_York", "UTC"). */
+export function isTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== 'string' || !TZ_SHAPE.test(tz)) return false;
+  try {
+    formatter(tz);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The visitor's zone if valid, else UTC. */
+export function normalizeTimeZone(tz: unknown): string {
+  return isTimeZone(tz) ? tz : DEFAULT_TIME_ZONE;
+}
+
+interface LocalParts {
+  y: string;
+  m: string;
+  d: string;
+  h: number;
+}
+
+function localParts(at: number, tz: string): LocalParts {
+  const parts = formatter(tz).formatToParts(new Date(at));
+  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '';
+  return { y: get('year'), m: get('month'), d: get('day'), h: Number(get('hour')) % 24 };
+}
+
+/** The find window at a moment: `YYYY-MM-DD:AM` (local 00:00-11:59) or `:PM` (12:00-23:59). */
+export function windowKeyAt(at: number, tz: string): string {
+  const p = localParts(at, tz);
+  return `${p.y}-${p.m}-${p.d}:${p.h < 12 ? 'AM' : 'PM'}`;
+}
+
+const QUARTER_HOUR = 15 * 60 * 1000;
+
+/**
+ * The first instant after `at` that belongs to a different window: the next local noon or
+ * midnight, wherever daylight saving puts it. Zone offsets are whole quarter hours, so the
+ * search walks quarter hours and then narrows to the exact millisecond.
+ */
+export function nextWindowAt(at: number, tz: string): number {
+  const key = windowKeyAt(at, tz);
+  let lo = at;
+  let hi = Math.floor(at / QUARTER_HOUR) * QUARTER_HOUR + QUARTER_HOUR;
+  for (let i = 0; i < 4 * 15 && windowKeyAt(hi, tz) === key; i++) {
+    lo = hi;
+    hi += QUARTER_HOUR;
+  }
+  if (windowKeyAt(hi, tz) === key) return hi; // no change within 15 h: should not happen; never loop forever
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (windowKeyAt(mid, tz) === key) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+export interface WindowInfo {
+  key: string;
+  half: 'AM' | 'PM';
+  /** When the next window starts (ms since the epoch). */
+  next: number;
+}
+
+export function windowInfo(at: number, tz: string): WindowInfo {
+  const key = windowKeyAt(at, tz);
+  return { key, half: key.endsWith('AM') ? 'AM' : 'PM', next: nextWindowAt(at, tz) };
+}
+
+/** Local "HH:MM" of a moment in a zone (for "new finds at 12:00"). */
+export function localClock(at: number, tz: string): string {
+  const parts = formatter(tz).formatToParts(new Date(at));
+  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '00';
+  return `${String(Number(get('hour')) % 24).padStart(2, '0')}:${get('minute')}`;
+}
+
+// ---------- drops ----------
+
+export interface DropSpot {
+  room: string;
+  x: number;
+  y: number;
+}
+
+export interface Drop {
+  /** Index within the window (0, 1, 2). */
+  n: number;
+  room: string;
+  x: number;
+  y: number;
+  variant: string;
+}
+
+/** What a client may see of a drop before finding it: where, and what kind of thing. */
+export interface DropView {
+  n: number;
+  room: string;
+  x: number;
+  y: number;
+  kind: ItemKind;
+}
+
+export function dropView(d: Drop): DropView {
+  return { n: d.n, room: d.room, x: d.x, y: d.y, kind: parseVariant(d.variant)?.item.kind ?? 'wear' };
+}
+
+/** Every hiding spot of every room, rooms in id order and spots in data order (a stable list). */
+export function allSpots(rooms: Readonly<Record<string, { id: string; spots?: readonly Vec2[] }>>): DropSpot[] {
+  const out: DropSpot[] = [];
+  for (const id of Object.keys(rooms).sort()) {
+    for (const s of rooms[id]!.spots ?? []) out.push({ room: id, x: s.x, y: s.y });
+  }
+  return out;
+}
+
+/** A small, fast, seedable generator (sfc32) fed from the window's seed bytes. */
+export function seededRandom(seed: Uint8Array): () => number {
+  const word = (i: number) => ((seed[i] ?? 0) | ((seed[i + 1] ?? 0) << 8) | ((seed[i + 2] ?? 0) << 16) | ((seed[i + 3] ?? 0) << 24)) >>> 0;
+  let a = word(0);
+  let b = word(4);
+  let c = word(8);
+  let d = word(12) || 0x9e3779b9;
+  const next = () => {
+    a >>>= 0;
+    b >>>= 0;
+    c >>>= 0;
+    d >>>= 0;
+    let t = (a + b) | 0;
+    a = b ^ (b >>> 9);
+    b = (c + (c << 3)) | 0;
+    c = (c << 21) | (c >>> 11);
+    d = (d + 1) | 0;
+    t = (t + d) | 0;
+    c = (c + t) | 0;
+    return (t >>> 0) / 4294967296;
+  };
+  for (let i = 0; i < 15; i++) next();
+  return next;
+}
+
+function pickWeighted<T>(items: readonly T[], weight: (t: T) => number, rnd: () => number): T | undefined {
+  let total = 0;
+  for (const it of items) total += weight(it);
+  if (total <= 0) return undefined;
+  let r = rnd() * total;
+  for (const it of items) {
+    r -= weight(it);
+    if (r < 0) return it;
+  }
+  return items[items.length - 1];
+}
+
+/**
+ * The drops of one window, from its seed (on the server: HMAC-SHA256 of `cid|window` under a
+ * secret) and what the collector owned when the window opened. Two or three drops on distinct
+ * hiding spots; each variant's rarity class by RARITY_WEIGHTS, then a variant of that class with
+ * unowned ones UNOWNED_BOOST times as likely; never the same variant twice in one window.
+ */
+export function generateDrops(seed: Uint8Array, spots: readonly DropSpot[], owned: ReadonlySet<string>): Drop[] {
+  const rnd = seededRandom(seed);
+  const count = Math.min(spots.length, DROPS_MIN + Math.floor(rnd() * (DROPS_MAX - DROPS_MIN + 1)));
+  const idx = spots.map((_, i) => i);
+  const byRarity = variantsByRarity();
+  const chosen = new Set<string>();
+  const out: Drop[] = [];
+  for (let n = 0; n < count; n++) {
+    const j = n + Math.floor(rnd() * (idx.length - n));
+    [idx[n], idx[j]] = [idx[j]!, idx[n]!];
+    const spot = spots[idx[n]!]!;
+    const classes = RARITIES.filter((r) => byRarity[r].some((v) => !chosen.has(v)));
+    const rarity = pickWeighted(classes, (r) => RARITY_WEIGHTS[r], rnd) ?? 'common';
+    const pool = byRarity[rarity].filter((v) => !chosen.has(v));
+    const variant = pickWeighted(pool, (v) => (owned.has(v) ? 1 : UNOWNED_BOOST), rnd) ?? pool[0]!;
+    chosen.add(variant);
+    out.push({ n, room: spot.room, x: spot.x, y: spot.y, variant });
+  }
+  return out;
+}
+
+// ---------- the feather economy ----------
+
+export function duplicatePayout(variant: string): number {
+  const v = parseVariant(variant);
+  return v ? DUPLICATE_FEATHERS[v.rarity] : 0;
+}
+
+export function craftCost(variant: string): number | null {
+  const v = parseVariant(variant);
+  return v ? CRAFT_COST[v.rarity] : null;
+}
