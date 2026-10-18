@@ -120,6 +120,7 @@ export function encodePng({ width, height, channels, data, level = 6 }) {
 }
 
 export const isPng = (buf) => buf.length >= 8 && buf.subarray(0, 8).equals(PNG_SIG);
+export const isWebp = (buf) => buf.length >= 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP';
 export const isJpeg = (buf) => buf.length >= 3 && buf.subarray(0, 3).equals(JPEG_SIG);
 
 /** Read the header and the chunk list of a PNG, verifying every chunk's CRC. */
@@ -440,7 +441,12 @@ export function refLocation(ref, { workDir, toolsDir = TOOLS_DIR, publicArtDir =
   if (ref.startsWith('https://')) return { kind: 'url', url: ref };
   if (ref.startsWith('refs/')) return { kind: 'file', file: path.join(toolsDir, ref) };
   if (ref.startsWith('@guide:')) return { kind: 'file', file: path.join(workDir, 'guides', `${ref.slice(7)}.png`) };
-  if (ref.startsWith('@final:')) return { kind: 'file', file: path.join(publicArtDir, `${ref.slice(7)}.png`) };
+  if (ref.startsWith('@final:')) {
+    // Rooms publish as WebP, everything else as PNG.
+    const png = path.join(publicArtDir, `${ref.slice(7)}.png`);
+    const webp = path.join(publicArtDir, `${ref.slice(7)}.webp`);
+    return { kind: 'file', file: !fs.existsSync(png) && fs.existsSync(webp) ? webp : png };
+  }
   if (ref.startsWith('@raw:')) {
     const key = ref.slice(5);
     const dir = path.join(workDir, 'raw', key);
@@ -475,9 +481,9 @@ export function resolveRefs(job, ctx) {
     const bytes = fs.readFileSync(loc.file);
     const maxRef = ctx.maxRefBytes ?? 2 * 1024 * 1024;
     if (bytes.length > maxRef) throw new RefError(`job ${job.key}: ref ${slot.ref} is ${bytes.length} bytes, over the ${maxRef} byte limit for inline references`);
-    if (!isPng(bytes) && !isJpeg(bytes)) throw new RefError(`job ${job.key}: ref ${slot.ref} is not a PNG or JPEG`);
+    if (!isPng(bytes) && !isJpeg(bytes) && !isWebp(bytes)) throw new RefError(`job ${job.key}: ref ${slot.ref} is not a PNG, JPEG or WebP`);
     const hex = sha256(bytes);
-    out.push({ ...slot, status: 'ok', file: loc.file, bytes, sha256: hex, token: `sha256:${hex}`, mime: isPng(bytes) ? 'image/png' : 'image/jpeg' });
+    out.push({ ...slot, status: 'ok', file: loc.file, bytes, sha256: hex, token: `sha256:${hex}`, mime: isPng(bytes) ? 'image/png' : isWebp(bytes) ? 'image/webp' : 'image/jpeg' });
   }
   return out;
 }

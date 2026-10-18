@@ -225,6 +225,20 @@ test('cacheKey is stable across key order and ref paths, and changes with prompt
   assert.throws(() => G.resolveRefs({ key: 'hub', refs: [{ ref: 'refs/none.png', optional: true }] }, { ...ctx, requireRefs: true }), G.RefError);
 });
 
+test('@final refs find a room published as WebP and travel as image/webp', () => {
+  const publicArtDir = tmp('public-art');
+  fs.mkdirSync(publicArtDir, { recursive: true });
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.from([4, 0, 0, 0]), Buffer.from('WEBP')]);
+  fs.writeFileSync(path.join(publicArtDir, 'market.webp'), webp);
+  const ctx = { workDir: tmp('w-webp'), toolsDir: tmp('t-webp'), publicArtDir, requireRefs: false };
+  const [r] = G.resolveRefs({ key: 'robot-owl', refs: [{ ref: '@final:market', optional: true }] }, ctx);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.mime, 'image/webp');
+  // A PNG publish wins when both exist (pieces and overlays publish as PNG).
+  fs.writeFileSync(path.join(publicArtDir, 'market.png'), tinyPng());
+  assert.equal(G.resolveRefs({ key: 'robot-owl', refs: [{ ref: '@final:market', optional: true }] }, ctx)[0].mime, 'image/png');
+});
+
 test('a second run with the same jobs is fully cached and makes no provider calls', async () => {
   const out = tmp('cache-run');
   const args = ['--provider', 'mock', '--only', 'guardian', '--variants', '2', '--out', out, '--now', '2026-10-18T09:00:00Z'];
