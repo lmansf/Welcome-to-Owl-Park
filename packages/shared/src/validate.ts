@@ -5,7 +5,7 @@
 import { EMOTE_IDS, isWear } from './collectibles';
 import { isHexColour, isPledge } from './look';
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from './protocol';
-import { ROOM_H, ROOM_W } from './room';
+import { ROOM_MAX_H, ROOM_MAX_W } from './room';
 
 export const MAX_ID_LENGTH = 64;
 
@@ -17,7 +17,8 @@ export function isId(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0 && v.length <= MAX_ID_LENGTH;
 }
 
-export function isVec2(v: unknown, maxX = ROOM_W, maxY = ROOM_H): v is Vec2 {
+/** A point in room pixels: finite, and inside the biggest room there may be. */
+export function isVec2(v: unknown, maxX = ROOM_MAX_W, maxY = ROOM_MAX_H): v is Vec2 {
   return (
     isObj(v) &&
     typeof v['x'] === 'number' &&

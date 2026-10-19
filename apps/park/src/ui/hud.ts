@@ -17,6 +17,19 @@ export interface HudAction {
   label: string;
 }
 
+/** A chip at the edge of the screen pointing toward something off screen (placed by game/hints.ts). */
+export interface HudHint {
+  id: string;
+  /** Centre in CSS pixels. */
+  x: number;
+  y: number;
+  /** Arrow direction in radians (0 points right). */
+  angle: number;
+  /** CSS colour of the ring and arrow. */
+  tint: string;
+  label: string;
+}
+
 export interface Hud {
   setCount(n: number): void;
   /** Owls in the whole park, when known (authoritative transports). */
@@ -35,6 +48,9 @@ export interface Hud {
   toggleCollection(): void;
   /** Escape: close every open panel. */
   closePanels(): void;
+  /** The off-screen hint chips; an empty list clears them. */
+  setHints(hints: HudHint[]): void;
+  onHint(cb: (id: string) => void): void;
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
 }
@@ -77,6 +93,9 @@ const CSS = `
 #hud .finds i{width:10px;height:10px;display:inline-block;background:#FFD36A;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);box-shadow:0 0 8px #FFD36A}
 #hud .toast.accent{border-left:6px solid var(--accent)}
 #hud .emote-wrap{position:relative}
+#hud .hints{position:absolute;inset:0;pointer-events:none}
+#hud .hint{position:absolute;width:44px;height:44px;min-height:0;margin:-22px 0 0 -22px;padding:0;border-radius:50%;background:rgba(12,30,54,.8);border:2px solid var(--tint);box-shadow:0 0 12px var(--tint);display:flex;align-items:center;justify-content:center;animation:hud-in .25s ease-out}
+#hud .hint i{display:block;width:0;height:0;border-left:14px solid var(--tint);border-top:9px solid transparent;border-bottom:9px solid transparent;transform-origin:50% 50%}
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .finds{order:3}}
 `;
 
@@ -93,6 +112,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       <div class="finds" role="status" aria-live="polite" data-finds><i aria-hidden="true"></i><span data-finds-text></span></div>
       <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
     </div>
+    <div class="hints" data-hints></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom">
       <div class="left">
@@ -119,6 +139,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const panel = $<HTMLElement>('[data-panel]');
   const customize = $<HTMLButtonElement>('[data-customize]');
   const actionsEl = $<HTMLElement>('[data-actions]');
+  const hintsEl = $<HTMLElement>('[data-hints]');
+  const hintEls = new Map<string, HTMLButtonElement>();
+  let hintCb: ((id: string) => void) | null = null;
   const finds = $<HTMLElement>('[data-finds]');
   const findsText = $<HTMLElement>('[data-finds-text]');
   const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
@@ -255,6 +278,36 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       actionCb = cb;
     },
     toggleCollection,
+    setHints(list) {
+      const seen = new Set<string>();
+      for (const h of list) {
+        seen.add(h.id);
+        let b = hintEls.get(h.id);
+        if (!b) {
+          b = document.createElement('button');
+          b.className = 'hint';
+          b.dataset['hint'] = h.id;
+          b.appendChild(document.createElement('i'));
+          const id = h.id;
+          b.addEventListener('click', () => hintCb?.(id));
+          hintsEl.appendChild(b);
+          hintEls.set(h.id, b);
+        }
+        b.style.left = `${h.x.toFixed(1)}px`;
+        b.style.top = `${h.y.toFixed(1)}px`;
+        b.style.setProperty('--tint', h.tint);
+        b.setAttribute('aria-label', h.label);
+        (b.firstChild as HTMLElement).style.transform = `rotate(${h.angle.toFixed(3)}rad)`;
+      }
+      for (const [id, b] of hintEls) {
+        if (seen.has(id)) continue;
+        b.remove();
+        hintEls.delete(id);
+      }
+    },
+    onHint(cb) {
+      hintCb = cb;
+    },
     closePanels() {
       panel.classList.remove('open');
       customize.setAttribute('aria-expanded', 'false');

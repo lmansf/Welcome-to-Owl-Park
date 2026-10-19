@@ -114,9 +114,17 @@ every room from its sockets.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
-Rooms are data shared by the client and the server: `walkable` polygons, `spawns`, `doors`
+Rooms are data shared by the client and the server: a `size` (one screen is 1600 x 900; a room
+may be up to 6400 x 1800, `ROOM_MAX_W` x `ROOM_MAX_H`, and the camera follows the owl across it),
+`walkable` polygons, `spawns`, `doors`
 (open with `to`, or closed with an approved `closedSign`), `mood` for ambience, `spots` where
-collectible finds appear, and anchors for large set pieces. A door without `to` can be an
+collectible finds appear, and anchors for large set pieces. A one-screen room names its painting
+in `background` (and its overlay in `foreground`); a bigger room is painted in tiles of one screen
+each, listed in `backgrounds` and `foregrounds` with their offsets, which must cover the room
+exactly (unit-tested). The client registers every tile as room art, loads a room's tiles together
+and keeps them within one memory budget: a phone gets what a one-screen room costs today, so a
+room whose 2x tiles would not fit loads its 1x copies. Open doorways and interactive spots the
+camera cannot see get a chip at the screen's edge pointing to them; tapping it walks there. A door without `to` can be an
 interactive spot (the gift shop, the idol): an entry in `interactions` in
 `apps/park/src/game/RoomScene.ts` gives it a button label and an action, and standing in it shows
 the button, which E also presses. New interactables, mini games included, follow that pattern. Art is referenced by key; artists replace files under

@@ -20,6 +20,7 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | Key | Logical size (px) | What it is |
 | --- | --- | --- |
 | `hub`, `hub-fg` | 1600 x 900 | Hub room background (WebP), and a transparent foreground overlay (PNG) drawn in front of the owls |
+| room tiles (`<room>-<part>`) | 1600 x 900 | A room wider (or taller) than one screen is painted in tiles of one screen each, listed in the room's `backgrounds` / `foregrounds` with their offsets; each tile is room-kind art with the same budgets, WebP rule and 2x copy as `hub`, and the game registers it from the room data |
 | `grove`, `grove-fg` | 1600 x 900 | Storybook realm background (WebP) and foreground (PNG) |
 | `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
 | `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |

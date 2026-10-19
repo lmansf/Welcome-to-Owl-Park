@@ -7,7 +7,8 @@
  * Missing or broken files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W } from '@owl-park/shared';
+import { ROOM_H, ROOM_W, backgroundTiles, foregroundTiles } from '@owl-park/shared';
+import { ROOMS } from '../rooms';
 import { rasterCandidates } from './artFiles';
 import { loadSvgTexture } from './svgLoader';
 
@@ -44,12 +45,18 @@ export const ART: Record<string, ArtSpec> = {
   'owl-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
 };
 
+// The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
+for (const room of Object.values(ROOMS)) {
+  for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
+}
+
 /** Art needed in every room (loaded once at boot). */
 export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' || ART[k]!.kind === 'sign');
 
 /** Art that belongs to one room (loaded when the room opens, released when it closes). */
 export function roomArtKeys(roomId: string): string[] {
-  const keys = [roomId, `${roomId}-fg`];
+  const room = Object.hasOwn(ROOMS, roomId) ? ROOMS[roomId] : undefined;
+  const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
   return keys.filter((k) => k in ART);
@@ -58,7 +65,8 @@ export function roomArtKeys(roomId: string): string[] {
 /**
  * How many texture pixels per room pixel to rasterize at. Owls and signs are small, so they
  * get the full device ratio; rooms and big set pieces are capped to keep GPU memory bounded
- * (a 1600 x 900 room costs about 5.8 MB per unit of scale squared).
+ * (a 1600 x 900 room tile costs about 5.8 MB per unit of scale squared; see roomScaleCap for rooms
+ * of several tiles).
  */
 export function artScale(kind: ArtKind, pixelRatio: number, roomMax: number): number {
   const target = kind === 'owl' || kind === 'sign' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);

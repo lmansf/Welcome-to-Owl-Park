@@ -10,6 +10,10 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'look', look, extra: 1 }))).toEqual({ t: 'look', look });
     expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
   });
+
+  it('accepts positions anywhere in a room wider than one screen', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 4700, y: 1500 }, seq: 2 }))).toEqual({ t: 'move', to: { x: 4700, y: 1500 }, seq: 2 });
+  });
   it('rejects anything malformed', () => {
     expect(parseClientFrame('not json')).toBeNull();
     expect(parseClientFrame('[]')).toBeNull();
@@ -19,6 +23,7 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: -5, y: 2 }, seq: 1 }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 5, y: 2 }, seq: 1.5 }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: Infinity, y: 2 }, seq: 1 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 6401, y: 2 }, seq: 1 }))).toBeNull(); // past the biggest room
     expect(parseClientFrame(JSON.stringify({ t: 'say', text: 'hi' }))).toBeNull();
     expect(parseClientFrame('x'.repeat(2000))).toBeNull();
   });

@@ -2,6 +2,8 @@
  * Runtime configuration. Everything here is public: it ships in the browser bundle.
  * Query-string overrides exist for tests and demos (e.g. ?transport=local&room=grove).
  */
+import { PHONE_ROOM_BUDGET } from './game/artFiles';
+
 export type TransportKind = 'local' | 'supabase' | 'edge';
 
 export interface ParkConfig {
@@ -27,6 +29,8 @@ export interface ParkConfig {
   pixelRatio: number;
   /** Max texture pixels per room pixel for rooms and big set pieces (GPU memory cap). */
   artScaleMax: number;
+  /** Decoded bytes one room's big art may take; a wide room that would pass it at 2x loads its 1x copies. */
+  roomArtBudget: number;
 }
 
 export function readConfig(): ParkConfig {
@@ -60,5 +64,7 @@ export function readConfig(): ParkConfig {
     debug: q.get('debug') === '1',
     pixelRatio: Math.min(2, Math.max(1, dpr)),
     artScaleMax: Math.min(2, Math.max(1, Number(env.VITE_ART_SCALE_MAX) || 1.5)),
+    // Phones and tablets (a coarse pointer) keep what a one-screen room costs today; computers get three times that.
+    roomArtBudget: (Number(env.VITE_ROOM_ART_BUDGET_MB) * 1024 * 1024) || PHONE_ROOM_BUDGET * (globalThis.matchMedia?.('(pointer: coarse)').matches ? 1 : 3),
   };
 }

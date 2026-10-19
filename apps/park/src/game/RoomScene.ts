@@ -3,12 +3,16 @@ import {
   EMOTE_IDS,
   PICKUP_CLIENT_RADIUS,
   PROTOCOL_VERSION,
+  ROOM_H,
+  ROOM_W,
   RARITY_COLOURS,
   RARITY_NAMES,
+  backgroundTiles,
   distance,
   duplicatePayout,
   filterOwnedWear,
   findSpawn,
+  foregroundTiles,
   localClock,
   parseVariant,
   pointInRect,
@@ -36,6 +40,8 @@ import type { Hud } from '../ui/hud';
 import type { Keys } from '../ui/keyboard';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
+import { roomScaleCap } from './artFiles';
+import { placeHints } from './hints';
 import { DropMarker } from './DropMarker';
 import { itemScale } from './items';
 import { Owl } from './Owl';
@@ -55,6 +61,10 @@ const CLOCK_TOLERANCE_MS = 1500;
 const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
 /** Ask again after a failed pickup this long later (the owl may still be walking up). */
 const PICKUP_RETRY_MS = 800;
+/** How far hint chips keep from the screen's edges, in CSS pixels (clear of the HUD's top and bottom bars). */
+const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
+/** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
+const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', grove: '#FFB347' };
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
 const KEY_TURNS = 8;
 /** Never wait longer than this for a window change (timers past ~24 days overflow). */
@@ -88,6 +98,8 @@ export class RoomScene extends Phaser.Scene {
   /** The walk under way came from the keys, so letting go of them stops it. */
   private keyWalk = false;
   private keyTurns = 0;
+  /** The hint chips last sent to the HUD, so an unchanged frame touches no DOM. */
+  private hintsShown = '';
   private voting = false;
   /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
   private pendingVote = false;
@@ -126,6 +138,7 @@ export class RoomScene extends Phaser.Scene {
     this.keyDir = null;
     this.keyWalk = false;
     this.keyTurns = 0;
+    this.hintsShown = '';
     this.voting = false;
     this.pendingVote = false;
     this.pieces = {};
@@ -153,7 +166,10 @@ export class RoomScene extends Phaser.Scene {
     if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
     const { width, height } = this.scale.gameSize;
     const label = this.add.text(width / 2, height / 2, 'Opening…', { fontSize: '26px', color: '#F6F1E3', fontFamily: 'system-ui, sans-serif' }).setOrigin(0.5).setScrollFactor(0).setDepth(1e6);
-    await loadArt(this, roomArtKeys(this.room.id), this.cfg.pixelRatio, this.cfg.artScaleMax);
+    // A room of several tiles keeps to the same memory budget as a one-screen room, at 1x if need be.
+    const textures = backgroundTiles(this.room).length + foregroundTiles(this.room).length;
+    const cap = roomScaleCap(textures, this.cfg.pixelRatio, this.cfg.artScaleMax, this.cfg.roomArtBudget);
+    await loadArt(this, roomArtKeys(this.room.id), this.cfg.pixelRatio, cap);
     if (gen !== this.gen || !this.scene.isActive()) return; // the scene moved on while we loaded
     this.registry.set('loadedRoom', this.room.id);
     label.destroy();
@@ -164,11 +180,13 @@ export class RoomScene extends Phaser.Scene {
     const { room } = this;
     ensureFxTextures(this);
 
-    this.add.image(0, 0, room.background).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(-1);
+    // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
+    // hairline of the clear colour shows at a join while the camera scrolls.
+    for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     addAmbience(this, room);
-    if (room.foreground && this.textures.exists(room.foreground)) {
-      this.add.image(0, 0, room.foreground).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(room.size.h + 100);
+    for (const t of foregroundTiles(room)) {
+      if (this.textures.exists(t.key)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100);
     }
 
     const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
@@ -183,6 +201,7 @@ export class RoomScene extends Phaser.Scene {
     // The colour picker changes colours only: today's pledge and the worn collectibles stay.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent }));
     this.hud.onAction((id) => this.interactions[id]?.run());
+    this.hud.onHint((id) => this.walkToDoorway(id));
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
@@ -198,6 +217,7 @@ export class RoomScene extends Phaser.Scene {
       this.steer();
       this.checkDoors(finished);
       this.checkDrops(now);
+      this.updateHints();
     }
     for (const owl of this.peers.values()) owl.tick(now);
   }
@@ -365,6 +385,35 @@ export class RoomScene extends Phaser.Scene {
     const walk: Walk = { from: here, to: here, startedAt: Date.now() };
     this.conn?.send({ t: 'move', id: this.playerId, walk });
     this.conn?.track(this.snapshot());
+  }
+
+  /** Chips at the screen's edge for open doorways and interactive spots the camera cannot see. */
+  private updateHints(): void {
+    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id]).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
+    const v = this.cameras.main.worldView;
+    const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS });
+    const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
+    if (shown === this.hintsShown) return;
+    this.hintsShown = shown;
+    this.hud.setHints(
+      places.map((p) => {
+        const door = this.room.doors.find((d) => d.id === p.id)!;
+        const spot = this.interactions[p.id];
+        return {
+          ...p,
+          tint: door.to ? (DOOR_TINTS[door.to.room] ?? '#C9A227') : '#FFD36A',
+          label: spot ? `${spot.label}, off screen: walk there` : 'Doorway, off screen: walk there',
+        };
+      }),
+    );
+  }
+
+  /** A hint chip was tapped: head for that doorway or spot. */
+  private walkToDoorway(id: string): void {
+    const door = this.room.doors.find((d) => d.id === id);
+    if (!this.built || this.leaving || !door) return;
+    this.pendingVote = false;
+    this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 });
   }
 
   /** E: use the interactive spot the owl stands in (the first, where two overlap). */
@@ -651,6 +700,7 @@ export class RoomScene extends Phaser.Scene {
   private async goTo(roomId: string, spawn: string, from: RoomStart['from']): Promise<void> {
     if (this.leaving) return;
     this.leaving = true;
+    this.hud.setHints([]);
     this.me.walk = null;
     this.cameras.main.fadeOut(220, 12, 30, 54);
     await new Promise<void>((r) => this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => r()));
@@ -659,6 +709,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async teardown(): Promise<void> {
+    this.hud.setHints([]);
     this.windowTimer?.remove();
     this.windowTimer = null;
     for (const m of this.markers.values()) m.destroy();

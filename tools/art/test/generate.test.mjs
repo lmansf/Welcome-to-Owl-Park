@@ -28,6 +28,11 @@ function parseArtTable() {
   const re = /^\s*'?([a-z][a-z0-9-]*)'?:\s*\{\s*w:\s*(\w+),\s*h:\s*(\w+),\s*kind:\s*'(\w+)'/gm;
   const table = {};
   for (let m; (m = re.exec(block));) table[m[1]] = { w: consts[m[2]] ?? Number(m[2]), h: consts[m[3]] ?? Number(m[3]), kind: m[4] };
+  // art.ts also registers the tiles of rooms bigger than one screen, from the room data, as room art of one screen.
+  const roomsSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/rooms/index.ts'), 'utf8');
+  for (const list of roomsSrc.matchAll(/(?:backgrounds|foregrounds):\s*\[([^\]]*)\]/g)) {
+    for (const m of list[1].matchAll(/key:\s*'([a-z][a-z0-9-]*)'/g)) table[m[1]] ??= { w: consts.ROOM_W, h: consts.ROOM_H, kind: 'room' };
+  }
   return table;
 }
 

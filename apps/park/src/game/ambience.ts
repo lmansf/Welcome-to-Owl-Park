@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W, type RoomDef } from '@owl-park/shared';
+import { ROOM_W, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
 import { ART } from './art';
 
@@ -159,14 +159,17 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
   return pieces;
 }
 
-/** Mood particles: fireflies, neon rain, drifting gold dust. */
+/** Mood particles: fireflies, neon rain, drifting gold dust, spread over the whole room. */
 export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
   const floorTop = Math.min(...room.walkable.flat().map((p) => p.y));
+  const { w, h } = room.size;
+  // A room several screens wide gets as many particles per screen as a one-screen room.
+  const k = Math.max(1, w / ROOM_W);
   if (room.mood === 'dusk') {
     scene.add
       .particles(0, 0, 'fx-dot', {
-        x: { min: 40, max: ROOM_W - 40 },
-        y: { min: floorTop - 260, max: ROOM_H - 60 },
+        x: { min: 40, max: w - 40 },
+        y: { min: floorTop - 260, max: h - 60 },
         lifespan: { min: 4000, max: 7000 },
         speedX: { min: -14, max: 14 },
         speedY: { min: -22, max: -6 },
@@ -174,15 +177,15 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
         alpha: { start: 0, end: 0.95, ease: 'Sine.easeInOut', random: false },
         tint: [0xffe08a, 0xfff2b3, 0xc9a227],
         blendMode: Phaser.BlendModes.ADD,
-        frequency: 140,
+        frequency: 140 / k,
         quantity: 1,
-        maxAliveParticles: 70,
+        maxAliveParticles: Math.round(70 * k),
       })
-      .setDepth(ROOM_H + 10);
+      .setDepth(h + 10);
   } else if (room.mood === 'neon') {
     scene.add
       .particles(0, 0, 'fx-rain', {
-        x: { min: -100, max: ROOM_W + 100 },
+        x: { min: -100, max: w + 100 },
         y: -30,
         lifespan: 1100,
         speedY: { min: 900, max: 1300 },
@@ -191,18 +194,18 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
         alpha: { start: 0.35, end: 0.05 },
         scaleY: { min: 0.8, max: 1.6 },
         tint: [0x9fe9ff, 0xffb3e0, 0xc7ceda],
-        frequency: 22,
+        frequency: 22 / k,
         quantity: 2,
-        maxAliveParticles: 140,
+        maxAliveParticles: Math.round(140 * k),
       })
-      .setDepth(ROOM_H + 20);
-    const haze = scene.add.rectangle(ROOM_W / 2, ROOM_H / 2, ROOM_W, ROOM_H, 0xff2aa1, 0.05).setDepth(ROOM_H + 5).setBlendMode(Phaser.BlendModes.ADD);
+      .setDepth(h + 20);
+    const haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.05).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
     scene.tweens.add({ targets: haze, fillAlpha: 0.1, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   } else {
     scene.add
       .particles(0, 0, 'fx-dot', {
-        x: { min: 0, max: ROOM_W },
-        y: { min: 0, max: ROOM_H },
+        x: { min: 0, max: w },
+        y: { min: 0, max: h },
         lifespan: { min: 6000, max: 10000 },
         speedX: { min: -10, max: 10 },
         speedY: { min: 4, max: 16 },
@@ -210,11 +213,11 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
         alpha: { start: 0, end: 0.5 },
         tint: [0xc9a227, 0xf6f1e3],
         blendMode: Phaser.BlendModes.ADD,
-        frequency: 260,
+        frequency: 260 / k,
         quantity: 1,
-        maxAliveParticles: 40,
+        maxAliveParticles: Math.round(40 * k),
       })
-      .setDepth(ROOM_H + 10);
+      .setDepth(h + 10);
     const anchors = ANCHORS['hub'];
     const tb = anchors?.['tree-base'];
     if (tb) {
