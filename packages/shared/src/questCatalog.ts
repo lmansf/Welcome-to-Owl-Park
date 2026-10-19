@@ -143,6 +143,8 @@ interface Template {
   build(giver: string, d: Difficulty, key: string): Built | null;
 }
 
+const GRAND_TITLES = ['The grand tour', 'A very long night', 'All around the park', 'The full flight', 'Round the whole park', 'One big adventure'];
+
 const THANKS = ['Wonderful. You have earned this.', 'Just what I needed. Here, for your trouble.', 'You are quicker than you look. Take this.', 'Thank you, friend. A little something for you.'];
 
 const TEMPLATES: readonly Template[] = [
@@ -299,7 +301,8 @@ const TEMPLATES: readonly Template[] = [
       }
       const steps = order.slice(0, n).map((i) => pool[i]!());
       return {
-        title: pick(key, ['The grand tour', 'A very long night', 'All around the park', 'The full flight']),
+        // One title per giver: the week's two grand quests come from different givers, so they never share one.
+        title: GRAND_TITLES[NPCS.findIndex((n) => n.id === giver) % GRAND_TITLES.length]!,
         type: 'mixed',
         steps,
         offer: pick(key + 'o', ['I have a long list and a good feeling about you. It will take a while.', 'This one is a proper adventure. Are you up for it?']),

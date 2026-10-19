@@ -192,6 +192,8 @@ describe('quest catalogue', () => {
       const week = weeklyQuestIds(parkWeek(MON + i * DAY)).map((id) => getQuest(id)!);
       expect(week.map((q) => q.difficulty)).toEqual(['medium', 'hard']);
       expect(week[0]!.giver).not.toBe(week[1]!.giver);
+      expect(week[0]!.title).not.toBe(week[1]!.title);
+      expect(new Set(ids.map((q) => q.title)).size, d).toBe(3);
     }
   });
 });
