@@ -1,11 +1,12 @@
-import type { CraftResult, Inventory, TzResult, Vec2 } from '@owl-park/shared';
+import type { BuyResult, GiftResult, Inventory, ShopView } from '@owl-park/shared';
 import type { EdgeTransport } from '../net/edge';
-import type { CollectionService, DropLink, DropsInfo, PickupResult } from './service';
+import type { RoomConnection } from '../net/transport';
+import type { CollectionService, QuestLink } from './service';
 
 /**
- * The collection kept by the room server. Inventory, crafting and the home time zone go over
- * HTTP with the visitor's pass; drops and pickups go over the room's WebSocket (the `DropLink`),
- * because only the room knows where the owl stands.
+ * The collection kept by the room server. Inventory and the shop go over HTTP with the visitor's
+ * pass; quests go over the room's WebSocket (the connection's `link`), because only the room
+ * knows where the owl stands.
  */
 export class EdgeCollections implements CollectionService {
   readonly mode = 'edge' as const;
@@ -19,26 +20,23 @@ export class EdgeCollections implements CollectionService {
   }
 
   async inventory(): Promise<Inventory> {
-    const inv = await this.json<Inventory>('/api/collection');
-    // `next` comes from the server clock; close enough for the panel (the HUD uses the room link's).
-    return inv;
+    return this.json<Inventory>('/api/collection');
   }
 
-  async drops(link: DropLink | null): Promise<DropsInfo> {
-    if (!link) return { window: '', next: 0, drops: [], feathers: 0 };
-    return link.drops();
+  async shop(): Promise<ShopView> {
+    return this.json<ShopView>('/api/shop');
   }
 
-  async pickup(n: number, _room: string, _pos: Vec2, link: DropLink | null): Promise<PickupResult> {
-    if (!link) return { ok: false, n, reason: 'offline' };
-    return link.pickup(n);
+  async buy(variant: string): Promise<BuyResult> {
+    return this.json<BuyResult>('/api/shop/buy', { method: 'POST', body: JSON.stringify({ variant }) });
   }
 
-  async craft(variant: string): Promise<CraftResult> {
-    return this.json<CraftResult>('/api/collection/craft', { method: 'POST', body: JSON.stringify({ variant }) });
+  async claimGift(): Promise<GiftResult> {
+    return this.json<GiftResult>('/api/shop/gift', { method: 'POST' });
   }
 
-  async setTimeZone(tz: string): Promise<TzResult> {
-    return this.json<TzResult>('/api/collection/tz', { method: 'POST', body: JSON.stringify({ tz }) });
+  questLink(_room: string, conn: RoomConnection | null): QuestLink | null {
+    // The transport routes the room's pushes to the scene's handlers itself.
+    return conn?.link ?? null;
   }
 }

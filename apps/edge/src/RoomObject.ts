@@ -4,7 +4,29 @@
  * the socket attachments when the object wakes up or is moved.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { CLOSE, HEARTBEAT_FRAME, filterOwnedWear, isTimeZone, parseClientFrame, wearVariants, type OwlLook, type ServerFrame, type Wear } from '@owl-park/shared';
+import {
+  CLOSE,
+  HEARTBEAT_FRAME,
+  KIND_RULES,
+  NPC_EMOTE_RADIUS,
+  NPC_TALK_RADIUS,
+  distance,
+  filterOwnedWear,
+  getInteractable,
+  getNpc,
+  getQuest,
+  isTimeZone,
+  leafRespawnMs,
+  npcsIn,
+  parseClientFrame,
+  wearVariants,
+  type ClientFrame,
+  type OwlLook,
+  type QuestBoard,
+  type QuestUpdate,
+  type ServerFrame,
+  type Wear,
+} from '@owl-park/shared';
 import type { Collections } from './Collections';
 import { Room, type Peer, type VisitorState } from './Room';
 import { ROOMS, roomCap } from './rooms';
@@ -19,7 +41,7 @@ interface Attachment {
   ip: string;
   joinedAt: number;
   state: VisitorState | null;
-  /** The collector behind this page (from the pass), if any: owns the drops, wear and emotes. */
+  /** The collector behind this page (from the pass), if any: owns the quests, wear and emotes. */
   cid?: string;
   tz?: string;
 }
@@ -40,6 +62,8 @@ const DEFAULT_MAX_SOCKETS_PER_IP = 8;
 /** Re-read a collector's collection when a look or emote names something the cache lacks, at most this often. */
 const OWNED_REFRESH_MS = 2_000;
 const OWNED_CACHE_MAX = 1_000;
+/** Storage key for used-up shared objects (leaf piles): room id -> object id -> when it is back. */
+const OBJECTS_KEY = 'objects';
 
 function withoutWear(look: OwlLook): OwlLook {
   const { wear: _wear, ...rest } = look;
@@ -81,8 +105,8 @@ export class RoomObject extends DurableObject<Env> {
   private readonly owned = new Map<string, OwnedEntry>();
   private readonly ownedLoads = new Map<string, Promise<OwnedEntry | null>>();
   private readonly lastEquipped = new Map<string, string>();
-  /** Pickups in flight per visitor: one at a time. */
-  private readonly picking = new Set<string>();
+  /** Quest requests run one at a time per visitor, in arrival order. */
+  private readonly queues = new Map<string, Promise<void>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -102,6 +126,11 @@ export class RoomObject extends DurableObject<Env> {
         }
       }
     }
+    // An idle object can be evicted while a leaf pile is still gone: bring those back from storage.
+    void ctx.blockConcurrencyWhile(async () => {
+      const saved = await ctx.storage.get<Record<string, Record<string, number>>>(OBJECTS_KEY);
+      for (const [id, until] of Object.entries(saved ?? {})) if (Object.hasOwn(ROOMS, id)) this.room(id).restoreObjects(until);
+    });
   }
 
   private counts(): Record<string, number> {
@@ -177,6 +206,8 @@ export class RoomObject extends DurableObject<Env> {
       }
       this.emitCounts();
       if (recheck) void this.recheckLook(att, frame.look);
+      // Arriving in a room counts for quests that ask to visit it.
+      this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
       return;
     }
 
@@ -198,16 +229,125 @@ export class RoomObject extends DurableObject<Env> {
         ws.close(1000, 'bye');
         this.emitCounts();
         return;
-      case 'drops':
-        if (!room.admit(att.id)) return;
-        return this.sendDrops(ws, att);
-      case 'pickup':
-        if (!room.admit(att.id)) return;
-        return this.pickup(ws, att, room, frame.n);
       case 'emote':
         if (!room.admit(att.id)) return;
-        return this.emote(att, room, frame.e);
+        return this.emote(ws, att, room, frame.e);
+      case 'quests':
+      case 'talk':
+      case 'accept':
+      case 'abandon':
+      case 'handin':
+      case 'use':
+      case 'gather':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.quest(ws, att, room, frame));
     }
+  }
+
+  // ---------- quests, NPC owls and interactables ----------
+
+  /** Run quest work for one visitor after the previous one finished (no interleaving per visitor). */
+  private serial(att: Attachment, fn: () => Promise<void>): void {
+    const prev = this.queues.get(att.id) ?? Promise.resolve();
+    const next = prev.then(fn, fn).catch(() => undefined);
+    this.queues.set(att.id, next);
+    void next.finally(() => {
+      if (this.queues.get(att.id) === next) this.queues.delete(att.id);
+    });
+  }
+
+  private sendBoard(ws: WebSocket, board: QuestBoard, updates: QuestUpdate[], extra: { r?: number; ok?: boolean; reason?: string } = {}): void {
+    this.send(ws, { t: 'quests', ...extra, board, updates });
+  }
+
+  /** Count an event toward the visitor's quests and push the board when something moved. */
+  private async pushEvent(ws: WebSocket, att: Attachment, ev: Parameters<Collections['questEvent']>[1]): Promise<void> {
+    if (!att.cid) return;
+    try {
+      const res = await this.collections().questEvent(att.cid, ev, att.room);
+      if (res.updates.length && res.board) this.sendBoard(ws, res.board, res.updates);
+    } catch {
+      /* quests are best effort for pushes: the next request returns the true board */
+    }
+  }
+
+  private async quest(ws: WebSocket, att: Attachment, room: Room, frame: Extract<ClientFrame, { r: number }>): Promise<void> {
+    const r = frame.r;
+    const refuse = (reason: 'far' | 'unknown' | 'busy' | 'offline') => this.send(ws, { t: 'refused', r, reason });
+    if (!att.cid) return refuse('unknown');
+    if (room.sessionOf(att.id) !== att.sid) return;
+    const cid = att.cid;
+    const stub = this.collections();
+    try {
+      switch (frame.t) {
+        case 'quests':
+          return this.sendBoard(ws, await stub.board(cid), [], { r });
+        case 'talk': {
+          const npc = getNpc(frame.npc);
+          if (!npc || npc.room !== att.room) return refuse('unknown');
+          if (!room.near(att.id, npc.pos, NPC_TALK_RADIUS)) return refuse('far');
+          const res = await stub.questEvent(cid, { kind: 'talk', npc: npc.id }, att.room);
+          return this.sendBoard(ws, res.board ?? (await stub.board(cid)), res.updates, { r });
+        }
+        case 'accept':
+        case 'handin': {
+          const q = getQuest(frame.quest);
+          const giver = q ? getNpc(q.giver) : undefined;
+          if (!q || !giver || giver.room !== att.room) return refuse('unknown');
+          if (!room.near(att.id, giver.pos, NPC_TALK_RADIUS)) return refuse('far');
+          if (frame.t === 'accept') {
+            const res = await stub.accept(cid, q.id, att.room);
+            return this.sendBoard(ws, res.board, [], { r, ok: res.ok, ...(res.ok ? {} : { reason: res.reason }) });
+          }
+          const res = await stub.handIn(cid, q.id, giver.id);
+          if (res.ok && res.award && !res.award.dup) this.owned.get(cid)?.set.add(res.award.variant);
+          return this.send(ws, { t: 'handin', r, ...res });
+        }
+        case 'abandon': {
+          const res = await stub.abandon(cid, frame.quest);
+          return this.sendBoard(ws, res.board, [], { r, ok: res.ok });
+        }
+        case 'use': {
+          const it = getInteractable(frame.target);
+          if (!it || it.room !== att.room) return refuse('unknown');
+          const rules = KIND_RULES[it.kind];
+          if (!room.near(att.id, it.pos, rules.reach)) return refuse('far');
+          if (!room.takeUse(att.id)) return refuse('busy');
+          const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
+          if (rules.shared) {
+            if (!room.useObject(att.id, it.id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+            this.saveObjects();
+            const res = await stub.flop(cid, ev, att.room);
+            this.send(ws, { t: 'useResult', r, ok: true, feathers: res.feathers, total: res.total, updates: res.updates });
+            if (res.board) this.sendBoard(ws, res.board, res.updates);
+            return;
+          }
+          const res = await stub.questEvent(cid, ev, att.room);
+          this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: res.board?.feathers ?? -1, updates: res.updates });
+          if (res.board) this.sendBoard(ws, res.board, res.updates);
+          return;
+        }
+        case 'gather': {
+          const pos = room.positionOf(att.id);
+          if (!pos) return refuse('unknown');
+          const res = await stub.gather(cid, frame.quest, frame.n, att.room, pos);
+          if (res.ok) return this.sendBoard(ws, res.board, res.updates, { r, ok: true });
+          return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
+        }
+      }
+    } catch {
+      return refuse('offline');
+    }
+  }
+
+  /** Keep the used-up shared objects in storage as well as in memory (see the constructor). */
+  private saveObjects(): void {
+    const all: Record<string, Record<string, number>> = {};
+    for (const [id, r] of this.rooms) {
+      const until = r.objectStates();
+      if (Object.keys(until).length) all[id] = until;
+    }
+    this.ctx.waitUntil(this.ctx.storage.put(OBJECTS_KEY, all));
   }
 
   // ---------- collectibles ----------
@@ -294,43 +434,16 @@ export class RoomObject extends DurableObject<Env> {
     );
   }
 
-  private async sendDrops(ws: WebSocket, att: Attachment): Promise<void> {
-    const none: ServerFrame = { t: 'drops', window: '', next: 0, drops: [], feathers: 0 };
-    if (!att.cid) return this.send(ws, none);
-    try {
-      const info = await this.collections().drops(att.cid, att.tz);
-      this.send(ws, { t: 'drops', window: info.window, next: info.next, drops: info.drops, feathers: info.feathers });
-    } catch {
-      this.send(ws, none);
-    }
-  }
-
-  private async pickup(ws: WebSocket, att: Attachment, room: Room, n: number): Promise<void> {
-    const pos = room.positionOf(att.id);
-    if (!att.cid || !pos) return this.send(ws, { t: 'missed', n, reason: 'gone' });
-    if (this.picking.has(att.id)) return this.send(ws, { t: 'missed', n, reason: 'busy' });
-    this.picking.add(att.id);
-    try {
-      const res = await this.collections().claim(att.cid, att.tz, n, att.room, pos);
-      if (res.ok) {
-        this.owned.get(att.cid)?.set.add(res.variant);
-        this.send(ws, { t: 'found', n, variant: res.variant, dup: res.dup, feathers: res.feathers });
-      } else {
-        this.send(ws, { t: 'missed', n, reason: res.reason });
-      }
-    } catch {
-      this.send(ws, { t: 'missed', n, reason: 'busy' });
-    } finally {
-      this.picking.delete(att.id);
-    }
-  }
-
-  private async emote(att: Attachment, room: Room, e: string): Promise<void> {
+  private async emote(ws: WebSocket, att: Attachment, room: Room, e: string): Promise<void> {
     if (!att.cid) return;
     let entry: OwnedEntry | null | undefined = this.owned.get(att.cid);
     if (!entry?.set.has(e)) entry = await this.loadOwned(att.cid, att.tz, true);
     if (!entry?.set.has(e) || room.sessionOf(att.id) !== att.sid) return;
-    room.emote(att.id, e);
+    if (!room.emote(att.id, e)) return;
+    // An emote counts for quests in this room, and "for" any NPC owl standing close enough.
+    const pos = room.positionOf(att.id);
+    const near = pos ? npcsIn(att.room).filter((n) => distance(n.pos, pos) <= NPC_EMOTE_RADIUS).map((n) => n.id) : [];
+    this.serial(att, () => this.pushEvent(ws, att, { kind: 'emote', emote: e, room: att.room, near }));
   }
 
   override async webSocketClose(ws: WebSocket): Promise<void> {

@@ -229,7 +229,7 @@ describe('Room', () => {
   });
 });
 
-describe('Room collectibles hooks', () => {
+describe('Room hooks for collectibles, quests and interactables', () => {
   let now = 2_000_000;
   let room: Room;
   beforeEach(() => {
@@ -263,6 +263,39 @@ describe('Room collectibles hooks', () => {
     now += LIMITS.emoteEveryMs;
     expect(room.emote('a', 'flap')).toBe(true);
     expect(b.count('emote')).toBe(2);
+  });
+
+  it('sends used-up objects on join and lets a shared object be used once until it is back', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    expect(a.last('objects')).toEqual({ t: 'objects', until: {} });
+    expect(room.useObject('a', 'pile', now + 5000)).toBe(true);
+    expect(a.last('used')).toEqual({ t: 'used', id: 'pile', by: 'a', until: now + 5000 }); // the user plays it too
+    expect(room.useObject('a', 'pile', now + 9000)).toBe(false);
+    room.join(b, 'b', hello());
+    expect(b.last('objects')).toEqual({ t: 'objects', until: { pile: now + 5000 } });
+    now += 5000;
+    expect(room.objectStates()).toEqual({});
+    expect(room.useObject('b', 'pile', now + 5000)).toBe(true);
+    expect(a.last('used')!.by).toBe('b');
+    // After an eviction the saved states come back, minus any that are already back.
+    const fresh = new Room(def, { now: () => now, random: () => 0.5, cap: 3 });
+    fresh.restoreObjects({ pile: now + 5000, old: now - 1 });
+    expect(fresh.objectStates()).toEqual({ pile: now + 5000 });
+  });
+
+  it('checks reach on the server clock with a little slack, and spaces out uses', () => {
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const p = a.last('welcome')!.you.pos;
+    expect(room.near('a', { x: p.x + 100 + LIMITS.reachSlackPx, y: p.y }, 100)).toBe(true);
+    expect(room.near('a', { x: p.x + 101 + LIMITS.reachSlackPx, y: p.y }, 100)).toBe(false);
+    expect(room.near('nobody', p, 100)).toBe(false);
+    expect(room.takeUse('a')).toBe(true);
+    expect(room.takeUse('a')).toBe(false);
+    now += LIMITS.useEveryMs;
+    expect(room.takeUse('a')).toBe(true);
   });
 
   it('applies a vetted look without counting it twice, and closes floods on adapter frames', () => {

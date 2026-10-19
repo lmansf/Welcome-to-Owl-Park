@@ -1,50 +1,38 @@
-import { CollectionBook, MemoryCollectionStore, allSpots, normalizeTimeZone, type CraftResult, type Inventory, type TzResult, type Vec2 } from '@owl-park/shared';
+import {
+  CollectionBook,
+  KIND_RULES,
+  LEAF_FEATHERS_PER_DAY,
+  MemoryCollectionStore,
+  NPC_TALK_RADIUS,
+  QuestBook,
+  REACH_SLACK,
+  USE_COOLDOWN_MS,
+  distance,
+  getInteractable,
+  getNpc,
+  getQuest,
+  leafFeathers,
+  leafRespawnMs,
+  normalizeTimeZone,
+  type BuyResult,
+  type GiftResult,
+  type Inventory,
+  type NpcDef,
+  type QuestSpots,
+  type ShopView,
+  type Vec2,
+} from '@owl-park/shared';
+import type { RoomConnection } from '../net/transport';
 import { ROOMS } from '../rooms';
-import type { CollectionService, DropLink, DropsInfo, PickupResult } from './service';
+import type { CollectionService, HandInReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
 
 const COLLECTOR_KEY = 'owl-park:local-collector';
 const STORE_PREFIX = 'owl-park:collection:';
+const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
 export interface KeyValueStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
-}
-
-/**
- * The seed of a window's drops in local mode. Not a secret (there is no server to keep one):
- * a fast 128-bit string hash spread over 32 bytes, which also works where WebCrypto does not
- * (a phone opening the dev server over the LAN is not a secure context).
- */
-export function localSeed(cid: string, windowKey: string): Uint8Array {
-  const str = `owl-park-local|${cid}|${windowKey}`;
-  let h1 = 1779033703;
-  let h2 = 3144134277;
-  let h3 = 1013904242;
-  let h4 = 2773480762;
-  for (let i = 0; i < str.length; i++) {
-    const k = str.charCodeAt(i);
-    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
-    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
-    h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
-    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
-  }
-  const out = new Uint8Array(32);
-  let s = [h1 >>> 0, h2 >>> 0, h3 >>> 0, h4 >>> 0];
-  for (let i = 0; i < 32; i += 4) {
-    // xorshift128 to spread the four words over 32 bytes
-    let t = s[3]!;
-    const x = s[0]!;
-    s = [t, x, s[1]!, s[2]!];
-    t ^= t << 11;
-    t ^= t >>> 8;
-    const w = (t ^ x ^ (x >>> 19)) >>> 0;
-    s[0] = w;
-    out[i] = w & 0xff;
-    out[i + 1] = (w >>> 8) & 0xff;
-    out[i + 2] = (w >>> 16) & 0xff;
-    out[i + 3] = (w >>> 24) & 0xff;
-  }
-  return out;
 }
 
 function randomCid(): string {
@@ -56,22 +44,31 @@ function randomCid(): string {
   return s;
 }
 
+const refused = (reason: string): QuestReply => ({ ok: false, reason, board: null, updates: [] });
+const unused = (reason: string): UseReply => ({ ok: false, reason, feathers: 0, total: -1, updates: [] });
+
 /**
- * The whole collection in this browser (no server). Same rules and numbers as the room server;
- * positions are trusted because there is nobody to cheat. Tabs share one collection: the store
- * is re-read before and written after every operation.
+ * The whole collection in this browser (no server). Same rules and numbers as the room server,
+ * reach checks included; leaf piles are this page's alone (there is nobody to share them with).
+ * Tabs share one collection: the store is re-read before and written after every operation.
  */
 export class LocalCollections implements CollectionService {
   readonly mode = 'local' as const;
   readonly cid: string;
   private readonly tz: string;
-  private readonly spots = allSpots(ROOMS);
+  private readonly now: () => number;
+  private readonly random: () => number;
+  private memory: MemoryCollectionStore | null = null;
+  /** Shared objects used up in this page: id -> when they are back. */
+  private readonly objects = new Map<string, number>();
+  private usedAt = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly storage: KeyValueStorage | null,
-    opts: { collector?: string | undefined; tz?: string | undefined; now?: () => number } = {},
+    opts: { collector?: string | undefined; tz?: string | undefined; now?: () => number; random?: () => number } = {},
   ) {
     this.now = opts.now ?? (() => Date.now());
+    this.random = opts.random ?? Math.random;
     this.tz = normalizeTimeZone(opts.tz);
     let cid = opts.collector && /^[A-Za-z0-9_-]{1,32}$/.test(opts.collector) ? opts.collector : null;
     if (!cid) {
@@ -92,11 +89,8 @@ export class LocalCollections implements CollectionService {
     this.cid = cid;
   }
 
-  private readonly now: () => number;
-  private memory: MemoryCollectionStore | null = null;
-
   /** Run against the latest stored collection, then store it again. */
-  private use<T>(fn: (book: CollectionBook) => T): T {
+  private use<T>(fn: (books: { book: CollectionBook; quests: QuestBook }) => T): T {
     let store: MemoryCollectionStore;
     try {
       const raw = this.storage?.getItem(STORE_PREFIX + this.cid) ?? null;
@@ -104,7 +98,8 @@ export class LocalCollections implements CollectionService {
     } catch {
       store = this.memory ?? new MemoryCollectionStore();
     }
-    const out = fn(new CollectionBook(store, this.spots));
+    const book = new CollectionBook(store);
+    const out = fn({ book, quests: new QuestBook(store, book, SPOTS) });
     this.memory = store;
     try {
       this.storage?.setItem(STORE_PREFIX + this.cid, JSON.stringify(store.snapshot()));
@@ -115,27 +110,111 @@ export class LocalCollections implements CollectionService {
   }
 
   async inventory(): Promise<Inventory> {
-    return this.use((book) => book.inventory(this.cid, this.tz, this.now()));
+    return this.use(({ book }) => book.inventory(this.cid, this.tz, this.now()));
   }
 
-  async drops(_link: DropLink | null): Promise<DropsInfo> {
-    return this.use((book) => {
-      const now = this.now();
-      const cur = book.current(this.cid, this.tz, now);
-      const rows = cur.rows ?? book.storeDrops(this.cid, cur.window, localSeed(this.cid, cur.window));
-      return book.info(book.ensure(this.cid, this.tz, now), cur.window, cur.next, rows);
-    });
+  async shop(): Promise<ShopView> {
+    return this.use(({ book }) => book.shop(this.cid, this.now()));
   }
 
-  async pickup(n: number, room: string, pos: Vec2, _link: DropLink | null): Promise<PickupResult> {
-    return this.use((book) => book.claim(this.cid, this.tz, n, room, pos, this.now()));
+  async buy(variant: string): Promise<BuyResult> {
+    return this.use(({ book }) => book.buy(this.cid, variant, this.now()));
   }
 
-  async craft(variant: string): Promise<CraftResult> {
-    return this.use((book) => book.craft(this.cid, this.tz, variant, this.now()));
+  async claimGift(): Promise<GiftResult> {
+    return this.use(({ book }) => book.claimGift(this.cid, this.now()));
   }
 
-  async setTimeZone(tz: string): Promise<TzResult> {
-    return this.use((book) => book.setTimeZone(this.cid, this.tz, tz, this.now()));
+  private liveObjects(): Record<string, number> {
+    const now = this.now();
+    const out: Record<string, number> = {};
+    for (const [id, until] of this.objects) {
+      if (until > now) out[id] = until;
+      else this.objects.delete(id);
+    }
+    return out;
+  }
+
+  questLink(room: string, _conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink {
+    const cid = this.cid;
+    const near = (p: Vec2, radius: number) => distance(where(), p) <= radius + REACH_SLACK;
+    /** The giver of a quest, if it stands in this room. */
+    const giverHere = (quest: string): NpcDef | undefined => {
+      const giver = getNpc(getQuest(quest)?.giver ?? '');
+      return giver && giver.room === room ? giver : undefined;
+    };
+    // The room server reports used-up objects right after its welcome; so does this.
+    queueMicrotask(() => pushes.onObjects?.(this.liveObjects()));
+    return {
+      board: async () => this.use(({ quests }) => ({ ok: true, board: quests.board(cid, this.now()), updates: [] })),
+      talk: async (npcId) => {
+        const npc = getNpc(npcId);
+        if (!npc || npc.room !== room) return refused('unknown');
+        if (!near(npc.pos, NPC_TALK_RADIUS)) return refused('far');
+        return this.use(({ quests }) => {
+          const now = this.now();
+          const updates = quests.event(cid, { kind: 'talk', npc: npc.id }, now, room);
+          return { ok: true, board: quests.board(cid, now), updates };
+        });
+      },
+      accept: async (quest) => {
+        const giver = giverHere(quest);
+        if (!giver) return refused('unknown');
+        if (!near(giver.pos, NPC_TALK_RADIUS)) return refused('far');
+        return this.use(({ quests }) => {
+          const res = quests.accept(cid, quest, this.now(), room);
+          return { ok: res.ok, ...(res.ok ? {} : { reason: res.reason }), board: res.board, updates: [] };
+        });
+      },
+      abandon: async (quest) =>
+        this.use(({ quests }) => {
+          const res = quests.abandon(cid, quest, this.now());
+          return { ok: res.ok, board: res.board, updates: [] };
+        }),
+      handIn: async (quest): Promise<HandInReply> => {
+        const giver = giverHere(quest);
+        if (!giver) return { ok: false, reason: 'unknown', board: null };
+        if (!near(giver.pos, NPC_TALK_RADIUS)) return { ok: false, reason: 'far', board: null };
+        return this.use(({ quests }) => {
+          const res = quests.handIn(cid, quest, giver.id, this.now(), this.random);
+          return res.ok ? res : { ok: false, reason: res.reason, board: res.board };
+        });
+      },
+      use: async (target) => {
+        const it = getInteractable(target);
+        if (!it || it.room !== room) return unused('unknown');
+        const rules = KIND_RULES[it.kind];
+        if (!near(it.pos, rules.reach)) return unused('far');
+        const now = this.now();
+        if (now - this.usedAt < USE_COOLDOWN_MS) return unused('busy');
+        this.usedAt = now;
+        if (rules.shared) {
+          if ((this.objects.get(it.id) ?? 0) > now) return unused('gone');
+          const until = now + leafRespawnMs(this.random);
+          this.objects.set(it.id, until);
+          pushes.onUsed?.(it.id, null, until);
+        }
+        return this.use(({ book, quests }) => {
+          const earned = rules.shared ? book.earnCapped(cid, 'leaves', leafFeathers(this.random), LEAF_FEATHERS_PER_DAY, now) : null;
+          const updates = quests.event(cid, { kind: 'interact', what: it.kind, id: it.id, room }, now, room);
+          const reply: UseReply = { ok: true, feathers: earned?.added ?? 0, total: earned?.feathers ?? book.feathers(cid, now), updates };
+          return updates.length ? { ...reply, board: quests.board(cid, now) } : reply;
+        });
+      },
+      gather: async (quest, n) =>
+        this.use(({ quests }) => {
+          const now = this.now();
+          const res = quests.gather(cid, quest, n, room, where(), now);
+          return res.ok ? { ok: true, board: res.board, updates: res.updates } : { ok: false, reason: res.reason, board: quests.board(cid, now), updates: [] };
+        }),
+      note: (ev) => {
+        const moved = this.use(({ quests }) => {
+          const now = this.now();
+          const updates = quests.event(cid, ev, now, room);
+          return updates.length ? { board: quests.board(cid, now), updates } : null;
+        });
+        if (moved) pushes.onQuests?.(moved.board, moved.updates);
+      },
+    };
   }
 }

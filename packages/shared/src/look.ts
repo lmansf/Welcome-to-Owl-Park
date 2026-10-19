@@ -1,4 +1,5 @@
 import { sanitizeWear } from './collectibles';
+import { isSpecies } from './species';
 import type { OwlLook } from './protocol';
 
 /** Colour choices offered in the owl customiser. All are original picks. */
@@ -30,6 +31,7 @@ export function sanitizeLook(input: unknown): OwlLook {
   if (isPledge(o.pledge)) look.pledge = o.pledge;
   const wear = sanitizeWear(o.wear);
   if (wear) look.wear = wear;
+  if (isSpecies(o.species)) look.species = o.species;
   return look;
 }
 
@@ -38,6 +40,7 @@ export function cleanLook(look: OwlLook): OwlLook {
   const out: OwlLook = { body: look.body, belly: look.belly, accent: look.accent };
   if (look.pledge !== undefined) out.pledge = look.pledge;
   if (look.wear && Object.keys(look.wear).length) out.wear = { ...look.wear };
+  if (look.species !== undefined) out.species = look.species;
   return out;
 }
 

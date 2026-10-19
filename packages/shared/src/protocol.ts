@@ -5,6 +5,7 @@
  * leave. Nothing here carries text written by visitors.
  */
 import type { Wear } from './collectibles';
+import type { SpeciesId } from './species';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -22,6 +23,8 @@ export interface OwlLook {
   pledge?: string;
   /** Collectibles worn: one variant id per slot (head, face, neck, pet, fx). */
   wear?: Wear;
+  /** What kind of owl (species.ts); the great horned owl when absent. */
+  species?: SpeciesId;
 }
 
 /**

@@ -1,35 +1,45 @@
 import Phaser from 'phaser';
 import {
   EMOTE_IDS,
+  KIND_RULES,
+  MAX_ACTIVE_QUESTS,
+  NPC_EMOTE_RADIUS,
+  NPC_TALK_RADIUS,
   PICKUP_CLIENT_RADIUS,
   PROTOCOL_VERSION,
+  REACH_SLACK,
   ROOM_H,
   ROOM_W,
   RARITY_COLOURS,
   RARITY_NAMES,
   backgroundTiles,
   distance,
-  duplicatePayout,
   filterOwnedWear,
   findSpawn,
   foregroundTiles,
-  localClock,
+  getInteractable,
+  getNpc,
+  getQuest,
+  interactablesIn,
+  npcsIn,
   parseVariant,
   pointInRect,
   positionAlongWalk,
   resolveTarget,
   steerTarget,
   variantName,
-  type DropView,
   type EquipSlot,
   type OwlLook,
   type PlayerState,
+  type QuestBoard,
+  type QuestUpdate,
   type RoomDef,
   type Vec2,
   type Walk,
   type Wear,
 } from '@owl-park/shared';
-import type { DropsInfo } from '../collect/service';
+import type { QuestState } from '../collect/quests';
+import type { QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
@@ -42,9 +52,11 @@ import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './a
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { roomScaleCap } from './artFiles';
 import { placeHints } from './hints';
-import { DropMarker } from './DropMarker';
 import { itemScale } from './items';
+import { LeafPile, featherFind } from './LeafPile';
+import { NpcOwl } from './Npc';
 import { Owl } from './Owl';
+import { QuestItemMarker, SpotGlow } from './QuestItem';
 
 export interface RoomStart {
   room: string;
@@ -61,16 +73,40 @@ const CLOCK_TOLERANCE_MS = 1500;
 const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
 /** Ask again after a failed pickup this long later (the owl may still be walking up). */
 const PICKUP_RETRY_MS = 800;
+/** A dialogue closes once the owl wanders this far from the NPC (room pixels). */
+const DIALOGUE_LEAVE_PX = NPC_TALK_RADIUS + REACH_SLACK + 40;
+/** An NPC turns to look at a visitor this close. */
+const NPC_LOOK_PX = NPC_TALK_RADIUS * 1.6;
+/** The flop lands on the pile this long after it starts: the leaves fly then. */
+const FLOP_LAND_MS = 330;
+/** A few words for using things that stay put. */
+const USE_LINES: Record<string, readonly string[]> = {
+  stall: ['Neon trinkets, rain-polished gears and a jar of something glowing.', 'A tray of buttons that hum when you look at them.', 'Paper lanterns, folded owls and one very small umbrella.'],
+  moonbeam: ['The moonbeam is warm. You feel a little shinier.', 'You bask. The moonlight hums softly.', 'Silver light settles on your feathers.'],
+};
+
+/** Something the owl was walking up to do: talk to an NPC or use an interactable on arrival. */
+interface Errand {
+  kind: 'talk' | 'use';
+  id: string;
+}
+
+/** Something to do where the owl stands: a button each, and E runs the first. */
+interface Action {
+  id: string;
+  label: string;
+  run: () => void;
+}
 /** How far hint chips keep from the screen's edges, in CSS pixels (clear of the HUD's top and bottom bars). */
 const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
 const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', grove: '#FFB347' };
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
 const KEY_TURNS = 8;
-/** Never wait longer than this for a window change (timers past ~24 days overflow). */
+/** Never wait longer than this for the park day to turn (timers past ~24 days overflow). */
 const MAX_TIMER_MS = 6 * 60 * 60 * 1000;
-/** Ask for the drops again this long after a request failed (offline, or no answer in time). */
-const DROPS_RETRY_MS = 5_000;
+/** Ask for the quest board again this long after a request failed (offline, or no answer in time). */
+const BOARD_RETRY_MS = 5_000;
 
 /**
  * One scene renders any room from its RoomDef: background, set pieces, the local owl,
@@ -90,8 +126,8 @@ export class RoomScene extends Phaser.Scene {
   private playerId!: string;
   private look!: OwlLook;
   private atIdol = false;
-  /** Interactive spots the owl stands in (door ids with an entry in `interactions`), in room order. */
-  private spots: string[] = [];
+  /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
+  private actions: Action[] = [];
   private keys: Keys | null = null;
   /** The direction the held keys walk in. */
   private keyDir: Vec2 | null = null;
@@ -104,17 +140,29 @@ export class RoomScene extends Phaser.Scene {
   /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
   private pendingVote = false;
   private pieces: SetPieces = {};
-  private idolTapAt = 0;
+  /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
+  private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
   private lastStatus: ConnectionStatus | null = null;
   private collection!: CollectionState;
-  private drops: DropsInfo | null = null;
-  private readonly markers = new Map<number, DropMarker>();
-  /** Pickups in flight, and when a failed one may be retried. */
-  private readonly picking = new Map<number, number>();
-  private windowTimer: Phaser.Time.TimerEvent | null = null;
+  private quests!: QuestState;
+  private link: QuestLink | null = null;
+  private readonly npcs = new Map<string, NpcOwl>();
+  private readonly piles = new Map<string, LeafPile>();
+  private readonly glows = new Map<string, SpotGlow>();
+  private readonly items = new Map<string, QuestItemMarker>();
+  /** Pickups in flight (by item key), and when a failed one may be retried. */
+  private readonly gathering = new Map<string, number>();
+  /** Set when the visitor tapped an NPC or an interactable from afar: do it on arrival. */
+  private errand: Errand | null = null;
+  /** A talk or a use is on its way to the room (one at a time). */
+  private busy = false;
+  /** The NPC whose dialogue is open, if any. */
+  private talkingTo: string | null = null;
+  private boardTimer: Phaser.Time.TimerEvent | null = null;
+  private unwatchBoard: (() => void) | null = null;
   private readonly peerEmotes = new Map<string, string>();
 
   constructor() {
@@ -133,7 +181,7 @@ export class RoomScene extends Phaser.Scene {
     this.conn = null;
     this.leaving = false;
     this.atIdol = false;
-    this.spots = [];
+    this.actions = [];
     this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
     this.keyDir = null;
     this.keyWalk = false;
@@ -146,10 +194,18 @@ export class RoomScene extends Phaser.Scene {
     this.gen += 1;
     this.lastStatus = null;
     this.collection = this.registry.get('collection') as CollectionState;
-    this.drops = null;
-    this.markers.clear();
-    this.picking.clear();
-    this.windowTimer = null;
+    this.quests = this.registry.get('quests') as QuestState;
+    this.link = null;
+    this.npcs.clear();
+    this.piles.clear();
+    this.glows.clear();
+    this.items.clear();
+    this.gathering.clear();
+    this.errand = null;
+    this.busy = false;
+    this.talkingTo = null;
+    this.boardTimer = null;
+    this.unwatchBoard = null;
     this.peerEmotes.clear();
     this.registry.set('currentRoom', this.room.id);
     this.registry.set('spawnName', data.spawn);
@@ -191,6 +247,7 @@ export class RoomScene extends Phaser.Scene {
 
     const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
+    this.addResidents();
 
     this.setupCamera();
     this.setupInput();
@@ -198,10 +255,12 @@ export class RoomScene extends Phaser.Scene {
 
     this.hud.setCount(1);
     this.hud.setActions([]);
-    // The colour picker changes colours only: today's pledge and the worn collectibles stay.
-    this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent }));
-    this.hud.onAction((id) => this.interactions[id]?.run());
+    // The owl panel changes colours and species only: today's pledge and the worn collectibles stay.
+    this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
+    this.hud.onAction((id) => this.actions.find((a) => a.id === id)?.run());
     this.hud.onHint((id) => this.walkToDoorway(id));
+    this.unwatchBoard = this.quests.onChange((board) => this.showBoard(board));
+    this.showBoard(this.quests.board);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
@@ -216,10 +275,12 @@ export class RoomScene extends Phaser.Scene {
     if (!this.leaving) {
       this.steer();
       this.checkDoors(finished);
-      this.checkDrops(now);
+      this.checkItems(now);
       this.updateHints();
     }
     for (const owl of this.peers.values()) owl.tick(now);
+    for (const npc of this.npcs.values()) npc.tick(now);
+    for (const pile of this.piles.values()) pile.tick(now);
   }
 
   // ---------- networking ----------
@@ -232,7 +293,21 @@ export class RoomScene extends Phaser.Scene {
     const gen = this.gen;
     const live = () => gen === this.gen && !this.leaving;
     const spawnName = this.registry.get('spawnName') as string | undefined;
+    // What the room pushes about quests and shared objects (the room server's own, or the local mode's).
+    const pushes: QuestPushes = {
+      onQuests: (board, updates) => {
+        if (!live()) return;
+        this.applyBoard(board);
+        this.showUpdates(updates);
+      },
+      onObjects: (until) => {
+        if (!live()) return;
+        for (const pile of this.piles.values()) pile.setUntil(until[pile.id] ?? 0);
+      },
+      onUsed: (id, by, until) => live() && this.onUsed(id, by, until),
+    };
     const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}) } as PlayerState, {
+      ...pushes,
       onPeerState: (s) => live() && this.onPeerState(s),
       onPeerMove: (id, walk) => live() && this.onPeerMove(id, walk),
       onPeerLeave: (id) => live() && this.onPeerLeave(id),
@@ -263,12 +338,17 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     this.conn = conn;
-    void this.refreshDrops();
+    this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
+    // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
+    this.link?.note({ kind: 'visit', room: this.room.id });
+    void this.refreshBoard();
   }
 
   private onStatus(s: ConnectionStatus): void {
     this.hud.setStatus(s, this.transport.kind);
     const wentOffline = s === 'offline' && this.lastStatus !== 'offline';
+    // Back online after a drop: the board may have moved meanwhile (a new park day, a push missed).
+    if (s === 'online' && this.lastStatus === 'offline' && this.conn) void this.refreshBoard();
     this.lastStatus = s;
     if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
   }
@@ -343,9 +423,10 @@ export class RoomScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
       // Phaser only emits POINTER_UP for releases on the canvas; also require the press to have been on it.
       if (this.leaving || p.downElement !== this.game.canvas) return;
-      if (Date.now() - this.idolTapAt < 100) return; // the idol took this tap
+      if (Date.now() - this.tapTakenAt < 100) return; // the idol or an NPC took this tap
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
       this.pendingVote = false; // a new destination cancels a walk to the idol
+      this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
       this.walkTo({ x: world.x, y: world.y });
     });
@@ -374,6 +455,7 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     this.pendingVote = false; // walking away cancels a walk to the idol
+    this.errand = null;
     this.walkTo(target, true);
   }
 
@@ -416,12 +498,12 @@ export class RoomScene extends Phaser.Scene {
     this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 });
   }
 
-  /** E: use the interactive spot the owl stands in (the first, where two overlap). */
+  /** E: do the first thing the owl can do where it stands (a spot, an NPC owl, a leaf pile). */
   interact(): boolean {
     if (!this.built || this.leaving) return false;
-    const id = this.spots[0];
-    if (!id) return false;
-    this.interactions[id]?.run();
+    const action = this.actions[0];
+    if (!action) return false;
+    action.run();
     return true;
   }
 
@@ -439,7 +521,8 @@ export class RoomScene extends Phaser.Scene {
   private onIdolTap(pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
     if (this.leaving || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
     event.stopPropagation();
-    this.idolTapAt = Date.now();
+    this.tapTakenAt = Date.now();
+    this.errand = null;
     if (this.atIdol) {
       void this.vote();
       return;
@@ -461,8 +544,16 @@ export class RoomScene extends Phaser.Scene {
     doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
     /** Where the owl's eyes are, left (-) or right (+) of its feet: the way its painting faces. */
     eyes: number;
-    /** This window's unclaimed drops in every room (only this visitor sees them). */
-    drops: DropView[];
+    /** NPC owls in this room and the marker each shows. */
+    npcs: Array<{ id: string; x: number; y: number; mark: string | null }>;
+    /** Interactables in this room; `here` is false while a leaf pile is used up. */
+    objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
+    /** Quest items waiting in this room (only this visitor sees them). */
+    items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;
+    /** What the owl can do where it stands (the action buttons), in order. */
+    actions: string[];
+    /** The NPC whose dialogue is open. */
+    talkingTo: string | null;
   } | null {
     if (!this.built) return null;
     return {
@@ -474,95 +565,316 @@ export class RoomScene extends Phaser.Scene {
       peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
-      drops: this.drops?.drops ?? [],
+      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id) })),
+      objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, here: this.piles.get(d.id)?.here ?? true })),
+      items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y })),
+      actions: this.actions.map((a) => a.id),
+      talkingTo: this.talkingTo,
     };
   }
 
-  // ---------- collectibles ----------
+  // ---------- NPC owls, interactables and quests ----------
 
-  /** Ask for this window's drops, show the ones in this room, and come back when the window turns. */
-  private async refreshDrops(): Promise<void> {
-    const gen = this.gen;
-    let info: DropsInfo;
-    try {
-      info = await this.collection.service.drops(this.conn?.link ?? null);
-    } catch {
-      if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
-      if (!this.drops) this.hud.setFinds(null);
-      this.windowTimer?.remove();
-      this.windowTimer = this.time.delayedCall(DROPS_RETRY_MS, () => void this.refreshDrops());
-      return;
+  /** The room's residents: NPC owls, leaf piles, and glows under the things that stay put. */
+  private addResidents(): void {
+    const scale = itemScale(this.cfg.pixelRatio);
+    for (const def of npcsIn(this.room.id)) this.npcs.set(def.id, new NpcOwl(this, def, scale, (npc, pointer, event) => this.onNpcTap(npc, pointer, event)));
+    for (const def of interactablesIn(this.room.id)) {
+      if (def.kind === 'leaf-pile') this.piles.set(def.id, new LeafPile(this, def));
+      else this.glows.set(def.id, new SpotGlow(this, def));
     }
+  }
+
+  /** Tapping an NPC owl: talk now if close enough, otherwise walk up and talk on arrival. */
+  private onNpcTap(npc: NpcOwl, pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
+    if (this.leaving || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
+    event.stopPropagation();
+    this.tapTakenAt = Date.now();
+    this.pendingVote = false;
+    this.goDo({ kind: 'talk', id: npc.id });
+  }
+
+  /** Where an errand happens and how close the owl must stand for it. */
+  private errandSpot(e: Errand): { pos: Vec2; reach: number } | null {
+    if (e.kind === 'talk') {
+      const npc = this.npcs.get(e.id);
+      return npc ? { pos: npc.def.pos, reach: NPC_TALK_RADIUS } : null;
+    }
+    const def = getInteractable(e.id);
+    return def && def.room === this.room.id ? { pos: def.pos, reach: KIND_RULES[def.kind].reach } : null;
+  }
+
+  private runErrand(e: Errand): void {
+    if (e.kind === 'talk') void this.talk(e.id);
+    else void this.use(e.id);
+  }
+
+  /** Do something at an NPC or an interactable: now when close enough, otherwise walk up first. */
+  goDo(e: Errand): boolean {
+    if (!this.built || this.leaving) return false;
+    const spot = this.errandSpot(e);
+    if (!spot) return false;
+    if (distance(this.me.pos, spot.pos) <= spot.reach) {
+      this.errand = null;
+      this.runErrand(e);
+      return true;
+    }
+    // Stand beside an NPC (on the visitor's side), or right on a leaf pile or at a stall.
+    const side = this.me.pos.x < spot.pos.x ? -1 : 1;
+    const target = e.kind === 'talk' ? { x: spot.pos.x + side * 70, y: spot.pos.y + 24 } : spot.pos;
+    if (!this.walkTo(target)) {
+      // Already as close as the floor allows.
+      if (distance(this.me.pos, spot.pos) <= spot.reach + REACH_SLACK / 2) this.runErrand(e);
+      return true;
+    }
+    this.errand = e;
+    return true;
+  }
+
+  /** What the owl can do here, recomputed every frame: spots first, then the nearest NPC, then interactables. */
+  private actionsHere(spots: string[]): Action[] {
+    const out: Action[] = spots.map((id) => ({ id, label: this.interactions[id]!.label, run: () => this.interactions[id]?.run() }));
+    const pos = this.me.pos;
+    let nearest: NpcOwl | null = null;
+    let best = Number.POSITIVE_INFINITY;
+    for (const npc of this.npcs.values()) {
+      const d = distance(pos, npc.def.pos);
+      npc.lookAt(d <= NPC_LOOK_PX ? pos.x : null);
+      if (d <= NPC_TALK_RADIUS && d < best) {
+        nearest = npc;
+        best = d;
+      }
+    }
+    if (nearest) {
+      const id = nearest.id;
+      out.push({ id: `npc:${id}`, label: `Talk to ${nearest.def.name}`, run: () => void this.talk(id) });
+    }
+    for (const def of interactablesIn(this.room.id)) {
+      const rules = KIND_RULES[def.kind];
+      const close = distance(pos, def.pos) <= rules.reach;
+      this.glows.get(def.id)?.setNear(close);
+      if (!close || this.piles.get(def.id)?.here === false) continue;
+      out.push({ id: `use:${def.id}`, label: rules.label, run: () => void this.use(def.id) });
+    }
+    return out;
+  }
+
+  /** Ask for the quest board; come back when the park day turns, or soon if the room did not answer. */
+  private async refreshBoard(): Promise<void> {
+    const gen = this.gen;
+    const link = this.link;
+    if (!link) return;
+    const res = await link.board();
     if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
-    this.drops = info;
-    for (const [n, m] of this.markers) {
-      if (!info.drops.some((d) => d.n === n && d.room === this.room.id)) {
-        m.destroy();
-        this.markers.delete(n);
-      }
-    }
-    for (const d of info.drops) {
-      if (d.room === this.room.id && !this.markers.has(d.n)) this.markers.set(d.n, new DropMarker(this, d));
-    }
-    this.updateFinds();
-    this.windowTimer?.remove();
-    this.windowTimer = info.next ? this.time.delayedCall(Math.min(MAX_TIMER_MS, Math.max(1000, info.next - Date.now() + 750)), () => void this.refreshDrops()) : null;
-  }
-
-  private updateFinds(): void {
-    const info = this.drops;
-    if (!info || !info.window) return this.hud.setFinds(null);
-    const tz = this.collection.inv?.tz;
-    const nextAt = tz ? localClock(info.next, tz) : new Date(info.next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    this.hud.setFinds({ left: info.drops.length, half: info.window.endsWith('AM') ? 'AM' : 'PM', nextAt });
-  }
-
-  /** Standing on a drop picks it up (the room server double-checks where the owl is). */
-  private checkDrops(now: number): void {
-    for (const [n, m] of this.markers) {
-      const retryAt = this.picking.get(n);
-      if (retryAt !== undefined && now < retryAt) continue;
-      const d = distance(this.me.pos, m);
-      if (d > PICKUP_CLIENT_RADIUS || (this.me.walking && d > PICKUP_CLIENT_RADIUS / 2)) continue;
-      void this.pickup(n);
-    }
-  }
-
-  private async pickup(n: number): Promise<void> {
-    const gen = this.gen;
-    this.picking.set(n, Number.POSITIVE_INFINITY);
-    const res = await this.collection.service.pickup(n, this.room.id, { ...this.me.pos }, this.conn?.link ?? null);
-    if (gen !== this.gen) return;
-    if (!res.ok) {
-      if (res.reason === 'gone') {
-        this.markers.get(n)?.destroy();
-        this.markers.delete(n);
-        this.picking.delete(n);
-        if (this.drops) this.drops = { ...this.drops, drops: this.drops.drops.filter((d) => d.n !== n) };
-        this.updateFinds();
-      } else {
-        this.picking.set(n, Date.now() + PICKUP_RETRY_MS);
-      }
+    this.boardTimer?.remove();
+    if (!res.board) {
+      this.boardTimer = this.time.delayedCall(BOARD_RETRY_MS, () => void this.refreshBoard());
       return;
     }
-    this.picking.delete(n);
-    this.markers.get(n)?.collect();
-    this.markers.delete(n);
-    if (this.drops) this.drops = { ...this.drops, drops: this.drops.drops.filter((d) => d.n !== n), feathers: res.feathers };
-    this.updateFinds();
-    this.collection.found(res.variant, res.feathers);
-    const v = parseVariant(res.variant);
-    const colour = v ? RARITY_COLOURS[v.rarity] : undefined;
-    const rarity = v ? ` (${RARITY_NAMES[v.rarity]})` : '';
-    if (res.dup) this.hud.toast(`Found ${variantName(res.variant)} again: +${duplicatePayout(res.variant)} feathers (${res.feathers} in all)`, 3400, colour);
-    else this.hud.toast(`Found: ${variantName(res.variant)}${rarity}`, 3600, colour);
+    this.applyBoard(res.board);
+    this.boardTimer = this.time.delayedCall(Math.min(MAX_TIMER_MS, Math.max(1000, res.board.nextDay - Date.now() + 1500)), () => void this.refreshBoard());
   }
 
-  /** Play an owned emote here and for everyone in the room. */
+  private applyBoard(board: QuestBoard): void {
+    this.quests.set(board);
+    this.collection.setFeathers(board.feathers);
+  }
+
+  private applyReply(res: QuestReply): void {
+    if (res.board) this.applyBoard(res.board);
+    this.showUpdates(res.updates);
+  }
+
+  /** The board changed: NPC markers and this room's quest items follow it. */
+  private showBoard(board: QuestBoard | null): void {
+    if (!this.built) return;
+    for (const npc of this.npcs.values()) npc.setMark(this.quests.markFor(npc.id));
+    const wanted = new Map<string, { quest: string; n: number; kind: QuestItemMarker['kind']; x: number; y: number }>();
+    for (const q of board?.active ?? []) for (const it of q.items) if (it.room === this.room.id) wanted.set(`${q.id}#${it.n}`, { quest: q.id, ...it });
+    for (const [key, m] of this.items) {
+      if (wanted.has(key)) continue;
+      m.destroy();
+      this.items.delete(key);
+    }
+    for (const [key, it] of wanted) if (!this.items.has(key)) this.items.set(key, new QuestItemMarker(this, it.quest, it.n, it.kind, { x: it.x, y: it.y }));
+  }
+
+  /** Toasts for quest steps that moved. */
+  private showUpdates(updates: QuestUpdate[]): void {
+    for (const u of updates) {
+      const giver = getNpc(getQuest(u.quest)?.giver ?? '')?.name ?? 'its giver';
+      if (u.ready) this.hud.toast(`${u.title}: all done! Take it back to ${giver}.`, 4200, '#FFD36A');
+      else if (u.count >= u.need) this.hud.toast(`${u.title}: step done.`, 2800, '#FFD36A');
+      else this.hud.toast(`${u.title}: ${u.count} of ${u.need}`, 2200);
+    }
+  }
+
+  /** Talk to an NPC owl standing close: it counts for quests, and its dialogue opens. */
+  private async talk(id: string): Promise<void> {
+    const npc = this.npcs.get(id);
+    if (!npc || this.busy) return;
+    if (!this.link) return void this.hud.toast(`${npc.def.name} is lost in thought. Try again in a moment.`, 3000);
+    const gen = this.gen;
+    this.busy = true;
+    try {
+      const res = await this.link.talk(id);
+      if (gen !== this.gen || this.leaving) return;
+      if (!res.ok) {
+        this.hud.toast(res.reason === 'far' ? `Walk a little closer to ${npc.def.name}.` : `${npc.def.name} did not hear you. Try again in a moment.`, 3000);
+        return;
+      }
+      npc.greet();
+      this.applyReply(res);
+      this.talkingTo = id;
+      this.hud.openDialogue(npc.def);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Use an interactable close by: flop into a leaf pile, browse a stall, bask in the moonbeam. */
+  private async use(id: string): Promise<void> {
+    const def = getInteractable(id);
+    if (!def || this.busy || !this.link) return;
+    const gen = this.gen;
+    this.busy = true;
+    try {
+      const res = await this.link.use(id);
+      if (gen !== this.gen || this.leaving) return;
+      if (!res.ok) {
+        if (res.reason === 'gone') this.hud.toast('Someone flopped in first. The leaves will blow back together soon.', 3200);
+        else if (res.reason === 'far') this.hud.toast('A little closer...', 2000);
+        else if (res.reason !== 'busy') this.hud.toast('The park did not catch that. Try again in a moment.', 3000);
+        return;
+      }
+      if (def.kind === 'leaf-pile') {
+        if (res.feathers > 0) {
+          const n = res.feathers;
+          this.time.delayedCall(FLOP_LAND_MS + 150, () => {
+            if (gen !== this.gen) return;
+            featherFind(this, def.pos, () => this.me.pos, () => this.collection.setFeathers(res.total));
+            this.hud.toast(n === 1 ? 'A feather was hiding in the leaves! +1 feather' : `Feathers were hiding in the leaves! +${n} feathers`, 3200, '#FFD36A');
+          });
+        }
+      } else {
+        this.glows.get(id)?.pulse();
+        const lines = USE_LINES[def.kind] ?? [];
+        const line = lines[Math.floor(Math.random() * lines.length)];
+        if (line) this.hud.toast(line, 2800);
+        this.collection.setFeathers(res.total);
+      }
+      this.showUpdates(res.updates);
+      // The room server pushes the board after progress; the local mode answers with it.
+      if (res.board) this.applyBoard(res.board);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Someone flopped into a pile: their owl flops, the leaves fly, the pile is gone until `until`. */
+  private onUsed(id: string, by: string | null, until: number): void {
+    const pile = this.piles.get(id);
+    if (!pile) return;
+    const owl = by === null ? this.me : this.peers.get(by);
+    owl?.flop();
+    this.time.delayedCall(owl ? FLOP_LAND_MS : 0, () => pile.poof(until));
+  }
+
+  /** Standing on a quest item picks it up (the room server double-checks where the owl is). */
+  private checkItems(now: number): void {
+    for (const [key, m] of this.items) {
+      const retryAt = this.gathering.get(key);
+      if (retryAt !== undefined && now < retryAt) continue;
+      const d = distance(this.me.pos, m.pos);
+      if (d > PICKUP_CLIENT_RADIUS || (this.me.walking && d > PICKUP_CLIENT_RADIUS / 2)) continue;
+      void this.gather(m);
+    }
+  }
+
+  private async gather(m: QuestItemMarker): Promise<void> {
+    const link = this.link;
+    if (!link) return;
+    const gen = this.gen;
+    this.gathering.set(m.key, Number.POSITIVE_INFINITY);
+    const res = await link.gather(m.quest, m.n);
+    if (gen !== this.gen) return;
+    if (res.ok || res.reason === 'gone' || res.reason === 'not-current') {
+      this.gathering.delete(m.key);
+      this.items.delete(m.key);
+      if (res.ok) m.collect();
+      else m.destroy();
+      this.applyReply(res);
+      return;
+    }
+    this.gathering.set(m.key, Date.now() + PICKUP_RETRY_MS);
+  }
+
+  /** Take a quest from the NPC whose dialogue is open. */
+  async acceptQuest(quest: string): Promise<boolean> {
+    if (!this.link) return false;
+    const gen = this.gen;
+    const res = await this.link.accept(quest);
+    if (gen !== this.gen) return false;
+    this.applyReply(res);
+    const title = getQuest(quest)?.title ?? 'Quest';
+    if (res.ok) this.hud.toast(`New quest: ${title}`, 3000, '#FFD36A');
+    else if (res.reason === 'full') this.hud.toast(`You can carry ${MAX_ACTIVE_QUESTS} quests at once. Finish or drop one first.`, 3800);
+    else if (res.reason === 'far') this.hud.toast('Walk a little closer first.', 2600);
+    else if (res.reason === 'done') this.hud.toast('You have done that one already.', 2600);
+    else this.hud.toast('That quest is not on offer right now.', 3000);
+    return res.ok;
+  }
+
+  async abandonQuest(quest: string): Promise<boolean> {
+    if (!this.link) return false;
+    const gen = this.gen;
+    const res = await this.link.abandon(quest);
+    if (gen !== this.gen) return false;
+    this.applyReply(res);
+    if (res.ok) this.hud.toast(`Dropped: ${getQuest(quest)?.title ?? 'the quest'}`, 2600);
+    return res.ok;
+  }
+
+  /** Hand a finished quest back to the NPC whose dialogue is open: feathers, and maybe a collectible. */
+  async handInQuest(quest: string): Promise<boolean> {
+    if (!this.link) return false;
+    const gen = this.gen;
+    const res = await this.link.handIn(quest);
+    if (gen !== this.gen) return false;
+    if (!res.ok) {
+      if (res.board) this.applyBoard(res.board);
+      this.hud.toast(res.reason === 'far' ? 'Walk a little closer first.' : res.reason === 'not-ready' ? 'Not quite done yet.' : 'That could not be handed in just now.', 3000);
+      return false;
+    }
+    this.applyBoard(res.board);
+    this.me.playEmote('flap');
+    const award = res.award;
+    if (award && !award.dup) this.collection.added(award.variant, res.total);
+    else this.collection.setFeathers(res.total);
+    this.hud.toast(res.thanks, 4200);
+    const v = award ? parseVariant(award.variant) : null;
+    const colour = v ? RARITY_COLOURS[v.rarity] : '#FFD36A';
+    const item = award ? (award.dup ? `${variantName(award.variant)} again (+${award.feathers} feathers)` : `${variantName(award.variant)}${v ? ` (${RARITY_NAMES[v.rarity]})` : ''}`) : null;
+    const feathers = res.feathers - (award?.feathers ?? 0);
+    this.hud.toast(item ? `Reward: ${item} and ${feathers} feathers` : `Reward: ${feathers} feathers`, 4600, colour);
+    return true;
+  }
+
+  /** Test hook: walk to quest item `n` of a quest if it is in this room (arriving picks it up). */
+  walkToItem(quest: string, n: number): boolean {
+    const m = this.items.get(`${quest}#${n}`);
+    if (!m) return false;
+    this.walkTo(m.pos);
+    return true;
+  }
+
+  /** Play an owned emote here and for everyone in the room (it counts for quests that ask for it). */
   emote(e: string): boolean {
     if (!this.built || !EMOTE_IDS.includes(e) || !this.collection.owns(e)) return false;
     this.me.playEmote(e);
     this.conn?.send({ t: 'emote', id: this.playerId, e });
+    const near = [...this.npcs.values()].filter((n) => distance(n.def.pos, this.me.pos) <= NPC_EMOTE_RADIUS).map((n) => n.id);
+    this.link?.note({ kind: 'emote', emote: e, room: this.room.id, near });
     return true;
   }
 
@@ -595,14 +907,6 @@ export class RoomScene extends Phaser.Scene {
     this.changeLook(kept ? { ...rest, wear: kept } : rest);
   }
 
-  /** Test hook: walk to drop `n` if it is in this room. */
-  walkToDrop(n: number): boolean {
-    const m = this.markers.get(n);
-    if (!m) return false;
-    this.walkTo({ x: m.x, y: m.y });
-    return true;
-  }
-
   /**
    * Public for tests and future features: walk the local owl to a room point. True if it set off.
    * `fromKeys` marks a walk the held keys own, which letting go of them stops.
@@ -631,6 +935,20 @@ export class RoomScene extends Phaser.Scene {
   private checkDoors(walkFinished: boolean): void {
     const pos = this.me.pos;
     const spots: string[] = [];
+    const errand = this.errand;
+    if (errand && walkFinished) {
+      // Arrived (or stopped short): do it if close enough, else give up quietly.
+      this.errand = null;
+      const spot = this.errandSpot(errand);
+      if (spot && distance(pos, spot.pos) <= spot.reach + REACH_SLACK / 2) this.runErrand(errand);
+    }
+    if (this.talkingTo) {
+      const npc = this.npcs.get(this.talkingTo);
+      if (!npc || distance(pos, npc.def.pos) > DIALOGUE_LEAVE_PX || this.hud.dialogueNpc() !== this.talkingTo) {
+        if (this.hud.dialogueNpc() === this.talkingTo) this.hud.closeDialogue();
+        this.talkingTo = null;
+      }
+    }
     for (const door of this.room.doors) {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
@@ -641,10 +959,8 @@ export class RoomScene extends Phaser.Scene {
       if (this.interactions[door.id]) spots.push(door.id);
       if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
     }
-    if (spots.join(' ') !== this.spots.join(' ')) {
-      this.spots = spots;
-      this.hud.setActions(spots.map((id) => ({ id, label: this.interactions[id]!.label })));
-    }
+    this.actions = this.actionsHere(spots);
+    this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));
     this.atIdol = spots.includes('idol');
     if (this.atIdol && walkFinished && this.pendingVote) {
       this.pendingVote = false;
@@ -710,10 +1026,21 @@ export class RoomScene extends Phaser.Scene {
 
   private async teardown(): Promise<void> {
     this.hud.setHints([]);
-    this.windowTimer?.remove();
-    this.windowTimer = null;
-    for (const m of this.markers.values()) m.destroy();
-    this.markers.clear();
+    this.hud.closeDialogue();
+    this.talkingTo = null;
+    this.unwatchBoard?.();
+    this.unwatchBoard = null;
+    this.boardTimer?.remove();
+    this.boardTimer = null;
+    for (const m of this.items.values()) m.destroy();
+    this.items.clear();
+    for (const npc of this.npcs.values()) npc.destroy();
+    this.npcs.clear();
+    for (const pile of this.piles.values()) pile.destroy();
+    this.piles.clear();
+    for (const glow of this.glows.values()) glow.destroy();
+    this.glows.clear();
+    this.link = null;
     const conn = this.conn;
     this.conn = null;
     if (conn) await conn.leave();

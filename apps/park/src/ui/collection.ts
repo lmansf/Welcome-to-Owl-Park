@@ -3,9 +3,7 @@ import {
   RARITY_COLOURS,
   RARITY_NAMES,
   colourwaysFor,
-  craftCost,
   equipSlotOf,
-  localClock,
   parseVariant,
   variantId,
   variantName,
@@ -15,7 +13,6 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
-import { deviceTimeZone } from '../collect/service';
 import { multiplyTint } from '../collect/pixels';
 import { iconArt, itemCanvas } from '../game/itemArt';
 import { symbolCanvas, type SymbolName } from '../game/symbols';
@@ -101,8 +98,7 @@ const CSS = `
 #hud .detail{display:flex;align-items:center;gap:10px;min-height:44px;flex-wrap:wrap}
 #hud .detail .what{flex:1;min-width:160px;font-size:13px}
 #hud .detail .what b{display:block;font-size:14px}
-#hud .collection footer{font-size:12px;opacity:.8;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-#hud .collection footer button{min-height:30px;padding:4px 10px;font-size:12px}
+#hud .collection footer{font-size:12px;opacity:.8}
 #hud .emotes{position:absolute;left:0;bottom:calc(100% + 8px);pointer-events:auto;background:rgba(12,30,54,.94);border:1px solid rgba(246,241,227,.18);border-radius:16px;padding:10px;display:none;flex-wrap:wrap;gap:6px;width:min(330px,calc(100vw - 24px));box-shadow:0 8px 30px rgba(0,0,0,.5)}
 #hud .emotes.open{display:flex}
 #hud .emotes button{min-height:40px;padding:6px 10px;font-size:13px;background:rgba(246,241,227,.08);color:#F6F1E3;border:1px solid rgba(246,241,227,.18);box-shadow:none;display:flex;align-items:center;gap:6px}
@@ -203,7 +199,7 @@ export function createCollectionPanel(root: HTMLElement, emoteHost: HTMLElement,
     <nav role="tablist" data-tabs></nav>
     <div class="grid" data-grid role="list"></div>
     <div class="detail" data-detail></div>
-    <footer data-tz></footer>`;
+    <footer>Collectibles come from quests and from Nova's feather shop on the neon street.</footer>`;
   root.appendChild(panel);
 
   const emotes = document.createElement('div');
@@ -216,7 +212,6 @@ export function createCollectionPanel(root: HTMLElement, emoteHost: HTMLElement,
   const tabsEl = $<HTMLElement>('[data-tabs]');
   const grid = $<HTMLElement>('[data-grid]');
   const detail = $<HTMLElement>('[data-detail]');
-  const tzLine = $<HTMLElement>('[data-tz]');
 
   let tab: ItemKind = 'wear';
   /** The selected colourway per item id. */
@@ -253,7 +248,7 @@ export function createCollectionPanel(root: HTMLElement, emoteHost: HTMLElement,
     if (!selected) {
       const hint = document.createElement('div');
       hint.className = 'what';
-      hint.textContent = tab === 'emote' ? 'Pick an emote to play it, or to craft one you have not found yet.' : 'Pick something to wear it, or tap a dot for another colourway.';
+      hint.textContent = tab === 'emote' ? 'Pick an emote to play it.' : 'Pick something to wear it, or tap a dot for another colourway.';
       detail.appendChild(hint);
       return;
     }
@@ -281,16 +276,10 @@ export function createCollectionPanel(root: HTMLElement, emoteHost: HTMLElement,
         }));
       }
     } else {
-      const cost = craftCost(sel) ?? 0;
-      const feathers = state.inv?.feathers ?? 0;
-      detail.appendChild(
-        button(`Craft for ${cost} feathers`, feathers < cost ? 'ghost' : '', async () => {
-          const res = await state.craft(sel);
-          if (res.ok) actions.toast(`Crafted: ${variantName(sel)}`, 2600, RARITY_COLOURS[v.rarity]);
-          else actions.toast(res.reason === 'feathers' ? `You need ${cost} feathers for that (you have ${res.feathers}).` : 'That could not be crafted just now.', 3000);
-          render();
-        }, feathers < cost),
-      );
+      const how = document.createElement('span');
+      how.className = 'what';
+      how.textContent = 'Not yet yours: earn it on a quest, or look for it in the feather shop.';
+      detail.appendChild(how);
     }
   };
 
@@ -340,38 +329,12 @@ export function createCollectionPanel(root: HTMLElement, emoteHost: HTMLElement,
     }
   };
 
-  const renderTz = () => {
-    tzLine.innerHTML = '';
-    const inv = state.inv;
-    if (!inv) return;
-    const label = document.createElement('span');
-    label.textContent = `Finds refresh at midnight and noon, ${inv.tz} time · next at ${localClock(inv.next, inv.tz)}`;
-    tzLine.appendChild(label);
-    const device = deviceTimeZone();
-    if (device && device !== inv.tz) {
-      if (inv.tzLockedUntil && inv.tzLockedUntil > Date.now()) {
-        const until = document.createElement('span');
-        until.textContent = `(this device is on ${device}; you can switch after ${new Date(inv.tzLockedUntil).toLocaleDateString()})`;
-        tzLine.appendChild(until);
-      } else {
-        tzLine.appendChild(
-          button(`Use ${device}`, 'ghost', async () => {
-            const res = await state.setTimeZone(device);
-            actions.toast(res.ok ? `Your finds now follow ${res.tz} time.` : 'The time zone can change once a month.', 3200);
-            render();
-          }),
-        );
-      }
-    }
-  };
-
   const render = () => {
     const inv = state.inv;
     progress.textContent = inv ? `${state.count} of ${state.total} · ${inv.feathers} feathers` : 'Loading…';
     renderTabs();
     renderGrid();
     renderDetail();
-    renderTz();
   };
 
   const renderEmotes = () => {
@@ -388,7 +351,7 @@ export function createCollectionPanel(root: HTMLElement, emoteHost: HTMLElement,
     }
     if (!owned.length) {
       const empty = document.createElement('span');
-      empty.textContent = 'Find emotes around the park.';
+      empty.textContent = 'Earn emotes on quests, or find them in the feather shop.';
       emotes.appendChild(empty);
     }
   };

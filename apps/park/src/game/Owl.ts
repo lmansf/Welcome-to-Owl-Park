@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { facing, hexToInt, positionAlongWalk, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { DEFAULT_SPECIES, facing, hexToInt, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_W } from './art';
-import { playEmote, type EmoteHost } from './emotes';
+import { playEmote, playFlop, type EmoteHost } from './emotes';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { ITEM_SIZES } from './itemArt';
 import { ensureVariantTexture, owlAnchors } from './items';
@@ -14,7 +14,19 @@ export const OWL_SCALE = 0.5;
 /** Feet position inside the layer canvas: bottom-centre, per the art pipeline canon. */
 const FEET = { x: 100, y: 240 };
 
-const LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face'] as const;
+const LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'owl-blink'] as const;
+
+/**
+ * The layer textures for a look's species: its own (`owl-<species>-body` and so on) once that art
+ * is approved and loaded, otherwise the great horned owl's. (A species with its own art will also
+ * want its own anchors for worn items; the great horned owl's are used for now.)
+ */
+function layersFor(scene: Phaser.Scene, look: OwlLook): readonly string[] {
+  const sp = speciesOf(look);
+  if (!sp.art || sp.id === DEFAULT_SPECIES) return LAYERS;
+  const own = LAYERS.map((k) => k.replace('owl-', `owl-${sp.id}-`));
+  return own.every((k) => scene.textures.exists(k)) ? own : LAYERS;
+}
 
 /** The widths wearables are drawn for (owl canvas units); a bigger or smaller head scales them. */
 const REF = { head: 110, eyes: 92, neck: 100 };
@@ -71,6 +83,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   /** Which way the painting itself is turned (1 right, -1 left): the art is mirrored when that differs from `dir`. */
   private readonly drawnFacing: 1 | -1;
   private dir: -1 | 1 = 1;
+  /** Drawn size relative to the great horned owl (the species' size). */
+  private size = 1;
+  private layers: readonly string[] = LAYERS;
   private nextBlinkAt = 0;
   private eyesClosedUntil = 0;
   private jitter = 0;
@@ -104,14 +119,13 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.bellyImg = mk(LAYERS[1]);
     this.accentImg = mk(LAYERS[2]);
     this.faceImg = mk(LAYERS[3]);
-    this.blinkImg = mk('owl-blink').setVisible(false);
+    this.blinkImg = mk(LAYERS[4]).setVisible(false);
     this.wearImgs = { neck: worn(0.12), face: worn(0.5), head: worn(1) };
     this.back = scene.add.container(0, 0);
     this.front = scene.add.container(0, 0);
     this.pose = scene.add.container(0, 0, [this.back, this.bodyImg, this.bellyImg, this.accentImg, this.wearImgs.neck, this.faceImg, this.blinkImg, this.wearImgs.face, this.wearImgs.head, this.front]);
     this.art = scene.add.container(0, 0, [this.pose]);
     this.add([this.pledgeMark, this.shadow, this.art]);
-    this.setScale(OWL_SCALE);
     this.applyLook(look);
     this.nextBlinkAt = Date.now() + 1500 + Math.random() * 4000;
     scene.add.existing(this);
@@ -120,12 +134,23 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   applyLook(look: OwlLook): void {
     this.look = look;
     this.pledgeMark.setAlpha(look.pledge ? 0.75 : 0);
+    this.size = speciesOf(look).size;
+    this.setScale(OWL_SCALE * this.size);
+    const layers = layersFor(this.scene, look);
+    if (layers !== this.layers) {
+      this.layers = layers;
+      this.faceImg.setTexture(layers[3]!).setDisplaySize(OWL_W, OWL_H);
+      this.blinkImg.setTexture(layers[4]!).setDisplaySize(OWL_W, OWL_H);
+    }
     if (this.scene.renderer.type === Phaser.CANVAS) {
       // Tint is WebGL-only; on the Canvas renderer bake the colour into a texture instead.
-      this.bodyImg.setTexture(tintedLayer(this.scene, LAYERS[0], look.body)).setDisplaySize(OWL_W, OWL_H);
-      this.bellyImg.setTexture(tintedLayer(this.scene, LAYERS[1], look.belly)).setDisplaySize(OWL_W, OWL_H);
-      this.accentImg.setTexture(tintedLayer(this.scene, LAYERS[2], look.accent)).setDisplaySize(OWL_W, OWL_H);
+      this.bodyImg.setTexture(tintedLayer(this.scene, layers[0]!, look.body)).setDisplaySize(OWL_W, OWL_H);
+      this.bellyImg.setTexture(tintedLayer(this.scene, layers[1]!, look.belly)).setDisplaySize(OWL_W, OWL_H);
+      this.accentImg.setTexture(tintedLayer(this.scene, layers[2]!, look.accent)).setDisplaySize(OWL_W, OWL_H);
     } else {
+      this.bodyImg.setTexture(layers[0]!).setDisplaySize(OWL_W, OWL_H);
+      this.bellyImg.setTexture(layers[1]!).setDisplaySize(OWL_W, OWL_H);
+      this.accentImg.setTexture(layers[2]!).setDisplaySize(OWL_W, OWL_H);
       this.bodyImg.setTint(hexToInt(look.body));
       this.bellyImg.setTint(hexToInt(look.belly));
       this.accentImg.setTint(hexToInt(look.accent));
@@ -186,6 +211,16 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return playEmote(this, emote);
   }
 
+  /** Flop into a leaf pile. */
+  flop(): void {
+    playFlop(this);
+  }
+
+  /** Turn to face a way without walking (NPC owls greeting a visitor). */
+  face(dir: 1 | -1): void {
+    this.dir = dir;
+  }
+
   /** Close the eyes for a while (sleep, wink). */
   closeEyes(ms: number): void {
     this.eyesClosedUntil = Date.now() + ms;
@@ -236,7 +271,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   /** The same anchor as a world offset from the feet, turned with the owl. */
   anchor(name: AnchorName): { x: number; y: number } {
     const p = this.localAnchor(name);
-    return { x: p.x * OWL_SCALE * this.dir * this.drawnFacing, y: p.y * OWL_SCALE };
+    const k = OWL_SCALE * this.size;
+    return { x: p.x * k * this.dir * this.drawnFacing, y: p.y * k };
   }
 
   // ---------- movement ----------

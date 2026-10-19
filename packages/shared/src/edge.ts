@@ -1,15 +1,18 @@
 /**
- * Protocol v3: the authoritative room server (Durable Object) and its clients.
+ * Protocol v4: the authoritative room server (Durable Object) and its clients.
  * Every client frame is one JSON object (≤ 1 KiB) except the literal heartbeat text frame `hb`.
- * All timestamps (`at`, `now`, `next`) are server milliseconds; clients never put their clock on the wire.
- * v3 adds collectibles: looks may carry `wear`, and the `drops`, `pickup` and `emote` frames.
+ * All timestamps (`at`, `now`, `until`, `next...`) are server milliseconds; clients never put their clock on the wire.
+ * v3 added collectibles (`wear` on looks, emotes). v4 replaces the half-day finds with quests, NPC
+ * owls and interactables: `quests`, `talk`, `accept`, `abandon`, `handin`, `use` and `gather`, each
+ * carrying a request number `r` that the answer echoes; looks may carry a `species`.
  */
-import type { DropView } from './collectibles';
+import type { Award } from './book';
 import { cleanLook } from './look';
 import type { OwlLook, Vec2 } from './protocol';
+import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-export const EDGE_PROTOCOL_VERSION = 3;
+export const EDGE_PROTOCOL_VERSION = 4;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -63,21 +66,42 @@ export interface ClientLook {
 export interface ClientBye {
   t: 'bye';
 }
-/** Ask for this window's unclaimed drops (answered with `drops`). */
-export interface ClientDrops {
-  t: 'drops';
-}
-/** Pick up drop `n` of the current window; the server checks the owl stands on it. */
-export interface ClientPickup {
-  t: 'pickup';
-  n: number;
-}
 /** Play an owned emote for everyone in the room. */
 export interface ClientEmote {
   t: 'emote';
   e: string;
 }
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientDrops | ClientPickup | ClientEmote;
+/** Ask for this collector's quest board (answered with `quests`). */
+export interface ClientQuests {
+  t: 'quests';
+  r: number;
+}
+/** Talk to an NPC owl in this room; the server checks the owl stands close. Answered with `quests`. */
+export interface ClientTalk {
+  t: 'talk';
+  npc: string;
+  r: number;
+}
+/** Take, drop or hand back a quest (taking and handing back mean standing by its giver). */
+export interface ClientQuestAction {
+  t: 'accept' | 'abandon' | 'handin';
+  quest: string;
+  r: number;
+}
+/** Use an interactable in this room: flop into a leaf pile, browse a stall. Answered with `useResult`. */
+export interface ClientUse {
+  t: 'use';
+  target: string;
+  r: number;
+}
+/** Pick up quest item `n` of an active quest; the server checks the owl stands on it. Answered with `quests`. */
+export interface ClientGather {
+  t: 'gather';
+  quest: string;
+  n: number;
+  r: number;
+}
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -122,39 +146,79 @@ export interface ServerFull {
   room: string;
   cap: number;
 }
-/** This window's unclaimed drops across the park (only the finder ever sees them). */
-export interface ServerDrops {
-  t: 'drops';
-  window: string;
-  /** Server ms when the next window starts. */
-  next: number;
-  drops: DropView[];
-  feathers: number;
-}
-/** A pickup succeeded: the variant found, whether it was a duplicate (paid in feathers), the new balance. */
-export interface ServerFound {
-  t: 'found';
-  n: number;
-  variant: string;
-  dup: boolean;
-  feathers: number;
-}
-/** A pickup was refused: too far from the drop, already taken or from a window that has ended. */
-export interface ServerMissed {
-  t: 'missed';
-  n: number;
-  reason: 'far' | 'gone' | 'busy';
-}
 export interface ServerEmote {
   t: 'emote';
   id: string;
   e: string;
 }
-export type ServerFrame = ServerWelcome | ServerEnter | ServerMove | ServerLook | ServerLeave | ServerCounts | ServerFull | ServerDrops | ServerFound | ServerMissed | ServerEmote;
+/**
+ * The collector's quest board: the answer to `quests`, `talk`, `accept`, `abandon` and `gather`
+ * (with their `r` and, when refused, `ok: false` and a reason), or pushed after a visit or an
+ * emote moved a quest along. `updates` lists the steps that just progressed.
+ */
+export interface ServerQuests {
+  t: 'quests';
+  r?: number;
+  ok?: boolean;
+  reason?: string;
+  board: QuestBoard;
+  updates: QuestUpdate[];
+}
+/** A hand-in: the quest's thanks, the feathers paid (with any duplicate's), the balance and the collectible. */
+export type ServerHandIn = { t: 'handin'; r: number } & (
+  | { ok: true; quest: string; title: string; thanks: string; feathers: number; total: number; award: Award | null; board: QuestBoard }
+  | { ok: false; reason: string; board?: QuestBoard }
+);
+/** Shared interactables in this room: id -> server ms when it is back (absent or 0: here now). */
+export interface ServerObjects {
+  t: 'objects';
+  until: Record<string, number>;
+}
+/** Someone used a shared interactable: everyone plays it; it is back at `until`. */
+export interface ServerUsed {
+  t: 'used';
+  id: string;
+  by: string;
+  until: number;
+}
+/** Your own use: feathers found (with the new balance) and any quest progress, or why it failed. */
+export interface ServerUseResult {
+  t: 'useResult';
+  r: number;
+  ok: boolean;
+  reason?: 'far' | 'gone' | 'busy' | 'unknown';
+  feathers: number;
+  total: number;
+  updates: QuestUpdate[];
+}
+/** A request refused before it reached the ledger (unknown target, too far, too fast). */
+export interface ServerRefused {
+  t: 'refused';
+  r: number;
+  reason: 'far' | 'unknown' | 'busy' | 'offline';
+}
+export type ServerFrame =
+  | ServerWelcome
+  | ServerEnter
+  | ServerMove
+  | ServerLook
+  | ServerLeave
+  | ServerCounts
+  | ServerFull
+  | ServerEmote
+  | ServerQuests
+  | ServerHandIn
+  | ServerObjects
+  | ServerUsed
+  | ServerUseResult
+  | ServerRefused;
 
 // ---- validation (server side, strict) ----
 
 const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
+const OBJECT_ID = /^[a-z][a-z0-9-]{0,47}$/;
+
+const isRequest = (r: unknown): r is number => typeof r === 'number' && Number.isInteger(r) && r >= 0 && r <= 1e9;
 
 /** Parse and validate one client frame. Returns null for anything malformed. */
 export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): ClientFrame | null {
@@ -190,21 +254,29 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     }
     case 'bye':
       return { t: 'bye' };
-    case 'drops':
-      return { t: 'drops' };
-    case 'pickup': {
-      const n = v['n'];
-      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 15) return null;
-      return { t: 'pickup', n };
-    }
     case 'emote':
       return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
+    case 'quests':
+      return isRequest(v['r']) ? { t: 'quests', r: v['r'] } : null;
+    case 'talk':
+      return isRequest(v['r']) && typeof v['npc'] === 'string' && OBJECT_ID.test(v['npc']) ? { t: 'talk', npc: v['npc'], r: v['r'] } : null;
+    case 'accept':
+    case 'abandon':
+    case 'handin':
+      return isRequest(v['r']) && typeof v['quest'] === 'string' && OBJECT_ID.test(v['quest']) ? { t: v['t'], quest: v['quest'], r: v['r'] } : null;
+    case 'use':
+      return isRequest(v['r']) && typeof v['target'] === 'string' && OBJECT_ID.test(v['target']) ? { t: 'use', target: v['target'], r: v['r'] } : null;
+    case 'gather': {
+      const n = v['n'];
+      if (!isRequest(v['r']) || typeof v['quest'] !== 'string' || !OBJECT_ID.test(v['quest']) || typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 31) return null;
+      return { t: 'gather', quest: v['quest'], n, r: v['r'] };
+    }
     default:
       return null;
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'drops', 'found', 'missed', 'emote']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

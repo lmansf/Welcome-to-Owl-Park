@@ -24,7 +24,13 @@ export type SymbolName =
   | 'puff'
   | 'bang'
   | 'spark'
-  | 'bubble';
+  | 'bubble'
+  | 'ask'
+  | 'feather'
+  | 'fallen'
+  | 'acorn'
+  | 'gear'
+  | 'gem';
 
 const S = 32;
 const TAU = Math.PI * 2;
@@ -164,6 +170,95 @@ function draw(ctx: CanvasRenderingContext2D, name: SymbolName): void {
       ctx.moveTo(c, 3);
       ctx.lineTo(c, 29);
       ctx.stroke();
+      break;
+    case 'ask':
+      // A hook and a dot: something to hand back.
+      ctx.lineWidth = 5;
+      ctx.arc(c, 10, 7, Math.PI, Math.PI * 2.5);
+      ctx.lineTo(c, 21);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c, 27, 3.5, 0, TAU);
+      ctx.fill();
+      break;
+    case 'feather':
+      // A vane leaning right, split by its shaft, with a notch; the bare quill below.
+      ctx.moveTo(5, 28);
+      ctx.bezierCurveTo(6, 16, 15, 6, 28, 3);
+      ctx.bezierCurveTo(27, 15, 18, 24, 7, 27);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(5, 29);
+      ctx.quadraticCurveTo(15, 18, 28, 3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(9, 15);
+      ctx.lineTo(14, 17.5);
+      ctx.lineTo(10, 19.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(2.5, 31);
+      ctx.lineTo(7, 26);
+      ctx.stroke();
+      break;
+    case 'fallen':
+      // A pointed leaf with its midrib.
+      ctx.moveTo(3, c);
+      ctx.quadraticCurveTo(c, 3, 29, c);
+      ctx.quadraticCurveTo(c, 29, 3, c);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(6, c);
+      ctx.lineTo(27, c);
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+      break;
+    case 'acorn':
+      // The nut, the cap over it (a thin gap between) and the stem.
+      ctx.ellipse(c, 20, 8, 9.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(c, 14, 11, 7, 0, Math.PI, TAU);
+      ctx.fill();
+      ctx.fillRect(c - 1.5, 3, 3, 5);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillRect(4, 14, 24, 1.6);
+      ctx.globalCompositeOperation = 'source-over';
+      break;
+    case 'gear':
+      ctx.arc(c, c, 10, 0, TAU);
+      ctx.fill();
+      for (let i = 0; i < 8; i++) {
+        ctx.save();
+        ctx.translate(c, c);
+        ctx.rotate((i * Math.PI) / 4);
+        ctx.fillRect(-3, -15, 6, 7);
+        ctx.restore();
+      }
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(c, c, 4, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      break;
+    case 'gem':
+      // A smooth moonstone with a crescent of light across it.
+      ctx.ellipse(c, c, 11, 13, 0, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(c + 3, c + 2, 8, Math.PI * 1.05, Math.PI * 1.55);
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
       break;
   }
 }

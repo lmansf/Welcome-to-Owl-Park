@@ -1,10 +1,10 @@
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
-import type { DropLink } from '../collect/service';
+import type { QuestLink, QuestPushes } from '../collect/service';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
-/** What a room scene needs to hear from the network. */
-export interface RoomHandlers {
+/** What a room scene needs to hear from the network (quest pushes come only from the room server). */
+export interface RoomHandlers extends QuestPushes {
   /** A peer appeared or refreshed its full state (position, look, current walk). */
   onPeerState(state: PlayerState): void;
   /** A peer started walking. */
@@ -31,8 +31,8 @@ export interface RoomConnection {
   /** Update the full state others will see when they join later. */
   track(state: PlayerState): void;
   leave(): Promise<void>;
-  /** Drops and pickups checked by an authoritative server (the room server only). */
-  link?: DropLink;
+  /** Quests, talks and uses checked by an authoritative server (the room server only). */
+  link?: QuestLink;
 }
 
 /**

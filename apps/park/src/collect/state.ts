@@ -1,11 +1,12 @@
-import { allVariants, type CraftResult, type Inventory, type TzResult } from '@owl-park/shared';
+import { allVariants, type BuyResult, type GiftResult, type Inventory, type ShopView } from '@owl-park/shared';
 import type { CollectionService } from './service';
 
 type Listener = (inv: Inventory | null) => void;
 
 /**
- * The visitor's collection as the page knows it: loaded once, kept current from finds and
- * crafts, refreshed from the service when in doubt. The HUD panel and the room scene listen.
+ * The visitor's collection as the page knows it: loaded once, kept current from quest rewards,
+ * leaf-pile feathers and shop buys, refreshed from the service when in doubt. The HUD panels and
+ * the room scene listen.
  */
 export class CollectionState {
   inv: Inventory | null = null;
@@ -50,23 +51,34 @@ export class CollectionState {
     return this.loading;
   }
 
-  /** A find came in: add it (or credit the duplicate's feathers) without a round trip. */
-  found(variant: string, feathers: number): void {
-    if (!this.inv) return void this.refresh();
-    const owned = this.inv.owned.includes(variant) ? this.inv.owned : [...this.inv.owned, variant];
-    this.set({ ...this.inv, owned, feathers });
+  /** The feather balance changed (a quest, a leaf pile, a duplicate); negative means unknown. */
+  setFeathers(feathers: number): void {
+    if (feathers < 0 || !this.inv || this.inv.feathers === feathers) return;
+    this.set({ ...this.inv, feathers });
   }
 
-  async craft(variant: string): Promise<CraftResult> {
-    const res = await this.service.craft(variant);
-    if (res.ok && this.inv) this.set({ ...this.inv, owned: [...this.inv.owned, variant], feathers: res.feathers });
-    else if (this.inv) this.set({ ...this.inv, feathers: res.feathers });
+  /** A collectible came in (a quest reward, a buy): add it, and take the new balance, without a round trip. */
+  added(variant: string, feathers: number): void {
+    if (!this.inv) return void this.refresh();
+    const owned = this.inv.owned.includes(variant) ? this.inv.owned : [...this.inv.owned, variant];
+    this.set({ ...this.inv, owned, feathers: feathers >= 0 ? feathers : this.inv.feathers });
+  }
+
+  shop(): Promise<ShopView> {
+    return this.service.shop();
+  }
+
+  async buy(variant: string): Promise<BuyResult> {
+    const res = await this.service.buy(variant);
+    if (res.ok) this.added(variant, res.feathers);
+    else this.setFeathers(res.feathers);
     return res;
   }
 
-  async setTimeZone(tz: string): Promise<TzResult> {
-    const res = await this.service.setTimeZone(tz);
-    await this.refresh();
+  async claimGift(): Promise<GiftResult> {
+    const res = await this.service.claimGift();
+    if (res.ok && !res.dup) this.added(res.variant, res.total);
+    else this.setFeathers(res.total);
     return res;
   }
 }

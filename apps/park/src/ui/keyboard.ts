@@ -2,7 +2,7 @@ import type { Vec2 } from '@owl-park/shared';
 
 /**
  * Keyboard controls: WASD and the arrow keys walk the owl while held, E interacts with what the
- * owl stands at, Q opens and closes the collection, Escape closes open panels. Keys are matched
+ * owl stands at, Q opens and closes the collection, J the quest journal, Escape closes open panels. Keys are matched
  * by place (`KeyboardEvent.code`), so ZQSD walks on an AZERTY keyboard. Typing in a text field,
  * and shortcuts with Ctrl, Alt or Cmd, are left alone.
  */
@@ -39,6 +39,8 @@ export interface KeyActions {
   interact(): void;
   /** Q: open or close the collection. */
   collection(): void;
+  /** J: open or close the quest journal. */
+  journal(): void;
   /** Escape: close open panels. */
   close(): void;
 }
@@ -68,6 +70,7 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
     if (e.repeat) return;
     if (e.code === 'KeyE') actions.interact();
     else if (e.code === 'KeyQ') actions.collection();
+    else if (e.code === 'KeyJ') actions.journal();
     else if (e.code === 'Escape') actions.close();
   };
   const onUp = (e: KeyboardEvent) => {

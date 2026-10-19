@@ -137,9 +137,3 @@ export async function verifyCollector(secret: string, token: string | null): Pro
   if (!p || p['k'] !== 'col' || !isCollectorId(p['cid']) || typeof p['iat'] !== 'number') return null;
   return p['cid'];
 }
-
-/** The seed of a collector's drops for one window: HMAC-SHA256 under the server secret, 32 bytes. */
-export async function dropSeed(secret: string, cid: string, windowKey: string): Promise<Uint8Array> {
-  const mac = await crypto.subtle.sign('HMAC', await key(secret), enc.encode(`drops|${cid}|${windowKey}`));
-  return new Uint8Array(mac);
-}

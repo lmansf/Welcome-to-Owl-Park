@@ -93,7 +93,7 @@ test.describe('room server', () => {
   test('the Realm Vote refuses guests until tickets exist, and keeps standings private', async ({ browser, request }) => {
     const a = await visitor(browser, { room: 'market' });
     await walkToDoor(a, 'idol');
-    await expect(a.getByRole('button', { name: 'Vote for this realm' })).toBeVisible({ timeout: 15_000 });
+    await expect(a.getByRole('button', { name: 'Vote for this realm', exact: true })).toBeVisible({ timeout: 15_000 });
     await settleCamera(a);
     await tapRoomPoint(a, 1240, 270); // tap the robot owl itself
     await expect(a.getByText(/Voting opens with tickets/).first()).toBeVisible({ timeout: 10_000 });
@@ -114,30 +114,61 @@ test.describe('room server', () => {
     expect(close.status()).toBe(403);
   });
 
-  test('collectibles live on the server: a find is checked, kept and listed', async ({ browser, request }) => {
+  test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
-    await expect.poll(async () => (await a.evaluate(() => window.owlPark.drops())).length, { timeout: 15_000 }).toBeGreaterThan(0);
-    const d = (await a.evaluate(() => window.owlPark.drops()))[0]!;
-    if ((await state(a)).room !== d.room) {
-      // Same browser, same collector token: the same window's drops wait in the other room.
-      await openPark(a, { transport: 'edge', room: d.room });
-      await expect.poll(async () => (await a.evaluate(() => window.owlPark.drops())).some((x) => x.n === d.n), { timeout: 15_000 }).toBe(true);
-    }
-    expect(await a.evaluate((n) => window.owlPark.pickup(n), d.n)).toBe(true);
-    await expect(a.getByText(/^Found/)).toBeVisible({ timeout: 20_000 });
+    await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
+    // Too far away: the server refuses the talk (the page would walk up first; the API does not).
+    expect(await a.evaluate(() => window.owlPark.accept('story-welcome'))).toBe(false);
+    expect(await a.evaluate(() => window.owlPark.talk('bramble'))).toBe(true);
+    await expect(a.locator('.dialogue[data-npc="bramble"]')).toBeVisible({ timeout: 20_000 });
+    expect(await a.evaluate(() => window.owlPark.accept('story-welcome'))).toBe(true);
+    await expect.poll(async () => (await a.evaluate(() => window.owlPark.quests()?.active.map((q) => q.id))) ?? []).toEqual(['story-welcome']);
+    expect(await a.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
+    await expect.poll(async () => (await a.evaluate(() => window.owlPark.quests()?.active[0]?.step)) ?? -1, { timeout: 20_000 }).toBe(1);
+    await a.context().close();
+  });
 
-    // The API agrees, for this collector only.
-    const inv = await a.evaluate(async () => {
+  test('a leaf pile is shared: one owl flops in and it is gone for everyone', async ({ browser }) => {
+    const a = await visitor(browser, { room: 'grove' });
+    const b = await visitor(browser, { room: 'grove' });
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    const pile = (await state(a)).objects.find((o) => o.kind === 'leaf-pile' && o.here)!;
+    expect(await a.evaluate((id) => window.owlPark.use(id), pile.id)).toBe(true);
+    await expect.poll(async () => (await state(a)).objects.find((o) => o.id === pile.id)?.here, { timeout: 20_000 }).toBe(false);
+    await expect.poll(async () => (await state(b)).objects.find((o) => o.id === pile.id)?.here, { timeout: 10_000 }).toBe(false);
+    await a.screenshot({ path: 'e2e-screenshots/edge-leaves.png' });
+    // A newcomer hears about it too.
+    const c = await visitor(browser, { room: 'grove' });
+    await expect.poll(async () => (await state(c)).objects.find((o) => o.id === pile.id)?.here, { timeout: 10_000 }).toBe(false);
+    for (const p of [a, b, c]) await p.context().close();
+  });
+
+  test('the shop and the collection live on the server, for this collector only', async ({ browser, request }) => {
+    const a = await visitor(browser);
+    const out = await a.evaluate(async () => {
       const token = localStorage.getItem('owl-park:collector') ?? '';
       const { pass } = (await (await fetch('/api/pass', { headers: { 'X-Collector': token } })).json()) as { pass: string };
       const auth = { Authorization: `Bearer ${pass}` };
+      const post = (path: string, body: unknown) => fetch(path, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const inventory = (await (await fetch('/api/collection', { headers: auth })).json()) as { owned: string[]; feathers: number };
-      const craft = (await (await fetch('/api/collection/craft', { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ variant: 'crown~0' }) })).json()) as { ok: boolean; reason?: string };
-      return { inventory, craft };
+      const shop = (await (await fetch('/api/shop', { headers: auth })).json()) as { rotation: { weekly: Array<{ variant: string }>; daily: Array<{ variant: string }>; gift: { variant: string } | null }; feathers: number };
+      const buy = (await (await post('/api/shop/buy', { variant: shop.rotation.weekly[0]!.variant })).json()) as { ok: boolean; reason?: string };
+      const gift = (await (await post('/api/shop/gift', {})).json()) as { ok: boolean; variant?: string };
+      const again = (await (await post('/api/shop/gift', {})).json()) as { ok: boolean; reason?: string };
+      const after = (await (await fetch('/api/collection', { headers: auth })).json()) as { owned: string[] };
+      const craft = (await post('/api/collection/craft', { variant: 'crown~0' })).status;
+      return { inventory, weekly: shop.rotation.weekly.length, daily: shop.rotation.daily.length, giftVariant: shop.rotation.gift?.variant, gift, again, owned: after.owned, buy, craft };
     });
-    expect(inv.inventory.owned.length).toBeGreaterThanOrEqual(3);
-    expect(inv.craft).toMatchObject({ ok: false, reason: 'feathers' });
+    expect(out.inventory.owned.length).toBeGreaterThanOrEqual(3);
+    expect(out.weekly).toBe(8);
+    expect(out.daily).toBe(3);
+    expect(out.buy).toMatchObject({ ok: false, reason: 'feathers' });
+    expect(out.gift).toMatchObject({ ok: true, variant: out.giftVariant });
+    expect(out.again).toMatchObject({ ok: false, reason: 'taken' });
+    expect(out.owned).toContain(out.giftVariant);
+    expect(out.craft).toBe(404); // crafting is retired
     expect((await request.get('/api/collection')).status()).toBe(401);
+    expect((await request.get('/api/shop')).status()).toBe(401);
     expect((await request.post('/api/admin/grant', { data: { cid: 'c_abcdefgh12', variant: 'crown~0' } })).status()).toBe(403);
     await a.context().close();
   });

@@ -64,6 +64,22 @@ function turnAround(host: EmoteHost, times: number, duration: number): void {
   host.scene.tweens.add({ targets: host.pose, scaleX: -1, duration: duration / (times * 2), yoyo: true, repeat: times - 1, ease: 'Sine.easeInOut', onComplete: () => reset(host.pose) });
 }
 
+/** A belly-flop into a leaf pile: up, a lean forward and a squashy landing. Not an emote: anyone can flop. */
+export function playFlop(host: EmoteHost): void {
+  const pose = host.pose;
+  reset(pose);
+  const lean = host.forward();
+  host.scene.tweens.chain({
+    targets: pose,
+    tweens: [
+      { y: -64, angle: 16 * lean, duration: 210, ease: 'Quad.easeOut' },
+      { y: 6, angle: 64 * lean, scaleX: 1.12, scaleY: 0.78, duration: 170, ease: 'Quad.easeIn' },
+      { y: 0, angle: 0, scaleX: 1, scaleY: 1, duration: 280, delay: 260, ease: 'Back.easeOut' },
+    ],
+    onComplete: () => reset(pose),
+  });
+}
+
 export function playEmote(host: EmoteHost, emote: string): boolean {
   const scene = host.scene;
   const pose = host.pose;

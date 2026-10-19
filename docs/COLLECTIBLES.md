@@ -1,25 +1,20 @@
 # Collectibles
 
-Visitors find things scattered around the park: wearables (hats, glasses, collars), little pets
-that trot after their owl, effects (glows, sparkles, eyes on fire) and emotes. Everything that
-can ever be bought can also be found. This document is the design, the numbers, and how the
-pieces fit.
+Visitors collect wearables (hats, glasses, collars), little pets that trot after their owl,
+effects (glows, sparkles, eyes on fire) and emotes. Everything that can ever be bought can also
+be earned in the park. This document is the catalogue, the numbers, and how the pieces fit.
 
 ## The loop
 
-- Every visitor has a **home time zone** (the browser's, on the first visit). Their day splits
-  into two **windows**: 00:00 to 11:59 (morning) and 12:00 to 23:59 (afternoon), local time.
-- Each window holds **two or three finds** for that visitor, on the park's **hiding spots**
-  (`spots` in `packages/shared/rooms/index.ts`, 9 or 10 per room). A visit in the morning and
-  one in the afternoon give 4 to 6 finds a day.
-- Finds are **personal**: only the finder sees their sparkles, so nobody camps or competes.
-- Walking onto a sparkle picks it up (the room server checks the owl is standing there).
-- A **duplicate** pays **feathers**; feathers **craft** any variant the visitor still lacks.
-- Unclaimed finds vanish when the window turns. The HUD says how many are left and when new
-  ones arrive ("2 finds left this morning · new finds at 12:00").
+- **Quests** from the NPC owls pay feathers and, usually, a collectible: a fixed one for story
+  quests, otherwise one picked by the quest's difficulty (unowned variants are likelier).
+- **Feathers** come from quests, from flopping into leaf piles, and from duplicates. They buy
+  collectibles in **Nova's feather shop**: a free gift each day, three new items each day, a
+  featured shelf and this week's eight.
+- A **duplicate** pays feathers instead.
 
-One server is enough for every time zone: windows are arithmetic on the collector's zone
-(`windowKeyAt`, `nextWindowAt` in `packages/shared/src/collectibles.ts`), not timers.
+The half-day finds on hiding spots, crafting and the home time zone are retired: quests and the
+shop replace them. The quests, NPC owls, leaf piles and the shop are in [QUESTS.md](QUESTS.md).
 
 ## The catalogue
 
@@ -34,77 +29,71 @@ One server is enough for every time zone: windows are arithmetic on the collecto
 The launch set was 118 items (1,068 variants). Drop 1, for Owlloween and the first frost, adds
 eight wearables (Bat Headband, Candy Corn Cap, Earmuffs, Holly Crown, Mummy Wrap, Jack-o'-Lantern
 Shades, Candy Necklace, Vampire Collar) and four pets (Little Ghost, Pumpkin Sprite, Snow Bunny,
-Black Kitten). They are findable all year, like everything else.
+Black Kitten). They can be earned all year, like everything else, and are the featured shelf in
+their season.
 
-A visitor finding three things a day, every day, gets about 1,095 finds a year; with duplicates
-paying feathers and monthly drops adding items, there is always more to find. Ids, names and
-rarities live in `CATALOGUE`; variant ids are `<item>~<colourway>` (`witch-hat~3`) and bare ids
-for emotes (`hoot`).
+Ids, names and rarities live in `CATALOGUE`; variant ids are `<item>~<colourway>` (`witch-hat~3`)
+and bare ids for emotes (`hoot`).
 
-## Defaults (named constants in `packages/shared/src/collectibles.ts`)
+## Defaults
 
 | Setting | Default |
 | --- | --- |
-| Rarity of a find | common 60 %, uncommon 28 %, rare 10 %, epic 2 % (`RARITY_WEIGHTS`) |
-| Within a rarity | a variant not yet owned is 4 times as likely (`UNOWNED_BOOST`) |
-| Finds per window | 2 or 3 (`DROPS_MIN`, `DROPS_MAX`) |
-| Duplicate payout | 5 / 10 / 25 / 60 feathers by rarity (`DUPLICATE_FEATHERS`) |
-| Crafting cost | 50 / 100 / 250 / 600 feathers by rarity (`CRAFT_COST`) |
-| Pickup distance | 56 px on the server, 40 px before the client asks (`PICKUP_RADIUS`) |
-| Home time zone changes | once every 30 days; the first visit counts (`TZ_CHANGE_COOLDOWN_DAYS`) |
-| Starter pack | Hoot, Wing Flap, Sparkle (Gold) (`STARTER_PACK`) |
+| A quest's collectible | rarity by the quest's difficulty, rare or better for weekly quests (`rewardOdds` in `quests.ts`); unowned variants 4 times as likely |
+| Duplicate payout | 5 / 10 / 25 / 60 feathers by rarity (`DUPLICATE_FEATHERS` in `collectibles.ts`) |
+| Shop prices | 40 / 90 / 220 / 500 feathers by rarity, plus a free gift each day (`shop.ts`) |
+| Pickup distance (quest items) | 56 px on the server, 40 px before the client asks (`PICKUP_RADIUS`) |
+| Starter pack | Hoot, Wing Flap, Sparkle (Gold) (`STARTER_PACK`); never sold |
 | Identity | per device (a collector token in the browser); email linking later |
 
 ## Identity
 
 - **Collector token** (`owl-park:collector` in localStorage): HMAC-signed `{k: "col", cid, iat}`
   with `PASS_SIGNING_KEY`. `GET /api/pass` takes it (header `X-Collector` or `?collector=`) and
-  the browser's `?tz=`, and returns `{pass, exp, collector}`; a missing or forged token starts a
-  new collection.
-- The **park pass** gains `cid` and `tz`. The pass's own id stays one owl per page load, so two
-  tabs of one browser are two owls sharing one collection.
+  returns `{pass, exp, collector}`; a missing or forged token starts a new collection.
+- The **park pass** carries the `cid` (and the browser's zone, which nothing uses any more). The
+  pass's own id stays one owl per page load, so two tabs of one browser are two owls sharing one
+  collection.
 - Collector tokens and passes are distinct shapes; neither verifies as the other.
 
 ## Server (`apps/edge`)
 
 - **`Collections`** Durable Object (SQLite, one for the park, `getByName('park')`, migration
   `v3`): `collectors(cid, tz, tz_set_at, feathers, equipped, created_at)`,
-  `owned(cid, variant, source, at)` (source: found, crafted, granted, bought) and
-  `drops(cid, win, n, room, x, y, variant, claimed_at)`. The rules are the platform-free
-  `CollectionBook` in `packages/shared/src/book.ts`, shared with the local mode and unit-tested.
-- A window's drops are generated on its first request from `HMAC-SHA256(secret, "drops|cid|window")`
-  and the collection as it stands, then stored, so they never shift as the collection grows.
-  Older windows' rows are deleted when a new window is generated.
+  `owned(cid, variant, source, at)` (source: quest, shop, gift, granted, bought; found and crafted
+  for history), `earned` (leaf-pile feathers and the gift, per day) and `quests` (progress). The old `drops` table stays
+  as history. The rules are the platform-free `CollectionBook` (`book.ts`) and `QuestBook`
+  (`questbook.ts`) in `packages/shared/src`, shared with the local mode and unit-tested; the SQL
+  store is `apps/edge/src/sqlStore.ts`.
 - The **room object** handles the socket side: it carries the collector id per socket, checks
-  pickups against the owl's position on the server clock, and keeps a small cache of what each
-  collector owns to vet worn items and emotes (a look naming something unknown triggers a fresh
-  read, so items crafted over HTTP are recognised).
+  quest talks, uses and pickups against the owl's position on the server clock, and keeps a small
+  cache of what each collector owns to vet worn items and emotes (a look naming something unknown
+  triggers a fresh read, so items bought over HTTP are recognised).
 
 ### API
 
 | Endpoint | Auth | Answer |
 | --- | --- | --- |
 | `GET /api/pass` | collector token (optional) | `{pass, exp, collector}` |
-| `GET /api/collection` | pass | `{cid, owned, feathers, equipped, tz, tzLockedUntil, window, next}` |
-| `POST /api/collection/craft {variant}` | pass | `{ok, variant, feathers}` or `{ok: false, reason: unknown, owned or feathers}` |
-| `POST /api/collection/tz {tz}` | pass | `{ok, tz, tzLockedUntil}` or `{ok: false, reason: invalid or locked}` |
+| `GET /api/collection` | pass | `{cid, owned, feathers, equipped}` |
+| `GET /api/shop` | pass | `{rotation: {featured, weekly, daily, ...}, owned, feathers}` |
+| `POST /api/shop/buy {variant}` | pass | `{ok, variant, price, feathers}` or `{ok: false, reason: unknown, not-offered, owned or feathers}` |
+| `POST /api/shop/gift` | pass | `{ok, variant, dup, feathers, total}` or `{ok: false, reason: taken or none}` |
 | `POST /api/admin/grant {cid, variant, source}` | `X-Admin-Key` | `{ok, variant, added}`; idempotent |
 
-### Socket frames (protocol v3)
+### Socket frames (protocol v4)
 
-Client: `drops` (this window's unclaimed finds), `pickup {n}`, `emote {e}`, and looks that may
-carry `wear: {head, face, neck, pet, fx}`. Server: `drops {window, next, drops: [{n, room, x, y,
-kind}], feathers}` (only where and what kind, never which item), `found {n, variant, dup,
-feathers}`, `missed {n, reason: far, gone or busy}`, `emote {id, e}` (to everyone else). Worn
-items the collector does not own are dropped before a look is broadcast. Emotes are limited to
-one per 1.5 s per owl.
+Client: `emote {e}`, looks that may carry `wear: {head, face, neck, pet, fx}`, and the quest
+frames in [QUESTS.md](QUESTS.md). Server: `emote {id, e}` (to everyone else) and the quest frames.
+Worn items the collector does not own are dropped before a look is broadcast. Emotes are limited
+to one per 1.5 s per owl.
 
 ## Client (`apps/park`)
 
-- `CollectionService`: `EdgeCollections` (room server: HTTP for inventory, crafting and the time
-  zone; the room socket for drops and pickups) or `LocalCollections` (no server: the same rules
-  in localStorage; used by the local and Supabase transports, development and the end-to-end
-  tests; `?collector=` and `?tz=` pin both for tests).
+- `CollectionService`: `EdgeCollections` (room server: HTTP for inventory and the shop; the room
+  socket for quests) or `LocalCollections` (no server: the same rules in localStorage; used by the
+  local and Supabase transports, development and the end-to-end tests; `?collector=` pins the
+  collection for tests).
 - **Wearables** sit on anchors measured from whichever owl art is loaded (crown, eye line,
   top of the chest: `apps/park/src/collect/pixels.ts`), turn with the owl, follow its bob and
   emotes. **Pets** trot after their owl. **Effects** are capped particle rigs and glows.
@@ -112,9 +101,11 @@ one per 1.5 s per owl.
 - **Colourways** of wearables and pets rotate the hue of the art by hand on a canvas (Safari's
   canvas has no `filter`); colourway 0 is the art as painted.
 - Until painted art ships every wearable and pet has a drawn placeholder (`itemArt.ts`).
-- HUD: the finds counter, the **Collection** panel (tabs, a card per item with its colourway dots,
-  wear or take off, craft with feathers, the home time zone) and the **Emotes** tray.
-- Test hooks on `window.owlPark`: `collection()`, `drops()`, `pickup(n)`, `equip(variant)`, `emote(e)`.
+- HUD: feathers in the top bar, the **Collection** panel (tabs, a card per item with its colourway
+  dots, wear or take off) and the **Emotes** tray; the quest tracker, journal, dialogue and shop
+  are in [QUESTS.md](QUESTS.md).
+- Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
+  shop hooks.
 
 ## Art for wearables and pets
 
@@ -136,15 +127,16 @@ stay neutral under a hue rotation); the other colourways are rotations of it. Th
 ## Adding a monthly drop
 
 1. Add `ItemDef`s to `CATALOGUE` with new ids. Never rename or remove an id: collections refer to
-   variants by id. (To retire an item from finds, a `droppable: false` flag is the follow-up.)
+   variants by id. (To keep an item out of rewards and the shop, a flag is the follow-up.)
 2. Update the variant total in `collectibles.test.ts` and in this document.
 3. Draw a placeholder in `itemArt.ts` for new wearables and pets (or ship their art), and an
    effect rig in `fx.ts` or an animation in `emotes.ts` for new effects and emotes.
-4. Deploy: new variants enter drops at once (by rarity, unowned first).
+4. Optionally add a `FEATURED_SETS` entry in `shop.ts` with the drop's dates and items.
+5. Deploy: new variants enter quest rewards and the shop rotation at once.
 
 ## Purchases (groundwork only)
 
-Everything purchasable is findable, and purchases sell a **specific** variant, never a random
+Everything purchasable can be earned in the park, and purchases sell a **specific** variant, never a random
 draw (paid random draws are restricted in several countries and cost collectors' trust). The
 plumbing is `POST /api/admin/grant {cid, variant, source: "bought"}`: a Shopify `orders/paid`
 webhook, once the store exists, verifies the order and grants the variant. Open design: how a

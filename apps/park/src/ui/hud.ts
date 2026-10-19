@@ -1,15 +1,10 @@
-import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, type OwlLook } from '@owl-park/shared';
+import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook } from '@owl-park/shared';
+import type { QuestState } from '../collect/quests';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
-
-/** What the finds counter shows: drops left in this half-day window and when new ones arrive. */
-export interface FindsInfo {
-  left: number;
-  half: 'AM' | 'PM';
-  /** "12:00": when the next window opens, in the collector's home time zone. */
-  nextAt: string;
-}
+import { createQuestUi, type QuestActions, type QuestUi } from './quests';
+import { createShopPanel, type ShopPanel } from './shop';
 
 /** Something to do where the owl stands: one button each, and E runs the first. */
 export interface HudAction {
@@ -35,12 +30,21 @@ export interface Hud {
   /** Owls in the whole park, when known (authoritative transports). */
   setParkCount(n: number | null): void;
   setStatus(s: ConnectionStatus, kind: 'local' | 'supabase' | 'edge'): void;
-  /** A short message; `accent` colours its edge (rarity colours for finds). */
+  /** A short message; `accent` colours its edge (rarity colours for rewards). */
   toast(message: string, ms?: number, accent?: string): void;
-  /** The finds counter; null hides it (no collection, or offline). */
-  setFinds(info: FindsInfo | null): void;
-  /** Wire the collection panel and the emote tray to the visitor's collection. */
+  /** Wire the collection panel, the emote tray, the feather count and the shop to the visitor's collection. */
   attachCollection(state: CollectionState, actions: CollectionActions): CollectionPanel;
+  /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests. */
+  attachQuests(state: QuestState, actions: QuestActions): void;
+  /** Talking to an NPC owl: its quests, and the shop for the shopkeeper. */
+  openDialogue(npc: NpcDef): void;
+  closeDialogue(): void;
+  /** The NPC whose dialogue is open, if any. */
+  dialogueNpc(): string | null;
+  /** J: open or close the quest journal (closing the other panels). */
+  toggleJournal(): void;
+  /** The feather shop. */
+  openShop(): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
   setActions(actions: HudAction[]): void;
   onAction(cb: (id: string) => void): void;
@@ -64,7 +68,7 @@ const CSS = `
 #hud .brand i{width:22px;height:22px;border-radius:50%;background:#C9A227;display:inline-block;position:relative}
 #hud .brand i:before,#hud .brand i:after{content:"";position:absolute;top:6px;width:7px;height:7px;border-radius:50%;background:#F6F1E3;box-shadow:inset 0 0 0 2px #0C1E36}
 #hud .brand i:before{left:3px}#hud .brand i:after{right:3px}
-#hud .pill,#hud .finds{pointer-events:auto;background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:999px;padding:8px 14px;font-size:14px;backdrop-filter:blur(6px);display:flex;align-items:center;gap:8px;white-space:nowrap}
+#hud .pill,#hud .feathers{pointer-events:auto;background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:999px;padding:8px 14px;font-size:14px;backdrop-filter:blur(6px);display:flex;align-items:center;gap:8px;white-space:nowrap}
 #hud .dot{width:8px;height:8px;border-radius:50%;background:#C9A227;box-shadow:0 0 8px #C9A227}
 #hud .dot.offline{background:#999;box-shadow:none}
 #hud .dot.connecting{background:#F6F1E3;opacity:.6}
@@ -80,7 +84,7 @@ const CSS = `
 #hud .swatches{display:flex;gap:8px;flex-wrap:wrap}
 #hud .sw{width:34px;height:34px;border-radius:50%;border:2px solid transparent;cursor:pointer;pointer-events:auto;padding:0;min-height:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 #hud .sw.on{border-color:#F6F1E3;transform:scale(1.08)}
-#hud .toasts{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
+#hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 @keyframes hud-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #hud .actions button{animation:hud-in .25s ease-out}
@@ -88,15 +92,19 @@ const CSS = `
 @media (hover:hover) and (pointer:fine){#hud kbd{display:inline-block}}
 #hud .actions{display:flex;gap:8px;align-items:flex-end}
 #hud .left{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
-#hud .finds{display:none;font-size:13px}
-#hud .finds.show{display:flex}
-#hud .finds i{width:10px;height:10px;display:inline-block;background:#FFD36A;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);box-shadow:0 0 8px #FFD36A}
+#hud .feathers{display:none;font-size:14px;font-weight:700}
+#hud .feathers.show{display:flex}
+#hud .feathers svg{width:18px;height:18px;filter:drop-shadow(0 0 4px rgba(255,211,106,.7))}
+#hud .species{display:flex;gap:6px;flex-wrap:wrap}
+#hud .species button{min-height:34px;padding:5px 11px;font-size:13px;background:rgba(246,241,227,.08);color:#F6F1E3;border:1px solid rgba(246,241,227,.18);box-shadow:none}
+#hud .species button[aria-pressed=true]{background:#C9A227;color:#0C1E36}
+#hud .panel .natural{min-height:34px;padding:5px 12px;font-size:13px;align-self:flex-start}
 #hud .toast.accent{border-left:6px solid var(--accent)}
 #hud .emote-wrap{position:relative}
 #hud .hints{position:absolute;inset:0;pointer-events:none}
 #hud .hint{position:absolute;width:44px;height:44px;min-height:0;margin:-22px 0 0 -22px;padding:0;border-radius:50%;background:rgba(12,30,54,.8);border:2px solid var(--tint);box-shadow:0 0 12px var(--tint);display:flex;align-items:center;justify-content:center;animation:hud-in .25s ease-out}
 #hud .hint i{display:block;width:0;height:0;border-left:14px solid var(--tint);border-top:9px solid transparent;border-bottom:9px solid transparent;transform-origin:50% 50%}
-@media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .finds{order:3}}
+@media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
 `;
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
@@ -109,7 +117,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   root.innerHTML = `
     <div class="bar">
       <div class="brand" aria-label="Owl Park"><i aria-hidden="true"></i>Owl Park</div>
-      <div class="finds" role="status" aria-live="polite" data-finds><i aria-hidden="true"></i><span data-finds-text></span></div>
+      <div class="feathers" role="status" aria-label="Feathers" data-feathers><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 28C6 16 15 6 28 3C27 15 18 24 7 27Z" fill="#FFD36A"/><path d="M4 30Q15 18 28 3" stroke="#0C1E36" stroke-width="1.6" fill="none"/></svg><span data-feathers-text>0</span></div>
       <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
     </div>
     <div class="hints" data-hints></div>
@@ -119,13 +127,16 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
         <div class="owl">
           <div class="panel" data-panel aria-label="Your owl">
             <h2>Your owl</h2>
+            <div class="row"><span>Kind of owl</span><div class="species" data-species></div></div>
             <div class="row"><span>Feathers</span><div class="swatches" data-sw="body"></div></div>
             <div class="row"><span>Belly</span><div class="swatches" data-sw="belly"></div></div>
             <div class="row"><span>Tufts and feet</span><div class="swatches" data-sw="accent"></div></div>
+            <button class="ghost natural" data-natural>Natural colours</button>
           </div>
           <button class="ghost" data-customize aria-expanded="false">Your owl</button>
         </div>
         <button class="ghost" data-collection-btn aria-expanded="false" aria-keyshortcuts="Q">Collection<kbd aria-hidden="true">Q</kbd></button>
+        <button class="ghost" data-quests-btn aria-expanded="false" aria-keyshortcuts="J">Quests<kbd aria-hidden="true">J</kbd></button>
         <div class="emote-wrap" data-emote-wrap><button class="ghost" data-emotes-btn aria-expanded="false">Emotes</button></div>
       </div>
       <div class="actions" data-actions></div>
@@ -142,9 +153,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const hintsEl = $<HTMLElement>('[data-hints]');
   const hintEls = new Map<string, HTMLButtonElement>();
   let hintCb: ((id: string) => void) | null = null;
-  const finds = $<HTMLElement>('[data-finds]');
-  const findsText = $<HTMLElement>('[data-finds-text]');
+  const feathersPill = $<HTMLElement>('[data-feathers]');
+  const feathersText = $<HTMLElement>('[data-feathers-text]');
   const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
+  const questsBtn = $<HTMLButtonElement>('[data-quests-btn]');
+  const bar = $<HTMLElement>('.bar');
+  let questUi: QuestUi | null = null;
+  let shop: ShopPanel | null = null;
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const emoteWrap = $<HTMLElement>('[data-emote-wrap]');
   let collectionPanel: CollectionPanel | null = null;
@@ -187,28 +202,77 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   };
   renderSwatches();
 
+  const speciesHost = $<HTMLElement>('[data-species]');
+  const renderSpecies = () => {
+    speciesHost.innerHTML = '';
+    const current = getSpecies(look.species).id;
+    for (const sp of selectableSpecies()) {
+      const b = document.createElement('button');
+      b.textContent = sp.name.replace(/ owl$/, '');
+      b.dataset['species'] = sp.id;
+      b.setAttribute('aria-pressed', String(sp.id === current));
+      b.setAttribute('aria-label', sp.name);
+      b.addEventListener('click', () => {
+        look = { ...look, species: sp.id };
+        renderSpecies();
+        lookCb?.(look);
+      });
+      speciesHost.appendChild(b);
+    }
+  };
+  renderSpecies();
+  $<HTMLButtonElement>('[data-natural]').addEventListener('click', () => {
+    look = { ...look, ...getSpecies(look.species).natural };
+    renderSwatches();
+    lookCb?.(look);
+  });
+
   const closeEmotes = () => {
     emoteWrap.querySelector('.emotes')?.classList.remove('open');
     emotesBtn.setAttribute('aria-expanded', 'false');
+  };
+  /** The big sheets (collection, journal, dialogue, shop) share the middle of the screen: one at a time. */
+  const closeSheets = (keep?: 'collection' | 'journal') => {
+    if (keep !== 'collection') {
+      collectionPanel?.close();
+      collectionBtn.setAttribute('aria-expanded', 'false');
+    }
+    if (keep !== 'journal') questUi?.closeJournal();
+    questsBtn.setAttribute('aria-expanded', String(keep === 'journal'));
+    questUi?.closeDialogue();
+    shop?.close();
+  };
+  const closeOwlPanel = () => {
+    panel.classList.remove('open');
+    customize.setAttribute('aria-expanded', 'false');
   };
   customize.addEventListener('click', () => {
     const open = !panel.classList.contains('open');
     panel.classList.toggle('open', open);
     customize.setAttribute('aria-expanded', String(open));
     if (open) {
-      collectionPanel?.close();
+      closeSheets();
       closeEmotes();
     }
   });
   const toggleCollection = () => {
     if (!collectionPanel) return;
+    closeSheets('collection');
     collectionPanel.toggle();
     collectionBtn.setAttribute('aria-expanded', String(collectionPanel.isOpen()));
-    panel.classList.remove('open');
-    customize.setAttribute('aria-expanded', 'false');
+    closeOwlPanel();
     closeEmotes();
   };
   collectionBtn.addEventListener('click', toggleCollection);
+  const toggleJournal = () => {
+    if (!questUi) return;
+    closeSheets('journal');
+    questUi.toggleJournal();
+    questsBtn.setAttribute('aria-expanded', String(questUi.isJournalOpen()));
+    closeOwlPanel();
+    closeEmotes();
+  };
+  questsBtn.addEventListener('click', toggleJournal);
   emotesBtn.addEventListener('click', () => {
     const tray = emoteWrap.querySelector('.emotes');
     if (!tray) return;
@@ -216,10 +280,16 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     tray.classList.toggle('open', open);
     emotesBtn.setAttribute('aria-expanded', String(open));
     if (open) {
-      collectionPanel?.close();
-      panel.classList.remove('open');
+      closeSheets();
+      closeOwlPanel();
     }
   });
+  /** Before a sheet opens on its own (a dialogue, the shop): close the rest. */
+  const makeRoom = () => {
+    closeSheets();
+    closeOwlPanel();
+    closeEmotes();
+  };
 
   return {
     setCount(n) {
@@ -243,15 +313,31 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       toasts.appendChild(el);
       setTimeout(() => el.remove(), ms);
     },
-    setFinds(info) {
-      finds.classList.toggle('show', info !== null);
-      if (!info) return;
-      const when = info.half === 'AM' ? 'this morning' : 'this afternoon';
-      findsText.textContent = info.left > 0 ? `${info.left} ${info.left === 1 ? 'find' : 'finds'} left ${when} · new finds at ${info.nextAt}` : `All found ${when} · new finds at ${info.nextAt}`;
-    },
     attachCollection(state, actions) {
       collectionPanel = createCollectionPanel(root, emoteWrap, state, actions);
+      shop = createShopPanel(root, state, actions.toast, makeRoom);
+      const showFeathers = () => {
+        feathersPill.classList.toggle('show', state.inv !== null);
+        feathersText.textContent = String(state.inv?.feathers ?? 0);
+        feathersPill.setAttribute('aria-label', `${state.inv?.feathers ?? 0} feathers`);
+      };
+      state.onChange(showFeathers);
+      showFeathers();
       return collectionPanel;
+    },
+    attachQuests(state, actions) {
+      questUi = createQuestUi(root, bar, state, actions, makeRoom);
+    },
+    openDialogue(npc) {
+      questUi?.openDialogue(npc);
+    },
+    closeDialogue() {
+      questUi?.closeDialogue();
+    },
+    dialogueNpc: () => questUi?.dialogueNpc() ?? null,
+    toggleJournal,
+    openShop() {
+      shop?.open();
     },
     setActions(list) {
       const key = list.map((a) => `${a.id}:${a.label}`).join('|');
@@ -309,15 +395,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       hintCb = cb;
     },
     closePanels() {
-      panel.classList.remove('open');
-      customize.setAttribute('aria-expanded', 'false');
-      collectionPanel?.close();
-      collectionBtn.setAttribute('aria-expanded', 'false');
+      closeOwlPanel();
+      closeSheets();
       closeEmotes();
     },
     setLook(l) {
       look = { ...l };
       renderSwatches();
+      renderSpecies();
     },
     onLookChange(cb) {
       lookCb = cb;

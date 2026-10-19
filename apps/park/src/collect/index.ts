@@ -5,7 +5,7 @@ import { EdgeCollections } from './edge';
 import { LocalCollections } from './local';
 import { deviceTimeZone, type CollectionService } from './service';
 
-export type { CollectionService, DropLink, DropsInfo, PickupResult } from './service';
+export type { CollectionService, HandInReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
 
 /** The room server keeps collections; every other transport keeps them in this browser. */
 export function createCollections(cfg: ParkConfig, transport: ParkTransport): CollectionService {

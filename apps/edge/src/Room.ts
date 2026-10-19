@@ -7,6 +7,8 @@
 import {
   MOVE_BURST,
   MOVE_REFILL_PER_S,
+  USE_COOLDOWN_MS,
+  REACH_SLACK,
   findSpawn,
   isWalkable,
   positionAlongWalk,
@@ -50,6 +52,8 @@ interface Visitor {
   strikes: number[];
   frames: number[];
   emotedAt: number;
+  /** When this visitor last used an interactable (leaf piles, stalls). */
+  usedAt: number;
 }
 
 export interface RoomOptions {
@@ -77,6 +81,10 @@ export const LIMITS = {
   leaverMemoryMs: 120_000,
   /** One emote per visitor this often; faster ones are dropped quietly. */
   emoteEveryMs: 1_500,
+  /** One use of an interactable per visitor this often. */
+  useEveryMs: USE_COOLDOWN_MS,
+  /** Extra reach the server allows for talks and uses (the client's owl is drawn a little ahead). */
+  reachSlackPx: REACH_SLACK,
 } as const;
 
 export class Room {
@@ -84,6 +92,8 @@ export class Room {
   private readonly visitors = new Map<string, Visitor>();
   private readonly leavers = new Map<string, { pos: Vec2; leftAt: number }>();
   private readonly opts: RoomOptions;
+  /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
+  private readonly objects = new Map<string, number>();
 
   constructor(def: RoomDef, opts: RoomOptions) {
     this.def = def;
@@ -215,7 +225,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -231,6 +241,7 @@ export class Room {
       owls: this.snapshot(id),
       counts: this.opts.counts?.() ?? { [this.def.id]: this.visitors.size },
     });
+    this.send(v, { t: 'objects', until: this.objectStates() });
     this.broadcast({ t: 'enter', owl: { id, look: v.st.look, pos, walk: null } }, id);
     return 'ok';
   }
@@ -238,7 +249,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -339,7 +350,7 @@ export class Room {
   }
 
   /**
-   * Count a frame the adapter handles itself (drops, pickup, emote) against the flood limit.
+   * Count a frame the adapter handles itself (quests, uses, emotes) against the flood limit.
    * Returns false, and closes the socket, when the visitor is sending too much.
    */
   admit(id: string): boolean {
@@ -358,6 +369,50 @@ export class Room {
     if (now - v.emotedAt < LIMITS.emoteEveryMs) return false;
     v.emotedAt = now;
     this.broadcast({ t: 'emote', id, e }, id);
+    return true;
+  }
+
+  /** Whether a visitor stands within `radius` (plus the latency slack) of a point, on the server clock. */
+  near(id: string, p: Vec2, radius: number): boolean {
+    const v = this.visitors.get(id);
+    return !!v && distance(this.currentPos(v), p) <= radius + LIMITS.reachSlackPx;
+  }
+
+  /** Count a use of an interactable against the visitor's cooldown. False when too soon. */
+  takeUse(id: string): boolean {
+    const v = this.visitors.get(id);
+    if (!v) return false;
+    const now = this.now();
+    if (now - v.usedAt < LIMITS.useEveryMs) return false;
+    v.usedAt = now;
+    return true;
+  }
+
+  /** Shared interactables that are used up right now: id -> server ms when they are back. */
+  objectStates(): Record<string, number> {
+    const now = this.now();
+    const out: Record<string, number> = {};
+    for (const [id, until] of this.objects) {
+      if (until > now) out[id] = until;
+      else this.objects.delete(id);
+    }
+    return out;
+  }
+
+  /** Put back used-up objects saved before the object was evicted (those already back are skipped). */
+  restoreObjects(until: Record<string, number>): void {
+    const now = this.now();
+    for (const [id, t] of Object.entries(until)) if (typeof t === 'number' && t > now) this.objects.set(id, t);
+  }
+
+  /**
+   * Use up a shared interactable until `until` and tell everyone (the user included), who play
+   * it on visitor `by`'s owl. False when it is already used up.
+   */
+  useObject(by: string, objectId: string, until: number): boolean {
+    if ((this.objects.get(objectId) ?? 0) > this.now()) return false;
+    this.objects.set(objectId, until);
+    this.broadcast({ t: 'used', id: objectId, by, until });
     return true;
   }
 

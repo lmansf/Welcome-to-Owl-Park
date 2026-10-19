@@ -41,7 +41,7 @@ Useful query parameters while developing:
 | `?room=market` | Start in a given room (`hub`, `grove`, `market`) |
 | `?transport=local` | Force a transport: `local` (tabs on one device), `supabase`, or `edge` (room server) |
 | `?id=owl-a&look=%23C9A227,%23F6F1E3,%23FF2AA1` | Fixed id and colours (tests) |
-| `?collector=e2e-a&tz=UTC` | Fixed collection and home time zone when there is no room server (tests) |
+| `?collector=e2e-a` | Fixed collection when there is no room server (tests) |
 
 ## Check it
 
@@ -67,8 +67,8 @@ apps/park/            the browser app (Vite + TypeScript + Phaser 3)
 apps/edge/            the room server: Cloudflare Worker + Durable Object (hibernating WebSockets)
   src/Room.ts         the rules, with no platform dependency (unit-tested in Node)
   src/RoomObject.ts   the Durable Object adapter; src/index.ts the router; src/pass.ts guest passes
-  src/Collections.ts  every collection (Durable Object, SQLite)
-packages/shared/      protocol v1 + v3, geometry and walk maths, target resolution, room data, collectibles
+  src/Collections.ts  every collection, quest and feather (Durable Object, SQLite; tables in src/sqlStore.ts)
+packages/shared/      protocol v1 + v4, geometry and walk maths, target resolution, room data, collectibles, quests, the shop
 tools/                render-svg.mjs (rasterize art exactly as the game will), load/swarm.mjs (bot swarm)
 docs/                 architecture, art pipeline, deployment
 ```
@@ -77,11 +77,12 @@ docs/                 architecture, art pipeline, deployment
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the original tap-to-move room games worked, what we replicate, and the architecture decision for v1 and beyond.
 - [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
-- [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): finds, wearables, pets, effects and emotes: the rules, the numbers and the server.
+- [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): wearables, pets, effects and emotes: the catalogue, the numbers and the server.
+- [docs/QUESTS.md](docs/QUESTS.md): quests, NPC owls, leaf piles, feathers, the feather shop and owl species.
 - [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
 
 ## Ground rules baked into the code
 
-- Realm names stay out of this public repository; rooms use neutral ids and visitors see no names in the park.
+- Realm names stay out of this public repository; rooms use neutral ids and visitors see no realm names in the park (places are "the great tree", "the treehouse clearing", "the neon street"; the NPC owls' names are approved canon).
 - The only visible text in the art is the approved closed-realm sign wording.
 - Nothing a visitor types is ever sent to other visitors in v1 (there is no text input).

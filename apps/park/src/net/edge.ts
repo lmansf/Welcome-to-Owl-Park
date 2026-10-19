@@ -9,11 +9,12 @@ import {
   type OwlSnapshot,
   type ParkMessage,
   type PlayerState,
+  type QuestBoard,
   type ServerFrame,
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
-import type { DropLink, DropsInfo, PickupResult } from '../collect/service';
+import type { HandInReply, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { MoveBudget } from './budget';
 import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
@@ -30,8 +31,14 @@ const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const RELOAD_GUARD_KEY = 'owl-park:reloaded';
 /** The collector token this browser keeps (one collection per device until email linking exists). */
 const COLLECTOR_KEY = 'owl-park:collector';
-/** How long a drops or pickup request waits for the server's answer. */
+/** How long a quest request waits for the server's answer. */
 const REPLY_TIMEOUT_MS = 6_000;
+
+/** A client frame that expects an answer, before its request number is added. */
+type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' }>;
+
+const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
 interface Pass {
   pass: string;
@@ -140,12 +147,29 @@ export class EdgeTransport implements ParkTransport {
     const budget = new MoveBudget(Date.now());
     let queued: Vec2 | null = null;
     let queueTimer: ReturnType<typeof setTimeout> | null = null;
-    /** Requests waiting for the server: drops answers in order, pickups by drop number. */
-    const dropWaiters: Array<{ resolve: (d: DropsInfo) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }> = [];
-    const pickupWaiters = new Map<number, { resolve: (r: PickupResult) => void; timer: ReturnType<typeof setTimeout> }>();
+    /** Quest requests waiting for the server's answer, by request number. */
+    const waiters = new Map<number, { resolve: (f: Answer | null) => void; timer: ReturnType<typeof setTimeout> }>();
+    let lastR = 0;
     const readyWaiters: Array<(ok: boolean) => void> = [];
 
     const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS });
+    /** Board times are on the server clock; the HUD counts down on this device's. */
+    const toLocalBoard = (b: QuestBoard): QuestBoard => ({
+      ...b,
+      nextDay: b.nextDay - offset,
+      nextWeek: b.nextWeek - offset,
+      active: b.active.map((q) => (q.endsAt ? { ...q, endsAt: q.endsAt - offset } : q)),
+    });
+    const answer = (f: Answer) => {
+      const r = f.r;
+      if (r === undefined) return false;
+      const w = waiters.get(r);
+      if (!w) return true;
+      clearTimeout(w.timer);
+      waiters.delete(r);
+      w.resolve(f);
+      return true;
+    };
     const sendFrame = (f: ClientFrame) => {
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(f));
     };
@@ -266,23 +290,24 @@ export class EdgeTransport implements ParkTransport {
         case 'full':
           handlers.onFull?.(f.room);
           break;
-        case 'drops': {
-          const w = dropWaiters.shift();
-          if (!w) break;
-          clearTimeout(w.timer);
-          // `next` is on the server clock; the scene schedules on this device's clock.
-          w.resolve({ window: f.window, next: f.next ? f.next - offset : 0, drops: f.drops, feathers: f.feathers });
+        case 'quests':
+          // An answer to one of our requests, or a push after an arrival or an emote moved a quest.
+          if (!answer(f)) handlers.onQuests?.(toLocalBoard(f.board), f.updates);
+          break;
+        case 'handin':
+        case 'useResult':
+        case 'refused':
+          answer(f);
+          break;
+        case 'objects': {
+          const until: Record<string, number> = {};
+          for (const [id, t] of Object.entries(f.until)) until[id] = t - offset;
+          handlers.onObjects?.(until);
           break;
         }
-        case 'found':
-        case 'missed': {
-          const w = pickupWaiters.get(f.n);
-          if (!w) break;
-          clearTimeout(w.timer);
-          pickupWaiters.delete(f.n);
-          w.resolve(f.t === 'found' ? { ok: true, n: f.n, variant: f.variant, dup: f.dup, feathers: f.feathers } : { ok: false, n: f.n, reason: f.reason });
+        case 'used':
+          handlers.onUsed?.(f.id, f.by === selfId ? null : f.by, f.until - offset);
           break;
-        }
         case 'emote':
           if (f.id !== selfId) handlers.onPeerEmote?.(f.id, f.e);
           break;
@@ -290,7 +315,7 @@ export class EdgeTransport implements ParkTransport {
     };
 
     const isOpen = () => ws !== null && ws.readyState === WebSocket.OPEN && welcomed;
-    /** Resolves true once the server has welcomed us (the scene asks for drops right after joining). */
+    /** Resolves true once the server has welcomed us (the scene asks for its quests right after joining). */
     const whenWelcomed = (): Promise<boolean> => {
       if (isOpen()) return Promise.resolve(true);
       if (closed) return Promise.resolve(false);
@@ -307,40 +332,51 @@ export class EdgeTransport implements ParkTransport {
         readyWaiters.push(done);
       });
     };
-    const link: DropLink = {
-      drops: async () => {
-        if (!(await whenWelcomed())) throw new Error('offline');
-        return new Promise<DropsInfo>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            const i = dropWaiters.findIndex((w) => w.timer === timer);
-            if (i >= 0) dropWaiters.splice(i, 1);
-            reject(new Error('no answer'));
-          }, REPLY_TIMEOUT_MS);
-          dropWaiters.push({ resolve, reject, timer });
-          sendFrame({ t: 'drops' });
-        });
+    /** Send a request once welcomed and wait for its answer (null when offline or unanswered). */
+    const request = async (frame: Request): Promise<Answer | null> => {
+      if (!(await whenWelcomed())) return null;
+      return new Promise((resolve) => {
+        const r = ++lastR;
+        const timer = setTimeout(() => {
+          waiters.delete(r);
+          resolve(null);
+        }, REPLY_TIMEOUT_MS);
+        waiters.set(r, { resolve, timer });
+        sendFrame({ ...frame, r } as ClientFrame);
+      });
+    };
+    const questReply = (f: Answer | null): QuestReply => {
+      if (f?.t === 'quests') return { ok: f.ok ?? true, ...(f.reason ? { reason: f.reason } : {}), board: toLocalBoard(f.board), updates: f.updates };
+      if (f?.t === 'refused') return { ok: false, reason: f.reason, board: null, updates: [] };
+      return OFFLINE;
+    };
+    const link: QuestLink = {
+      board: async () => questReply(await request({ t: 'quests' })),
+      talk: async (npc) => questReply(await request({ t: 'talk', npc })),
+      accept: async (quest) => questReply(await request({ t: 'accept', quest })),
+      abandon: async (quest) => questReply(await request({ t: 'abandon', quest })),
+      gather: async (quest, n) => questReply(await request({ t: 'gather', quest, n })),
+      handIn: async (quest): Promise<HandInReply> => {
+        const f = await request({ t: 'handin', quest });
+        if (f?.t !== 'handin') return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline', board: null };
+        if (!f.ok) return { ok: false, reason: f.reason, board: f.board ? toLocalBoard(f.board) : null };
+        const { t: _t, r: _r, ...res } = f;
+        return { ...res, board: toLocalBoard(f.board) };
       },
-      pickup: (n: number) =>
-        new Promise<PickupResult>((resolve) => {
-          if (!isOpen() || pickupWaiters.has(n)) return resolve({ ok: false, n, reason: isOpen() ? 'busy' : 'offline' });
-          const timer = setTimeout(() => {
-            pickupWaiters.delete(n);
-            resolve({ ok: false, n, reason: 'offline' });
-          }, REPLY_TIMEOUT_MS);
-          pickupWaiters.set(n, { resolve, timer });
-          sendFrame({ t: 'pickup', n });
-        }),
+      use: async (target): Promise<UseReply> => {
+        const f = await request({ t: 'use', target });
+        if (f?.t === 'useResult') return { ok: f.ok, ...(f.reason ? { reason: f.reason } : {}), feathers: f.feathers, total: f.total, updates: f.updates };
+        return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline', feathers: 0, total: -1, updates: [] };
+      },
+      // The room counts arrivals and emotes itself.
+      note: () => undefined,
     };
     const failWaiters = () => {
-      for (const w of dropWaiters.splice(0)) {
+      for (const w of waiters.values()) {
         clearTimeout(w.timer);
-        w.reject(new Error('offline'));
+        w.resolve(null);
       }
-      for (const [n, w] of pickupWaiters) {
-        clearTimeout(w.timer);
-        w.resolve({ ok: false, n, reason: 'offline' });
-      }
-      pickupWaiters.clear();
+      waiters.clear();
     };
 
     const scheduleReconnect = () => {

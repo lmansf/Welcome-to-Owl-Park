@@ -1,7 +1,7 @@
 /**
  * The Worker: serves the built client as static assets, mints guest passes and collector
- * tokens, answers the collection API, and upgrades /ws/<room> to a WebSocket held by the
- * park's Durable Object.
+ * tokens, answers the collection and shop API, and upgrades /ws/<room> to a WebSocket held by
+ * the park's Durable Object (where quests, NPC owls and leaf piles live).
  */
 import { isTimeZone, isVariantId } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
@@ -87,23 +87,20 @@ export default {
       if (!body || !isCollectorId(body['cid']) || !isVariantId(body['variant']) || !SOURCES.includes(source)) return json({ error: 'bad request' }, 400);
       return json(await collections(env).grant(body['cid'], body['variant'], source));
     }
-    if (url.pathname === '/api/collection' || url.pathname.startsWith('/api/collection/')) {
+    if (url.pathname === '/api/collection' || url.pathname === '/api/shop' || url.pathname === '/api/shop/buy' || url.pathname === '/api/shop/gift') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       const pass = await passFrom(request, env);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       const stub = collections(env);
       if (url.pathname === '/api/collection' && request.method === 'GET') return json(await stub.inventory(pass.cid, pass.tz));
-      if (request.method !== 'POST') return json({ error: 'not found' }, 404);
-      const body = await readJson(request);
-      if (url.pathname === '/api/collection/craft') {
+      if (url.pathname === '/api/shop' && request.method === 'GET') return json(await stub.shop(pass.cid));
+      if (url.pathname === '/api/shop/buy' && request.method === 'POST') {
+        const body = await readJson(request);
         if (!body || !isVariantId(body['variant'])) return json({ error: 'bad request' }, 400);
-        return json(await stub.craft(pass.cid, pass.tz, body['variant']));
+        return json(await stub.buy(pass.cid, body['variant']));
       }
-      if (url.pathname === '/api/collection/tz') {
-        if (!body || typeof body['tz'] !== 'string') return json({ error: 'bad request' }, 400);
-        return json(await stub.setTimeZone(pass.cid, pass.tz, body['tz']));
-      }
+      if (url.pathname === '/api/shop/gift' && request.method === 'POST') return json(await stub.claimGift(pass.cid));
       return json({ error: 'not found' }, 404);
     }
 

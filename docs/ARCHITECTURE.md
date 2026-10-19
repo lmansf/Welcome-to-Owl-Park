@@ -73,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v3 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v4 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -81,15 +81,16 @@ Durable Object answers without waking. Coordinates are integers in room space. A
 are server milliseconds; clients never put their own clock on the wire.
 
 Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
-`move` (target and a per-connection `seq`), `look` (new colours and worn items), `drops` (this
-window's finds), `pickup` (a find's number), `emote` (an emote id), `bye`.
+`move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
+(an emote id), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
+`accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item).
 
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
 everyone including the sender; only the sender's copy carries `seq`, which is the
-acknowledgement), `look`, `leave`, `counts`, `full`, and for the collectibles `drops` (where this
-window's finds are and what kind, never which item), `found`, `missed` (too far, already gone, or
-another pickup in flight) and `emote` (to everyone else in the room).
+acknowledgement), `look`, `leave`, `counts`, `full`, `emote` (to everyone else in the room), and
+for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, `refused`, plus
+`objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`).
 
 Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
 normally match the client's prediction; a walk in progress is continued from its current
@@ -97,10 +98,11 @@ point when redirected; moves use a token bucket (burst 5, refill 2 per second) a
 excess closes the socket (4003); more than 40 frames in 5 s closes it; a second session for
 the same visitor replaces the first (4005); full rooms answer `full` then close (4010);
 idle sockets (no heartbeat for 90 s) are reaped by a one-minute alarm; at most 3 sockets per
-IP address per object. Collectibles: a pickup counts only within 56 px of the owl's position on
-the server clock, one at a time per visitor; worn items the visitor's collection does not hold
-are dropped from a look before it is broadcast; emotes must be owned and are limited to one per
-1.5 s; `drops`, `pickup` and `emote` frames count toward the frame limit.
+IP address per object. Quests and collectibles: talks, uses and hand-ins count only within reach
+of the owl's position on the server clock (plus 40 px of slack), a quest item only within 56 px,
+and one quest request runs at a time per visitor; one use per 1.2 s; worn items the visitor's
+collection does not hold are dropped from a look before it is broadcast; emotes must be owned and
+are limited to one per 1.5 s; quest and emote frames count toward the frame limit.
 
 Client rules: the clock offset is set from `welcome` and refined with a min-filter over
 later `move` frames; remote owls are drawn 100 ms behind server time so jitter never shows;
@@ -108,9 +110,10 @@ the local owl walks immediately on the tap and is corrected only if the echo dif
 than 2 px; reconnects back off from 0.5 s to 8 s and resume near the last position; a stale
 bundle (protocol mismatch) reloads itself.
 
-Everything about a visitor that must survive hibernation (id, look, position, walk, collector
-id and home time zone) is kept in the socket attachment, so an object that was evicted rebuilds
-every room from its sockets.
+Everything about a visitor that must survive hibernation (id, look, position, walk and collector
+id) is kept in the socket attachment, so an object that was evicted rebuilds every room from its
+sockets. Used-up leaf piles are kept in the object's storage as well, so an evicted object
+brings them back.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
@@ -118,7 +121,8 @@ Rooms are data shared by the client and the server: a `size` (one screen is 1600
 may be up to 6400 x 1800, `ROOM_MAX_W` x `ROOM_MAX_H`, and the camera follows the owl across it),
 `walkable` polygons, `spawns`, `doors`
 (open with `to`, or closed with an approved `closedSign`), `mood` for ambience, `spots` where
-collectible finds appear, and anchors for large set pieces. A one-screen room names its painting
+quests hide their items, and anchors for large set pieces. NPC owls and interactables are placed
+in `npcs.ts` and `interactables.ts`; a unit test keeps them on the floor and out of doorways. A one-screen room names its painting
 in `background` (and its overlay in `foreground`); a bigger room is painted in tiles of one screen
 each, listed in `backgrounds` and `foregrounds` with their offsets, which must cover the room
 exactly (unit-tested). The client registers every tile as room art, loads a room's tiles together
@@ -170,23 +174,24 @@ winner sets the next merch drop; ties go to the realm with the fewest all-time w
   feeds the sales and data pipeline. Mirroring rows into the Supabase ticket ledger is a small
   follow-up once that ledger exists.
 
-## 8. Collectibles (built)
+## 8. Collectibles, quests and the feather shop (built)
 
-Visitors find wearables, pets, effects and emotes on each room's `spots`: two or three finds per
-half day in the visitor's home time zone, personal to the finder, so one server serves every time
-zone with arithmetic rather than timers. Identity is a per-device collector token: `/api/pass`
-mints one when none is sent and folds its `cid` and the home `tz` into the pass.
+Visitors earn wearables, pets, effects and emotes from quests that NPC owls give, and buy them
+with feathers in a rotating shop; feathers come from quests, leaf piles and duplicates. Identity
+is a per-device collector token: `/api/pass` mints one when none is sent and folds its `cid`
+into the pass.
 
 - **`Collections`** Durable Object (SQLite, migration `v3`, one per park): collectors, owned
-  variants and each window's drops, generated from an HMAC of the collector and window and stored,
-  so they never shift. The rules are the portable `CollectionBook` in `packages/shared/src/book.ts`,
-  which the local mode reuses in the browser.
-- **Room object**: carries the collector per socket, checks pickups against the owl's server
-  position, and vets worn items and emotes against a short-lived cache of what each collector owns.
-- **HTTP**: `GET /api/collection`, `POST /api/collection/craft`, `POST /api/collection/tz` (with the
-  pass), and `POST /api/admin/grant` (admin key; the hook purchases will use).
+  variants, quest progress and capped daily earnings. The rules are the portable `CollectionBook`
+  and `QuestBook` in `packages/shared/src`, which the local mode reuses in the browser.
+- **Room object**: carries the collector per socket, checks quest talks, uses and pickups against
+  the owl's server position, counts arrivals and emotes for quests, keeps the room's used-up leaf
+  piles, and vets worn items and emotes against a short-lived cache of what each collector owns.
+- **HTTP**: `GET /api/collection`, `GET /api/shop`, `POST /api/shop/buy`, `POST /api/shop/gift`
+  (with the pass), and `POST /api/admin/grant` (admin key; the hook purchases will use).
 
-The design, the catalogue and every number: `docs/COLLECTIBLES.md`.
+The catalogue and its numbers: `docs/COLLECTIBLES.md`. Quests, NPC owls, leaf piles, the shop and
+owl species: `docs/QUESTS.md`.
 
 ## 9. Ticket gating (v2, designed, not built)
 
@@ -211,4 +216,4 @@ Vote that night.
 4. Hostname: `*.workers.dev` for a soft launch, or a park subdomain on the brand's DNS.
 5. Room caps: hub 80 / grove 40 / market 40, or flat.
 6. Pre-ticket access: open to all guests (today), or a bot check on `/api/pass` if abuse shows.
-7. Collectibles: find rates, feather prices, the time zone rule and how purchases reach a collection (defaults in `docs/COLLECTIBLES.md`).
+7. Collectibles: how purchases with money reach a collection (quest rewards, leaf-pile feathers and the shop follow canon C31; defaults in `docs/QUESTS.md` and `docs/COLLECTIBLES.md`).

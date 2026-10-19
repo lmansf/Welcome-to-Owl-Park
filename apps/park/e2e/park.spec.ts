@@ -123,7 +123,7 @@ test.describe('single visitor', () => {
   test('the neon realm offers the gift shop near the kiosk', async ({ page }) => {
     await openPark(page, { room: 'market' });
     await walkToDoor(page, 'shop');
-    await expect(page.getByRole('button', { name: 'Gift shop' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Gift shop', exact: true })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-market.png` });
     await page.keyboard.press('KeyE'); // E does what the button does
     await expect(page.getByText('The gift shop opens soon.')).toBeVisible();
@@ -131,10 +131,10 @@ test.describe('single visitor', () => {
 
   test('standing at a realm idol offers the Realm Vote; without a ticketed server it explains', async ({ page }) => {
     await openPark(page, { room: 'grove' });
-    await expect(page.getByRole('button', { name: 'Vote for this realm' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Vote for this realm', exact: true })).toBeHidden();
     await walkToDoor(page, 'idol');
-    await expect(page.getByRole('button', { name: 'Vote for this realm' })).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('button', { name: 'Vote for this realm' }).click();
+    await expect(page.getByRole('button', { name: 'Vote for this realm', exact: true })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Vote for this realm', exact: true }).click();
     await expect(page.getByText(/Voting opens/).first()).toBeVisible();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-idol.png` });
   });

@@ -1,12 +1,11 @@
 /**
- * Collectibles: the catalogue, colourways, the half-day find windows, the per-window drops, the
- * feather economy and the `wear` a look may carry. Pure and deterministic, so the room server,
- * the local (zero-backend) mode and the tests all run exactly the same rules.
+ * Collectibles: the catalogue, colourways, the `wear` a look may carry and the duplicate payout.
+ * Pure and deterministic, so the room server, the local (zero-backend) mode and the tests all
+ * run exactly the same rules. Collectibles are earned from quests and bought with feathers in
+ * the shop (quests.ts, shop.ts); they no longer appear at hiding spots.
  *
  * Every name here is public-safe: these strings are shown to visitors.
  */
-import type { Vec2 } from './protocol';
-
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic';
 export type ItemKind = 'wear' | 'pet' | 'fx' | 'emote';
 export type WearSlot = 'head' | 'face' | 'neck';
@@ -43,22 +42,12 @@ export interface Variant {
 
 // ---------- defaults the owner may change (named constants) ----------
 
-/** Duplicate finds pay out feathers; feathers craft a chosen variant. */
+/** A collectible that comes again (a quest reward the collector already owns) pays feathers instead. */
 export const DUPLICATE_FEATHERS: Record<Rarity, number> = { common: 5, uncommon: 10, rare: 25, epic: 60 };
-export const CRAFT_COST: Record<Rarity, number> = { common: 50, uncommon: 100, rare: 250, epic: 600 };
-/** How often a drop's variant comes from each rarity class (percent). */
-export const RARITY_WEIGHTS: Record<Rarity, number> = { common: 60, uncommon: 28, rare: 10, epic: 2 };
-/** Within a rarity class, a variant the collector does not own yet is this many times as likely. */
-export const UNOWNED_BOOST = 4;
-/** Drops per half-day window: two or three, decided by the window's seed. */
-export const DROPS_MIN = 2;
-export const DROPS_MAX = 3;
-/** The server accepts a pickup when the owl stands this close to the drop (room pixels). */
+/** The server accepts a quest-item pickup when the owl stands this close to it (room pixels). */
 export const PICKUP_RADIUS = 56;
 /** The client asks for a pickup a little closer than the server's radius (latency headroom). */
 export const PICKUP_CLIENT_RADIUS = 40;
-/** A collector's home time zone may change once per this many days. */
-export const TZ_CHANGE_COOLDOWN_DAYS = 30;
 /** Every new collector starts with these. */
 export const STARTER_PACK = ['hoot', 'flap', 'sparkle~0'] as const;
 export const DEFAULT_TIME_ZONE = 'UTC';
@@ -341,7 +330,8 @@ export function allVariants(): readonly string[] {
 }
 
 let byRarityCache: Record<Rarity, string[]> | null = null;
-function variantsByRarity(): Record<Rarity, string[]> {
+/** Every variant by rarity, in catalogue order. */
+export function variantsByRarity(): Readonly<Record<Rarity, readonly string[]>> {
   if (!byRarityCache) {
     byRarityCache = { common: [], uncommon: [], rare: [], epic: [] };
     for (const id of allVariants()) byRarityCache[parseVariant(id)!.rarity].push(id);
@@ -407,7 +397,7 @@ export function wearVariants(wear: Wear | undefined): string[] {
   return out;
 }
 
-// ---------- time zones and half-day windows ----------
+// ---------- time zones ----------
 
 const TZ_SHAPE = /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/;
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -438,179 +428,9 @@ export function normalizeTimeZone(tz: unknown): string {
   return isTimeZone(tz) ? tz : DEFAULT_TIME_ZONE;
 }
 
-interface LocalParts {
-  y: string;
-  m: string;
-  d: string;
-  h: number;
-}
-
-function localParts(at: number, tz: string): LocalParts {
-  const parts = formatter(tz).formatToParts(new Date(at));
-  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '';
-  return { y: get('year'), m: get('month'), d: get('day'), h: Number(get('hour')) % 24 };
-}
-
-/** The find window at a moment: `YYYY-MM-DD:AM` (local 00:00-11:59) or `:PM` (12:00-23:59). */
-export function windowKeyAt(at: number, tz: string): string {
-  const p = localParts(at, tz);
-  return `${p.y}-${p.m}-${p.d}:${p.h < 12 ? 'AM' : 'PM'}`;
-}
-
-const QUARTER_HOUR = 15 * 60 * 1000;
-
-/**
- * The first instant after `at` that belongs to a different window: the next local noon or
- * midnight, wherever daylight saving puts it. Zone offsets are whole quarter hours, so the
- * search walks quarter hours and then narrows to the exact millisecond.
- */
-export function nextWindowAt(at: number, tz: string): number {
-  const key = windowKeyAt(at, tz);
-  let lo = at;
-  let hi = Math.floor(at / QUARTER_HOUR) * QUARTER_HOUR + QUARTER_HOUR;
-  for (let i = 0; i < 4 * 15 && windowKeyAt(hi, tz) === key; i++) {
-    lo = hi;
-    hi += QUARTER_HOUR;
-  }
-  if (windowKeyAt(hi, tz) === key) return hi; // no change within 15 h: should not happen; never loop forever
-  while (hi - lo > 1) {
-    const mid = Math.floor((lo + hi) / 2);
-    if (windowKeyAt(mid, tz) === key) lo = mid;
-    else hi = mid;
-  }
-  return hi;
-}
-
-export interface WindowInfo {
-  key: string;
-  half: 'AM' | 'PM';
-  /** When the next window starts (ms since the epoch). */
-  next: number;
-}
-
-export function windowInfo(at: number, tz: string): WindowInfo {
-  const key = windowKeyAt(at, tz);
-  return { key, half: key.endsWith('AM') ? 'AM' : 'PM', next: nextWindowAt(at, tz) };
-}
-
-/** Local "HH:MM" of a moment in a zone (for "new finds at 12:00"). */
-export function localClock(at: number, tz: string): string {
-  const parts = formatter(tz).formatToParts(new Date(at));
-  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '00';
-  return `${String(Number(get('hour')) % 24).padStart(2, '0')}:${get('minute')}`;
-}
-
-// ---------- drops ----------
-
-export interface DropSpot {
-  room: string;
-  x: number;
-  y: number;
-}
-
-export interface Drop {
-  /** Index within the window (0, 1, 2). */
-  n: number;
-  room: string;
-  x: number;
-  y: number;
-  variant: string;
-}
-
-/** What a client may see of a drop before finding it: where, and what kind of thing. */
-export interface DropView {
-  n: number;
-  room: string;
-  x: number;
-  y: number;
-  kind: ItemKind;
-}
-
-export function dropView(d: Drop): DropView {
-  return { n: d.n, room: d.room, x: d.x, y: d.y, kind: parseVariant(d.variant)?.item.kind ?? 'wear' };
-}
-
-/** Every hiding spot of every room, rooms in id order and spots in data order (a stable list). */
-export function allSpots(rooms: Readonly<Record<string, { id: string; spots?: readonly Vec2[] }>>): DropSpot[] {
-  const out: DropSpot[] = [];
-  for (const id of Object.keys(rooms).sort()) {
-    for (const s of rooms[id]!.spots ?? []) out.push({ room: id, x: s.x, y: s.y });
-  }
-  return out;
-}
-
-/** A small, fast, seedable generator (sfc32) fed from the window's seed bytes. */
-export function seededRandom(seed: Uint8Array): () => number {
-  const word = (i: number) => ((seed[i] ?? 0) | ((seed[i + 1] ?? 0) << 8) | ((seed[i + 2] ?? 0) << 16) | ((seed[i + 3] ?? 0) << 24)) >>> 0;
-  let a = word(0);
-  let b = word(4);
-  let c = word(8);
-  let d = word(12) || 0x9e3779b9;
-  const next = () => {
-    a >>>= 0;
-    b >>>= 0;
-    c >>>= 0;
-    d >>>= 0;
-    let t = (a + b) | 0;
-    a = b ^ (b >>> 9);
-    b = (c + (c << 3)) | 0;
-    c = (c << 21) | (c >>> 11);
-    d = (d + 1) | 0;
-    t = (t + d) | 0;
-    c = (c + t) | 0;
-    return (t >>> 0) / 4294967296;
-  };
-  for (let i = 0; i < 15; i++) next();
-  return next;
-}
-
-function pickWeighted<T>(items: readonly T[], weight: (t: T) => number, rnd: () => number): T | undefined {
-  let total = 0;
-  for (const it of items) total += weight(it);
-  if (total <= 0) return undefined;
-  let r = rnd() * total;
-  for (const it of items) {
-    r -= weight(it);
-    if (r < 0) return it;
-  }
-  return items[items.length - 1];
-}
-
-/**
- * The drops of one window, from its seed (on the server: HMAC-SHA256 of `cid|window` under a
- * secret) and what the collector owned when the window opened. Two or three drops on distinct
- * hiding spots; each variant's rarity class by RARITY_WEIGHTS, then a variant of that class with
- * unowned ones UNOWNED_BOOST times as likely; never the same variant twice in one window.
- */
-export function generateDrops(seed: Uint8Array, spots: readonly DropSpot[], owned: ReadonlySet<string>): Drop[] {
-  const rnd = seededRandom(seed);
-  const count = Math.min(spots.length, DROPS_MIN + Math.floor(rnd() * (DROPS_MAX - DROPS_MIN + 1)));
-  const idx = spots.map((_, i) => i);
-  const byRarity = variantsByRarity();
-  const chosen = new Set<string>();
-  const out: Drop[] = [];
-  for (let n = 0; n < count; n++) {
-    const j = n + Math.floor(rnd() * (idx.length - n));
-    [idx[n], idx[j]] = [idx[j]!, idx[n]!];
-    const spot = spots[idx[n]!]!;
-    const classes = RARITIES.filter((r) => byRarity[r].some((v) => !chosen.has(v)));
-    const rarity = pickWeighted(classes, (r) => RARITY_WEIGHTS[r], rnd) ?? 'common';
-    const pool = byRarity[rarity].filter((v) => !chosen.has(v));
-    const variant = pickWeighted(pool, (v) => (owned.has(v) ? 1 : UNOWNED_BOOST), rnd) ?? pool[0]!;
-    chosen.add(variant);
-    out.push({ n, room: spot.room, x: spot.x, y: spot.y, variant });
-  }
-  return out;
-}
-
 // ---------- the feather economy ----------
 
 export function duplicatePayout(variant: string): number {
   const v = parseVariant(variant);
   return v ? DUPLICATE_FEATHERS[v.rarity] : 0;
-}
-
-export function craftCost(variant: string): number | null {
-  const v = parseVariant(variant);
-  return v ? CRAFT_COST[v.rarity] : null;
 }

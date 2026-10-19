@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { parseVariant, type DropView, type Inventory } from '@owl-park/shared';
+import { parseVariant, type BuyResult, type GiftResult, type Inventory, type QuestBoard, type ShopView } from '@owl-park/shared';
 import { createCollections } from './collect';
+import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
@@ -17,6 +18,7 @@ const parent = document.getElementById('game') as HTMLElement;
 const hud = createHud(document.body, look);
 const transport = createTransport(cfg);
 const collection = new CollectionState(createCollections(cfg, transport));
+const quests = new QuestState();
 
 const dpr = cfg.pixelRatio;
 const size = () => ({ w: Math.round(window.innerWidth * dpr), h: Math.round(window.innerHeight * dpr) });
@@ -41,13 +43,16 @@ game.registry.set('look', look);
 game.registry.set('hud', hud);
 game.registry.set('transport', transport);
 game.registry.set('collection', collection);
+game.registry.set('quests', quests);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
-// WASD and the arrow keys walk (the room scene reads them every frame), E interacts, Q is the collection.
+// WASD and the arrow keys walk (the room scene reads them every frame), E interacts, Q is the
+// collection and J the quest journal.
 game.registry.set(
   'keys',
   attachKeyboard(window, {
     interact: () => void roomScene()?.interact(),
     collection: () => hud.toggleCollection(),
+    journal: () => hud.toggleJournal(),
     close: () => hud.closePanels(),
   }),
 );
@@ -75,10 +80,21 @@ declare global {
       textureSize(key: string): { w: number; h: number } | null;
       /** The visitor's collection as this page knows it (null until loaded). */
       collection(): Inventory | null;
-      /** This window's unclaimed drops in every room. */
-      drops(): DropView[];
-      /** Walk to drop `n` if it is in this room (arriving picks it up). */
-      pickup(n: number): boolean;
+      /** The quest board as this page knows it (null until the room answers). */
+      quests(): QuestBoard | null;
+      /** Talk to an NPC owl or use an interactable in this room, walking up first if need be. */
+      talk(npc: string): boolean;
+      use(target: string): boolean;
+      /** Take on, drop or hand in a quest (taking and handing in mean standing by its giver). */
+      accept(quest: string): Promise<boolean>;
+      abandon(quest: string): Promise<boolean>;
+      handIn(quest: string): Promise<boolean>;
+      /** Walk to a quest item in this room (arriving picks it up). */
+      gather(quest: string, n: number): boolean;
+      /** The feather shop as this collector sees it, buying from it, and today's free gift. */
+      shop(): Promise<ShopView>;
+      buy(variant: string): Promise<BuyResult>;
+      gift(): Promise<GiftResult>;
       /** Wear an owned variant in its slot. */
       equip(variant: string): boolean;
       /** Play an owned emote. */
@@ -96,6 +112,12 @@ hud.attachCollection(collection, {
   emote: (e) => void roomScene()?.emote(e),
   toast: (message, ms, accent) => hud.toast(message, ms, accent),
   wear: () => roomScene()?.wear(),
+});
+hud.attachQuests(quests, {
+  accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),
+  abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
+  handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
+  openShop: () => hud.openShop(),
 });
 // Load the collection in the background; worn items this collector does not own come off.
 void collection.refresh().then(() => roomScene()?.pruneWear());
@@ -119,8 +141,16 @@ window.owlPark = {
     return { w: src.width, h: src.height };
   },
   collection: () => collection.inv,
-  drops: () => roomScene()?.debugState()?.drops ?? [],
-  pickup: (n) => roomScene()?.walkToDrop(n) ?? false,
+  quests: () => quests.board,
+  talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
+  use: (target) => roomScene()?.goDo({ kind: 'use', id: target }) ?? false,
+  accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),
+  abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
+  handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
+  gather: (quest, n) => roomScene()?.walkToItem(quest, n) ?? false,
+  shop: () => collection.shop(),
+  buy: (variant) => collection.buy(variant),
+  gift: () => collection.claimGift(),
   equip: (variant) => {
     const v = parseVariant(variant);
     if (!v || v.item.kind === 'emote') return false;

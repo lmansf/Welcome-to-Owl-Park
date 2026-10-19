@@ -4,6 +4,7 @@
  */
 import { EMOTE_IDS, isWear } from './collectibles';
 import { isHexColour, isPledge } from './look';
+import { isSpecies } from './species';
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from './protocol';
 import { ROOM_MAX_H, ROOM_MAX_W } from './room';
 
@@ -39,7 +40,8 @@ export function isLook(v: unknown): v is OwlLook {
     isHexColour(v['belly']) &&
     isHexColour(v['accent']) &&
     (v['pledge'] === undefined || isPledge(v['pledge'])) &&
-    (v['wear'] === undefined || isWear(v['wear']))
+    (v['wear'] === undefined || isWear(v['wear'])) &&
+    (v['species'] === undefined || isSpecies(v['species']))
   );
 }
 

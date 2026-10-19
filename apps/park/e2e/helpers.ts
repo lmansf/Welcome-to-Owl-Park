@@ -4,18 +4,23 @@ export interface ParkState {
   room: string;
   pos: { x: number; y: number };
   walking: boolean;
+  look: { body: string; belly: string; accent: string; species?: string };
   peers: Array<{
     id: string;
     pos: { x: number; y: number };
     walking: boolean;
-    look: { body: string; belly: string; accent: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
+    look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
     emote: string | null;
   }>;
   connected: boolean;
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
   eyes: number;
-  drops: Array<{ n: number; room: string; x: number; y: number; kind: string }>;
+  npcs: Array<{ id: string; x: number; y: number; mark: string | null }>;
+  objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
+  items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;
+  actions: string[];
+  talkingTo: string | null;
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */
