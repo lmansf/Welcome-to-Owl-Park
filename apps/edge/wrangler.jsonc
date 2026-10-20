@@ -27,6 +27,13 @@
     { "tag": "v2", "new_sqlite_classes": ["VoteLedger"] },
     { "tag": "v3", "new_sqlite_classes": ["Collections"] }
   ],
+  // The park's domain, attached to this Worker as Custom Domains on every deploy, so nothing else can
+  // stand in front of it (Cloudflare keeps the DNS records and the certificates). A deploy from CI
+  // moves a hostname that points elsewhere onto this Worker.
+  "routes": [
+    { "pattern": "exploreowlpark.com", "custom_domain": true },
+    { "pattern": "www.exploreowlpark.com", "custom_domain": true }
+  ],
   // Month close for the Realm Vote: 05:05 UTC on the 1st (just after midnight in the park's time zone).
   "triggers": { "crons": ["5 5 1 * *"] },
   "vars": {

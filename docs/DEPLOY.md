@@ -73,7 +73,12 @@ pnpm dev:edge         # builds the client, then wrangler dev on http://localhost
    - optional secrets `PASS_SIGNING_KEY` and `ADMIN_KEY`: the workflow uploads each one it finds to
      the Worker after the deploy, so step 3 above is not needed when they are set here.
 3. Merge to `main`. The workflow builds and deploys. Worker secrets set either way are kept across
-   deploys.
+   deploys. The park's own domain (`routes` in `apps/edge/wrangler.jsonc`, both hostnames as Custom
+   Domains) is attached to the Worker by every deploy: a hostname that points somewhere else (a
+   proxy, another Worker, an old DNS record) is moved onto the park's Worker, and Cloudflare keeps
+   the DNS records and certificates. Custom Domains create DNS records, so if the deploy log
+   reports an authentication error at that step, add Zone DNS Edit for the domain's zone to the API
+   token (or attach the two hostnames once in the dashboard under the Worker's Domains & Routes).
 4. Operations: in the Cloudflare dashboard set a usage notification at 50 % of the free daily
    Durable Object request cap, and buy Workers Paid ($5/month) before the first promoted weekend.
    The free plan fails closed at the daily cap.
