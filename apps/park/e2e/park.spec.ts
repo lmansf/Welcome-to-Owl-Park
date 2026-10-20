@@ -10,7 +10,7 @@ async function hasSvg(page: Page, key: string): Promise<boolean> {
 }
 
 test.describe('single visitor', () => {
-  test('the park opens in the hub with one owl present', async ({ page }) => {
+  test('the hub opens with one owl present', async ({ page }) => {
     await openPark(page);
     const s = await state(page);
     expect(s.room).toBe('hub');

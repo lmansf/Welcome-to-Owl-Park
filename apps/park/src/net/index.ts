@@ -4,7 +4,8 @@ import { LocalTransport } from './local';
 import { SupabaseTransport } from './supabase';
 import type { ParkTransport } from './transport';
 
-export type { ParkTransport, RoomConnection, RoomHandlers, ConnectionStatus } from './transport';
+export type { Entry, ParkTransport, RoomConnection, RoomHandlers, ConnectionStatus } from './transport';
+export { OPEN_ENTRY } from './transport';
 
 export function createTransport(cfg: ParkConfig): ParkTransport {
   if (cfg.transport === 'edge') return new EdgeTransport(cfg.edgeUrl);

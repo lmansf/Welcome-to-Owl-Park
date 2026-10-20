@@ -6,6 +6,7 @@
 import { isTimeZone, isVariantId } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyPass, type PassPayload } from './pass';
+import { admitted, gateMode, mayEnter } from './gate';
 import { isPage, uncachedPage } from './page';
 import { ROOMS } from './rooms';
 import type { Env } from './env';
@@ -64,7 +65,6 @@ export default {
 
     if (url.pathname === '/api/pass') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (env.GATE === 'ticket') return Response.json({ error: 'tickets required' }, { status: 403, headers: CORS });
       const secret = signingSecret(env);
       // The collector token the browser keeps; a missing or forged one starts a new collection.
       const given = request.headers.get('X-Collector') ?? url.searchParams.get('collector');
@@ -76,7 +76,8 @@ export default {
       const tz = url.searchParams.get('tz');
       if (isTimeZone(tz)) payload.tz = tz;
       const pass = await mintPass(secret, payload);
-      return Response.json({ pass, exp, collector }, { headers: CORS });
+      // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
+      return Response.json({ pass, exp, collector, gate: gateMode(env.GATE), adm: payload.adm }, { headers: CORS });
     }
 
     // ---- Collectibles (the collector comes from the pass) ----
@@ -93,6 +94,8 @@ export default {
       const pass = await passFrom(request, env);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
+      // The collection shows anywhere; the shop is inside the park, past the turnstiles.
+      if (url.pathname !== '/api/collection' && !admitted(gateMode(env.GATE), pass)) return json({ error: 'tickets-required' }, 403);
       const stub = collections(env);
       if (url.pathname === '/api/collection' && request.method === 'GET') return json(await stub.inventory(pass.cid, pass.tz));
       if (url.pathname === '/api/shop' && request.method === 'GET') return json(await stub.shop(pass.cid));
@@ -162,7 +165,7 @@ export default {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
       const pass = await verifyPass(signingSecret(env), url.searchParams.get('pass'));
       if (!pass) return new Response('bad pass', { status: 401 });
-      if (env.GATE === 'ticket' && !pass.adm) return new Response('not admitted', { status: 403 });
+      if (!mayEnter(gateMode(env.GATE), pass, roomId)) return new Response('not admitted', { status: 403 });
       const headers = new Headers(request.headers);
       headers.set('X-Room', roomId);
       headers.set('X-Visitor-Id', pass.id);

@@ -1,7 +1,8 @@
 /**
  * Park passes: a small signed token the client presents when opening a room socket.
- * v1 mints guest passes for everyone (GATE=open). v2 mints them only for admitted
- * ticket holders. HMAC-SHA256 over a JSON payload; verification is a constant-time compare.
+ * Every visitor gets a guest pass. With GATE=ticket a guest pass opens only the lobby
+ * (`gate.ts`); a pass admitted through a ticket opens the rest. HMAC-SHA256 over a JSON
+ * payload; verification is a constant-time compare.
  *
  * Collector tokens use the same signature over a different payload shape (`k: "col"`), so a
  * pass is never a collector token and a collector token is never a pass.
@@ -13,7 +14,7 @@ export interface PassPayload {
   id: string;
   /** Expiry, Unix seconds. */
   exp: number;
-  /** Admitted through a ticket (v2). Guests are false. */
+  /** Admitted through a ticket. Guests are false. */
   adm: boolean;
   /** The collector this page belongs to (several tabs of one browser share it). */
   cid?: string;

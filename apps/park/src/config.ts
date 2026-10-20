@@ -13,7 +13,9 @@ export interface ParkConfig {
   /** Base URL of the room server; empty means same origin as the page. */
   edgeUrl: string;
   shopUrl: string;
-  /** Starting room id and spawn, from the query string. */
+  /** The store's ticket page; empty until tickets go on sale (the booth then says they are coming). */
+  ticketsUrl: string;
+  /** Starting room id and spawn, from the query string; every visit starts in the lobby. */
   room: string;
   spawn: string | undefined;
   /** Fixed player id for tests; otherwise a fresh id is generated per page load. */
@@ -55,7 +57,8 @@ export function readConfig(): ParkConfig {
     supabaseAnonKey,
     edgeUrl,
     shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
-    room: q.get('room') ?? 'hub',
+    ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),
+    room: q.get('room') ?? 'lobby',
     spawn: q.get('spawn') ?? undefined,
     id: q.get('id') ?? undefined,
     look: q.get('look') ?? undefined,

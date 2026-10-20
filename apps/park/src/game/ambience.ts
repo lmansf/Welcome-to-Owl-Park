@@ -63,6 +63,8 @@ export interface Idol {
 
 export interface SetPieces {
   idol?: Idol;
+  /** The lobby's turnstiles: a flash of gold as an owl goes through. */
+  gate?: { react(): void };
 }
 
 /** Large set pieces (guardian, giant robot owl, signs) sorted into the owl depth range. */
@@ -147,7 +149,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
       const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
       const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(tint).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({ targets: glow, alpha: 0.5, scale: 1.9, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    } else if (door.id === 'shop') {
+    } else if (door.id === 'shop' || door.id === 'booth') {
       const chevron = scene.add.image(m.x, m.y, 'fx-chevron').setTint(0xc9a227).setDepth(m.y + 1);
       scene.tweens.add({ targets: chevron, y: m.y + 14, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.id === 'idol') {
@@ -155,6 +157,29 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
       const ring = scene.add.image(m.x, m.y, 'fx-glow').setTint(0xc9a227).setAlpha(0.22).setScale(1.1, 0.45).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({ targets: ring, alpha: 0.4, scaleX: 1.3, scaleY: 0.52, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
+  }
+  const gate = room.doors.find((d) => d.id === 'gate');
+  if (gate?.marker) {
+    // The turnstiles light up gold as an owl goes through.
+    const m = { x: gate.marker.x, y: gate.rect.y + gate.rect.h / 2 };
+    const flash = scene.add.image(m.x, m.y, 'fx-glow').setTint(0xffd36a).setAlpha(0).setScale(4.2, 1.4).setDepth(m.y - 1).setBlendMode(Phaser.BlendModes.ADD);
+    pieces.gate = {
+      react() {
+        scene.tweens.add({ targets: flash, alpha: 0.9, duration: 220, yoyo: true, hold: 280, ease: 'Sine.easeOut' });
+        scene.add
+          .particles(m.x, m.y - 20, 'fx-dot', {
+            lifespan: { min: 600, max: 1200 },
+            speed: { min: 100, max: 240 },
+            scale: { start: 0.5, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [0xffd36a, 0xf6f1e3, 0xc9a227],
+            blendMode: Phaser.BlendModes.ADD,
+            emitting: false,
+          })
+          .setDepth(m.y + 1)
+          .explode(36);
+      },
+    };
   }
   return pieces;
 }

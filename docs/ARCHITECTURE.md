@@ -11,7 +11,7 @@ and so does Owl Park:
 
 | Mechanic | Classic model | Owl Park |
 | --- | --- | --- |
-| Rooms | A fixed-size painted stage per room with a hidden "block" layer marking where an avatar may not stand, a foreground layer drawn in front of avatars, and trigger zones that lead to other rooms | A room of one or more 1600 x 900 screens (the hub and the grove three, the market two) with `walkable` polygons, optional foreground images, and `doors` (trigger rectangles) in `packages/shared/rooms` |
+| Rooms | A fixed-size painted stage per room with a hidden "block" layer marking where an avatar may not stand, a foreground layer drawn in front of avatars, and trigger zones that lead to other rooms | A room of one or more 1600 x 900 screens (the hub and the grove three, the market and the lobby two) with `walkable` polygons, optional foreground images, and `doors` (trigger rectangles) in `packages/shared/rooms` |
 | Movement | Click a spot; the avatar walks there in a straight line at constant speed; the client sends only the destination and every other client animates the same walk itself | Tap; `resolveTarget` snaps the tap into the walkable area and stops at the first blocked sample; one `move` message carries the target; every client animates from (from, to, startedAt) with `positionAlongWalk` |
 | Depth | Avatars and props sorted by their y coordinate | `depth = y` for owls and set pieces; foreground always on top |
 | Entering a room | Spawn near a named point with a little random scatter so avatars do not stack | Named `spawns`; the room server scatters new arrivals (door entry 60 px, map entry 220 px) |
@@ -197,20 +197,34 @@ into the pass.
 The catalogue and its numbers: `docs/COLLECTIBLES.md`. Quests, NPC owls, leaf piles, the shop and
 owl species: `docs/QUESTS.md`.
 
-## 9. Ticket gating (v2, designed, not built)
+## 9. The lobby and tickets (the lobby built; tickets designed, not built)
 
-Shopify `orders/paid` webhook -> the Worker records the order -> after the fraud review the
-order is tagged approved -> the Worker mints a long-lived claim token and emails a link ->
-the link creates a Supabase session for the buyer -> `/api/pass` mints admitted passes only for
-visitors with a valid ticket window -> `GATE=ticket` makes the room server refuse guest passes.
-Refunds revoke the session and the pass expires within the hour. Nothing in this flow changes
-the wire protocol; v1 already carries the pass and the gate flag.
+Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
+the turnstile gate into the hub on the other. With `GATE=open` (now) the turnstiles let everyone
+through and the booth says tickets are coming. With `GATE=ticket` (once tickets sell),
+`/api/pass` still gives every visitor a guest pass, but a pass that is not admitted opens only the
+lobby: the gate turns it back toward the booth, and the Worker refuses its socket for any other
+room and its use of the shop (its collection still shows). The pass answer carries `gate` and
+`adm` so the client knows which.
 
-**Opening-night entry with the Drop-1 pin (canon):** each pin order mints one entry token through
-the same flow at $0, with a validity window covering opening night only (date to be announced).
-In the ledger that is a ticket row whose `valid_from`/`valid_until` is that night and whose order
-line is the pin product; one pin, one token. The same admitted pass then also allows one Realm
-Vote that night.
+The ticket flow (designed with the owner, not built): Shopify sells tickets and passes and keeps
+the buyer. Its `orders/paid` webhook, checked against the shop's signature, makes one ticket per
+unit in the Worker's ticket ledger, beside the vote ledger: a visual ID such as `OWL-7K3Q-PX9M`,
+the kind, and the order and line numbers only (no names or emails). Orders Shopify rates low risk
+get their tickets at once; any other order waits for the owner's fraud check, which releases or
+refunds it. The Worker fulfils the ticket line with the ticket's claim link as the tracking link,
+so Shopify's own shipping email delivers it; the link carries its own secret and puts the
+ticket in the visitor's wallet on that device (one device at a time; opening the link elsewhere
+moves it). A ticket's time starts at its first scan at the gate, not at purchase (a day ticket
+lasts 24 hours, an annual pass 365 days; an unused ticket expires a year after purchase), and every
+ticket and pass gets one Realm Vote per park day. A Shopify metaobject per ticket mirrors its state
+for the owner; the park never reads it. A refund or cancellation switches the ticket off within
+the hour; votes it already cast stay counted. This replaces the earlier plan's emailed magic link
+and Supabase session.
+
+**Opening-night entry with the Drop-1 pin (canon):** each pin order makes one ticket through the
+same flow at $0 that works on opening night only (date to be announced); one pin, one ticket. It
+gives that night's Realm Vote like any other ticket.
 
 ## 10. Open questions for the owner (with the defaults in the code)
 

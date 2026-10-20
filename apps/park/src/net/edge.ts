@@ -17,7 +17,7 @@ import {
 import type { HandInReply, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { MoveBudget } from './budget';
-import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
+import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -44,6 +44,9 @@ interface Pass {
   pass: string;
   exp: number;
   collector?: string;
+  /** The front gate (`ticket` once the park takes tickets) and whether this pass goes through it. */
+  gate?: 'open' | 'ticket';
+  adm?: boolean;
 }
 
 function readCollector(): string | null {
@@ -110,6 +113,12 @@ export class EdgeTransport implements ParkTransport {
       const res = await fetch(`${this.base}${path}`, { ...init, headers, cache: 'no-store' });
       if (res.status !== 401 || attempt > 0) return res;
     }
+  }
+
+  /** The front gate as the server sees this visitor's pass. */
+  async entry(): Promise<Entry> {
+    const pass = await this.getPass();
+    return pass.gate === 'ticket' ? { gate: 'ticket', admitted: pass.adm === true } : OPEN_ENTRY;
   }
 
   /** POST a vote with this visitor's pass; the server decides admission and the daily limit. */

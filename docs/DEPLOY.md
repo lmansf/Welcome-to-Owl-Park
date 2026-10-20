@@ -92,7 +92,7 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (`open` now; `ticket` once tickets exist), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
+`GATE` (`open` now: everyone walks through the lobby's turnstiles; `ticket` once tickets sell: visitors without a ticket stay in the lobby), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally
 and to close a month by hand). A cron trigger closes the Realm Vote month automatically.

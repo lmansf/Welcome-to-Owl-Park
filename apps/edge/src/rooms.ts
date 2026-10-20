@@ -4,7 +4,7 @@ import type { Env } from './env';
 
 export const ROOMS: Record<string, RoomDef> = PARK_ROOMS;
 
-const DEFAULT_CAPS: Record<string, number> = { hub: 80, grove: 40, market: 40 };
+const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40 };
 
 export function roomCap(env: Env, roomId: string): number {
   try {

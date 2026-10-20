@@ -4,6 +4,7 @@ import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
+import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
 
 /** Something to do where the owl stands: one button each, and E runs the first. */
@@ -45,6 +46,10 @@ export interface Hud {
   toggleJournal(): void;
   /** The feather shop. */
   openShop(): void;
+  /** The lobby's ticket booth. */
+  openBooth(info: BoothInfo): void;
+  /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
+  setRoom(roomId: string): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
   setActions(actions: HudAction[]): void;
   onAction(cb: (id: string) => void): void;
@@ -160,6 +165,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const bar = $<HTMLElement>('.bar');
   let questUi: QuestUi | null = null;
   let shop: ShopPanel | null = null;
+  let booth: BoothPanel | null = null;
+  let roomId = '';
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const emoteWrap = $<HTMLElement>('[data-emote-wrap]');
   let collectionPanel: CollectionPanel | null = null;
@@ -241,6 +248,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     questsBtn.setAttribute('aria-expanded', String(keep === 'journal'));
     questUi?.closeDialogue();
     shop?.close();
+    booth?.close();
   };
   const closeOwlPanel = () => {
     panel.classList.remove('open');
@@ -327,6 +335,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     },
     attachQuests(state, actions) {
       questUi = createQuestUi(root, bar, state, actions, makeRoom);
+      if (roomId) questUi.setRoom(roomId);
     },
     openDialogue(npc) {
       questUi?.openDialogue(npc);
@@ -338,6 +347,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     toggleJournal,
     openShop() {
       shop?.open();
+    },
+    openBooth(info) {
+      booth ??= createBoothPanel(root, makeRoom);
+      booth.open(info);
+    },
+    setRoom(id) {
+      roomId = id;
+      questUi?.setRoom(id);
     },
     setActions(list) {
       const key = list.map((a) => `${a.id}:${a.label}`).join('|');

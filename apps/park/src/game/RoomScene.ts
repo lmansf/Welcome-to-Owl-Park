@@ -28,6 +28,7 @@ import {
   resolveTarget,
   steerTarget,
   variantName,
+  type DoorDef,
   type EquipSlot,
   type OwlLook,
   type PlayerState,
@@ -43,7 +44,7 @@ import type { QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
-import type { ConnectionStatus, ParkTransport, RoomConnection } from '../net';
+import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection } from '../net';
 import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
@@ -127,6 +128,8 @@ export class RoomScene extends Phaser.Scene {
   private playerId!: string;
   private look!: OwlLook;
   private atIdol = false;
+  /** Going through the lobby's turnstiles (the welcome is playing, or the gate is checking the pass). */
+  private passingGate = false;
   /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
   private actions: Action[] = [];
   private keys: Keys | null = null;
@@ -182,6 +185,7 @@ export class RoomScene extends Phaser.Scene {
     this.conn = null;
     this.leaving = false;
     this.atIdol = false;
+    this.passingGate = false;
     this.actions = [];
     this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
     this.keyDir = null;
@@ -256,6 +260,7 @@ export class RoomScene extends Phaser.Scene {
 
     this.hud.setCount(1);
     this.hud.setActions([]);
+    this.hud.setRoom(room.id);
     // The owl panel changes colours and species only: today's pledge and the worn collectibles stay.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
     this.hud.onAction((id) => this.actions.find((a) => a.id === id)?.run());
@@ -485,7 +490,7 @@ export class RoomScene extends Phaser.Scene {
         return {
           ...p,
           tint: door.to ? (DOOR_TINTS[door.to.room] ?? '#C9A227') : '#FFD36A',
-          label: spot ? `${spot.label}, off screen: walk there` : 'Doorway, off screen: walk there',
+          label: spot ? `${spot.label}, off screen: walk there` : door.id === 'gate' ? 'The turnstiles, off screen: walk there' : 'Doorway, off screen: walk there',
         };
       }),
     );
@@ -516,6 +521,7 @@ export class RoomScene extends Phaser.Scene {
   private readonly interactions: Record<string, { label: string; run: () => void }> = {
     shop: { label: 'Gift shop', run: () => this.openShop() },
     idol: { label: 'Vote for this realm', run: () => void this.vote() },
+    booth: { label: 'Ticket booth', run: () => void this.openBooth() },
   };
 
   /** Tapping the realm's idol: pledge now if standing at it, otherwise walk up and pledge on arrival. */
@@ -958,6 +964,10 @@ export class RoomScene extends Phaser.Scene {
       if (!inside) continue;
       if (door.to) {
         if (!takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null)) continue;
+        if (door.id === 'gate') {
+          void this.throughGate(door);
+          return;
+        }
         void this.goTo(door.to.room, door.to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
         return;
       }
@@ -1011,6 +1021,46 @@ export class RoomScene extends Phaser.Scene {
     } finally {
       this.voting = false;
     }
+  }
+
+  /** The front gate as this visitor's transport sees it (an open gate without a server). */
+  private async entry(): Promise<Entry> {
+    try {
+      return (await this.transport.entry?.()) ?? OPEN_ENTRY;
+    } catch {
+      return OPEN_ENTRY;
+    }
+  }
+
+  /** The lobby's ticket booth: tickets sell in the store; the window says whether they are on sale yet. */
+  private async openBooth(): Promise<void> {
+    const entry = await this.entry();
+    if (this.leaving) return;
+    this.hud.openBooth({ ticketsUrl: this.cfg.ticketsUrl || null, ...entry });
+  }
+
+  /**
+   * The lobby's turnstiles: a welcome, then the hub. Once the park takes tickets (GATE=ticket) only
+   * an admitted pass goes through; anyone else is turned back toward the booth.
+   */
+  private async throughGate(door: DoorDef): Promise<void> {
+    const to = door.to;
+    if (this.passingGate || this.leaving || !to) return;
+    this.passingGate = true;
+    const entry = await this.entry();
+    if (this.leaving) return;
+    if (entry.gate === 'ticket' && !entry.admitted) {
+      this.hud.toast('The park is open to ticket-holders. The ticket booth is along the plaza.', 4000);
+      this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h + 70 });
+      this.time.delayedCall(1500, () => {
+        this.passingGate = false;
+      });
+      return;
+    }
+    this.me.walk = null;
+    this.pieces.gate?.react();
+    this.hud.toast('Welcome to Owl Park!', 2600);
+    this.time.delayedCall(700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }));
   }
 
   private openShop(): void {

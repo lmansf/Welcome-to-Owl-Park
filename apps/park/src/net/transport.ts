@@ -46,4 +46,17 @@ export interface ParkTransport {
   join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection>;
   /** Cast a Realm Vote as this visitor; only transports with an authenticated server offer it. */
   vote?(realm: string): Promise<Response>;
+  /**
+   * What the front gate needs: whether the park takes tickets yet, and whether this visitor's pass
+   * goes through. Transports without a server have an open gate.
+   */
+  entry?(): Promise<Entry>;
 }
+
+/** The front gate: `open` lets everyone through; `ticket` lets through admitted passes only. */
+export interface Entry {
+  gate: 'open' | 'ticket';
+  admitted: boolean;
+}
+
+export const OPEN_ENTRY: Entry = { gate: 'open', admitted: true };

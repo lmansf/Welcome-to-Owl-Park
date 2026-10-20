@@ -17,6 +17,8 @@ export interface QuestUi {
   toggleJournal(): void;
   closeJournal(): void;
   isJournalOpen(): boolean;
+  /** The room the owl is in: the lobby shows its welcome instead of the quests. */
+  setRoom(room: string): void;
 }
 
 const CSS = `
@@ -128,6 +130,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
 
   let talking: NpcDef | null = null;
   let greeting = '';
+  let room = '';
   /** A request from a button is under way: buttons wait for it. */
   let pending = false;
 
@@ -176,6 +179,13 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   const renderTracker = () => {
     const board = state.board;
     tracker.innerHTML = '';
+    if (room === 'lobby') {
+      // Quests happen inside the park: at the front gate, the way in.
+      const line = el('div', 'tq');
+      line.append(el('b', '', 'Welcome to Owl Park'), document.createTextNode('Walk through the turnstiles to enter the park.'));
+      tracker.appendChild(line);
+      return void tracker.classList.add('show');
+    }
     if (!board) return void tracker.classList.remove('show');
     const active = [...board.active].sort((a, b) => Number(b.ready) - Number(a.ready)).slice(0, 2);
     for (const q of active) {
@@ -274,6 +284,10 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   render();
 
   return {
+    setRoom(r) {
+      room = r;
+      renderTracker();
+    },
     openDialogue(npc) {
       onOpen();
       talking = npc;
