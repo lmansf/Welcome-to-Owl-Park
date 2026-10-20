@@ -6,6 +6,7 @@ import { createCollectionPanel, type CollectionActions, type CollectionPanel } f
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
+import { createTicketCard, type GateCard } from './tickets';
 
 /** Something to do where the owl stands: one button each, and E runs the first. */
 export interface HudAction {
@@ -48,6 +49,8 @@ export interface Hud {
   openShop(): void;
   /** The lobby's ticket booth. */
   openBooth(info: BoothInfo): void;
+  /** The ticket card that flips up as the turnstiles take a ticket. */
+  showTicket(card: GateCard): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
@@ -166,6 +169,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   let questUi: QuestUi | null = null;
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
+  let ticketCard: ReturnType<typeof createTicketCard> | null = null;
   let roomId = '';
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const emoteWrap = $<HTMLElement>('[data-emote-wrap]');
@@ -351,6 +355,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     openBooth(info) {
       booth ??= createBoothPanel(root, makeRoom);
       booth.open(info);
+    },
+    showTicket(card) {
+      ticketCard ??= createTicketCard(root);
+      ticketCard.show(card);
     },
     setRoom(id) {
       roomId = id;

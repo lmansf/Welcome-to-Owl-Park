@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { E2E_ADMIN_KEY } from './e2e/helpers';
 
 export default defineConfig({
   testDir: './e2e',
@@ -30,7 +31,8 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'pnpm build && pnpm --filter @owl-park/edge dev',
+      // The admin key lets the ticket test issue tickets without a store; it exists only on this test server.
+      command: `pnpm build && pnpm --filter @owl-park/edge dev --var ADMIN_KEY:${E2E_ADMIN_KEY}`,
       url: 'http://localhost:8787/api/counts',
       reuseExistingServer: true,
       timeout: 180_000,

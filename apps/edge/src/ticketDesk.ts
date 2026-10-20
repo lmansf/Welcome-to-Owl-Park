@@ -4,11 +4,22 @@
  * visitor's pass; `device` is the visitor's collector id. Nothing here is reachable from outside.
  */
 import type { TicketLine } from './shopify';
-import type { TicketBook, WalletTicket } from './TicketBook';
-import { isTicketId, statusOf } from './tickets';
+import type { TicketMirror } from './storeApi';
+import type { TicketBook, TicketRecord, WalletTicket } from './TicketBook';
+import { isTicketId, statusOf, type TicketStatus } from './tickets';
 
 /** What the votes say about a ticket: how many it has cast, and whether today's is spent. */
 export type VotesOf = (ticketId: string) => { cast: number; today: boolean };
+
+/** Today's vote: free, spent, or none (the ticket is not running, so it cannot vote now). */
+export type VoteToday = TicketMirror['voteToday'];
+
+/** A wallet entry with its vote, as the page shows it. */
+export type DeskTicket = WalletTicket & { voteToday: VoteToday };
+
+function voteToday(status: TicketStatus, v: { today: boolean }): VoteToday {
+  return status !== 'active' ? 'none' : v.today ? 'used' : 'ready';
+}
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const bad = () => json({ error: 'bad request' }, 400);
@@ -32,8 +43,8 @@ function lines(v: unknown): TicketLine[] | null {
 /**
  * The ticket the gate scans when the visitor does not name one: a running ticket first, then an
  * event ticket whose night has begun (it is gone after the night), then the unused ticket that
- * expires soonest. An event ticket for a later night comes last, so the gate can say it is not
- * time yet.
+ * expires soonest. An event ticket for a later night comes after those, so the gate can say it is
+ * not time yet, and a ticket still waiting on the store's check last, so the gate can say that.
  */
 export function pickForGate(wallet: WalletTicket[], now: number): WalletTicket | null {
   const unused = wallet.filter((t) => t.status === 'unused');
@@ -42,6 +53,7 @@ export function pickForGate(wallet: WalletTicket[], now: number): WalletTicket |
     unused.find((t) => t.kind === 'event' && t.validFrom !== null && t.validFrom <= now) ??
     unused.filter((t) => t.kind !== 'event').sort((a, b) => (a.msLeft ?? Infinity) - (b.msLeft ?? Infinity))[0] ??
     unused[0] ??
+    wallet.find((t) => t.status === 'held') ??
     null
   );
 }
@@ -49,9 +61,22 @@ export function pickForGate(wallet: WalletTicket[], now: number): WalletTicket |
 export async function ticketDesk(book: TicketBook, request: Request, now: number, votesOf: VotesOf): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/tickets/, '');
+  const wallet = (device: string): DeskTicket[] => book.wallet(device, now).map((t) => ({ ...t, voteToday: voteToday(t.status, votesOf(t.id)) }));
+  const mirror = (t: TicketRecord): TicketMirror => {
+    const status = statusOf(t, now);
+    const v = votesOf(t.id);
+    return { id: t.id, kind: t.kind, status, order: t.order, firstScan: t.firstScan, validUntil: t.validUntil, votesCast: v.cast, voteToday: voteToday(status, v) };
+  };
   if (request.method === 'GET' && path === '/wallet') {
     const device = str(url.searchParams.get('device'), 40);
-    return device ? json({ tickets: book.wallet(device, now) }) : bad();
+    return device ? json({ tickets: wallet(device) }) : bad();
+  }
+  if (request.method === 'GET' && path === '/order') {
+    const order = str(url.searchParams.get('order'), 40);
+    if (!order) return bad();
+    const o = book.orderOf(order);
+    if (!o) return json({ error: 'unknown order' }, 404);
+    return json({ order, held: o.record.held, sent: o.record.sent, tickets: o.tickets.map((t) => t.id), lines: [...new Set(o.tickets.map((t) => t.line))] });
   }
   if (request.method !== 'POST') return json({ error: 'not found' }, 404);
   let body: Record<string, unknown>;
@@ -67,7 +92,8 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       const l = lines(body['lines']);
       if (!order || !l || typeof body['held'] !== 'boolean') return bad();
       const r = await book.issue(order, l, body['held'], now);
-      return json({ claim: r.claim, tickets: r.tickets.map((t) => t.id) });
+      const o = book.orderOf(order)!.record;
+      return json({ claim: r.claim, tickets: r.tickets.map((t) => t.id), held: o.held, sent: o.sent });
     }
     case '/release': {
       if (!order) return bad();
@@ -96,18 +122,18 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       const secret = str(body['secret'], 64);
       if (!secret || !device) return bad();
       const r = await book.claim(secret, device);
-      return r ? json({ tickets: book.wallet(device, now) }) : json({ error: 'unknown link' }, 404);
+      return r ? json({ tickets: wallet(device) }) : json({ error: 'unknown link' }, 404);
     }
     case '/take': {
       const secret = str(body['secret'], 64);
       if (!secret || !device) return bad();
       const r = await book.take(secret, device);
-      return r ? json({ tickets: book.wallet(device, now) }) : json({ error: 'unknown link' }, 404);
+      return r ? json({ tickets: wallet(device) }) : json({ error: 'unknown link' }, 404);
     }
     case '/share': {
       const id = str(body['id'], 20);
       if (!id || !device) return bad();
-      const secret = await book.share(id, device);
+      const secret = await book.share(id, device, now);
       return secret ? json({ secret }) : json({ error: 'not yours' }, 403);
     }
     case '/scan': {
@@ -121,13 +147,12 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
     }
     case '/mirror': {
+      // The store's copy of one ticket, or of every ticket of an order.
       const id = body['id'];
+      if (order) return json({ tickets: (book.orderOf(order)?.tickets ?? []).map(mirror) });
       if (!isTicketId(id)) return bad();
       const t = book.get(id);
-      if (!t) return json({ error: 'unknown ticket' }, 404);
-      const v = votesOf(id);
-      const status = statusOf(t, now);
-      return json({ id, kind: t.kind, status, order: t.order, firstScan: t.firstScan, validUntil: t.validUntil, votesCast: v.cast, voteToday: status !== 'active' ? 'none' : v.today ? 'used' : 'ready' });
+      return t ? json({ tickets: [mirror(t)] }) : json({ error: 'unknown ticket' }, 404);
     }
     default:
       return json({ error: 'not found' }, 404);

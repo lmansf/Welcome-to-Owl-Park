@@ -1,5 +1,6 @@
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
 import type { QuestLink, QuestPushes } from '../collect/service';
+import type { TicketLink } from './ticketLinks';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
@@ -51,6 +52,39 @@ export interface ParkTransport {
    * goes through. Transports without a server have an open gate.
    */
   entry?(): Promise<Entry>;
+  /** The ticket wallet on this device (C35); only the room server keeps tickets. */
+  readonly tickets?: TicketWallet;
+}
+
+/** A ticket in this device's wallet, as the server shows it. */
+export interface WalletEntry {
+  /** Visual ID, `OWL-XXXX-XXXX`. */
+  id: string;
+  kind: 'day' | 'night' | 'annual' | 'event';
+  status: 'held' | 'unused' | 'active' | 'used' | 'expired' | 'revoked';
+  /** Time left once it is running, or until an unused ticket expires. */
+  msLeft: number | null;
+  firstScan: number | null;
+  /** Event tickets: their window. */
+  validFrom: number | null;
+  validUntil: number | null;
+  /** Today's Realm Vote: free, spent, or none while the ticket is not running. */
+  voteToday: 'ready' | 'used' | 'none';
+}
+
+/** Why the gate did not take a ticket (`none`: this device holds no ticket it could scan). */
+export type ScanRefusal = 'none' | 'held' | 'used' | 'expired' | 'revoked' | 'not-yet' | 'no-length' | 'unknown' | 'elsewhere' | 'offline';
+
+export type ScanReply = { ok: true; id: string; kind: WalletEntry['kind']; started: boolean; validUntil: number | null } | { ok: false; reason: ScanRefusal; id?: string };
+
+export interface TicketWallet {
+  wallet(): Promise<WalletEntry[]>;
+  /** An emailed claim link or a share link: its tickets move onto this device. Null for a link that no longer works. */
+  open(link: TicketLink): Promise<WalletEntry[] | null>;
+  /** A share secret for one ticket this device holds; null when it cannot be passed on. */
+  share(id: string): Promise<string | null>;
+  /** The gate scans a ticket (the server picks one when none is named); a ticket that goes through admits this visitor. */
+  scan(id?: string): Promise<ScanReply>;
 }
 
 /** The front gate: `open` lets everyone through; `ticket` lets through admitted passes only. */

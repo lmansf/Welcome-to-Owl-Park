@@ -4,7 +4,7 @@ import { LocalTransport } from './local';
 import { SupabaseTransport } from './supabase';
 import type { ParkTransport } from './transport';
 
-export type { Entry, ParkTransport, RoomConnection, RoomHandlers, ConnectionStatus } from './transport';
+export type { Entry, ParkTransport, RoomConnection, RoomHandlers, ConnectionStatus, ScanRefusal, ScanReply, TicketWallet, WalletEntry } from './transport';
 export { OPEN_ENTRY } from './transport';
 
 export function createTransport(cfg: ParkConfig): ParkTransport {

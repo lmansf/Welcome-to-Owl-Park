@@ -58,12 +58,8 @@ export const FULFILL_MUTATION = `mutation OwlParkSendTickets($fulfillment: Fulfi
   }
 }`;
 
-/**
- * The fulfillment that sends the claim link: only the order's ticket lines (merch ships on its own),
- * with the tickets' IDs as tracking numbers and the claim link as the tracking link, and the
- * store's shipping email switched on. Null when nothing of those lines is left to fulfil.
- */
-export function fulfillmentInput(fo: FulfillmentOrders, ticketLineIds: string[], ticketIds: string[], claimUrl: string): Record<string, unknown> | null {
+/** What is left to fulfil of the order's ticket lines, grouped by fulfillment order. */
+function openTicketItems(fo: FulfillmentOrders, ticketLineIds: string[]) {
   const want = new Set(ticketLineIds.map((l) => `gid://shopify/LineItem/${l}`));
   const groups = [];
   for (const o of fo.order?.fulfillmentOrders.nodes ?? []) {
@@ -71,6 +67,21 @@ export function fulfillmentInput(fo: FulfillmentOrders, ticketLineIds: string[],
     const items = o.lineItems.nodes.filter((li) => want.has(li.lineItem.id) && li.remainingQuantity > 0).map((li) => ({ id: li.id, quantity: li.remainingQuantity }));
     if (items.length) groups.push({ fulfillmentOrderId: o.id, fulfillmentOrderLineItems: items });
   }
+  return groups;
+}
+
+/** Whether any of the order's ticket lines still waits to be fulfilled (the claim link has not gone out). */
+export function ticketLinesOpen(fo: FulfillmentOrders, ticketLineIds: string[]): boolean {
+  return openTicketItems(fo, ticketLineIds).length > 0;
+}
+
+/**
+ * The fulfillment that sends the claim link: only the order's ticket lines (merch ships on its own),
+ * with the tickets' IDs as tracking numbers and the claim link as the tracking link, and the
+ * store's shipping email switched on. Null when nothing of those lines is left to fulfil.
+ */
+export function fulfillmentInput(fo: FulfillmentOrders, ticketLineIds: string[], ticketIds: string[], claimUrl: string): Record<string, unknown> | null {
+  const groups = openTicketItems(fo, ticketLineIds);
   if (!groups.length) return null;
   return {
     notifyCustomer: true,

@@ -13,6 +13,16 @@ describe('Ledger', () => {
     expect(l.vote('u1', 'market', '2026-11-04', 3).ok).toBe(true);
   });
 
+  it('counts every vote a voter has cast, all days', () => {
+    const l = new Ledger(new MemoryVoteStore(), realms);
+    l.vote('OWL-AAAA-AAAA', 'grove', '2026-11-03', 1);
+    l.vote('OWL-AAAA-AAAA', 'market', '2026-11-04', 2);
+    l.vote('OWL-BBBB-BBBB', 'grove', '2026-11-04', 3);
+    expect(l.castBy('OWL-AAAA-AAAA')).toBe(2);
+    expect(l.castBy('OWL-BBBB-BBBB')).toBe(1);
+    expect(l.castBy('OWL-CCCC-CCCC')).toBe(0);
+  });
+
   it('rejects realms without an idol', () => {
     const l = new Ledger(new MemoryVoteStore(), realms);
     expect(l.vote('u1', 'ink', '2026-11-03', 1)).toEqual({ ok: false, reason: 'realm' });

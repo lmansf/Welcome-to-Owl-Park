@@ -83,6 +83,49 @@ pnpm dev:edge         # builds the client, then wrangler dev on http://localhost
    Durable Object request cap, and buy Workers Paid ($5/month) before the first promoted weekend.
    The free plan fails closed at the daily cap.
 
+### Selling tickets (the store)
+
+Tickets (C35) are sold by the Shopify store, which keeps the buyer; the park keeps each ticket, with
+its order and line numbers only. None of this is needed before tickets go on sale: until then the
+turnstiles let everyone through. The steps, in order:
+
+1. **The store's custom app** (the owner's account): Admin API access to orders (read, and write for
+   the order's ticket list), products (read), merchant-managed fulfillment orders (read and write)
+   and metaobjects (write). Its Admin API token never goes in a file.
+2. **The Worker's secrets**, each with `pnpm --filter @owl-park/edge exec wrangler secret put <NAME>`
+   (or as repository secrets, which the deploy workflow uploads together):
+   `SHOPIFY_SHOP` (the store's `*.myshopify.com` domain), `SHOPIFY_ADMIN_TOKEN` (the app's Admin API
+   token) and `SHOPIFY_WEBHOOK_SECRET` (the secret the store signs webhooks with: the app's client
+   secret, or the one shown under Settings → Notifications → Webhooks for webhooks made there).
+   Without them the store's webhooks are refused.
+3. **Webhooks** (JSON) to `https://<the park's own domain>/api/store/webhook`: `orders/paid`,
+   `orders/updated`, `orders/cancelled` and `refunds/create`, plus `orders/risk_assessment_changed`
+   where the store offers it. The claim link in the store's email uses the address the webhooks are
+   sent to, so use the park's own domain.
+4. **The ticket products**: product type `Ticket` and the metafield `owl_park.ticket_kind` (`day`,
+   `night` or `annual`); `owl_park.length_hours` sets a ticket's length (night tickets need it; day
+   tickets last 24 hours and annual passes 365 days without it). The opening-night entry that comes
+   with the Drop-1 pin is `owl_park.ticket_kind` = `event` on the pin, with `owl_park.event_start`
+   and `owl_park.event_end` (date and time) once the night is set.
+5. **The store's copy of each ticket** (optional): a metaobject definition `owl_park_ticket` with
+   single-line text fields `ticket_id`, `kind`, `status`, `order_id`, `first_scan`, `valid_until`,
+   `votes_cast` and `todays_vote`, and an order metafield definition `owl_park.tickets` (a list of
+   `owl_park_ticket` references). Without them tickets still work; the Worker logs that the copy
+   failed.
+6. **The email**: the store's shipping confirmation carries the claim link as its tracking link and
+   the ticket IDs as its tracking numbers. Reword it as "Your ticket" for ticket orders (Settings →
+   Notifications → Shipping confirmation).
+7. **Fraud check**: an order the store rates low risk gets its link at once. Any other order waits
+   (its tickets show as waiting in the buyer's wallet); a later low rating releases it, or the
+   owner adds the order tag `owl-park-release` after checking it, or refunds it.
+8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, for the booth's button; a
+   repository variable for deploys) and switch `GATE` to `ticket` in `wrangler.jsonc` at the same
+   time. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
+   first scan starts its time.
+9. **Tickets without a store order** (giveaways and tests): `POST /api/admin/tickets` with the
+   `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
+   `"from"` and `"until"`) answers with the claim link. Nothing is copied to the store for these.
+
 ### Coding agents
 
 Claude Code picks up the Cloudflare skills vendored in `.claude/skills/` and the Cloudflare MCP
@@ -94,8 +137,9 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
 `GATE` (`open` now: everyone walks through the lobby's turnstiles; `ticket` once tickets sell: visitors without a ticket stay in the lobby), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
-`PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally
-and to close a month by hand). A cron trigger closes the Realm Vote month automatically.
+`PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
+to close a month by hand and to issue tickets without a store order), and the store's three
+(above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 

@@ -25,6 +25,9 @@ export interface ParkState {
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */
+/** The admin key the local room server runs with in these tests (playwright.config.ts): a test value, not a secret. */
+export const E2E_ADMIN_KEY = 'e2e-only-admin-key-not-a-secret';
+
 export async function walkToDoor(page: Page, doorId: string): Promise<void> {
   const s = await state(page);
   const door = s.doors.find((d) => d.id === doorId);

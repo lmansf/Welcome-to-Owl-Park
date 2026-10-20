@@ -3,11 +3,14 @@
  * Rules (canon): one vote per ticket-holder per park day, cast at a realm's idol; the
  * month's winner is the realm with the most votes; ties go to the realm with the fewest
  * all-time wins (then the first in the park's fixed realm order, an engineering default).
+ * The voter is the ticket (C35): every ticket and pass has its own vote each park day.
  */
 export interface VoteStore {
   get(day: string, visitor: string): { realm: string } | null;
   put(day: string, visitor: string, realm: string, at: number): void;
   countByRealm(month: string): Record<string, number>;
+  /** Every vote this voter has cast, all days. */
+  countOf(visitor: string): number;
   /** All-time wins per realm. */
   wins(): Record<string, number>;
   winOf(month: string): string | null;
@@ -40,6 +43,11 @@ export class Ledger {
 
   status(visitor: string, day: string): { day: string; votedFor: string | null } {
     return { day, votedFor: this.store.get(day, visitor)?.realm ?? null };
+  }
+
+  /** How many votes this voter has cast, all days. */
+  castBy(visitor: string): number {
+    return this.store.countOf(visitor);
   }
 
   tally(month: string): Tally {
@@ -95,6 +103,11 @@ export class MemoryVoteStore implements VoteStore {
     const out: Record<string, number> = {};
     for (const [k, v] of this.votes) if (k.startsWith(month)) out[v.realm] = (out[v.realm] ?? 0) + 1;
     return out;
+  }
+  countOf(visitor: string) {
+    let n = 0;
+    for (const k of this.votes.keys()) if (k.slice(k.indexOf('|') + 1) === visitor) n++;
+    return n;
   }
   wins() {
     const out: Record<string, number> = {};

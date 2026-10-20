@@ -18,5 +18,10 @@ describe('the ticket booth window', () => {
 
   it('tells a ticket-holder to go on through', () => {
     expect(boothText({ ticketsUrl: null, gate: 'ticket', admitted: true }).say).toContain('Walk through the turnstiles');
+    // A ticket in the wallet counts before the gate has scanned it, whichever way the gate is set.
+    const wallet = [{ id: 'OWL-7K3Q-PX9M', kind: 'day' as const, status: 'unused' as const, msLeft: 1, firstScan: null, validFrom: null, validUntil: null, voteToday: 'none' as const }];
+    expect(boothText({ ticketsUrl: null, gate: 'ticket', admitted: false, wallet }).say).toContain('Your ticket is ready');
+    expect(boothText({ ticketsUrl: null, gate: 'open', admitted: true, wallet }).say).toContain('Your ticket is ready');
+    expect(boothText({ ticketsUrl: null, gate: 'ticket', admitted: false, wallet: [{ ...wallet[0]!, status: 'used' }] }).say).toContain('open to ticket-holders');
   });
 });

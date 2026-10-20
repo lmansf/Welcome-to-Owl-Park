@@ -44,11 +44,12 @@ import type { QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
-import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection } from '../net';
+import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
 import type { Keys } from '../ui/keyboard';
+import { gateCard, gateRefusal } from '../ui/tickets';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { roomScaleCap } from './artFiles';
@@ -1032,35 +1033,42 @@ export class RoomScene extends Phaser.Scene {
     }
   }
 
-  /** The lobby's ticket booth: tickets sell in the store; the window says whether they are on sale yet. */
+  /** The lobby's ticket booth: tickets sell in the store; the window shows the tickets on this device. */
   private async openBooth(): Promise<void> {
-    const entry = await this.entry();
+    const tickets = this.transport.tickets;
+    const [entry, wallet] = await Promise.all([this.entry(), tickets ? tickets.wallet().catch(() => null) : Promise.resolve(null)]);
     if (this.leaving) return;
-    this.hud.openBooth({ ticketsUrl: this.cfg.ticketsUrl || null, ...entry });
+    this.hud.openBooth({ ticketsUrl: this.cfg.ticketsUrl || null, ...entry, wallet, ...(tickets ? { share: (id: string) => tickets.share(id) } : {}) });
   }
 
   /**
-   * The lobby's turnstiles: a welcome, then the hub. Once the park takes tickets (GATE=ticket) only
-   * an admitted pass goes through; anyone else is turned back toward the booth.
+   * The lobby's turnstiles scan a ticket this device holds (its first scan starts its time, C35):
+   * the ticket card flips up and the owl goes on into the hub. Without a ticket that goes through,
+   * the turnstiles let everyone in while the gate is open; once the park takes tickets
+   * (GATE=ticket) they turn the owl back toward the booth and say why.
    */
   private async throughGate(door: DoorDef): Promise<void> {
     const to = door.to;
     if (this.passingGate || this.leaving || !to) return;
     this.passingGate = true;
+    this.me.walk = null;
+    const scan: ScanReply = this.transport.tickets ? await this.transport.tickets.scan() : { ok: false, reason: 'none' };
+    if (this.leaving) return;
     const entry = await this.entry();
     if (this.leaving) return;
-    if (entry.gate === 'ticket' && !entry.admitted) {
-      this.hud.toast('The park is open to ticket-holders. The ticket booth is along the plaza.', 4000);
+    if (!scan.ok && entry.gate === 'ticket' && !entry.admitted) {
+      this.hud.toast(gateRefusal(scan.reason), 4500);
       this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h + 70 });
       this.time.delayedCall(1500, () => {
         this.passingGate = false;
       });
       return;
     }
-    this.me.walk = null;
     this.pieces.gate?.react();
-    this.hud.toast('Welcome to Owl Park!', 2600);
-    this.time.delayedCall(700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }));
+    if (scan.ok) this.hud.showTicket(gateCard(scan, Date.now()));
+    else this.hud.toast('Welcome to Owl Park!', 2600);
+    // The card stays up a moment before the walk on into the hub.
+    this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }));
   }
 
   private openShop(): void {

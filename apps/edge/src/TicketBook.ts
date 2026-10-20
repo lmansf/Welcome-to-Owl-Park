@@ -10,7 +10,8 @@
  * - A refund switches off that many tickets of the line (unused ones first); a cancellation
  *   switches off all of them. Votes already cast stay counted.
  * - The claim link puts the order's tickets on the device that opens it. A ticket lives on one
- *   device at a time: a holder can pass one on with a share link, and opening a link moves it.
+ *   device at a time: a holder can pass one on with a share link before its first scan, and
+ *   opening a link moves it.
  * - The gate scans a ticket held on this device; the first scan starts its time.
  */
 import { isTicketId, scan, statusOf, timeLeft, visualId, type ScanResult, type Ticket, type TicketStatus } from './tickets';
@@ -178,10 +179,14 @@ export class TicketBook {
     return out;
   }
 
-  /** A share link for a ticket this device holds (a new one replaces the last). */
-  async share(id: string, device: string): Promise<string | null> {
+  /**
+   * A share link for a ticket this device holds that has not been scanned yet (a new one replaces
+   * the last): a running ticket stays with the visitor it admitted.
+   */
+  async share(id: string, device: string, now: number): Promise<string | null> {
     const t = this.get(id);
-    if (!t || t.device !== device || t.revoked !== null) return null;
+    const status = t ? statusOf(t, now) : null;
+    if (!t || t.device !== device || (status !== 'unused' && status !== 'held')) return null;
     const s = secret(this.random);
     this.store.putTicket({ ...t, shareHash: await this.hash(s) });
     return s;
@@ -212,6 +217,12 @@ export class TicketBook {
     const r = scan(t, now);
     if (r.ok && r.started) this.store.putTicket({ ...t, ...r.ticket });
     return r;
+  }
+
+  /** An order the book knows, and its tickets. */
+  orderOf(order: string): { record: OrderRecord; tickets: TicketRecord[] } | null {
+    const record = this.store.order(order);
+    return record ? { record, tickets: this.store.ticketsOf(order) } : null;
   }
 
   /** A ticket by its visual ID; null for anything else. */

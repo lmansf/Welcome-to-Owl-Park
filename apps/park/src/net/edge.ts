@@ -17,7 +17,7 @@ import {
 import type { HandInReply, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { MoveBudget } from './budget';
-import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers } from './transport';
+import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -82,6 +82,8 @@ export class EdgeTransport implements ParkTransport {
   /** The pass lives in memory only: one visitor identity per page load, never shared by a duplicated tab. */
   private pass: Pass | null = null;
   private passLoad: Promise<Pass> | null = null;
+  /** The ticket the gate last let this visitor through with: a renewed pass is admitted with it again. */
+  private ticketId: string | null = null;
 
   private getPass(force = false): Promise<Pass> {
     if (!force && this.pass && this.pass.exp * 1000 > Date.now() + 60_000) return Promise.resolve(this.pass);
@@ -100,8 +102,53 @@ export class EdgeTransport implements ParkTransport {
     if (!res.ok) throw new Error(`pass refused (${res.status})`);
     this.pass = (await res.json()) as Pass;
     saveCollector(this.pass.collector);
+    // Through the gate already: the renewed pass is admitted with the same ticket (a guest pass if that fails).
+    if (this.ticketId) await this.scanWith(this.pass, this.ticketId).catch(() => undefined);
     return this.pass;
   }
+
+  /** The gate scans a ticket with this pass; one that goes through swaps in the pass it admits. */
+  private async scanWith(pass: Pass, id?: string): Promise<ScanReply> {
+    const res = await fetch(`${this.base}/api/tickets/scan`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pass.pass}` },
+      body: JSON.stringify(id ? { id } : {}),
+    });
+    if (!res.ok) return { ok: false, reason: 'offline' };
+    const r = (await res.json()) as ScanReply & { pass?: string; exp?: number; gate?: Pass['gate'] };
+    if (!r.ok) {
+      if (id && id === this.ticketId) this.ticketId = null;
+      return { ok: false, reason: r.reason, ...(r.id ? { id: r.id } : {}) };
+    }
+    if (r.pass && r.exp) {
+      this.pass = { ...pass, pass: r.pass, exp: r.exp, adm: true, ...(r.gate ? { gate: r.gate } : {}) };
+      this.ticketId = r.id;
+    }
+    return { ok: true, id: r.id, kind: r.kind, started: r.started, validUntil: r.validUntil };
+  }
+
+  readonly tickets: TicketWallet = {
+    wallet: async () => {
+      const res = await this.api('/api/tickets');
+      return res.ok ? ((await res.json()) as { tickets: WalletEntry[] }).tickets : [];
+    },
+    open: async (link) => {
+      const res = await this.api(`/api/tickets/${link.kind}`, { method: 'POST', body: JSON.stringify({ secret: link.secret }) });
+      return res.ok ? ((await res.json()) as { tickets: WalletEntry[] }).tickets : null;
+    },
+    share: async (id) => {
+      const res = await this.api('/api/tickets/share', { method: 'POST', body: JSON.stringify({ id }) });
+      return res.ok ? ((await res.json()) as { secret: string }).secret : null;
+    },
+    scan: async (id) => {
+      try {
+        return await this.scanWith(await this.getPass(), id);
+      } catch {
+        return { ok: false, reason: 'offline' };
+      }
+    },
+  };
 
   /** An authenticated call to the park API; a refused pass is renewed once. */
   async api(path: string, init: RequestInit = {}): Promise<Response> {

@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { dist, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { dist, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -127,6 +127,64 @@ test.describe('room server', () => {
     expect(tally.status()).toBe(403);
     const close = await request.post('/api/vote/close');
     expect(close.status()).toBe(403);
+  });
+
+  test('a ticket: its link puts it in the wallet, the turnstiles scan it, and it votes once a day', async ({ browser, request }) => {
+    // Two day tickets the park gives away (no store order behind them).
+    const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 2 } });
+    expect(issued.status(), 'the room server runs with the test admin key (playwright.config.ts)').toBe(200);
+    const { tickets, link } = (await issued.json()) as { tickets: string[]; link: string };
+    const secret = link.split('#claim=')[1] ?? '';
+    expect(secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    // The emailed link opens the park; its secret leaves the address bar at once.
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    await a.goto(`/?transport=edge#claim=${secret}`);
+    await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    expect(a.url()).not.toContain('claim=');
+    await expect(a.getByText('Your tickets are in your wallet')).toBeVisible({ timeout: 10_000 });
+    expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => t.id).sort()).toEqual([...tickets].sort());
+    expect((await state(a)).room).toBe('lobby');
+
+    // The booth shows both, and passes one on with a share link.
+    await walkToDoor(a, 'booth');
+    await a.locator('[data-action="booth"]').click({ timeout: 15_000 });
+    await expect(a.locator('[data-booth="wallet"] li')).toHaveCount(2);
+    await expect(a.locator('[data-booth="say"]')).toContainText('Your ticket is ready');
+    await a.screenshot({ path: 'e2e-screenshots/ticket-booth-wallet.png' });
+    await a.locator('[data-booth="share"]').first().click();
+    const shared = a.locator('[data-booth="wallet"] .shared');
+    await expect(shared).toBeVisible();
+    const shareUrl = (await shared.getAttribute('data-link')) ?? '';
+    expect(shareUrl).toMatch(/\/#take=[A-Za-z0-9_-]{43}$/);
+    await a.keyboard.press('Escape');
+
+    // A friend opens it: the ticket moves to their device, and works once.
+    const b = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    await b.goto(`/?transport=edge&room=hub${new URL(shareUrl).hash}`);
+    await expect(b.getByText('A ticket was passed on to you')).toBeVisible({ timeout: 20_000 });
+    expect(await b.evaluate(() => window.owlPark.wallet())).toHaveLength(1);
+    await expect.poll(async () => (await a.evaluate(() => window.owlPark.wallet())).length).toBe(1);
+    await b.context().close();
+
+    // The turnstiles scan the buyer's ticket: the card flips up, its time starts, and the owl goes on into the hub.
+    await walkToDoor(a, 'gate');
+    await expect(a.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
+    await a.screenshot({ path: 'e2e-screenshots/ticket-gate-card.png' });
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ status: 'active', voteToday: 'ready' });
+
+    // Admitted by the ticket, the owl votes at a realm's idol: once a day.
+    await walkToDoor(a, 'to-market');
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('market');
+    await walkToDoor(a, 'idol');
+    const vote = a.getByRole('button', { name: 'Vote for this realm', exact: true });
+    await vote.click({ timeout: 15_000 });
+    await expect(a.getByText('Your vote for this realm is in')).toBeVisible({ timeout: 10_000 });
+    await vote.click();
+    await expect(a.getByText('You already voted for this realm today.')).toBeVisible({ timeout: 10_000 });
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ voteToday: 'used' });
+    await a.context().close();
   });
 
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {

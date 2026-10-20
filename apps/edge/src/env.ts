@@ -13,4 +13,12 @@ export interface Env extends Cloudflare.Env {
   ROOM_CAPS?: string;
   /** Local load testing only: trust X-Forwarded-For as the client address. Never set in production. */
   TRUST_FORWARDED_FOR?: string;
+  /**
+   * The store that sells tickets (C35): its myshopify domain and the custom app's Admin API token.
+   * Unset: the store's webhooks are refused and nothing is copied to the store.
+   */
+  SHOPIFY_SHOP?: string;
+  SHOPIFY_ADMIN_TOKEN?: string;
+  /** The secret the store signs its webhooks with. Unset: every webhook is refused. */
+  SHOPIFY_WEBHOOK_SECRET?: string;
 }

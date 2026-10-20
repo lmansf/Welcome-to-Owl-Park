@@ -40,16 +40,32 @@ describe('the ticket desk', () => {
     expect((wallet.body['tickets'] as WalletTicket[]).map((t) => t.status).sort()).toEqual(['active', 'unused']);
   });
 
-  it('mirrors a ticket for the store with its votes', async () => {
+  it('mirrors a ticket, or a whole order, for the store with its votes', async () => {
     const book = new TicketBook(new MemoryTicketStore(), seq());
     const { body } = await call(book, '/issue', { order: '2002', lines: [{ ...LINE, quantity: 1 }], held: false });
     const id = (body['tickets'] as string[])[0]!;
     await call(book, '/claim', { secret: body['claim'], device: 'c_one' });
-    expect((await call(book, '/mirror', { id })).body).toMatchObject({ id, kind: 'day', status: 'unused', order: '2002', votesCast: 0, voteToday: 'none' });
+    expect((await call(book, '/mirror', { id })).body['tickets']).toEqual([{ id, kind: 'day', status: 'unused', order: '2002', firstScan: null, validUntil: null, votesCast: 0, voteToday: 'none' }]);
     await call(book, '/scan', { device: 'c_one', id }, T0 + HOUR_MS);
     const votes: VotesOf = (t) => (t === id ? { cast: 3, today: true } : { cast: 0, today: false });
-    expect((await call(book, '/mirror', { id }, T0 + 2 * HOUR_MS, votes)).body).toMatchObject({ status: 'active', votesCast: 3, voteToday: 'used', firstScan: T0 + HOUR_MS });
+    expect((await call(book, '/mirror', { order: '2002' }, T0 + 2 * HOUR_MS, votes)).body['tickets']).toMatchObject([{ status: 'active', votesCast: 3, voteToday: 'used', firstScan: T0 + HOUR_MS }]);
+    // The wallet shows the same vote.
+    expect((await call(book, '/wallet?device=c_one', undefined, T0 + 2 * HOUR_MS, votes)).body['tickets']).toMatchObject([{ id, voteToday: 'used' }]);
     expect((await call(book, '/mirror', { id: 'OWL-2222-2222' })).status).toBe(404);
+    expect((await call(book, '/mirror', { order: 'nope' })).body).toEqual({ tickets: [] });
+  });
+
+  it('tells the store side what it knows about an order', async () => {
+    const book = new TicketBook(new MemoryTicketStore(), seq());
+    const held = await call(book, '/issue', { order: '2006', lines: [LINE], held: true });
+    expect(held.body).toMatchObject({ claim: null, held: true, sent: false });
+    expect((await call(book, '/order?order=2006')).body).toEqual({ order: '2006', held: true, sent: false, tickets: held.body['tickets'], lines: ['L1'] });
+    await call(book, '/release', { order: '2006' });
+    await call(book, '/sent', { order: '2006' });
+    expect((await call(book, '/order?order=2006')).body).toMatchObject({ held: false, sent: true });
+    // The store sends the paid webhook again: nothing new, and the book says the link went out.
+    expect((await call(book, '/issue', { order: '2006', lines: [LINE], held: false })).body).toMatchObject({ claim: null, held: false, sent: true });
+    expect((await call(book, '/order?order=2007')).status).toBe(404);
   });
 
   it('passes a ticket on with a share link, from its holder only', async () => {
@@ -98,6 +114,8 @@ describe('the ticket the gate picks', () => {
     expect(pickForGate([w('A', 'unused', 5), w('B', 'active', 9)], T0)?.id).toBe('B');
     expect(pickForGate([w('A', 'unused', 9), w('B', 'unused', 5), w('C', 'unused', null)], T0)?.id).toBe('B');
     expect(pickForGate([w('A', 'used', 0), w('B', 'revoked', null)], T0)).toBeNull();
+    // Nothing that could go through: a ticket waiting on the store's check, so the gate says so.
+    expect(pickForGate([w('A', 'used', 0), w('B', 'held', null)], T0)?.id).toBe('B');
     expect(pickForGate([], T0)).toBeNull();
   });
 

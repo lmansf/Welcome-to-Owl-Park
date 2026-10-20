@@ -113,8 +113,8 @@ for (const [name, make] of STORES) {
         const { claim, tickets } = await b.issue('1004', [day(2)], false, T0);
         await b.claim(claim!, 'c_buyer');
         const id = tickets[1]!.id;
-        expect(await b.share(id, 'c_friend')).toBeNull();
-        const link = (await b.share(id, 'c_buyer'))!;
+        expect(await b.share(id, 'c_friend', T0)).toBeNull();
+        const link = (await b.share(id, 'c_buyer', T0))!;
         expect((await b.take(link, 'c_friend'))!.device).toBe('c_friend');
         expect(b.wallet('c_buyer', T0).map((w) => w.id)).toEqual([tickets[0]!.id]);
         expect(b.wallet('c_friend', T0).map((w) => w.id)).toEqual([id]);
@@ -123,6 +123,9 @@ for (const [name, make] of STORES) {
         // Opening the order's link again brings every live ticket of the order back to that device.
         await b.claim(claim!, 'c_buyer');
         expect(b.wallet('c_buyer', T0)).toHaveLength(2);
+        // A running ticket stays with the visitor it admitted.
+        b.scan(id, 'c_buyer', T0 + HOUR_MS);
+        expect(await b.share(id, 'c_buyer', T0 + 2 * HOUR_MS)).toBeNull();
       });
     });
 
@@ -140,7 +143,7 @@ for (const [name, make] of STORES) {
         expect(b.wallet('c_d', T0 + 5 * HOUR_MS).map((w) => w.status)).toEqual(['revoked', 'revoked', 'revoked']);
         expect(b.scan(tickets[0]!.id, 'c_d', T0 + 5 * HOUR_MS)).toEqual({ ok: false, reason: 'revoked' });
         // A revoked ticket cannot be passed on, and a later claim leaves it behind.
-        expect(await b.share(tickets[0]!.id, 'c_d')).toBeNull();
+        expect(await b.share(tickets[0]!.id, 'c_d', T0 + 5 * HOUR_MS)).toBeNull();
         expect(await b.claim(claim!, 'c_new')).toEqual([]);
       });
     });

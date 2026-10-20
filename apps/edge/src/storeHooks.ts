@@ -1,0 +1,199 @@
+/**
+ * The store's webhooks (C35), once the Worker has checked their signature. A paid order makes its
+ * tickets and sends the claim link through the store's own shipping email; an order the store did
+ * not rate low risk waits until the owner's fraud check releases it (the order tag
+ * `owl-park-release`) or a later rating comes back low; a refund switches off that many tickets of
+ * a line and a cancellation all of them. The store may send any webhook more than once, and
+ * retries one that failed: every step here is safe to repeat.
+ */
+import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
+import { gidTail, lowRisk, ORDER_QUERY, ticketLines, type AdminOrder } from './shopify';
+
+/** The order tag that releases a held order: the owner's fraud check passed it. */
+export const RELEASE_TAG = 'owl-park-release';
+
+/** The vote ledger's ticket desk as the Worker reaches it: a GET without a body, a POST with one. */
+export type Desk = (path: string, body?: Record<string, unknown>) => Promise<{ status: number; body: Record<string, unknown> }>;
+
+export interface HookDeps {
+  store: StoreConfig;
+  desk: Desk;
+  /** The claim link for a secret, on the park's own address. */
+  claimUrl: (secret: string) => string;
+  fetchFn?: typeof fetch;
+  /** Waits before the paid order's second look at a rating still in progress (tests skip it). */
+  wait?: (ms: number) => Promise<void>;
+}
+
+export interface HookResult {
+  status: number;
+  body: Record<string, unknown>;
+  /** An order whose tickets changed: the Worker refreshes the store's copy after answering. */
+  mirror?: string;
+}
+
+/** The link the shipping email carries; the page reads the secret from the fragment. */
+export function claimLink(origin: string, secret: string): string {
+  return `${origin.replace(/\/$/, '')}/#claim=${secret}`;
+}
+
+/** The order's number from a webhook: an order's own payload, or a refund's `order_id`. */
+export function orderIdOf(payload: Record<string, unknown>, topic: string): string | null {
+  const raw = topic === 'refunds/create' ? payload['order_id'] : (payload['admin_graphql_api_id'] ?? payload['id']);
+  const id = typeof raw === 'number' ? String(raw) : typeof raw === 'string' ? gidTail(raw) : '';
+  return /^\d{1,20}$/.test(id) ? id : null;
+}
+
+const orderGid = (id: string) => `gid://shopify/Order/${id}`;
+
+function tagsOf(payload: Record<string, unknown>): string[] {
+  const t = payload['tags'];
+  const list = Array.isArray(t) ? t : typeof t === 'string' ? t.split(',') : [];
+  return list.map((x) => String(x).trim().toLowerCase());
+}
+
+/** The store's rating is still being worked out: no assessment yet, or one marked pending. */
+function ratingPending(order: AdminOrder): boolean {
+  const a = order.risk?.assessments ?? [];
+  return a.length === 0 || a.some((x) => (x.riskLevel ?? '').toUpperCase() === 'PENDING');
+}
+
+type UserErrors = { userErrors?: Array<{ field?: string[] | null; message?: string }> };
+
+/** A mutation; its user errors come back as a StoreError. */
+async function mutate<T extends Record<string, UserErrors | null>>(deps: HookDeps, mutation: string, variables: Record<string, unknown>): Promise<T> {
+  const data = await adminQuery<T>(deps.store, mutation, variables, deps.fetchFn);
+  for (const v of Object.values(data)) {
+    const errs = v?.userErrors ?? [];
+    if (errs.length) throw new StoreError(errs.map((e) => e.message ?? 'error').join('; '));
+  }
+  return data;
+}
+
+async function deskOk(deps: HookDeps, path: string, body?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const r = await deps.desk(path, body);
+  if (r.status !== 200) throw new StoreError(`ticket desk ${path} answered ${r.status}`);
+  return r.body;
+}
+
+async function loadOrder(deps: HookDeps, id: string): Promise<AdminOrder | null> {
+  return (await adminQuery<{ order: AdminOrder | null }>(deps.store, ORDER_QUERY, { id: orderGid(id) }, deps.fetchFn)).order;
+}
+
+/**
+ * Sends the order's claim link with a fulfillment of its ticket lines (the store emails it). When
+ * the lines are already fulfilled, the link went out on an earlier try: it is only marked sent,
+ * and the secret is left alone so the link in that email keeps working. Without a fresh secret in
+ * hand (a retried webhook) a new one replaces the one that never went out.
+ */
+async function sendLink(deps: HookDeps, id: string, lines: string[], tickets: string[], claim: string | null): Promise<void> {
+  const fo = await adminQuery<FulfillmentOrders>(deps.store, FULFILLMENT_ORDERS_QUERY, { id: orderGid(id) }, deps.fetchFn);
+  if (!ticketLinesOpen(fo, lines)) {
+    await deskOk(deps, '/tickets/sent', { order: id });
+    return;
+  }
+  const secret = claim ?? ((await deskOk(deps, '/tickets/claim-again', { order: id }))['claim'] as string | null);
+  if (!secret) throw new StoreError('no claim link for this order');
+  await mutate(deps, FULFILL_MUTATION, { fulfillment: fulfillmentInput(fo, lines, tickets, deps.claimUrl(secret)) });
+  await deskOk(deps, '/tickets/sent', { order: id });
+}
+
+async function paid(deps: HookDeps, id: string): Promise<HookResult> {
+  let order = await loadOrder(deps, id);
+  if (!order || order.cancelledAt) return { status: 200, body: { tickets: 0 } };
+  const lines = ticketLines(order);
+  if (!lines.length) return { status: 200, body: { tickets: 0 } };
+  // The store rates an order a few seconds after it is placed: one more look before holding it.
+  if (!lowRisk(order) && ratingPending(order)) {
+    await (deps.wait ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(2000);
+    order = (await loadOrder(deps, id)) ?? order;
+  }
+  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !lowRisk(order) });
+  const tickets = issued['tickets'] as string[];
+  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id };
+  if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
+  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id };
+}
+
+/** A held order changed or got a new rating: release it if the owner tagged it or the store now rates it low. */
+async function recheck(deps: HookDeps, id: string, payload: Record<string, unknown>): Promise<HookResult> {
+  const known = await deps.desk(`/tickets/order?order=${id}`);
+  // Not a ticket order (or one the book has not seen yet: its paid webhook makes the tickets).
+  if (known.status === 404) return { status: 200, body: { tickets: 0 } };
+  if (known.status !== 200) throw new StoreError(`ticket desk answered ${known.status}`);
+  if (known.body['held'] !== true) return { status: 200, body: { held: false } };
+  let release = tagsOf(payload).includes(RELEASE_TAG);
+  if (!release) {
+    const order = await loadOrder(deps, id);
+    release = !!order && !order.cancelledAt && lowRisk(order);
+  }
+  if (!release) return { status: 200, body: { held: true } };
+  const r = await deskOk(deps, '/tickets/release', { order: id });
+  await sendLink(deps, id, known.body['lines'] as string[], r['tickets'] as string[], (r['claim'] as string | null) ?? null);
+  return { status: 200, body: { released: true }, mirror: id };
+}
+
+async function refunded(deps: HookDeps, id: string, payload: Record<string, unknown>): Promise<HookResult> {
+  const items = Array.isArray(payload['refund_line_items']) ? (payload['refund_line_items'] as Array<Record<string, unknown>>) : [];
+  const which = items
+    .map((li) => ({ line: String(li['line_item_id'] ?? ''), quantity: Number(li['quantity']) }))
+    .filter((w) => /^\d{1,20}$/.test(w.line) && Number.isInteger(w.quantity) && w.quantity > 0);
+  if (!which.length) return { status: 200, body: { revoked: 0 } };
+  const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which }))['revoked'] as string[]).length;
+  return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
+}
+
+async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
+  const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which: 'all' }))['revoked'] as string[]).length;
+  return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
+}
+
+/**
+ * One webhook. A store or desk failure throws, so the Worker answers with an error and the store
+ * sends the webhook again later.
+ */
+export async function storeWebhook(topic: string, payload: Record<string, unknown>, deps: HookDeps): Promise<HookResult> {
+  const id = orderIdOf(payload, topic);
+  if (!id) return { status: 200, body: { ignored: 'no order' } };
+  switch (topic) {
+    case 'orders/paid':
+      return paid(deps, id);
+    case 'orders/updated':
+    case 'orders/risk_assessment_changed':
+      return recheck(deps, id, payload);
+    case 'refunds/create':
+      return refunded(deps, id, payload);
+    case 'orders/cancelled':
+      return cancelled(deps, id);
+    default:
+      return { status: 200, body: { ignored: topic } };
+  }
+}
+
+export const ORDER_TICKETS_MUTATION = `mutation OwlParkOrderTickets($metafields: [MetafieldsSetInput!]!) {
+  metafieldsSet(metafields: $metafields) {
+    metafields { id }
+    userErrors { field message }
+  }
+}`;
+
+/**
+ * The store's copy of tickets (C35): one metaobject per ticket, and the order's `owl_park.tickets`
+ * list pointing at them, so the owner and the buyer see the tickets on the order. Only orders the
+ * store sold (numeric ids) are copied.
+ */
+export async function mirrorTickets(deps: HookDeps, tickets: TicketMirror[], linkOrder: boolean): Promise<void> {
+  const fromStore = tickets.filter((t) => /^\d{1,20}$/.test(t.order));
+  const ids: string[] = [];
+  for (let i = 0; i < fromStore.length; i += 5) {
+    const batch = await Promise.all(
+      fromStore.slice(i, i + 5).map((t) => mutate<{ metaobjectUpsert: UserErrors & { metaobject: { id: string } | null } }>(deps, TICKET_UPSERT_MUTATION, ticketUpsert(t))),
+    );
+    for (const r of batch) if (r.metaobjectUpsert.metaobject) ids.push(r.metaobjectUpsert.metaobject.id);
+  }
+  const order = fromStore[0]?.order;
+  if (!linkOrder || !order || !ids.length) return;
+  await mutate(deps, ORDER_TICKETS_MUTATION, {
+    metafields: [{ ownerId: orderGid(order), namespace: 'owl_park', key: 'tickets', type: 'list.metaobject_reference', value: JSON.stringify(ids) }],
+  });
+}

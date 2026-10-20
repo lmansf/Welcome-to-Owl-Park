@@ -7,9 +7,11 @@ import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
 import { loadLook, loadPlayerId } from './identity';
-import { createTransport } from './net';
+import { createTransport, type WalletEntry } from './net';
+import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { createHud } from './ui/hud';
 import { attachKeyboard } from './ui/keyboard';
+import { linkToast } from './ui/tickets';
 
 const cfg = readConfig();
 const playerId = loadPlayerId(cfg);
@@ -19,6 +21,20 @@ const hud = createHud(document.body, look);
 const transport = createTransport(cfg);
 const collection = new CollectionState(createCollections(cfg, transport));
 const quests = new QuestState();
+
+// A ticket link (C35) carries its secret in the address's fragment: take it out of the address bar
+// at once, then put the link's tickets on this device.
+const ticketLink = readTicketLink(location.hash);
+if (ticketLink) {
+  history.replaceState(history.state, '', withoutTicketLink(location.href));
+  const tickets = transport.tickets;
+  if (!tickets) hud.toast("Ticket links work on the park's own server.", 5000);
+  else
+    void tickets.open(ticketLink).then(
+      (wallet) => hud.toast(linkToast(ticketLink.kind, wallet), 5000),
+      () => hud.toast('Your ticket could not be loaded just now. Open the link again in a moment.', 5000),
+    );
+}
 
 const dpr = cfg.pixelRatio;
 const size = () => ({ w: Math.round(window.innerWidth * dpr), h: Math.round(window.innerHeight * dpr) });
@@ -99,6 +115,8 @@ declare global {
       equip(variant: string): boolean;
       /** Play an owned emote. */
       emote(e: string): boolean;
+      /** The tickets on this device (empty without the park's server). */
+      wallet(): Promise<WalletEntry[]>;
     };
   }
 }
@@ -158,4 +176,5 @@ window.owlPark = {
     return slot ? (roomScene()?.equip(slot, variant) ?? false) : false;
   },
   emote: (e) => roomScene()?.emote(e) ?? false,
+  wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
 };

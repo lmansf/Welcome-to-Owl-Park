@@ -8,6 +8,7 @@
  * pass is never a collector token and a collector token is never a pass.
  */
 import { isTimeZone } from '@owl-park/shared';
+import { isTicketId } from './tickets';
 
 export interface PassPayload {
   /** Visitor id, stable for the pass lifetime: one owl per page load. */
@@ -16,6 +17,8 @@ export interface PassPayload {
   exp: number;
   /** Admitted through a ticket. Guests are false. */
   adm: boolean;
+  /** The ticket the gate scanned to admit this pass: it votes as that ticket. */
+  tid?: string;
   /** The collector this page belongs to (several tabs of one browser share it). */
   cid?: string;
   /** The browser's IANA time zone when the pass was minted: the collector's home zone on first sight. */
@@ -125,6 +128,7 @@ export async function verifyPass(secret: string, token: string | null, nowS = Ma
   const out: PassPayload = { id, exp, adm: p['adm'] === true };
   if (isCollectorId(p['cid'])) out.cid = p['cid'];
   if (isTimeZone(p['tz'])) out.tz = p['tz'];
+  if (isTicketId(p['tid'])) out.tid = p['tid'];
   return out;
 }
 
