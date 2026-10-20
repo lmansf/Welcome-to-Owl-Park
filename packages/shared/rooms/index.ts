@@ -9,6 +9,10 @@ import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
  * The hub and the grove are three screens wide and the market two: each room's approved painting
  * is its middle screen (the market's first) and the wings were painted out from it, so positions
  * on the painting are its old ones plus one screen in the hub and the grove.
+ *
+ * The lobby is the park's front entrance, where every visitor arrives: the ticket booth on one
+ * side, the turnstile gate into the hub on the other. It is two screens wide, its painting the
+ * east screen. It is outside the park, so it has no hiding spots and quests never send owls there.
  */
 export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Our Feathers', 'Hatching Soon'] as const;
 
@@ -287,6 +291,61 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 2500, y: 860 },
       { x: 2700, y: 800 },
       { x: 2900, y: 860 },
+    ],
+  },
+  lobby: {
+    id: 'lobby',
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'lobby',
+    backgrounds: [
+      { key: 'lobby-west', x: 0, y: 0 },
+      { key: 'lobby', x: ROOM_W, y: 0 },
+    ],
+    mood: 'dusk',
+    walkable: [
+      [
+        // The cobbled plaza: from the curved balustrade on the west, around the front of the owl
+        // fountain and the bench, past the booth and the two carved owls up to the turnstiles (the
+        // gate's threshold), and down to the balustrade that closes it on the east.
+        { x: 0, y: 815 },
+        { x: 300, y: 808 },
+        { x: 405, y: 800 },
+        { x: 425, y: 712 },
+        { x: 480, y: 712 },
+        { x: 488, y: 735 },
+        { x: 520, y: 748 },
+        { x: 600, y: 756 },
+        { x: 665, y: 758 },
+        { x: 740, y: 756 },
+        { x: 810, y: 748 },
+        { x: 845, y: 735 },
+        { x: 850, y: 712 },
+        { x: 1020, y: 712 },
+        { x: 1030, y: 728 },
+        { x: 1150, y: 728 },
+        { x: 1160, y: 712 },
+        { x: 1600, y: 705 },
+        { x: 1720, y: 702 },
+        { x: 2100, y: 702 },
+        { x: 2390, y: 708 },
+        { x: 2400, y: 695 },
+        { x: 2790, y: 695 },
+        { x: 2800, y: 708 },
+        { x: 2840, y: 708 },
+        { x: 2900, y: 735 },
+        { x: 2960, y: 762 },
+        { x: 3050, y: 820 },
+        { x: 3120, y: 870 },
+        { x: 3145, y: 888 },
+        { x: 0, y: 888 },
+      ],
+    ],
+    spawns: { 'default': { x: 2200, y: 820 } },
+    doors: [
+      // The ticket window of the birdhouse booth.
+      { id: 'booth', rect: { x: 1890, y: 702, w: 170, h: 88 }, marker: { x: 1960, y: 590 } },
+      // The five turnstiles beneath the owls' wings: through them is the hub.
+      { id: 'gate', rect: { x: 2400, y: 650, w: 390, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
     ],
   },
 };

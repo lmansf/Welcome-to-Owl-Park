@@ -12,6 +12,8 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   room <key>           crop/resize to 1600x900 (and opt-in 3200x1800), grade, WebP under budget, review
   piece <key>          chroma key, fit into the logical canvas at 2x, downsample, grade, budget
   overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
+  cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
+  patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
   canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
   wing <room>          stitch the room's picked wings onto its painting; finish every screen and the end overlays
   owl                  split the owl master into the five layers at 200x240 and 400x480
@@ -65,6 +67,7 @@ from artlib.chroma import ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
+from artlib.patch import cut as cut_crop, patch as patch_edit  # noqa: E402
 from artlib.resize import downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
@@ -342,13 +345,23 @@ def room_review(ctx: Ctx, key: str, img: Image.Image) -> Image.Image:
     return review_composite(img, view[0], view[1], 0.4, ctx.assets) if view else img.convert("RGB")
 
 
+def patch_lines(sc: dict | None) -> list[str]:
+    """The provenance line of a candidate made by ``patch``: what was pasted into what, and where."""
+    p = (sc or {}).get("patched")
+    if not p:
+        return []
+    base, edit, bb = p["base"], p["edit"], p["patch_bbox"]
+    return [f"patch: {edit['key']} seed {edit['seed']} ({edit['file']}) pasted into {base['key']} seed {base['seed']} ({base['file']}) "
+            f"at x {bb[0]}..{bb[2]}, y {bb[1]}..{bb[3]} ({p['patched_px']} px changed, tone shift {p['tone_shift']})"]
+
+
 def cmd_room(ctx: Ctx, a: argparse.Namespace) -> int:
     """Rooms ship as lossy WebP: a painted 1600x900 room cannot meet the budget as PNG."""
     key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
     raw, sc = resolve_raw(ctx, key, a.raw)
     img = open_raw(raw).convert("RGB")
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
-    tools = [f"room: crop={a.crop} shift={a.shift_y} source={img.width}x{img.height}"]
+    tools = patch_lines(sc) + [f"room: crop={a.crop} shift={a.shift_y} source={img.width}x{img.height}"]
     if gline:
         tools.append(gline)
     outputs, lines = finish_room(ctx, key, img, a.crop, a.shift_y, pal, strength, a.with_2x, a.budget_2x)
@@ -531,6 +544,13 @@ def cmd_wing(ctx: Ctx, a: argparse.Namespace) -> int:
     src, painting = open_painting(ctx, room, a.painting)
     prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
     painting_sc = prov.sidecar_of(prov_path, src.name) if src.parent.resolve() == ctx.public.resolve() else None
+    painting_tools: list[str] = []
+    if painting_sc is None and src.parent.resolve() == ctx.out.resolve():
+        # A painting finished here but not published yet: its own finish record says where it came
+        # from (and, for a patched painting, what was pasted into it).
+        rec = load_post_record(ctx, src.name.split("@")[0].split(".")[0]) or load_post_record(ctx, room) or {}
+        painting_sc = rec.get("raw_sidecar")
+        painting_tools = [t for t in rec.get("tools", []) if t.startswith("patch:")]
     panos: dict[str, Image.Image] = {}
     picked: dict[str, tuple[Path, dict | None, dict]] = {}
     for side, key in wings:
@@ -577,11 +597,12 @@ def cmd_wing(ctx: Ctx, a: argparse.Namespace) -> int:
         if part == "mid":
             joins = ", ".join(f"{side} join to {k} (seed {(picked[side][1] or {}).get('seed')}, seam columns {picked[side][2]['seam_columns'][0]}-{picked[side][2]['seam_columns'][1]})" for side, k in wings)
             raw_rel, sc, head = rel_to_repo(src), painting_sc, f"wing: the approved painting {src.name} with a blended band at each join: {joins}"
+            head = [head] + painting_tools
         else:
             raw, sc0, rep = picked[part]
-            raw_rel, sc, head = rel_to_repo(raw), sidecar_subset(sc0), f"wing: {part} of {src.name}, joined along the cheapest seam through the {rep['side']} overlap (columns {rep['seam_columns'][0]}-{rep['seam_columns'][1]}, difference {rep['overlap_diff']}) with tones matched"
+            raw_rel, sc, head = rel_to_repo(raw), sidecar_subset(sc0), [f"wing: {part} of {src.name}, joined along the cheapest seam through the {rep['side']} overlap (columns {rep['seam_columns'][0]}-{rep['seam_columns'][1]}, difference {rep['overlap_diff']}) with tones matched"]
         outputs, lines = finish_room(ctx, key, tile, "centre", 0, None, None, True, a.budget_2x)
-        save_post_record(ctx, key, {"key": key, "kind": "room", "raw": raw_rel, "raw_sidecar": sc, "outputs": outputs, "tools": [head] + lines, "params": {"wing": room, "part": part, "overlay": a.overlay}})
+        save_post_record(ctx, key, {"key": key, "kind": "room", "raw": raw_rel, "raw_sidecar": sc, "outputs": outputs, "tools": head + lines, "params": {"wing": room, "part": part, "overlay": a.overlay}})
         for k2, o in outputs.items():
             note(f"{key} {k2}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
         shot = Image.open(ctx.out / f"{key}.webp").convert("RGBA")
@@ -665,6 +686,59 @@ def cmd_grade(ctx: Ctx, a: argparse.Namespace) -> int:
     out = grade_image(img, pal, a.strength, a.chroma_boost)
     n = pngmeta.save(out, Path(a.output))
     note(f"graded {a.input} -> {a.output} ({n} bytes) with {pal['_file']} {sha} strength={a.strength if a.strength is not None else pal['strength']}")
+    return 0
+
+
+def parse_ints(s: str, n: int, what: str) -> tuple[int, ...]:
+    try:
+        v = tuple(int(x) for x in s.split(","))
+    except ValueError:
+        v = ()
+    if len(v) != n:
+        raise ArtError(f"{what} takes {n} comma-separated integers, not {s!r}")
+    return v
+
+
+def cmd_cut(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)."""
+    key = validate_key(a.key, assets=ctx.assets)
+    raw, _ = resolve_raw(ctx, a.base_key, a.base)
+    box = parse_ints(a.box, 4, "--box")
+    out = ctx.work / "canvas" / f"{key}.png"
+    try:
+        n = pngmeta.save(cut_crop(open_raw(raw), box), out)
+    except ValueError as e:
+        raise ArtError(str(e)) from None
+    note(f"cut {key}: {rel_to_repo(out)} ({n} bytes; {raw.name} at x {box[0]}..{box[2]}, y {box[1]}..{box[3]})")
+    return 0
+
+
+def cmd_patch(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A picked candidate with an edit of one of its crops pasted back where the edit changed it,
+    written as a new raw candidate of the key (select it with generate.mjs select)."""
+    key = validate_key(a.key, assets=ctx.assets)
+    base, base_sc = resolve_raw(ctx, a.base_key, a.base)
+    edit, edit_sc = resolve_raw(ctx, a.edit_key, a.edit)
+    at = parse_ints(a.at, 2, "--at")
+    box = parse_ints(a.box, 4, "--box") if a.box else None
+    try:
+        img, rep = patch_edit(open_raw(base), open_raw(edit), at, box, threshold=a.threshold, grow=a.grow, close=a.close, feather=a.feather)
+    except ValueError as e:
+        raise ArtError(str(e)) from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    src = lambda p, sc: {"key": (sc or {}).get("key"), "file": p.name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
+    b = base_sc or {}
+    sc = {"schema": 1, "key": key, "kind": b.get("kind", ctx.assets.get(key, {}).get("kind")), "realm": b.get("realm"), "provider": b.get("provider"), "model": b.get("model"),
+          "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
+          "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
+          "key_colour": b.get("key_colour"), "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "patch", "cost_estimate_usd": 0, "provider_meta": {},
+          "patched": {"base": src(base, base_sc), "edit": src(edit, edit_sc), **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
+    note(f"patch {key}: {rel_to_repo(d / f'{h}.png')}, {rep['patched_px']} px from {edit.name} in x {rep['patch_bbox'][0]}..{rep['patch_bbox'][2]}, "
+         f"y {rep['patch_bbox'][1]}..{rep['patch_bbox'][3]}, tone shift {rep['tone_shift']}; select it with: node tools/art/generate.mjs select {key} {h}")
     return 0
 
 
@@ -991,10 +1065,9 @@ def cmd_demo(ctx: Ctx, a: argparse.Namespace) -> int:
         owl, _ = synth_owl_master(*sz(1600, 1920))
         _write_raw(work, "owl-master", owl, 1701, "#FF00FF", {"body": "#FF0000", "belly": "#00FF00", "accent": "#0000FF"}, now, "owl", "hub")
     if not (work / "geometry.json").exists():
-        if ctx.geometry_path.exists():
-            shutil.copy(ctx.geometry_path, work / "geometry.json")
-        else:
-            (work / "geometry.json").write_text(json.dumps(fixture_geometry()), encoding="utf-8")
+        # The fixture's one-screen rooms, not this checkout's exported room data (whose wide rooms
+        # list their overlays by screen), so the demo runs the same everywhere.
+        (work / "geometry.json").write_text(json.dumps(fixture_geometry()), encoding="utf-8")
     common = ["--work", str(work), "--geometry", str(work / "geometry.json"), "--now", now, "--public", str(public)]
     # The overlay rules are enforced on both the synthetic overlay and the generator's mock one,
     # which keep their props out of the walkable band on purpose.
@@ -1125,6 +1198,29 @@ def build_parser() -> argparse.ArgumentParser:
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_overlay)
+
+    sp = sub.add_parser("cut", help="a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)")
+    sp.add_argument("key", help="the edit job's key (the crop is written to <work>/canvas/<key>.png)")
+    sp.add_argument("--base-key", required=True, help="the key whose candidate is cut (its SELECTED one unless --base)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--box", required=True, help="x0,y0,x1,y1 in the candidate's pixels")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_cut)
+
+    sp = sub.add_parser("patch", help="paste an edit of a crop back into the picked candidate, only where it changed; writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the key the patched candidate is for")
+    sp.add_argument("--base-key", required=True, help="the key whose candidate is patched (its SELECTED one unless --base)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--edit-key", required=True, help="the edit job's key (its SELECTED candidate unless --edit)")
+    sp.add_argument("--edit", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--at", required=True, help="x,y: where the edited crop's top-left corner sits in the candidate (the cut box's x0,y0)")
+    sp.add_argument("--box", default=None, help="x0,y0,x1,y1 in the edit's pixels: only here may the edit replace the painting (default: all of it)")
+    sp.add_argument("--threshold", type=float, default=30.0, help="how much a pixel must change (0-255, any channel) to count as edited")
+    sp.add_argument("--grow", type=int, default=6, help="px the patch grows past the changed pixels")
+    sp.add_argument("--close", type=int, default=8, help="px of gaps bridged inside the patch")
+    sp.add_argument("--feather", type=float, default=2.5, help="blur radius of the patch's edge")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_patch)
 
     sp = sub.add_parser("canvas", help="a wing's outpaint canvas (the generator's @canvas:<key>)")
     sp.add_argument("keys", nargs="*", help="wing keys (default: every <room>-west / <room>-east in config/assets.json)")

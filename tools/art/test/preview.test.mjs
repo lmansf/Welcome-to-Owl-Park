@@ -25,6 +25,9 @@ test('roomsTouched maps keys to rooms in park order; owls and signs alone mean t
   assert.deepEqual(V.roomsTouched(['guardian']), ['grove']);
   assert.deepEqual(V.roomsTouched(['owl-body', 'owl-face']), ['hub']);
   assert.deepEqual(V.roomsTouched(['sign-hatching-soon', 'grove']), ['hub', 'grove']);
+  // A screen of a wider room shows in its own room.
+  assert.deepEqual(V.roomsTouched(['lobby-west', 'lobby']), ['lobby']);
+  assert.deepEqual(V.roomsTouched(['market-east-fg', 'grove-west']), ['grove', 'market']);
 });
 
 test('overlayFinals copies the finals and hides the placeholder SVG the loader would prefer', () => {

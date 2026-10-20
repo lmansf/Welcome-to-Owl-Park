@@ -20,7 +20,7 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | Key | Logical size (px) | What it is |
 | --- | --- | --- |
 | `hub`, `hub-fg` | 1600 x 900 | Hub room background (WebP), and a transparent foreground overlay (PNG) drawn in front of the owls; the hub is three screens wide now and draws no overlay, so `hub-fg` is kept but unused |
-| room tiles (`<room>-<part>`) | 1600 x 900 | A room wider (or taller) than one screen is painted in tiles of one screen each, listed in the room's `backgrounds` / `foregrounds` with their offsets; each tile is room-kind art with the same budgets, WebP rule and 2x copy as `hub`, and the game registers it from the room data. Today: the wings `hub-west`, `hub-east`, `grove-west`, `grove-east` and `market-east` (WebP), and the end overlays `grove-west-fg` and `market-east-fg` (PNG) |
+| room tiles (`<room>-<part>`) | 1600 x 900 | A room wider (or taller) than one screen is painted in tiles of one screen each, listed in the room's `backgrounds` / `foregrounds` with their offsets; each tile is room-kind art with the same budgets, WebP rule and 2x copy as `hub`, and the game registers it from the room data. Today: the wings `hub-west`, `hub-east`, `grove-west`, `grove-east`, `market-east` and `lobby-west` (WebP), and the end overlays `grove-west-fg` and `market-east-fg` (PNG) |
 | `grove`, `grove-fg` | 1600 x 900 | Storybook realm background (WebP) and foreground (PNG) |
 | `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
 | `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |
@@ -194,6 +194,33 @@ it, and `work/art/review/<room>-wide.png` lays them side by side. `wing` reads t
 original painting with `--painting` to stitch again. New keys go in `config/assets.json` (kind
 `room`; overlays with `overlay: true`) and in the room's `backgrounds` / `foregrounds`: tests keep
 them, the job list and `art.ts` in step.
+
+### Small fixes to a picked painting: cut and patch
+
+When one detail of a picked painting needs repainting (the lobby concept's booth came with a
+rooster weathervane), only that detail is edited, so the rest stays exactly as approved:
+
+```bash
+pnpm art:finish cut lobby-vane --base-key lobby-concept-b --box 16,0,1040,1024   # work/art/canvas/lobby-vane.png
+pnpm art:generate --provider fal --only lobby-vane                               # the edit job: refs @canvas:lobby-vane
+pnpm art:finish sheet lobby-vane && node tools/art/generate.mjs select lobby-vane <hash16>
+pnpm art:finish patch lobby --base-key lobby-concept-b --edit-key lobby-vane --at 16,0 --box 415,120,630,335
+node tools/art/generate.mjs select lobby <hash16>                                # the patched candidate
+```
+
+`cut` writes a crop of the picked candidate around the detail, which the edit job sends as
+`@canvas:<key>` (a whole painting is too large to send inline and invites a full re-render).
+`patch` pastes the edited crop back at `--at`, but only where it differs from the painting, inside
+`--box` (crop pixels): the changed pixels, cleaned of specks, closed over small gaps, with
+enclosed holes filled, grown a few pixels and feathered, and toned to the painting around the
+patch. Every other pixel is the painting's own. The result is a new raw candidate of the target
+key whose sidecar names both sources; `room` and `wing` carry a `patch:` line into the provenance.
+
+The lobby is built this way and then widened like the other rooms: concept B1 (the art director's
+pick) with its owl weathervane is the painting, `lobby-west` is its wing (`pnpm art:finish canvas
+lobby-west --painting work/art/final/lobby@2x.webp` before it is published), and the room is two
+screens wide with no overlay (`pnpm art:finish wing lobby --overlay drop`). It is not graded
+(`--grade none`): the picked concept is kept as it is.
 
 ### Grade, regrade, rerun
 

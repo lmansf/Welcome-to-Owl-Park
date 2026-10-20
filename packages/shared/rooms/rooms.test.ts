@@ -74,7 +74,11 @@ describe('the floor', () => {
 });
 
 describe('hiding spots', () => {
-  for (const room of Object.values(ROOMS)) {
+  it('the lobby has none: it is outside the park', () => {
+    expect(ROOMS.lobby?.spots).toBeUndefined();
+  });
+
+  for (const room of Object.values(ROOMS).filter((r) => r.spots)) {
     describe(room.id, () => {
       const spots = room.spots ?? [];
 

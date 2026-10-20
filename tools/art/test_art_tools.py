@@ -36,7 +36,7 @@ from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
                           synth_overlay, synth_owl_master, synth_room)
-from artlib import wings  # noqa: E402
+from artlib import patch, wings  # noqa: E402
 import owl_layers  # noqa: E402
 import postprocess  # noqa: E402
 
@@ -663,6 +663,50 @@ class TestWings(unittest.TestCase):
         ImageDraw.Draw(blocker).rectangle((780, 740, 820, 780), fill=(10, 10, 10, 255))
         self.assertTrue(any("stage marker" in v for v in check_overlay(blocker, view, "market")["violations"]))
         self.assertFalse(any("stage" in v for v in check_overlay(blocker, tile_view(geom, "market", 0, 0), "market")["violations"]))
+
+
+class TestPatch(unittest.TestCase):
+    def setUp(self):
+        self.base = synth_room(400, 240, 7, "hub")
+        self.at = (100, 40)
+        # The "edit": the crop re-rendered with a little noise everywhere, and a gold disc where a
+        # dark square used to be.
+        crop = patch.cut(self.base, (100, 40, 228, 168))
+        rng = np.random.default_rng(3)
+        noisy = np.clip(np.asarray(crop).astype(int) + rng.integers(-6, 7, (128, 128, 3)), 0, 255).astype(np.uint8)
+        self.edit = Image.fromarray(noisy)
+        ImageDraw.Draw(self.edit).ellipse((40, 40, 80, 80), fill=(201, 162, 39))
+        dark = self.base.copy()
+        ImageDraw.Draw(dark).rectangle((150, 90, 175, 115), fill=(10, 10, 30))
+        self.base = dark
+
+    def test_cut_checks_the_box(self):
+        self.assertEqual(patch.cut(self.base, (0, 0, 10, 20)).size, (10, 20))
+        with self.assertRaises(ValueError):
+            patch.cut(self.base, (390, 0, 410, 20))
+
+    def test_only_the_edited_detail_changes(self):
+        out, rep = patch.patch(self.base, self.edit, self.at, box=(20, 20, 108, 108))
+        a, b = np.asarray(self.base).astype(int), np.asarray(out).astype(int)
+        changed = np.abs(a - b).max(axis=2) > 0
+        ys, xs = np.nonzero(changed)
+        # The old square and the new disc (crop 40..80 -> 140..180, 80..120), grown and feathered, nothing else.
+        self.assertGreaterEqual(xs.min(), 120)
+        self.assertLessEqual(xs.max(), 200)
+        self.assertGreaterEqual(ys.min(), 60)
+        self.assertLessEqual(ys.max(), 140)
+        self.assertLessEqual(np.abs(b[100, 160] - [201, 162, 39]).max(), 8, "the disc came across")
+        self.assertTrue(rep["patch_bbox"][0] >= 120 and rep["patch_bbox"][2] <= 200, rep["patch_bbox"])
+        # The re-render noise elsewhere in the crop stays out: outside the patch, every pixel is the original's.
+        self.assertTrue((a[:, :120] == b[:, :120]).all())
+        self.assertTrue((a[200:] == b[200:]).all())
+
+    def test_deterministic_and_refuses_an_unchanged_box(self):
+        one, _ = patch.patch(self.base, self.edit, self.at, box=(20, 20, 108, 108))
+        two, _ = patch.patch(self.base, self.edit, self.at, box=(20, 20, 108, 108))
+        self.assertEqual(one.tobytes(), two.tobytes())
+        with self.assertRaises(ValueError):
+            patch.patch(self.base, self.edit, self.at, box=(0, 0, 12, 12))
 
 
 class TestForbiddenAndProvenance(unittest.TestCase):

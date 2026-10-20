@@ -90,6 +90,18 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "lobby": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "lobby-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
     "guardian": {
       "w": 720,
       "h": 820,

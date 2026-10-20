@@ -629,11 +629,13 @@ const WING_SCENE = {
   hub: 'the inside of the hollow base of a colossal ancient tree at night',
   grove: 'a cozy storybook forest clearing at dusk with a treehouse village',
   market: 'a rainy night street in a cyberpunk neon market',
+  lobby: 'the cobbled entrance plaza of a storybook theme park at night',
 };
 const WING_CARRY = {
   hub: 'floor, inner bark walls, lighting, perspective, floor height and brush style',
   grove: 'lawn, trees, treehouses, sky glow, lighting, perspective, ground height and brush style',
   market: 'wet street, far curb, stalls, skyline, clouds, lighting, perspective, street height and brush style',
+  lobby: 'cobbled plaza, balustrade, string lights, banners, trees, night sky, lighting, perspective, ground height and brush style',
 };
 const wingIntro = (room, side) => {
   const [finished, away] = side === 'east' ? ['left', 'right'] : ['right', 'left'];
@@ -712,3 +714,57 @@ const LOBBY_JOBS = LOBBY_CONCEPT_KEYS.map((key, i) => ({
 Object.assign(PROMPTS, LOBBY_PROMPTS);
 HELPER_KEYS.push(...LOBBY_CONCEPT_KEYS);
 JOBS.push(...LOBBY_JOBS);
+
+// The art director picked concept B1 (seed 2201). Its booth's weathervane came out as a rooster:
+// an edit of a 1024 px crop of the pick around the booth's roof (work/art/canvas/lobby-vane.png,
+// cut from the selected B1 at x 16..1040, y 0..1024) repaints it as an owl, and only the
+// weathervane is taken from the edit, so the rest of the approved painting stays exactly as picked.
+const LOBBY_VANE_PROMPT = `Edit this painting, a detail of a storybook theme park entrance at night: the pointed shingled roof of a birdhouse-shaped ticket booth, with a gold rooster weathervane on top. Change only the weathervane: the rooster becomes a small owl with folded wings and two little ear tufts, perched on the same arrow and cross, at the same size and height, in the same polished gold metal, catching the same warm lamplight. Keep everything else exactly as it is: the same framing, colours and lighting, the same finial, roof, round windows, awning, banners, string lights, fireflies and night sky. No text, letters or numbers anywhere.`;
+
+const LOBBY_VANE_JOB = {
+  key: 'lobby-vane',
+  // A detail edit, not a screen of a room: an anchor-like helper. Patched into the picked concept
+  // (`pnpm art:finish patch lobby`), it makes the lobby's painting.
+  kind: 'anchor',
+  derives: ['lobby'],
+  realm: 'lobby',
+  optional: true,
+  size: '1024x1024',
+  seed: 2301,
+  variants: 2,
+  refs: [{ ref: '@canvas:lobby-vane', role: 'a crop of the picked concept around the booth roof', optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: LOBBY_VANE_PROMPT,
+};
+PROMPTS['lobby-vane'] = LOBBY_VANE_PROMPT;
+HELPER_KEYS.push('lobby-vane');
+JOBS.push(LOBBY_VANE_JOB);
+
+// The lobby's style block, for its wing (the concepts above carry it verbatim).
+STYLE.lobby = LOBBY_STYLE;
+const LOBBY_WING_EDITS = [
+  ['; the ticket booth and the entrance stand at the back of the plaza at floor level.', '.'],
+  [', polished brass turnstiles', ''],
+  ['ornate arches, ', ''],
+  [' so small colourful figures added later stand out', ''],
+];
+
+// The lobby is two screens wide: the painting (concept B1 with its owl weathervane) is the east
+// screen, and the west wing, where visitors arrive, is painted out from its west edge like the
+// other rooms' wings (`pnpm art:finish canvas lobby-west`, then `pnpm art:finish wing lobby`).
+const LOBBY_WING_PROMPT = `${wingIntro('lobby', 'west')} The plaza continues to the left: its cobbles fill the lower third of the frame at the same height, open, empty and uncluttered. The birdhouse ticket booth at the right edge of the finished part is kept exactly as painted, with its velvet rope posts, and stays the only booth. At the back of the plaza in the middle of the new stretch, in front of the balustrade, stands a round tiered stone fountain on a low step, its basin edged in gold and a small gold owl statue on top, its water glowing softly in the warm lamplight, with a curly iron bench and potted topiaries beside it. Along the back of the plaza a low carved balustrade with ball finials and clipped topiary hedges carries on, lamp posts of curly iron with warm glowing lanterns stand at intervals, strings of round festoon bulbs swoop between them, and tall poles fly blank banners in navy, gold and emerald. Beyond the balustrade, dark rounded trees under the starry navy sky, with fireflies drifting. At the far left edge, tall clipped hedges and trees close the plaza. The new stretch has no second booth, no turnstiles, no gate, no archway, no carved owl statues and no moon. ${wingStyle('lobby', LOBBY_WING_EDITS)}`;
+
+export const LOBBY_WING_JOB = {
+  key: 'lobby-west',
+  kind: 'wing',
+  realm: 'lobby',
+  optional: true,
+  size: '3040x1368',
+  seed: 9261,
+  variants: 4,
+  refs: [{ ref: '@canvas:lobby-west', role: "the painting's edge on a grey canvas to paint over", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: LOBBY_WING_PROMPT,
+};
+PROMPTS['lobby-west'] = LOBBY_WING_PROMPT;
+JOBS.push(LOBBY_WING_JOB);

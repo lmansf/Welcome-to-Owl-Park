@@ -265,6 +265,28 @@ test('wing jobs paint each wing over its canvas at 3040x1368 in PNG; the overlay
   assert.throws(() => G.validateJobs([{ ...P.JOBS.find((j) => j.key === 'hub-west'), refs: ['@canvas:Hub West'] }], { assets: ASSETS }), /invalid key/);
 });
 
+test('the lobby: two concepts, an edit of the pick around its weathervane, and a west wing over its canvas', () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.deepEqual(P.LOBBY_CONCEPT_KEYS, ['lobby-concept-a', 'lobby-concept-b']);
+  for (const key of [...P.LOBBY_CONCEPT_KEYS, 'lobby-vane']) assert.ok(P.HELPER_KEYS.includes(key), `${key} is a helper, never published`);
+  const vane = jobs.get('lobby-vane');
+  assert.deepEqual([vane.size, vane.variants], ['1024x1024', 2]);
+  assert.deepEqual(vane.refs.map((r) => [r.ref, r.optional]), [['@canvas:lobby-vane', false]]);
+  assert.match(vane.prompt, /^Edit this painting/);
+  const wing = jobs.get('lobby-west');
+  assert.equal(wing.kind, 'wing');
+  assert.equal(wing.realm, 'lobby');
+  assert.deepEqual([wing.size, wing.optional], ['3040x1368', true]);
+  assert.deepEqual(wing.refs.map((r) => [r.ref, r.optional]), [['@canvas:lobby-west', false]]);
+  assert.equal(wing.providers.fal.output_format, 'png');
+  assert.ok(wing.prompt.startsWith('Extend this painting into a wide panorama.'));
+  const style = wing.prompt.slice(wing.prompt.indexOf('STYLE: '));
+  assert.ok(style.length > 200, "carries the lobby's style block");
+  assert.ok(!/turnstiles|arches|the ticket booth and the entrance/.test(style), 'its style block asks for no second gate or booth');
+  assert.equal(ASSETS.keys['lobby-west'].kind, 'room');
+  assert.equal(ASSETS.keys.lobby.kind, 'room');
+});
+
 test('a wing job runs with the mock provider once its canvas exists, and is skipped before', () => {
   const out = tmp('wing');
   const env = { ...process.env, ART_NOW: '2026-10-20T10:00:00Z' };
@@ -571,7 +593,9 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['grove', 'hub', 'market']);
+  assert.deepEqual(Object.keys(g.rooms).sort(), ['grove', 'hub', 'lobby', 'market']);
+  assert.deepEqual(g.rooms.lobby.size, { w: 3200, h: 900 });
+  assert.deepEqual(g.rooms.lobby.backgrounds.map((t) => [t.key, t.x]), [['lobby-west', 0], ['lobby', 1600]]);
   assert.deepEqual(g.rooms.hub.size, { w: 4800, h: 900 });
   assert.deepEqual(g.rooms.hub.backgrounds.map((t) => [t.key, t.x]), [['hub-west', 0], ['hub', 1600], ['hub-east', 3200]]);
   assert.deepEqual(g.rooms.hub.foregrounds, []);

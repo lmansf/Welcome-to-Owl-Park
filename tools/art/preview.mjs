@@ -25,7 +25,7 @@ import { parseArgs } from 'node:util';
 
 export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
-export const ROOMS = ['hub', 'grove', 'market'];
+export const ROOMS = ['hub', 'grove', 'market', 'lobby'];
 
 /** Which room shows each key. Owl layers and signs show in the hub (owls show everywhere). */
 const ROOM_OF = {
@@ -80,7 +80,8 @@ export function scanFinals(dir, keys) {
 /** The rooms a set of replaced keys shows up in, in park order; owl layers and signs alone mean the hub. */
 export function roomsTouched(keys) {
   const set = new Set();
-  for (const k of keys) set.add(ROOM_OF[k] ?? 'hub');
+  // A screen of a wider room (`lobby-west`, `hub-east-fg`) shows in its room.
+  for (const k of keys) set.add(ROOM_OF[k] ?? ROOMS.find((r) => k === r || k.startsWith(`${r}-`)) ?? 'hub');
   return ROOMS.filter((r) => set.has(r));
 }
 
