@@ -197,7 +197,7 @@ into the pass.
 The catalogue and its numbers: `docs/COLLECTIBLES.md`. Quests, NPC owls, leaf piles, the shop and
 owl species: `docs/QUESTS.md`.
 
-## 9. The lobby and tickets (the lobby built; tickets designed, not built)
+## 9. The lobby and tickets (the lobby built; the ticket rules written, not wired in)
 
 Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
 the turnstile gate into the hub on the other. With `GATE=open` (now) the turnstiles let everyone
@@ -207,20 +207,22 @@ lobby: the gate turns it back toward the booth, and the Worker refuses its socke
 room and its use of the shop (its collection still shows). The pass answer carries `gate` and
 `adm` so the client knows which.
 
-The ticket flow (designed with the owner, not built): Shopify sells tickets and passes and keeps
-the buyer. Its `orders/paid` webhook, checked against the shop's signature, makes one ticket per
-unit in the Worker's ticket ledger, beside the vote ledger: a visual ID such as `OWL-7K3Q-PX9M`,
-the kind, and the order and line numbers only (no names or emails). Orders Shopify rates low risk
-get their tickets at once; any other order waits for the owner's fraud check, which releases or
-refunds it. The Worker fulfils the ticket line with the ticket's claim link as the tracking link,
-so Shopify's own shipping email delivers it; the link carries its own secret and puts the
-ticket in the visitor's wallet on that device (one device at a time; opening the link elsewhere
-moves it). A ticket's time starts at its first scan at the gate, not at purchase (a day ticket
-lasts 24 hours, an annual pass 365 days; an unused ticket expires a year after purchase), and every
-ticket and pass gets one Realm Vote per park day. A Shopify metaobject per ticket mirrors its state
-for the owner; the park never reads it. A refund or cancellation switches the ticket off within
-the hour; votes it already cast stay counted. This replaces the earlier plan's emailed magic link
-and Supabase session.
+The ticket flow (designed with the owner; its rules are written and unit-tested in
+`apps/edge/src/tickets.ts`, `TicketBook.ts`, `ticketDesk.ts`, `shopify.ts` and `storeApi.ts`, and
+the page's link helpers in `apps/park/src/net/ticketLinks.ts`, but nothing calls them yet): Shopify
+sells tickets and passes and keeps the buyer. Its `orders/paid` webhook, checked against the shop's
+signature, makes one ticket per unit in the Worker's ticket ledger, beside the vote ledger: a visual
+ID such as `OWL-7K3Q-PX9M`, the kind, and the order and line numbers only (no names or emails).
+Orders Shopify rates low risk get their tickets at once; any other order waits for the owner's fraud
+check, which releases or refunds it. The Worker fulfils the ticket line with the ticket's claim link
+as the tracking link, so Shopify's own shipping email delivers it; the link carries its own secret
+and puts the ticket in the visitor's wallet on that device (one device at a time; opening the link
+elsewhere moves it). A ticket's time starts at its first scan at the gate, not at purchase (a day
+ticket lasts 24 hours, an annual pass 365 days; an unused ticket expires a year after purchase), and
+every ticket and pass gets one Realm Vote per park day. A Shopify metaobject per ticket mirrors its
+state for the owner; the park never reads it. A refund or cancellation switches the ticket off
+within the hour; votes it already cast stay counted. This replaces the earlier plan's emailed magic
+link and Supabase session.
 
 **Opening-night entry with the Drop-1 pin (canon):** each pin order makes one ticket through the
 same flow at $0 that works on opening night only (date to be announced); one pin, one ticket. It
