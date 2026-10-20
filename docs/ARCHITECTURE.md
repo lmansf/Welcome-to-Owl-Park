@@ -73,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v4 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v6 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -83,14 +83,17 @@ are server milliseconds; clients never put their own clock on the wire.
 Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
 `move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
 (an emote id), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
-`accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item).
+`accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
+the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks).
 
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
 everyone including the sender; only the sender's copy carries `seq`, which is the
 acknowledgement), `look`, `leave`, `counts`, `full`, `emote` (to everyone else in the room), and
 for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, `refused`, plus
-`objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`).
+`objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`), and for
+the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks` (see
+`docs/ACTIVITIES.md`).
 
 Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
 normally match the client's prediction; a walk in progress is continued from its current
@@ -112,8 +115,9 @@ bundle (protocol mismatch) reloads itself.
 
 Everything about a visitor that must survive hibernation (id, look, position, walk and collector
 id) is kept in the socket attachment, so an object that was evicted rebuilds every room from its
-sockets. Used-up leaf piles are kept in the object's storage as well, so an evicted object
-brings them back.
+sockets. Used-up leaf piles, the hub's lantern beam and the last stage quiz round paid are kept
+in the object's storage as well, so an evicted object brings them back; while owls are in the hub,
+the alarm also wakes the object when a quiz question closes.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
@@ -195,7 +199,9 @@ into the pass.
   (with the pass), and `POST /api/admin/grant` (admin key; the hook purchases will use).
 
 The catalogue and its numbers: `docs/COLLECTIBLES.md`. Quests, NPC owls, leaf piles, the shop and
-owl species: `docs/QUESTS.md`.
+owl species: `docs/QUESTS.md`. The activities (the lantern beam, the stage quiz, fishing, the robot
+owl's copy game and three small tasks a day), which pay feathers under their own daily cap:
+`docs/ACTIVITIES.md`.
 
 ## 9. The lobby and tickets (built; the store's side waits for its custom app)
 
@@ -240,3 +246,4 @@ gives that night's Realm Vote like any other ticket.
 5. Room caps: hub 80 / grove 40 / market 40, or flat.
 6. Pre-ticket access: open to all guests (today), or a bot check on `/api/pass` if abuse shows.
 7. Collectibles: how purchases with money reach a collection (quest rewards, leaf-pile feathers and the shop follow canon C31; defaults in `docs/QUESTS.md` and `docs/COLLECTIBLES.md`).
+8. Activities (C30): their numbers and words, defaults in `docs/ACTIVITIES.md`.
