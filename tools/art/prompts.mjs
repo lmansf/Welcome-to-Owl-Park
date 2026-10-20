@@ -682,3 +682,33 @@ const WING_JOBS = WING_KEYS.map((key) => ({
 }));
 Object.assign(PROMPTS, WING_PROMPTS);
 JOBS.push(...WING_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// Lobby concepts: the park's front entrance, where every visitor arrives, buys a ticket at the
+// booth and passes the turnstiles into the park. Two directions, four seeds each, for the art
+// director to pick from before the lobby room is painted and wired into the game.
+
+const LOBBY_STYLE = `STYLE: hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. A magical night at the grand entrance of a storybook theme park, festive, opulent and welcoming. PALETTE: navy #0C1E36 and deep navy #07122A night sky; gold #C9A227 and warm gold light #FFD36A for lamps, trims and highlights; cream #F6F1E3 for moonlight and marquee bulbs; polished brass; deep plum and emerald accents on awnings and banners; warm stone and cobbles from #5C4632 to #8F8068 in the lamplight. SHAPE LANGUAGE: ornate arches, scalloped striped awnings, rows of round marquee bulbs, swooping strings of festoon lights, pennants and hanging banners, lanterns on curly iron posts, potted topiaries, polished brass turnstiles, soft volumetric light. READABILITY: straight-on eye-level view; a clear, uncluttered, mid-value plaza of cobbles across the lower third of the frame, open and empty so small colourful figures added later stand out; the ticket booth and the entrance stand at the back of the plaza at floor level. AVOID: any text, letters, numbers, writing, signage lettering, logos or watermarks (signs, banners and the booth carry no words, only patterns or simple owl emblems); any people, crowds, faces, animals or living birds (owl shapes appear only as carved, cast or wrought-iron ornaments); photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`;
+
+const LOBBY_PROMPTS = {
+  'lobby-concept-a': `Concept painting of the grand front entrance of a magical storybook theme park, seen from the plaza in front of it at night. On the left, a charming ornate ticket booth: a little round kiosk with tall arched windows glowing warm gold, a scalloped striped awning, a domed roof with a brass finial ringed with marquee bulbs, and a velvet-roped queue lane in front of it. On the right half, the entrance itself: a row of five polished brass turnstiles with little lanterns on their posts, standing in front of a towering arched gateway of carved stone and gold wrought iron with an owl crest at its keystone. Its tall gates stand open, and through them the park glows beyond: a colossal ancient tree lit warmly from within under a big full moon. Festoon lights swoop from lamp posts across the plaza, blank pennants and banners in navy, gold and plum hang from the arch, potted topiaries and lanterns line the way, and a few fireworks bloom softly high in the sky. ${LOBBY_STYLE}`,
+  'lobby-concept-b': `Concept painting of the grand front entrance of a magical storybook theme park, seen from the plaza in front of it at night. On the right half, the entrance itself: an enormous archway formed by two giant carved wooden owl statues facing each other, their wings raised to meet overhead in a pointed arch studded with glowing bulbs and hung with lanterns; beneath the arch a row of five ornate turnstiles in brass and dark polished wood with lantern caps; beyond them a glowing path leads into the park toward a colossal ancient tree lit warmly from within under a big full moon. On the left, a whimsical ticket booth shaped like a tall birdhouse: a pointed shingled roof with a gold weathervane, round windows glowing warm gold, a scalloped striped awning over the ticket window, flower boxes and a little velvet-roped queue lane. Festoon lights swoop across the plaza, blank banners in navy, gold and emerald flutter on tall poles, lanterns on curly iron posts and potted topiaries line the way, and fireflies drift in the warm air. ${LOBBY_STYLE}`,
+};
+
+/** Helper keys of the lobby concepts (not shipped: the pick guides the lobby room's art). */
+export const LOBBY_CONCEPT_KEYS = Object.keys(LOBBY_PROMPTS);
+
+const LOBBY_JOBS = LOBBY_CONCEPT_KEYS.map((key, i) => ({
+  key,
+  kind: 'room',
+  realm: 'lobby',
+  optional: true,
+  size: '3200x1800',
+  seed: 2101 + i * 100,
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: LOBBY_PROMPTS[key],
+}));
+Object.assign(PROMPTS, LOBBY_PROMPTS);
+HELPER_KEYS.push(...LOBBY_CONCEPT_KEYS);
+JOBS.push(...LOBBY_JOBS);
