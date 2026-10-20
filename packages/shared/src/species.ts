@@ -29,7 +29,7 @@ export const SPECIES: readonly SpeciesDef[] = [
   { id: 'barn', name: 'Barn owl', size: 0.92, natural: { body: '#D9A066', belly: '#FFF8EC', accent: '#A67B5B' }, art: true },
   { id: 'burrowing', name: 'Burrowing owl', size: 0.8, natural: { body: '#A67B5B', belly: '#F2E1C1', accent: '#5C4033' }, art: true },
   { id: 'snowy', name: 'Snowy owl', size: 1, natural: { body: '#EDEAE0', belly: '#FFFFFF', accent: '#2F3E5C' }, art: true },
-  { id: 'screech', name: 'Screech owl', size: 0.62, natural: { body: '#6B6B6B', belly: '#D6C7B0', accent: '#5C4033' }, art: false, founders: true },
+  { id: 'screech', name: 'Screech owl', size: 0.62, natural: { body: '#6B6B6B', belly: '#D6C7B0', accent: '#5C4033' }, art: true, founders: true },
 ];
 
 export const DEFAULT_SPECIES: SpeciesId = 'great-horned';

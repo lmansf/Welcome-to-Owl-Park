@@ -176,9 +176,9 @@ the same change.
 
 Visitors choose a kind of owl in the owl panel: great horned, barn, burrowing, snowy, or screech.
 Each species has a drawn size (the screech owl is tiny, 0.62) and natural colours a visitor can
-apply with one tap and still recolour. The barn, burrowing and snowy owls have their own painted
-layers (`owl-barn-body` and so on, `art: true` in `species.ts`), loaded the first time an owl of
-that kind shows up; until then, and for the screech owl until its art is approved, a species is
-drawn with the great horned owl's layers at its own size. Hats, glasses and scarves sit where each
+apply with one tap and still recolour. Every species has its own painted layers (`owl-barn-body`
+and so on, `art: true` in `species.ts`), loaded the first time an owl of that kind shows up; until
+they load, and for any species added later until its art is approved, a species is drawn with the
+great horned owl's layers at its own size. Hats, glasses and scarves sit where each
 species' crown, eyes and chest are, measured from the layers it wears. The screech owl is meant for
 founders only; until founder status exists it is open to everyone (`FOUNDER_SPECIES_OPEN`).
