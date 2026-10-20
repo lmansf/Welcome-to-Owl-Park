@@ -157,14 +157,19 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect(page.locator('[data-emote="hoot"]')).toBeVisible();
   });
 
-  test('the owl panel picks a kind of owl: drawn at its size, seen by others, kept on return', async ({ page, context }) => {
+  test('the owl panel picks a kind of owl: drawn in its own art at its size, seen by others, kept on return', async ({ page, context }) => {
     test.slow(); // two live parks in one browser
     const other = await context.newPage();
     await openPark(page, { id: 'owl-a', collector: 'e2e-species', tz: 'UTC' });
     await openPark(other, { id: 'owl-b', collector: 'e2e-species-b', tz: 'UTC' });
     await page.getByRole('button', { name: 'Your owl' }).click();
+    // A barn owl wears its own painted layers, loaded when it first shows up.
+    await page.getByRole('button', { name: 'Barn owl' }).click();
+    await expect.poll(async () => (await state(page)).owlArt, { timeout: 15_000 }).toBe('owl-barn-body');
+    // The screech owl's art is still to come: it wears the great horned owl's layers, smaller.
     await page.getByRole('button', { name: 'Screech owl' }).click();
     await expect.poll(async () => (await state(page)).look.species).toBe('screech');
+    expect((await state(page)).owlArt).toBe('owl-body');
     await page.getByRole('button', { name: 'Natural colours' }).click();
     await expect.poll(async () => (await state(page)).look.body).toBe('#6B6B6B');
     await expect.poll(async () => (await state(other)).peers.find((p) => p.id === 'owl-a')?.look.species, { timeout: 15_000 }).toBe('screech');
