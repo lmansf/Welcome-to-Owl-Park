@@ -72,3 +72,19 @@ test('serve answers files under its root and refuses paths outside it', async ()
     server.close();
   }
 });
+
+test('previewLooks: one owl per species the finals bring, after a great horned owl for scale; else the colour mix', () => {
+  assert.deepEqual(V.previewLooks(new Set(['owl-barn-body', 'owl-barn-face', 'owl-snowy-body', 'hub']), 4), [
+    '#8B5A2B,#F6F1E3,#C9A227', '#D9A066,#FFF8EC,#A67B5B,barn', '#EDEAE0,#FFFFFF,#2F3E5C,snowy',
+  ]);
+  const plain = V.previewLooks(new Set(['hub', 'owl-body']), 3);
+  assert.equal(plain.length, 3);
+  assert.ok(plain.every((l) => l.split(',').length === 3));
+  // The natural colours mirror packages/shared/src/species.ts.
+  const src = fs.readFileSync(path.join(V.REPO_ROOT, 'packages/shared/src/species.ts'), 'utf8');
+  for (const [sp, look] of Object.entries(V.SPECIES_LOOKS)) {
+    const m = new RegExp(`id: '${sp}'[^\\n]*natural: \\{ body: '(#[0-9A-F]{6})', belly: '(#[0-9A-F]{6})', accent: '(#[0-9A-F]{6})' \\}`).exec(src);
+    assert.ok(m, `${sp} in species.ts`);
+    assert.equal(look, m.slice(1).join(','), `${sp} natural colours`);
+  }
+});

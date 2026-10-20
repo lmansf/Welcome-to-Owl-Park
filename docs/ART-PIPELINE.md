@@ -28,6 +28,7 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
 | `owl-face`, `owl-blink` | 200 x 240 | Eyes and beak in fixed colours (not tinted); the blink frame replaces the face for a moment, so it must include the beak |
+| `owl-<species>-body` and the rest (barn, burrowing, snowy, screech) | 200 x 240 | A species' own five layers, by the same rules as the owl's; loaded when an owl of that species shows up, and until then (or without them) it wears the great horned owl's at its own size |
 | `item-<id>` (82 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
 | `icon-<id>` (48 keys) | 64 x 64 | Collection icons for the 24 effects and 24 emotes: white with grey shading on transparency; the game multiplies them by the effect's tint (or the emote colour), so one painting serves every colourway |
 
@@ -245,7 +246,16 @@ is wider on one side of the feet (a tail or wing in the three-quarter pose) is s
 still fits, and the command warns if anything opaque is left on the canvas edge. `--flip` mirrors a
 winner that faces the wrong way, `--debug` dumps the label map and intermediates, and
 `--labels <png>` takes a hand-corrected label map (body blue, belly magenta, accent red, face
-yellow) when a master needs a manual fix.
+yellow) when a master needs a manual fix. Opaque specks on the backdrop smaller than 0.2 % of the
+owl (`speck_frac`) are dropped before registration, so a stray pixel in a corner cannot shrink it.
+
+The other species are masters of their own, each an edit of the selected great horned master in
+the same colour code (`owl-barn-master` and so on in `prompts.mjs`), finished with
+`pnpm art:finish owl --species barn` into `owl-barn-body` and the rest, and published with
+`pnpm art:finish publish owl-barn`. A species can need different splitter settings, kept under
+`species` in `owl-keys.json`: the barn owl's eyes are dark navy discs with no cream ring, close to
+the accent hue, so its value floor is higher; rounder heads with wider-set eyes get a wider face
+area. The game measures where hats, glasses and scarves sit from each species' own layers.
 
 ### File budget and the 2x policy
 

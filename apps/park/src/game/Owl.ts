@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DEFAULT_SPECIES, facing, hexToInt, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
-import { OWL_H, OWL_W } from './art';
+import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_LAYERS, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { ITEM_SIZES } from './itemArt';
@@ -14,17 +14,16 @@ export const OWL_SCALE = 0.5;
 /** Feet position inside the layer canvas: bottom-centre, per the art pipeline canon. */
 const FEET = { x: 100, y: 240 };
 
-const LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'owl-blink'] as const;
+const LAYERS = OWL_LAYERS;
 
 /**
  * The layer textures for a look's species: its own (`owl-<species>-body` and so on) once that art
- * is approved and loaded, otherwise the great horned owl's. (A species with its own art will also
- * want its own anchors for worn items; the great horned owl's are used for now.)
+ * is approved and loaded, otherwise the great horned owl's.
  */
 function layersFor(scene: Phaser.Scene, look: OwlLook): readonly string[] {
   const sp = speciesOf(look);
   if (!sp.art || sp.id === DEFAULT_SPECIES) return LAYERS;
-  const own = LAYERS.map((k) => k.replace('owl-', `owl-${sp.id}-`));
+  const own = SPECIES_LAYERS[sp.id];
   return own.every((k) => scene.textures.exists(k)) ? own : LAYERS;
 }
 
@@ -79,9 +78,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private readonly pledgeMark: Phaser.GameObjects.Image;
   private readonly art: Phaser.GameObjects.Container;
   private readonly wearImgs: Record<WearImageSlot, Phaser.GameObjects.Image>;
-  private readonly anchors: OwlAnchors;
+  /** Where worn items sit, measured from the layers in use (each species' painting differs). */
+  private anchors: OwlAnchors;
   /** Which way the painting itself is turned (1 right, -1 left): the art is mirrored when that differs from `dir`. */
-  private readonly drawnFacing: 1 | -1;
+  private drawnFacing: 1 | -1;
   private dir: -1 | 1 = 1;
   /** Drawn size relative to the great horned owl (the species' size). */
   private size = 1;
@@ -139,8 +139,17 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     const layers = layersFor(this.scene, look);
     if (layers !== this.layers) {
       this.layers = layers;
+      this.anchors = owlAnchors(this.scene, layers);
+      this.drawnFacing = artFacing(this.anchors);
       this.faceImg.setTexture(layers[3]!).setDisplaySize(OWL_W, OWL_H);
       this.blinkImg.setTexture(layers[4]!).setDisplaySize(OWL_W, OWL_H);
+    }
+    const sp = speciesOf(look);
+    if (sp.art && layers === LAYERS && sp.id !== DEFAULT_SPECIES) {
+      // Its own layers load on first sight; until then (or if they are missing) it wears the great horned owl's.
+      void loadSpeciesArt(this.scene, sp.id).then((ok) => {
+        if (ok && !this.destroyed && speciesOf(this.look).id === sp.id) this.applyLook(this.look);
+      });
     }
     if (this.scene.renderer.type === Phaser.CANVAS) {
       // Tint is WebGL-only; on the Canvas renderer bake the colour into a texture instead.
@@ -233,6 +242,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   /** Which way the owl faces inside `pose`, where emotes work: the painting's own turn. */
   forward(): 1 | -1 {
     return this.drawnFacing;
+  }
+
+  /** The body layer in use: `owl-body`, or a species' own such as `owl-barn-body`. */
+  get artKey(): string {
+    return this.layers[0]!;
   }
 
   isWalking(): boolean {

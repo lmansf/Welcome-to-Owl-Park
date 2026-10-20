@@ -1,3 +1,20 @@
+import { DEFAULT_SPECIES, SPECIES, type SpeciesId } from '@owl-park/shared';
+
+/** The great horned owl's five layers, in drawing order: body, belly, accent, face, blink. */
+export const OWL_LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'owl-blink'] as const;
+
+/** Each species' layer keys (`owl-barn-body` and so on); the great horned owl's are OWL_LAYERS. */
+export const SPECIES_LAYERS = Object.fromEntries(
+  SPECIES.map((s): [SpeciesId, readonly string[]] => [s.id, s.id === DEFAULT_SPECIES ? OWL_LAYERS : OWL_LAYERS.map((k) => k.replace('owl-', `owl-${s.id}-`))]),
+) as Readonly<Record<SpeciesId, readonly string[]>>;
+
+const SPECIES_LAYER_KEYS: ReadonlySet<string> = new Set(SPECIES.filter((s) => s.id !== DEFAULT_SPECIES).flatMap((s) => SPECIES_LAYERS[s.id]));
+
+/** A species' own layer (`owl-barn-face`): not loaded at boot, only when an owl of that kind shows up. */
+export function isSpeciesLayer(key: string): boolean {
+  return SPECIES_LAYER_KEYS.has(key);
+}
+
 /**
  * The raster files the loader tries for a key once there is no SVG, in order. WebP comes before
  * PNG (painted rooms ship as WebP, everything else as PNG), and on a dense screen the 2x copies

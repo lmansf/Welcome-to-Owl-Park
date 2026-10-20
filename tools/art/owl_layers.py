@@ -79,7 +79,7 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
 from artlib import CONFIG_DIR, OWL_H, OWL_W, ArtError, hex_of, parse_hex  # noqa: E402
 from artlib.chroma import ChromaParams, key_out  # noqa: E402
 from artlib.labels import (bbox_of, component_areas, component_bboxes, component_centroids, dilate, enclosed_by,  # noqa: E402
-                           label_components, closing, mean_filter)
+                           label_components, closing, mean_filter, remove_specks)
 from artlib import pngmeta  # noqa: E402
 
 DEFAULT_KEYS_PATH = CONFIG_DIR / "owl-keys.json"
@@ -109,7 +109,32 @@ def load_keys(path: Path | None = None) -> dict:
     keys.setdefault("shade_gamma", 1.0)
     keys.setdefault("blink", {"width_frac": 0.025, "bow_frac": 0.3, "colour": "#0C1E36"})
     keys.setdefault("registration", {"height": 220, "max_width": 196, "feet_rows_frac": 0.06})
+    # Opaque specks on the backdrop smaller than this share of the owl are dropped before
+    # registration (one stray pixel in a corner would otherwise stretch the box and shrink the owl).
+    keys.setdefault("speck_frac", 0.002)
     return keys
+
+
+def for_species(keys: dict, species: str | None) -> dict:
+    """The table with a species' overrides from ``species.<id>`` applied (region entries are merged).
+
+    A species painted with a different face (dark eyes with no cream ring, eyes set wider) needs a
+    few different thresholds; everything it does not name keeps the owl master's value. A new
+    ``face_rect`` without ``fixed_rects`` moves the head rect of ``fixed_rects`` with it.
+    """
+    over = (keys.get("species") or {}).get(species) if species else None
+    if not over:
+        return keys
+    out = json.loads(json.dumps(keys))
+    for name, value in over.items():
+        if name == "regions":
+            for region, fields in value.items():
+                out["regions"].setdefault(region, {}).update(fields)
+        else:
+            out[name] = value
+    if "face_rect" in over and "fixed_rects" not in over:
+        out["fixed_rects"] = [list(over["face_rect"])] + [r for r in keys.get("fixed_rects", [])[1:]]
+    return out
 
 
 @dataclass
@@ -130,7 +155,17 @@ def matte(master: Image.Image, keys: dict, chroma: ChromaParams | None = None) -
     """Returns (clean RGB uint8, alpha float 0..1, info)."""
     p = chroma or ChromaParams(key=keys.get("backdrop", "#FF00FF"), despill_band=4)
     rgba, info = key_out(master, p)
-    arr = np.asarray(rgba)
+    arr = np.asarray(rgba).copy()
+    # The chroma key keeps anything touching the frame (it is a frame element in a room); an owl
+    # touches the frame only with its feet, so small specks go wherever they are, with their halo.
+    sil = arr[..., 3] >= 128
+    if sil.any():
+        kept, dropped = remove_specks(sil, 16, keep_inside_largest=True, largest_frac=float(keys.get("speck_frac", 0.002)))
+        if dropped:
+            gone = sil & ~kept
+            arr[dilate(gone, 2) & ~dilate(kept, 2), 3] = 0
+            arr[gone, 3] = 0
+            info["specks_dropped"] = int(dropped)
     return arr[..., :3].copy(), arr[..., 3].astype(np.float32) / 255.0, info
 
 
@@ -326,6 +361,8 @@ def split(master: Image.Image, keys: dict | None = None, *, height: int | None =
     H, W = A.shape
     sil = A > 0.5
     info: dict = {"backdrop": minfo.get("backdrop"), "flipped": flip, "source_size": [W, H]}
+    if minfo.get("specks_dropped"):
+        info["specks_dropped"] = minfo["specks_dropped"]
     absorbed = np.zeros((H, W), bool)
     if labels_img is not None:
         labels = labels_from_image(labels_img.resize((W, H), Image.Resampling.NEAREST) if labels_img.size != (W, H) else labels_img, A)

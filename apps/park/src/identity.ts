@@ -1,4 +1,4 @@
-import { DEFAULT_LOOK, isHexColour, lookFromSeed, sanitizeLook, type OwlLook } from '@owl-park/shared';
+import { DEFAULT_LOOK, isHexColour, isSpecies, lookFromSeed, sanitizeLook, type OwlLook } from '@owl-park/shared';
 import type { ParkConfig } from './config';
 
 const LOOK_KEY = 'owl-park:look';
@@ -17,8 +17,9 @@ export function loadPlayerId(cfg: ParkConfig): string {
 /** The owl's colours follow the visitor across tabs and visits (localStorage). */
 export function loadLook(cfg: ParkConfig, playerId: string): OwlLook {
   if (cfg.look) {
-    const [body, belly, accent] = cfg.look.split(',').map((s) => s.trim());
-    if (isHexColour(body) && isHexColour(belly) && isHexColour(accent)) return { body, belly, accent };
+    // `?look=body,belly,accent[,species]` (tests and the art preview).
+    const [body, belly, accent, species] = cfg.look.split(',').map((s) => s.trim());
+    if (isHexColour(body) && isHexColour(belly) && isHexColour(accent)) return { body, belly, accent, ...(isSpecies(species) ? { species } : {}) };
   }
   try {
     const raw = localStorage.getItem(LOOK_KEY);

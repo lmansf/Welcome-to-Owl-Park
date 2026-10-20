@@ -53,9 +53,10 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
     print(f"pnpm art:finish needs Pillow 12 and numpy ({_missing.name or 'a module'} is missing): python3 -m pip install pillow numpy (a venv is fine)", file=sys.stderr)
     sys.exit(2)
 
-from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES,DEFAULT_WORK_DIR, HELPER_KEYS, OVERLAY_KEYS, OWL_LAYERS,  # noqa: E402
+from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES,DEFAULT_WORK_DIR, HELPER_KEYS, OVERLAY_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
-                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, load_assets, load_key_colours, logical_size, now_iso, rel_to_repo, sha256_bytes, validate_key)
+                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, load_assets, load_key_colours, logical_size, now_iso, owl_layer_base, owl_master_of, rel_to_repo,
+                    sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, key_out  # noqa: E402
@@ -436,9 +437,12 @@ def owl_keys_from_sidecar(keys: dict, sc: dict | None) -> dict:
 
 
 def cmd_owl(ctx: Ctx, a: argparse.Namespace) -> int:
-    raw, sc = resolve_raw(ctx, "owl-master", a.raw)
+    species = getattr(a, "species", None)
+    master_key = f"owl-{species}-master" if species else "owl-master"
+    layer_keys = species_layers(species) if species else OWL_LAYERS
+    raw, sc = resolve_raw(ctx, master_key, a.raw)
     master = open_raw(raw)
-    keys = owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), sc)
+    keys = owl_layers.for_species(owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), sc), species)
     blink_from = None
     blink_note = "programmatic"
     if a.blink:
@@ -447,24 +451,24 @@ def cmd_owl(ctx: Ctx, a: argparse.Namespace) -> int:
         blink_from = open_raw(Path(a.blink[5:]))
         blink_note = f"from {Path(a.blink[5:]).name}"
     labels_img = Image.open(a.labels) if a.labels else None
-    debug_dir = (ctx.work / "intermediates" / "owl-master") if a.debug else None
+    debug_dir = (ctx.work / "intermediates" / master_key) if a.debug else None
     # The chroma flags work here as for pieces: --key-colour auto|#RRGGBB and --trust-key, so a
     # hand-edited master on another shade of backdrop can be finished without editing a sidecar.
     auto = bool(a.key_colour) and a.key_colour.lower() == "auto"
-    kc = None if auto else (key_colour_for(ctx, "owl-master", a.key_colour, sc) or keys["backdrop"])
+    kc = None if auto else (key_colour_for(ctx, master_key, a.key_colour, sc) or keys["backdrop"])
     chroma = chroma_params(a, kc)
     res = owl_layers.split(master, keys, height=a.height, flip=a.flip, blink_from=blink_from, labels_img=labels_img, debug_dir=debug_dir, chroma=chroma)
     outputs: dict[str, dict] = {}
-    for name in OWL_LAYERS:
+    for name, key in zip(OWL_LAYERS, layer_keys):
         for tag, layer, mult in (("1x", res.layers_1x[name], 1), ("2x", res.layers_2x[name], 2)):
-            fname = f"{name}.png" if tag == "1x" else f"{name}@2x.png"
+            fname = f"{key}.png" if tag == "1x" else f"{key}@2x.png"
             data, info = encode_under_budget(layer, ctx.budget)
-            outputs[fname] = {**write_final(ctx, fname, data, (200 * mult, 240 * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": name, "logical": tag}
-    rv = write_review(ctx, "owl-layers.png", owl_layers.review_sheet(res))
-    tools = [f"owl: height={a.height or keys['registration'].get('height', 220)} flip={a.flip} blink={blink_note} labels={'file' if a.labels else 'auto'} key={res.info.get('backdrop')} t0={a.t0} t1={a.t1} despill={a.despill_band} windows=" + ",".join(f"{n}:{r['hue']}±{r['window']}" for n, r in keys["regions"].items()) + f" floor={keys['luminance_floor']} lit_pct={keys['lit_percentile']}", "budget: LA/RGBA truecolour"]
+            outputs[fname] = {**write_final(ctx, fname, data, (200 * mult, 240 * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": key, "logical": tag}
+    rv = write_review(ctx, f"{master_key}-layers.png" if species else "owl-layers.png", owl_layers.review_sheet(res))
+    tools = [f"owl: {'species=' + species + ' ' if species else ''}height={a.height or keys['registration'].get('height', 220)} flip={a.flip} blink={blink_note} labels={'file' if a.labels else 'auto'} key={res.info.get('backdrop')} t0={a.t0} t1={a.t1} despill={a.despill_band} windows=" + ",".join(f"{n}:{r['hue']}±{r['window']}" for n, r in keys["regions"].items()) + f" floor={keys['luminance_floor']} lit_pct={keys['lit_percentile']}", "budget: LA/RGBA truecolour"]
     if res.info.get("clipped_px"):
         warn(f"owl layers: {res.info['clipped_px']} opaque px touch the canvas edge after registration; lower --height or check the silhouette")
-    save_post_record(ctx, "owl-master", {"key": "owl-master", "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
+    save_post_record(ctx, master_key, {"key": master_key, "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
     for fname, o in outputs.items():
         note(f"{fname}: {o['bytes']} bytes ({o['mode']})")
     note(f"review: {rel_to_repo(rv)}")
@@ -539,8 +543,11 @@ def cmd_sheet(ctx: Ctx, a: argparse.Namespace) -> int:
 def expand_publish_keys(keys: list[str]) -> list[str]:
     out: list[str] = []
     for k in keys:
+        species = k[len("owl-"):].removesuffix("-*") if k.startswith("owl-") else None
         if k in ("owl-*", "owl"):
             out.extend(OWL_LAYERS)
+        elif species in OWL_SPECIES:
+            out.extend(species_layers(species))
         else:
             out.append(k)
     return out
@@ -569,12 +576,13 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
         svg = ctx.public / f"{key}.svg"
         if svg.exists() and not a.retire_svg:
             raise ArtError(f"{svg.name} exists and the loader prefers SVG, so the {ext.upper()} would never show; pass --retire-svg to move it to work/art/retired-svg/")
-        record_key = "owl-master" if key in OWL_LAYERS else key
+        base = owl_layer_base(key)
+        record_key = owl_master_of(key) if base else key
         rec = load_post_record(ctx, record_key) or {}
         outs = rec.get("outputs", {})
         files: list[tuple[Path, bytes, dict]] = []
         for path, expect, logical in [(one, (W, H), "1x")] + ([(two, (2 * W, 2 * H), "2x")] if two.exists() else []):
-            oinfo = outs.get(path.name) if key in OWL_LAYERS else outs.get(logical)
+            oinfo = outs.get(path.name) if base else outs.get(logical)
             relaxed = bool(oinfo and oinfo.get("budget_relaxed"))
             if ext == "webp" and logical == "2x":
                 budget = BUDGET_2X_ROOM
@@ -701,21 +709,22 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
             rep = check_overlay(Image.open(pngs[f"{key}.png"]), ctx.geometry(), ctx.room_for(key), key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"))
             for v in rep["violations"]:
                 problems.append(f"{key}.png: {v}")
-        if key in OWL_LAYERS:
+        base = owl_layer_base(key)
+        if base:
             for name in (f"{key}.png", f"{key}@2x.png"):
                 p = pngs.get(name)
                 if not p:
                     continue
                 im = Image.open(p)
                 arr = np.asarray(im.convert("RGBA"))
-                if key in TINTED_LAYERS:
+                if base in TINTED_LAYERS:
                     if im.mode not in ("LA", "RGBA", "P"):
                         problems.append(f"{name}: tintable layer must be LA or RGBA with R=G=B, found {im.mode}")
                     elif not (arr[..., 0] == arr[..., 1]).all() or not (arr[..., 1] == arr[..., 2]).all():
                         problems.append(f"{name}: tintable layer has colour (R, G, B differ); it must be white with grey shading")
                 elif im.mode not in ("RGBA", "P"):
                     problems.append(f"{name}: face/blink must be RGBA, found {im.mode}")
-                if key == "owl-body" and not (arr[-1, :, 3] >= 128).any():
+                if base == "owl-body" and not (arr[-1, :, 3] >= 128).any():
                     problems.append(f"{name}: the feet do not touch the bottom row")
     # Forbidden words over committed tool files (no-op without a list).
     scan = [TOOLS_ART_DIR / "prompts.mjs", TOOLS_ART_DIR / "jobs.json", prov_path] + sorted(PALETTES_DIR.glob("*.json")) + sorted((TOOLS_ART_DIR / "config").glob("*.json"))
@@ -932,13 +941,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(fn=cmd_overlay)
 
     sp = sub.add_parser("owl", help="owl master -> five layers at 1x and 2x")
+    sp.add_argument("--species", choices=OWL_SPECIES, default=None, help="finish owl-<species>-master into the owl-<species>-* layers instead")
     sp.add_argument("--raw", default=None)
     sp.add_argument("--keys", default=None, help="owl-keys.json override")
     sp.add_argument("--height", type=int, default=None)
     sp.add_argument("--flip", action="store_true")
     sp.add_argument("--blink", default=None, help="from:<png> (an eyes-closed edit of the master)")
     sp.add_argument("--labels", default=None, help="hand-edited label map")
-    sp.add_argument("--debug", action="store_true", help="dump intermediates to <work>/intermediates/owl-master")
+    sp.add_argument("--debug", action="store_true", help="dump intermediates to <work>/intermediates/<master key>")
     add_chroma_flags(sp)
     sp.set_defaults(despill_band=4)  # the owl's flat fills need only a narrow despill band
     add_common(sp)

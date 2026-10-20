@@ -7,9 +7,10 @@
  * Missing or broken files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W, backgroundTiles, foregroundTiles } from '@owl-park/shared';
+import { ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, type SpeciesId } from '@owl-park/shared';
+import type { ParkConfig } from '../config';
 import { ROOMS } from '../rooms';
-import { rasterCandidates } from './artFiles';
+import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
 import { loadSvgTexture } from './svgLoader';
 
 export const ART_PATH = 'art/';
@@ -43,15 +44,38 @@ export const ART: Record<string, ArtSpec> = {
   'owl-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-face': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  // Species with their own painted layers (species.ts `art`), loaded when an owl of that kind shows up.
+  'owl-barn-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-face': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-face': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-face': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-face': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
 };
+
+export { OWL_LAYERS, SPECIES_LAYERS };
 
 // The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
 for (const room of Object.values(ROOMS)) {
   for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
 }
 
-/** Art needed in every room (loaded once at boot). */
-export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' || ART[k]!.kind === 'sign');
+/** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up. */
+export const GLOBAL_ART = Object.keys(ART).filter((k) => (ART[k]!.kind === 'owl' && !isSpeciesLayer(k)) || ART[k]!.kind === 'sign');
 
 /** Art that belongs to one room (loaded when the room opens, released when it closes). */
 export function roomArtKeys(roomId: string): string[] {
@@ -102,6 +126,26 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
     }
   }
   return false;
+}
+
+const speciesLoads = new Map<SpeciesId, Promise<boolean>>();
+
+/**
+ * Load a species' own layers, once per page; resolves true when all five are there. Nothing is
+ * drawn in their place while they load or if they are missing: the owl keeps the great horned
+ * owl's layers at the species' size.
+ */
+export function loadSpeciesArt(scene: Phaser.Scene, species: SpeciesId): Promise<boolean> {
+  const keys = SPECIES_LAYERS[species];
+  if (keys.every((k) => scene.textures.exists(k))) return Promise.resolve(true);
+  let load = speciesLoads.get(species);
+  if (!load) {
+    const cfg = scene.registry.get('config') as ParkConfig | undefined;
+    const scale = artScale('owl', cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1);
+    load = Promise.all(keys.map((k) => loadArtKey(scene, k, scale))).then((ok) => ok.every(Boolean));
+    speciesLoads.set(species, load);
+  }
+  return load;
 }
 
 export interface LoadReport {

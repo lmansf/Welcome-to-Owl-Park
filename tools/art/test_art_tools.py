@@ -24,7 +24,8 @@ if str(HERE) not in sys.path:
 import numpy as np  # noqa: E402
 from PIL import Image, ImageDraw, ImageOps, PngImagePlugin  # noqa: E402
 
-from artlib import ALLOWED_CHUNKS, BUDGET_BYTES, ArtError, load_assets, parse_hex  # noqa: E402
+from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, OWL_SPECIES, ArtError, load_assets, owl_layer_base, owl_master_of, parse_hex,  # noqa: E402
+                    species_layers)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, key_out  # noqa: E402
@@ -351,6 +352,28 @@ class TestOwlSplit(unittest.TestCase):
         centre = (belly[..., 1] == 255) & (belly[..., 0] == 255)
         self.assertTrue(centre.any())
         self.assertTrue(np.all(arr[centre][:, :3] == np.array([246, 241, 227])), "white belly multiplied by the tint is exactly the tint")
+
+    def test_a_stray_speck_on_the_backdrop_does_not_shrink_the_owl(self):
+        arr = np.asarray(self.master.convert("RGB")).copy()
+        arr[0:3, 0:3] = (255, 0, 0)  # body-red pixels in a corner of the backdrop
+        res = owl_layers.split(Image.fromarray(arr), self.keys)
+        self.assertGreaterEqual(res.info.get("specks_dropped", 0), 1)
+        self.assertEqual(res.info["registration"], self.res.info["registration"], "the registration box ignores the speck")
+        self.assertEqual(np.asarray(res.layers_1x["owl-body"]).tolist(), np.asarray(self.res.layers_1x["owl-body"]).tolist())
+
+    def test_species_settings_override_only_what_they_name(self):
+        keys = {**self.keys, "species": {"barn": {"min_val": 0.3}, "wide": {"face_rect": [0.1, 0.1, 0.8, 0.4]}, "tint": {"regions": {"accent": {"window": 14}}}}}
+        barn = owl_layers.for_species(keys, "barn")
+        self.assertEqual((barn["min_val"], barn["face_rect"]), (0.3, keys["face_rect"]))
+        wide = owl_layers.for_species(keys, "wide")
+        self.assertEqual(wide["fixed_rects"][0], [0.1, 0.1, 0.8, 0.4], "the head rect of fixed_rects follows face_rect")
+        self.assertEqual(wide["fixed_rects"][1:], keys["fixed_rects"][1:])
+        tint = owl_layers.for_species(keys, "tint")
+        self.assertEqual(tint["regions"]["accent"], {"hue": 240, "window": 14})
+        self.assertEqual(keys["regions"]["accent"]["window"], 24, "the table is not mutated")
+        self.assertIs(owl_layers.for_species(keys, None), keys)
+        self.assertIs(owl_layers.for_species(keys, "nobody"), keys)
+        self.assertEqual(sorted(owl_layers.load_keys()["species"]), sorted(OWL_SPECIES), "owl-keys.json has settings for every species")
 
 
 class TestBudget(unittest.TestCase):
@@ -771,6 +794,36 @@ class TestCli(unittest.TestCase):
             self.assertTrue(all(l["published_at"] == "2026-10-18T09:00:00Z" for l in lines))
             r2 = subprocess.run(cmd + ["--help"], capture_output=True, text=True, timeout=60)
             self.assertEqual(r2.returncode, 0)
+
+    def test_a_species_master_finishes_and_publishes_as_its_own_layers(self):
+        self.assertEqual(species_layers("barn"), ("owl-barn-body", "owl-barn-belly", "owl-barn-accent", "owl-barn-face", "owl-barn-blink"))
+        self.assertEqual((owl_layer_base("owl-barn-face"), owl_layer_base("owl-face"), owl_layer_base("hub")), ("owl-face", "owl-face", None))
+        self.assertEqual((owl_master_of("owl-snowy-blink"), owl_master_of("owl-body")), ("owl-snowy-master", "owl-master"))
+        self.assertEqual(postprocess.expand_publish_keys(["owl-snowy-*", "hub", "owl-body"]), [*species_layers("snowy"), "hub", "owl-body"])
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            d = work / "raw" / "owl-barn-master"
+            d.mkdir(parents=True)
+            public.mkdir()
+            master, _ = synth_owl_master(800, 960)
+            h = "00000000000000b1"
+            (d / f"{h}.png").write_bytes(pngmeta.encode(master))
+            (d / f"{h}.json").write_text(json.dumps({"schema": 1, "key": "owl-barn-master", "kind": "owl-edit", "provider": "mock", "model": "m", "hash16": h, "prompt_sha256": "ab" * 32,
+                                                     "seed": 1711, "size": "800x960", "generated_at": "t", "key_colour": "#FF00FF",
+                                                     "regions": {"body": "#FF0000", "belly": "#00FF00", "accent": "#0000FF"}}), encoding="utf-8")
+            (d / "SELECTED").write_text(h + "\n", encoding="utf-8")
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--now", "2026-10-20T09:00:00Z"]
+            with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(postprocess.main(["owl", "--species", "barn"] + common), 0, err.getvalue())
+                for key in species_layers("barn"):
+                    self.assertTrue((work / "final" / f"{key}.png").exists(), key)
+                    self.assertTrue((work / "final" / f"{key}@2x.png").exists(), key)
+                self.assertFalse((work / "final" / "owl-body.png").exists(), "the owl master's own layers are left alone")
+                self.assertEqual(json.loads((work / "final" / "owl-barn-master.post.json").read_text())["key"], "owl-barn-master")
+                self.assertEqual(postprocess.main(["publish", "owl-barn", "--provenance", str(provp)] + common), 0, err.getvalue())
+                self.assertEqual(len(prov.read_lines(provp)), 10)
+                self.assertEqual(postprocess.main(["check", "--all", "--provenance", str(provp)] + common), 0, err.getvalue())
 
     def test_publish_validates_before_touching_the_tree(self):
         with tempfile.TemporaryDirectory() as tmp:

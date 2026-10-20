@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { PHONE_ROOM_BUDGET, rasterCandidates, roomScaleCap } from './artFiles';
+import { OWL_LAYERS, PHONE_ROOM_BUDGET, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, roomScaleCap } from './artFiles';
+
+describe('species layers', () => {
+  it('name each species its own five layers, the great horned owl keeping the plain ones', () => {
+    expect(SPECIES_LAYERS['great-horned']).toEqual(OWL_LAYERS);
+    expect(SPECIES_LAYERS.barn).toEqual(['owl-barn-body', 'owl-barn-belly', 'owl-barn-accent', 'owl-barn-face', 'owl-barn-blink']);
+    expect(SPECIES_LAYERS.screech[4]).toBe('owl-screech-blink');
+  });
+
+  it('tells a species layer from the great horned owl and everything else', () => {
+    expect(isSpeciesLayer('owl-snowy-face')).toBe(true);
+    expect(isSpeciesLayer('owl-face')).toBe(false);
+    expect(isSpeciesLayer('owl-master')).toBe(false);
+    expect(isSpeciesLayer('robot-owl')).toBe(false);
+  });
+});
 
 describe('rasterCandidates', () => {
   it('tries WebP before PNG at 1x', () => {

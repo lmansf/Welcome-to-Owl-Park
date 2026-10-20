@@ -48,24 +48,27 @@ function maskOf(scene: Phaser.Scene, key: string): Mask | null {
   return { width: w, height: h, alpha };
 }
 
-let cached: { source: unknown; anchors: OwlAnchors } | null = null;
+const cached = new Map<string, { source: unknown; anchors: OwlAnchors }>();
 
 /**
- * Where hats, glasses and collars sit on the owl art that is loaded right now (measured once per
- * set of owl textures; the placeholder SVG owl and the painted owl differ a lot).
+ * Where hats, glasses and collars sit on an owl's layers (the great horned owl's unless another
+ * species' keys are given), measured once per set of textures: the placeholder SVG owl and the
+ * painted owls differ a lot.
  */
-export function owlAnchors(scene: Phaser.Scene): OwlAnchors {
-  const source = scene.textures.exists('owl-body') ? scene.textures.get('owl-body').getSourceImage() : null;
-  if (cached && cached.source === source) return cached.anchors;
+export function owlAnchors(scene: Phaser.Scene, layers: readonly string[] = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face']): OwlAnchors {
+  const [bodyKey = 'owl-body', bellyKey = 'owl-belly', , faceKey = 'owl-face'] = layers;
+  const source = scene.textures.exists(bodyKey) ? scene.textures.get(bodyKey).getSourceImage() : null;
+  const hit = cached.get(bodyKey);
+  if (hit && hit.source === source) return hit.anchors;
   let anchors = DEFAULT_ANCHORS;
   try {
-    const body = maskOf(scene, 'owl-body');
-    const face = maskOf(scene, 'owl-face');
-    const belly = maskOf(scene, 'owl-belly');
+    const body = maskOf(scene, bodyKey);
+    const face = maskOf(scene, faceKey);
+    const belly = maskOf(scene, bellyKey);
     if (body && face && belly) anchors = measureAnchors(body, face, belly);
   } catch {
     anchors = DEFAULT_ANCHORS; // a tainted canvas or an odd texture: the defaults fit the placeholder owl
   }
-  cached = { source, anchors };
+  cached.set(bodyKey, { source, anchors });
   return anchors;
 }

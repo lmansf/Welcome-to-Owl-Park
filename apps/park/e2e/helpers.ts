@@ -16,6 +16,7 @@ export interface ParkState {
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
   eyes: number;
+  owlArt: string;
   npcs: Array<{ id: string; x: number; y: number; mark: string | null }>;
   objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;

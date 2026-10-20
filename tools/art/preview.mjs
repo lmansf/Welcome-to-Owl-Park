@@ -9,7 +9,9 @@
  * apps/park/public/art as it is now, and "new", with every final PNG and WebP from the finals folder laid
  * over it (the matching placeholder SVG removed, since the loader prefers an SVG). Both are served
  * locally and each room is opened in a headless browser with a few visitor owls walking about
- * (local transport, no server or account). For every room and view it writes
+ * (local transport, no server or account). When the finals include a species' own layers
+ * (`owl-barn-body` and so on), the visitors are owls of those species in their natural colours,
+ * beside one great horned owl for scale. For every room and view it writes
  *   <out>/<room>-<view>-current.png, <room>-<view>-new.png and a side-by-side <room>-<view>-compare.png.
  * Nothing under apps/park changes. Needs the Playwright browser: `pnpm exec playwright install chromium`.
  */
@@ -41,6 +43,21 @@ const LOOKS = [
   '#8B5A2B,#F6F1E3,#C9A227', '#2F3E5C,#E0D4F0,#00E5FF', '#7A5C99,#F2E1C1,#FF2AA1', '#3E6B48,#E8D8B8,#81B29A',
   '#D9C7A5,#BFC9D6,#6E3AFF', '#5C4033,#F6F1E3,#E07A5F', '#6B6B6B,#D6C7B0,#C9A227', '#A67B5B,#E0D4F0,#00E5FF',
 ];
+/** Each species' natural colours, as in packages/shared/src/species.ts. */
+export const SPECIES_LOOKS = {
+  barn: '#D9A066,#FFF8EC,#A67B5B', burrowing: '#A67B5B,#F2E1C1,#5C4033', snowy: '#EDEAE0,#FFFFFF,#2F3E5C', screech: '#6B6B6B,#D6C7B0,#5C4033',
+};
+
+/**
+ * The visitors' looks (`body,belly,accent[,species]`): one owl per species the finals bring, after
+ * a great horned owl for scale, else the usual colour mix.
+ */
+export function previewLooks(keys, owls) {
+  const species = Object.keys(SPECIES_LOOKS).filter((sp) => [...keys].some((k) => k.startsWith(`owl-${sp}-`)));
+  if (!species.length) return Array.from({ length: owls }, (_, i) => LOOKS[i % LOOKS.length]);
+  return [LOOKS[0], ...species.map((sp) => `${SPECIES_LOOKS[sp]},${sp}`)];
+}
+
 /** Where each owl walks, in room pixels; the client clamps a target to the walkable floor. */
 const TARGETS = [[800, 770], [560, 700], [1040, 720], [420, 810], [1180, 800], [680, 840], [930, 650], [1300, 690]];
 
@@ -125,8 +142,9 @@ async function until(fn, timeoutMs, stepMs = 150) {
 
 const stateOf = (page) => page.evaluate(() => window.owlPark?.state?.() ?? null);
 
-/** One screenshot of one room in one view, with `owls` visitors, the first being the camera's. */
-async function shoot(browser, base, room, view, owls, file, warn) {
+/** One screenshot of one room in one view, one visitor per look, the first being the camera's. */
+async function shoot(browser, base, room, view, looks, file, warn) {
+  const owls = looks.length;
   const ctx = await browser.newContext({ viewport: view.viewport, deviceScaleFactor: view.deviceScaleFactor, isMobile: view.isMobile, hasTouch: view.hasTouch });
   try {
     const pages = [];
@@ -135,7 +153,7 @@ async function shoot(browser, base, room, view, owls, file, warn) {
       // Only the first page is photographed; the other visitors just need to exist as peers, so
       // they get a tiny viewport and cost little to render (the game renders in software here).
       if (i > 0) await page.setViewportSize({ width: 160, height: 90 });
-      const q = new URLSearchParams({ transport: 'local', room, id: `preview-${i}`, look: LOOKS[i % LOOKS.length] });
+      const q = new URLSearchParams({ transport: 'local', room, id: `preview-${i}`, look: looks[i] });
       await page.goto(`${base}/?${q}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       if (!(await until(async () => (await stateOf(page))?.connected === true, 30_000))) throw new Error(`${room}: the park did not start`);
       pages.push(page);
@@ -198,7 +216,8 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
   if (!files.length) { err(`no final PNG or WebP files in ${path.relative(REPO_ROOT, finalsDir) || finalsDir}: run pnpm art:finish room|piece|overlay|owl first`); return 1; }
   const rooms = values.rooms ? values.rooms.split(',').map((s) => s.trim()).filter(Boolean) : roomsTouched(keys);
   for (const r of rooms) if (!ROOMS.includes(r)) { err(`unknown room ${r} (${ROOMS.join(', ')})`); return 2; }
-  out(`new art: ${[...keys].join(', ')} (${files.length} file(s)); rooms: ${rooms.join(', ')}; views: ${viewNames.join(', ')}`);
+  const looks = previewLooks(keys, owls);
+  out(`new art: ${[...keys].join(', ')} (${files.length} file(s)); rooms: ${rooms.join(', ')}; views: ${viewNames.join(', ')}; owls: ${looks.length}`);
 
   const site = fs.mkdtempSync(path.join(os.tmpdir(), 'owl-art-preview-'));
   const servers = [];
@@ -224,8 +243,8 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         const cur = path.join(outDir, `${room}-${v}-current.png`);
         const nxt = path.join(outDir, `${room}-${v}-new.png`);
         const cmp = path.join(outDir, `${room}-${v}-compare.png`);
-        await shoot(browser, a.base, room, view, owls, cur, (m) => err(`warning: current ${v} ${m}`));
-        await shoot(browser, b.base, room, view, owls, nxt, (m) => err(`warning: new ${v} ${m}`));
+        await shoot(browser, a.base, room, view, looks, cur, (m) => err(`warning: current ${v} ${m}`));
+        await shoot(browser, b.base, room, view, looks, nxt, (m) => err(`warning: new ${v} ${m}`));
         await compose(browser, cur, nxt, view, cmp);
         written.push(cmp, nxt, cur);
         out(`${room} ${v}: ${path.relative(REPO_ROOT, cmp)}`);

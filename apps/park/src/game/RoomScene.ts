@@ -544,6 +544,8 @@ export class RoomScene extends Phaser.Scene {
     doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
     /** Where the owl's eyes are, left (-) or right (+) of its feet: the way its painting faces. */
     eyes: number;
+    /** The owl's body layer in use: `owl-body`, or its species' own (`owl-barn-body`). */
+    owlArt: string;
     /** NPC owls in this room and the marker each shows. */
     npcs: Array<{ id: string; x: number; y: number; mark: string | null }>;
     /** Interactables in this room; `here` is false while a leaf pile is used up. */
@@ -565,6 +567,7 @@ export class RoomScene extends Phaser.Scene {
       peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
+      owlArt: this.me.artKey,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id) })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y })),

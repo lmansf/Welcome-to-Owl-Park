@@ -65,6 +65,33 @@ BUILTIN_ASSETS: dict[str, dict] = {
 
 OWL_LAYERS = ("owl-body", "owl-belly", "owl-accent", "owl-face", "owl-blink")
 TINTED_LAYERS = ("owl-body", "owl-belly", "owl-accent")
+#: Owl species with masters of their own: ``owl-<species>-master`` splits into ``owl-<species>-body`` and so on.
+OWL_SPECIES = ("barn", "burrowing", "snowy", "screech")
+
+
+def species_layers(species: str) -> tuple[str, ...]:
+    """A species' five layer keys, in OWL_LAYERS order (``owl-barn-body``, ...)."""
+    return tuple(name.replace("owl-", f"owl-{species}-", 1) for name in OWL_LAYERS)
+
+
+def owl_layer_base(key: str) -> str | None:
+    """The great horned owl layer a key is or stands in for (``owl-barn-body`` -> ``owl-body``); None for any other key."""
+    if key in OWL_LAYERS:
+        return key
+    for sp in OWL_SPECIES:
+        layers = species_layers(sp)
+        if key in layers:
+            return OWL_LAYERS[layers.index(key)]
+    return None
+
+
+def owl_master_of(key: str) -> str:
+    """The helper key a layer is split from: ``owl-master``, or ``owl-<species>-master``."""
+    for sp in OWL_SPECIES:
+        if key in species_layers(sp):
+            return f"owl-{sp}-master"
+    return "owl-master"
+
 #: Helper keys used by the generator for anchors and masters; never published as art.
 HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master")
 PUBLIC_ROOMS = ("hub", "grove", "market")

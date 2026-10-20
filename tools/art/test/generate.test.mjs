@@ -226,6 +226,7 @@ test('every generated asset key in art.ts has a job (directly or derived) and th
   }
   const byKey = Object.fromEntries(jobs.map((j) => [j.key, j]));
   assert.deepEqual(byKey['owl-master'].derives, P.OWL_LAYER_KEYS);
+  assert.deepEqual(byKey['owl-barn-master'].derives, ['owl-barn-body', 'owl-barn-belly', 'owl-barn-accent', 'owl-barn-face', 'owl-barn-blink']);
   assert.equal(byKey['owl-blink-src'].optional, true);
   assert.equal(byKey['owl-blink-src'].refs[0].optional, false);
   for (const realm of ['hub', 'grove', 'market']) assert.ok(P.STYLE[realm].startsWith('STYLE (use verbatim in every'));

@@ -593,6 +593,7 @@ export const SPECIES_MASTER_KEYS = Object.keys(SPECIES_OWL_PROMPTS);
 const SPECIES_JOBS = SPECIES_MASTER_KEYS.map((key, i) => ({
   key,
   kind: 'owl-edit',
+  derives: OWL_LAYER_KEYS.map((k) => k.replace('owl-', key.replace(/-master$/, '-'))),
   realm: 'hub',
   optional: true,
   size: '1040x1248',

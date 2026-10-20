@@ -117,6 +117,146 @@
       "from": "owl-master",
       "with_2x": true
     },
+    "owl-barn-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-burrowing-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-snowy-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-screech-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
     "item-witch-hat": {
       "w": 140,
       "h": 100,

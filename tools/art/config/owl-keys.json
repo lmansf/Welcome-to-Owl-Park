@@ -14,5 +14,12 @@
   "lit_percentile": 92,
   "shade_gamma": 1.0,
   "blink": { "width_frac": 0.025, "bow_frac": 0.3, "colour": "#0C1E36" },
-  "registration": { "height": 220, "max_width": 196, "feet_rows_frac": 0.06 }
+  "registration": { "height": 220, "max_width": 196, "feet_rows_frac": 0.06 },
+  "speck_frac": 0.002,
+  "species": {
+    "barn": { "min_val": 0.3 },
+    "burrowing": { "face_rect": [0.08, 0.08, 0.84, 0.46], "fixed_rects": [[0.08, 0.08, 0.84, 0.46], [0.0, 0.88, 1.0, 0.12]] },
+    "snowy": { "face_rect": [0.08, 0.08, 0.84, 0.46], "fixed_rects": [[0.08, 0.08, 0.84, 0.46], [0.0, 0.88, 1.0, 0.12]] },
+    "screech": { "face_rect": [0.08, 0.08, 0.84, 0.46], "fixed_rects": [[0.08, 0.08, 0.84, 0.46], [0.0, 0.88, 1.0, 0.12]] }
+  }
 }
