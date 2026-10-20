@@ -13,6 +13,15 @@ import { nextParkDayAt, parkDay } from './parktime';
 import { offerFor, shopRotation, type BuyResult, type GiftResult, type ShopView } from './shop';
 import { ROOM_LAYOUT, relayout } from '../rooms';
 
+/** What an activity paid, and what it did for today's tasks. */
+export interface PlayResult {
+  /** Feathers added (within the activities' daily cap) and the balance after everything. */
+  added: number;
+  total: number;
+  /** Today's tasks when the event moved them: as they stand, the ones just finished and what they paid. */
+  tasks?: { tasks: TaskView; finished: string[]; paid: number; total: number };
+}
+
 export type Source = 'found' | 'crafted' | 'granted' | 'bought' | 'quest' | 'shop' | 'gift';
 export const SOURCES: readonly Source[] = ['found', 'crafted', 'granted', 'bought', 'quest', 'shop', 'gift'];
 
@@ -144,6 +153,20 @@ export class CollectionBook {
   /** Feathers from an activity (lanterns, the quiz, fishing, the copy game), under their shared daily cap. */
   earnPlay(cid: string, n: number, now: number): { added: number; feathers: number } {
     return this.earnCapped(cid, 'play', n, PLAY_FEATHERS_PER_DAY, now);
+  }
+
+  /**
+   * An activity: its feathers under the activities' daily cap, and its progress on today's tasks
+   * (`feathers` may be 0: a lantern lit, a leaf pile flopped into). The tasks come back only when
+   * the event moved them.
+   */
+  play(cid: string, feathers: number, ev: PlayEvent | null, now: number): PlayResult {
+    const earned = feathers > 0 ? this.earnPlay(cid, feathers, now) : { added: 0, feathers: this.feathers(cid, now) };
+    if (!ev) return { added: earned.added, total: earned.feathers };
+    const before = this.tasks(cid, now).tasks.map((t) => t.done);
+    const t = this.taskEvent(cid, ev, now);
+    const moved = t.tasks.tasks.some((x, i) => x.done !== before[i]);
+    return { added: earned.added, total: t.total, ...(moved ? { tasks: t } : {}) };
   }
 
   /** Today's three tasks and how far this collector is with each. */

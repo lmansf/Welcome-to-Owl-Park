@@ -250,7 +250,7 @@ export type ServerAct = { t: 'act'; r: number } & (
   | { a: 'cast'; ok: true; biteAt: number }
   | { a: 'reel'; ok: true; outcome: 'early' | 'late' }
   | { a: 'reel'; ok: true; outcome: 'caught'; fish: string; feathers: number; total: number }
-  | { a: 'copy'; ok: true; tune: string[]; listenUntil: number; deadline: number; level: number }
+  | { a: 'copy'; ok: true; notes: string[]; tune: string[]; listenUntil: number; deadline: number; level: number }
   | { a: 'note'; ok: true; step: 'note' | 'early'; deadline: number }
   | { a: 'note'; ok: true; step: 'tune'; tune: string[]; listenUntil: number; deadline: number; level: number; feathers: number; total: number }
   | { a: 'note'; ok: true; step: 'won'; level: number; feathers: number; total: number }

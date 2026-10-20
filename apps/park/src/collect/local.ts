@@ -1,9 +1,12 @@
 import {
+  Activities,
   CollectionBook,
   KIND_RULES,
   LEAF_FEATHERS_PER_DAY,
   MemoryCollectionStore,
   NPC_TALK_RADIUS,
+  QUIZ_FEATHERS,
+  QUIZ_ROOM,
   QuestBook,
   REACH_SLACK,
   USE_COOLDOWN_MS,
@@ -11,6 +14,8 @@ import {
   getInteractable,
   getNpc,
   getQuest,
+  isEmoteId,
+  lanternFeathers,
   leafFeathers,
   leafRespawnMs,
   normalizeTimeZone,
@@ -18,13 +23,15 @@ import {
   type GiftResult,
   type Inventory,
   type NpcDef,
+  type PlayEvent,
+  type PlayResult,
   type QuestSpots,
   type ShopView,
   type Vec2,
 } from '@owl-park/shared';
 import type { RoomConnection } from '../net/transport';
 import { ROOMS } from '../rooms';
-import type { CollectionService, HandInReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
+import type { ActivityLink, ActivityPushes, CollectionService, HandInReply, NoteReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
 
 const COLLECTOR_KEY = 'owl-park:local-collector';
 const STORE_PREFIX = 'owl-park:collection:';
@@ -62,6 +69,8 @@ export class LocalCollections implements CollectionService {
   /** Shared objects used up in this page: id -> when they are back. */
   private readonly objects = new Map<string, number>();
   private usedAt = Number.NEGATIVE_INFINITY;
+  /** Each room's activities for this page (a lantern beam stays lit while the owl looks round). */
+  private readonly activities = new Map<string, { acts: Activities; where: { at: () => Vec2 } }>();
 
   constructor(
     private readonly storage: KeyValueStorage | null,
@@ -197,7 +206,14 @@ export class LocalCollections implements CollectionService {
         return this.use(({ book, quests }) => {
           const earned = rules.shared ? book.earnCapped(cid, 'leaves', leafFeathers(this.random), LEAF_FEATHERS_PER_DAY, now) : null;
           const updates = quests.event(cid, { kind: 'interact', what: it.kind, id: it.id, room }, now, room);
-          const reply: UseReply = { ok: true, feathers: earned?.added ?? 0, total: earned?.feathers ?? book.feathers(cid, now), updates };
+          // Leaf piles and stalls count toward today's tasks too.
+          const task = it.kind === 'leaf-pile' ? 'flop' : it.kind === 'stall' ? 'browse' : null;
+          const played = task ? book.play(cid, 0, { kind: task }, now) : null;
+          if (played?.tasks) {
+            const t = played.tasks;
+            setTimeout(() => this.taskPushes?.onTasks?.(t.tasks, t.finished, t.paid, t.total), 0);
+          }
+          const reply: UseReply = { ok: true, feathers: earned?.added ?? 0, total: played?.tasks?.total ?? earned?.feathers ?? book.feathers(cid, now), updates };
           return updates.length ? { ...reply, board: quests.board(cid, now) } : reply;
         });
       },
@@ -214,6 +230,118 @@ export class LocalCollections implements CollectionService {
           return updates.length ? { board: quests.board(cid, now), updates } : null;
         });
         if (moved) pushes.onQuests?.(moved.board, moved.updates);
+      },
+    };
+  }
+
+  /** Where the room's task progress goes (the room scene's pushes, while it is open). */
+  private taskPushes: ActivityPushes | null = null;
+
+  /**
+   * The activities, run by the same class as the room server's, for the one owl on this device: the
+   * lantern beam is this page's alone, and the stage quiz settles on a timer while the owl is in the hub.
+   */
+  activityLink(room: string, _conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2): ActivityLink {
+    const cid = this.cid;
+    let host = this.activities.get(room);
+    if (!host) {
+      const spot = { at: where };
+      host = { acts: new Activities({ id: room, ids: () => [cid], positionOf: (id) => (id === cid ? spot.at() : null) }, this.now, this.random), where: spot };
+      this.activities.set(room, host);
+    }
+    host.where.at = where;
+    const { acts } = host;
+    this.taskPushes = pushes;
+    let closed = false;
+    let quizTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Pushes follow the answer, as the room server's frames do. */
+    const later = (fn: () => void) => setTimeout(() => !closed && fn(), 0);
+    const play = (feathers: number, ev: PlayEvent | null): PlayResult => {
+      const res = this.use(({ book }) => book.play(cid, feathers, ev, this.now()));
+      const t = res.tasks;
+      if (t) later(() => pushes.onTasks?.(t.tasks, t.finished, t.paid, t.total));
+      return res;
+    };
+    const settleQuiz = () => {
+      quizTimer = null;
+      if (closed) return;
+      const due = acts.quizDue();
+      if (due) {
+        const { right, winners } = acts.settleQuiz(due);
+        const won = winners.includes(cid);
+        pushes.onQuiz?.(due.n, right, won, []);
+        if (won) {
+          const res = play(QUIZ_FEATHERS, { kind: 'quiz' });
+          pushes.onPaid?.('quiz', res.added, res.total);
+        }
+      }
+      armQuiz();
+    };
+    const armQuiz = () => {
+      if (closed || room !== QUIZ_ROOM) return;
+      quizTimer = setTimeout(settleQuiz, Math.max(0, acts.nextQuizClose() - this.now()) + 50);
+    };
+    armQuiz();
+    // The room server sends a newcomer the beam as it burns; so does this.
+    const beam = acts.lanternState();
+    if (Object.keys(beam.lit).length) later(() => pushes.onLanterns?.({ lit: beam.lit, glowUntil: beam.glowUntil }, null));
+    return {
+      parkNow: () => this.now(),
+      light: async () => {
+        const r = acts.light(cid);
+        if (!r.ok) return r;
+        const s = acts.lanternState();
+        later(() => pushes.onLanterns?.({ lit: s.lit, glowUntil: s.glowUntil }, { id: r.id, by: null }));
+        play(0, { kind: 'light' });
+        if (r.full) {
+          const res = play(lanternFeathers(r.full.length), { kind: 'beam' });
+          later(() => pushes.onPaid?.('beam', res.added, res.total));
+        }
+        return { ok: true, id: r.id };
+      },
+      cast: async () => acts.cast(cid),
+      reel: async () => {
+        const r = acts.reel(cid);
+        if (!r.ok || r.outcome !== 'caught') return r;
+        const res = play(r.fish.feathers, { kind: 'fish' });
+        return { ok: true, outcome: 'caught', fish: r.fish.id, feathers: res.added, total: res.total };
+      },
+      copy: async () => {
+        const owned = this.use(({ book }) => book.inventory(cid, this.tz, this.now()).owned.filter((v) => isEmoteId(v)));
+        const r = acts.startCopy(cid, owned);
+        if (!r.ok) return r;
+        const g = r.game;
+        return { ok: true, notes: g.notes, tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level };
+      },
+      note: async (e): Promise<NoteReply> => {
+        const step = acts.note(cid, e);
+        switch (step.kind) {
+          case 'idle':
+          case 'busy':
+            return { ok: false, reason: step.kind };
+          case 'early':
+          case 'note':
+            return { ok: true, step: step.kind, deadline: step.game.deadline };
+          case 'wrong':
+          case 'slow':
+            return { ok: true, step: step.kind, level: step.level, expected: step.expected };
+          case 'tune': {
+            const res = play(step.feathers, { kind: 'copy' });
+            const g = step.game;
+            return { ok: true, step: 'tune', tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level, feathers: res.added, total: res.total };
+          }
+          case 'won': {
+            const res = play(step.feathers, { kind: 'copy' });
+            return { ok: true, step: 'won', level: step.level, feathers: res.added, total: res.total };
+          }
+        }
+      },
+      tasks: async () => this.use(({ book }) => book.tasks(cid, this.now())),
+      close: () => {
+        closed = true;
+        if (quizTimer) clearTimeout(quizTimer);
+        acts.forget(cid);
+        if (this.taskPushes === pushes) this.taskPushes = null;
       },
     };
   }

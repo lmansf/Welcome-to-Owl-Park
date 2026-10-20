@@ -1,5 +1,6 @@
-import { MAX_ACTIVE_QUESTS, getNpc, placeName, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
+import { MAX_ACTIVE_QUESTS, TASKS_BONUS, TASK_FEATHERS, getNpc, placeName, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
+import type { TaskState } from '../collect/tasks';
 
 export interface QuestActions {
   accept(quest: string): Promise<unknown>;
@@ -51,6 +52,12 @@ const CSS = `
 #hud .qcard .quote{font-style:italic;font-size:13px;opacity:.9}
 #hud .sheet .empty{font-size:13px;opacity:.8}
 #hud .sheet .who{font-size:13px;display:flex;flex-direction:column;gap:4px}
+#hud .today{display:flex;flex-direction:column;gap:4px;font-size:13px}
+#hud .today .task{display:flex;gap:8px;align-items:baseline}
+#hud .today .task b{width:16px;flex:none;color:#FFD36A}
+#hud .today .task span{flex:1}
+#hud .today .task i{font-style:normal;opacity:.75;font-size:12px}
+#hud .today .task.done span{opacity:.6;text-decoration:line-through}
 `;
 
 const CHIP_WORDS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', short: 'Short', long: 'Long', story: 'Story', daily: 'Today', weekly: 'This week' } as const;
@@ -112,7 +119,7 @@ function steps(texts: string[], current: number | null, progress?: { count: numb
  * journal (J) with every quest carried and who has more, and the dialogue that opens when
  * talking to an NPC owl (hand in, take on, or open Nova's shop).
  */
-export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void): QuestUi {
+export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState): QuestUi {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -200,6 +207,13 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       tracker.appendChild(line);
     }
     if (board.active.length > active.length) tracker.appendChild(el('div', 'tq', `+${board.active.length - active.length} more in the journal`));
+    const today = tasks.view;
+    if (today) {
+      const line = el('div', 'tq');
+      line.dataset['today'] = String(tasks.done);
+      line.append(el('b', '', 'Today'), document.createTextNode(tasks.done === today.tasks.length ? 'All three tasks done!' : `${tasks.done} of ${today.tasks.length} tasks done`));
+      tracker.appendChild(line);
+    }
     tracker.classList.toggle('show', tracker.childElementCount > 0);
   };
 
@@ -215,6 +229,19 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     const board = state.board;
     journal.innerHTML = '';
     journal.appendChild(header('Quests', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…', () => journal.classList.remove('open'), 'Close quests'));
+    const today = tasks.view;
+    if (today) {
+      journal.appendChild(el('h3', '', "Today's tasks"));
+      const list = el('div', 'today');
+      for (const t of today.tasks) {
+        const done = t.done >= t.count;
+        const row = el('div', `task${done ? ' done' : ''}`);
+        row.append(el('b', '', done ? '✓' : '•'), el('span', '', t.text), el('i', '', `${t.done} of ${t.count}`));
+        list.appendChild(row);
+      }
+      list.appendChild(el('p', 'empty', `${today.bonus ? 'All three done, bonus paid.' : `Each task pays ${TASK_FEATHERS} feathers, and all three ${TASKS_BONUS} more.`} New tasks in ${timeLeft(today.endsAt)}.`));
+      journal.appendChild(list);
+    }
     if (!board) return;
     if (board.active.length) for (const q of board.active) journal.appendChild(activeCard(q, true));
     else journal.appendChild(el('p', 'empty', 'No quests under way. Owls with a gold "!" over their heads have something for you.'));
@@ -281,6 +308,10 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     renderJournal();
   });
   state.onChange(render);
+  tasks.onChange(() => {
+    renderTracker();
+    renderJournal();
+  });
   render();
 
   return {

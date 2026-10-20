@@ -1,7 +1,9 @@
 import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
+import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
+import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
@@ -36,8 +38,8 @@ export interface Hud {
   toast(message: string, ms?: number, accent?: string): void;
   /** Wire the collection panel, the emote tray, the feather count and the shop to the visitor's collection. */
   attachCollection(state: CollectionState, actions: CollectionActions): CollectionPanel;
-  /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests. */
-  attachQuests(state: QuestState, actions: QuestActions): void;
+  /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests and today's tasks. */
+  attachQuests(state: QuestState, actions: QuestActions, tasks: TaskState): void;
   /** Talking to an NPC owl: its quests, and the shop for the shopkeeper. */
   openDialogue(npc: NpcDef): void;
   closeDialogue(): void;
@@ -65,6 +67,12 @@ export interface Hud {
   onHint(cb: (id: string) => void): void;
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
+  /** The stage quiz's card while the owl is by the stage; null hides it. */
+  setQuiz(view: QuizView | null): void;
+  /** The robot owl's copy game while it runs; null hides it. */
+  setCopy(view: CopyView | null): void;
+  /** A note button of the copy game (an emote), or null for its Stop button. */
+  onCopy(cb: (note: string | null) => void): void;
 }
 
 const CSS = `
@@ -166,6 +174,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
   const questsBtn = $<HTMLButtonElement>('[data-quests-btn]');
   const bar = $<HTMLElement>('.bar');
+  const cards = createActivityCards(root, bar);
   let questUi: QuestUi | null = null;
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
@@ -337,8 +346,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       showFeathers();
       return collectionPanel;
     },
-    attachQuests(state, actions) {
-      questUi = createQuestUi(root, bar, state, actions, makeRoom);
+    attachQuests(state, actions, tasks) {
+      questUi = createQuestUi(root, bar, state, actions, makeRoom, tasks);
       if (roomId) questUi.setRoom(roomId);
     },
     openDialogue(npc) {
@@ -432,5 +441,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     onLookChange(cb) {
       lookCb = cb;
     },
+    setQuiz: (v) => cards.setQuiz(v),
+    setCopy: (v) => cards.setCopy(v),
+    onCopy: (cb) => cards.onCopy(cb),
   };
 }

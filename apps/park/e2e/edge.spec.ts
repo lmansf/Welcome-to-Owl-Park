@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { dist, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -245,6 +245,77 @@ test.describe('room server', () => {
     expect((await request.get('/api/shop')).status()).toBe(401);
     expect((await request.post('/api/admin/grant', { data: { cid: 'c_abcdefgh12', variant: 'crown~0' } })).status()).toBe(403);
     await a.context().close();
+  });
+
+  test('two owls light the lantern beam together, and the room server pays them both', async ({ browser }) => {
+    test.slow(); // two live parks, seven lanterns
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    // A beam still glowing from an earlier run goes dark first.
+    await expect.poll(async () => (await state(a)).play?.glowing, { timeout: 50_000 }).toBe(false);
+    // A from the west end of the beam, B from the east: four rounds, a lantern each.
+    const plan: Array<[number, number | null]> = [
+      [800, 1125],
+      [800, 1125],
+      [970, 1235],
+      [970, null],
+    ];
+    const at: Record<'a' | 'b', number> = { a: -1, b: -1 };
+    let litAt = 0;
+    for (const [xa, xb] of plan) {
+      await Promise.all([xa !== at.a ? walkAndStop(a, xa, 760) : null, xb !== null && xb !== at.b ? walkAndStop(b, xb, 760) : null]);
+      at.a = xa;
+      if (xb !== null) at.b = xb;
+      const wait = litAt + 2_550 - Date.now();
+      if (wait > 0) await a.waitForTimeout(wait);
+      await expect.poll(async () => (await state(a)).actions[0], { intervals: [50] }).toBe('act:light');
+      await a.keyboard.press('e');
+      if (xb !== null) {
+        await expect.poll(async () => (await state(b)).actions[0], { intervals: [50] }).toBe('act:light');
+        await b.keyboard.press('e');
+      }
+      litAt = Date.now();
+    }
+    await expect.poll(async () => (await state(a)).play?.glowing, { timeout: 10_000 }).toBe(true);
+    await expect.poll(async () => (await state(b)).play?.glowing, { timeout: 10_000 }).toBe(true);
+    // Four feathers each, and one more for the other owl who helped.
+    await expect(a.getByText(/^You helped light the whole beam! \+5 feathers/)).toBeVisible();
+    await expect(b.getByText(/^You helped light the whole beam! \+5 feathers/)).toBeVisible();
+    await a.screenshot({ path: 'e2e-screenshots/edge-beam.png' });
+    // A newcomer sees the beam glowing.
+    const c = await visitor(browser);
+    await expect.poll(async () => (await state(c)).play?.glowing, { timeout: 10_000 }).toBe(true);
+    for (const p of [a, b, c]) await p.context().close();
+  });
+
+  test('fishing through the room server: the bite comes when it says, and the catch pays', async ({ browser }) => {
+    const a = await visitor(browser, { room: 'grove' });
+    await walkToJetty(a);
+    await doAction(a, 'act:cast');
+    await expect.poll(async () => (await state(a)).play?.line, { timeout: 12_000, intervals: [50] }).toBe('bite');
+    await a.keyboard.press('e');
+    await expect(a.getByText(/^(You caught .+!|You fished out an old boot!)/)).toBeVisible();
+    await a.context().close();
+  });
+
+  test("the robot owl's tune through the room server, danced for everyone in the street", async ({ browser }) => {
+    const a = await visitor(browser, { room: 'market' });
+    const b = await visitor(browser, { room: 'market' });
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    await walkAndStop(a, 1480, 755);
+    await doAction(a, 'act:copy');
+    const card = a.locator('.play-card.copy');
+    await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 8_000 });
+    const tune = (await state(a)).play!.copy!.tune;
+    for (const [i, note] of tune.entries()) {
+      await card.locator(`[data-note="${note}"]`).click();
+      if (i < tune.length - 1) await expect.poll(async () => (await state(a)).play?.copy?.got).toBe(i + 1);
+    }
+    await expect(a.getByText(/^Tune copied! \+1 feather/)).toBeVisible();
+    // B saw A play the notes.
+    await expect.poll(async () => (await state(b)).peers[0]?.emote, { timeout: 5_000 }).toBe(tune[tune.length - 1]);
+    for (const p of [a, b]) await p.context().close();
   });
 
   test('closing the tab removes the owl for everyone else', async ({ browser }) => {

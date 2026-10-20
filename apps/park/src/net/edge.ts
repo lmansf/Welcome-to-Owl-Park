@@ -5,16 +5,19 @@ import {
   HEARTBEAT_INTERVAL_MS,
   parseServerFrame,
   positionAlongWalk,
+  type ActKind,
   type ClientFrame,
   type OwlSnapshot,
   type ParkMessage,
   type PlayerState,
   type QuestBoard,
+  type ServerAct,
   type ServerFrame,
+  type TaskView,
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
-import type { HandInReply, QuestLink, QuestReply, UseReply } from '../collect/service';
+import type { ActRefusal, ActivityLink, HandInReply, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { MoveBudget } from './budget';
 import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
@@ -36,7 +39,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -216,6 +219,7 @@ export class EdgeTransport implements ParkTransport {
       nextWeek: b.nextWeek - offset,
       active: b.active.map((q) => (q.endsAt ? { ...q, endsAt: q.endsAt - offset } : q)),
     });
+    const toLocalTasks = (t: TaskView): TaskView => ({ ...t, endsAt: t.endsAt - offset });
     const answer = (f: Answer) => {
       const r = f.r;
       if (r === undefined) return false;
@@ -353,7 +357,23 @@ export class EdgeTransport implements ParkTransport {
         case 'handin':
         case 'useResult':
         case 'refused':
+        case 'act':
           answer(f);
+          break;
+        case 'lanterns': {
+          const lit: Record<string, number> = {};
+          for (const [id, t] of Object.entries(f.lit)) lit[id] = t - offset;
+          handlers.onLanterns?.({ lit, glowUntil: f.glowUntil ? f.glowUntil - offset : 0 }, f.id ? { id: f.id, by: f.by === selfId ? null : (f.by ?? null) } : null);
+          break;
+        }
+        case 'quiz':
+          handlers.onQuiz?.(f.n, f.right, selfId !== null && f.winners.includes(selfId), f.winners.filter((id) => id !== selfId));
+          break;
+        case 'paid':
+          handlers.onPaid?.(f.what, f.feathers, f.total);
+          break;
+        case 'tasks':
+          handlers.onTasks?.(toLocalTasks(f.tasks), f.finished, f.paid, f.total);
           break;
         case 'objects': {
           const until: Record<string, number> = {};
@@ -426,6 +446,60 @@ export class EdgeTransport implements ParkTransport {
       },
       // The room counts arrivals and emotes itself.
       note: () => undefined,
+    };
+    /** An activity request, and its answer (an `act` frame, or why there is none). */
+    const act = async (a: ActKind, e?: string): Promise<ServerAct | { ok: false; reason: ActRefusal }> => {
+      const f = await request(e === undefined ? { t: 'act', a } : { t: 'act', a, e });
+      if (f?.t === 'act') return f;
+      return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline' };
+    };
+    const unknown = { ok: false, reason: 'unknown' } as const;
+    const acts: ActivityLink = {
+      parkNow: () => Date.now() + offset,
+      light: async () => {
+        const f = await act('light');
+        if (!f.ok) return f;
+        return f.a === 'light' ? { ok: true, id: f.id } : unknown;
+      },
+      cast: async () => {
+        const f = await act('cast');
+        if (!f.ok) return f;
+        return f.a === 'cast' ? { ok: true, biteAt: f.biteAt - offset } : unknown;
+      },
+      reel: async () => {
+        const f = await act('reel');
+        if (!f.ok) return f;
+        if (f.a !== 'reel') return unknown;
+        return f.outcome === 'caught' ? { ok: true, outcome: 'caught', fish: f.fish, feathers: f.feathers, total: f.total } : { ok: true, outcome: f.outcome };
+      },
+      copy: async () => {
+        const f = await act('copy');
+        if (!f.ok) return f;
+        return f.a === 'copy' ? { ok: true, notes: f.notes, tune: f.tune, listenUntil: f.listenUntil - offset, deadline: f.deadline - offset, level: f.level } : unknown;
+      },
+      note: async (e) => {
+        const f = await act('note', e);
+        if (!f.ok) return f;
+        if (f.a !== 'note') return unknown;
+        switch (f.step) {
+          case 'note':
+          case 'early':
+            return { ok: true, step: f.step, deadline: f.deadline - offset };
+          case 'tune':
+            return { ok: true, step: 'tune', tune: f.tune, listenUntil: f.listenUntil - offset, deadline: f.deadline - offset, level: f.level, feathers: f.feathers, total: f.total };
+          case 'won':
+            return { ok: true, step: 'won', level: f.level, feathers: f.feathers, total: f.total };
+          case 'wrong':
+          case 'slow':
+            return { ok: true, step: f.step, level: f.level, expected: f.expected };
+        }
+      },
+      tasks: async () => {
+        const f = await act('tasks');
+        return f.ok && f.a === 'tasks' ? toLocalTasks(f.tasks) : null;
+      },
+      // The room forgets the owl's line and game when it leaves.
+      close: () => undefined,
     };
     const failWaiters = () => {
       for (const w of waiters.values()) {
@@ -545,6 +619,7 @@ export class EdgeTransport implements ParkTransport {
         }
       },
       link,
+      acts,
       track(state: PlayerState) {
         current = state;
         spawn = undefined;

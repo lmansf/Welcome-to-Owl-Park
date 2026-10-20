@@ -22,6 +22,13 @@ export interface ParkState {
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;
   actions: string[];
   talkingTo: string | null;
+  play: {
+    lanterns: string[];
+    glowing: boolean;
+    line: 'idle' | 'out' | 'bite' | 'gone';
+    copy: { tune: string[]; got: number; level: number; listening: boolean } | null;
+    quiz: { n: number; right: 'a' | 'b' | 'c'; revealAt: number } | null;
+  } | null;
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */
@@ -105,3 +112,23 @@ export async function waitForArrival(page: Page, x: number, y: number, tolerance
 }
 
 export const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+
+/** Walk the owl to a room point (owls walk in straight lines) and wait until it stands still. */
+export async function walkAndStop(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
+  await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x, y });
+  await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
+  return (await state(page)).pos;
+}
+
+/** Wait for an action button where the owl stands, then press it. */
+export async function doAction(page: Page, id: string): Promise<void> {
+  await expect.poll(async () => (await state(page)).actions, { timeout: 10_000, intervals: [50] }).toContain(id);
+  await page.locator(`[data-action="${id}"]`).click();
+}
+
+/** From the grove's clearing along the lawn to the pond, and out to the end of the jetty (owls walk in straight lines). */
+export async function walkToJetty(page: Page): Promise<void> {
+  await walkAndStop(page, 1880, 740);
+  await walkAndStop(page, 1000, 700);
+  await walkAndStop(page, 965, 640);
+}

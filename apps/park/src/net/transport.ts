@@ -1,11 +1,11 @@
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
-import type { QuestLink, QuestPushes } from '../collect/service';
+import type { ActivityLink, ActivityPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
-/** What a room scene needs to hear from the network (quest pushes come only from the room server). */
-export interface RoomHandlers extends QuestPushes {
+/** What a room scene needs to hear from the network (quest and activity pushes come only from the room server). */
+export interface RoomHandlers extends QuestPushes, ActivityPushes {
   /** A peer appeared or refreshed its full state (position, look, current walk). */
   onPeerState(state: PlayerState): void;
   /** A peer started walking. */
@@ -34,6 +34,8 @@ export interface RoomConnection {
   leave(): Promise<void>;
   /** Quests, talks and uses checked by an authoritative server (the room server only). */
   link?: QuestLink;
+  /** The room's activities, run by the same server. */
+  acts?: ActivityLink;
 }
 
 /**

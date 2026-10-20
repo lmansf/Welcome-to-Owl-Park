@@ -5,6 +5,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
+  Activities,
   CLOSE,
   COPY_BASE_EMOTES,
   HEARTBEAT_FRAME,
@@ -30,13 +31,13 @@ import {
   type ClientFrame,
   type LanternState,
   type OwlLook,
+  type PlayResult,
   type QuestBoard,
   type QuestUpdate,
   type ServerFrame,
   type Wear,
 } from '@owl-park/shared';
-import { Activities } from './Activities';
-import type { Collections, PlayResult } from './Collections';
+import type { Collections } from './Collections';
 import { Room, type Peer, type VisitorState } from './Room';
 import { ROOMS, roomCap } from './rooms';
 import { isCollectorId } from './pass';
@@ -421,7 +422,7 @@ export class RoomObject extends DurableObject<Env> {
           const res = acts.startCopy(att.id, emotes);
           if (!res.ok) return no(res.reason);
           const g = res.game;
-          return this.send(ws, { t: 'act', r, a, ok: true, tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level });
+          return this.send(ws, { t: 'act', r, a, ok: true, notes: g.notes, tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level });
         }
         case 'note': {
           const e = frame.e ?? '';

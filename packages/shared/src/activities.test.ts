@@ -101,7 +101,7 @@ describe('the lanterns', () => {
     expect(lanternsAt(s, T0 + LANTERN_BURN_MS)).toEqual(darkLanterns());
   });
 
-  it('one owl alone can just light the whole beam; it then glows and pays everyone who helped', () => {
+  it('one owl alone can light the whole beam; it then glows and pays everyone who helped', () => {
     let s = darkLanterns();
     let full = null as string[] | null;
     LANTERNS.forEach((_, i) => {
@@ -109,7 +109,8 @@ describe('the lanterns', () => {
       expect(r.ok).toBe(true);
       if (r.ok) ({ state: s, full } = r);
     });
-    expect(LANTERN_EVERY_MS * (LANTERNS.length - 1)).toBeLessThan(LANTERN_BURN_MS);
+    // With time to walk along the beam between lanterns: at least five seconds to spare.
+    expect(LANTERN_EVERY_MS * (LANTERNS.length - 1) + 5_000).toBeLessThan(LANTERN_BURN_MS);
     expect(full).toEqual(['v_a']);
     expect(s.glowUntil).toBe(T0 + 6 * LANTERN_EVERY_MS + LANTERN_GLOW_MS);
     expect(lightLantern(s, 'v_b', under(0), T0 + 20_000)).toEqual({ ok: false, reason: 'glowing' });
@@ -275,5 +276,17 @@ describe('three small tasks a day', () => {
     for (let i = 0; i < 20; i++) book.earnPlay('c_a', 4, T0);
     expect(book.feathers('c_a', T0) - before).toBe(PLAY_FEATHERS_PER_DAY);
     expect(book.earnPlay('c_a', 4, T0 + 86_400_000).added).toBe(4);
+  });
+
+  it('an activity pays under the cap and brings the tasks back only when it moved them', () => {
+    const book = new CollectionBook(new MemoryCollectionStore());
+    const tasks = dailyTasks(parkDay(T0));
+    const counted = tasks[0]!.kind;
+    const other = (['light', 'beam', 'fish', 'quiz', 'copy', 'flop', 'browse'] as const).find((k) => !tasks.some((t) => t.kind === k))!;
+    expect(book.play('c_b', 3, { kind: other }, T0)).toEqual({ added: 3, total: 3 });
+    const moved = book.play('c_b', 0, { kind: counted }, T0);
+    expect(moved.added).toBe(0);
+    expect(moved.tasks?.tasks.tasks[0]!.done).toBe(1);
+    expect(book.play('c_b', 2, null, T0)).toEqual({ added: 2, total: 5 + (moved.tasks?.paid ?? 0) });
   });
 });

@@ -32,8 +32,8 @@ export const LANTERNS: readonly { id: string; pos: Vec2 }[] = [
 export const LANTERN_FLOOR: Rect = { x: 670, y: 690, w: 660, h: 150 };
 /** The owl lights the dark lantern nearest above it, at most this far to either side. */
 export const LANTERN_REACH_X = 90;
-/** A lantern burns this long, unless the whole beam is lit. */
-export const LANTERN_BURN_MS = 20_000;
+/** A lantern burns this long, unless the whole beam is lit: long enough for one owl alone, walking along the beam, if it keeps at it. */
+export const LANTERN_BURN_MS = 25_000;
 /** One owl lights one lantern this often, so a beam lit together goes quicker than one lit alone. */
 export const LANTERN_EVERY_MS = 2_500;
 /** Every lantern lit at once: the beam glows this long, then goes dark for the next round. */

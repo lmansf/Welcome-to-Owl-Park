@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { parseVariant, type BuyResult, type GiftResult, type Inventory, type QuestBoard, type ShopView } from '@owl-park/shared';
+import { parseVariant, type BuyResult, type GiftResult, type Inventory, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
+import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
@@ -21,6 +22,7 @@ const hud = createHud(document.body, look);
 const transport = createTransport(cfg);
 const collection = new CollectionState(createCollections(cfg, transport));
 const quests = new QuestState();
+const tasks = new TaskState();
 
 // A ticket link (C35) carries its secret in the address's fragment: take it out of the address bar
 // at once, then put the link's tickets on this device.
@@ -60,6 +62,7 @@ game.registry.set('hud', hud);
 game.registry.set('transport', transport);
 game.registry.set('collection', collection);
 game.registry.set('quests', quests);
+game.registry.set('tasks', tasks);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), E interacts, Q is the
 // collection and J the quest journal.
@@ -98,6 +101,8 @@ declare global {
       collection(): Inventory | null;
       /** The quest board as this page knows it (null until the room answers). */
       quests(): QuestBoard | null;
+      /** Today's three tasks as this page knows them (null until the room answers). */
+      tasks(): TaskView | null;
       /** Talk to an NPC owl or use an interactable in this room, walking up first if need be. */
       talk(npc: string): boolean;
       use(target: string): boolean;
@@ -136,7 +141,7 @@ hud.attachQuests(quests, {
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   openShop: () => hud.openShop(),
-});
+}, tasks);
 // Load the collection in the background; worn items this collector does not own come off.
 void collection.refresh().then(() => roomScene()?.pruneWear());
 collection.onChange(() => roomScene()?.pruneWear());
@@ -160,6 +165,7 @@ window.owlPark = {
   },
   collection: () => collection.inv,
   quests: () => quests.board,
+  tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
   use: (target) => roomScene()?.goDo({ kind: 'use', id: target }) ?? false,
   accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),

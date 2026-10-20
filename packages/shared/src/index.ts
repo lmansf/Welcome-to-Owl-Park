@@ -17,3 +17,4 @@ export * from './questCatalog';
 export * from './questbook';
 export * from './shop';
 export * from './activities';
+export * from './roomActivities';

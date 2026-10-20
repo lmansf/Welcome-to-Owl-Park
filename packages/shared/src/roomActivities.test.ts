@@ -1,31 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BITE_AFTER_MS,
-  BITE_WINDOW_MS,
-  CAST_EVERY_MS,
-  COPY_FIRST,
-  COPY_SPOT,
-  FISHING_SPOT,
-  LANTERNS,
-  LANTERN_EVERY_MS,
-  LANTERN_GLOW_MS,
-  QUIZ_ZONES,
-  quizRound,
-  rectCenter,
-  type Vec2,
-} from '@owl-park/shared';
-import { Activities, NOTE_EVERY_MS, REEL_SLACK_MS } from '../src/Activities';
-import type { Room } from '../src/Room';
+import { BITE_AFTER_MS, BITE_WINDOW_MS, CAST_EVERY_MS, COPY_FIRST, COPY_SPOT, FISHING_SPOT, LANTERNS, LANTERN_BURN_MS, LANTERN_EVERY_MS, LANTERN_GLOW_MS, QUIZ_ZONES, quizRound } from './activities';
+import { rectCenter } from './geometry';
+import type { Vec2 } from './protocol';
+import { Activities, NOTE_EVERY_MS, REEL_SLACK_MS, type ActivityRoom } from './roomActivities';
 
 /** A room as Activities sees it: an id, who is in it, and where each owl stands. */
-function roomOf(id: string, positions: Record<string, Vec2>): Room {
-  return { id, ids: () => Object.keys(positions), positionOf: (v: string) => positions[v] ?? null } as unknown as Room;
+function roomOf(id: string, positions: Record<string, Vec2>): ActivityRoom {
+  return { id, ids: () => Object.keys(positions), positionOf: (v: string) => positions[v] ?? null };
 }
 
 const T0 = Date.UTC(2026, 9, 20, 18, 0, 0);
 const under = (i: number): Vec2 => ({ x: LANTERNS[i]!.pos.x, y: 760 });
 
-describe('the lantern beam on the room server', () => {
+describe('the lantern beam in a room', () => {
   it('lights the lantern above the owl, refuses one out of reach or in another room', () => {
     const pos: Record<string, Vec2> = { a: under(0), b: { x: 2400, y: 760 } };
     let now = T0;
@@ -33,7 +20,7 @@ describe('the lantern beam on the room server', () => {
     expect(acts.light('a')).toEqual({ ok: true, id: 'lantern-1', full: null });
     expect(acts.light('b')).toEqual({ ok: false, reason: 'far' });
     expect(acts.light('nobody')).toEqual({ ok: false, reason: 'far' });
-    expect(acts.lanternFrame({ id: 'lantern-1', by: 'a' })).toEqual({ t: 'lanterns', lit: { 'lantern-1': T0 + 20_000 }, glowUntil: 0, id: 'lantern-1', by: 'a' });
+    expect(acts.lanternFrame({ id: 'lantern-1', by: 'a' })).toEqual({ t: 'lanterns', lit: { 'lantern-1': T0 + LANTERN_BURN_MS }, glowUntil: 0, id: 'lantern-1', by: 'a' });
     now += 1000;
     expect(acts.light('a')).toEqual({ ok: false, reason: 'busy' });
     expect(new Activities(roomOf('grove', { a: under(0) }), () => now).light('a')).toEqual({ ok: false, reason: 'far' });
@@ -69,7 +56,7 @@ describe('the lantern beam on the room server', () => {
   });
 });
 
-describe('fishing on the room server', () => {
+describe('fishing in a room', () => {
   it('casts from the jetty, and reeling in on the bite catches something', () => {
     const pos: Record<string, Vec2> = { a: FISHING_SPOT, b: { x: 2600, y: 800 } };
     let now = T0;
@@ -104,7 +91,7 @@ describe('fishing on the room server', () => {
   });
 });
 
-describe("the robot owl's copy game on the room server", () => {
+describe("the robot owl's copy game in a room", () => {
   it('starts by the robot owl and takes the tune note by note', () => {
     const pos: Record<string, Vec2> = { a: rectCenter(COPY_SPOT), b: { x: 300, y: 740 } };
     let now = T0;
@@ -126,7 +113,7 @@ describe("the robot owl's copy game on the room server", () => {
   });
 });
 
-describe('the stage quiz on the room server', () => {
+describe('the stage quiz in a room', () => {
   it('settles each round once, while its answer shows, paying the owls in the right zone', () => {
     const round = quizRound(Math.floor(T0 / 90_000) + 1);
     const wrong = round.right === 'a' ? 'b' : 'a';

@@ -40,8 +40,9 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
-import type { QuestLink, QuestPushes, QuestReply } from '../collect/service';
+import type { ActivityLink, ActivityPushes, QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
+import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
@@ -50,6 +51,7 @@ import { getRoom } from '../rooms';
 import type { Hud } from '../ui/hud';
 import type { Keys } from '../ui/keyboard';
 import { gateCard, gateRefusal } from '../ui/tickets';
+import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { roomScaleCap } from './artFiles';
@@ -169,6 +171,10 @@ export class RoomScene extends Phaser.Scene {
   private boardTimer: Phaser.Time.TimerEvent | null = null;
   private unwatchBoard: (() => void) | null = null;
   private readonly peerEmotes = new Map<string, string>();
+  private tasks!: TaskState;
+  /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
+  private play: ActivityLayer | null = null;
+  private acts: ActivityLink | null = null;
 
   constructor() {
     super('room');
@@ -213,6 +219,9 @@ export class RoomScene extends Phaser.Scene {
     this.boardTimer = null;
     this.unwatchBoard = null;
     this.peerEmotes.clear();
+    this.tasks = this.registry.get('tasks') as TaskState;
+    this.play = null;
+    this.acts = null;
     this.registry.set('currentRoom', this.room.id);
     this.registry.set('spawnName', data.spawn);
   }
@@ -254,6 +263,16 @@ export class RoomScene extends Phaser.Scene {
     const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
     this.addResidents();
+    this.play = new ActivityLayer({
+      scene: this,
+      room: room.id,
+      hud: this.hud,
+      me: () => this.me,
+      peer: (id) => this.peers.get(id),
+      feathers: (total) => this.collection.setFeathers(total),
+      tasks: this.tasks,
+      cheer: () => this.pieces.idol?.react(),
+    });
 
     this.setupCamera();
     this.setupInput();
@@ -288,6 +307,7 @@ export class RoomScene extends Phaser.Scene {
     for (const owl of this.peers.values()) owl.tick(now);
     for (const npc of this.npcs.values()) npc.tick(now);
     for (const pile of this.piles.values()) pile.tick(now);
+    this.play?.tick();
   }
 
   // ---------- networking ----------
@@ -300,8 +320,8 @@ export class RoomScene extends Phaser.Scene {
     const gen = this.gen;
     const live = () => gen === this.gen && !this.leaving;
     const spawnName = this.registry.get('spawnName') as string | undefined;
-    // What the room pushes about quests and shared objects (the room server's own, or the local mode's).
-    const pushes: QuestPushes = {
+    // What the room pushes about quests, shared objects and activities (the room server's own, or the local mode's).
+    const pushes: QuestPushes & ActivityPushes = {
       onQuests: (board, updates) => {
         if (!live()) return;
         this.applyBoard(board);
@@ -312,6 +332,10 @@ export class RoomScene extends Phaser.Scene {
         for (const pile of this.piles.values()) pile.setUntil(until[pile.id] ?? 0);
       },
       onUsed: (id, by, until) => live() && this.onUsed(id, by, until),
+      onLanterns: (beam, lit) => live() && this.play?.onLanterns(beam, lit),
+      onQuiz: (n, right, won, others) => live() && this.play?.onQuiz(n, right, won, others),
+      onPaid: (what, feathers, total) => live() && this.play?.onPaid(what, feathers, total),
+      onTasks: (tasks, finished, paid, total) => live() && this.play?.onTasks(tasks, finished, paid, total),
     };
     const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}) } as PlayerState, {
       ...pushes,
@@ -346,6 +370,8 @@ export class RoomScene extends Phaser.Scene {
     }
     this.conn = conn;
     this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
+    this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
+    this.play?.attach(this.acts);
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
@@ -564,6 +590,8 @@ export class RoomScene extends Phaser.Scene {
     actions: string[];
     /** The NPC whose dialogue is open. */
     talkingTo: string | null;
+    /** The activities here: lanterns lit, the fishing line, the copy game, the next quiz question. */
+    play: ReturnType<ActivityLayer['debug']> | null;
   } | null {
     if (!this.built) return null;
     return {
@@ -581,6 +609,7 @@ export class RoomScene extends Phaser.Scene {
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y })),
       actions: this.actions.map((a) => a.id),
       talkingTo: this.talkingTo,
+      play: this.play?.debug() ?? null,
     };
   }
 
@@ -667,6 +696,8 @@ export class RoomScene extends Phaser.Scene {
       if (!close || this.piles.get(def.id)?.here === false) continue;
       out.push({ id: `use:${def.id}`, label: rules.label, run: () => void this.use(def.id) });
     }
+    // Lanterns, fishing and the robot owl's game where the owl stands.
+    if (this.play) out.push(...this.play.actions(pos));
     return out;
   }
 
@@ -1103,6 +1134,10 @@ export class RoomScene extends Phaser.Scene {
     this.piles.clear();
     for (const glow of this.glows.values()) glow.destroy();
     this.glows.clear();
+    this.play?.destroy();
+    this.play = null;
+    this.acts?.close();
+    this.acts = null;
     this.link = null;
     const conn = this.conn;
     this.conn = null;

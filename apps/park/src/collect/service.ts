@@ -1,4 +1,4 @@
-import type { Award, BuyResult, GiftResult, Inventory, QuestBoard, QuestEvent, QuestUpdate, ShopView, Vec2 } from '@owl-park/shared';
+import type { Award, BuyResult, GiftResult, Inventory, QuestBoard, QuestEvent, QuestUpdate, QuizZone, ShopView, TaskView, Vec2 } from '@owl-park/shared';
 import type { RoomConnection } from '../net/transport';
 
 /** The answer to a quest request: whether it worked, the board as it now stands, and what moved. */
@@ -57,6 +57,66 @@ export interface QuestPushes {
   onUsed?(id: string, by: string | null, until: number): void;
 }
 
+/** Why the room did not take an activity. */
+export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown';
+type No = { ok: false; reason: ActRefusal };
+
+/** The robot owl's tune to copy: played until `listenUntil`, then each note due by `deadline`. */
+export interface CopyTune {
+  tune: string[];
+  listenUntil: number;
+  deadline: number;
+  /** Tunes copied so far this game. */
+  level: number;
+}
+
+export type LightReply = { ok: true; id: string } | No;
+export type CastReply = { ok: true; biteAt: number } | No;
+export type ReelReply = { ok: true; outcome: 'early' | 'late' } | { ok: true; outcome: 'caught'; fish: string; feathers: number; total: number } | No;
+/** A new game: the emotes the robot plays this game, and its first tune. */
+export type CopyReply = ({ ok: true; notes: string[] } & CopyTune) | No;
+export type NoteReply =
+  | { ok: true; step: 'note' | 'early'; deadline: number }
+  | ({ ok: true; step: 'tune'; feathers: number; total: number } & CopyTune)
+  | { ok: true; step: 'won'; level: number; feathers: number; total: number }
+  | { ok: true; step: 'wrong' | 'slow'; level: number; expected: string }
+  | No;
+
+/**
+ * The park's activities in one room (activities.ts in @owl-park/shared): the hub's lanterns, the pond
+ * in the grove, the market robot owl's copy game, and today's tasks. Times in answers and pushes are
+ * on this device's clock; the stage quiz runs on the park clock, `parkNow()`.
+ */
+export interface ActivityLink {
+  /** The room's clock: the stage quiz's schedule runs on it. */
+  parkNow(): number;
+  /** Light the dark lantern above the owl. */
+  light(): Promise<LightReply>;
+  /** Cast a line from the jetty; a fish bites at `biteAt`. */
+  cast(): Promise<CastReply>;
+  reel(): Promise<ReelReply>;
+  /** Start the robot owl's copy game, standing in front of it. */
+  copy(): Promise<CopyReply>;
+  /** Play a note (an emote) of the tune. */
+  note(e: string): Promise<NoteReply>;
+  /** Today's three tasks (null when the room did not answer). */
+  tasks(): Promise<TaskView | null>;
+  /** The owl left the room. */
+  close(): void;
+}
+
+/** What the activities push without being asked. */
+export interface ActivityPushes {
+  /** The lantern beam (this device's clock); `lit` names a lantern just lit and by whom (null: this visitor). */
+  onLanterns?(beam: { lit: Record<string, number>; glowUntil: number }, lit: { id: string; by: string | null } | null): void;
+  /** A stage quiz question closed: the right zone, whether this visitor stood in it, and the other owls that did. */
+  onQuiz?(n: number, right: QuizZone, won: boolean, others: string[]): void;
+  /** Feathers from something shared: a full lantern beam, a right quiz answer. */
+  onPaid?(what: 'beam' | 'quiz', feathers: number, total: number): void;
+  /** Today's tasks moved: as they stand, the ones just finished, what they paid and the balance. */
+  onTasks?(tasks: TaskView, finished: string[], paid: number, total: number): void;
+}
+
 /**
  * A visitor's collection, feathers and quests. Two implementations share the rules in
  * `@owl-park/shared`:
@@ -79,6 +139,8 @@ export interface CollectionService {
    * is missing).
    */
   questLink(room: string, conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink | null;
+  /** The activities in a room, the same way: the room server's over its socket, otherwise this browser's. */
+  activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2): ActivityLink | null;
 }
 
 /** This device's IANA time zone, if the browser reports a usable one. */

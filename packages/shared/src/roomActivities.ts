@@ -1,8 +1,8 @@
 /**
- * The activities in one room (the rules are in @owl-park/shared, activities.ts), written without
- * platform APIs like Room so Node tests them: the hub's lantern beam and stage quiz, fishing from
- * the grove's jetty, and the market robot owl's copy game. The room server (RoomObject) routes
- * `act` frames here, wakes the hub when a quiz question closes, and pays through the ledger.
+ * The activities in one room (their rules are in activities.ts): the hub's lantern beam and stage
+ * quiz, fishing from the grove's jetty, and the market robot owl's copy game. The room server
+ * (RoomObject) routes `act` frames here, wakes the hub when a quiz question closes, and pays through
+ * the ledger; the local mode runs the same class for the one owl on this device.
  */
 import {
   CAST_EVERY_MS,
@@ -16,8 +16,6 @@ import {
   biteDelay,
   copyNote,
   darkLanterns,
-  distance,
-  distanceToRect,
   lanternsAt,
   lightLantern,
   quizRound,
@@ -32,11 +30,19 @@ import {
   type LanternState,
   type QuizRound,
   type QuizZone,
-  type ServerLanterns,
-} from '@owl-park/shared';
-import type { Room } from './Room';
+} from './activities';
+import type { ServerLanterns } from './edge';
+import { distance, distanceToRect } from './geometry';
+import type { Vec2 } from './protocol';
 
-/** Extra reach the server allows: the page draws its owl a little ahead of the server's. */
+/** What the activities need of a room: its id, who is in it and where each owl stands. */
+export interface ActivityRoom {
+  readonly id: string;
+  ids(): string[];
+  positionOf(id: string): Vec2 | null;
+}
+
+/** Extra reach allowed: a page draws its owl a little ahead of the room server's. */
 export const ACT_SLACK = 40;
 /** A reel may arrive this much after the bite closed (the trip to the server). */
 export const REEL_SLACK_MS = 350;
@@ -60,7 +66,7 @@ export class Activities {
   quizSettled = -1;
 
   constructor(
-    private readonly room: Room,
+    private readonly room: ActivityRoom,
     private readonly now: () => number,
     private readonly rnd: () => number = Math.random,
   ) {}

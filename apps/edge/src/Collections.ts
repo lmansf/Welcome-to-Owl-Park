@@ -23,6 +23,7 @@ import {
   type QuestEvent,
   type QuestUpdate,
   type PlayEvent,
+  type PlayResult,
   type ShopView,
   type Source,
   type TaskView,
@@ -49,15 +50,6 @@ export interface EventResult {
 export interface FlopResult extends EventResult {
   feathers: number;
   total: number;
-}
-
-/** An activity's pay and what it did for today's tasks. */
-export interface PlayResult {
-  /** Feathers added (within the day's cap for the activities) and the balance. */
-  added: number;
-  total: number;
-  /** Today's tasks, when the event moved them. */
-  tasks?: { tasks: TaskView; finished: string[]; paid: number; total: number };
 }
 
 export class Collections extends DurableObject<Env> {
@@ -131,13 +123,7 @@ export class Collections extends DurableObject<Env> {
    * cap, and the event's progress on today's tasks (`feathers` may be 0: a lantern lit, a leaf pile).
    */
   async play(cid: string, feathers: number, ev: PlayEvent | null): Promise<PlayResult> {
-    const now = Date.now();
-    const earned = feathers > 0 ? this.book.earnPlay(cid, feathers, now) : { added: 0, feathers: this.book.feathers(cid, now) };
-    if (!ev) return { added: earned.added, total: earned.feathers };
-    const before = this.book.tasks(cid, now).tasks.map((t) => t.done);
-    const t = this.book.taskEvent(cid, ev, now);
-    const moved = t.tasks.tasks.some((x, i) => x.done !== before[i]);
-    return { added: earned.added, total: t.total, ...(moved ? { tasks: t } : {}) };
+    return this.book.play(cid, feathers, ev, Date.now());
   }
 
   /** Today's three tasks and this collector's progress. */
