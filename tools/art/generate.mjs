@@ -34,7 +34,8 @@ export const ASSETS_FILE = path.join(TOOLS_DIR, 'config', 'assets.json');
 export const KEY_RE = /^[a-z][a-z0-9-]*$/;
 export const SIZE_RE = /^(\d{2,5})x(\d{2,5})$/;
 export const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
-export const KINDS = ['room', 'overlay', 'piece', 'owl', 'owl-edit', 'anchor'];
+/** `wing` paints a room wider: an edit of the room's own painting (its edge on a grey canvas, `@canvas:<key>`). */
+export const KINDS = ['room', 'overlay', 'piece', 'owl', 'owl-edit', 'anchor', 'wing'];
 const KEYED_KINDS = new Set(['overlay', 'piece', 'owl', 'owl-edit']);
 
 // ---------------------------------------------------------------------------------------------
@@ -361,10 +362,10 @@ export function expandPrompt(prompt, blocks, job) {
 function normaliseRef(entry, job) {
   const r = typeof entry === 'string' ? { ref: entry } : entry;
   if (!r || typeof r.ref !== 'string') throw new Error(`job ${job.key}: bad ref entry`);
-  const ok = r.ref.startsWith('refs/') || r.ref.startsWith('@guide:') || r.ref.startsWith('@raw:') || r.ref.startsWith('@final:') || r.ref.startsWith('https://');
-  if (!ok) throw new Error(`job ${job.key}: ref ${r.ref} must be refs/<file>, @guide:<room>, @raw:<key>, @final:<key> or https://...`);
+  const ok = r.ref.startsWith('refs/') || /^@(guide|raw|final|canvas):/.test(r.ref) || r.ref.startsWith('https://');
+  if (!ok) throw new Error(`job ${job.key}: ref ${r.ref} must be refs/<file>, @guide:<room>, @raw:<key>, @final:<key>, @canvas:<key> or https://...`);
   if (r.ref.includes('..')) throw new Error(`job ${job.key}: ref ${r.ref} may not contain ..`);
-  if (/^@(guide|raw|final):/.test(r.ref) && !KEY_RE.test(r.ref.split(':')[1])) throw new Error(`job ${job.key}: ref ${r.ref} names an invalid key`);
+  if (/^@(guide|raw|final|canvas):/.test(r.ref) && !KEY_RE.test(r.ref.split(':')[1])) throw new Error(`job ${job.key}: ref ${r.ref} names an invalid key`);
   return { ref: r.ref, role: r.role ?? '', optional: Boolean(r.optional) };
 }
 
@@ -441,6 +442,8 @@ export function refLocation(ref, { workDir, toolsDir = TOOLS_DIR, publicArtDir =
   if (ref.startsWith('https://')) return { kind: 'url', url: ref };
   if (ref.startsWith('refs/')) return { kind: 'file', file: path.join(toolsDir, ref) };
   if (ref.startsWith('@guide:')) return { kind: 'file', file: path.join(workDir, 'guides', `${ref.slice(7)}.png`) };
+  // A wing's outpaint canvas, written by the post stage (`pnpm art:finish canvas <key>`).
+  if (ref.startsWith('@canvas:')) return { kind: 'file', file: path.join(workDir, 'canvas', `${ref.slice(8)}.png`) };
   if (ref.startsWith('@final:')) {
     // Rooms publish as WebP, everything else as PNG.
     const png = path.join(publicArtDir, `${ref.slice(7)}.png`);
@@ -785,10 +788,10 @@ export function drawMock({ kind, realm, width, height, seed, key, keyColour, reg
   const w = width; const h = height;
   const jitter = (rnd() - 0.5) * 0.04; // +-2 %: variants differ visibly
 
-  if (kind === 'room' || kind === 'anchor') {
+  if (kind === 'room' || kind === 'anchor' || kind === 'wing') {
     r.gradientV(0, 0, w, h * 0.55, c(pal.skyTop), c(pal.skyBottom));
     r.fillRect(0, h * 0.55, w, h * 0.45, c(pal.ground));
-    if (kind === 'room') {
+    if (kind !== 'anchor') {
       r.fillEllipse(w * 0.5, h * 0.74, w * 0.16, h * 0.08, c(pal.groundLit));
       const tx = w * (0.5 + jitter);
       r.fillRect(tx - w * 0.06, h * 0.08, w * 0.12, h * 0.52, c(pal.trunk));
@@ -1212,6 +1215,9 @@ export async function resolve(specifier, context, next) {
       size: room.size,
       background: room.background,
       foreground: room.foreground ?? null,
+      // A room wider than one screen is painted in tiles ({key, x, y} in room pixels).
+      backgrounds: room.backgrounds ?? null,
+      foregrounds: room.foregrounds ?? null,
       walkable: room.walkable,
       doors: room.doors,
       spawns: room.spawns,

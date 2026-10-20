@@ -102,10 +102,21 @@ test.describe('single visitor', () => {
 
   test('tapping outside the walkable area snaps to its edge', async ({ page }) => {
     await openPark(page);
-    await page.evaluate(() => window.owlPark.walkTo(800, 50)); // far up in the sky
+    await page.evaluate(() => window.owlPark.walkTo(2400, 50)); // far up in the sky
     await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
     const s = await state(page);
     expect(s.pos.y).toBeGreaterThan(400); // landed on the floor's top edge, not in the sky
+  });
+
+  test('a walk that only passes a doorway stays in the room; one that ends at the doorway goes through', async ({ page }) => {
+    await openPark(page);
+    await page.evaluate(() => window.owlPark.walkTo(1550, 730)); // the hollow's west bay
+    await waitForArrival(page, 1550, 730);
+    await page.evaluate(() => window.owlPark.walkTo(2000, 640)); // back into the nave, straight across the doorway to the grove
+    await waitForArrival(page, 2000, 640);
+    expect((await state(page)).room).toBe('hub');
+    await walkToDoor(page, 'to-grove');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
   });
 
   test('walking into an open doorway changes room and back', async ({ page }) => {
@@ -146,10 +157,10 @@ test.describe('single visitor', () => {
   test('tapping the idol from afar walks the owl up to it and pledges on arrival', async ({ page }) => {
     await openPark(page, { room: 'grove' });
     // Stand near the gathering spot (outside it) so the guardian is on screen even on a phone.
-    await page.evaluate(() => window.owlPark.walkTo(900, 720));
-    await waitForArrival(page, 900, 720);
+    await page.evaluate(() => window.owlPark.walkTo(2500, 720));
+    await waitForArrival(page, 2500, 720);
     await settleCamera(page);
-    await tapRoomPoint(page, 800, 260); // the guardian's chest
+    await tapRoomPoint(page, 2400, 260); // the guardian's chest
     const s = await state(page);
     const spot = s.doors.find((d) => d.id === 'idol')!;
     await waitForArrival(page, spot.x, spot.y); // the tap sent the owl to the gathering spot
@@ -173,7 +184,7 @@ test.describe('two visitors on one device', () => {
     expect((await state(b)).peers[0]?.look.body).toBe('#8B5A2B');
 
     // A walks; B's copy of A follows the same path and ends at the same spot.
-    const target = { x: 600, y: 760 };
+    const target = { x: 2200, y: 760 };
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
     await waitForArrival(a, target.x, target.y);
     await expect.poll(async () => dist((await state(b)).peers[0]!.pos, target), { timeout: 15_000 }).toBeLessThan(6);

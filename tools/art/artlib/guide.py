@@ -8,8 +8,9 @@ dots and set-piece footprints scaled exactly as ``ambience.ts`` does
 reference (``@guide:<room>``); the post stage blends it over finals for review.
 
 Geometry JSON schema (``work/art/geometry.json``, written by ``pnpm art:geometry``):
-``{"rooms": {id: {size, walkable, doors, spawns, anchors, background, foreground}},
-"closedSigns": [...], "assets": {...}}`` with points as ``{x, y}``.
+``{"rooms": {id: {size, walkable, doors, spawns, anchors, background, foreground, backgrounds,
+foregrounds}}, "closedSigns": [...], "assets": {...}}`` with points as ``{x, y}``; a room wider
+than one screen lists its art tiles as ``{key, x, y}`` and ``tile_view`` shows one screen of it.
 """
 
 from __future__ import annotations
@@ -48,6 +49,29 @@ def room_of(geom: dict, room_id: str) -> dict:
     if room_id not in rooms:
         raise ArtError(f"room {room_id!r} is not in the geometry (have {', '.join(sorted(rooms))})")
     return rooms[room_id]
+
+
+def tile_view(geom: dict, room_id: str, x: float, y: float) -> dict:
+    """The geometry with ``room_id`` seen from one screen of it: every point, rectangle and anchor
+    moved by (-x, -y), so the screen whose top-left corner is (x, y) in room pixels draws and checks
+    like a room of one screen (what lies off that screen is clipped or out of reach)."""
+    room = room_of(geom, room_id)
+
+    def mv(p) -> dict:
+        px, py = pt(p)
+        return {"x": px - x, "y": py - y}
+
+    def door(d: dict) -> dict:
+        out = dict(d)
+        out["rect"] = {**d["rect"], "x": float(d["rect"]["x"]) - x, "y": float(d["rect"]["y"]) - y}
+        if d.get("marker"):
+            out["marker"] = mv(d["marker"])
+        return out
+
+    view = dict(room, size={"w": ROOM_W, "h": ROOM_H}, walkable=[[mv(p) for p in poly] for poly in room.get("walkable", [])],
+                doors=[door(d) for d in room.get("doors", [])], spawns={k: mv(p) for k, p in (room.get("spawns") or {}).items()},
+                anchors={k: mv(p) for k, p in (room.get("anchors") or {}).items()})
+    return {**geom, "rooms": {**geom["rooms"], room_id: view}}
 
 
 def pt(p) -> tuple[float, float]:

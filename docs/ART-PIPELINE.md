@@ -19,8 +19,8 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 
 | Key | Logical size (px) | What it is |
 | --- | --- | --- |
-| `hub`, `hub-fg` | 1600 x 900 | Hub room background (WebP), and a transparent foreground overlay (PNG) drawn in front of the owls |
-| room tiles (`<room>-<part>`) | 1600 x 900 | A room wider (or taller) than one screen is painted in tiles of one screen each, listed in the room's `backgrounds` / `foregrounds` with their offsets; each tile is room-kind art with the same budgets, WebP rule and 2x copy as `hub`, and the game registers it from the room data |
+| `hub`, `hub-fg` | 1600 x 900 | Hub room background (WebP), and a transparent foreground overlay (PNG) drawn in front of the owls; the hub is three screens wide now and draws no overlay, so `hub-fg` is kept but unused |
+| room tiles (`<room>-<part>`) | 1600 x 900 | A room wider (or taller) than one screen is painted in tiles of one screen each, listed in the room's `backgrounds` / `foregrounds` with their offsets; each tile is room-kind art with the same budgets, WebP rule and 2x copy as `hub`, and the game registers it from the room data. Today: the wings `hub-west`, `hub-east`, `grove-west`, `grove-east` and `market-east` (WebP), and the end overlays `grove-west-fg` and `market-east-fg` (PNG) |
 | `grove`, `grove-fg` | 1600 x 900 | Storybook realm background (WebP) and foreground (PNG) |
 | `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
 | `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |
@@ -66,7 +66,10 @@ node tools/render-svg.mjs apps/park/public/art/grove.svg /tmp/grove.png 1600 900
 
 Each room's walkable area, doors and spawn points live in `packages/shared/rooms/index.ts`
 (shared by the client and the room server),
-in room pixels (1600 x 900). When a room's layout changes, update:
+in room pixels. One screen is 1600 x 900; the hub and the grove are three screens wide and the
+market two, and each painting is the middle screen (the market's first), so a point on the hub's or
+the grove's painting sits 1600 px further right in the room than in the painting. When a room's
+layout changes, update:
 
 - `walkable`: one or more simple polygons the owl may stand on (feet position).
 - `doors`: trigger rectangles. Open doors have `to: { room, spawn }`. Closed doors have `closedSign`
@@ -74,6 +77,9 @@ in room pixels (1600 x 900). When a room's layout changes, update:
   gift-shop spot, and `idol` is where visitors stand at the realm's mythical owl to cast a Realm Vote.
 - `spawns`: where an owl appears when entering; `default` is required.
 - `ANCHORS`: bottom-centre points for large set pieces (guardian, robot owl, tree base).
+- `ROOM_LAYOUT`: raise it, and add the move to `LAYOUT_MOVES`, when positions already in use shift
+  (a room growing on the west): the quest items visitors were already handed move with it, in the
+  room server's storage and in the browser's.
 
 Check it in the browser with `?debug=1`, which draws the polygons, door rectangles and spawn points.
 
@@ -154,6 +160,41 @@ Rooms go first; a room's overlay (`<room>-fg`) and set piece (`guardian`, `robot
 generated afterwards with the published room as a style reference (`@final:<room>` in the job).
 The owl master comes last (`owl`), optionally followed by the eyes-closed edit for the blink.
 
+### Wider rooms: wings
+
+A room grows a screen at a time. Each new screen, a wing (`<room>-west` or `<room>-east`), is an
+edit of the room's approved painting, so it keeps the painting's light, perspective and brush:
+
+```bash
+pnpm art:finish canvas hub-west            # work/art/canvas/hub-west.png: the painting's west edge on grey
+pnpm art:generate --provider fal --only hub-west --dry-run
+pnpm art:generate --provider fal --only hub-west
+pnpm art:finish sheet hub-west && node tools/art/generate.mjs select hub-west <hash16>
+pnpm art:finish wing hub --overlay drop    # every screen of the hub finished, with review images
+pnpm art:preview --rooms hub
+pnpm art:finish publish hub-west hub hub-east --note "west wing D (seed 9214), picked by the art director"
+```
+
+The canvas is the painting's outer 800 px (at 2x) beside a screen of flat grey, sent at half
+size, and the job's prompt asks for the grey to be painted into one continuous painting, with the
+wing's own brief and the room's style block. `wing <room>` puts each selected wing back against
+the painting: scaled to the canvas at 2x, its tone matched to the painting near the join (fading
+out across the wing), and joined along the cheapest top-to-bottom cut through the 800 px they
+share, pulled toward the painting's outer edge so as little of the approved painting as possible
+changes. It then cuts the room into screens: each wing, and the painting itself with a blended
+band at each join, which is why the room's own key is republished (its provenance keeps the
+painting's candidate and names the joins in `tools`). No grade is applied: the painting is graded
+already and the wings were painted to match it. The overlay keeps its frame at the room's ends:
+`--overlay ends` moves the overlay's pieces that touch the painting's west or east edge to that
+end's screen (`<room>-west-fg`, `<room>-east-fg`) and keeps the rest on the painting's screen;
+`--overlay drop` leaves the wide room without one (the hub's corner frame, whose straight cuts
+would show at the joins). Every screen's review image shows the room geometry as that screen sees
+it, and `work/art/review/<room>-wide.png` lays them side by side. `wing` reads the published
+`<room>@2x.webp`; once the wings are published that file is the middle screen, so pass the
+original painting with `--painting` to stitch again. New keys go in `config/assets.json` (kind
+`room`; overlays with `overlay: true`) and in the room's `backgrounds` / `foregrounds`: tests keep
+them, the job list and `art.ts` in step.
+
 ### Grade, regrade, rerun
 
 Every final passes through a deterministic colour grade: `tools/art/palettes/<realm>.json` holds
@@ -187,7 +228,8 @@ so a hand-edited file finished with `--raw` needs no sidecar. Limits: translucen
 mist, rain) come out as partly opaque colour, so the guardian's glow and the market's rain stay
 in `ambience.ts`; hair-thin edges harden; a painted floor or cast shadow must be prompted away
 (or cut with `--floor-cut`); ask providers for PNG output, since JPEG ringing leaves a halo.
-Overlays must leave the owls visible: `overlay --check` fails when opaque pixels cover more than
+Overlays must leave the owls visible (a screen of a wider room is checked against the room as that
+screen sees it): `overlay --check` fails when opaque pixels cover more than
 5 % of the walkable interior (eroded by 60 px; the frame edge is not an edge, owls stand right
 at the bottom of the hub, which is why the hub overlay keeps its whole lower half empty) or sit
 within 24 px of a spawn, a door centre, a sign, the shop or the gathering spot, and it draws the

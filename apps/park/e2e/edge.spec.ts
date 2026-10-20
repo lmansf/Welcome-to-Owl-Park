@@ -45,7 +45,7 @@ test.describe('room server', () => {
     expect((await state(b)).peers[0]!.look.body).toBe('#8B5A2B');
     await expect(a.getByText('2 owls here')).toBeVisible();
 
-    const target = { x: 600, y: 760 };
+    const target = { x: 2200, y: 760 };
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
     await waitForArrival(a, target.x, target.y);
     await expect.poll(async () => dist((await state(b)).peers[0]!.pos, target), { timeout: 15_000 }).toBeLessThan(6);
@@ -63,7 +63,7 @@ test.describe('room server', () => {
     const b = await visitor(browser);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     const start = (await state(a)).pos;
-    const key = start.x < 800 ? 'KeyD' : 'KeyA'; // toward the middle, so there is floor to walk on
+    const key = start.x < 2400 ? 'KeyD' : 'KeyA'; // toward the middle, so there is floor to walk on
     await a.keyboard.down(key);
     await expect.poll(async () => Math.abs((await state(a)).pos.x - start.x), { timeout: 10_000 }).toBeGreaterThan(80);
     await a.keyboard.up(key);
@@ -81,7 +81,7 @@ test.describe('room server', () => {
   test('a late joiner sees an owl that is already mid-walk in the right place', async ({ browser }) => {
     const a = await visitor(browser);
     const start = (await state(a)).pos;
-    const target = { x: start.x < 800 ? 1400 : 200, y: 800 }; // a long walk, several seconds
+    const target = { x: start.x < 2400 ? 3000 : 1800, y: 800 }; // a long walk, several seconds
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
     await a.waitForTimeout(300);
     const b = await visitor(browser);
@@ -99,7 +99,7 @@ test.describe('room server', () => {
 
   test('the server clamps a walk that leaves the walkable area', async ({ browser }) => {
     const a = await visitor(browser);
-    await a.evaluate(() => window.owlPark.walkTo(800, 50));
+    await a.evaluate(() => window.owlPark.walkTo(2400, 50));
     await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
     expect((await state(a)).pos.y).toBeGreaterThanOrEqual(600);
     await a.context().close();

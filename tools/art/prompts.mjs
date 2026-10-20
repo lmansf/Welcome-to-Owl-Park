@@ -150,6 +150,7 @@ export const OWL_LAYER_KEYS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face'
  *   @guide:<room>      the layout guide rendered by the post stage, work/art/guides/<room>.png
  *   @final:<key>       the published asset apps/park/public/art/<key>.png
  *   @raw:<key>         the SELECTED raw candidate of another job
+ *   @canvas:<key>      a wing's outpaint canvas from the post stage, work/art/canvas/<key>.png
  *   https://...        a hosted image, passed through as a URL
  * An `optional` slot is skipped with a notice when its file does not exist yet (the first runs
  * happen before any anchor or guide exists); a required slot that is missing fails the job, or
@@ -162,7 +163,7 @@ const published = (key) => ({ ref: `@final:${key}`, role: 'style and lighting', 
 const OWL_REGIONS = { body: '#FF0000', belly: '#00FF00', accent: '#0000FF' };
 
 /**
- * The job list. `kind` is one of room | overlay | piece | owl | owl-edit | anchor and tells the
+ * The job list. `kind` is one of room | overlay | piece | owl | owl-edit | anchor | wing and tells the
  * mock provider what to draw and the post stage how to treat the raw image. `size` is the
  * generation size (post resizes to the logical size). `seed` is the base seed; variant i uses
  * seed + i. `key_colour` is the flat backdrop that post keys out. `regions` are the flat fills
@@ -219,6 +220,8 @@ export const JOBS = [
     variants: 1,
     key_colour: '#FF00FF',
     refs: [published('grove'), guide('grove')],
+    // The wide grove keeps the overlay's lantern string at its west end (`pnpm art:finish wing grove`).
+    derives: ['grove-west-fg'],
     prompt: PROMPTS['grove-fg'],
   },
   {
@@ -251,6 +254,8 @@ export const JOBS = [
     variants: 1,
     key_colour: '#00FF00',
     refs: [published('market'), guide('market')],
+    // The wide market keeps the overlay's awning and crates at its east end (`pnpm art:finish wing market`).
+    derives: ['market-east-fg'],
     prompt: PROMPTS['market-fg'],
   },
   {
@@ -609,3 +614,71 @@ const SPECIES_JOBS = SPECIES_MASTER_KEYS.map((key, i) => ({
 Object.assign(PROMPTS, SPECIES_OWL_PROMPTS);
 HELPER_KEYS.push(...SPECIES_MASTER_KEYS);
 JOBS.push(...SPECIES_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// Wings: the hub and the grove are three screens wide and the market two. A wing is an edit of
+// the room's approved painting: its 800 px edge strip sits at one end of a grey canvas
+// (`pnpm art:finish canvas <key>`, sent as @canvas:<key>), the model paints the grey, and the
+// post stage stitches the result back onto the painting (`pnpm art:finish wing <room>`). Each
+// prompt is the outpaint brief, the wing's own brief and the room's style block. These are the
+// prompts of the approved candidates; hub-west and grove-west are the second round's wording (the
+// grove's colossal tree stays unique to its painting, no moon overhead in the hub's wings,
+// lanterns unlit, the floor kept empty).
+
+const WING_SCENE = {
+  hub: 'the inside of the hollow base of a colossal ancient tree at night',
+  grove: 'a cozy storybook forest clearing at dusk with a treehouse village',
+  market: 'a rainy night street in a cyberpunk neon market',
+};
+const WING_CARRY = {
+  hub: 'floor, inner bark walls, lighting, perspective, floor height and brush style',
+  grove: 'lawn, trees, treehouses, sky glow, lighting, perspective, ground height and brush style',
+  market: 'wet street, far curb, stalls, skyline, clouds, lighting, perspective, street height and brush style',
+};
+const wingIntro = (room, side) => {
+  const [finished, away] = side === 'east' ? ['left', 'right'] : ['right', 'left'];
+  return `Extend this painting into a wide panorama. The reference is an unfinished canvas: its ${finished} fifth is a finished hand-painted game background, ${WING_SCENE[room]}, and everything to the ${away} of it is flat grey placeholder. Repaint the grey completely so the whole frame becomes one continuous, seamless painting: keep the finished ${finished} part as it is, and carry its ${WING_CARRY[room]} straight on to the ${away} with no visible join.`;
+};
+const WING_STYLE_EDITS = [
+  [/, the same colossal ancient tree with its locked silhouette \([^)]*\)\./, '.'],
+  ['lit by cream moonlight from above', 'lit by soft cream moonlight spilling in from the side'],
+  ['sky or landscape beyond the knothole', 'any moon, sky, stars or landscape'],
+  ['so small colourful figures added later stand out', 'kept empty'],
+];
+const wingStyle = (room, edits = []) => edits.reduce((s, [a, b]) => s.replace(a, b), STYLE[room]).replace(/^STYLE \([^)]*\):/, 'STYLE:');
+const EMPTY = { 1: 'open and uncluttered so small figures stand out on it.', 2: 'open, empty and uncluttered.' };
+const hubFloor = (round) => `The hollow is far wider than it first looked. The broad floor of pale worn inner wood with faint concentric growth rings and thin worn gold guide lines continues across the whole lower third at the same height, ${EMPTY[round]}`;
+const HUB_CLOSED = 'tall vertical ribs of inner bark rise into deep navy shadow at the top of the frame, closed overhead, with root buttresses diving under the floor and a few small knotholes glowing gold';
+const HUB_AVOID = 'No new doorways or arches. AVOID in the new stretch: a moon, any sky or stars, any opening or hole in the ceiling or upper walls, any new doorway.';
+const groveLawn = (round) => `The soft mossy lawn continues at the same height across the lower part of the frame, ${EMPTY[round]}`;
+const GROVE_TREES = {
+  1: 'The trees in the new stretch are ordinary tall forest trunks, none of them bigger than the ones beside them.',
+  2: 'Every tree in the new stretch is an ordinary dark forest trunk, none bigger than its neighbours, with no glow, no knothole light and no doorway.',
+};
+
+const WING_PROMPTS = {
+  'hub-west': `${wingIntro('hub', 'west')} ${hubFloor(2)} The cosy storybook archway at the right edge of the finished part is kept exactly as painted, with its string of small lights, and remains the only doorway: directly to its left the bark wall continues, with no second archway and no glowing opening. The new stretch is a closed side bay of the same hollow: ${HUB_CLOSED}. Across the middle of the new stretch one long, low root arcs along the back wall like a beam, and from it hang seven round paper lanterns, all unlit: plain pale cream paper on thin wooden ribs, dark inside, no glow, evenly spaced; beneath them a curve of low, smooth root benches edges an open patch of floor. At the far left edge the wall curves gently forward into shadow with thick roots. The only moonlight here is soft cream light spilling in sideways from the right. ${HUB_AVOID} ${wingStyle('hub', WING_STYLE_EDITS)}`,
+  'hub-east': `${wingIntro('hub', 'east')} ${hubFloor(1)} The new stretch is a closed side bay of the same hollow: ${HUB_CLOSED}. In the middle of the new stretch a wide, shallow alcove in the back wall holds a low round tree-stump platform like a small stage, worn smooth on top, with three paper lanterns hanging above it and soft gold light on it. Further right, a cluster of large shelf fungi on the wall glows a faint warm gold, and at the far right edge the wall curves gently forward into shadow with thick roots. The only moonlight here is soft cream light spilling in sideways from the left. ${HUB_AVOID} ${wingStyle('hub')}`,
+  'grove-west': `${wingIntro('grove', 'west')} The clearing continues to the left. ${groveLawn(2)} In the middle of the new stretch the lawn meets a still forest pond: its near bank is a gentle curve of moss and smooth round stones, its water dark blue and glassy, reflecting the dusk sky and the warm lantern lights. A short jetty of weathered wooden planks runs from the lawn straight back over the water, with a small round amber lantern on a post at its far end. Reeds and a few lily pads at the water's edge, fireflies drifting over the water. Behind the pond, tall dark trunks hold two little shingled treehouses high up on platforms, joined by a rope bridge hung with round amber lanterns, and the warm dusk glow of the sky between the trunks continues at the same height. At the far left edge the forest closes in with big trunks and ferns. ${GROVE_TREES[2]} ${wingStyle('grove', WING_STYLE_EDITS)}`,
+  'grove-east': `${wingIntro('grove', 'east')} The clearing continues to the right. ${groveLawn(1)} A narrow winding dirt path crosses it. The rope bridge that leaves the top right of the finished part carries on into the new stretch, linking three or four more little shingled treehouses with lit round windows at different heights on tall trunks, with rope bridges hung with round amber lanterns and a ladder down to the lawn. On the lawn, a small ring of glowing mushrooms, a few mossy stumps and a fallen log to sit on. The warm dusk glow of the sky between the trunks continues at the same height. At the far right edge the forest closes in with big trunks and ferns. ${GROVE_TREES[1]} ${wingStyle('grove')}`,
+  'market-east': `${wingIntro('market', 'east')} The street continues to the right at the same height: the rain-slick asphalt with neon reflections fills the lower part of the frame, ${EMPTY[1]} Along the far curb the row of market stalls carries on: more stalls with awnings, hanging cables and glowing displays of goods as abstract shapes of colour, a noodle stall with soft steam, a stall stacked with glowing sweets in jars. In the middle of the new stretch the street widens into a small round plaza in front of the stalls, with a low circular platform ringed by cyan neon, empty, like a little stage. Behind the stalls the skyline of tall chrome towers with neon edges and lit window bands continues under the violet and magenta clouds. At the far right edge the street bends away between tall buildings. No robots and no characters anywhere. ${wingStyle('market')}`,
+};
+
+/** The wing keys (one screen each) and the seed of each approved candidate's pair of variants. */
+export const WING_KEYS = Object.keys(WING_PROMPTS);
+const WING_SEEDS = { 'hub-west': 9213, 'hub-east': 9221, 'grove-west': 9233, 'grove-east': 9241, 'market-east': 9251 };
+
+const WING_JOBS = WING_KEYS.map((key) => ({
+  key,
+  kind: 'wing',
+  realm: key.replace(/-(west|east)$/, ''),
+  optional: true,
+  size: '3040x1368',
+  seed: WING_SEEDS[key],
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the painting's edge on a grey canvas to paint over", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: WING_PROMPTS[key],
+}));
+Object.assign(PROMPTS, WING_PROMPTS);
+JOBS.push(...WING_JOBS);

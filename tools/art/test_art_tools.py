@@ -30,12 +30,13 @@ from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
-from artlib.guide import render_guide, review_composite, room_of  # noqa: E402
+from artlib.guide import render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
                           synth_overlay, synth_owl_master, synth_room)
+from artlib import wings  # noqa: E402
 import owl_layers  # noqa: E402
 import postprocess  # noqa: E402
 
@@ -547,6 +548,123 @@ class TestGuideOverlay(unittest.TestCase):
         self.assertTrue(check_overlay(fixed_big.resize((1600, 900)), geom, "hub")["ok"])
 
 
+def wide_market_geometry() -> dict:
+    """The fixture's market grown by an east screen: two background tiles and two overlays."""
+    geom = fixture_geometry()
+    m = geom["rooms"]["market"]
+    m["size"] = {"w": 3200, "h": 900}
+    m["walkable"] = [[{"x": 0, "y": 690}, {"x": 3200, "y": 690}, {"x": 3200, "y": 885}, {"x": 0, "y": 885}]]
+    m["doors"] = m["doors"] + [{"id": "stage", "rect": {"x": 2300, "y": 700, "w": 200, "h": 100}, "marker": {"x": 2400, "y": 760}}]
+    m["spawns"] = {"default": {"x": 200, "y": 760}, "far": {"x": 2600, "y": 800}}
+    m["backgrounds"] = [{"key": "market", "x": 0, "y": 0}, {"key": "market-east", "x": 1600, "y": 0}]
+    m["foregrounds"] = [{"key": "market-fg", "x": 0, "y": 0}, {"key": "market-east-fg", "x": 1600, "y": 0}]
+    return geom
+
+
+def edge_overlay(w: int, h: int) -> Image.Image:
+    """Transparent RGBA with a post touching each side edge and a lamp in the middle."""
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, h // 10, w // 40, h // 3), fill=(40, 30, 20, 255))
+    d.rectangle((w - w // 40, h // 10, w - 1, h // 3), fill=(20, 30, 40, 255))
+    d.ellipse((w // 2 - w // 50, h // 12, w // 2 + w // 50, h // 6), fill=(220, 200, 90, 255))
+    return img
+
+
+class TestWings(unittest.TestCase):
+    def test_wing_keys_name_a_room_and_a_side(self):
+        self.assertEqual(wings.wing_of("hub-west"), ("hub", "west"))
+        self.assertEqual(wings.wing_of("market-east"), ("market", "east"))
+        for key in ("hub", "hub-fg", "market-east-fg", "owl-west-x", "hub-north"):
+            self.assertIsNone(wings.wing_of(key), key)
+        self.assertEqual([wings.tile_key("grove", p) for p in ("west", "mid", "east")], ["grove-west", "grove", "grove-east"])
+        self.assertEqual([wings.tile_key("grove", p, overlay=True) for p in ("west", "mid")], ["grove-west-fg", "grove-fg"])
+
+    def test_the_canvas_holds_the_painting_edge_and_grey_where_the_wing_goes(self):
+        painting = synth_room(3200, 1800, 5, "market")
+        east = np.asarray(wings.outpaint_canvas(painting, "east")).astype(int)
+        west = np.asarray(wings.outpaint_canvas(painting, "west")).astype(int)
+        self.assertEqual(east.shape, (900, 2000, 3))
+        edge = np.asarray(painting.crop((2400, 0, 3200, 1800)).resize((400, 900), Image.Resampling.LANCZOS)).astype(int)
+        self.assertLess(np.abs(east[:, 20:380] - edge[:, 20:380]).mean(), 2, "the painting's east strip opens the canvas")
+        self.assertTrue((east[:, 420:] == 127).all(), "grey for the wing")
+        self.assertTrue((west[:, :1580] == 127).all())
+        self.assertLess(np.abs(west[:, 1620:1980] - np.asarray(painting.crop((0, 0, 800, 1800)).resize((400, 900), Image.Resampling.LANCZOS)).astype(int)[:, 20:380]).mean(), 2)
+
+    def _model_output(self, painting: Image.Image, side: str, shift: float) -> Image.Image:
+        """A stand-in for the model: the painting's strip repainted a little brighter, then new paint."""
+        art = np.asarray(painting).astype(np.float32)
+        out = np.zeros((1800, 4000, 3), np.float32)
+        out[:, :, :] = (90, 140, 60)
+        if side == "east":
+            out[:, :800] = art[:, 2400:] + shift
+        else:
+            out[:, 3200:] = art[:, :800] + shift
+        return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).resize((3040, 1368), Image.Resampling.LANCZOS)
+
+    def test_stitch_keeps_the_painting_and_joins_inside_the_overlap(self):
+        painting = synth_room(3200, 1800, 7, "grove")
+        art = np.asarray(painting)
+        panos = {}
+        for side in ("west", "east"):
+            pano, rep = wings.stitch(painting, self._model_output(painting, side, 12.0), side)
+            self.assertEqual(pano.size, (6400, 1800))
+            self.assertEqual(rep["side"], side)
+            lo, hi = rep["seam_columns"]
+            self.assertTrue(60 <= lo <= hi <= 740, rep)
+            a = np.asarray(pano)
+            if side == "east":
+                self.assertTrue((a[:, :2400] == art[:, :2400]).all(), "the painting west of the overlap is untouched")
+                self.assertLess(np.abs(a[:, 3300:3400].astype(int) - (90, 140, 60)).mean(), 25, "the wing's new paint follows, its tone pulled toward the painting")
+            else:
+                self.assertTrue((a[:, 4000:] == art[:, 800:]).all(), "the painting east of the overlap is untouched")
+            panos[side] = pano
+        tiles = wings.split_tiles(painting, panos)
+        self.assertEqual(list(tiles), ["west", "mid", "east"])
+        self.assertTrue(all(t.size == (3200, 1800) for t in tiles.values()))
+        mid = np.asarray(tiles["mid"])
+        self.assertTrue((mid[:, 800:2400] == art[:, 800:2400]).all(), "the middle screen is the painting between its joins")
+        self.assertTrue((np.asarray(tiles["west"]) == np.asarray(panos["west"])[:, :3200]).all())
+        self.assertTrue((np.asarray(tiles["east"]) == np.asarray(panos["east"])[:, 3200:]).all())
+        only_east = wings.split_tiles(painting, {"east": panos["east"]})
+        self.assertEqual(list(only_east), ["mid", "east"])
+        self.assertTrue((np.asarray(only_east["mid"])[:, :2400] == art[:, :2400]).all())
+
+    def test_the_overlay_pieces_at_an_edge_move_to_that_end(self):
+        fg2 = np.asarray(edge_overlay(3200, 1800))
+        fg1 = np.asarray(edge_overlay(1600, 900))
+        parts = wings.split_overlay(fg2, fg1, ("east",))
+        self.assertEqual(sorted(parts), ["east", "mid"])
+        e2, e1 = parts["east"]
+        m2, m1 = parts["mid"]
+        self.assertTrue((e2[300:500, 3190:, 3] == 255).all(), "the east post moved to the east end")
+        self.assertEqual(int((e2[:, :3000, 3] > 0).sum()), 0, "nothing else came with it")
+        self.assertTrue((m2[300:500, :40, 3] == 255).all(), "the west post stays: the room has no west wing")
+        self.assertTrue((m2[200:250, 1580:1620, 3] == 255).all(), "the middle lamp stays")
+        self.assertEqual(int((m2[:, 3100:, 3] > 0).sum()), 0)
+        self.assertEqual(int(((e1[:, :, 3] > 0) & (m1[:, :, 3] > 0)).sum()), 0, "no 1x pixel is in both")
+        self.assertTrue((e1[150:250, 1595:, 3] == 255).all())
+        both = wings.split_overlay(fg2, fg1, ("west", "east"))
+        self.assertTrue((both["west"][0][300:500, :40, 3] == 255).all())
+        self.assertEqual(int((both["mid"][0][:, :100, 3] > 0).sum()), 0)
+
+    def test_a_screen_of_a_wide_room_sees_the_room_shifted(self):
+        geom = wide_market_geometry()
+        view = tile_view(geom, "market", 1600, 0)
+        room = room_of(view, "market")
+        self.assertEqual(room["size"], {"w": 1600, "h": 900})
+        self.assertEqual(room["walkable"][0][1], {"x": 1600.0, "y": 690.0})
+        stage = next(d for d in room["doors"] if d["id"] == "stage")
+        self.assertEqual((stage["rect"]["x"], stage["marker"]), (700.0, {"x": 800.0, "y": 760.0}))
+        self.assertEqual(room["spawns"]["far"], {"x": 1000.0, "y": 800.0})
+        self.assertEqual(room_of(geom, "market")["spawns"]["far"], {"x": 2600, "y": 800}, "the geometry itself is unchanged")
+        # The overlay rules run on the screen: a post on the stage's marker breaks them there only.
+        blocker = Image.new("RGBA", (1600, 900), (0, 0, 0, 0))
+        ImageDraw.Draw(blocker).rectangle((780, 740, 820, 780), fill=(10, 10, 10, 255))
+        self.assertTrue(any("stage marker" in v for v in check_overlay(blocker, view, "market")["violations"]))
+        self.assertFalse(any("stage" in v for v in check_overlay(blocker, tile_view(geom, "market", 0, 0), "market")["violations"]))
+
+
 class TestForbiddenAndProvenance(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -824,6 +942,63 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(postprocess.main(["publish", "owl-barn", "--provenance", str(provp)] + common), 0, err.getvalue())
                 self.assertEqual(len(prov.read_lines(provp)), 10)
                 self.assertEqual(postprocess.main(["check", "--all", "--provenance", str(provp)] + common), 0, err.getvalue())
+
+    def test_wing_finishes_every_screen_and_moves_the_overlay_ends(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            public.mkdir()
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--provenance", str(provp), "--now", "2026-10-20T09:00:00Z"]
+            (work).mkdir()
+            (work / "geometry.json").write_text(json.dumps(wide_market_geometry()), encoding="utf-8")
+            # The approved painting and its overlay, published with provenance.
+            painting = synth_room(3200, 1800, 11, "market")
+            (public / "market@2x.webp").write_bytes(webpmeta.encode(painting, 90))
+            (public / "market.webp").write_bytes(webpmeta.encode(painting.resize((1600, 900)), 90))
+            pngmeta.save(edge_overlay(3200, 1800), public / "market-fg@2x.png")
+            pngmeta.save(edge_overlay(1600, 900), public / "market-fg.png")
+            for asset, seed in (("market@2x.webp", 1404), ("market-fg@2x.png", 1603)):
+                prov.append(provp, prov.build_line(asset=asset, key=asset.split("@")[0].removesuffix(".webp"), logical="2x", sha256="0" * 64, nbytes=1, colors=None, budget_relaxed=False,
+                                                   sidecar={"hash16": f"{seed:016x}", "provider": "fal", "model": "m", "prompt_sha256": "cd" * 32, "seed": seed, "size": "3200x1800", "generated_at": "t"},
+                                                   published_at="t", tools=[], human_edits=[]))
+            # The picked wing candidate.
+            d = work / "raw" / "market-east"
+            d.mkdir(parents=True)
+            h = "00000000000092b2"
+            (d / f"{h}.png").write_bytes(pngmeta.encode(TestWings()._model_output(painting.convert("RGB"), "east", 6.0)))
+            (d / f"{h}.json").write_text(json.dumps({"schema": 1, "key": "market-east", "kind": "wing", "provider": "fal", "model": "m", "hash16": h, "prompt_sha256": "ef" * 32,
+                                                     "seed": 9252, "size": "3040x1368", "generated_at": "t"}), encoding="utf-8")
+            (d / "SELECTED").write_text(h + "\n", encoding="utf-8")
+            with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()) as out:
+                self.assertEqual(postprocess.main(["canvas", "market-east"] + common[:4]), 0, err.getvalue())
+                self.assertEqual(Image.open(work / "canvas" / "market-east.png").size, (2000, 900))
+                self.assertEqual(postprocess.main(["canvas", "market"] + common[:4]), 1)
+                self.assertEqual(postprocess.main(["wing", "market", "--note", "east B approved by the art director"] + common), 0, err.getvalue())
+                final = work / "final"
+                self.assertEqual(sorted(p.name for p in final.iterdir() if not p.name.endswith(".json")),
+                                 ["market-east-fg.png", "market-east-fg@2x.png", "market-east.webp", "market-east@2x.webp", "market-fg.png", "market-fg@2x.png", "market.webp", "market@2x.webp"])
+                rec = {k: json.loads((final / f"{k}.post.json").read_text(encoding="utf-8")) for k in ("market", "market-east", "market-fg", "market-east-fg")}
+                self.assertEqual(rec["market-east"]["raw_sidecar"]["seed"], 9252, "a wing records its candidate")
+                self.assertEqual(rec["market"]["raw_sidecar"]["seed"], 1404, "the middle screen keeps the painting's own record")
+                self.assertEqual(rec["market-east-fg"]["raw_sidecar"]["seed"], 1603)
+                self.assertIn("join to market-east (seed 9252", rec["market"]["tools"][0])
+                self.assertTrue(rec["market-east-fg"]["overlay_check"]["ok"], rec["market-east-fg"]["overlay_check"])
+                self.assertEqual(rec["market-east"]["human_edits"], ["east B approved by the art director"])
+                east_fg = np.asarray(Image.open(final / "market-east-fg@2x.png").convert("RGBA"))
+                self.assertTrue((east_fg[300:500, 3190:, 3] == 255).all(), "the east post is at the room's east end")
+                self.assertTrue((work / "review" / "market-wide.png").exists())
+                self.assertIn("publish: pnpm art:finish publish market market-east market-fg market-east-fg", out.getvalue())
+                self.assertEqual(postprocess.main(["publish", "market", "market-east", "market-fg", "market-east-fg"] + common), 0, err.getvalue())
+                self.assertEqual(postprocess.main(["check", "market", "market-east", "market-fg", "market-east-fg"] + common), 0, out.getvalue()[-2000:])
+                lines = [l for l in prov.read_lines(provp) if l["published_at"] == "2026-10-20T09:00:00Z"]
+                self.assertEqual(len(lines), 8)
+                self.assertEqual({l["seed"] for l in lines if l["key"] == "market-east"}, {9252})
+                # A screen the wide room does not draw is left out of the overlay rules, with a warning.
+                self.assertEqual(postprocess.main(["check", "hub-fg"] + common), 0)
+                # --overlay drop writes no overlay.
+                self.assertEqual(postprocess.main(["wing", "market", "--overlay", "drop", "--painting", str(public / "market@2x.webp"), "--out", str(Path(tmp) / "drop")] + common[:2] + common[4:]), 0, err.getvalue())
+                self.assertEqual(sorted(p.name for p in (Path(tmp) / "drop").iterdir() if p.suffix == ".webp"), ["market-east.webp", "market-east@2x.webp", "market.webp", "market@2x.webp"])
+                self.assertFalse(any((Path(tmp) / "drop").glob("*-fg*")))
 
     def test_publish_validates_before_touching_the_tree(self):
         with tempfile.TemporaryDirectory() as tmp:

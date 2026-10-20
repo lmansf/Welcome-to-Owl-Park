@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closestPointOnPolygon, isWalkable, pointInPolygon, pointInRect, snapToWalkable, type Polygon } from './geometry';
+import { closestPointOnPolygon, distanceToRect, isWalkable, pointInPolygon, pointInRect, snapToWalkable, type Polygon } from './geometry';
 
 const square: Polygon = [
   { x: 0, y: 0 },
@@ -55,6 +55,13 @@ describe('helpers', () => {
   it('closestPointOnPolygon handles corners', () => {
     expect(closestPointOnPolygon({ x: 120, y: 120 }, square)).toEqual({ x: 100, y: 100 });
   });
+  it('distanceToRect is 0 inside and the shortest way to an edge or corner outside', () => {
+    const r = { x: 10, y: 10, w: 20, h: 10 };
+    expect(distanceToRect({ x: 15, y: 15 }, r)).toBe(0);
+    expect(distanceToRect({ x: 15, y: 4 }, r)).toBe(6);
+    expect(distanceToRect({ x: 33, y: 24 }, r)).toBe(5);
+  });
+
   it('pointInRect is inclusive', () => {
     expect(pointInRect({ x: 10, y: 10 }, { x: 10, y: 10, w: 5, h: 5 })).toBe(true);
     expect(pointInRect({ x: 16, y: 10 }, { x: 10, y: 10, w: 5, h: 5 })).toBe(false);

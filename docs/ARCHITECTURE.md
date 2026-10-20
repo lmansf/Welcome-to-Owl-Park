@@ -11,7 +11,7 @@ and so does Owl Park:
 
 | Mechanic | Classic model | Owl Park |
 | --- | --- | --- |
-| Rooms | A fixed-size painted stage per room with a hidden "block" layer marking where an avatar may not stand, a foreground layer drawn in front of avatars, and trigger zones that lead to other rooms | A 1600 x 900 room with `walkable` polygons, an optional foreground image, and `doors` (trigger rectangles) in `packages/shared/rooms` |
+| Rooms | A fixed-size painted stage per room with a hidden "block" layer marking where an avatar may not stand, a foreground layer drawn in front of avatars, and trigger zones that lead to other rooms | A room of one or more 1600 x 900 screens (the hub and the grove three, the market two) with `walkable` polygons, optional foreground images, and `doors` (trigger rectangles) in `packages/shared/rooms` |
 | Movement | Click a spot; the avatar walks there in a straight line at constant speed; the client sends only the destination and every other client animates the same walk itself | Tap; `resolveTarget` snaps the tap into the walkable area and stops at the first blocked sample; one `move` message carries the target; every client animates from (from, to, startedAt) with `positionAlongWalk` |
 | Depth | Avatars and props sorted by their y coordinate | `depth = y` for owls and set pieces; foreground always on top |
 | Entering a room | Spawn near a named point with a little random scatter so avatars do not stack | Named `spawns`; the room server scatters new arrivals (door entry 60 px, map entry 220 px) |
@@ -128,7 +128,11 @@ each, listed in `backgrounds` and `foregrounds` with their offsets, which must c
 exactly (unit-tested). The client registers every tile as room art, loads a room's tiles together
 and keeps them within one memory budget: a phone gets what a one-screen room costs today, so a
 room whose 2x tiles would not fit loads its 1x copies. Open doorways and interactive spots the
-camera cannot see get a chip at the screen's edge pointing to them; tapping it walks there. A door without `to` can be an
+camera cannot see get a chip at the screen's edge pointing to them; tapping it walks there. A
+walk goes through a doorway only when it ends in it or at its arch (or the held keys steer into
+it): walking across a wide room, or up to something to do, passes doorways by. Positions stored
+for later (the quest items a visitor has been handed) follow the room data's `ROOM_LAYOUT`: when
+a room grows on the west, the room server and the browser move them once. A door without `to` can be an
 interactive spot (the gift shop, the idol): an entry in `interactions` in
 `apps/park/src/game/RoomScene.ts` gives it a button label and an action, and standing in it shows
 the button, which E also presses. New interactables, mini games included, follow that pattern. Art is referenced by key; artists replace files under

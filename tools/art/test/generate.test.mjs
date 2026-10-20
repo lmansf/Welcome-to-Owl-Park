@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -222,7 +223,7 @@ test('every generated asset key in art.ts has a job (directly or derived) and th
     assert.ok(!j.prompt.includes('{'), `${j.key}: no unresolved placeholders`);
     if (j.key_colour) assert.ok(j.prompt.includes(j.key_colour), `${j.key}: the prompt names the job's key colour ${j.key_colour}`);
     if (j.kind === 'room' || j.kind === 'overlay') assert.equal(j.size, '3200x1800', `${j.key}: rooms generate at 2x`);
-    for (const r of j.refs) assert.ok(/^(refs\/|@guide:|@raw:|@final:|https:\/\/)/.test(r.ref));
+    for (const r of j.refs) assert.ok(/^(refs\/|@guide:|@raw:|@final:|@canvas:|https:\/\/)/.test(r.ref));
   }
   const byKey = Object.fromEntries(jobs.map((j) => [j.key, j]));
   assert.deepEqual(byKey['owl-master'].derives, P.OWL_LAYER_KEYS);
@@ -230,6 +231,59 @@ test('every generated asset key in art.ts has a job (directly or derived) and th
   assert.equal(byKey['owl-blink-src'].optional, true);
   assert.equal(byKey['owl-blink-src'].refs[0].optional, false);
   for (const realm of ['hub', 'grove', 'market']) assert.ok(P.STYLE[realm].startsWith('STYLE (use verbatim in every'));
+});
+
+test('wing jobs paint each wing over its canvas at 3040x1368 in PNG; the overlays derive the end screens', () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.deepEqual(P.WING_KEYS, ['hub-west', 'hub-east', 'grove-west', 'grove-east', 'market-east']);
+  for (const key of P.WING_KEYS) {
+    const j = jobs.get(key);
+    assert.equal(j.kind, 'wing', key);
+    assert.equal(j.realm, key.split('-')[0]);
+    assert.deepEqual([j.size, j.variants, j.optional], ['3040x1368', 2, true], key);
+    assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [[`@canvas:${key}`, false]], key);
+    assert.equal(j.providers.fal.output_format, 'png', `${key}: the edit endpoint answers in JPEG unless asked`);
+    assert.ok(j.prompt.startsWith('Extend this painting into a wide panorama.'), key);
+    assert.match(j.prompt, /STYLE: /, `${key}: carries the room's style block`);
+    assert.ok(!/STYLE \(use verbatim/.test(j.prompt), `${key}: the block's own heading is dropped`);
+    assert.equal(ASSETS.keys[key].kind, 'room', `${key}: one screen of room art`);
+  }
+  assert.ok(!jobs.get('hub-west').prompt.includes('moonlight from above'), 'the wings have no moon overhead');
+  assert.ok(!jobs.get('grove-west').prompt.includes('locked silhouette'), "the grove's colossal tree stays in its painting");
+  assert.deepEqual(jobs.get('grove-fg').derives, ['grove-west-fg']);
+  assert.deepEqual(jobs.get('market-fg').derives, ['market-east-fg']);
+  assert.deepEqual(G.refLocation('@canvas:hub-west', { workDir: '/w' }), { kind: 'file', file: path.join('/w', 'canvas', 'hub-west.png') });
+  // The published wings were painted from these very prompts, at one of each job's seeds.
+  const lines = fs.readFileSync(path.join(G.TOOLS_DIR, 'provenance.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  for (const key of P.WING_KEYS) {
+    const j = jobs.get(key);
+    const line = lines.findLast((l) => l.asset === `${key}.webp`);
+    assert.ok(line, `${key}.webp is published`);
+    assert.equal(line.prompt_sha256, createHash('sha256').update(j.prompt).digest('hex'), `${key}: the prompt it was painted from`);
+    assert.ok(line.seed >= j.seed && line.seed < j.seed + j.variants, `${key}: seed ${line.seed} is one of the job's variants`);
+  }
+  assert.throws(() => G.validateJobs([{ ...P.JOBS.find((j) => j.key === 'hub-west'), refs: ['@canvas:Hub West'] }], { assets: ASSETS }), /invalid key/);
+});
+
+test('a wing job runs with the mock provider once its canvas exists, and is skipped before', () => {
+  const out = tmp('wing');
+  const env = { ...process.env, ART_NOW: '2026-10-20T10:00:00Z' };
+  const before = spawnSync(process.execPath, [GEN, 'run', '--only', 'market-east', '--out', out], { encoding: 'utf8', env });
+  assert.equal(before.status, 0, before.stderr);
+  assert.match(before.stderr, /skipping optional job market-east/);
+  fs.mkdirSync(path.join(out, 'canvas'), { recursive: true });
+  fs.writeFileSync(path.join(out, 'canvas', 'market-east.png'), tinyPng());
+  const r = spawnSync(process.execPath, [GEN, 'run', '--only', 'market-east', '--out', out], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  const dir = path.join(out, 'raw', 'market-east');
+  const sidecars = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+  assert.deepEqual(sidecars.map((s) => s.seed).sort(), [9251, 9252]);
+  for (const s of sidecars) {
+    assert.equal(s.kind, 'wing');
+    assert.equal(s.refs[0].ref, '@canvas:market-east');
+    const png = fs.readFileSync(path.join(dir, `${s.hash16}.png`));
+    assert.deepEqual([G.parsePng(png).width, G.parsePng(png).height], [3040, 1368]);
+  }
 });
 
 test('validateJobs rejects invalid or non-public keys, bad sizes and missing key colours', () => {
@@ -518,8 +572,11 @@ test('geometry exports the live room data with the assets table', () => {
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
   assert.deepEqual(Object.keys(g.rooms).sort(), ['grove', 'hub', 'market']);
-  assert.deepEqual(g.rooms.hub.size, { w: 1600, h: 900 });
-  assert.deepEqual(g.rooms.hub.anchors['tree-base'], { x: 800, y: 628 });
+  assert.deepEqual(g.rooms.hub.size, { w: 4800, h: 900 });
+  assert.deepEqual(g.rooms.hub.backgrounds.map((t) => [t.key, t.x]), [['hub-west', 0], ['hub', 1600], ['hub-east', 3200]]);
+  assert.deepEqual(g.rooms.hub.foregrounds, []);
+  assert.deepEqual(g.rooms.market.foregrounds.map((t) => [t.key, t.x]), [['market-fg', 0], ['market-east-fg', 1600]]);
+  assert.deepEqual(g.rooms.hub.anchors['tree-base'], { x: 2400, y: 628 });
   assert.ok(g.rooms.hub.doors.some((d) => d.id === 'to-grove'));
   assert.ok(g.rooms.hub.walkable[0].length > 3);
   assert.equal(g.closedSigns.length, 4);

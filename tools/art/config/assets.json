@@ -6,7 +6,19 @@
       "w": 1600,
       "h": 900,
       "kind": "room",
-      "with_2x": false
+      "with_2x": true
+    },
+    "hub-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "hub-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
     },
     "hub-fg": {
       "w": 1600,
@@ -14,13 +26,25 @@
       "kind": "room",
       "overlay": true,
       "key_colour": "#00FF00",
-      "with_2x": false
+      "with_2x": true
     },
     "grove": {
       "w": 1600,
       "h": 900,
       "kind": "room",
-      "with_2x": false
+      "with_2x": true
+    },
+    "grove-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "grove-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
     },
     "grove-fg": {
       "w": 1600,
@@ -28,13 +52,27 @@
       "kind": "room",
       "overlay": true,
       "key_colour": "#FF00FF",
-      "with_2x": false
+      "with_2x": true
+    },
+    "grove-west-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "with_2x": true
     },
     "market": {
       "w": 1600,
       "h": 900,
       "kind": "room",
-      "with_2x": false
+      "with_2x": true
+    },
+    "market-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
     },
     "market-fg": {
       "w": 1600,
@@ -42,7 +80,15 @@
       "kind": "room",
       "overlay": true,
       "key_colour": "#00FF00",
-      "with_2x": false
+      "with_2x": true
+    },
+    "market-east-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": true
     },
     "guardian": {
       "w": 720,

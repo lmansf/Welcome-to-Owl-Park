@@ -44,6 +44,16 @@ function rig() {
 }
 
 describe('SqlCollectionStore', () => {
+  it('moves quest items saved under the one-screen rooms along with the rooms, once', () => {
+    const sql = sqlStorage();
+    const item = (room: string, x: number, n: number) => ({ n, step: 0, room, x, y: 840, kind: 'acorn' as const, taken: false });
+    new SqlCollectionStore(sql).putQuest({ cid: CID, quest: 'story-hazel-acorns', period: '', step: 0, count: 0, seen: [], items: [item('grove', 380, 0), item('market', 330, 1)], acceptedAt: MON, doneAt: null });
+    sql.exec(`DELETE FROM meta`); // as the store was before the rooms grew
+    const xs = () => new SqlCollectionStore(sql).quests(CID)[0]!.items.map((i) => i.x);
+    expect(xs()).toEqual([1980, 330]);
+    expect(xs()).toEqual([1980, 330]);
+  });
+
   it('keeps a collector, the starter pack, grants and owned wear', () => {
     const { store, book } = rig();
     expect(book.ensure(CID, 'America/New_York', MON)).toMatchObject({ cid: CID, tz: 'America/New_York', feathers: 0 });

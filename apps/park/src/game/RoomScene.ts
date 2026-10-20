@@ -51,6 +51,7 @@ import type { Keys } from '../ui/keyboard';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { roomScaleCap } from './artFiles';
+import { takesDoorway } from './doors';
 import { placeHints } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
@@ -956,8 +957,7 @@ export class RoomScene extends Phaser.Scene {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
       if (door.to) {
-        // Walking up to do something (talk, flop, browse) never takes a doorway on the way.
-        if (this.errand) continue;
+        if (!takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null)) continue;
         void this.goTo(door.to.room, door.to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
         return;
       }

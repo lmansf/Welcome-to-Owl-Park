@@ -36,15 +36,15 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
 
 export const INTERACTABLES: readonly InteractableDef[] = [
   // Leaves blow in through the storybook arch and pile up just inside the great tree...
-  { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 330, y: 820 } },
+  { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 1930, y: 820 } },
   // ...and drift around the hollow at the foot of the tree outside.
-  { id: 'grove-leaves-1', kind: 'leaf-pile', room: 'grove', pos: { x: 900, y: 835 } },
-  { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 1290, y: 845 } },
-  { id: 'grove-leaves-3', kind: 'leaf-pile', room: 'grove', pos: { x: 620, y: 820 } },
+  { id: 'grove-leaves-1', kind: 'leaf-pile', room: 'grove', pos: { x: 2500, y: 835 } },
+  { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 2890, y: 845 } },
+  { id: 'grove-leaves-3', kind: 'leaf-pile', room: 'grove', pos: { x: 2220, y: 820 } },
   { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 400, y: 705 } },
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
-  { id: 'hub-moonbeam', kind: 'moonbeam', room: 'hub', pos: { x: 800, y: 690 } },
+  { id: 'hub-moonbeam', kind: 'moonbeam', room: 'hub', pos: { x: 2400, y: 690 } },
 ];
 
 const BY_ID: Readonly<Record<string, InteractableDef>> = Object.fromEntries(INTERACTABLES.map((i) => [i.id, i]));

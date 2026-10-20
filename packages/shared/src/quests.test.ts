@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROOMS } from '../rooms';
+import { ROOMS, ROOM_LAYOUT } from '../rooms';
 import { MemoryCollectionStore, CollectionBook } from './book';
 import { DUPLICATE_FEATHERS, EMOTE_IDS, STARTER_PACK, parseVariant } from './collectibles';
 import { isWalkable, pointInRect } from './geometry';
@@ -326,6 +326,17 @@ describe('quest ledger', () => {
     quests.gather('c1', 'story-hazel-acorns', b!.n, 'grove', b!, MON);
     const last = quests.gather('c1', 'story-hazel-acorns', c!.n, 'grove', c!, MON);
     expect(last.ok && last.updates[0]!.ready).toBe(true);
+  });
+
+  it('moves quest items saved under the one-screen rooms along with the rooms, once', () => {
+    const item = (room: string, x: number, y: number, n: number) => ({ n, step: 0, room, x, y, kind: 'acorn' as const, taken: false });
+    const before = { collectors: [], owned: [], quests: [{ cid: 'c1', quest: 'story-hazel-acorns', period: '', step: 0, count: 0, seen: [], items: [item('grove', 380, 840, 0), item('hub', 60, 820, 1), item('market', 330, 860, 2)], acceptedAt: MON, doneAt: null }] };
+    const moved = MemoryCollectionStore.from(before).quests('c1')[0]!.items;
+    expect(moved.map((i) => [i.room, i.x, i.y])).toEqual([['grove', 1980, 840], ['hub', 1660, 820], ['market', 330, 860]]);
+    for (const i of moved) expect(SPOTS[i.room]!.some((p) => p.x === i.x && p.y === i.y), `${i.room} ${i.x},${i.y} is a spot again`).toBe(true);
+    const snap = MemoryCollectionStore.from(before).snapshot();
+    expect(snap.layout).toBe(ROOM_LAYOUT);
+    expect(MemoryCollectionStore.from(snap).quests('c1')[0]!.items).toEqual(moved);
   });
 
   it('caps active quests and forgets yesterday’s daily quests', () => {

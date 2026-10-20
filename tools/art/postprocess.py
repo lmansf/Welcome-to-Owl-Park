@@ -12,6 +12,8 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   room <key>           crop/resize to 1600x900 (and opt-in 3200x1800), grade, WebP under budget, review
   piece <key>          chroma key, fit into the logical canvas at 2x, downsample, grade, budget
   overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
+  canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
+  wing <room>          stitch the room's picked wings onto its painting; finish every screen and the end overlays
   owl                  split the owl master into the five layers at 200x240 and 400x480
   grade <in> <out>     the palette grade hook on its own
   ref <in> <out>       prepare a committed anchor reference (<= 1024 px, no metadata, under budget)
@@ -53,18 +55,19 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
     print(f"pnpm art:finish needs Pillow 12 and numpy ({_missing.name or 'a module'} is missing): python3 -m pip install pillow numpy (a venv is fine)", file=sys.stderr)
     sys.exit(2)
 
-from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES,DEFAULT_WORK_DIR, HELPER_KEYS, OVERLAY_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
+from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
-                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, load_assets, load_key_colours, logical_size, now_iso, owl_layer_base, owl_master_of, rel_to_repo,
-                    sha256_bytes, species_layers, validate_key)
+                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, load_key_colours, logical_size, now_iso, owl_layer_base,
+                    owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, key_out  # noqa: E402
 from artlib.grade import grade as grade_image, load_palette  # noqa: E402
-from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of  # noqa: E402
+from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.resize import downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
+from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
 import owl_layers  # noqa: E402
 
 Image.MAX_IMAGE_PIXELS = 80_000_000
@@ -103,10 +106,36 @@ class Ctx:
                 self._geom = fixture_geometry()
         return self._geom
 
+    def tile_of(self, key: str) -> tuple[str, dict] | None:
+        """(room id, {key, x, y}) when a room wider than one screen lists the key among its art tiles."""
+        for rid, room in self.geometry().get("rooms", {}).items():
+            for t in (room.get("backgrounds") or []) + (room.get("foregrounds") or []):
+                if t.get("key") == key:
+                    return rid, t
+        return None
+
     def room_for(self, key: str) -> str:
         if key in PIECE_ANCHOR:
             return PIECE_ANCHOR[key][0]
-        return key[:-3] if key.endswith("-fg") else key
+        hit = self.tile_of(key)
+        if hit:
+            return hit[0]
+        base = key[:-3] if key.endswith("-fg") else key
+        wing = wing_of(base)
+        return wing[0] if wing else base
+
+    def view_for(self, key: str) -> tuple[dict, str] | None:
+        """The geometry a key's art is drawn and checked against, and its room id: one screen of a
+        wider room is seen through ``tile_view``. None for room art that a wider room does not draw."""
+        geom = self.geometry()
+        room = self.room_for(key)
+        hit = self.tile_of(key)
+        if hit:
+            return tile_view(geom, room, float(hit[1].get("x", 0)), float(hit[1].get("y", 0))), room
+        size = (geom.get("rooms", {}).get(room) or {}).get("size") or {"w": ROOM_W, "h": ROOM_H}
+        if self.assets.get(key, {}).get("kind") == "room" and (size["w"], size["h"]) != (ROOM_W, ROOM_H):
+            return None
+        return geom, room
 
 
 # ----------------------------------------------------------------------------------------------
@@ -245,11 +274,22 @@ def chroma_params(a: argparse.Namespace, key_colour: str | None) -> ChromaParams
     return ChromaParams(key=key_colour, t0=a.t0, t1=a.t1, despill_band=a.despill_band, min_area=a.min_area, max_hole=a.max_hole, feather=a.feather, trust_key=a.trust_key)
 
 
-def background_for(ctx: Ctx, room: str) -> Image.Image:
-    for cand in (ctx.public / f"{room}.webp", ctx.public / f"{room}.png", ctx.out / f"{room}.webp", ctx.out / f"{room}.png"):
+def background_for(ctx: Ctx, key: str) -> Image.Image:
+    """The painting behind a key's art: the screen at the same place for one screen of a wider room,
+    else the room's own painting (published, else finished), else its layout guide."""
+    room = ctx.room_for(key)
+    bg = room
+    hit = ctx.tile_of(key)
+    if hit:
+        rid, t = hit
+        for b in room_of(ctx.geometry(), rid).get("backgrounds") or []:
+            if (b.get("x"), b.get("y")) == (t.get("x"), t.get("y")):
+                bg = b["key"]
+    for cand in (ctx.public / f"{bg}.webp", ctx.public / f"{bg}.png", ctx.out / f"{bg}.webp", ctx.out / f"{bg}.png"):
         if cand.exists():
             return Image.open(cand).convert("RGB").resize((ROOM_W, ROOM_H), Image.Resampling.LANCZOS)
-    return render_guide(ctx.geometry(), room, ctx.assets)
+    view = ctx.view_for(key)
+    return render_guide(view[0], view[1], ctx.assets) if view else Image.new("RGB", (ROOM_W, ROOM_H), (12, 30, 54))
 
 
 def write_review(ctx: Ctx, name: str, img: Image.Image) -> Path:
@@ -273,33 +313,47 @@ def cmd_guide(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def finish_room(ctx: Ctx, key: str, img: Image.Image, crop: str, shift_y: int, pal: dict | None, strength: float | None, with_2x: bool, budget_2x: int) -> tuple[dict, list[str]]:
+    """The WebP finals of one screen of a room (1x, and 2x when asked): (outputs, budget lines)."""
+    W, H = logical_size(key, ctx.assets)
+    outputs: dict = {}
+    tools: list[str] = []
+    fields = ("format", "quality", "colors", "mode", "budget_relaxed")
+    one = apply_grade(resize_exact(img, W, H, crop, shift_y), pal, strength)
+    data, info = webpmeta.encode_under_budget(one, ctx.budget)
+    outputs["1x"] = {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in fields}}
+    tools.append(budget_line(info))
+    if with_2x:
+        two = apply_grade(resize_exact(img, 2 * W, 2 * H, crop, shift_y), pal, strength)
+        data2, info2 = webpmeta.encode_under_budget(two, budget_2x)
+        outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), budget_2x), **{k: info2.get(k) for k in fields}}
+        tools.append("budget@2x: " + budget_line(info2)[8:])
+    # Only this finish's files may remain: a PNG from an earlier finish, or a 2x this one did not
+    # write, would otherwise be published with it.
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    return outputs, tools
+
+
+def room_review(ctx: Ctx, key: str, img: Image.Image) -> Image.Image:
+    """``img`` with its room's geometry over it (the screen's own view of a wider room), or as it is
+    when no room draws the key."""
+    view = ctx.view_for(key)
+    return review_composite(img, view[0], view[1], 0.4, ctx.assets) if view else img.convert("RGB")
+
+
 def cmd_room(ctx: Ctx, a: argparse.Namespace) -> int:
     """Rooms ship as lossy WebP: a painted 1600x900 room cannot meet the budget as PNG."""
     key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
-    W, H = logical_size(key, ctx.assets)
     raw, sc = resolve_raw(ctx, key, a.raw)
     img = open_raw(raw).convert("RGB")
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
     tools = [f"room: crop={a.crop} shift={a.shift_y} source={img.width}x{img.height}"]
     if gline:
         tools.append(gline)
-    outputs = {}
-    fields = ("format", "quality", "colors", "mode", "budget_relaxed")
-
-    one = apply_grade(resize_exact(img, W, H, a.crop, a.shift_y), pal, strength)
-    data, info = webpmeta.encode_under_budget(one, ctx.budget)
-    outputs["1x"] = {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in fields}}
-    tools.append(budget_line(info))
-    if a.with_2x:
-        two = apply_grade(resize_exact(img, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength)
-        data2, info2 = webpmeta.encode_under_budget(two, a.budget_2x)
-        outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), a.budget_2x), **{k: info2.get(k) for k in fields}}
-        tools.append("budget@2x: " + budget_line(info2)[8:])
-    # Only this finish's files may remain: a PNG from an earlier finish, or a 2x this one did not
-    # write, would otherwise be published with it.
-    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
-        note(f"removed stale final {name}")
-    rv = write_review(ctx, f"{key}.png", review_composite(Image.open(ctx.out / f"{key}.webp"), ctx.geometry(), ctx.room_for(key), 0.4, ctx.assets))
+    outputs, lines = finish_room(ctx, key, img, a.crop, a.shift_y, pal, strength, a.with_2x, a.budget_2x)
+    tools.extend(lines)
+    rv = write_review(ctx, f"{key}.png", room_review(ctx, key, Image.open(ctx.out / f"{key}.webp")))
     save_post_record(ctx, key, {"key": key, "kind": "room", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "params": {"crop": a.crop, "shift_y": a.shift_y, "with_2x": a.with_2x}})
     for k, o in outputs.items():
         note(f"{key} {k}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
@@ -343,9 +397,11 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     elif (ctx.out / f"{key}@2x.png").exists():
         (ctx.out / f"{key}@2x.png").unlink()
     remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
-    # Review: the piece in its room at the anchor, scaled as ambience.ts does.
+    # Review: the piece in its room at the anchor, scaled as ambience.ts does (on the room's painted
+    # screen, as that screen sees the room when the room is wider than one).
     room, anchor = PIECE_ANCHOR.get(key, (None, None))
-    geom = ctx.geometry()
+    view = ctx.view_for(room) if room else None
+    geom, room = view if view else (ctx.geometry(), room)
     if room and anchor and anchor in (room_of(geom, room).get("anchors") or {}):
         ax, ay = (room_of(geom, room)["anchors"][anchor][k] for k in ("x", "y"))
         k = fit_below_top(H, ay)
@@ -360,12 +416,36 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def finish_overlay(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None, budget_2x: int, dither: str) -> tuple[dict, list[str]]:
+    """The PNG finals of an overlay from its RGBA at 1x (and 2x): (outputs, budget lines)."""
+    W, H = logical_size(key, ctx.assets)
+    fields = ("colors", "mode", "budget_relaxed", "dither")
+    outputs: dict = {}
+    data, info = encode_final(one, ctx.budget, None, dither, f"{key}.png")
+    outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in fields}}
+    tools = [budget_line(info)]
+    if two is not None:
+        data2, info2 = encode_final(two, ctx.budget, budget_2x, dither, f"{key}@2x.png")
+        outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), max(ctx.budget, budget_2x)), **{k: info2.get(k) for k in fields}}
+        tools.append("budget@2x: " + budget_line(info2)[8:])
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    return outputs, tools
+
+
+def overlay_view(ctx: Ctx, key: str) -> tuple[dict, str]:
+    view = ctx.view_for(key)
+    if view is None:
+        raise ArtError(f"{key!r}: its room is wider than one screen and does not list it among its foregrounds (run `pnpm art:geometry` after changing the room data)")
+    return view
+
+
 def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
-    if key not in OVERLAY_KEYS:
-        raise ArtError(f"{key!r} is not an overlay key ({', '.join(OVERLAY_KEYS)})")
+    if not is_overlay(key, ctx.assets):
+        raise ArtError(f"{key!r} is not an overlay key (room art named <room>-fg or <room>-<side>-fg)")
     W, H = logical_size(key, ctx.assets)
-    room = ctx.room_for(key)
+    geom, room = overlay_view(ctx, key)
     raw, sc = resolve_raw(ctx, key, a.raw)
     img = open_raw(raw)
     kc = key_colour_for(ctx, key, a.key_colour, sc)
@@ -374,8 +454,6 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     tools = [f"overlay: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} crop={a.crop}"]
     if gline:
         tools.append(gline)
-    outputs = {}
-    geom = ctx.geometry()
 
     def cleared(im: Image.Image, scale: float) -> Image.Image:
         # Deterministic fixes for what prompts cannot pin down: glow keyed out as opaque key colour,
@@ -391,19 +469,12 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
         return im
 
     one = cleared(apply_grade(resize_exact(rgba, W, H, a.crop, a.shift_y), pal, strength), 1)
-    data, info = encode_final(one, ctx.budget, None, a.dither, f"{key}.png")
-    outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
-    tools.append(budget_line(info))
-    if a.with_2x:
-        two = cleared(apply_grade(resize_exact(rgba, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength), 2)
-        data2, info2 = encode_final(two, ctx.budget, a.budget_2x, a.dither, f"{key}@2x.png")
-        outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), max(ctx.budget, a.budget_2x)), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
-    elif (ctx.out / f"{key}@2x.png").exists():
-        (ctx.out / f"{key}@2x.png").unlink()
-    remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
+    two = cleared(apply_grade(resize_exact(rgba, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength), 2) if a.with_2x else None
+    outputs, lines = finish_overlay(ctx, key, one, two, a.budget_2x, a.dither)
+    tools.extend(lines)
     final = Image.open(ctx.out / f"{key}.png").convert("RGBA")
     report = check_overlay(final, geom, room, key_colour=cinfo["backdrop"])
-    bg = background_for(ctx, room).convert("RGBA")
+    bg = background_for(ctx, key).convert("RGBA")
     bg.alpha_composite(final)
     rv = write_review(ctx, f"{key}.png", review_composite(bg, geom, room, 0.4, ctx.assets))
     save_post_record(ctx, key, {"key": key, "kind": "overlay", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "overlay_check": report})
@@ -415,6 +486,117 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
         note(f"  - {v}")
     if a.check and not report["ok"]:
         return 1
+    return 0
+
+
+def open_painting(ctx: Ctx, room: str, flag: str | None) -> tuple[Path, Image.Image]:
+    """The room's approved painting at 2x: --painting, else the published <room>@2x.webp (which is
+    the middle screen once the wings are published; keep the original to stitch again)."""
+    path = Path(flag) if flag else ctx.public / f"{room}@2x.webp"
+    if not path.exists():
+        raise ArtError(f"no painting at {path}: publish {room} with its 2x first, or pass --painting")
+    img = Image.open(path).convert("RGB")
+    if img.size != (TILE_W, TILE_H):
+        raise ArtError(f"{path.name} is {img.width}x{img.height}; a room's painting at 2x is {TILE_W}x{TILE_H}")
+    return path, img
+
+
+def wings_of(ctx: Ctx, room: str) -> list[tuple[str, str]]:
+    """(side, key) of every wing config/assets.json lists for a room, west first."""
+    return [(side, f"{room}-{side}") for side in SIDES if f"{room}-{side}" in ctx.assets]
+
+
+def cmd_canvas(ctx: Ctx, a: argparse.Namespace) -> int:
+    keys = a.keys or [k for k in ctx.assets if wing_of(k)]
+    if not keys:
+        raise ArtError("no wing keys in config/assets.json")
+    for key in keys:
+        w = wing_of(key)
+        if not w or key not in ctx.assets or w[0] not in PUBLIC_ROOMS:
+            raise ArtError(f"{key!r} is not a wing key (<room>-west or <room>-east of a public room, listed in config/assets.json)")
+        room, side = w
+        src, painting = open_painting(ctx, room, a.painting)
+        out = ctx.work / "canvas" / f"{key}.png"
+        n = pngmeta.save(outpaint_canvas(painting, side), out)
+        note(f"canvas {key}: {rel_to_repo(out)} ({n} bytes; the {side} edge of {src.name} on grey)")
+    return 0
+
+
+def cmd_wing(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Each wing stitched onto the painting, every screen finished as WebP, the overlay's ends moved."""
+    room = a.room
+    wings = wings_of(ctx, room)
+    if not wings:
+        raise ArtError(f"{room} has no wings in config/assets.json ({room}-west, {room}-east)")
+    src, painting = open_painting(ctx, room, a.painting)
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    painting_sc = prov.sidecar_of(prov_path, src.name) if src.parent.resolve() == ctx.public.resolve() else None
+    panos: dict[str, Image.Image] = {}
+    picked: dict[str, tuple[Path, dict | None, dict]] = {}
+    for side, key in wings:
+        raw, sc = resolve_raw(ctx, key, getattr(a, side))
+        pano, rep = stitch(painting, open_raw(raw), side)
+        panos[side] = pano
+        picked[side] = (raw, sc, rep)
+        note(f"{key}: seed {(sc or {}).get('seed')} stitched, overlap difference {rep['overlap_diff']}, seam in columns {rep['seam_columns'][0]}-{rep['seam_columns'][1]} of the {rep['side']} join")
+    tiles = split_tiles(painting, panos)
+
+    reviews: list[Image.Image] = []
+    overlays: dict[str, Image.Image] = {}
+    if a.overlay == "ends":
+        fg2_path, fg1_path = ctx.public / f"{room}-fg@2x.png", ctx.public / f"{room}-fg.png"
+        if not fg2_path.exists() or not fg1_path.exists():
+            raise ArtError(f"--overlay ends needs the published {fg1_path.name} and {fg2_path.name}")
+        fg_sc = prov.sidecar_of(prov_path, fg2_path.name)
+        parts = split_overlay(np.asarray(Image.open(fg2_path).convert("RGBA")), np.asarray(Image.open(fg1_path).convert("RGBA")), tuple(side for side, _ in wings))
+        for part, (a2, a1) in parts.items():
+            key = tile_key(room, part, overlay=True)
+            if part != "mid" and not (a2[:, :, 3] > 8).any():
+                note(f"{key}: no overlay piece reaches the painting's {part} edge; nothing to write (leave it out of the room's foregrounds)")
+                continue
+            if key not in ctx.assets:
+                raise ArtError(f"{key!r} is not in config/assets.json: add it (and to the room's foregrounds)")
+            outputs, lines = finish_overlay(ctx, key, Image.fromarray(a1, "RGBA"), Image.fromarray(a2, "RGBA"), a.overlay_budget_2x, "none")
+            what = f"the rest of {fg2_path.name}" if part == "mid" else f"the pieces of {fg2_path.name} touching its {part} edge, moved to the room's {part} end"
+            tools = [f"wing: {what}"] + lines
+            view = ctx.view_for(key)
+            report = check_overlay(Image.open(ctx.out / f"{key}.png"), *view) if view else None
+            save_post_record(ctx, key, {"key": key, "kind": "overlay", "raw": rel_to_repo(fg2_path), "raw_sidecar": fg_sc, "outputs": outputs, "tools": tools, "overlay_check": report})
+            overlays[part] = Image.open(ctx.out / f"{key}.png").convert("RGBA")
+            for k2, o in outputs.items():
+                note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" P{o['colors']}" if o.get("colors") else " truecolour"))
+            if report:
+                note(f"{key} overlay check: coverage {report['coverage'] * 100:.1f} % of the walkable interior; {'ok' if report['ok'] else 'FAILED'}")
+                for v in report["violations"]:
+                    note(f"  - {v}")
+    else:
+        note(f"--overlay drop: the wide {room} draws no overlay; leave {room}-fg out of its foregrounds")
+
+    for part, tile in tiles.items():
+        key = tile_key(room, part)
+        if part == "mid":
+            joins = ", ".join(f"{side} join to {k} (seed {(picked[side][1] or {}).get('seed')}, seam columns {picked[side][2]['seam_columns'][0]}-{picked[side][2]['seam_columns'][1]})" for side, k in wings)
+            raw_rel, sc, head = rel_to_repo(src), painting_sc, f"wing: the approved painting {src.name} with a blended band at each join: {joins}"
+        else:
+            raw, sc0, rep = picked[part]
+            raw_rel, sc, head = rel_to_repo(raw), sidecar_subset(sc0), f"wing: {part} of {src.name}, joined along the cheapest seam through the {rep['side']} overlap (columns {rep['seam_columns'][0]}-{rep['seam_columns'][1]}, difference {rep['overlap_diff']}) with tones matched"
+        outputs, lines = finish_room(ctx, key, tile, "centre", 0, None, None, True, a.budget_2x)
+        save_post_record(ctx, key, {"key": key, "kind": "room", "raw": raw_rel, "raw_sidecar": sc, "outputs": outputs, "tools": [head] + lines, "params": {"wing": room, "part": part, "overlay": a.overlay}})
+        for k2, o in outputs.items():
+            note(f"{key} {k2}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
+        shot = Image.open(ctx.out / f"{key}.webp").convert("RGBA")
+        if part in overlays:
+            shot.alpha_composite(overlays[part])
+        reviews.append(room_review(ctx, key, shot))
+        write_review(ctx, f"{key}.png", reviews[-1])
+    strip = Image.new("RGB", (sum(r.width for r in reviews), max(r.height for r in reviews)))
+    x = 0
+    for r in reviews:
+        strip.paste(r, (x, 0))
+        x += r.width
+    rv = write_review(ctx, f"{room}-wide.png", strip)
+    note(f"review: {rel_to_repo(rv)} (west to east; every screen with its overlay and its view of the room geometry)")
+    note(f"publish: pnpm art:finish publish {' '.join([tile_key(room, p) for p in tiles] + [tile_key(room, p, overlay=True) for p in tiles if p in overlays])}")
     return 0
 
 
@@ -587,7 +769,7 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
             if ext == "webp" and logical == "2x":
                 budget = BUDGET_2X_ROOM
             else:
-                budget = BUDGET_2X_RELAXED if (relaxed and logical == "2x" and key in PUBLIC_ROOMS + OVERLAY_KEYS) else ctx.budget
+                budget = BUDGET_2X_RELAXED if (relaxed and logical == "2x" and ctx.assets[key].get("kind") == "room") else ctx.budget
             v = verify_final(path, expect, budget)
             if not v["ok"]:
                 raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
@@ -676,7 +858,7 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
         formats = [ext for ext in RASTER_EXTS if f"{key}.{ext}" in rasters or f"{key}@2x.{ext}" in rasters]
         if len(formats) > 1:
             problems.append(f"{key}: both PNG and WebP files are published; the loader uses the WebP, so the PNG is stale (republish {key})")
-        if "webp" in formats and key not in PUBLIC_ROOMS:
+        if "webp" in formats and not is_room_background(key, ctx.assets):
             problems.append(f"{key}: published as WebP, but only room backgrounds ship as WebP")
         for ext in RASTER_EXTS:
             one_name, two_name = f"{key}.{ext}", f"{key}@2x.{ext}"
@@ -705,10 +887,14 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
                 want = latest[name][1].get("sha256")
                 if want and want != sha256_bytes(p.read_bytes()):
                     problems.append(f"{name}: contents differ from the latest provenance line (stale or hand-edited; republish it)")
-        if key in OVERLAY_KEYS and f"{key}.png" in pngs:
-            rep = check_overlay(Image.open(pngs[f"{key}.png"]), ctx.geometry(), ctx.room_for(key), key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"))
-            for v in rep["violations"]:
-                problems.append(f"{key}.png: {v}")
+        if is_overlay(key, ctx.assets) and f"{key}.png" in pngs:
+            view = ctx.view_for(key)
+            if view is None:
+                warnings.append(f"{key}: no room draws it (its room is wider than one screen and leaves it out of its foregrounds)")
+            else:
+                rep = check_overlay(Image.open(pngs[f"{key}.png"]), *view, key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"))
+                for v in rep["violations"]:
+                    problems.append(f"{key}.png: {v}")
         base = owl_layer_base(key)
         if base:
             for name in (f"{key}.png", f"{key}@2x.png"):
@@ -939,6 +1125,24 @@ def build_parser() -> argparse.ArgumentParser:
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_overlay)
+
+    sp = sub.add_parser("canvas", help="a wing's outpaint canvas (the generator's @canvas:<key>)")
+    sp.add_argument("keys", nargs="*", help="wing keys (default: every <room>-west / <room>-east in config/assets.json)")
+    sp.add_argument("--painting", default=None, help="the approved painting at 2x (default: the published <room>@2x.webp)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_canvas)
+
+    sp = sub.add_parser("wing", help="stitch a room's picked wings onto its painting; finish every screen (WebP 1x + 2x) and the end overlays")
+    sp.add_argument("room", choices=PUBLIC_ROOMS)
+    sp.add_argument("--west", default=None, help="raw candidate for <room>-west (default: its SELECTED candidate)")
+    sp.add_argument("--east", default=None, help="raw candidate for <room>-east (default: its SELECTED candidate)")
+    sp.add_argument("--painting", default=None, help="the approved painting at 2x (default: the published <room>@2x.webp)")
+    sp.add_argument("--overlay", choices=("ends", "drop"), default="ends", help="ends: the overlay's pieces at the painting's edges move to the room's ends; drop: the wide room draws no overlay")
+    sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_ROOM, help=f"byte budget of each 2x WebP (default {BUDGET_2X_ROOM})")
+    sp.add_argument("--overlay-budget-2x", type=int, default=BUDGET_2X_RELAXED, help=f"relaxed byte budget of each 2x overlay PNG (default {BUDGET_2X_RELAXED})")
+    sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_wing)
 
     sp = sub.add_parser("owl", help="owl master -> five layers at 1x and 2x")
     sp.add_argument("--species", choices=OWL_SPECIES, default=None, help="finish owl-<species>-master into the owl-<species>-* layers instead")

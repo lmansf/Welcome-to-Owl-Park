@@ -96,6 +96,11 @@ export function pointInRect(p: Vec2, r: Rect): boolean {
   return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 }
 
+/** Distance from a point to the nearest point of a rectangle (0 inside it). */
+export function distanceToRect(p: Vec2, r: Rect): number {
+  return Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.w)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h)));
+}
+
 export function rectCenter(r: Rect): Vec2 {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 }

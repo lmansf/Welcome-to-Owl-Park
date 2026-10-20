@@ -13,6 +13,7 @@ import {
   type Source,
   type Wear,
 } from '@owl-park/shared';
+import { ROOM_LAYOUT, relayout } from '@owl-park/shared/rooms';
 
 function json<T>(text: string | null, fallback: T): T {
   if (!text) return fallback;
@@ -34,6 +35,16 @@ export class SqlCollectionStore implements CollectionStore {
       `CREATE TABLE IF NOT EXISTS quests (cid TEXT NOT NULL, quest TEXT NOT NULL, period TEXT NOT NULL, step INTEGER NOT NULL, count INTEGER NOT NULL, seen TEXT NOT NULL, items TEXT NOT NULL, accepted_at INTEGER NOT NULL, done_at INTEGER, PRIMARY KEY (cid, quest, period))`,
     );
     // The half-day finds are retired: their table stays (history) but nothing reads or writes it.
+    // The rooms' layout the stored positions belong to: quest items move with the rooms, once.
+    sql.exec(`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL)`);
+    const layout = sql.exec<{ v: number }>(`SELECT v FROM meta WHERE k = 'layout'`).toArray()[0]?.v ?? 1;
+    if (layout < ROOM_LAYOUT) {
+      for (const r of sql.exec<{ cid: string; quest: string; period: string; items: string }>(`SELECT cid, quest, period, items FROM quests`).toArray()) {
+        const items = json<QuestItemSpot[]>(r.items, []).map((i) => ({ ...i, ...relayout(i.room, i, layout) }));
+        sql.exec(`UPDATE quests SET items = ? WHERE cid = ? AND quest = ? AND period = ?`, JSON.stringify(items), r.cid, r.quest, r.period);
+      }
+      sql.exec(`INSERT OR REPLACE INTO meta (k, v) VALUES ('layout', ?)`, ROOM_LAYOUT);
+    }
   }
 
   getCollector(cid: string): CollectorRow | null {

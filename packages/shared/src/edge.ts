@@ -12,7 +12,8 @@ import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-export const EDGE_PROTOCOL_VERSION = 4;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 5;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;

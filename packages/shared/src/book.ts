@@ -9,6 +9,7 @@ import { DUPLICATE_FEATHERS, STARTER_PACK, filterOwnedWear, isWear, normalizeTim
 import type { QuestItemSpot } from './interactables';
 import { parkDay } from './parktime';
 import { offerFor, shopRotation, type BuyResult, type GiftResult, type ShopView } from './shop';
+import { ROOM_LAYOUT, relayout } from '../rooms';
 
 export type Source = 'found' | 'crafted' | 'granted' | 'bought' | 'quest' | 'shop' | 'gift';
 export const SOURCES: readonly Source[] = ['found', 'crafted', 'granted', 'bought', 'quest', 'shop', 'gift'];
@@ -192,6 +193,8 @@ export interface MemoryStoreSnapshot {
   owned: Array<[string, string, Source, number]>;
   earned?: Array<[string, string, EarnSource, number]>;
   quests?: QuestRow[];
+  /** The rooms' layout its positions belong to (ROOM_LAYOUT; 1 when missing). */
+  layout?: number;
 }
 
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -230,7 +233,7 @@ export class MemoryCollectionStore implements CollectionStore {
       const [cid, day, source] = k.split('|') as [string, string, EarnSource];
       earned.push([cid, day, source, n]);
     }
-    return { collectors: [...this.collectors.values()], owned, earned, quests: [...this.questRows.values()] };
+    return { collectors: [...this.collectors.values()], owned, earned, quests: [...this.questRows.values()], layout: ROOM_LAYOUT };
   }
 
   /** Rebuild from a snapshot; anything malformed is skipped rather than trusted (old snapshots' drops are ignored). */
@@ -249,9 +252,11 @@ export class MemoryCollectionStore implements CollectionStore {
       if (!Array.isArray(row) || typeof row[0] !== 'string' || typeof row[1] !== 'string' || !(EARN_SOURCES as readonly unknown[]).includes(row[2])) continue;
       store.earnedRows.set(`${row[0]}|${row[1]}|${row[2]}`, num(row[3]));
     }
+    // Quest items saved under an older room layout move with the rooms.
+    const layout = typeof snap.layout === 'number' ? snap.layout : 1;
     for (const r of Array.isArray(snap.quests) ? snap.quests : []) {
       const q = cleanQuestRow(r);
-      if (q) store.putQuest(q);
+      if (q) store.putQuest({ ...q, items: q.items.map((i) => ({ ...i, ...relayout(i.room, i, layout) })) });
     }
     return store;
   }

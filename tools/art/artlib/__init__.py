@@ -98,6 +98,18 @@ PUBLIC_ROOMS = ("hub", "grove", "market")
 OVERLAY_KEYS = ("hub-fg", "grove-fg", "market-fg")
 PIECE_KEYS = ("guardian", "robot-owl")
 
+
+
+def is_overlay(key: str, assets: dict) -> bool:
+    """Room art drawn in front of the owls: ``<room>-fg``, or an end screen's ``<room>-<side>-fg``."""
+    return key.endswith("-fg") and assets.get(key, {}).get("kind") == "room"
+
+
+def is_room_background(key: str, assets: dict) -> bool:
+    """One screen of a room's painting, shipped as WebP: ``<room>``, ``<room>-west`` or ``<room>-east``."""
+    return assets.get(key, {}).get("kind") == "room" and not key.endswith("-fg")
+
+
 #: Which realm's palette grades which key.
 REALM_OF_KEY = {
     "hub": "hub", "hub-fg": "hub",

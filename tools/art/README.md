@@ -168,11 +168,16 @@ blocks, the `PROMPTS` (one per key), the `NEGATIVE_PROMPT`, and `JOBS` with kind
 generation size, base seed, variant count, key colour, owl region colours and reference slots.
 Keys are validated against `config/assets.json` (mirrored from `art.ts`, guarded by a test) plus
 the helper keys `tree-master`, `owl-master`, `owl-blink-src` and the four species masters
-(`owl-barn-master`, `owl-burrowing-master`, `owl-snowy-master`, `owl-screech-master`).
+(`owl-barn-master`, `owl-burrowing-master`, `owl-snowy-master`, `owl-screech-master`). The five
+`wing` jobs (`hub-west`, `hub-east`, `grove-west`, `grove-east`, `market-east`) paint a room a
+screen wider; they hold the prompts the approved wings were painted from, and a test checks those
+against the published provenance.
 
 Reference slots (`refs`) point at `refs/<file>` (committed anchors in `tools/art/refs/`, 1024 px
 and 200 KB at most, chosen by the art director), `@guide:<room>` (the post stage's layout guide),
-`@final:<key>` (a published PNG) or `@raw:<key>` (another job's SELECTED candidate). Slots marked
+`@final:<key>` (a published PNG), `@raw:<key>` (another job's SELECTED candidate) or
+`@canvas:<key>` (a wing's outpaint canvas, `work/art/canvas/<key>.png`, written by
+`pnpm art:finish canvas <key>`). Slots marked
 `optional` are skipped with a notice until the file exists, which is why the first runs work
 before any anchor is chosen; a job marked `optional` (the blink edit) is skipped when its required
 reference is missing. References travel as data URLs by default (2 MB each at most, 14 per
@@ -183,7 +188,9 @@ the rooms, then `pnpm art:geometry` and the post stage's guides, publish a room,
 and set piece with the published room as a style reference, then `owl-master`, `select` it, then
 `owl-blink-src`. The species masters are edits of the selected `owl-master` too, so each keeps its
 pose and colour code and changes only its species' shape and markings. Their jobs ask fal for
-PNG, since its edit endpoint otherwise answers in JPEG.
+PNG, since its edit endpoint otherwise answers in JPEG. A wing comes after its room is published:
+`canvas` puts the painting's edge on grey, the job paints the grey (3040 x 1368, PNG), and the post
+stage's `wing <room>` stitches the selected wing back onto the painting (`docs/ART-PIPELINE.md`).
 
 ## Output contract (read by the post stage)
 
@@ -192,7 +199,8 @@ work/art/raw/<key>/<hash16>.png|jpg   the raw candidate
 work/art/raw/<key>/<hash16>.json      its sidecar
 work/art/raw/<key>/SELECTED           the hash16 of the chosen candidate (written by `select`)
 work/art/log.jsonl                    one line per attempt (ok | cached | failed)
-work/art/geometry.json                rooms, doors, spawns, anchors, closed signs, assets table
+work/art/geometry.json                rooms (with their art tiles), doors, spawns, anchors, closed signs, assets table
+work/art/canvas/<key>.png             a wing's outpaint canvas (written by the post stage, read as @canvas:<key>)
 ```
 
 `hash16` is the first 16 hex digits of `sha256(provider + "\n" + model + "\n" + canonical JSON of

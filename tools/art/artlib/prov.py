@@ -167,6 +167,19 @@ def read_lines(path: Path) -> list[dict]:
     return out
 
 
+def sidecar_of(path: Path, asset: str) -> dict | None:
+    """The source fields (as a raw sidecar names them) of the latest provenance line of a published
+    file: art finished again from a published file keeps the record of the candidate it came from."""
+    latest = None
+    for line in read_lines(path):
+        if isinstance(line, dict) and line.get("asset") == asset:
+            latest = line
+    if latest is None:
+        return None
+    return {"hash16": latest.get("raw_hash16"), "provider": latest.get("provider"), "model": latest.get("model"), "prompt_sha256": latest.get("prompt_sha256"),
+            "seed": latest.get("seed"), "size": latest.get("gen_size"), "source_url": latest.get("source_url"), "generated_at": latest.get("generated_at")}
+
+
 def relaxed_assets(path: Path) -> set[str]:
     """Asset file names whose latest provenance line says budget_relaxed."""
     latest: dict[str, bool] = {}
