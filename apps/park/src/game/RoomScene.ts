@@ -953,6 +953,8 @@ export class RoomScene extends Phaser.Scene {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
       if (door.to) {
+        // Walking up to do something (talk, flop, browse) never takes a doorway on the way.
+        if (this.errand) continue;
         void this.goTo(door.to.room, door.to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
         return;
       }

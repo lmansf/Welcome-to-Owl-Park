@@ -82,6 +82,14 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-journal.png` });
   });
 
+  test('walking up to a leaf pile on the far side of a doorway does not take the doorway', async ({ page }) => {
+    // From the clearing's arrival point the way to this pile crosses the hollow's doorway.
+    await openPark(page, { collector: 'e2e-doorway', tz: 'UTC', room: 'grove' });
+    expect(await page.evaluate(() => window.owlPark.use('grove-leaves-2'))).toBe(true);
+    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-2')?.here, { timeout: 15_000 }).toBe(false);
+    expect((await state(page)).room).toBe('grove');
+  });
+
   test('the feather shop gives a gift a day and sells today’s three, the featured shelf and the week', async ({ page }) => {
     await seedFeathers(page, 'e2e-shop', 1000);
     await openPark(page, { collector: 'e2e-shop', tz: 'UTC', room: 'market' });

@@ -129,6 +129,7 @@ test.describe('room server', () => {
   });
 
   test('a leaf pile is shared: one owl flops in and it is gone for everyone', async ({ browser }) => {
+    test.slow(); // three live parks on the room server, drawn with software WebGL on CI runners
     const a = await visitor(browser, { room: 'grove' });
     const b = await visitor(browser, { room: 'grove' });
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);

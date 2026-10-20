@@ -56,7 +56,11 @@ test.describe('single visitor', () => {
     expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
 
     await page.keyboard.down('ArrowLeft');
-    await expect.poll(async () => stopped.x - (await state(page)).pos.x).toBeGreaterThan(60);
+    // Watch closely: a slow look lets the owl run on to where the floor's edge leaves no room to go up.
+    await page.waitForFunction((x) => {
+      const s = window.owlPark?.state();
+      return !!s && x - s.pos.x > 60;
+    }, stopped.x, { polling: 50 });
     expect((await state(page)).eyes).toBeLessThan(0);
     await page.keyboard.down('ArrowUp'); // up and to the left together
     const turned = (await state(page)).pos;
