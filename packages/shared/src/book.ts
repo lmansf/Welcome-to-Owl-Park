@@ -2,21 +2,27 @@
  * The collectibles ledger, written without platform APIs so the room server's Durable Object
  * and the zero-backend local mode run exactly the same rules (and Node tests them). A collector
  * owns variants and a feather balance. Collectibles come from quests (questbook.ts) and the
- * shop (shop.ts), including its daily free gift; feathers come from quests, leaf piles and
- * duplicates, and are spent in the shop.
+ * shop (shop.ts), including its daily free gift; feathers come from quests, leaf piles, the
+ * park's activities and their daily tasks (activities.ts) and duplicates, and are spent in the
+ * shop.
  */
+import { PLAY_FEATHERS_PER_DAY, TASKS_BONUS, TASK_FEATHERS, dailyTasks, taskProgress, type PlayEvent, type TaskView } from './activities';
 import { DUPLICATE_FEATHERS, STARTER_PACK, filterOwnedWear, isWear, normalizeTimeZone, parseVariant, type Wear } from './collectibles';
 import type { QuestItemSpot } from './interactables';
-import { parkDay } from './parktime';
+import { nextParkDayAt, parkDay } from './parktime';
 import { offerFor, shopRotation, type BuyResult, type GiftResult, type ShopView } from './shop';
 import { ROOM_LAYOUT, relayout } from '../rooms';
 
 export type Source = 'found' | 'crafted' | 'granted' | 'bought' | 'quest' | 'shop' | 'gift';
 export const SOURCES: readonly Source[] = ['found', 'crafted', 'granted', 'bought', 'quest', 'shop', 'gift'];
 
-/** Things counted per collector and park day: feathers from leaf piles (capped) and today's gift. */
-export type EarnSource = 'leaves' | 'gift';
-export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift'];
+/**
+ * Things counted per collector and park day: feathers from leaf piles and from the activities (each
+ * capped), today's gift, progress on each of the day's three tasks, and whether their bonus is paid.
+ */
+export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus';
+export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus'];
+const TASK_SOURCES = ['task-0', 'task-1', 'task-2'] as const;
 
 export interface CollectorRow {
   cid: string;
@@ -133,6 +139,44 @@ export class CollectionBook {
     const added = Math.min(room, Math.max(0, Math.floor(n)));
     if (added > 0) this.store.addEarned(cid, day, source, added);
     return { added, feathers: added > 0 ? this.addFeathers(cid, added, now) : this.feathers(cid, now) };
+  }
+
+  /** Feathers from an activity (lanterns, the quiz, fishing, the copy game), under their shared daily cap. */
+  earnPlay(cid: string, n: number, now: number): { added: number; feathers: number } {
+    return this.earnCapped(cid, 'play', n, PLAY_FEATHERS_PER_DAY, now);
+  }
+
+  /** Today's three tasks and how far this collector is with each. */
+  tasks(cid: string, now: number): TaskView {
+    const day = parkDay(now);
+    return {
+      day,
+      endsAt: nextParkDayAt(now),
+      tasks: dailyTasks(day).map((t, i) => ({ text: t.text, count: t.count, done: Math.min(t.count, this.store.earned(cid, day, TASK_SOURCES[i]!)) })),
+      bonus: this.store.earned(cid, day, 'tasks-bonus') > 0,
+    };
+  }
+
+  /**
+   * Something done in the park: progress on today's tasks, feathers for each task it finishes,
+   * and the bonus once all three are done.
+   */
+  taskEvent(cid: string, ev: PlayEvent, now: number): { tasks: TaskView; finished: string[]; paid: number; total: number } {
+    this.ensure(cid, undefined, now);
+    const day = parkDay(now);
+    const defs = dailyTasks(day);
+    const counts = defs.map((_, i) => this.store.earned(cid, day, TASK_SOURCES[i]!));
+    const { counts: next, finished } = taskProgress(defs, counts, ev);
+    next.forEach((n, i) => {
+      if (n > counts[i]!) this.store.addEarned(cid, day, TASK_SOURCES[i]!, n - counts[i]!);
+    });
+    let paid = finished.length * TASK_FEATHERS;
+    if (finished.length && defs.every((t, i) => next[i]! >= t.count) && this.store.earned(cid, day, 'tasks-bonus') === 0) {
+      this.store.addEarned(cid, day, 'tasks-bonus', 1);
+      paid += TASKS_BONUS;
+    }
+    const total = paid ? this.addFeathers(cid, paid, now) : this.feathers(cid, now);
+    return { tasks: this.tasks(cid, now), finished: finished.map((i) => defs[i]!.text), paid, total };
   }
 
   /** Give a variant: new goes into the collection, a duplicate pays its feathers. */
