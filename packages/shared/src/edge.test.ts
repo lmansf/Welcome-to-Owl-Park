@@ -14,6 +14,16 @@ describe('parseClientFrame', () => {
   it('accepts positions anywhere in a room wider than one screen', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 4700, y: 1500 }, seq: 2 }))).toEqual({ t: 'move', to: { x: 4700, y: 1500 }, seq: 2 });
   });
+
+  it('accepts activity frames, a note only with an emote', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'light', r: 4 }))).toEqual({ t: 'act', a: 'light', r: 4 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'cast', e: 'hoot', r: 5 }))).toEqual({ t: 'act', a: 'cast', r: 5 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'note', e: 'hoot', r: 6 }))).toEqual({ t: 'act', a: 'note', e: 'hoot', r: 6 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'note', r: 6 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'note', e: 'sing', r: 6 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'fly', r: 7 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'tasks' }))).toBeNull();
+  });
   it('rejects anything malformed', () => {
     expect(parseClientFrame('not json')).toBeNull();
     expect(parseClientFrame('[]')).toBeNull();

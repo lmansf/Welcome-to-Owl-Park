@@ -22,8 +22,10 @@ import {
   type QuestBoard,
   type QuestEvent,
   type QuestUpdate,
+  type PlayEvent,
   type ShopView,
   type Source,
+  type TaskView,
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
@@ -47,6 +49,15 @@ export interface EventResult {
 export interface FlopResult extends EventResult {
   feathers: number;
   total: number;
+}
+
+/** An activity's pay and what it did for today's tasks. */
+export interface PlayResult {
+  /** Feathers added (within the day's cap for the activities) and the balance. */
+  added: number;
+  total: number;
+  /** Today's tasks, when the event moved them. */
+  tasks?: { tasks: TaskView; finished: string[]; paid: number; total: number };
 }
 
 export class Collections extends DurableObject<Env> {
@@ -113,6 +124,25 @@ export class Collections extends DurableObject<Env> {
     const { added, feathers } = this.book.earnCapped(cid, 'leaves', leafFeathers(secureRandom), LEAF_FEATHERS_PER_DAY, now);
     const updates = this.quests.event(cid, ev, now, here);
     return { feathers: added, total: feathers, updates, ...(updates.length ? { board: this.quests.board(cid, now) } : {}) };
+  }
+
+  /**
+   * Feathers from an activity (lanterns, the quiz, fishing, the copy game) under their shared daily
+   * cap, and the event's progress on today's tasks (`feathers` may be 0: a lantern lit, a leaf pile).
+   */
+  async play(cid: string, feathers: number, ev: PlayEvent | null): Promise<PlayResult> {
+    const now = Date.now();
+    const earned = feathers > 0 ? this.book.earnPlay(cid, feathers, now) : { added: 0, feathers: this.book.feathers(cid, now) };
+    if (!ev) return { added: earned.added, total: earned.feathers };
+    const before = this.book.tasks(cid, now).tasks.map((t) => t.done);
+    const t = this.book.taskEvent(cid, ev, now);
+    const moved = t.tasks.tasks.some((x, i) => x.done !== before[i]);
+    return { added: earned.added, total: t.total, ...(moved ? { tasks: t } : {}) };
+  }
+
+  /** Today's three tasks and this collector's progress. */
+  async tasks(cid: string): Promise<TaskView> {
+    return this.book.tasks(cid, Date.now());
   }
 
   async gather(cid: string, quest: string, n: number, room: string, pos: Vec2): Promise<GatherResult> {
