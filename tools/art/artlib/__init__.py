@@ -66,7 +66,7 @@ BUILTIN_ASSETS: dict[str, dict] = {
 OWL_LAYERS = ("owl-body", "owl-belly", "owl-accent", "owl-face", "owl-blink")
 TINTED_LAYERS = ("owl-body", "owl-belly", "owl-accent")
 #: Helper keys used by the generator for anchors and masters; never published as art.
-HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master")
+HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master")
 PUBLIC_ROOMS = ("hub", "grove", "market")
 OVERLAY_KEYS = ("hub-fg", "grove-fg", "market-fg")
 PIECE_KEYS = ("guardian", "robot-owl")

@@ -1040,6 +1040,22 @@
     "owl-blink-src": {
       "role": "edit of the owl master with closed eyes",
       "key_colour": "#FF00FF"
+    },
+    "owl-barn-master": {
+      "role": "colour-coded barn owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-burrowing-master": {
+      "role": "colour-coded burrowing owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-snowy-master": {
+      "role": "colour-coded snowy owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-screech-master": {
+      "role": "colour-coded screech owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
     }
   }
 }

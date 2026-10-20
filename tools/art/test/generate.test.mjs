@@ -246,7 +246,8 @@ test('validateJobs rejects invalid or non-public keys, bad sizes and missing key
 
 test('selectJobs supports lists and globs and rejects unmatched patterns', () => {
   const jobs = G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS });
-  assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src']);
+  assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS]);
+  assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), P.SPECIES_MASTER_KEYS);
   assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }), [10, 11, 12]);

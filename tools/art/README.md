@@ -167,7 +167,8 @@ Everything the art director edits is in one data file: the hub brief, the three 
 blocks, the `PROMPTS` (one per key), the `NEGATIVE_PROMPT`, and `JOBS` with kind, realm,
 generation size, base seed, variant count, key colour, owl region colours and reference slots.
 Keys are validated against `config/assets.json` (mirrored from `art.ts`, guarded by a test) plus
-the helper keys `tree-master`, `owl-master` and `owl-blink-src`.
+the helper keys `tree-master`, `owl-master`, `owl-blink-src` and the four species masters
+(`owl-barn-master`, `owl-burrowing-master`, `owl-snowy-master`, `owl-screech-master`).
 
 Reference slots (`refs`) point at `refs/<file>` (committed anchors in `tools/art/refs/`, 1024 px
 and 200 KB at most, chosen by the art director), `@guide:<room>` (the post stage's layout guide),
@@ -180,7 +181,9 @@ request) or as hosted URLs with `*_REF_MODE=url`.
 The intended order: `tree-master` first (pick a winner, save it as `refs/tree-master.png`), then
 the rooms, then `pnpm art:geometry` and the post stage's guides, publish a room, then its overlay
 and set piece with the published room as a style reference, then `owl-master`, `select` it, then
-`owl-blink-src`.
+`owl-blink-src`. The species masters are edits of the selected `owl-master` too, so each keeps its
+pose and colour code and changes only its species' shape and markings. Their jobs ask fal for
+PNG, since its edit endpoint otherwise answers in JPEG.
 
 ## Output contract (read by the post stage)
 

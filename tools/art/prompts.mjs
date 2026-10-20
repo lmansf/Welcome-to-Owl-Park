@@ -4,8 +4,9 @@
  * reference-image slots. This file is data; the art director edits it. `generate.mjs` reads it.
  *
  * Prompts and style blocks below are the approved defaults. Keys are the public asset ids from
- * `apps/park/src/game/art.ts` plus three helper keys (`tree-master`, `owl-master`,
- * `owl-blink-src`) whose output is turned into shipped assets by the post-processing stage.
+ * `apps/park/src/game/art.ts` plus helper keys (`tree-master`, `owl-master`, `owl-blink-src` and
+ * the species masters `owl-<species>-master`) whose output is turned into shipped assets by the
+ * post-processing stage.
  *
  * Rules for anything added here: no text in images except the four approved sign phrases, no
  * names of realms, people, companies or other games, no requests for another work's style.
@@ -572,3 +573,38 @@ const ICON_JOBS = [
 ];
 Object.assign(PROMPTS, ICON_PROMPTS);
 JOBS.push(...ICON_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// Owl species: each is an edit of the SELECTED great horned owl master, so it keeps the pose,
+// the placement and the colour code and only takes on its species' shape and markings. The post
+// stage splits a chosen species master into its own layers the same way as the owl master.
+const SPECIES_KEEP = 'Keep from the reference: the same single character in the same pose, the same front three-quarter view turned slightly toward the viewer\'s left, about the same size and position with the feet on the bottom edge, centred horizontally and bottom-centre anchored, and the same strict colour code: the body (head, wings and most of the torso) FLAT pure red #FF0000, the belly FLAT pure green #00FF00, the accent parts FLAT pure blue #0000FF, any shading ONLY a darker value of the same hue (darker red on red, darker green on green, darker blue on blue), with no highlights, no outlines and no colour mixing between the three regions, and crisp hard edges between them; the same flat, solid, uniform pure magenta #FF00FF background that fills everything not covered by the owl, with no gradient, no vignette and no cast shadow. Portrait proportions 200x240. STYLE: clean flat 2D game character art in the same style as the reference, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain, friendly and cute. No text, no watermark. AVOID: any text or writing; any second owl, bird, animal, person or character; background scenery; the owl cut off by any edge except the feet at the bottom; any colour other than pure red, pure green, pure blue and their darker shades on the body, belly and accents; magenta tint on the owl; soft or feathered edges; outlines; realistic or detailed feather texture.';
+
+const SPECIES_OWL_PROMPTS = {
+  'owl-barn-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon barn owl. Change only what makes it a barn owl: no ear tufts at all, the top of the head smooth and gently rounded; a large heart-shaped facial disc filling most of the face, painted FLAT pure green #00FF00 like the belly and edged by a thin rim painted FLAT pure blue #0000FF; inside the disc two large round dark navy #0C1E36 eyes, each with a small cream #F6F1E3 catchlight and no eye ring; the small gold #C9A227 beak at the lower point of the heart; a slightly slimmer, more upright body with the wings folded neatly at the sides; the wing tips and the short tail painted FLAT pure blue #0000FF; two small gold #C9A227 feet. ${SPECIES_KEEP}`,
+  'owl-burrowing-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon burrowing owl. Change only what makes it a burrowing owl: no ear tufts at all, a smaller, smooth, round head; two bold eyebrow stripes above the eyes and a broad chin band under the beak, painted FLAT pure green #00FF00 like the belly; a few small round spots scattered on the head and the wings, also FLAT pure green #00FF00; large round eyes with bright golden-yellow #FFD34A irises and dark navy #0C1E36 pupils, each with a small cream #F6F1E3 catchlight; a small gold #C9A227 beak; long thin legs, so the body stands a little higher above the feet, the legs and the two small feet gold #C9A227; the wing tips and the short tail painted FLAT pure blue #0000FF. ${SPECIES_KEEP}`,
+  'owl-snowy-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon snowy owl. Change only what makes it a snowy owl: no ear tufts at all, a very round, smooth head; a plumper, fluffier, rounder body; small dark crescent-shaped flecks scattered across the head, the wings and the back, painted FLAT pure blue #0000FF, none on the belly; the belly a large clean oval painted FLAT pure green #00FF00; large round eyes with bright golden-yellow #FFD34A irises and dark navy #0C1E36 pupils, each with a small cream #F6F1E3 catchlight; the small gold #C9A227 beak partly tucked into the fluffy face; fluffy feathered feet painted FLAT pure red #FF0000 like the body, with tiny gold #C9A227 claws; the wing tips and the short tail painted FLAT pure blue #0000FF. ${SPECIES_KEEP}`,
+  'owl-screech-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon screech owl, a small and stocky owl. Change only what makes it a screech owl: shorter, chunkier proportions, a big round head on a short plump body, still filling about the same height of the frame; two short, wide, pointed ear tufts painted FLAT pure blue #0000FF; a round facial disc edged by a thin rim painted FLAT pure blue #0000FF; large round eyes with bright golden-yellow #FFD34A irises and dark navy #0C1E36 pupils, each with a small cream #F6F1E3 catchlight; a small gold #C9A227 beak; a few short vertical streaks on the belly drawn only as a darker green; the wing tips and the short tail painted FLAT pure blue #0000FF; two small gold #C9A227 feet. ${SPECIES_KEEP}`,
+};
+
+/** Helper keys of the species masters (not shipped; the post stage derives `owl-<species>-*`). */
+export const SPECIES_MASTER_KEYS = Object.keys(SPECIES_OWL_PROMPTS);
+
+const SPECIES_JOBS = SPECIES_MASTER_KEYS.map((key, i) => ({
+  key,
+  kind: 'owl-edit',
+  realm: 'hub',
+  optional: true,
+  size: '1040x1248',
+  seed: 1711 + i * 10,
+  variants: 3,
+  key_colour: '#FF00FF',
+  regions: OWL_REGIONS,
+  refs: [{ ref: '@raw:owl-master', role: 'edit source', optional: false }],
+  // fal's edit endpoint answers in JPEG unless asked; JPEG rings at the key-colour edges.
+  providers: { fal: { output_format: 'png' } },
+  prompt: SPECIES_OWL_PROMPTS[key],
+}));
+Object.assign(PROMPTS, SPECIES_OWL_PROMPTS);
+HELPER_KEYS.push(...SPECIES_MASTER_KEYS);
+JOBS.push(...SPECIES_JOBS);
