@@ -10,7 +10,9 @@
   "assets": {
     "directory": "../park/dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/ws/*", "/api/*"]
+    // The API, the sockets and the page itself reach the Worker first; the page is served uncached
+    // (src/page.ts), so a deploy never leaves a cached page pointing at a script bundle that is gone.
+    "run_worker_first": ["/ws/*", "/api/*", "/", "/index.html"]
   },
   "durable_objects": {
     "bindings": [

@@ -13,6 +13,21 @@ async function visitor(browser: Browser, params: Record<string, string> = {}): P
 }
 
 test.describe('room server', () => {
+  test('the page is never cached, so a deploy cannot leave it pointing at a bundle that is gone', async ({ request }) => {
+    for (const path of ['/', '/index.html']) {
+      const res = await request.get(path);
+      expect(res.status()).toBe(200);
+      expect(res.headers()['cache-control']).toBe('no-store');
+      expect(res.headers()['cdn-cache-control']).toBe('no-store');
+    }
+    const html = await (await request.get('/')).text();
+    const bundle = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+    expect(bundle).toBeTruthy();
+    const js = await request.get(bundle!);
+    expect(js.status()).toBe(200);
+    expect(js.headers()['cache-control'] ?? '').not.toBe('no-store');
+  });
+
   test('the server places the owl and the HUD shows the park count', async ({ browser }) => {
     const a = await visitor(browser);
     const s = await state(a);

@@ -2,6 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script>
+      // A page kept from an earlier deploy points at a script bundle that is gone: fetch the page
+      // afresh, at most once a minute, instead of staying blank.
+      addEventListener('error', function (e) {
+        var t = e.target;
+        if (!t || t.tagName !== 'SCRIPT' || !/\/assets\//.test(t.src || '')) return;
+        try {
+          var last = Number(sessionStorage.getItem('owl-park:refetched') || 0);
+          if (Date.now() - last < 60000) return;
+          sessionStorage.setItem('owl-park:refetched', String(Date.now()));
+        } catch (_) {
+          return;
+        }
+        var u = new URL(location.href);
+        u.searchParams.set('fresh', String(Date.now()));
+        location.replace(u.toString());
+      }, true);
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0C1E36" />
     <meta name="description" content="Owl Park: a virtual owl park you visit online. Wander the park as an owl, alongside everyone else who is here right now." />
@@ -11,7 +29,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Owl Park" />
     <meta property="og:title" content="Owl Park" />
-    <meta property="og:description" content="A virtual owl zoo in the making. Wander the park as an owl, find hats, pets and sparkles, and meet everyone else who is here right now." />
+    <meta property="og:description" content="A virtual owl park in the making. Wander the park as an owl, find hats, pets and sparkles, and meet everyone else who is here right now." />
     <meta property="og:image" content="__SITE_URL__%BASE_URL%og-image.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />

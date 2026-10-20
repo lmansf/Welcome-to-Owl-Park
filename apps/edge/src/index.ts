@@ -6,6 +6,7 @@
 import { isTimeZone, isVariantId } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyPass, type PassPayload } from './pass';
+import { isPage, uncachedPage } from './page';
 import { ROOMS } from './rooms';
 import type { Env } from './env';
 
@@ -173,7 +174,8 @@ export default {
       return objectFor(env, roomId).fetch(new Request(request, { headers }));
     }
 
-    return env.ASSETS.fetch(request);
+    const asset = await env.ASSETS.fetch(request);
+    return isPage(url.pathname) ? uncachedPage(asset) : asset;
   },
 
   /** Month-end: decide the previous park month's Realm Vote. */
