@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="170" height="140" viewBox="0 0 170 140">
+<desc>Nest furniture: a round tea table with a teapot and cups. Bottom centre is the spot it stands or hangs on. Original placeholder art for Owl Park.</desc>
+<path d="M40 92 Q25 116 22 138" fill="none" stroke="#6E4E36" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M85 92 Q79 116 85 138" fill="none" stroke="#6E4E36" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M130 92 Q145 116 148 138" fill="none" stroke="#6E4E36" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="85" cy="92" rx="80" ry="18" fill="#6E4E36"/>
+<ellipse cx="85" cy="88" rx="80" ry="16" fill="#8A6A48"/>
+<ellipse cx="70" cy="64" rx="28" ry="24" fill="#F6F1E3"/>
+<rect x="42" y="60" width="56" height="9" fill="#2E4C7A"/>
+<path d="M96 64 Q116 56 118 42 L112 42 Q108 58 92 58 Z" fill="#F6F1E3"/>
+<circle cx="42" cy="62" r="10" fill="none" stroke="#F6F1E3" stroke-width="5"/>
+<ellipse cx="70" cy="41" rx="12" ry="5" fill="#F6F1E3"/>
+<circle cx="70" cy="35" r="4" fill="#2E4C7A"/>
+<ellipse cx="122" cy="88" rx="11" ry="3" fill="#F6F1E3"/>
+<rect x="115" y="74" width="14" height="13" rx="4" fill="#F6F1E3"/>
+<ellipse cx="144" cy="88" rx="11" ry="3" fill="#F6F1E3"/>
+<rect x="137" y="74" width="14" height="13" rx="4" fill="#F6F1E3"/>
+<ellipse cx="36" cy="86" rx="16" ry="4" fill="#F6F1E3"/>
+<circle cx="30" cy="82" r="5" fill="#F2B24A"/>
+<circle cx="40" cy="82" r="5" fill="#F2B24A"/>
+</svg>

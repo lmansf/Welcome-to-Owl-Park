@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="110" viewBox="0 0 180 110">
+<desc>Nest furniture: a window box of ivy and herbs. Bottom centre is the spot it stands or hangs on. Original placeholder art for Owl Park.</desc>
+<polygon points="34,70 42,70 42,100 26,82" fill="#2B1C12"/>
+<polygon points="138,70 146,70 146,100 130,82" fill="#2B1C12"/>
+<circle cx="30" cy="40" r="22" fill="#3E5A3A"/>
+<circle cx="62" cy="30" r="26" fill="#6E8B4E"/>
+<circle cx="98" cy="32" r="26" fill="#3E5A3A"/>
+<circle cx="132" cy="30" r="24" fill="#6E8B4E"/>
+<circle cx="156" cy="42" r="18" fill="#3E5A3A"/>
+<ellipse cx="24" cy="74" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="30" cy="83" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="24" cy="92" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="30" cy="101" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="60" cy="74" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="66" cy="83" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="60" cy="92" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="66" cy="101" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="120" cy="74" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="126" cy="83" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="120" cy="92" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="126" cy="101" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="160" cy="74" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="166" cy="83" rx="6" ry="4" fill="#6E8B4E"/>
+<ellipse cx="160" cy="92" rx="6" ry="4" fill="#3E5A3A"/>
+<ellipse cx="166" cy="101" rx="6" ry="4" fill="#6E8B4E"/>
+<circle cx="40" cy="24" r="5" fill="#F6F1E3"/>
+<circle cx="76" cy="18" r="5" fill="#F2B24A"/>
+<circle cx="108" cy="26" r="5" fill="#F6F1E3"/>
+<circle cx="142" cy="20" r="5" fill="#F2B24A"/>
+<circle cx="58" cy="44" r="5" fill="#F2B24A"/>
+<circle cx="124" cy="44" r="5" fill="#F6F1E3"/>
+<rect x="16" y="46" width="148" height="34" rx="4" fill="#6E4E36"/>
+<rect x="16" y="46" width="148" height="7" rx="3" fill="#8A6A48"/>
+</svg>

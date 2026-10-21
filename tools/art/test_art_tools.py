@@ -987,6 +987,17 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(len(prov.read_lines(provp)), 10)
                 self.assertEqual(postprocess.main(["check", "--all", "--provenance", str(provp)] + common), 0, err.getvalue())
 
+    def test_the_street_of_nests_paints_its_west_wing_from_its_painting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            public.mkdir()
+            (public / "homes@2x.webp").write_bytes(webpmeta.encode(synth_room(3200, 1800, 7, "grove"), 90))
+            with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(postprocess.main(["canvas", "homes-west", "--work", str(work), "--public", str(public)]), 0, err.getvalue())
+            canvas = np.asarray(Image.open(work / "canvas" / "homes-west.png")).astype(int)
+            self.assertEqual(canvas.shape, (900, 2000, 3))
+            self.assertTrue((canvas[:, :1580] == 127).all(), "grey where the wing goes, the painting's west edge on the right")
+
     def test_wing_finishes_every_screen_and_moves_the_overlay_ends(self):
         with tempfile.TemporaryDirectory() as tmp:
             work, public = Path(tmp) / "work", Path(tmp) / "public"

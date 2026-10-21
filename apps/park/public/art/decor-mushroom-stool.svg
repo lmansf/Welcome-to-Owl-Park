@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="100" viewBox="0 0 120 100">
+<desc>Nest furniture: a toadstool stool. Bottom centre is the spot it stands or hangs on. Original placeholder art for Owl Park.</desc>
+<ellipse cx="60" cy="96" rx="34" ry="5" fill="#2B1C12" opacity="0.35"/>
+<path d="M42 98 L46 46 L74 46 L78 98 Z" fill="#F6F1E3"/>
+<path d="M6 50 Q10 6 60 4 Q110 6 114 50 Q60 60 6 50 Z" fill="#B5402F"/>
+<circle cx="34" cy="26" r="8" fill="#F6F1E3"/>
+<circle cx="62" cy="16" r="7" fill="#F6F1E3"/>
+<circle cx="88" cy="30" r="9" fill="#F6F1E3"/>
+<circle cx="50" cy="40" r="5" fill="#F6F1E3"/>
+<circle cx="100" cy="44" r="4" fill="#F6F1E3"/>
+</svg>

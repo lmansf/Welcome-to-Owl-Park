@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="210" viewBox="0 0 120 210">
+<desc>Nest furniture: a standing lamp with a cream bell shade. Bottom centre is the spot it stands or hangs on. Original placeholder art for Owl Park.</desc>
+<ellipse cx="60" cy="202" rx="34" ry="8" fill="#2B1C12"/>
+<rect x="55" y="70" width="10" height="132" rx="4" fill="#6E4E36"/>
+<path d="M55 80 L65 89" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M55 98 L65 107" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M55 116 L65 125" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M55 134 L65 143" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M55 152 L65 161" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M55 170 L65 179" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M55 188 L65 197" fill="none" stroke="#2B1C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+<path d="M24 82 Q30 22 60 16 Q90 22 96 82 Z" fill="#F6F1E3"/>
+<path d="M24 82 Q60 92 96 82 Q60 74 24 82 Z" fill="#FFD36A"/>
+<circle cx="60" cy="12" r="5" fill="#2B1C12"/>
+</svg>
