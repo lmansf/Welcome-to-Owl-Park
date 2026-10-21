@@ -82,6 +82,25 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-journal.png` });
   });
 
+  test('every owl gets the Bat pet as a Halloween present, and hears about it once', async ({ page }) => {
+    // A collection from before the present.
+    await seedFeathers(page, 'e2e-present', 0);
+    await openPark(page, { collector: 'e2e-present', tz: 'UTC' });
+    await expect(page.getByText(/^Happy Halloween! Every owl gets a Bat pet/)).toBeVisible({ timeout: 15_000 });
+    expect(await owns(page, 'bat~0')).toBe(true);
+    expect(await owns(page, 'bow-tie~0')).toBe(true);
+    // It can be worn at once.
+    expect(await page.evaluate(() => window.owlPark.equip('bat~0'))).toBe(true);
+    await expect.poll(async () => (await page.evaluate(() => window.owlPark.state()?.look.wear?.pet)) ?? null).toBe('bat~0');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-bat-present.png` });
+    // The next visit on this device says nothing more.
+    await page.reload();
+    await page.waitForFunction(() => window.owlPark?.collection() !== null, null, { timeout: 20_000 });
+    await page.waitForTimeout(1500);
+    await expect(page.getByText(/^Happy Halloween!/)).toHaveCount(0);
+    expect(await owns(page, 'bat~0')).toBe(true);
+  });
+
   test('walking up to a leaf pile on the far side of a doorway does not take the doorway', async ({ page }) => {
     // From the clearing's arrival point the way to this pile crosses the hollow's doorway.
     await openPark(page, { collector: 'e2e-doorway', tz: 'UTC', room: 'grove' });

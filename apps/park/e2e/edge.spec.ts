@@ -234,6 +234,7 @@ test.describe('room server', () => {
       return { inventory, weekly: shop.rotation.weekly.length, daily: shop.rotation.daily.length, giftVariant: shop.rotation.gift?.variant, gift, again, owned: after.owned, buy, craft };
     });
     expect(out.inventory.owned.length).toBeGreaterThanOrEqual(3);
+    expect(out.inventory.owned).toContain('bat~0'); // the Halloween present, for every owl
     expect(out.weekly).toBe(8);
     expect(out.daily).toBe(3);
     expect(out.buy).toMatchObject({ ok: false, reason: 'feathers' });

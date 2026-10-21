@@ -50,6 +50,22 @@ export const PICKUP_RADIUS = 56;
 export const PICKUP_CLIENT_RADIUS = 40;
 /** Every new collector starts with these. */
 export const STARTER_PACK = ['hoot', 'flap', 'sparkle~0'] as const;
+
+/** A present from the park: every collector holds it, and the page says so once. */
+export interface Present {
+  variant: string;
+  /** What the page says the first time it sees the present in a collection (visitor-facing). */
+  note: string;
+}
+
+/**
+ * Presents from the park, for every collector old and new: one made before a present was added gets
+ * it the next time its collection is read. The shop never sells them.
+ */
+export const PRESENTS: readonly Present[] = [
+  // Halloween 2026 (the owner's gift, 2026-10-21): the Bat pet in its original colours.
+  { variant: 'bat~0', note: 'Happy Halloween! Every owl gets a Bat pet, a present from the park. It is waiting in your collection.' },
+];
 export const DEFAULT_TIME_ZONE = 'UTC';
 
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic'];

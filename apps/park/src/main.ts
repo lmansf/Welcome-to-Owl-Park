@@ -12,6 +12,7 @@ import { createTransport, type WalletEntry } from './net';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { createHud } from './ui/hud';
 import { attachKeyboard } from './ui/keyboard';
+import { announcePresents } from './ui/presents';
 import { linkToast } from './ui/tickets';
 
 const cfg = readConfig();
@@ -143,7 +144,18 @@ hud.attachQuests(quests, {
   openShop: () => hud.openShop(),
 }, tasks);
 // Load the collection in the background; worn items this collector does not own come off.
-void collection.refresh().then(() => roomScene()?.pruneWear());
+// A present from the park in the collection is announced once on this device.
+void collection.refresh().then(() => {
+  roomScene()?.pruneWear();
+  if (!collection.inv) return;
+  let storage: Storage | null = null;
+  try {
+    storage = localStorage;
+  } catch {
+    storage = null;
+  }
+  announcePresents(collection.inv.owned, (message, ms, accent) => hud.toast(message, ms, accent), storage);
+});
 collection.onChange(() => roomScene()?.pruneWear());
 window.owlPark = {
   game,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATALOGUE,
   DUPLICATE_FEATHERS,
+  PRESENTS,
   STARTER_PACK,
   allVariants,
   duplicatePayout,
@@ -72,6 +73,14 @@ describe('catalogue', () => {
 
   it('starts every collector with two emotes and an effect, all real variants', () => {
     for (const v of STARTER_PACK) expect(parseVariant(v)).not.toBeNull();
+  });
+
+  it("gives the park's presents as real variants, each with a note for the visitor", () => {
+    expect(PRESENTS.map((p) => p.variant)).toContain('bat~0');
+    for (const p of PRESENTS) {
+      expect(parseVariant(p.variant)).not.toBeNull();
+      expect(p.note.length).toBeGreaterThan(10);
+    }
   });
 
   it('pays duplicates by rarity', () => {

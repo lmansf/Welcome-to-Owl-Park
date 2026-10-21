@@ -7,7 +7,7 @@
  * shop.
  */
 import { PLAY_FEATHERS_PER_DAY, TASKS_BONUS, TASK_FEATHERS, dailyTasks, taskProgress, type PlayEvent, type TaskView } from './activities';
-import { DUPLICATE_FEATHERS, STARTER_PACK, filterOwnedWear, isWear, normalizeTimeZone, parseVariant, type Wear } from './collectibles';
+import { DUPLICATE_FEATHERS, PRESENTS, STARTER_PACK, filterOwnedWear, isWear, normalizeTimeZone, parseVariant, type Wear } from './collectibles';
 import type { QuestItemSpot } from './interactables';
 import { nextParkDayAt, parkDay } from './parktime';
 import { offerFor, shopRotation, type BuyResult, type GiftResult, type ShopView } from './shop';
@@ -101,32 +101,41 @@ export interface Award {
 export class CollectionBook {
   constructor(private readonly store: CollectionStore) {}
 
-  /** The collector, created on first sight with the starter pack. */
+  /** The collector, created on first sight with the starter pack and the park's presents. */
   ensure(cid: string, tzHint: string | undefined, now: number): CollectorRow {
     const existing = this.store.getCollector(cid);
     if (existing) return existing;
     const row: CollectorRow = { cid, tz: normalizeTimeZone(tzHint), tzSetAt: now, feathers: 0, equipped: undefined, createdAt: now };
     this.store.insertCollector(row);
-    for (const v of STARTER_PACK) this.store.addOwned(cid, v, 'granted', now);
+    for (const v of [...STARTER_PACK, ...PRESENTS.map((p) => p.variant)]) this.store.addOwned(cid, v, 'granted', now);
     return this.store.getCollector(cid) ?? row;
+  }
+
+  /** What the collector owns, with any present from the park it does not hold yet added first. */
+  private ownedWithPresents(cid: string, now: number): string[] {
+    const owned = this.store.owned(cid);
+    const missing = PRESENTS.filter((p) => !owned.includes(p.variant));
+    if (!missing.length) return owned;
+    for (const p of missing) this.store.addOwned(cid, p.variant, 'granted', now);
+    return this.store.owned(cid);
   }
 
   owned(cid: string, tzHint: string | undefined, now: number): string[] {
     this.ensure(cid, tzHint, now);
-    return this.store.owned(cid);
+    return this.ownedWithPresents(cid, now);
   }
 
   /** Remember what the collector wears (owned variants only); returns what was kept. */
   setEquipped(cid: string, tzHint: string | undefined, wear: unknown, now: number): Wear | undefined {
     this.ensure(cid, tzHint, now);
-    const kept = isWear(wear) ? filterOwnedWear(wear, new Set(this.store.owned(cid))) : undefined;
+    const kept = isWear(wear) ? filterOwnedWear(wear, new Set(this.ownedWithPresents(cid, now))) : undefined;
     this.store.setEquipped(cid, kept);
     return kept;
   }
 
   inventory(cid: string, tzHint: string | undefined, now: number): Inventory {
     const c = this.ensure(cid, tzHint, now);
-    return { cid, owned: this.store.owned(cid), feathers: c.feathers, equipped: c.equipped ?? null };
+    return { cid, owned: this.ownedWithPresents(cid, now), feathers: c.feathers, equipped: c.equipped ?? null };
   }
 
   feathers(cid: string, now: number): number {

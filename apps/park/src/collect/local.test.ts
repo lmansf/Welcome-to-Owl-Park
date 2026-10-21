@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { LEAF_FEATHERS_PER_DAY, STARTER_PACK, USE_COOLDOWN_MS, getNpc, shopRotation, type QuestBoard, type Vec2 } from '@owl-park/shared';
+import { LEAF_FEATHERS_PER_DAY, PRESENTS, STARTER_PACK, USE_COOLDOWN_MS, getNpc, shopRotation, type QuestBoard, type Vec2 } from '@owl-park/shared';
+
+/** What every collector holds from the start: the starter pack and the park's presents. */
+const EVERYONES = [...STARTER_PACK, ...PRESENTS.map((p) => p.variant)];
 import { LocalCollections, type KeyValueStorage } from './local';
 import type { QuestPushes } from './service';
 
@@ -43,9 +46,9 @@ describe('LocalCollections', () => {
     expect(new LocalCollections(storage, { collector: 'e2e-a', now: () => at }).cid).toBe('e2e-a');
   });
 
-  it('starts with the starter pack, and talks only to an NPC owl standing close', async () => {
+  it('starts with the starter pack and the presents, and talks only to an NPC owl standing close', async () => {
     const { page } = rig();
-    expect((await page.inventory()).owned.sort()).toEqual([...STARTER_PACK].sort());
+    expect((await page.inventory()).owned.sort()).toEqual([...EVERYONES].sort());
     const bramble = getNpc('bramble')!;
     const { link, where } = linkIn(page, 'hub', { x: bramble.pos.x + 400, y: bramble.pos.y });
     expect(await link.talk('bramble')).toMatchObject({ ok: false, reason: 'far' });
@@ -137,10 +140,10 @@ describe('LocalCollections', () => {
       },
     };
     const page = new LocalCollections(broken, { collector: 'c_x', now: () => at });
-    expect((await page.inventory()).owned.length).toBe(STARTER_PACK.length);
+    expect((await page.inventory()).owned.length).toBe(EVERYONES.length);
     const garbage = new MemoryStorage();
     garbage.setItem('owl-park:collection:c_y', '{"collectors":[{"cid":42}],"owned":[["c_y","nope~9"]],"drops":"x","quests":[{"cid":7}]}');
     const g = new LocalCollections(garbage, { collector: 'c_y', now: () => at });
-    expect((await g.inventory()).owned.sort()).toEqual([...STARTER_PACK].sort());
+    expect((await g.inventory()).owned.sort()).toEqual([...EVERYONES].sort());
   });
 });
