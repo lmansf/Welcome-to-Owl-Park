@@ -48,7 +48,8 @@ export function giftButton(gift: DecorateView['gift']): { label: string; ready: 
 }
 
 const CSS = `
-#hud.decorating .bottom,#hud.decorating .hints{display:none}
+#hud.decorating .bottom,#hud.decorating .hints,#hud.decorating .tracker,#hud.decorating .tracker.show{display:none}
+#hud.decorating .toasts{bottom:calc(var(--sheet-h,0px) + 10px)}
 #hud .decorate{bottom:max(10px,env(safe-area-inset-bottom));width:min(640px,calc(100vw - 20px));max-height:min(48vh,360px);gap:8px;padding:12px 12px 10px}
 #hud .decorate header .sub{font-size:13px}
 #hud .decorate .spot{display:flex;align-items:center;gap:8px;min-width:0}

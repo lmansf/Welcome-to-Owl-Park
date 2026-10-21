@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { NEST_WORDS, STREET_ROOM, nestDoorIndex, type NestLook, type RoomDef } from '@owl-park/shared';
+import { NEST_WORDS, STREET_ROOM, isNestRoom, nestDoorIndex, type NestLook, type RoomDef } from '@owl-park/shared';
 import type { StreetDoor } from './nestPlan';
 
 const INK = 0x0c1e36;
@@ -91,8 +91,10 @@ export class StreetDoors {
   }
 }
 
-/** "To the nests" by each door that leads to the street (the lobby's west end), pointing the way. */
+/** "To the nests" by each door from the park's rooms to the street (the lobby's west end), pointing the way. */
 export function addNestsSign(scene: Phaser.Scene, room: RoomDef): void {
+  // A nest's own door leads back to the street too, but there the way is plain.
+  if (isNestRoom(room.id)) return;
   for (const d of room.doors) {
     if (d.to?.room !== STREET_ROOM) continue;
     const m = d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y };

@@ -205,7 +205,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     select: (spot) => decorateActions?.select(spot),
     done: () => decorateActions?.done(),
     thumb: (art) => decorateActions?.thumb(art) ?? null,
-    resize: (px) => decorateActions?.resize(px),
+    resize: (px) => {
+      // Messages show above the sheet while it is open.
+      root.style.setProperty('--sheet-h', `${Math.round(px)}px`);
+      decorateActions?.resize(px);
+    },
   };
 
   let look: OwlLook = { ...initialLook };

@@ -49,8 +49,9 @@ test.describe('the nests (this device)', () => {
     await expect.poll(async () => (await state(page)).nest?.decorating).toBe(true);
     await expect(sheet(page).locator('[data-where]')).toHaveText('1 / 12 · On the floor');
     await expect(sheet(page).locator('[data-piece="lamp"]')).toHaveAttribute('aria-pressed', 'true');
-    // The bottom bar gives way to the sheet.
+    // The bottom bar and the quest cards give way to the sheet and the room.
     await expect(page.locator('[data-collection-btn]')).toBeHidden();
+    await expect(page.locator('.tracker')).toBeHidden();
 
     // Spot 2: the rug moves there from its own spot; then Take away puts it back with the owl.
     await sheet(page).getByRole('button', { name: 'Next spot' }).click();
@@ -78,7 +79,11 @@ test.describe('the nests (this device)', () => {
 
     // Today's furniture gift: a new piece, and the button says when the next one comes.
     await sheet(page).locator('[data-gift]').click();
-    await expect(page.locator('.toast').filter({ hasText: 'New for your nest:' })).toBeVisible();
+    const gift = page.locator('.toast').filter({ hasText: 'New for your nest:' });
+    await expect(gift).toBeVisible();
+    // The message shows above the sheet, not over it.
+    const [giftBox, sheetBox] = await Promise.all([gift.boundingBox(), sheet(page).boundingBox()]);
+    expect(giftBox!.y + giftBox!.height).toBeLessThanOrEqual(sheetBox!.y);
     await expect(sheet(page).locator('[data-gift]')).toHaveText('Next gift tomorrow');
     await expect(sheet(page).locator('[data-gift]')).toBeDisabled();
     expect((await state(page)).nest?.owned).toHaveLength(5);
