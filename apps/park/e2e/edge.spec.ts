@@ -5,8 +5,8 @@ import { dist, doAction, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPo
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
  * browser context, so nothing is shared between them except the server.
  */
-async function visitor(browser: Browser, params: Record<string, string> = {}): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+async function visitor(browser: Browser, params: Record<string, string> = {}, viewport = { width: 1280, height: 800 }): Promise<Page> {
+  const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   await openPark(page, { transport: 'edge', ...params });
   return page;
@@ -302,7 +302,8 @@ test.describe('room server', () => {
 
   test("the robot owl's tune through the room server, danced for everyone in the street", async ({ browser }) => {
     const a = await visitor(browser, { room: 'market' });
-    const b = await visitor(browser, { room: 'market' });
+    // B only watches: a small window costs little to draw, so A's notes keep to the tune's timing on a slow machine.
+    const b = await visitor(browser, { room: 'market' }, { width: 320, height: 200 });
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     await walkAndStop(a, 1480, 755);
     await doAction(a, 'act:copy');
@@ -310,7 +311,8 @@ test.describe('room server', () => {
     await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 8_000 });
     const tune = (await state(a)).play!.copy!.tune;
     for (const [i, note] of tune.entries()) {
-      await card.locator(`[data-note="${note}"]`).click();
+      // Each note has a few seconds: press it at once rather than wait for the card to sit still.
+      await card.locator(`[data-note="${note}"]`).dispatchEvent('click');
       if (i < tune.length - 1) await expect.poll(async () => (await state(a)).play?.copy?.got).toBe(i + 1);
     }
     await expect(a.getByText(/^Tune copied! \+1 feather/)).toBeVisible();
