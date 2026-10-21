@@ -70,7 +70,9 @@ test.describe('activities (this device)', () => {
     await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 6_000 });
     const before = await feathers(page);
     for (const [i, note] of game!.tune.entries()) {
-      await card.locator(`[data-note="${note}"]`).click();
+      // Each note has a few seconds: press it at once rather than wait for the card to sit still,
+      // which on a slow machine drawing the neon street can take longer than the note's window.
+      await card.locator(`[data-note="${note}"]`).dispatchEvent('click');
       if (i < game!.tune.length - 1) await expect.poll(async () => (await state(page)).play?.copy?.got).toBe(i + 1);
     }
     await expect(page.getByText(/^Tune copied! \+1 feather/)).toBeVisible();
@@ -80,7 +82,7 @@ test.describe('activities (this device)', () => {
     // A wrong note ends the game.
     const next = (await state(page)).play!.copy!.tune;
     await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 8_000 });
-    await card.locator(`[data-note="${next[0] === 'hoot' ? 'flap' : 'hoot'}"]`).click();
+    await card.locator(`[data-note="${next[0] === 'hoot' ? 'flap' : 'hoot'}"]`).dispatchEvent('click');
     await expect(page.getByText(/^Not quite: the robot owl played/)).toBeVisible();
     await expect(card).toBeHidden();
   });
