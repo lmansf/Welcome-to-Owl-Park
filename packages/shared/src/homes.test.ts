@@ -367,7 +367,6 @@ describe('the words visitors see', () => {
       onTheWall: 'On the wall',
       noPieces: "No pieces for this spot yet. Each day's furniture gift brings a new one.",
       notAnswering: 'The nests are not answering just now. Try again in a moment.',
-      sit: 'Sit',
     });
   });
 });
