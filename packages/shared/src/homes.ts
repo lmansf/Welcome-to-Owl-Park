@@ -31,6 +31,19 @@ export const NEST_WORDS = {
   /** On the street door of a nest its owner has closed. */
   closedForNow: 'Closed for now',
   furnitureGift: "Today's furniture gift",
+  /** The gift button once today's is taken. */
+  nextGift: 'Next gift tomorrow',
+  /** Before the name of the piece the gift brought. */
+  newPiece: 'New for your nest:',
+  /** After the feathers the gift brings an owl that owns every piece. */
+  everyPiece: 'You have every piece already!',
+  /** Where the spot being decorated is. */
+  onTheFloor: 'On the floor',
+  onTheWall: 'On the wall',
+  /** A spot for which the owl owns no piece yet. */
+  noPieces: "No pieces for this spot yet. Each day's furniture gift brings a new one.",
+  /** The street or a nest did not answer. */
+  notAnswering: 'The nests are not answering just now. Try again in a moment.',
   /** On the lobby's benches and on a nest's armchair or mushroom stool. */
   sit: 'Sit',
 } as const;

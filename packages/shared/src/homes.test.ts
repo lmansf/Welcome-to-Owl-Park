@@ -360,6 +360,13 @@ describe('the words visitors see', () => {
       closedToVisitors: 'Closed to visitors',
       closedForNow: 'Closed for now',
       furnitureGift: "Today's furniture gift",
+      nextGift: 'Next gift tomorrow',
+      newPiece: 'New for your nest:',
+      everyPiece: 'You have every piece already!',
+      onTheFloor: 'On the floor',
+      onTheWall: 'On the wall',
+      noPieces: "No pieces for this spot yet. Each day's furniture gift brings a new one.",
+      notAnswering: 'The nests are not answering just now. Try again in a moment.',
       sit: 'Sit',
     });
   });
