@@ -369,6 +369,53 @@ test.describe('room server', () => {
     for (const p of [host, guest]) await p.context().close();
   });
 
+  test("feedback from the Menu reaches the keepers' page, which needs the admin key and marks notes done", async ({ browser, request }) => {
+    const a = await visitor(browser);
+    const words = `More lanterns by the pond, please (${Date.now()})`;
+    const sheet = a.getByRole('dialog', { name: 'Feedback' });
+    const openFeedback = async () => {
+      await a.locator('[data-menu-btn]').click();
+      await a.locator('[data-screen="feedback"]').click();
+    };
+    await openFeedback();
+    await sheet.getByRole('button', { name: 'Idea' }).click();
+    await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
+    await sheet.getByRole('button', { name: 'Send' }).click();
+    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+    // A second note straight away waits its turn.
+    await openFeedback();
+    await sheet.getByRole('textbox', { name: 'Your note' }).fill('And a second thought');
+    await sheet.getByRole('button', { name: 'Send' }).click();
+    await expect(sheet.getByText('One note at a time')).toBeVisible();
+
+    // Reading it takes the admin key; sending it takes a pass.
+    expect((await request.get('/api/admin/feedback')).status()).toBe(403);
+    expect((await request.post('/api/feedback', { data: { kind: 'bug', text: 'no pass' } })).status()).toBe(401);
+    const open = await request.get('/api/admin/feedback?status=open', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY } });
+    const notes = ((await open.json()) as { feedback: Array<{ id: number; kind: string; text: string; room: string | null; screen: string | null; ua: string | null }> }).feedback;
+    expect(notes.find((n) => n.text === words)).toMatchObject({ kind: 'idea', room: 'hub', screen: '1280x800' });
+    expect(notes.find((n) => n.text === words)?.ua).toContain('Chrome');
+
+    const keeper = await browser.newPage();
+    const page = await keeper.goto('/admin/feedback');
+    expect(page?.headers()['cache-control']).toBe('no-store');
+    expect(page?.headers()['x-robots-tag']).toContain('noindex');
+    await keeper.getByRole('textbox', { name: 'Admin key' }).fill('not the key');
+    await keeper.getByRole('button', { name: 'Open' }).click();
+    await expect(keeper.getByText('That key did not open it.')).toBeVisible();
+    await keeper.getByRole('textbox', { name: 'Admin key' }).fill(E2E_ADMIN_KEY);
+    await keeper.getByRole('button', { name: 'Open' }).click();
+    const note = keeper.getByRole('listitem').filter({ hasText: words });
+    await expect(note).toBeVisible();
+    await keeper.screenshot({ path: 'e2e-screenshots/edge-feedback-admin.png' });
+    await note.getByRole('button', { name: 'Done' }).click();
+    await expect(note).toBeHidden();
+    await keeper.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'Done' }).click();
+    await expect(keeper.getByRole('listitem').filter({ hasText: words })).toBeVisible();
+    await keeper.close();
+    await a.context().close();
+  });
+
   test('closing the tab removes the owl for everyone else', async ({ browser }) => {
     const a = await visitor(browser);
     const b = await visitor(browser);

@@ -188,29 +188,44 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect.poll(() => page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(false);
   });
 
-  test('the emote wheel shows the owl’s emotes, plays one and closes', async ({ page, context }) => {
+  test('the Emotes button opens the wheel, which plays one and closes; on a keyboard 1 to 8 play one at once', async ({ page, context }) => {
     test.slow(); // two live parks in one browser
     await seed(page, 'e2e-wheel', 'dance');
     const other = await context.newPage();
     await openPark(page, { id: 'owl-a', collector: 'e2e-wheel', tz: 'UTC' });
     await openPark(other, { id: 'owl-b', collector: 'e2e-wheel-b', tz: 'UTC' });
     await expect.poll(() => owns(page, 'dance')).toBe(true);
-    await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="emotes"]').click();
+    const seen = async () => (await state(other)).peers.find((p) => p.id === 'owl-a')?.emote;
+    await page.locator('[data-emotes-btn]').click();
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
+    await expect(page.locator('[data-emotes-btn]')).toHaveAttribute('aria-expanded', 'true');
     // The starter pack's two and the one earned, in the catalogue's order.
     await expect(wheel.locator('[data-emote]')).toHaveCount(3);
     await expect(wheel.locator('[data-emote]').first()).toHaveAttribute('data-emote', 'hoot');
+    const order = await wheel.locator('[data-emote]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset['emote']));
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-emote-wheel.png` });
     await wheel.locator('[data-emote="dance"]').click();
     await expect(wheel).toBeHidden();
-    await expect.poll(async () => (await state(other)).peers.find((p) => p.id === 'owl-a')?.emote, { timeout: 10_000 }).toBe('dance');
+    await expect(page.locator('[data-emotes-btn]')).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(seen, { timeout: 10_000 }).toBe('dance');
     // On a keyboard, T opens it and a number plays that slot.
     await page.keyboard.press('KeyT');
     await expect(wheel).toBeVisible();
     await page.keyboard.press('Digit1');
     await expect(wheel).toBeHidden();
-    await expect.poll(async () => (await state(other)).peers.find((p) => p.id === 'owl-a')?.emote, { timeout: 10_000 }).toBe('hoot');
+    await expect.poll(seen, { timeout: 10_000 }).toBe('hoot');
+    // With nothing open a number plays that emote at once (after the room's pause between emotes).
+    await page.waitForTimeout(1_600);
+    await page.keyboard.press('Digit2');
+    await expect.poll(seen, { timeout: 10_000 }).toBe(order[1]);
+    // While another screen is open the numbers are left alone.
+    await page.waitForTimeout(1_600);
+    await page.keyboard.press('KeyM');
+    await page.keyboard.press('Digit1');
+    await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(await seen()).toBe(order[1]);
+    await page.keyboard.press('Escape');
   });
 
   test('the owl builder picks a kind of owl: drawn in its own art at its size, seen by others, kept on return', async ({ page, context }) => {

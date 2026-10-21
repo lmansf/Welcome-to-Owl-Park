@@ -5,7 +5,7 @@
  * object (quests, uses, ownership checks for wear and emotes, the nests). The rules live in the
  * portable `CollectionBook`, `QuestBook` and `NestBook` (packages/shared) over the SQL stores in
  * sqlStore.ts and sqlNestStore.ts. Rewards and nest ids draw from the platform's cryptographic
- * random source.
+ * random source. Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -18,6 +18,7 @@ import {
   type AbandonResult,
   type AcceptResult,
   type BuyResult,
+  type FeedbackDraft,
   type FurnitureGiftResult,
   type GatherResult,
   type GiftResult,
@@ -40,6 +41,7 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
+import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ROOMS } from './rooms';
 import { SqlNestStore } from './sqlNestStore';
 import { SqlCollectionStore } from './sqlStore';
@@ -70,6 +72,7 @@ export class Collections extends DurableObject<Env> {
   private readonly book: CollectionBook;
   private readonly quests: QuestBook;
   private readonly nests: NestBook;
+  private readonly feedbackBox: FeedbackBox;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -77,6 +80,7 @@ export class Collections extends DurableObject<Env> {
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
     this.nests = new NestBook(new SqlNestStore(ctx.storage.sql), this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
+    this.feedbackBox = new FeedbackBox(ctx.storage.sql);
   }
 
   async owned(cid: string, tzHint?: string): Promise<string[]> {
@@ -185,5 +189,20 @@ export class Collections extends DurableObject<Env> {
   /** Today's furniture gift, once a park day. */
   async claimFurnitureGift(cid: string): Promise<FurnitureGiftResult> {
     return this.nests.claimGift(cid, Date.now());
+  }
+
+  // ---------- feedback ----------
+
+  /** A visitor's feedback, kept for the park's keepers (feedbackBox.ts). */
+  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null): Promise<FeedbackAdd> {
+    return this.feedbackBox.add(cid, draft, ua, Date.now());
+  }
+
+  async feedback(status: FeedbackStatus | 'all', limit: number): Promise<FeedbackRow[]> {
+    return this.feedbackBox.list(status, limit);
+  }
+
+  async setFeedbackStatus(id: number, status: FeedbackStatus): Promise<boolean> {
+    return this.feedbackBox.setStatus(id, status);
   }
 }

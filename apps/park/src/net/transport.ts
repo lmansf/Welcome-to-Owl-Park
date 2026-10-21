@@ -1,4 +1,4 @@
-import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
+import type { FeedbackDraft, OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -51,6 +51,8 @@ export interface ParkTransport {
   join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection>;
   /** Cast a Realm Vote as this visitor; only transports with an authenticated server offer it. */
   vote?(realm: string): Promise<Response>;
+  /** Send the visitor's feedback to the park's keepers; only the room server keeps it (net/feedback.ts). */
+  feedback?(draft: FeedbackDraft): Promise<Response>;
   /**
    * What the front gate needs: whether the park takes tickets yet, and whether this visitor's pass
    * goes through. Transports without a server have an open gate.

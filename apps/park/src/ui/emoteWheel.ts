@@ -19,10 +19,19 @@ export function wheelPage<T>(items: readonly T[], page: number, per = WHEEL_SLOT
   return { items: items.slice(p * per, p * per + per), page: p, pages };
 }
 
+/** The owl's emotes in the wheel's order: the first eight are its first page, and keys 1 to 8. */
+export function wheelEmotes(state: CollectionState): ItemDef[] {
+  return CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id));
+}
+
 export interface EmoteWheel {
   open(opener?: HTMLElement | null): void;
   close(): void;
   isOpen(): boolean;
+  /** Called after it closes, whichever way. */
+  onClose(cb: () => void): void;
+  /** Key `n` (1 to 8): play that slot of the page shown. */
+  press(n: number): void;
 }
 
 const CSS = `
@@ -31,7 +40,8 @@ const CSS = `
 #hud .wheel .slot{position:absolute;left:50%;top:50%;width:80px;height:80px;min-height:0;margin:-40px 0 0 -40px;padding:6px 4px 4px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:rgba(246,241,227,.08);color:#F6F1E3;border:1px solid rgba(246,241,227,.22);box-shadow:none;font-size:11px;font-weight:700;line-height:1.1;transition:transform .12s ease-out,background .12s}
 #hud .wheel .slot canvas{width:36px;height:36px;pointer-events:none}
 #hud .wheel .slot span{max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
-#hud .wheel .slot:hover,#hud .wheel .slot:focus-visible{background:rgba(201,162,39,.32);border-color:#FFD36A;transform:scale(1.08)}
+#hud .wheel .slot:focus-visible{background:rgba(201,162,39,.32);border-color:#FFD36A;transform:scale(1.08)}
+@media (hover:hover){#hud .wheel .slot:hover{background:rgba(201,162,39,.32);border-color:#FFD36A;transform:scale(1.08)}}
 #hud .wheel .slot kbd{position:absolute;top:2px;right:6px;margin:0;font-size:10px}
 #hud .wheel .slot.empty{background:transparent;border-style:dashed;opacity:.35;pointer-events:none}
 #hud .wheel .hub{position:absolute;left:50%;top:50%;width:150px;margin-left:-75px;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
@@ -46,8 +56,9 @@ const CSS = `
 `;
 
 /**
- * The emote wheel: the owl's emotes round a ring, eight at a time, a tap (or 1 to 8 on a keyboard)
- * plays one and closes the wheel. More than eight turn the page with the arrows (or ← and →).
+ * The emote wheel: the owl's emotes round a ring, eight at a time, a tap (or 1 to 8 on a keyboard,
+ * through `press`) plays one and closes the wheel. More than eight turn the page with the arrows
+ * (or ← and →).
  */
 export function createEmoteWheel(root: HTMLElement, state: CollectionState, play: (emote: string) => void): EmoteWheel {
   const style = document.createElement('style');
@@ -79,14 +90,12 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
   let page = 0;
   let slots: HTMLButtonElement[] = [];
 
-  const owned = (): ItemDef[] => CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id));
-
   const render = () => {
     // Turning the page with the keyboard keeps the focus on a slot.
     const focused = slots.indexOf(document.activeElement as HTMLButtonElement);
     for (const s of slots) s.remove();
     slots = [];
-    const all = owned();
+    const all = wheelEmotes(state);
     const view = wheelPage(all, page);
     page = view.page;
     const r = parseFloat(getComputedStyle(ring).getPropertyValue('--r')) || 132;
@@ -142,14 +151,10 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     });
   }
   $<HTMLButtonElement>('[data-close]').addEventListener('click', () => modal.close());
-  // 1 to 8 play a slot; the arrows turn the page. (Escape is the HUD's: it closes every screen.)
+  // The arrows turn the page. (1 to 8 and Escape are the HUD's, from the keyboard module.)
   window.addEventListener('keydown', (e) => {
     if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey) return;
-    const n = /^Digit([1-8])$/.exec(e.code)?.[1] ?? /^Numpad([1-8])$/.exec(e.code)?.[1];
-    if (n) {
-      e.preventDefault();
-      slots[Number(n) - 1]?.click();
-    } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
       page += e.code === 'ArrowLeft' ? -1 : 1;
       render();
@@ -168,5 +173,9 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     },
     close: () => modal.close(),
     isOpen: () => modal.isOpen(),
+    onClose: (cb) => modal.onClose(cb),
+    press(n) {
+      if (modal.isOpen()) slots[n - 1]?.click();
+    },
   };
 }

@@ -51,6 +51,7 @@ describe('attachKeyboard', () => {
       interact: () => calls.push('interact'),
       menu: () => calls.push('menu'),
       emotes: () => calls.push('emotes'),
+      emoteKey: (n) => calls.push(`emote ${n}`),
       owl: () => calls.push('owl'),
       journal: () => calls.push('journal'),
       close: () => calls.push('close'),
@@ -77,6 +78,17 @@ describe('attachKeyboard', () => {
     key('keydown', 'KeyJ');
     key('keydown', 'Escape');
     expect(calls).toEqual(['interact', 'menu', 'emotes', 'owl', 'journal', 'close']);
+  });
+
+  it('plays emotes 1 to 8 from the number row and the keypad, once per press', () => {
+    const { key, calls } = setup();
+    key('keydown', 'Digit1');
+    key('keydown', 'Digit1', { repeat: true });
+    key('keydown', 'Numpad8');
+    key('keydown', 'Digit9');
+    key('keydown', 'Digit0');
+    key('keydown', 'Digit3', { target: { tagName: 'TEXTAREA', isContentEditable: false } });
+    expect(calls).toEqual(['emote 1', 'emote 8']);
   });
 
   it('leaves typing and browser shortcuts alone', () => {

@@ -10,6 +10,7 @@ import { BuilderScene } from './game/BuilderScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
 import { loadLook, loadPlayerId } from './identity';
 import { createTransport, type WalletEntry } from './net';
+import { sendFeedback } from './net/feedback';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { createHud } from './ui/hud';
 import { attachKeyboard, type Keys } from './ui/keyboard';
@@ -71,14 +72,15 @@ game.registry.set('quests', quests);
 game.registry.set('tasks', tasks);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
-// touch screens; E interacts, M opens the Menu, T the emote wheel, Q the owl builder and J the quests.
-// While the Menu or one of its screens is open, the owl stays where it is.
+// touch screens; E interacts, M opens the Menu, T the emote wheel (1 to 8 play an emote at once), Q
+// the owl builder and J the quests. While the Menu or one of its screens is open, the owl stays put.
 const keyboard = attachKeyboard(window, {
   interact: () => {
     if (!hud.isBlocking()) void roomScene()?.interact();
   },
   menu: () => hud.toggleMenu(),
   emotes: () => hud.toggleEmotes(),
+  emoteKey: (n) => hud.emoteKey(n),
   owl: () => hud.toggleOwl(),
   journal: () => hud.toggleJournal(),
   close: () => hud.closePanels(),
@@ -161,17 +163,19 @@ hud.attachQuests(quests, {
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   openShop: () => hud.openShop(),
 }, tasks);
+let storage: Storage | null = null;
+try {
+  storage = localStorage;
+} catch {
+  storage = null; // a browser that keeps nothing
+}
+// Feedback goes to the park's keepers through the room server (kept in this browser without one).
+hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
 // Load the collection in the background; worn items this collector does not own come off.
 // A present from the park in the collection is announced once on this device.
 void collection.refresh().then(() => {
   roomScene()?.pruneWear();
   if (!collection.inv) return;
-  let storage: Storage | null = null;
-  try {
-    storage = localStorage;
-  } catch {
-    storage = null;
-  }
   announcePresents(collection.inv.owned, (message, ms, accent) => hud.toast(message, ms, accent), storage);
 });
 collection.onChange(() => roomScene()?.pruneWear());

@@ -1,12 +1,14 @@
-import { EMOTE_IDS, MAX_ACTIVE_QUESTS, type EquipSlot, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { MAX_ACTIVE_QUESTS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
+import type { FeedbackOutcome } from '../net/feedback';
 import type { SettingsStore } from '../settings';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
-import { createEmoteWheel, type EmoteWheel } from './emoteWheel';
+import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
+import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createJoystick } from './joystick';
 import { createMenu, type MenuScreenId } from './menu';
 import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuilder';
@@ -56,6 +58,8 @@ export interface Hud {
   toast(message: string, ms?: number, accent?: string): void;
   /** Wire the emote wheel, the owl builder, the feather count and the shop to the visitor's collection. */
   attachCollection(state: CollectionState, actions: CollectionActions): void;
+  /** Feedback in the Menu; each note goes with the room the owl is in and the screen's size. */
+  attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
   /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests and today's tasks. */
   attachQuests(state: QuestState, actions: QuestActions, tasks: TaskState): void;
   /** Talking to an NPC owl: its quests, and the shop for the shopkeeper. */
@@ -65,8 +69,10 @@ export interface Hud {
   dialogueNpc(): string | null;
   /** M: open or close the Menu (closing the other screens). */
   toggleMenu(): void;
-  /** T: open or close the emote wheel. */
+  /** T (or the Emotes button): open or close the emote wheel. */
   toggleEmotes(): void;
+  /** 1 to 8: play that emote of the wheel (its page, while it is open), unless another screen is open. */
+  emoteKey(n: number): void;
   /** Q: open or close the owl builder. */
   toggleOwl(): void;
   /** J: open or close the quests screen. */
@@ -132,6 +138,10 @@ const CSS = `
 #hud .menu-btn[aria-expanded=true]{background:#C9A227;color:#0C1E36}
 #hud .menu-btn[aria-expanded=true] i,#hud .menu-btn[aria-expanded=true] i::after{border-color:#0C1E36;background:#0C1E36}
 #hud .menu-btn[aria-expanded=true] i{background:transparent}
+#hud .emote-btn{position:relative;display:flex;align-items:center;justify-content:center;width:52px;min-height:52px;height:52px;padding:0;border-radius:50%;background:rgba(12,30,54,.86);border:1px solid rgba(255,211,106,.55);box-shadow:0 4px 14px rgba(0,0,0,.45)}
+#hud .emote-btn svg{width:34px;height:34px}
+#hud .emote-btn[aria-expanded=true]{background:#C9A227}
+#hud .emote-btn kbd{position:absolute;top:-6px;right:-8px;margin:0;color:#F6F1E3;background:rgba(12,30,54,.92)}
 #hud.no-quest-cards .tracker,#hud.no-quest-cards .tracker.show{display:none}
 #hud.covered .bar,#hud.covered .tracker,#hud.covered .tracker.show,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards{visibility:hidden}
 #hud.no-stick .stick{display:none}
@@ -154,6 +164,13 @@ const CSS = `
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
 `;
 
+/** The Emotes button's face: a smile in a dotted ring, like the wheel it opens. */
+const EMOTES_ICON =
+  '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="17" fill="none" stroke="#FFD36A" stroke-width="3" stroke-dasharray="8 5.4"/><circle cx="24" cy="24" r="9" fill="#FFD36A"/><path d="M20 25.5q4 3.4 8 0" stroke="#0C1E36" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="21" cy="21.6" r="1.5" fill="#0C1E36"/><circle cx="27" cy="21.6" r="1.5" fill="#0C1E36"/></svg>';
+
+/** The Menu, its screens, and the emote wheel (which has a button of its own). */
+type ScreenId = MenuScreenId | 'menu' | 'emotes';
+
 export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: SettingsStore): Hud {
   const style = document.createElement('style');
   style.textContent = CSS;
@@ -172,6 +189,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="bottom">
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd></button>
+        <button class="emote-btn" data-emotes-btn aria-label="Emotes" aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="T">${EMOTES_ICON}<kbd aria-hidden="true">T</kbd></button>
       </div>
       <div class="actions" data-actions></div>
     </div>`;
@@ -182,6 +200,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const count = $<HTMLElement>('[data-count]');
   const toasts = $<HTMLElement>('[data-toasts]');
   const menuBtn = $<HTMLButtonElement>('[data-menu-btn]');
+  const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const actionsEl = $<HTMLElement>('[data-actions]');
   const hintsEl = $<HTMLElement>('[data-hints]');
   const hintEls = new Map<string, HTMLButtonElement>();
@@ -200,6 +219,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let ticketCard: ReturnType<typeof createTicketCard> | null = null;
   let roomId = '';
   let wheel: EmoteWheel | null = null;
+  let feedback: FeedbackScreen | null = null;
   let builder: OwlBuilder | null = null;
   let collectionActions: CollectionActions | null = null;
   let previewCb: ((frame: PreviewFrame | null) => void) | null = null;
@@ -241,11 +261,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   applySettings();
 
   // ---- the Menu and its screens: one open at a time ----
-  const ownedEmotes = () => (collectionState?.inv ? EMOTE_IDS.filter((e) => collectionState!.owns(e)).length : null);
   const menu = createMenu(
     root,
     [
-      { id: 'emotes', title: 'Emotes', key: 'T', sub: () => (ownedEmotes() === null ? 'Hoot, wave, dance…' : `${ownedEmotes()} of ${EMOTE_IDS.length} emotes`) },
       {
         id: 'owl',
         title: 'Your owl',
@@ -265,6 +283,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         },
       },
       { id: 'settings', title: 'Settings', key: '', sub: () => 'Quest cards, thumbstick, calm motion, controls' },
+      { id: 'feedback', title: 'Feedback', key: '', sub: () => 'Found a bug? Have an idea? Tell the keepers.', highlight: true },
     ],
     (id) => openScreen(id, true),
   );
@@ -286,33 +305,47 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     builder?.close();
     questUi?.closeJournal();
     settingsScreen.close();
+    feedback?.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen();
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
     closeScreens();
   };
 
-  function openScreen(id: MenuScreenId | 'menu', fromMenu = false) {
+  function openScreen(id: ScreenId, fromMenu = false) {
     makeRoom();
     if (id === 'menu') {
       menu.open(menuBtn);
       menuBtn.setAttribute('aria-expanded', 'true');
-    } else if (id === 'emotes') wheel?.open(menuBtn);
-    else if (id === 'owl' && builder) {
+    } else if (id === 'emotes' && wheel) {
+      wheel.open(emotesBtn);
+      emotesBtn.setAttribute('aria-expanded', 'true');
+    } else if (id === 'owl' && builder) {
       builder.setLook(collectionActions?.look() ?? look);
       // The builder covers the whole screen: the bar, the cards and the buttons hide under it.
       root.classList.add('covered');
       builder.open(fromMenu, undefined, menuBtn);
     } else if (id === 'quests') questUi?.openJournal(fromMenu, menuBtn);
-    else settingsScreen.open(fromMenu, menuBtn);
+    else if (id === 'settings') settingsScreen.open(fromMenu, menuBtn);
+    else if (id === 'feedback') feedback?.open(fromMenu, menuBtn);
   }
-  const toggle = (id: MenuScreenId | 'menu', isOpen: () => boolean) => {
+  const toggle = (id: ScreenId, isOpen: () => boolean) => {
     if (isOpen()) closeScreens();
     else openScreen(id);
   };
   menuBtn.addEventListener('click', () => toggle('menu', () => menu.isOpen()));
+  emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
+
+  const toast = (message: string, ms = 2600, accent?: string) => {
+    const el = document.createElement('div');
+    el.className = accent ? 'toast accent' : 'toast';
+    if (accent) el.style.setProperty('--accent', accent);
+    el.textContent = message;
+    toasts.appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  };
 
   return {
     setCount(n) {
@@ -328,18 +361,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       dot.title = s === 'online' ? (kind === 'local' ? 'Connected (this device only)' : 'Connected') : s === 'connecting' ? 'Connecting…' : 'Offline';
       dot.dataset['status'] = s;
     },
-    toast(message, ms = 2600, accent) {
-      const el = document.createElement('div');
-      el.className = accent ? 'toast accent' : 'toast';
-      if (accent) el.style.setProperty('--accent', accent);
-      el.textContent = message;
-      toasts.appendChild(el);
-      setTimeout(() => el.remove(), ms);
-    },
+    toast,
     attachCollection(state, actions) {
       collectionState = state;
       collectionActions = actions;
       wheel = createEmoteWheel(root, state, (e) => actions.emote(e));
+      wheel.onClose(() => emotesBtn.setAttribute('aria-expanded', 'false'));
       builder = createOwlBuilder(
         root,
         state,
@@ -366,6 +393,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       state.onChange(showFeathers);
       showFeathers();
     },
+    attachFeedback(send) {
+      feedback = createFeedbackScreen(
+        root,
+        (kind, text) => send({ kind, text, room: roomId || null, screen: `${window.innerWidth}x${window.innerHeight}` }),
+        toast,
+        () => openScreen('menu'),
+      );
+    },
     attachQuests(state, actions, tasks) {
       questState = state;
       taskState = tasks;
@@ -383,6 +418,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     dialogueNpc: () => questUi?.dialogueNpc() ?? null,
     toggleMenu: () => toggle('menu', () => menu.isOpen()),
     toggleEmotes: () => toggle('emotes', () => !!wheel?.isOpen()),
+    emoteKey(n) {
+      if (wheel?.isOpen()) wheel.press(n);
+      else if (!isBlocking() && collectionState && collectionActions) {
+        const emote = wheelEmotes(collectionState)[n - 1];
+        if (emote) collectionActions.emote(emote.id);
+      }
+    },
     toggleOwl: () => toggle('owl', () => !!builder?.isOpen()),
     toggleJournal: () => toggle('quests', () => !!questUi?.isJournalOpen()),
     isBlocking,

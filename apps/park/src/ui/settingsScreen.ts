@@ -31,7 +31,8 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
   [['E'], 'Do what you are standing at'],
   [['M'], 'Menu'],
-  [['T'], 'Emotes (then 1 to 8)'],
+  [['T'], 'The emote wheel'],
+  [['1–8'], 'Play an emote at once, as numbered on the wheel'],
   [['Q'], 'Your owl'],
   [['J'], 'Quests'],
   [['Esc'], 'Close'],
@@ -117,7 +118,7 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     }
     const tips = document.createElement('p');
     tips.className = 'tips';
-    tips.textContent = 'Tap the floor to walk there, or hold the thumbstick. Tap an owl with a gold “!” to talk, and the gold buttons to do things where you stand.';
+    tips.textContent = 'Tap the floor to walk there, or hold the thumbstick. The smile beside Menu opens your emotes. Tap an owl with a gold “!” to talk, and the gold buttons to do things where you stand.';
     box.append(keys, tips);
     sync(store.get());
   };

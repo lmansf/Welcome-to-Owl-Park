@@ -106,11 +106,11 @@ test.describe('single visitor', () => {
 
   test('M opens the Menu, T the emotes, Q your owl and J the quests; each key closes its screen again, and so does Escape', async ({ page }) => {
     await openPark(page);
-    for (const [key, name] of [
-      ['KeyM', 'Menu'],
-      ['KeyT', 'Emotes'],
-      ['KeyQ', 'Your owl'],
-      ['KeyJ', 'Quests'],
+    for (const [key, name, opener] of [
+      ['KeyM', 'Menu', '[data-menu-btn]'],
+      ['KeyT', 'Emotes', '[data-emotes-btn]'],
+      ['KeyQ', 'Your owl', '[data-menu-btn]'],
+      ['KeyJ', 'Quests', '[data-menu-btn]'],
     ] as const) {
       const screen = page.getByRole('dialog', { name });
       await page.keyboard.press(key);
@@ -121,8 +121,8 @@ test.describe('single visitor', () => {
       await expect(screen, name).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(screen, name).toBeHidden();
-      // The focus goes back to the Menu button, even from the owl builder, which hides it while open.
-      await expect(page.locator('[data-menu-btn]'), name).toBeFocused();
+      // The focus goes back to the button for it, even from the owl builder, which hides the buttons while open.
+      await expect(page.locator(opener), name).toBeFocused();
     }
     // While a screen is open the walking keys leave the owl where it is.
     const before = (await state(page)).pos;
@@ -135,28 +135,32 @@ test.describe('single visitor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('the bottom bar is one Menu button, and the Menu leads to the emotes, your owl, the quests and the settings', async ({ page }) => {
+  test('the bottom bar is Menu and Emotes; the Menu leads to your owl, the quests, the settings and Feedback', async ({ page }) => {
     await openPark(page);
-    await expect(page.locator('#hud .bottom .left button')).toHaveCount(1);
+    await expect(page.locator('#hud .bottom .left button')).toHaveCount(2);
+    // Emotes are one tap away.
+    await page.locator('[data-emotes-btn]').click();
+    const wheel = page.getByRole('dialog', { name: 'Emotes' });
+    await expect(wheel).toBeVisible();
+    await wheel.getByRole('button', { name: 'Close emotes' }).click();
+    await expect(wheel).toBeHidden();
     await page.locator('[data-menu-btn]').click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Emotes/, /^Your owl/, /^Quests/, /^Settings/]);
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Your owl/, /^Quests/, /^Settings/, /^Feedback/]);
+    // Feedback is picked out in gold.
+    await expect(menu.locator('[data-screen="feedback"]')).toHaveClass(/\bhi\b/);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
     for (const [id, name] of [
-      ['emotes', 'Emotes'],
       ['owl', 'Your owl'],
       ['quests', 'Quests'],
       ['settings', 'Settings'],
+      ['feedback', 'Feedback'],
     ] as const) {
       await menu.locator(`[data-screen="${id}"]`).click();
       const screen = page.getByRole('dialog', { name });
       await expect(screen, name).toBeVisible();
       await expect(menu).toBeHidden();
-      // Each screen but the wheel goes back to the Menu; the wheel just closes.
-      if (id === 'emotes') {
-        await screen.getByRole('button', { name: 'Close emotes' }).click();
-        await page.locator('[data-menu-btn]').click();
-      } else await screen.getByRole('button', { name: 'Back to the menu' }).click();
+      await screen.getByRole('button', { name: 'Back to the menu' }).click();
       await expect(screen, name).toBeHidden();
       await expect(menu).toBeVisible();
     }
@@ -183,6 +187,41 @@ test.describe('single visitor', () => {
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     await expect(page.locator('#hud .tracker')).toBeHidden();
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ questCards: false, thumbstick: !isMobile, calm: true });
+  });
+
+  test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
+    await openPark(page);
+    const before = (await state(page)).pos;
+    const sheet = page.getByRole('dialog', { name: 'Feedback' });
+    const openFeedback = async () => {
+      await page.locator('[data-menu-btn]').click();
+      await page.locator('[data-screen="feedback"]').click();
+    };
+    await openFeedback();
+    await expect(sheet).toBeVisible();
+    const send = sheet.getByRole('button', { name: 'Send' });
+    await expect(send).toBeDisabled(); // nothing written yet
+    await sheet.getByRole('button', { name: 'Bug' }).click();
+    const box = sheet.getByRole('textbox', { name: 'Your note' });
+    await box.click();
+    await box.pressSequentially('wasd q j e m t 1 2: the owl stays put');
+    // Only one screen opens at a time: had a key opened another, this one would have closed.
+    await expect(sheet).toBeVisible();
+    await expect(box).toHaveValue('wasd q j e m t 1 2: the owl stays put');
+    expect((await state(page)).pos).toEqual(before);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-feedback.png` });
+    await send.click();
+    // Without the park's server the note stays in this browser.
+    await expect(page.getByText('your note is saved on this device')).toBeVisible();
+    await expect(sheet).toBeHidden();
+    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:feedback') ?? '[]') as unknown[]);
+    expect(kept).toEqual([expect.objectContaining({ kind: 'bug', text: 'wasd q j e m t 1 2: the owl stays put', room: 'hub' })]);
+    // Escape closes it from inside the text box too.
+    await openFeedback();
+    await expect(box).toHaveValue('');
+    await box.click();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
   });
 
   test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {
