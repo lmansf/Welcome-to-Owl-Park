@@ -29,6 +29,8 @@ export interface ParkState {
     copy: { tune: string[]; got: number; level: number; listening: boolean } | null;
     quiz: { n: number; right: 'a' | 'b' | 'c'; revealAt: number } | null;
   } | null;
+  street: Array<{ kind: 'own'; nestId: string | null } | { kind: 'nest'; nestId: string; look: { body: string; belly: string; accent: string } | null } | { kind: 'empty' }> | null;
+  nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */

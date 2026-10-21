@@ -38,6 +38,7 @@ import {
   variantName,
   type DoorDef,
   type EquipSlot,
+  type NestLayout,
   type NestSpotId,
   type NestView,
   type OwlLook,
@@ -660,6 +661,10 @@ export class RoomScene extends Phaser.Scene {
     talkingTo: string | null;
     /** The activities here: lanterns lit, the fishing line, the copy game, the next quiz question. */
     play: ReturnType<ActivityLayer['debug']> | null;
+    /** On the street: who lives behind each door for this visitor (door 0 is its own). */
+    street: StreetDoor[] | null;
+    /** In a nest: which, whether it is this visitor's, how it stands, and Decorate mode. */
+    nest: { id: string; mine: boolean; open: boolean; layout: NestLayout; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: NestSpotId } | null;
   } | null {
     if (!this.built) return null;
     return {
@@ -678,6 +683,10 @@ export class RoomScene extends Phaser.Scene {
       actions: this.actions.map((a) => a.id),
       talkingTo: this.talkingTo,
       play: this.play?.debug() ?? null,
+      street: this.room.id === STREET_ROOM ? this.street : null,
+      nest: this.nestView
+        ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
+        : null,
     };
   }
 

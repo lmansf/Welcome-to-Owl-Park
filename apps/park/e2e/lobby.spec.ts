@@ -8,7 +8,8 @@ test.describe('the lobby (this device)', () => {
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     const s = await state(page);
     expect(s.room).toBe('lobby');
-    expect(s.doors.map((d) => d.id).sort()).toEqual(['booth', 'gate']);
+    expect(s.doors.map((d) => d.id).sort()).toEqual(['booth', 'gate', 'to-homes']);
+    expect(s.doors.find((d) => d.id === 'to-homes')?.to).toBe('homes');
     await expect(page.getByText('Walk through the turnstiles')).toBeVisible();
 
     // The booth: tickets are not on sale yet, so it says they are coming and the gate is open.

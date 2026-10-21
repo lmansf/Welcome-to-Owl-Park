@@ -25,13 +25,15 @@ import { parseArgs } from 'node:util';
 
 export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
-export const ROOMS = ['hub', 'grove', 'market', 'lobby'];
+export const ROOMS = ['hub', 'grove', 'market', 'lobby', 'homes', 'nest'];
 
 /** Which room shows each key. Owl layers and signs show in the hub (owls show everywhere). */
 const ROOM_OF = {
   hub: 'hub', 'hub-fg': 'hub', grove: 'grove', 'grove-fg': 'grove', guardian: 'grove',
   market: 'market', 'market-fg': 'market', 'robot-owl': 'market',
 };
+/** Furniture (`decor-<id>`) stands in a nest. */
+const roomOfKey = (k) => ROOM_OF[k] ?? (k.startsWith('decor-') ? 'nest' : ROOMS.find((r) => k === r || k.startsWith(`${r}-`)));
 
 export const VIEWS = {
   desktop: { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, isMobile: false, hasTouch: false, showWidth: 960 },
@@ -81,7 +83,7 @@ export function scanFinals(dir, keys) {
 export function roomsTouched(keys) {
   const set = new Set();
   // A screen of a wider room (`lobby-west`, `hub-east-fg`) shows in its room.
-  for (const k of keys) set.add(ROOM_OF[k] ?? ROOMS.find((r) => k === r || k.startsWith(`${r}-`)) ?? 'hub');
+  for (const k of keys) set.add(roomOfKey(k) ?? 'hub');
   return ROOMS.filter((r) => set.has(r));
 }
 
@@ -143,18 +145,36 @@ async function until(fn, timeoutMs, stepMs = 150) {
 
 const stateOf = (page) => page.evaluate(() => window.owlPark?.state?.() ?? null);
 
+/**
+ * A nest to photograph: in the local mode every page of one browser is the same collector, whose
+ * nest the street makes on its first visit (with the starter furniture in it).
+ */
+async function ownNest(ctx, base) {
+  const page = await ctx.newPage();
+  try {
+    await page.goto(`${base}/?${new URLSearchParams({ transport: 'local', room: 'homes' })}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    let id = null;
+    await until(async () => (id = (await stateOf(page))?.street?.[0]?.nestId ?? null) !== null, 30_000);
+    if (!id) throw new Error('nest: the street made no nest');
+    return `nest-${id}`;
+  } finally {
+    await page.close();
+  }
+}
+
 /** One screenshot of one room in one view, one visitor per look, the first being the camera's. */
 async function shoot(browser, base, room, view, looks, file, warn) {
   const owls = looks.length;
   const ctx = await browser.newContext({ viewport: view.viewport, deviceScaleFactor: view.deviceScaleFactor, isMobile: view.isMobile, hasTouch: view.hasTouch });
   try {
+    const where = room === 'nest' ? await ownNest(ctx, base) : room;
     const pages = [];
     for (let i = 0; i < owls; i += 1) {
       const page = await ctx.newPage();
       // Only the first page is photographed; the other visitors just need to exist as peers, so
       // they get a tiny viewport and cost little to render (the game renders in software here).
       if (i > 0) await page.setViewportSize({ width: 160, height: 90 });
-      const q = new URLSearchParams({ transport: 'local', room, id: `preview-${i}`, look: looks[i] });
+      const q = new URLSearchParams({ transport: 'local', room: where, id: `preview-${i}`, look: looks[i] });
       await page.goto(`${base}/?${q}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       if (!(await until(async () => (await stateOf(page))?.connected === true, 30_000))) throw new Error(`${room}: the park did not start`);
       pages.push(page);

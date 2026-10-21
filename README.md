@@ -80,6 +80,7 @@ docs/                 architecture, art pipeline, deployment
 - [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): wearables, pets, effects and emotes: the catalogue, the numbers and the server.
 - [docs/QUESTS.md](docs/QUESTS.md): quests, NPC owls, leaf piles, feathers, the feather shop and owl species.
 - [docs/ACTIVITIES.md](docs/ACTIVITIES.md): things to do in the park: the lantern beam, the stage quiz, fishing, the robot owl's copy game and three small tasks a day.
+- [docs/NESTS.md](docs/NESTS.md): every owl's own nest on the street outside the turnstiles: decorating it, the day's furniture gift, and visiting other owls' nests.
 - [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
 
 ## Ground rules baked into the code
