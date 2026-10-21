@@ -1,15 +1,15 @@
 /**
  * The Worker: serves the built client as static assets, mints guest passes and collector
- * tokens, answers the collection, shop and ticket API, takes the store's webhooks, and upgrades
- * /ws/<room> to a WebSocket held by the park's Durable Object (where quests, NPC owls and leaf
- * piles live).
+ * tokens, answers the collection, shop, furniture gift and ticket API, takes the store's webhooks,
+ * and upgrades /ws/<room> to a WebSocket held by the park's Durable Object (where quests, NPC owls,
+ * leaf piles and the nests live).
  */
 import { isTimeZone, isVariantId } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { isPage, uncachedPage } from './page';
-import { ROOMS } from './rooms';
+import { ROOMS, isRoomId } from './rooms';
 import { verifyWebhook, type TicketLine } from './shopify';
 import { storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
@@ -227,6 +227,16 @@ export default {
       return json({ error: 'not found' }, 404);
     }
 
+    // ---- Nests: the day's furniture gift. The nests are outside the turnstiles, so it needs no ticket. ----
+    if (url.pathname === '/api/nest/gift') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+      const pass = await passFrom(request, env);
+      if (!pass) return json({ error: 'bad-pass' }, 401);
+      if (!pass.cid) return json({ error: 'no-collector' }, 401);
+      return json(await collections(env).claimFurnitureGift(pass.cid));
+    }
+
     // ---- Realm Vote ----
     if (url.pathname.startsWith('/api/vote')) {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -283,7 +293,8 @@ export default {
 
     if (url.pathname.startsWith('/ws/')) {
       const roomId = url.pathname.slice(4);
-      if (!Object.hasOwn(ROOMS, roomId)) return new Response('unknown room', { status: 404 });
+      // One of the park's rooms, or a nest (`nest-<id>`): whether that nest is there, and open, is the room object's to say.
+      if (!isRoomId(roomId)) return new Response('unknown room', { status: 404 });
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
       const pass = await verifyPass(signingSecret(env), url.searchParams.get('pass'));
       if (!pass) return new Response('bad pass', { status: 401 });
@@ -291,6 +302,9 @@ export default {
       const headers = new Headers(request.headers);
       headers.set('X-Room', roomId);
       headers.set('X-Visitor-Id', pass.id);
+      // Only the pass says whose collection (and nest) this is: whatever the page sent under these names goes.
+      headers.delete('X-Collector-Id');
+      headers.delete('X-Collector-Tz');
       if (pass.cid) headers.set('X-Collector-Id', pass.cid);
       if (pass.tz) headers.set('X-Collector-Tz', pass.tz);
       // Local load tests set TRUST_FORWARDED_FOR so each bot can claim its own address; never in production.

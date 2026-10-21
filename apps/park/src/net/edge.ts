@@ -310,6 +310,12 @@ export class EdgeTransport implements ParkTransport {
           handlers.onCounts?.(f.counts);
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
+          // This page speaks the room's protocol: a later version change may reload it again.
+          try {
+            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+          } catch {
+            /* no session storage: nothing to clear */
+          }
           break;
         }
         case 'enter':

@@ -73,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v6 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v7 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -84,7 +84,9 @@ Client to server: `hello` (once, within 5 s; look, optional spawn name and resum
 `move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
 (an emote id), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
 `accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
-the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks).
+the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks); and for
+the nests `street` (on the street: the visitor's own nest and five other owls' open ones) and
+`nest` (in its own nest, the owner puts a piece in a spot, takes one away, or opens or closes it).
 
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
@@ -93,7 +95,9 @@ acknowledgement), `look`, `leave`, `counts`, `full`, `emote` (to everyone else i
 for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, `refused`, plus
 `objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`), and for
 the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks` (see
-`docs/ACTIVITIES.md`).
+`docs/ACTIVITIES.md`), and for the nests `street` (the answer), `nest` (a nest as it stands: to a
+newcomer after its welcome, to everyone inside when its owner changes it, and as the answer to the
+change) and `closed` (a nest turned the visitor away or closed with it inside; close 4011 follows).
 
 Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
 normally match the client's prediction; a walk in progress is continued from its current
@@ -105,19 +109,25 @@ IP address per object. Quests and collectibles: talks, uses and hand-ins count o
 of the owl's position on the server clock (plus 40 px of slack), a quest item only within 56 px,
 and one quest request runs at a time per visitor; one use per 1.2 s; worn items the visitor's
 collection does not hold are dropped from a look before it is broadcast; emotes must be owned and
-are limited to one per 1.5 s; quest and emote frames count toward the frame limit.
+are limited to one per 1.5 s; quest and emote frames count toward the frame limit. Nests: a nest's
+room is `nest-<nestId>`, the id random and never taken from the collector; its hello waits for the
+collections object (later frames wait behind it), a closed nest lets in only its owner, its owner
+gets in however full it is (12 others), only its owner changes it (one change per 250 ms), and
+closing it sends every visitor out. No frame carries a collector id, and counts sum all the nests
+under one `nests` key.
 
 Client rules: the clock offset is set from `welcome` and refined with a min-filter over
 later `move` frames; remote owls are drawn 100 ms behind server time so jitter never shows;
 the local owl walks immediately on the tap and is corrected only if the echo differs by more
 than 2 px; reconnects back off from 0.5 s to 8 s and resume near the last position; a stale
-bundle (protocol mismatch) reloads itself.
+bundle (protocol mismatch) reloads itself, once until a room welcomes it again.
 
-Everything about a visitor that must survive hibernation (id, look, position, walk and collector
-id) is kept in the socket attachment, so an object that was evicted rebuilds every room from its
-sockets. Used-up leaf piles, the hub's lantern beam and the last stage quiz round paid are kept
-in the object's storage as well, so an evicted object brings them back; while owls are in the hub,
-the alarm also wakes the object when a quiz question closes.
+Everything about a visitor that must survive hibernation (id, look, position, walk, collector id,
+and in a nest whether it is the owner's) is kept in the socket attachment, so an object that was
+evicted rebuilds every room, nests included, from its sockets. Used-up leaf piles, the hub's
+lantern beam and the last stage quiz round paid are kept in the object's storage as well, so an
+evicted object brings them back; while owls are in the hub, the alarm also wakes the object when a
+quiz question closes.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 

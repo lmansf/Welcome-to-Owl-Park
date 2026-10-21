@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOBBY, admitted, gateMode, mayEnter } from '../src/gate';
+import { LOBBY, admitted, gateMode, isFreeRoom, mayEnter } from '../src/gate';
 
 describe('the front gate', () => {
   it('reads GATE: only "ticket" takes tickets', () => {
@@ -17,6 +17,18 @@ describe('the front gate', () => {
     expect(mayEnter('ticket', { adm: false }, LOBBY)).toBe(true);
     for (const room of ['hub', 'grove', 'market']) expect(mayEnter('ticket', { adm: false }, room)).toBe(false);
     for (const room of [LOBBY, 'hub', 'grove', 'market']) expect(mayEnter('ticket', { adm: true }, room)).toBe(true);
+  });
+
+  it('lets a pass without a ticket onto the street of nests and into any nest, which are outside the turnstiles', () => {
+    for (const room of ['homes', 'nest-abcd1234', 'nest-00000000']) {
+      expect(isFreeRoom(room), room).toBe(true);
+      expect(mayEnter('ticket', { adm: false }, room), room).toBe(true);
+    }
+    // Only well-formed nest ids, and never the park's rooms inside the turnstiles.
+    for (const room of ['nest-ABCD1234', 'nest-abc', 'nest-abcd12345', 'nest-', 'nest', 'nests', 'homes-west', 'hub', 'grove', 'market', 'xnest-abcd1234']) {
+      expect(isFreeRoom(room), room).toBe(false);
+      expect(mayEnter('ticket', { adm: false }, room), room).toBe(false);
+    }
   });
 
   it('admits everyone while the gate is open, and only ticket-holders once it takes tickets', () => {

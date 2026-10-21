@@ -6,17 +6,22 @@
  * owls and interactables: `quests`, `talk`, `accept`, `abandon`, `handin`, `use` and `gather`, each
  * carrying a request number `r` that the answer echoes; looks may carry a `species`. v6 adds the
  * activities (activities.ts): `act` frames for the lanterns, fishing, the copy game and the day's
- * tasks, and the `lanterns`, `quiz`, `paid` and `tasks` frames the room sends.
+ * tasks, and the `lanterns`, `quiz`, `paid` and `tasks` frames the room sends. v7 adds the nests
+ * (homes.ts, nestbook.ts): `street` asks for the street's nest doors and `nest` carries an owner's
+ * change to its nest; the room answers with `street` and `nest`, sends `nest` to everyone in a nest
+ * when it changes, and `closed` before closing a socket a nest turns away (4011).
  */
 import type { QuizZone, TaskView } from './activities';
 import type { Award } from './book';
+import { parseNestEdit, type NestEdit, type NestRefusal, type NestView } from './homes';
 import { cleanLook } from './look';
+import type { NestGiftState, StreetDoor } from './nestbook';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 6;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 7;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -32,6 +37,8 @@ export const CLOSE = {
   NOT_ADMITTED: 4004,
   REPLACED: 4005,
   ROOM_FULL: 4010,
+  /** A nest turned the visitor away (closed to visitors, or no such nest), or closed while it was inside. */
+  NEST_CLOSED: 4011,
   TOO_LARGE: 1009,
 } as const;
 
@@ -117,7 +124,14 @@ export interface ClientAct {
   e?: string;
   r: number;
 }
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct;
+/** On the street: ask for its nest doors, this visitor's own nest and other owls' open ones. Answered with `street`. */
+export interface ClientStreet {
+  t: 'street';
+  r: number;
+}
+/** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
+export type ClientNest = { t: 'nest'; r: number } & NestEdit;
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -258,6 +272,41 @@ export type ServerAct = { t: 'act'; r: number } & (
   | { a: 'tasks'; ok: true; tasks: TaskView }
   | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' }
 );
+/** Why an owner's change to its nest was refused: the rules' reason, not the owner's nest, too fast, or the collections were away. */
+export type NestEditRefusal = NestRefusal | 'not-owner' | 'busy' | 'offline';
+/**
+ * A nest as it stands. A newcomer gets it right after its welcome, with `mine`, and the owner also
+ * the furniture it owns and today's furniture gift. Everyone else inside gets it whenever the owner
+ * changes it, and the owner's change is answered with it (`r` and `ok`; `reason` when refused).
+ */
+export interface ServerNest {
+  t: 'nest';
+  nest?: NestView;
+  mine?: boolean;
+  owned?: string[];
+  gift?: NestGiftState;
+  r?: number;
+  ok?: boolean;
+  reason?: NestEditRefusal;
+}
+/**
+ * The street's nest doors for this visitor: `own` is door 0, its own nest (made on its first visit;
+ * null only for a page without a collection, which the room server refuses instead), and `doors` are
+ * doors 1 to 5, always five, each another owl's open nest with its owner's colours for the flag
+ * (null: no nest behind that door this time).
+ */
+export interface ServerStreet {
+  t: 'street';
+  r: number;
+  own: { nestId: string; open: boolean } | null;
+  doors: Array<StreetDoor | null>;
+}
+/** A nest turned this visitor away (closed to visitors, or no such nest) or closed while it was inside; the socket closes with 4011 next. */
+export interface ServerClosed {
+  t: 'closed';
+  room: string;
+  why: 'closed' | 'gone';
+}
 export type ServerFrame =
   | ServerWelcome
   | ServerEnter
@@ -277,7 +326,10 @@ export type ServerFrame =
   | ServerQuiz
   | ServerPaid
   | ServerTasks
-  | ServerAct;
+  | ServerAct
+  | ServerNest
+  | ServerStreet
+  | ServerClosed;
 
 // ---- validation (server side, strict) ----
 
@@ -343,12 +395,19 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (a === 'note') return isEmoteId(v['e']) ? { t: 'act', a, e: v['e'], r: v['r'] } : null;
       return { t: 'act', a: a as ActKind, r: v['r'] };
     }
+    case 'street':
+      return isRequest(v['r']) ? { t: 'street', r: v['r'] } : null;
+    case 'nest': {
+      const r = v['r'];
+      const edit = parseNestEdit(v);
+      return isRequest(r) && edit ? { t: 'nest', r, ...edit } : null;
+    }
     default:
       return null;
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'closed']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

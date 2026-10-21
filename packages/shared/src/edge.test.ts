@@ -1,7 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import { EDGE_PROTOCOL_VERSION as V, parseClientFrame } from './edge';
+import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, type ServerFrame } from './edge';
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
+
+describe('protocol v7, the nests', () => {
+  it('is version 7, and a page speaking 6 is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(7);
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 6, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 7, look }))).toEqual({ t: 'hello', v: 7, look });
+    expect(CLOSE.NEST_CLOSED).toBe(4011);
+    expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
+  });
+
+  it('reads a street request with its request number only', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'street', r: 1 }))).toEqual({ t: 'street', r: 1 });
+    expect(parseClientFrame(JSON.stringify({ t: 'street', r: 2, nestId: 'abcd1234', cid: 'c_abcdefgh' }))).toEqual({ t: 'street', r: 2 });
+    for (const r of [undefined, -1, 1.5, '3', 2e9]) expect(parseClientFrame(JSON.stringify({ t: 'street', r })), String(r)).toBeNull();
+  });
+
+  it("reads an owner's change to its nest: a piece in a spot, taking one away, opening and closing", () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 2, spot: 'f1', item: 'rug' }))).toEqual({ t: 'nest', r: 2, spot: 'f1', item: 'rug' });
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 3, spot: 'w2', item: null }))).toEqual({ t: 'nest', r: 3, spot: 'w2', item: null });
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 4, open: false }))).toEqual({ t: 'nest', r: 4, open: false });
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 5, open: true, extra: 'x' }))).toEqual({ t: 'nest', r: 5, open: true });
+    // A well-formed spot or piece the rules do not know is passed on, for them to refuse with a reason.
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 6, spot: 'f9', item: 'sofa' }))).toEqual({ t: 'nest', r: 6, spot: 'f9', item: 'sofa' });
+  });
+
+  it('rejects a malformed change to a nest', () => {
+    for (const bad of [
+      { t: 'nest', spot: 'f1', item: 'rug' }, // no request number
+      { t: 'nest', r: -1, open: true },
+      { t: 'nest', r: 1 },
+      { t: 'nest', r: 1, spot: 'f1' },
+      { t: 'nest', r: 1, spot: 'f1', item: 'rug', open: true },
+      { t: 'nest', r: 1, spot: 'F1', item: 'rug' },
+      { t: 'nest', r: 1, spot: 'f1', item: 'Rug' },
+      { t: 'nest', r: 1, open: 'yes' },
+      { t: 'nest', r: 1, layout: { f1: 'rug' } },
+    ]) {
+      expect(parseClientFrame(JSON.stringify(bad)), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('lets a page read the nest, street and closed frames', () => {
+    const frames: ServerFrame[] = [
+      { t: 'nest', nest: { nestId: 'abcd1234', open: true, layout: { f1: 'rug' }, look }, mine: true, owned: ['rug'], gift: { taken: false, next: 1 } },
+      { t: 'nest', r: 3, ok: false, reason: 'not-owner' },
+      { t: 'street', r: 1, own: { nestId: 'abcd1234', open: false }, doors: [{ nestId: 'zz99zz99', look }, null, null, null, null] },
+      { t: 'closed', room: 'nest-abcd1234', why: 'closed' },
+    ];
+    for (const f of frames) expect(parseServerFrame(JSON.stringify(f))).toEqual(f);
+  });
+});
 
 describe('parseClientFrame', () => {
   it('accepts well-formed frames and rounds coordinates', () => {
