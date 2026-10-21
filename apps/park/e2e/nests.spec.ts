@@ -23,10 +23,12 @@ async function inRoom(page: Page, room: string | RegExp): Promise<void> {
 
 const sheet = (page: Page) => page.locator('section.decorate');
 
+// Each test chains several room changes, two of them with a second owl's page drawing too: on a
+// four-core runner they take 35 to 50 s, so they get the room server suite's budget.
+test.describe.configure({ timeout: 90_000 });
+
 test.describe('the nests (this device)', () => {
   test('from the lobby down the lane to the street, into the owl’s own nest, decorating it, and back out', async ({ page }) => {
-    // Five room changes and a dozen steps in the Decorate sheet: more than the default budget on a busy machine.
-    test.setTimeout(90_000);
     await openPark(page, { room: 'lobby', collector: 'e2e-nest-own', tz: 'UTC' });
     await walkToDoor(page, 'to-homes');
     await inRoom(page, 'homes');
