@@ -1,5 +1,8 @@
+import { isNestRoom } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
+
+export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
@@ -13,6 +16,11 @@ import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
  * The lobby is the park's front entrance, where every visitor arrives: the ticket booth on one
  * side, the turnstile gate into the hub on the other. It is two screens wide, its painting the
  * east screen. It is outside the park, so it has no hiding spots and quests never send owls there.
+ *
+ * The street (`homes`) is outside the park too, and free: a lane of tree houses at dusk that the
+ * lobby's west end leads to. It is two screens wide, its painting the east screen, where the lane
+ * from the lobby comes in. Six nest doors stand along it, each into one owl's nest: a room of its
+ * own, made from NEST_ROOM. Neither has hiding spots.
  */
 export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Our Feathers', 'Hatching Soon'] as const;
 
@@ -340,14 +348,120 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 2200, y: 820 } },
+    spawns: { 'default': { x: 2200, y: 820 }, 'from-homes': { x: 190, y: 850 } },
     doors: [
+      // The lane to the street of nests, past the west end of the balustrade.
+      { id: 'to-homes', rect: { x: 0, y: 790, w: 110, h: 98 }, to: { room: 'homes', spawn: 'from-lobby' }, marker: { x: 55, y: 790 } },
       // The ticket window of the birdhouse booth.
       { id: 'booth', rect: { x: 1890, y: 702, w: 170, h: 88 }, marker: { x: 1960, y: 590 } },
       // The five turnstiles beneath the owls' wings: through them is the hub.
       { id: 'gate', rect: { x: 2400, y: 650, w: 390, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
     ],
   },
+  homes: {
+    id: 'homes',
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'homes',
+    backgrounds: [
+      { key: 'homes-west', x: 0, y: 0 },
+      { key: 'homes', x: ROOM_W, y: 0 },
+    ],
+    mood: 'dusk',
+    walkable: [
+      [
+        // The lane beneath the tree houses: from its closed west end past the six nest doors (each
+        // threshold a step into its trunk) to the east end, where it bends away to the lobby.
+        { x: 40, y: 730 },
+        { x: 225, y: 730 },
+        { x: 232, y: 662 },
+        { x: 368, y: 662 },
+        { x: 375, y: 730 },
+        { x: 725, y: 730 },
+        { x: 732, y: 662 },
+        { x: 868, y: 662 },
+        { x: 875, y: 730 },
+        { x: 1225, y: 730 },
+        { x: 1232, y: 662 },
+        { x: 1368, y: 662 },
+        { x: 1375, y: 730 },
+        { x: 1725, y: 730 },
+        { x: 1732, y: 662 },
+        { x: 1868, y: 662 },
+        { x: 1875, y: 730 },
+        { x: 2225, y: 730 },
+        { x: 2232, y: 662 },
+        { x: 2368, y: 662 },
+        { x: 2375, y: 730 },
+        { x: 2725, y: 730 },
+        { x: 2732, y: 662 },
+        { x: 2868, y: 662 },
+        { x: 2875, y: 730 },
+        { x: 3200, y: 730 },
+        { x: 3200, y: 888 },
+        { x: 40, y: 888 },
+      ],
+    ],
+    spawns: {
+      'default': { x: 2550, y: 820 },
+      'from-lobby': { x: 2990, y: 815 },
+      'from-nest-0': { x: 2800, y: 800 },
+      'from-nest-1': { x: 2300, y: 800 },
+      'from-nest-2': { x: 1800, y: 800 },
+      'from-nest-3': { x: 1300, y: 800 },
+      'from-nest-4': { x: 800, y: 800 },
+      'from-nest-5': { x: 300, y: 800 },
+    },
+    doors: [
+      // The lane back to the lobby, round the east end.
+      { id: 'to-lobby', rect: { x: 3090, y: 700, w: 110, h: 188 }, to: { room: 'lobby', spawn: 'from-homes' }, marker: { x: 3145, y: 680 } },
+      // The nest doors, one in each trunk, door 0 nearest the lobby. Door 0 is always the visitor's
+      // own nest and the others are other owls' open nests, so where each one leads is decided per
+      // visitor and none has a `to`. The marker is where the door's flag hangs, over the doorway.
+      { id: 'nest-door-0', rect: { x: 2735, y: 665, w: 130, h: 85 }, marker: { x: 2800, y: 500 } },
+      { id: 'nest-door-1', rect: { x: 2235, y: 665, w: 130, h: 85 }, marker: { x: 2300, y: 500 } },
+      { id: 'nest-door-2', rect: { x: 1735, y: 665, w: 130, h: 85 }, marker: { x: 1800, y: 500 } },
+      { id: 'nest-door-3', rect: { x: 1235, y: 665, w: 130, h: 85 }, marker: { x: 1300, y: 500 } },
+      { id: 'nest-door-4', rect: { x: 735, y: 665, w: 130, h: 85 }, marker: { x: 800, y: 500 } },
+      { id: 'nest-door-5', rect: { x: 235, y: 665, w: 130, h: 85 }, marker: { x: 300, y: 500 } },
+    ],
+  },
+};
+
+/**
+ * The nest every owl has: a cosy round room inside a trunk, one screen. It is a template rather than
+ * a room of the registry: each nest is this room under its own id, `nest-<nestId>`, as roomFor gives
+ * it (homes.ts has the nest ids and the spots where the furniture stands).
+ */
+export const NEST_ROOM: RoomDef = {
+  id: 'nest',
+  size: { w: ROOM_W, h: ROOM_H },
+  background: 'nest',
+  // Gold dust drifting in the lamplight, as inside the hub's tree.
+  mood: 'hub',
+  walkable: [
+    [
+      // The round floor of the hollow, from the door in the west wall round the back to the east wall.
+      { x: 100, y: 888 },
+      { x: 124, y: 813 },
+      { x: 194, y: 743 },
+      { x: 305, y: 683 },
+      { x: 450, y: 637 },
+      { x: 619, y: 608 },
+      { x: 800, y: 598 },
+      { x: 981, y: 608 },
+      { x: 1150, y: 637 },
+      { x: 1295, y: 683 },
+      { x: 1406, y: 743 },
+      { x: 1476, y: 813 },
+      { x: 1500, y: 888 },
+    ],
+  ],
+  spawns: { 'default': { x: 330, y: 790 } },
+  doors: [
+    // The door in the west wall, out to the street. The owl comes out by the nest door it went in by
+    // (`from-nest-<n>`, which only the visit knows), else by door 0, its own nest's.
+    { id: 'to-street', rect: { x: 120, y: 720, w: 140, h: 110 }, to: { room: 'homes', spawn: 'from-nest-0' }, marker: { x: 190, y: 700 } },
+  ],
 };
 
 /** Named anchors for large set pieces drawn by the scene (depth-sorted with the owls). */
@@ -372,6 +486,13 @@ export function relayout(room: string, p: Vec2, from: number): Vec2 {
   return { x, y: p.y };
 }
 
+/** The room with this id: one of ROOMS, or a nest made from NEST_ROOM; undefined for anything else. */
+export function roomFor(id: string): RoomDef | undefined {
+  if (Object.hasOwn(ROOMS, id)) return ROOMS[id];
+  return isNestRoom(id) ? { ...NEST_ROOM, id } : undefined;
+}
+
+/** The room with this id, or the hub for an id that is no room. */
 export function getRoom(id: string): RoomDef {
-  return Object.hasOwn(ROOMS, id) ? ROOMS[id]! : ROOMS['hub']!;
+  return roomFor(id) ?? ROOMS['hub']!;
 }

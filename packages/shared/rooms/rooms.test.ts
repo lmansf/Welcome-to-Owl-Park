@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { distance, distanceToRect, isWalkable } from '../src/geometry';
+import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
+import { nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
-import { ANCHORS, ROOMS } from './index';
+import { ANCHORS, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { NPCS } from '../src/npcs';
+
+/** Every room an owl can stand in: the registry's, and the one every nest is made from. */
+const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
 
 const STEP = 10;
 const cell = (p: Vec2) => `${Math.round(p.x / STEP) * STEP},${Math.round(p.y / STEP) * STEP}`;
@@ -31,7 +35,7 @@ function reachableFloor(room: RoomDef, from: Vec2): Set<string> {
 }
 
 describe('room size and art tiles', () => {
-  for (const room of Object.values(ROOMS)) {
+  for (const room of ALL_ROOMS) {
     it(`${room.id}: fits the biggest room and is covered exactly by its background tiles`, () => {
       expect(room.size.w).toBeLessThanOrEqual(ROOM_MAX_W);
       expect(room.size.h).toBeLessThanOrEqual(ROOM_MAX_H);
@@ -50,7 +54,7 @@ describe('room size and art tiles', () => {
 });
 
 describe('the floor', () => {
-  for (const room of Object.values(ROOMS)) {
+  for (const room of ALL_ROOMS) {
     it(`${room.id}: everything an owl walks to is on one floor with every spawn`, () => {
       const floor = reachableFloor(room, findSpawn(room, 'default'));
       const things: [string, Vec2][] = [
@@ -73,9 +77,122 @@ describe('the floor', () => {
   }
 });
 
+describe('doors and spawns', () => {
+  for (const room of ALL_ROOMS) {
+    it(`${room.id}: every open door leads to a spawn that is there, and every marker is on the room's own screens`, () => {
+      for (const d of room.doors) {
+        if (d.to) {
+          const to = roomFor(d.to.room);
+          expect(to, `${room.id} ${d.id} leads to a room`).toBeDefined();
+          expect(Object.hasOwn(to?.spawns ?? {}, d.to.spawn), `${room.id} ${d.id} leads to ${d.to.room} ${d.to.spawn}`).toBe(true);
+        }
+        if (!d.marker) continue;
+        expect(d.marker.x, `${room.id} ${d.id} marker`).toBeGreaterThanOrEqual(0);
+        expect(d.marker.x, `${room.id} ${d.id} marker`).toBeLessThanOrEqual(room.size.w);
+        expect(d.marker.y, `${room.id} ${d.id} marker`).toBeGreaterThanOrEqual(0);
+        expect(d.marker.y, `${room.id} ${d.id} marker`).toBeLessThanOrEqual(room.size.h);
+      }
+    });
+
+    it(`${room.id}: no spawn stands in a doorway, where an owl would walk straight back out`, () => {
+      for (const [name, p] of Object.entries(room.spawns)) for (const d of room.doors) expect(pointInRect(p, d.rect), `${room.id} spawn ${name} in ${d.id}`).toBe(false);
+    });
+  }
+});
+
+describe('the street and the nests', () => {
+  const street = ROOMS[STREET_ROOM]!;
+  const door = (room: RoomDef, id: string) => room.doors.find((d) => d.id === id)!;
+
+  it("the lobby's west end leads to the street, and the street's east end back", () => {
+    const out = door(ROOMS.lobby!, 'to-homes');
+    expect(out.rect.x).toBe(0);
+    expect(out.rect.x + out.rect.w).toBeLessThanOrEqual(110);
+    expect(out.to).toEqual({ room: STREET_ROOM, spawn: 'from-lobby' });
+    const back = door(street, 'to-lobby');
+    expect(back.rect.x + back.rect.w).toBe(street.size.w);
+    expect(back.to).toEqual({ room: 'lobby', spawn: 'from-homes' });
+  });
+
+  it('the street is two screens, painted as homes-west and homes', () => {
+    expect(street.id).toBe(STREET_ROOM);
+    expect(street.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
+    expect(backgroundTiles(street).map((t) => [t.key, t.x])).toEqual([
+      ['homes-west', 0],
+      ['homes', ROOM_W],
+    ]);
+  });
+
+  it('six nest doors stand along the street, door 0 nearest the lobby, each with its marker over it and a spawn in front', () => {
+    const nests = street.doors.filter((d) => d.id.startsWith('nest-door-'));
+    expect(nests.map((d) => d.id)).toEqual(Array.from({ length: STREET_DOORS }, (_, n) => `nest-door-${n}`));
+    expect(street.doors.filter((d) => nestDoorIndex(d.id) === null).map((d) => d.id)).toEqual(['to-lobby']);
+    expect(Object.keys(street.spawns).sort()).toEqual(['default', 'from-lobby', ...nests.map((_, n) => `from-nest-${n}`)].sort());
+    const lobbyEnd = rectCenter(door(street, 'to-lobby').rect);
+    nests.forEach((d, n) => {
+      expect(nestDoorIndex(d.id)).toBe(n);
+      // Door 0 is the visitor's own nest and the others someone else's, so where each leads is decided per visitor.
+      expect(d.to, d.id).toBeUndefined();
+      expect(d.closedSign, d.id).toBeUndefined();
+      expect(d.marker, d.id).toBeDefined();
+      expect(d.marker!.y, `${d.id} marker over the doorway`).toBeLessThan(d.rect.y);
+      expect(d.marker!.x, `${d.id} marker over the doorway`).toBeGreaterThanOrEqual(d.rect.x);
+      expect(d.marker!.x, `${d.id} marker over the doorway`).toBeLessThanOrEqual(d.rect.x + d.rect.w);
+      const prev = nests[n - 1];
+      if (prev) {
+        expect(distance(rectCenter(d.rect), lobbyEnd), `${d.id} further from the lobby than ${prev.id}`).toBeGreaterThan(distance(rectCenter(prev.rect), lobbyEnd));
+        expect(distance(rectCenter(d.rect), rectCenter(prev.rect)), `${d.id} spread from ${prev.id}`).toBeGreaterThanOrEqual(400);
+      }
+      // Out of a nest, the owl stands in front of the door it went in by, nearer it than any other.
+      const back = street.spawns[`from-nest-${n}`]!;
+      expect(distanceToRect(back, d.rect), `from-nest-${n}`).toBeLessThanOrEqual(80);
+      for (const other of nests) if (other !== d) expect(distanceToRect(back, other.rect), `from-nest-${n} vs ${other.id}`).toBeGreaterThan(distanceToRect(back, d.rect));
+    });
+    expect(nests.filter((d) => d.rect.x + d.rect.w <= ROOM_W).length, 'doors on the west screen').toBeGreaterThan(0);
+    expect(nests.filter((d) => d.rect.x >= ROOM_W).length, 'doors on the east screen').toBeGreaterThan(0);
+  });
+
+  it('a nest is one screen painted as nest, with a spawn inside and the door out to the street', () => {
+    expect(NEST_ROOM.size).toEqual({ w: ROOM_W, h: ROOM_H });
+    expect(backgroundTiles(NEST_ROOM)).toEqual([{ key: 'nest', x: 0, y: 0 }]);
+    expect(NEST_ROOM.spawns['default']).toBeDefined();
+    expect(NEST_ROOM.doors.map((d) => d.id)).toEqual(['to-street']);
+    expect(door(NEST_ROOM, 'to-street').to?.room).toBe(STREET_ROOM);
+    // A template, not a room of the registry: each nest is this room under its own id.
+    expect(Object.hasOwn(ROOMS, NEST_ROOM.id)).toBe(false);
+    expect(Object.values(ROOMS)).not.toContain(NEST_ROOM);
+  });
+});
+
+describe('finding a room by its id', () => {
+  it('finds the rooms of the registry as they are', () => {
+    for (const [id, room] of Object.entries(ROOMS)) {
+      expect(roomFor(id)).toBe(room);
+      expect(getRoom(id)).toBe(room);
+    }
+  });
+
+  it('makes a nest from the template under its own id, leaving the template as it was', () => {
+    const nest = roomFor('nest-k3x9q2ab')!;
+    expect(nest).toEqual({ ...NEST_ROOM, id: 'nest-k3x9q2ab' });
+    expect(getRoom('nest-k3x9q2ab')).toEqual(nest);
+    expect(roomFor('nest-00000000')?.id).toBe('nest-00000000');
+    expect(NEST_ROOM.id).toBe('nest');
+  });
+
+  it('finds no room for anything else, where getRoom still falls back to the hub', () => {
+    for (const id of ['', 'nest', 'nest-', 'nest-K3X9Q2AB', 'nest-k3x9q2a', 'nest-k3x9q2abc', 'nests', 'Hub', '__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+      expect(roomFor(id), id).toBeUndefined();
+      expect(getRoom(id), id).toBe(ROOMS.hub);
+    }
+  });
+});
+
 describe('hiding spots', () => {
-  it('the lobby has none: it is outside the park', () => {
+  it('the lobby, the street and the nests have none: they are outside the park', () => {
     expect(ROOMS.lobby?.spots).toBeUndefined();
+    expect(ROOMS[STREET_ROOM]?.spots).toBeUndefined();
+    expect(NEST_ROOM.spots).toBeUndefined();
   });
 
   for (const room of Object.values(ROOMS).filter((r) => r.spots)) {
