@@ -19,5 +19,5 @@ used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec
   `TRUST_FORWARDED_FOR` is for local load tests only. Deploy steps live in `docs/DEPLOY.md`.
 - This repository is public. Internal working names for unreleased realms, the owner's personal
   details and employer, and the names of other games stay out of code, docs, art, tests and commit
-  messages. Closed-realm signs may show only the phrases already used by the sign art in
-  `apps/park/public/art`.
+  messages. Closed-realm signs (the blockades in the hub's closed arches) may show only the
+  approved phrases in `CLOSED_SIGNS` (`packages/shared/rooms/index.ts`).

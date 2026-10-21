@@ -17,7 +17,7 @@ export const ART_PATH = 'art/';
 export const OWL_W = 200;
 export const OWL_H = 240;
 
-export type ArtKind = 'room' | 'piece' | 'owl' | 'sign';
+export type ArtKind = 'room' | 'piece' | 'owl';
 
 export interface ArtSpec {
   w: number;
@@ -35,13 +35,9 @@ export const ART: Record<string, ArtSpec> = {
   'market-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
-  // Construction blockades across the hub's two closed doorways, each with its sign.
+  // Construction blockades in the hub's two closed arches, each carrying its doorway's phrase.
   'blockade-not-yet-fledged': { w: 300, h: 300, kind: 'piece' },
   'blockade-hatching-soon': { w: 300, h: 300, kind: 'piece' },
-  'sign-not-yet-fledged': { w: 420, h: 520, kind: 'sign' },
-  'sign-closed-for-molting': { w: 420, h: 520, kind: 'sign' },
-  'sign-pardon-our-feathers': { w: 420, h: 520, kind: 'sign' },
-  'sign-hatching-soon': { w: 420, h: 520, kind: 'sign' },
   'owl-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
@@ -78,25 +74,31 @@ for (const room of Object.values(ROOMS)) {
 }
 
 /** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up. */
-export const GLOBAL_ART = Object.keys(ART).filter((k) => (ART[k]!.kind === 'owl' && !isSpeciesLayer(k)) || ART[k]!.kind === 'sign');
+export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k));
+
+/** The blockade standing in a closed doorway that shows `phrase` ("Not Yet Fledged" -> blockade-not-yet-fledged). */
+export function blockadeKey(phrase: string): string {
+  return `blockade-${phrase.toLowerCase().replace(/\s+/g, '-')}`;
+}
 
 /** Art that belongs to one room (loaded when the room opens, released when it closes). */
 export function roomArtKeys(roomId: string): string[] {
   const room = Object.hasOwn(ROOMS, roomId) ? ROOMS[roomId] : undefined;
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
+  for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
   return keys.filter((k) => k in ART);
 }
 
 /**
- * How many texture pixels per room pixel to rasterize at. Owls and signs are small, so they
+ * How many texture pixels per room pixel to rasterize at. Owls are small, so they
  * get the full device ratio; rooms and big set pieces are capped to keep GPU memory bounded
  * (a 1600 x 900 room tile costs about 5.8 MB per unit of scale squared; see roomScaleCap for rooms
  * of several tiles).
  */
 export function artScale(kind: ArtKind, pixelRatio: number, roomMax: number): number {
-  const target = kind === 'owl' || kind === 'sign' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
+  const target = kind === 'owl' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
   return Math.max(1, Math.round(target * 4) / 4);
 }
 
@@ -199,14 +201,6 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
       g.fillRect(0, 460, w, h - 460);
       break;
     }
-    case 'sign':
-      g.fillStyle(0x5c4033, 1);
-      g.fillRect(w / 2 - 10, h - 150, 20, 150);
-      g.fillStyle(0x8b5a2b, 1);
-      g.fillRoundedRect(w / 2 - 110, h - 230, 220, 100, 14);
-      g.fillStyle(0xf6f1e3, 1);
-      g.fillEllipse(w / 2, h - 180, 70, 60);
-      break;
     case 'piece':
       g.fillStyle(0xc9a227, 0.18);
       g.fillEllipse(w / 2, h / 2, w * 0.6, h * 0.8);

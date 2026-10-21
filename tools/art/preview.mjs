@@ -27,7 +27,7 @@ export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
 export const ROOMS = ['hub', 'grove', 'market', 'lobby'];
 
-/** Which room shows each key. Owl layers and signs show in the hub (owls show everywhere). */
+/** Which room shows each key. Owl layers and the blockades show in the hub (owls show everywhere). */
 const ROOM_OF = {
   hub: 'hub', 'hub-fg': 'hub', grove: 'grove', 'grove-fg': 'grove', guardian: 'grove',
   market: 'market', 'market-fg': 'market', 'robot-owl': 'market',
@@ -61,6 +61,11 @@ export function previewLooks(keys, owls) {
 /** Where each owl walks, in room pixels; the client clamps a target to the walkable floor. */
 const TARGETS = [[800, 770], [560, 700], [1040, 720], [420, 810], [1180, 800], [680, 840], [930, 650], [1300, 690]];
 
+/** The walk targets, centred on room x `focus` (a wider room's arches, guardian or stalls) instead of the first screen. */
+export function walkTargets(focus) {
+  return focus === undefined ? TARGETS : TARGETS.map(([x, y]) => [x + focus - 800, y]);
+}
+
 export function loadKeys(toolsDir = TOOLS_DIR) {
   const assets = JSON.parse(fs.readFileSync(path.join(toolsDir, 'config', 'assets.json'), 'utf8'));
   return new Set(Object.keys(assets.keys ?? {}));
@@ -77,7 +82,7 @@ export function scanFinals(dir, keys) {
   return { files, keys: new Set(files.map((f) => f.key)) };
 }
 
-/** The rooms a set of replaced keys shows up in, in park order; owl layers and signs alone mean the hub. */
+/** The rooms a set of replaced keys shows up in, in park order; owl layers and blockades alone mean the hub. */
 export function roomsTouched(keys) {
   const set = new Set();
   // A screen of a wider room (`lobby-west`, `hub-east-fg`) shows in its room.
@@ -144,7 +149,7 @@ async function until(fn, timeoutMs, stepMs = 150) {
 const stateOf = (page) => page.evaluate(() => window.owlPark?.state?.() ?? null);
 
 /** One screenshot of one room in one view, one visitor per look, the first being the camera's. */
-async function shoot(browser, base, room, view, looks, file, warn) {
+async function shoot(browser, base, room, view, looks, targets, file, warn) {
   const owls = looks.length;
   const ctx = await browser.newContext({ viewport: view.viewport, deviceScaleFactor: view.deviceScaleFactor, isMobile: view.isMobile, hasTouch: view.hasTouch });
   try {
@@ -161,7 +166,7 @@ async function shoot(browser, base, room, view, looks, file, warn) {
     }
     const main = pages[0];
     if (!(await until(async () => (await stateOf(main))?.peers?.length >= owls - 1, 10_000))) warn(`${room}: only ${(await stateOf(main))?.peers?.length ?? 0} of ${owls - 1} other owls arrived`);
-    await Promise.all(pages.map((p, i) => p.evaluate(([x, y]) => window.owlPark.walkTo(x, y), TARGETS[i % TARGETS.length])));
+    await Promise.all(pages.map((p, i) => p.evaluate(([x, y]) => window.owlPark.walkTo(x, y), targets[i % targets.length])));
     await until(async () => (await Promise.all(pages.map(stateOf))).every((s) => s && !s.walking), 10_000);
     await until(async () => (await stateOf(main)).peers.every((p) => !p.walking), 5_000);
     await main.waitForTimeout(700); // camera follow and ambience settle
@@ -189,7 +194,7 @@ async function compose(browser, current, next, view, file) {
   }
 }
 
-const USAGE = `usage: pnpm art:preview [--finals <dir>] [--rooms hub,grove,market] [--out <dir>] [--owls N] [--views desktop,phone] [--keep-site]`;
+const USAGE = `usage: pnpm art:preview [--finals <dir>] [--rooms hub,grove,market] [--out <dir>] [--owls N] [--views desktop,phone] [--focus <room x>] [--keep-site]`;
 
 export async function main(argv = process.argv.slice(2), { stdout = process.stdout, stderr = process.stderr } = {}) {
   const out = (s) => stdout.write(`${s}\n`);
@@ -200,7 +205,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
       args: argv[0] === '--' ? argv.slice(1) : argv,
       options: {
         finals: { type: 'string' }, rooms: { type: 'string' }, out: { type: 'string' }, owls: { type: 'string' },
-        views: { type: 'string' }, 'keep-site': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+        views: { type: 'string' }, focus: { type: 'string' }, 'keep-site': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
       },
     }));
   } catch (e) { err(e.message); err(USAGE); return 2; }
@@ -210,6 +215,9 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
   const outDir = path.resolve(values.out ?? path.join(REPO_ROOT, 'work', 'art', 'preview'));
   const owls = values.owls === undefined ? 4 : Number(values.owls);
   if (!Number.isInteger(owls) || owls < 1 || owls > 8) { err('--owls must be 1 to 8'); return 2; }
+  const focus = values.focus === undefined ? undefined : Number(values.focus);
+  if (focus !== undefined && !(Number.isFinite(focus) && focus >= 0)) { err('--focus takes a room x in pixels'); return 2; }
+  const targets = walkTargets(focus);
   const viewNames = (values.views ?? 'desktop,phone').split(',').map((s) => s.trim()).filter(Boolean);
   for (const v of viewNames) if (!VIEWS[v]) { err(`unknown view ${v} (${Object.keys(VIEWS).join(', ')})`); return 2; }
 
@@ -244,8 +252,8 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         const cur = path.join(outDir, `${room}-${v}-current.png`);
         const nxt = path.join(outDir, `${room}-${v}-new.png`);
         const cmp = path.join(outDir, `${room}-${v}-compare.png`);
-        await shoot(browser, a.base, room, view, looks, cur, (m) => err(`warning: current ${v} ${m}`));
-        await shoot(browser, b.base, room, view, looks, nxt, (m) => err(`warning: new ${v} ${m}`));
+        await shoot(browser, a.base, room, view, looks, targets, cur, (m) => err(`warning: current ${v} ${m}`));
+        await shoot(browser, b.base, room, view, looks, targets, nxt, (m) => err(`warning: new ${v} ${m}`));
         await compose(browser, cur, nxt, view, cmp);
         written.push(cmp, nxt, cur);
         out(`${room} ${v}: ${path.relative(REPO_ROOT, cmp)}`);

@@ -130,30 +130,6 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
-    "sign-not-yet-fledged": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
-    "sign-closed-for-molting": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
-    "sign-pardon-our-feathers": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
-    "sign-hatching-soon": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
     "owl-body": {
       "w": 200,
       "h": 240,

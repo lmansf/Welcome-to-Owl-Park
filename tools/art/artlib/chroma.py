@@ -111,6 +111,32 @@ def _hue_bytes(img_rgb: Image.Image) -> np.ndarray:
     return np.asarray(img_rgb.convert("HSV"))
 
 
+def clear_glow(img: Image.Image, boxes: list[tuple[int, ...]], backdrop: str, margin: int = 24) -> tuple[Image.Image, int]:
+    """Paint the backdrop over every pixel inside ``boxes`` that leans toward the backdrop's own
+    channels by more than ``margin`` (on green: green above both red and blue), before keying.
+
+    A glow painted over the key (a lantern's light on green) otherwise keys out as an opaque green
+    halo; gold, wood, white and navy never lean that way, so the subject inside the box stays.
+    Returns the RGB image and the number of pixels painted.
+    """
+    B = np.array(parse_hex(backdrop), np.int16)
+    keyed = B > 127
+    if keyed.all() or not keyed.any():
+        raise ChromaError(f"clearing a glow needs a backdrop with one or two dominant channels, not {backdrop}")
+    rgb = np.array(img.convert("RGB"))
+    v = rgb.astype(np.int16)
+    lean = v[..., keyed].min(axis=-1) - v[..., ~keyed].max(axis=-1)
+    H, W = lean.shape
+    inside = np.zeros((H, W), bool)
+    for x0, y0, x1, y1 in boxes:
+        if x1 <= x0 or y1 <= y0:
+            raise ChromaError(f"a glow box needs x0 < x1 and y0 < y1, not {x0},{y0},{x1},{y1}")
+        inside[max(0, y0):min(H, y1), max(0, x0):min(W, x1)] = True
+    mask = inside & (lean > margin) & (v != B).any(axis=-1)
+    rgb[mask] = B.astype(np.uint8)
+    return Image.fromarray(rgb, "RGB"), int(mask.sum())
+
+
 def key_out(img: Image.Image, params: ChromaParams | None = None) -> tuple[Image.Image, dict]:
     """Matte ``img`` against its flat backdrop; returns (RGBA image, info dict)."""
     p = params or ChromaParams()

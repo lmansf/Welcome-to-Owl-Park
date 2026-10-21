@@ -233,6 +233,8 @@ export const JOBS = [
     variants: 4,
     key_colour: '#00FF00',
     refs: [published('grove')],
+    // PNG: the edit endpoint otherwise answers in JPEG, whose ringing leaves a halo once keyed.
+    providers: { fal: { output_format: 'png' } },
     prompt: PROMPTS.guardian,
   },
   {

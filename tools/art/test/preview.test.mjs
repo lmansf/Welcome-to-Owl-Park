@@ -20,11 +20,17 @@ test('scanFinals keeps only loader files for known keys', () => {
   assert.deepEqual(V.scanFinals(path.join(tmpRoot, 'nope'), V.loadKeys()).files, []);
 });
 
-test('roomsTouched maps keys to rooms in park order; owls and signs alone mean the hub', () => {
+test('walk targets centre on the focus, so a wider room shows its middle', () => {
+  const first = V.walkTargets();
+  assert.deepEqual(V.walkTargets(800), first);
+  assert.deepEqual(V.walkTargets(2400).map(([x, y]) => [x - 1600, y]), first);
+});
+
+test('roomsTouched maps keys to rooms in park order; owls and blockades alone mean the hub', () => {
   assert.deepEqual(V.roomsTouched(['robot-owl', 'hub-fg']), ['hub', 'market']);
   assert.deepEqual(V.roomsTouched(['guardian']), ['grove']);
   assert.deepEqual(V.roomsTouched(['owl-body', 'owl-face']), ['hub']);
-  assert.deepEqual(V.roomsTouched(['sign-hatching-soon', 'grove']), ['hub', 'grove']);
+  assert.deepEqual(V.roomsTouched(['blockade-hatching-soon', 'grove']), ['hub', 'grove']);
   // A screen of a wider room shows in its own room.
   assert.deepEqual(V.roomsTouched(['lobby-west', 'lobby']), ['lobby']);
   assert.deepEqual(V.roomsTouched(['market-east-fg', 'grove-west']), ['grove', 'market']);

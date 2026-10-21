@@ -52,11 +52,16 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 1806, y: 634 },
         { x: 1868, y: 634 },
         { x: 1900, y: 566 },
-        { x: 2020, y: 600 },
-        { x: 2200, y: 612 },
+        // The two closed arches are boarded up: the floor stops at the front of each blockade.
+        { x: 1990, y: 600 },
+        { x: 2000, y: 672 },
+        { x: 2290, y: 672 },
+        { x: 2300, y: 620 },
         { x: 2400, y: 630 },
-        { x: 2600, y: 612 },
-        { x: 2780, y: 600 },
+        { x: 2505, y: 620 },
+        { x: 2515, y: 672 },
+        { x: 2815, y: 672 },
+        { x: 2830, y: 600 },
         { x: 2900, y: 566 },
         { x: 2932, y: 634 },
         { x: 2994, y: 634 },
@@ -80,8 +85,9 @@ export const ROOMS: Record<string, RoomDef> = {
     doors: [
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 } },
       { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 } },
-      { id: 'closed-a', rect: { x: 2030, y: 560, w: 140, h: 90 }, closedSign: 'Not Yet Fledged', marker: { x: 2100, y: 598 } },
-      { id: 'closed-b', rect: { x: 2630, y: 560, w: 140, h: 90 }, closedSign: 'Hatching Soon', marker: { x: 2700, y: 598 } },
+      // The marker is the foot of each arch's blockade; the rect is the strip in front of it.
+      { id: 'closed-a', rect: { x: 2040, y: 660, w: 210, h: 30 }, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } },
+      { id: 'closed-b', rect: { x: 2560, y: 660, w: 210, h: 30 }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
     ],
     spots: [
       { x: 300, y: 840 },
