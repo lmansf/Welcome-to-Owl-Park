@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cameraView, dist, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { cameraView, dist, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 /** Whether the park ships `<key>.svg` (the loader's first choice); a dev server may answer a miss with index.html. */
 async function hasSvg(page: Page, key: string): Promise<boolean> {
@@ -24,8 +24,12 @@ test.describe('single visitor', () => {
     await openPark(page);
     const before = await state(page);
     const view = await settleCamera(page);
-    // A point to the right of the owl that is on screen even on a narrow portrait phone.
-    const target = { x: before.pos.x + Math.min(220, view.viewW * 0.3), y: before.pos.y + 40 };
+    // A point beside the owl that is on screen even on a narrow portrait phone, and not under a button.
+    const step = Math.min(220, view.viewW * 0.3);
+    const target = await openGround(page, [
+      { x: before.pos.x + step, y: before.pos.y + 40 },
+      { x: before.pos.x - step, y: before.pos.y + 40 },
+    ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
   });

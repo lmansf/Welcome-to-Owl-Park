@@ -95,6 +95,19 @@ export async function tapRoomPoint(page: Page, x: number, y: number): Promise<vo
   await page.mouse.click(p.x, p.y);
 }
 
+/**
+ * The first of these room points with nothing of the HUD over it on screen, so a tap there reaches
+ * the room (on a touch screen the action buttons stand above the thumbstick, beside the owl).
+ */
+export async function openGround(page: Page, points: Array<{ x: number; y: number }>): Promise<{ x: number; y: number }> {
+  for (const p of points) {
+    const s = await toScreen(page, p.x, p.y);
+    const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.tagName ?? '', [s.x, s.y]);
+    if (hit === 'CANVAS') return p;
+  }
+  throw new Error('every candidate point is under the HUD');
+}
+
 export async function waitForArrival(page: Page, x: number, y: number, tolerance = 6): Promise<void> {
   await expect
     .poll(async () => {
