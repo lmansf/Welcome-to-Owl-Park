@@ -69,7 +69,7 @@ test.describe('the nests (this device)', () => {
     // A tap on a spot's ring in the room chooses it, and never walks the owl.
     const before = (await state(page)).pos;
     await page.waitForTimeout(600); // the camera pans to the chosen spot
-    await tapRoomPoint(page, 800, 794);
+    await tapRoomPoint(page, 820, 794);
     await expect(sheet(page).locator('[data-where]')).toHaveText('6 / 12 · On the floor');
     expect((await state(page)).nest?.spot).toBe('f6');
     expect((await state(page)).pos).toEqual(before);
@@ -105,7 +105,7 @@ test.describe('the nests (this device)', () => {
     await walkToDoor(page, 'to-street');
     await inRoom(page, 'homes');
     const back = (await state(page)).pos;
-    expect(Math.abs(back.x - 2933)).toBeLessThan(80);
+    expect(Math.abs(back.x - 2872)).toBeLessThan(80);
 
     // What it arranged stays: back inside, the gift is still there and the nest still closed.
     await walkToDoor(page, 'nest-door-0');
@@ -146,7 +146,7 @@ test.describe('the nests (this device)', () => {
     await sheet(page).locator('[data-open]').click();
     await expect(guest.locator('.toast').filter({ hasText: 'Closed for now' })).toBeVisible();
     await inRoom(guest, 'homes');
-    expect(Math.abs((await state(guest)).pos.x - 2400)).toBeLessThan(80);
+    expect(Math.abs((await state(guest)).pos.x - 2399)).toBeLessThan(80);
     // And the closed nest is not on the guest's street any more.
     await expect.poll(async () => (await state(guest)).street?.slice(1).every((d) => d.kind === 'empty')).toBe(true);
   });
@@ -162,10 +162,10 @@ test.describe('decorating on a phone', () => {
     await page.locator('[data-action="decorate"]').click();
     await expect(sheet(page)).toBeVisible();
     for (const [n, x, y] of [
-      [1, 410, 694],
-      [4, 1190, 694],
-      [8, 1320, 804],
-      [12, 1190, 388],
+      [1, 480, 694],
+      [4, 1150, 694],
+      [8, 1290, 806],
+      [12, 1300, 323],
     ] as const) {
       while (!(await sheet(page).locator('[data-where]').textContent())?.startsWith(`${n} /`)) await sheet(page).getByRole('button', { name: 'Next spot' }).click();
       // Let the camera pan to the spot, then check it is on screen and above the sheet.

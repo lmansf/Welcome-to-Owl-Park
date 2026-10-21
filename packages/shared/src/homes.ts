@@ -128,22 +128,23 @@ export interface NestSpot {
 /**
  * Twelve spots in the nest. On the floor, f1 to f4 along the back wall and f5 to f8 nearer the front,
  * between them, all clear of the door in the west wall. On the back wall, w1 to w4, two each side of
- * the round window between the shelves and the hearth, staggered, and high enough that the tallest
- * floor piece standing beneath leaves them showing.
+ * the round window, staggered: over the door and on the beam beside the window to the west, on the
+ * beam beside the window and over the hearth to the east, each high enough that the tallest floor
+ * piece standing beneath leaves it showing.
  */
 export const NEST_SPOTS: readonly NestSpot[] = [
-  { id: 'f1', place: 'floor', x: 410, y: 700 },
-  { id: 'f2', place: 'floor', x: 670, y: 660 },
-  { id: 'f3', place: 'floor', x: 930, y: 660 },
-  { id: 'f4', place: 'floor', x: 1190, y: 700 },
-  { id: 'f5', place: 'floor', x: 540, y: 810 },
-  { id: 'f6', place: 'floor', x: 800, y: 800 },
-  { id: 'f7', place: 'floor', x: 1060, y: 800 },
-  { id: 'f8', place: 'floor', x: 1320, y: 810 },
-  { id: 'w1', place: 'wall', x: 380, y: 450 },
-  { id: 'w2', place: 'wall', x: 540, y: 360 },
-  { id: 'w3', place: 'wall', x: 1060, y: 360 },
-  { id: 'w4', place: 'wall', x: 1190, y: 450 },
+  { id: 'f1', place: 'floor', x: 480, y: 700 },
+  { id: 'f2', place: 'floor', x: 700, y: 668 },
+  { id: 'f3', place: 'floor', x: 920, y: 668 },
+  { id: 'f4', place: 'floor', x: 1150, y: 700 },
+  { id: 'f5', place: 'floor', x: 580, y: 812 },
+  { id: 'f6', place: 'floor', x: 820, y: 800 },
+  { id: 'f7', place: 'floor', x: 1060, y: 805 },
+  { id: 'f8', place: 'floor', x: 1290, y: 812 },
+  { id: 'w1', place: 'wall', x: 360, y: 300 },
+  { id: 'w2', place: 'wall', x: 525, y: 420 },
+  { id: 'w3', place: 'wall', x: 1085, y: 420 },
+  { id: 'w4', place: 'wall', x: 1300, y: 385 },
 ];
 
 const SPOTS_BY_ID: ReadonlyMap<string, NestSpot> = new Map(NEST_SPOTS.map((s) => [s.id, s]));

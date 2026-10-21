@@ -3,8 +3,8 @@
 Every owl has a nest of its own: a cosy round room inside a tree, on a street of tree houses outside
 the turnstiles (proposal C39). It is all free and needs no ticket, also once the park takes tickets
 (`GATE=ticket`): the lobby, the street and the nests are open to every visitor. Every number and
-every visitor-facing word below is a default waiting on the owner's approval, and the art is
-placeholder art until the owner approves the paintings.
+every visitor-facing word below is a default waiting on the owner's approval; the paintings are
+approved (see Art).
 
 The rules are data and functions in `packages/shared/src`, so the room server and the zero-backend
 local mode run the same ones and Node tests them:
@@ -20,7 +20,7 @@ local mode run the same ones and Node tests them:
 
 At the lobby's west end, past the balustrade, a lane says **To the nests**. It leads to the street:
 two screens of tree houses at dusk, six round doors along a lane, and a way back to the lobby past
-the lantern post at the east end.
+the two posts at the east end.
 
 - **Door 0**, nearest the lobby, is always the visitor's own nest: **Your nest** hangs over it with
   a flag in the visitor's colours.
@@ -95,7 +95,10 @@ inside it. The end-to-end tests use this (`apps/park/e2e/nests.spec.ts`).
 
 ## Art
 
-Placeholders (SVG) until the paintings are approved: `homes-west` and `homes` (the street's two
-screens), `nest` (the inside of a nest) and `decor-<id>` for each piece of furniture. The Seedream
-jobs are written and priced (`tools/art/prompts.mjs`); see `docs/ART-PIPELINE.md`. The room data
-follows the placeholders' layout, and moves to match the paintings once they are picked.
+Painted in Seedream and approved on 2026-10-21: the street's two screens (`homes`, and
+`homes-west` painted to continue it), the inside of a nest (`nest`) and the sixteen pieces of
+furniture (`decor-<id>`), each picked from two candidates. Each file's line in
+`tools/art/provenance.jsonl` says how it was made; the jobs are in `tools/art/prompts.mjs` (see
+`docs/ART-PIPELINE.md`). The room data follows the paintings: the street's six doors, its lane
+and spawns, and the nest's floor, door and twelve furniture spots (`NEST_SPOTS`). A room test
+checks that one walk from wherever an owl appears on the street reaches every door.

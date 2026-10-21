@@ -5,6 +5,7 @@ import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
 import { ANCHORS, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
+import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
@@ -150,6 +151,16 @@ describe('the street and the nests', () => {
     });
     expect(nests.filter((d) => d.rect.x + d.rect.w <= ROOM_W).length, 'doors on the west screen').toBeGreaterThan(0);
     expect(nests.filter((d) => d.rect.x >= ROOM_W).length, 'doors on the east screen').toBeGreaterThan(0);
+  });
+
+  it('one walk from wherever an owl appears on the street takes it to any door, and out of a nest', () => {
+    // Owls walk in straight lines, stopping where the floor ends, so each doorstep reaches into the
+    // lane far enough that a walk along it to a door ends on the doorstep.
+    for (const [name, from] of Object.entries(street.spawns)) {
+      for (const d of street.doors) expect(pointInRect(resolveTarget(from, rectCenter(d.rect), street.walkable), d.rect), `${d.id} from ${name}`).toBe(true);
+    }
+    const out = door(NEST_ROOM, 'to-street');
+    expect(pointInRect(resolveTarget(NEST_ROOM.spawns['default']!, rectCenter(out.rect), NEST_ROOM.walkable), out.rect)).toBe(true);
   });
 
   it('a nest is one screen painted as nest, with a spawn inside and the door out to the street', () => {
