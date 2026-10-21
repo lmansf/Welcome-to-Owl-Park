@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CLOSE, EDGE_PROTOCOL_VERSION, WALK_SPEED, type ClientHello, type RoomDef, type ServerFrame } from '@owl-park/shared';
+import { CLOSE, EDGE_PROTOCOL_VERSION, STREET_DOORS, STREET_ROOM, WALK_SPEED, isWalkable, nestDoorIndex, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
 
 const def: RoomDef = {
@@ -298,6 +299,22 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(room.takeUse('a')).toBe(true);
   });
 
+  it("spaces out an owner's changes to its nest", () => {
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    expect(room.takeArrange('a')).toBe(true);
+    expect(room.takeArrange('a')).toBe(false);
+    now += LIMITS.arrangeEveryMs - 1;
+    expect(room.takeArrange('a')).toBe(false);
+    now += 1;
+    expect(room.takeArrange('a')).toBe(true);
+    expect(room.takeArrange('nobody')).toBe(false);
+    // Its own cooldown: changing the nest does not spend a use, nor the other way round.
+    expect(room.takeUse('a')).toBe(true);
+    now += LIMITS.arrangeEveryMs;
+    expect(room.takeArrange('a')).toBe(true);
+  });
+
   it('applies a vetted look without counting it twice, and closes floods on adapter frames', () => {
     const a = new FakePeer();
     const b = new FakePeer();
@@ -310,5 +327,54 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     for (let i = 0; i < LIMITS.framesPerWindow; i++) expect(room.admit('a')).toBe(true);
     expect(room.admit('a')).toBe(false);
     expect(a.closed?.code).toBe(CLOSE.RATE_LIMITED);
+  });
+});
+
+describe('Room: the street and the nests', () => {
+  const now = 3_000_000;
+  const inRect = (p: Vec2, r: { x: number; y: number; w: number; h: number }) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+  it('never puts an arrival in a nest door, though a nest door has no `to`', () => {
+    const doorway = { x: 700, y: 600, w: 200, h: 200 };
+    const withNestDoor: RoomDef = { ...def, spawns: { default: { x: 650, y: 700 } }, doors: [{ id: 'nest-door-2', rect: doorway }] };
+    const r = new Room(withNestDoor, { now: () => now, cap: 100 });
+    for (let i = 0; i < 40; i++) {
+      const p = new FakePeer();
+      r.join(p, `v${i}`, hello(i % 2 ? { spawn: 'default' } : {}));
+      expect(inRect(p.last('welcome')!.you.pos, doorway), `v${i}`).toBe(false);
+    }
+  });
+
+  it("lands owls coming out of each nest on the street's floor, clear of every doorway", () => {
+    const street = ROOMS[STREET_ROOM]!;
+    const doorways = street.doors.filter((d) => d.to !== undefined || nestDoorIndex(d.id) !== null);
+    expect(doorways.filter((d) => nestDoorIndex(d.id) !== null)).toHaveLength(STREET_DOORS);
+    const r = new Room(street, { now: () => now, cap: 500 });
+    for (let n = 0; n < STREET_DOORS; n++) {
+      for (let i = 0; i < 30; i++) {
+        const p = new FakePeer();
+        r.join(p, `n${n}-${i}`, hello({ spawn: `from-nest-${n}` }));
+        const pos = p.last('welcome')!.you.pos;
+        expect(isWalkable(pos, street.walkable), `from-nest-${n}`).toBe(true);
+        for (const d of doorways) expect(inRect(pos, d.rect), `from-nest-${n} in ${d.id}`).toBe(false);
+      }
+    }
+  });
+
+  it("welcomes owls to a nest under the nest's own room id, and lets its owner in however full it is", () => {
+    const nest = roomFor('nest-k3x9q2ab')!;
+    const r = new Room(nest, { now: () => now, cap: 2 });
+    const peers = ['a', 'b'].map((id) => {
+      const p = new FakePeer();
+      expect(r.join(p, id, hello())).toBe('ok');
+      return p;
+    });
+    expect(peers[0]!.last('welcome')!.room).toBe('nest-k3x9q2ab');
+    expect(r.join(new FakePeer(), 'c', hello())).toBe('full');
+    const owner = new FakePeer();
+    expect(r.join(owner, 'owner', hello(), 's1', { overCap: true })).toBe('ok');
+    expect(r.count).toBe(3);
+    expect(owner.last('welcome')!.room).toBe('nest-k3x9q2ab');
+    expect(peers[1]!.last('enter')!.owl.id).toBe('owner');
   });
 });
