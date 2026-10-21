@@ -35,6 +35,9 @@ export const ART: Record<string, ArtSpec> = {
   'market-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
+  // Construction blockades across the hub's two closed doorways, each with its sign.
+  'blockade-not-yet-fledged': { w: 300, h: 300, kind: 'piece' },
+  'blockade-hatching-soon': { w: 300, h: 300, kind: 'piece' },
   'sign-not-yet-fledged': { w: 420, h: 520, kind: 'sign' },
   'sign-closed-for-molting': { w: 420, h: 520, kind: 'sign' },
   'sign-pardon-our-feathers': { w: 420, h: 520, kind: 'sign' },

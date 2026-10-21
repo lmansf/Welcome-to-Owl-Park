@@ -768,3 +768,29 @@ export const LOBBY_WING_JOB = {
 };
 PROMPTS['lobby-west'] = LOBBY_WING_PROMPT;
 JOBS.push(LOBBY_WING_JOB);
+
+// ---------------------------------------------------------------------------------------------
+// Construction blockades across the hub's two closed doorways (the owner, 2026-10-21): each one a
+// keyed set piece standing on the floor in front of its sealed arch, carrying that doorway's
+// approved sign phrase, in place of the old drawn sign-and-egg placeholders. The painting's arches
+// stay as painted around them.
+const BLOCKADE_FRAME = `A single free-standing prop, seen straight on at eye level, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the prop, with no gradient, no vignette, no floor and no cast shadow on the backdrop. Square proportions 300x300, generated at 1280x1280: the prop is centred, stands with its feet on the bottom edge of the frame, bottom-centre anchored, and fills about four fifths of the width and two thirds of the height, with the green showing above it.`;
+const BLOCKADE_STYLE = `STYLE: hand-painted 2D game prop matching the reference painting of the inside of a great tree at night: clean cel-shaded shapes with soft painted gradients, cream moonlight from above and warm gold lantern light, slightly stylised chunky proportions, no outlines, no photorealism, no film grain, a crisp clean opaque silhouette against the green with no glow bleeding onto the backdrop. PALETTE: warm bark browns #4A3322 and #6E4E36, gold #C9A227 and warm light #FFD36A, cream #F6F1E3, navy #0C1E36, muted brick red #B5523B for the safety stripes. No watermark. AVOID: any other text, letters, numbers or symbols anywhere, only the words on the sign; any owls, birds, animals, people, faces or characters; any doorway, arch, wall, floor or background scenery; the prop cut off by any edge except the feet at the bottom; green tint on the wood; photographic textures; lens flare.`;
+const BLOCKADE_PROMPTS = {
+  'blockade-not-yet-fledged': `A cosy storybook construction blockade that a park puts across a closed doorway. ${BLOCKADE_FRAME} It is built from two sturdy wooden sawhorses joined by two long horizontal planks painted with diagonal stripes of muted brick red and cream, with two rough unpainted boards nailed across them in a big X. On two short posts above the top plank sits a wide hand-carved wooden sign of warm brown wood with a thin gold trim and little brass nail heads, and painted on it in large, friendly storybook serif letters in cream with a thin navy outline are exactly the words "Not Yet Fledged" on two lines, "Not Yet" above "Fledged", spelled exactly so, with nothing else written anywhere. A small brass lantern glowing warm gold hangs from one post, two little cream-and-orange striped traffic cones and a coil of rope stand at the feet, and a few dry gold leaves rest on the planks. ${BLOCKADE_STYLE}`,
+  'blockade-hatching-soon': `A cosy storybook construction blockade that a park puts across a closed doorway. ${BLOCKADE_FRAME} It is a low wooden barrier of three slatted boards painted with diagonal stripes of muted brick red and cream between two sturdy striped posts with round gold caps, with a rope strung between the post tops hung with little triangular pennants in gold, cream and navy. From a crossbar above it, on two short ropes, hangs a wide hand-carved wooden sign of warm brown wood with a thin gold trim and little brass nail heads, and painted on it in large, friendly storybook serif letters in cream with a thin navy outline are exactly the words "Hatching Soon" on two lines, "Hatching" above "Soon", spelled exactly so, with nothing else written anywhere. A small brass lantern glowing warm gold hangs from the crossbar, a short stack of planks with a wooden mallet leans against one post, and two little cream-and-orange striped traffic cones stand at the feet. ${BLOCKADE_STYLE}`,
+};
+Object.assign(PROMPTS, BLOCKADE_PROMPTS);
+JOBS.push(
+  ...Object.entries(BLOCKADE_PROMPTS).map(([key, prompt], i) => ({
+    key,
+    kind: 'piece',
+    realm: 'hub',
+    size: '1280x1280',
+    seed: 1801 + 10 * i,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('hub')],
+    prompt,
+  })),
+);

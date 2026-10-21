@@ -116,6 +116,20 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "blockade-not-yet-fledged": {
+      "w": 300,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "blockade-hatching-soon": {
+      "w": 300,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
     "sign-not-yet-fledged": {
       "w": 420,
       "h": 520,
