@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, ROOM_LAYOUT } from '../rooms';
 import { MemoryCollectionStore, CollectionBook } from './book';
-import { DUPLICATE_FEATHERS, EMOTE_IDS, STARTER_PACK, parseVariant } from './collectibles';
+import { DUPLICATE_FEATHERS, EMOTE_IDS, PRESENTS, STARTER_PACK, parseVariant } from './collectibles';
 import { isWalkable, pointInRect } from './geometry';
 import { INTERACTABLES, KIND_RULES, LEAF_FEATHERS_PER_DAY, getInteractable, leafFeathers } from './interactables';
 import { NPCS, NPC_TALK_RADIUS, getNpc } from './npcs';
@@ -212,6 +212,11 @@ describe('the shop', () => {
     const items = [...rot.weekly, ...rot.daily, rot.gift!].map((o) => parseVariant(o.variant)!.item.id);
     expect(new Set(items).size).toBe(items.length);
     for (const v of STARTER_PACK) expect(offerFor(rot, v)).toBeNull();
+    // Nor a present everyone holds, in any week or on any day.
+    for (let d = 0; d < 400; d += 3) {
+      const r = shopRotation(MON + d * DAY);
+      for (const p of PRESENTS) expect([...r.weekly, ...r.daily, ...r.featured, r.gift].some((o) => o?.variant === p.variant)).toBe(false);
+    }
     // The same moment gives the same shop; the next day the daily items, the gift and the featured items move.
     expect(shopRotation(MON + HOUR)).toEqual(rot);
     const tomorrow = shopRotation(MON + DAY);

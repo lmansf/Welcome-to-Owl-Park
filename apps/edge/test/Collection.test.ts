@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CollectionBook, DUPLICATE_FEATHERS, LEAF_FEATHERS_PER_DAY, QuestBook, STARTER_PACK, parkDay, parseVariant, shopRotation, type QuestSpots } from '@owl-park/shared';
+import { CollectionBook, DUPLICATE_FEATHERS, LEAF_FEATHERS_PER_DAY, PRESENTS, QuestBook, STARTER_PACK, parkDay, parseVariant, shopRotation, type QuestSpots } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { isCollectorId, mintCollector, mintPass, randomCollectorId, verifyCollector, verifyPass } from '../src/pass';
@@ -54,17 +54,29 @@ describe('SqlCollectionStore', () => {
     expect(xs()).toEqual([1980, 330]);
   });
 
-  it('keeps a collector, the starter pack, grants and owned wear', () => {
+  it('keeps a collector, the starter pack and the presents, grants and owned wear', () => {
     const { store, book } = rig();
     expect(book.ensure(CID, 'America/New_York', MON)).toMatchObject({ cid: CID, tz: 'America/New_York', feathers: 0 });
-    expect(store.owned(CID).sort()).toEqual([...STARTER_PACK].sort());
+    expect(store.owned(CID).sort()).toEqual([...STARTER_PACK, ...PRESENTS.map((p) => p.variant)].sort());
     expect(book.ensure(CID, 'Europe/Paris', MON + 1).tz).toBe('America/New_York');
     expect(book.grant(CID, 'cape~2', 'granted', MON)).toEqual({ ok: true, variant: 'cape~2', added: true });
     expect(book.grant(CID, 'cape~2', 'granted', MON)).toEqual({ ok: true, variant: 'cape~2', added: false });
     expect(book.setEquipped(CID, undefined, { neck: 'cape~2', head: 'crown~0' }, MON)).toEqual({ neck: 'cape~2' });
     const inv = book.inventory(CID, undefined, MON);
     expect(inv).toMatchObject({ cid: CID, feathers: 0, equipped: { neck: 'cape~2' } });
-    expect(inv.owned).toHaveLength(STARTER_PACK.length + 1);
+    expect(inv.owned).toHaveLength(STARTER_PACK.length + PRESENTS.length + 1);
+  });
+
+  it('gives a collector made before a present that present when its collection is read, once', () => {
+    const { store, book } = rig();
+    store.insertCollector({ cid: CID, tz: 'UTC', tzSetAt: MON, feathers: 0, equipped: undefined, createdAt: MON });
+    for (const v of STARTER_PACK) store.addOwned(CID, v, 'granted', MON);
+    const presents = PRESENTS.map((p) => p.variant);
+    expect(store.owned(CID)).not.toContain(presents[0]);
+    expect(book.inventory(CID, undefined, MON + 1).owned).toEqual(expect.arrayContaining(presents));
+    expect(book.owned(CID, undefined, MON + 2).filter((v) => presents.includes(v))).toEqual(presents);
+    // A present the collector already holds is a duplicate if it comes again.
+    expect(book.award(CID, presents[0]!, 'quest', MON + 3)).toMatchObject({ dup: true, feathers: DUPLICATE_FEATHERS[parseVariant(presents[0])!.rarity] });
   });
 
   it('pays a duplicate in feathers and sells from the shop once', () => {
