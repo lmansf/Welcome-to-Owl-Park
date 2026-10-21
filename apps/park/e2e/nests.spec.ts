@@ -25,6 +25,8 @@ const sheet = (page: Page) => page.locator('section.decorate');
 
 test.describe('the nests (this device)', () => {
   test('from the lobby down the lane to the street, into the owl’s own nest, decorating it, and back out', async ({ page }) => {
+    // Five room changes and a dozen steps in the Decorate sheet: more than the default budget on a busy machine.
+    test.setTimeout(90_000);
     await openPark(page, { room: 'lobby', collector: 'e2e-nest-own', tz: 'UTC' });
     await walkToDoor(page, 'to-homes');
     await inRoom(page, 'homes');
