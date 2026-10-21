@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150">
+<desc>Nest furniture: a plump rust armchair with a cream blanket. Bottom centre is the spot it stands or hangs on. Original placeholder art for Owl Park.</desc>
+<rect x="24" y="124" width="8" height="24" rx="3" fill="#2B1C12"/>
+<rect x="118" y="124" width="8" height="24" rx="3" fill="#2B1C12"/>
+<rect x="26" y="14" width="98" height="90" rx="40" fill="#A0452E"/>
+<rect x="34" y="24" width="82" height="70" rx="34" fill="#B85A3E"/>
+<circle cx="56" cy="44" r="4" fill="#C9A227"/>
+<circle cx="94" cy="44" r="4" fill="#C9A227"/>
+<circle cx="75" cy="62" r="4" fill="#C9A227"/>
+<rect x="30" y="84" width="90" height="42" rx="16" fill="#C46A48"/>
+<rect x="8" y="64" width="36" height="66" rx="16" fill="#A0452E"/>
+<rect x="106" y="64" width="36" height="66" rx="16" fill="#A0452E"/>
+<path d="M102 70 Q124 52 146 70 L148 112 Q136 120 126 112 Q116 122 106 114 Z" fill="#F6F1E3"/>
+<path d="M102 70 Q124 52 146 70 Q124 62 102 70 Z" fill="#E4DAC4"/>
+<path d="M110 112 L110 120" fill="none" stroke="#F6F1E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M120 112 L120 120" fill="none" stroke="#F6F1E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M130 112 L130 120" fill="none" stroke="#F6F1E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M140 112 L140 120" fill="none" stroke="#F6F1E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

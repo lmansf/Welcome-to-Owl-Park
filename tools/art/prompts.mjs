@@ -768,3 +768,124 @@ export const LOBBY_WING_JOB = {
 };
 PROMPTS['lobby-west'] = LOBBY_WING_PROMPT;
 JOBS.push(LOBBY_WING_JOB);
+
+// ---------------------------------------------------------------------------------------------
+// The street of nests and the nests, a free area beside the lobby. The street is two screens: its
+// painting (`homes`, the east screen, nearest the lobby) is a lane of tree houses at dusk in the
+// storybook style of the published grove, with three of the six round nest doors, and its west
+// wing (`homes-west`) is painted out from the painting's west edge like the other rooms' wings
+// (`pnpm art:finish canvas homes-west`, then `pnpm art:finish wing homes`), with the other three.
+// A nest (`nest`) is one owl's round room inside a trunk, kept bare, because the furniture
+// (`decor-<id>`) is placed in it by its owner; each piece is painted alone on a chroma backdrop
+// with the published nest as its style reference. Order: the street, its wing, the nest, then the
+// furniture. Every job asks fal for PNG: with a reference it goes to the edit endpoint, which
+// otherwise answers in JPEG (and JPEG rings at keyed edges).
+
+const HOMES_STYLE = `STYLE: cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Dusk along a lane of tree houses in an old forest, lit by warm lanterns and glowing round windows. PALETTE: warm amber lantern light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; dusk blue sky #2E4C7A deepening to navy #0C1E36 at the top; mossy greens #3E5A3A and #6E8B4E; warm bark #4A3322 and #6E4E36; firefly points in pale gold #FFE28A. SHAPE LANGUAGE: broad old trunks with small round wooden doors at their feet, little shingled tree houses with round windows and balconies in the branches above, rope bridges and ladders between the trunks, round paper lanterns, soft moss cushions, drifting fireflies. READABILITY: a clear, open, mid-value lane as the ground plane across the lower part of the frame, nearer is lower; every door at ground level on the far edge of the lane and clearly a door. AVOID: any text, letters, numbers, writing, signage, house numbers, name plates, flags, logos or watermarks; any owls, birds, animals, people, faces or characters; one giant tree bigger than the rest; photographic textures; busy noisy detail; lens flare; harsh daylight; exact mirror symmetry.`;
+
+const HOMES_PROMPT = `A lane of cozy storybook tree houses in an old forest at dusk, seen from outside, 16:9 wide shot, 3200x1800, hand-painted 2D game background, in the same storybook style, palette and dusk light as the reference painting but a new scene, not a copy of it. The ground plane fills the lower part of the frame: a soft lane of packed earth edged with moss runs across the whole width from the left edge to the right edge, mid value, nearer is lower, open and empty. Along the far side of the lane stand broad old tree trunks of similar size, and three of them have a small round wooden door at their foot, at ground level on the edge of the lane: one a sixth of the way in from the left edge, one at the centre and one a sixth of the way in from the right edge, evenly spaced and all the same size, each about one sixth of the frame's height. Every door is round, made of curved planks painted its own colour (honey, rust red, dusk blue), with a brass ring handle, a little round window and a flat stone doorstep, set in a rounded frame of bark with a small lantern on a hook beside it; the bark around each door is otherwise plain. Above the doors the trunks rise into the branches, where little shingled tree houses with round windows glowing warm amber, small balconies and rope ladders sit on platforms, joined by rope bridges hung with round paper lanterns; fireflies drift as soft pale gold points. At the right edge of the frame the lane curves away out of the frame past a lantern on a post. Between the trunks the dusk sky glows warm amber low down, deepening through dusk blue to navy at the top, with a few early stars and soft mist among the distant trunks. ${HOMES_STYLE}`;
+
+// The street's wing, like the other rooms' wings: its scene, what it carries on and its style block.
+STYLE.homes = HOMES_STYLE;
+WING_SCENE.homes = 'a lane of cozy storybook tree houses at dusk';
+WING_CARRY.homes = 'lane, trunks, round doors, tree houses, rope bridges, lanterns, sky glow, lighting, perspective, ground height and brush style';
+
+const HOMES_WING_PROMPT = `${wingIntro('homes', 'west')} The lane continues to the left at the same height across the lower part of the frame, ${EMPTY[2]} Along its far side stand three more broad old trunks, each with a small round wooden door at its foot at ground level: the same size and height as the doors in the finished part and at the same spacing, so all the doors along the lane are evenly spaced, each painted its own colour, with a brass ring handle, a little round window, a flat stone doorstep and a small lantern on a hook beside it, the bark around it otherwise plain. Above them more little shingled tree houses with glowing round windows, small balconies and rope ladders sit in the branches, joined by rope bridges hung with round paper lanterns, and the warm dusk glow of the sky between the trunks continues at the same height. At the far left edge the forest closes in with big trunks, ferns and moss, and the lane ends there. No owls and no characters anywhere. ${wingStyle('homes')}`;
+
+const NEST_PROMPT = `Interior of a cozy round room inside the trunk of an old tree, a small, snug home at dusk, seen straight on from the middle of the room, camera slightly elevated, 16:9 wide shot, 3200x1800, hand-painted 2D game background, in the same storybook style and palette as the reference painting but a new scene. The room is round: walls of smooth honey-brown inner wood with a soft grain curve around the back of the room like the inside of a barrel and sweep forward out of the frame at the left and right edges, under a low domed wooden ceiling, and a single round paper lantern hangs from the top centre, glowing warm amber. The floor fills the lower two fifths of the frame: smooth worn pale inner wood with faint concentric growth rings, mid value, nearer is lower, completely bare and open from edge to edge with nothing standing on it. Near the left edge, at floor level in the curving wall, the round front door: curved wooden planks with a brass ring handle and a little round window, standing slightly ajar with cool dusk-blue light at its edge. In the middle of the back wall a big round window with a wooden frame and four panes looks out on the dusk: a deep blue sky, the dark shapes of neighbouring trees and a rope bridge with a few warm lantern lights; a little moss grows on its sill. Near the right edge a rounded hearth nook is carved into the wall at floor level, with a small hearth of smooth river stones and a low, gentle fire whose warm orange light spills across the floor. A few narrow shelves carved into the wall high up near the ceiling hold small jars, candles and pinecones. Between the door and the window, and between the window and the hearth, the wall is plain and uncluttered: smooth wood, left empty. STYLE: cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Evening inside a hollow tree, lit by warm lantern light and a glowing hearth, with cool dusk light at the window and the door. PALETTE: warm amber lantern and fire light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; inner wood #5C4632 lifting to #8F8068 on the floor; warm bark #4A3322 and #6E4E36 in the walls and shadows; dusk blue #2E4C7A and navy #0C1E36 through the window and the door; small touches of moss #3E5A3A and #6E8B4E. READABILITY: a clear, open, mid-value floor across the lower part of the frame, nearer is lower; the door at floor level and clearly a door; plain wall on both sides of the window. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; any furniture or furnishings: no rugs, chairs, stools, tables, beds, bookshelves, lamps, potted plants, pictures, frames, clocks, window boxes, strings of lanterns, mobiles or wall hangings; clutter on the floor; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`;
+
+const HOMES_JOBS = [
+  {
+    key: 'homes',
+    kind: 'room',
+    realm: 'homes',
+    size: '3200x1800',
+    seed: 3101,
+    variants: 4,
+    // No layout guide: a guide draws a room's first screen, and this painting is the street's second.
+    refs: [published('grove')],
+    providers: { fal: { output_format: 'png' } },
+    prompt: HOMES_PROMPT,
+  },
+  {
+    key: 'homes-west',
+    kind: 'wing',
+    realm: 'homes',
+    optional: true,
+    size: '3040x1368',
+    seed: 9271,
+    variants: 2,
+    refs: [{ ref: '@canvas:homes-west', role: "the painting's edge on a grey canvas to paint over", optional: false }],
+    providers: { fal: { output_format: 'png' } },
+    prompt: HOMES_WING_PROMPT,
+  },
+  {
+    key: 'nest',
+    kind: 'room',
+    realm: 'homes',
+    size: '3200x1800',
+    seed: 3201,
+    variants: 4,
+    refs: [published('grove'), guide('nest')],
+    providers: { fal: { output_format: 'png' } },
+    prompt: NEST_PROMPT,
+  },
+];
+PROMPTS.homes = HOMES_PROMPT;
+PROMPTS['homes-west'] = HOMES_WING_PROMPT;
+PROMPTS.nest = NEST_PROMPT;
+JOBS.push(...HOMES_JOBS);
+
+// The furniture: each piece alone on a chroma backdrop (magenta for the green subjects, green for
+// the rest), generated at twice its logical size and finished with its bottom centre on the
+// spot: `pnpm art:finish piece decor-<id> --margin 0.04`. No text on anything: the books have
+// blank spines, the clock face has dots only and the framed leaf is a painting of a leaf.
+const DECOR_VIEW = {
+  floor: 'standing on an unseen floor, seen from the front and a little above in a gentle three-quarter view, centred, its base resting on the bottom edge of the frame',
+  flat: 'lying flat on an unseen floor, seen from the front and above at a low angle so it reads as a wide oval, centred, its near edge on the bottom edge of the frame',
+  wall: 'hanging flat against an unseen wall, seen straight from the front, centred',
+};
+const decorPrompt = (subject, view, backdrop) => {
+  const green = backdrop === '#00FF00';
+  return `Furniture piece for a cozy owl game's tree-house rooms: ${subject}, the piece alone, ${DECOR_VIEW[view]}, isolated on a flat, solid, uniform pure chroma ${green ? 'green' : 'magenta'} ${backdrop} background that fills the entire canvas with no gradient, no vignette, no cast shadow and no floor, wall or ground plane, filling about 85 percent of the frame. STYLE: cozy storybook illustration, hand-painted 2D game art, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. PALETTE: warm woods #4A3322 and #6E4E36, honey gold #C9A227, warm amber #F2B24A, cream #F6F1E3, dusk blue #2E4C7A${green ? '' : ', mossy greens #3E5A3A and #6E8B4E'}, with navy #0C1E36 for the darkest accents. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face or character; more than one piece; a room, floor, wall or scenery around it; ${green ? 'green parts or green tint on the piece' : 'magenta, pink or purple parts or tint on the piece'}.`;
+};
+
+// id, view, backdrop, generation size (twice the logical size in art.ts), the piece.
+const DECOR = [
+  ['rug', 'flat', '#00FF00', '480x200', 'a round braided rag rug in concentric rings of rust red, amber, cream and dusk blue, soft and a little worn'],
+  ['armchair', 'floor', '#00FF00', '300x300', 'a plump, cozy armchair with a rounded high back, rolled arms and a deep seat cushion, upholstered in warm rust-red fabric with a few honey-gold buttons on the back, on four short turned wooden legs, a small cream knitted blanket folded over one arm'],
+  ['bookshelf', 'floor', '#00FF00', '300x460', 'a sturdy wooden bookshelf with a rounded arched top carved with a simple leaf pattern, three shelves of books leaning and stacked, with plain blank spines in rust red, amber, cream and dusk blue and no titles or lettering, a small round jar and a pinecone among them'],
+  ['lamp', 'floor', '#00FF00', '240x420', 'a tall standing floor lamp: a slender twisted wooden stem rising from a round wooden foot, topped by a cream fabric shade shaped like an upturned bell, lit warm from inside but painted as a solid object with no glow, light rays or halo around it'],
+  ['potted-fern', 'floor', '#FF00FF', '260x300', 'a lush fern with arching bright green fronds in a round terracotta pot with a simple cream band around its rim'],
+  ['mushroom-stool', 'floor', '#00FF00', '240x200', 'a sturdy stool shaped like a toadstool: a broad, flat-topped red cap with cream spots as the seat, on a short, thick cream stem'],
+  ['quilt-bed', 'floor', '#00FF00', '520x340', 'a small wooden bed seen from the side, its rounded headboard taller than its footboard, carved from warm honey wood, with a plump round cream pillow and a puffy patchwork quilt in squares of amber, rust red, cream and dusk blue hanging a little over the side'],
+  ['acorn-bowl', 'floor', '#00FF00', '240x180', 'a shallow carved wooden bowl heaped with shiny brown acorns wearing their little caps, with two golden oak leaves tucked among them'],
+  ['teapot-table', 'floor', '#00FF00', '340x280', 'a small round wooden table on three curved legs, set for tea: a round cream teapot with a dusk-blue band, two little cups on saucers and a small plate of biscuits, with no steam'],
+  ['wall-clock', 'wall', '#00FF00', '200x280', 'a round wall clock in a carved wooden case with a short brass pendulum below it, its face plain cream marked only with twelve small dots and two dark hands, with no numerals, letters or writing anywhere'],
+  ['framed-leaf', 'wall', '#00FF00', '220x280', 'a small framed picture: a carved honey-wood frame with rounded corners around a painting of a single golden-orange autumn leaf on a plain cream ground, with no writing or signature'],
+  ['window-box', 'wall', '#FF00FF', '360x220', 'a wooden window box planter on two small iron brackets, overflowing with trailing green ivy and leafy herbs dotted with small cream and amber flowers'],
+  ['lantern-string', 'wall', '#00FF00', '360x200', 'a string of five small round paper lanterns in amber, cream and honey gold hanging in a gentle swag from a twine cord between two little wooden pegs, softly lit from inside but painted as solid shapes with no glow, light rays or halo around them'],
+  ['moss-rug', 'flat', '#FF00FF', '440x200', 'a soft round rug of thick, cushiony green moss with a few tiny cream flowers and small amber mushrooms at its edge'],
+  ['stump-table', 'floor', '#00FF00', '320x240', 'a low table made from a smooth sawn tree stump, its flat top showing growth rings, bark on its sides and a few gnarled roots at its foot, a little clay cup on top, bare wood with no moss'],
+  ['feather-mobile', 'wall', '#00FF00', '220x320', 'a hanging mobile: a small hoop of bent twig hung from a short cord, with five long soft feathers in cream, honey gold and dusk blue dangling from it on short threads at different heights'],
+];
+const DECOR_PROMPTS = Object.fromEntries(DECOR.map(([id, view, backdrop, , subject]) => [`decor-${id}`, decorPrompt(subject, view, backdrop)]));
+
+/** The furniture keys, in the order of the shared furniture list. */
+export const DECOR_KEYS = Object.keys(DECOR_PROMPTS);
+
+const DECOR_JOBS = DECOR.map(([id, , backdrop, size], i) => ({
+  key: `decor-${id}`,
+  kind: 'piece',
+  realm: 'decor',
+  size,
+  seed: 4001 + i * 10,
+  variants: 2,
+  key_colour: backdrop,
+  // The published nest is the style reference; until it exists the slot is skipped with a notice.
+  refs: [published('nest')],
+  providers: { fal: { output_format: 'png' } },
+  prompt: DECOR_PROMPTS[`decor-${id}`],
+}));
+Object.assign(PROMPTS, DECOR_PROMPTS);
+JOBS.push(...DECOR_JOBS);

@@ -31,6 +31,9 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `owl-<species>-body` and the rest (barn, burrowing, snowy, screech) | 200 x 240 | A species' own five layers, by the same rules as the owl's; loaded when an owl of that species shows up, and until then (or without them) it wears the great horned owl's at its own size |
 | `item-<id>` (82 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
 | `icon-<id>` (48 keys) | 64 x 64 | Collection icons for the 24 effects and 24 emotes: white with grey shading on transparency; the game multiplies them by the effect's tint (or the emote colour), so one painting serves every colourway |
+| `homes-west`, `homes` | 1600 x 900 | The street of nests, two screens (WebP): a lane of tree houses at dusk with six round nest doors; `homes` (x 1600, nearest the lobby) is the painting and `homes-west` (x 0) its wing |
+| `nest` | 1600 x 900 | The inside of every nest (WebP): a round room in a trunk with a bare floor and bare wall, because its owner furnishes it |
+| `decor-<id>` (16 keys) | 100 to 260 wide, sizes in `art.ts` | Nest furniture, floor and wall pieces: transparent PNG, 1x and 2x, drawn with the bottom centre on its spot |
 
 The site icons and the link-preview card (`apps/park/public/favicon.png`, `apple-touch-icon.png`
 and `og-image.jpg`) are not pipeline keys: they are composed from the approved mascot headshot and
@@ -292,6 +295,30 @@ Collection icons (`icon-<id>`, one per effect and emote) are jobs too: a single 
 white and pale grey only, finished like the face items with
 `pnpm art:finish piece icon-<id> --margin 0.04 --valign centre`. Until an icon ships, the panel
 and the emote tray draw the effect's or emote's simple symbol instead.
+
+### The street of nests, the nest and its furniture
+
+The free area beside the lobby is generated in this order, each step after the one before is
+published:
+
+1. `homes`, the street's painting (its east screen, nearest the lobby): a lane of tree houses at
+   dusk with three of the six round nest doors and the lane leaving toward the lobby, painted with
+   the published grove as its style reference. It takes no layout guide, because a guide draws a
+   room's first screen, which here is the wing's.
+2. `homes-west`, its wing with the other three doors, painted out from the published painting like
+   the other wings: `pnpm art:finish canvas homes-west`, generate and pick, then
+   `pnpm art:finish wing homes`.
+3. `nest`, the one room every nest uses, with the grove (and its layout guide, once the room data
+   exports the nest template as `nest`) as references. It is kept bare: no furniture of its own.
+4. The sixteen `decor-<id>` pieces, each alone on a chroma backdrop (magenta for the fern, the
+   moss rug and the window box, green for the rest) with the published nest as the style
+   reference, finished with `pnpm art:finish piece decor-<id> --margin 0.04`: floor and wall pieces
+   alike sit on their spot by the bottom centre.
+
+`room` and `wing` draw the room geometry over their review images, so they need `homes` and `nest`
+in `work/art/geometry.json`. The whole set is 42 images, about $3.51 with Seedream 5.0 Pro:
+`pnpm art:generate --provider fal --only homes,homes-west,nest,decor-* --dry-run` lists them (the
+wing once its canvas exists).
 
 ### The owl key-colour convention
 

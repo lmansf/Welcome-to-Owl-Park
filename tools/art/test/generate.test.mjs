@@ -287,6 +287,38 @@ test('the lobby: two concepts, an edit of the pick around its weathervane, and a
   assert.equal(ASSETS.keys.lobby.kind, 'room');
 });
 
+test('the street of nests, its west wing, the nest and the sixteen pieces of furniture', () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  // With a reference a job goes to fal's edit endpoint, which answers in JPEG unless asked.
+  for (const key of ['homes', 'homes-west', 'nest', ...P.DECOR_KEYS]) assert.equal(jobs.get(key).providers?.fal?.output_format, 'png', key);
+  for (const key of ['homes', 'nest']) {
+    const j = jobs.get(key);
+    assert.deepEqual([j.kind, j.realm, j.size, j.variants], ['room', 'homes', '3200x1800', 4], key);
+    assert.equal(j.refs[0].ref, '@final:grove', `${key}: painted in the style of the published grove`);
+  }
+  // A layout guide draws a room's first screen, which is the wing's, not this painting's.
+  assert.deepEqual(jobs.get('homes').refs.map((r) => r.ref), ['@final:grove']);
+  const wing = jobs.get('homes-west');
+  assert.deepEqual([wing.kind, wing.realm, wing.size, wing.variants, wing.optional], ['wing', 'homes', '3040x1368', 2, true]);
+  assert.deepEqual(wing.refs.map((r) => [r.ref, r.optional]), [['@canvas:homes-west', false]]);
+  assert.ok(wing.prompt.startsWith('Extend this painting into a wide panorama.'));
+  assert.ok(wing.prompt.endsWith(P.STYLE.homes), "carries the street's style block");
+  assert.ok(!P.WING_KEYS.includes('homes-west'), 'the five approved wings keep their own list');
+  const decor = Object.entries(ASSETS.keys).filter(([k]) => k.startsWith('decor-'));
+  assert.equal(decor.length, 16);
+  assert.deepEqual(decor.map(([k]) => k), P.DECOR_KEYS);
+  for (const [key, v] of decor) {
+    const j = jobs.get(key);
+    assert.deepEqual([v.kind, v.with_2x, j.kind, j.realm, j.variants], ['piece', true, 'piece', 'decor', 2], key);
+    assert.equal(j.size, `${2 * v.w}x${2 * v.h}`, `${key}: generated at twice the logical size`);
+    assert.equal(j.key_colour, v.key_colour, `${key}: job and table agree on the backdrop`);
+    assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [['@final:nest', true]], `${key}: the published nest is its style reference`);
+  }
+  // Green subjects go on magenta, everything else on green.
+  assert.deepEqual(decor.filter(([, v]) => v.key_colour === '#FF00FF').map(([k]) => k), ['decor-potted-fern', 'decor-window-box', 'decor-moss-rug']);
+  assert.ok(decor.every(([, v]) => v.key_colour === '#00FF00' || v.key_colour === '#FF00FF'));
+});
+
 test('a wing job runs with the mock provider once its canvas exists, and is skipped before', () => {
   const out = tmp('wing');
   const env = { ...process.env, ART_NOW: '2026-10-20T10:00:00Z' };
