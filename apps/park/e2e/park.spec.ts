@@ -43,6 +43,36 @@ test.describe('single visitor', () => {
     await waitForArrival(page, target.x, target.y);
   });
 
+  test('on a touch screen the thumbstick walks the owl and letting go stops it; a computer has none', async ({ page, isMobile }) => {
+    await openPark(page);
+    const stick = page.locator('#hud .stick');
+    if (!isMobile) {
+      await expect(stick).toBeHidden();
+      return;
+    }
+    await expect(stick).toBeVisible();
+    // The buttons keep clear of it: to its left, or above it.
+    const s = (await stick.boundingBox())!;
+    for (const b of await page.locator('#hud .bottom .left > button, #hud .bottom .left > div > button, #hud [data-action]').all()) {
+      const r = await b.boundingBox();
+      if (r) expect(r.x + r.width <= s.x + 1 || r.y + r.height <= s.y + 1).toBe(true);
+    }
+    const start = (await state(page)).pos;
+    const toward = start.x < 2400 ? 1 : -1; // toward the middle of the hub, where there is floor
+    const c = { x: s.x + s.width / 2, y: s.y + s.height / 2 };
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + toward * 45, c.y, { steps: 5 });
+    await expect.poll(async () => toward * ((await state(page)).pos.x - start.x)).toBeGreaterThan(80);
+    expect(Math.sign((await state(page)).eyes)).toBe(toward); // it faces the way the stick points
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-stick.png` });
+    await page.mouse.up();
+    await expect.poll(async () => (await state(page)).walking).toBe(false);
+    const stopped = (await state(page)).pos;
+    await page.waitForTimeout(400);
+    expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
+  });
+
   test('WASD and the arrow keys walk the owl, facing the way it goes, and letting go stops it', async ({ page }) => {
     await openPark(page);
     const start = (await state(page)).pos;

@@ -102,6 +102,9 @@ interface Action {
 }
 /** How far hint chips keep from the screen's edges, in CSS pixels (clear of the HUD's top and bottom bars). */
 const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
+/** On touch screens the thumbstick and the buttons above it fill the bottom-right corner: hints keep above them. */
+const TOUCH_HINT_BOTTOM = 190;
+const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
 const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', grove: '#FFB347' };
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
@@ -480,7 +483,7 @@ export class RoomScene extends Phaser.Scene {
   private updateHints(): void {
     const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id]).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const v = this.cameras.main.worldView;
-    const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS });
+    const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: TOUCH_HINT_BOTTOM } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;
     this.hintsShown = shown;

@@ -1,8 +1,9 @@
-import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook } from '@owl-park/shared';
+import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook, type Vec2 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
+import { createJoystick } from './joystick';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
@@ -65,6 +66,8 @@ export interface Hud {
   onHint(cb: (id: string) => void): void;
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
+  /** Where the thumbstick points (touch screens), one of eight ways like the walking keys; null while it rests. */
+  stickDirection(): Vec2 | null;
 }
 
 const CSS = `
@@ -166,6 +169,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
   const questsBtn = $<HTMLButtonElement>('[data-quests-btn]');
   const bar = $<HTMLElement>('.bar');
+  const stick = createJoystick($<HTMLElement>('.bottom'));
   let questUi: QuestUi | null = null;
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
@@ -432,5 +436,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     onLookChange(cb) {
       lookCb = cb;
     },
+    stickDirection: () => stick.direction(),
   };
 }
