@@ -1,6 +1,7 @@
 import { MAX_ACTIVE_QUESTS, TASKS_BONUS, TASK_FEATHERS, getNpc, placeName, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
+import { createModal, modalHeader } from './modal';
 
 export interface QuestActions {
   accept(quest: string): Promise<unknown>;
@@ -15,7 +16,8 @@ export interface QuestUi {
   closeDialogue(): void;
   /** The NPC whose dialogue is open, if any. */
   dialogueNpc(): string | null;
-  toggleJournal(): void;
+  /** The quests screen; `fromMenu` adds the way back to the Menu. */
+  openJournal(fromMenu: boolean, opener?: HTMLElement | null): void;
   closeJournal(): void;
   isJournalOpen(): boolean;
   /** The room the owl is in: the lobby shows its welcome instead of the quests. */
@@ -52,6 +54,14 @@ const CSS = `
 #hud .qcard .quote{font-style:italic;font-size:13px;opacity:.9}
 #hud .sheet .empty{font-size:13px;opacity:.8}
 #hud .sheet .who{font-size:13px;display:flex;flex-direction:column;gap:4px}
+#hud .layer .modal.quests{width:min(560px,calc(100vw - 24px))}
+#hud .quests h3{margin:6px 0 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+#hud .quests .empty{font-size:13.5px;opacity:.85;margin:0}
+#hud .quests .who{font-size:13.5px;display:flex;flex-direction:column;gap:6px}
+#hud .quests .who span{padding:8px 10px;border-radius:10px;background:rgba(246,241,227,.06)}
+#hud .quests [role=tabpanel]{display:flex;flex-direction:column;gap:10px}
+#hud .quests .today{font-size:14px;gap:8px}
+#hud .quests .today .task{padding:8px 10px;border-radius:10px;background:rgba(246,241,227,.06)}
 #hud .today{display:flex;flex-direction:column;gap:4px;font-size:13px}
 #hud .today .task{display:flex;gap:8px;align-items:baseline}
 #hud .today .task b{width:16px;flex:none;color:#FFD36A}
@@ -114,26 +124,32 @@ function steps(texts: string[], current: number | null, progress?: { count: numb
   return ol;
 }
 
+type JournalTab = 'underway' | 'today' | 'more';
+
 /**
  * The quest HUD: a tracker under the top bar (the quests under way, or where to start), the
- * journal (J) with every quest carried and who has more, and the dialogue that opens when
- * talking to an NPC owl (hand in, take on, or open Nova's shop).
+ * quests screen (from the Menu, J, or a tap on the tracker) with every quest carried, today's tasks
+ * and who has more, and the dialogue that opens when talking to an NPC owl (hand in, take on, or
+ * open Nova's shop). `onOpen` makes room before a screen or the dialogue opens; `back` returns from
+ * the quests screen to the Menu.
  */
-export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState): QuestUi {
+export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState, back: () => void): QuestUi {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
 
   const tracker = el('div', 'tracker');
   tracker.setAttribute('role', 'button');
-  tracker.setAttribute('aria-label', 'Quests under way: open the journal');
+  tracker.setAttribute('aria-label', 'Quests under way: open Quests');
   bar.insertAdjacentElement('afterend', tracker);
 
-  const journal = el('section', 'sheet journal');
-  journal.setAttribute('aria-label', 'Quest journal');
+  const journal = createModal(root, { name: 'quests', label: 'Quests', layout: 'card' });
+  journal.box.classList.add('journal');
+  let tab: JournalTab = 'underway';
+  let fromMenu = false;
   const dialogue = el('section', 'sheet dialogue');
   dialogue.setAttribute('aria-label', 'Talking');
-  root.append(journal, dialogue);
+  root.append(dialogue);
 
   let talking: NpcDef | null = null;
   let greeting = '';
@@ -206,7 +222,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       line.append(el('b', '', 'New here?'), document.createTextNode(`Talk to ${npcName('bramble')} at ${npcPlace('bramble')}.`));
       tracker.appendChild(line);
     }
-    if (board.active.length > active.length) tracker.appendChild(el('div', 'tq', `+${board.active.length - active.length} more in the journal`));
+    if (board.active.length > active.length) tracker.appendChild(el('div', 'tq', `+${board.active.length - active.length} more in Quests`));
     const today = tasks.view;
     if (today) {
       const line = el('div', 'tq');
@@ -225,13 +241,46 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   };
 
   const renderJournal = () => {
-    if (!journal.classList.contains('open')) return;
+    if (!journal.isOpen()) return;
     const board = state.board;
-    journal.innerHTML = '';
-    journal.appendChild(header('Quests', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…', () => journal.classList.remove('open'), 'Close quests'));
+    const box = journal.box;
+    const focused = (document.activeElement as HTMLElement | null)?.dataset?.['tab'] ?? null;
+    box.innerHTML = '';
+    box.appendChild(
+      modalHeader('Quests', {
+        sub: board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…',
+        onBack: fromMenu ? back : null,
+        onClose: () => journal.close(),
+        closeLabel: 'Close quests',
+      }),
+    );
     const today = tasks.view;
-    if (today) {
-      journal.appendChild(el('h3', '', "Today's tasks"));
+    const tabs: Array<[JournalTab, string]> = [
+      ['underway', board ? `Under way (${board.active.length})` : 'Under way'],
+      ['today', today ? `Today (${tasks.done} of ${today.tasks.length})` : 'Today'],
+      ['more', 'Find more'],
+    ];
+    const nav = el('nav', 'tabs');
+    nav.setAttribute('role', 'tablist');
+    for (const [id, label] of tabs) {
+      const b = button(label, '', () => {
+        tab = id;
+        renderJournal();
+        box.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.focus();
+      });
+      b.dataset['tab'] = id;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(id === tab));
+      nav.appendChild(b);
+    }
+    box.appendChild(nav);
+    const panel = el('div');
+    panel.setAttribute('role', 'tabpanel');
+    panel.dataset['panel'] = tab;
+    box.appendChild(panel);
+    if (focused) box.querySelector<HTMLElement>(`[data-tab="${focused}"]`)?.focus();
+    if (tab === 'today') {
+      if (!today) return void panel.appendChild(el('p', 'empty', 'Loading today’s tasks…'));
       const list = el('div', 'today');
       for (const t of today.tasks) {
         const done = t.done >= t.count;
@@ -239,19 +288,30 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
         row.append(el('b', '', done ? '✓' : '•'), el('span', '', t.text), el('i', '', `${t.done} of ${t.count}`));
         list.appendChild(row);
       }
-      list.appendChild(el('p', 'empty', `${today.bonus ? 'All three done, bonus paid.' : `Each task pays ${TASK_FEATHERS} feathers, and all three ${TASKS_BONUS} more.`} New tasks in ${timeLeft(today.endsAt)}.`));
-      journal.appendChild(list);
+      panel.append(list, el('p', 'empty', `${today.bonus ? 'All three done, bonus paid.' : `Each task pays ${TASK_FEATHERS} feathers, and all three ${TASKS_BONUS} more.`} New tasks in ${timeLeft(today.endsAt)}.`));
+      return;
     }
-    if (!board) return;
-    if (board.active.length) for (const q of board.active) journal.appendChild(activeCard(q, true));
-    else journal.appendChild(el('p', 'empty', 'No quests under way. Owls with a gold "!" over their heads have something for you.'));
-    const givers = Object.entries(board.offers).filter(([, list]) => list.length);
-    journal.appendChild(el('h3', '', 'Who has quests for you'));
-    const who = el('div', 'who');
-    for (const [npc, list] of givers) who.appendChild(el('span', '', `${npcName(npc)} at ${npcPlace(npc)}: ${list.length === 1 ? list[0]!.title : `${list.length} quests`}`));
-    if (!givers.length) who.appendChild(el('span', 'empty', 'Nobody right now. New quests arrive every day at midnight, park time.'));
-    journal.appendChild(who);
-    journal.appendChild(el('p', 'empty', `Daily quests change in ${timeLeft(board.nextDay)}; weekly ones in ${timeLeft(board.nextWeek)}.`));
+    if (!board) return void panel.appendChild(el('p', 'empty', 'Loading your quests…'));
+    if (tab === 'more') {
+      const givers = Object.entries(board.offers).filter(([, list]) => list.length);
+      panel.appendChild(el('h3', '', 'Who has quests for you'));
+      const who = el('div', 'who');
+      for (const [npc, list] of givers) who.appendChild(el('span', '', `${npcName(npc)} at ${npcPlace(npc)}: ${list.length === 1 ? list[0]!.title : `${list.length} quests`}`));
+      if (!givers.length) who.appendChild(el('span', 'empty', 'Nobody right now. New quests arrive every day at midnight, park time.'));
+      panel.append(who, el('p', 'empty', `Daily quests change in ${timeLeft(board.nextDay)}; weekly ones in ${timeLeft(board.nextWeek)}.`));
+      return;
+    }
+    if (board.active.length) for (const q of board.active) panel.appendChild(activeCard(q, true));
+    else {
+      panel.appendChild(el('p', 'empty', 'No quests under way. Owls with a gold "!" over their heads have something for you.'));
+      panel.appendChild(
+        button('See who has quests', 'ghost', () => {
+          tab = 'more';
+          renderJournal();
+          box.querySelector<HTMLElement>('[data-tab="more"]')?.focus();
+        }),
+      );
+    }
   };
 
   const renderDialogue = () => {
@@ -302,11 +362,14 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     delete dialogue.dataset['npc'];
   };
 
-  tracker.addEventListener('click', () => {
+  function openJournal(menu: boolean, opener?: HTMLElement | null) {
     onOpen();
-    journal.classList.add('open');
+    fromMenu = menu;
+    tab = 'underway';
+    journal.open(opener);
     renderJournal();
-  });
+  }
+  tracker.addEventListener('click', () => openJournal(false, tracker));
   state.onChange(render);
   tasks.onChange(() => {
     renderTracker();
@@ -328,15 +391,8 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     },
     closeDialogue,
     dialogueNpc: () => (dialogue.classList.contains('open') ? (talking?.id ?? null) : null),
-    toggleJournal() {
-      const open = !journal.classList.contains('open');
-      if (open) onOpen();
-      journal.classList.toggle('open', open);
-      renderJournal();
-    },
-    closeJournal() {
-      journal.classList.remove('open');
-    },
-    isJournalOpen: () => journal.classList.contains('open'),
+    openJournal,
+    closeJournal: () => journal.close(),
+    isJournalOpen: () => journal.isOpen(),
   };
 }

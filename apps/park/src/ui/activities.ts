@@ -1,5 +1,5 @@
 import { QUIZ_EVERY_MS, QUIZ_ZONE_IDS, variantName, type QuizZone } from '@owl-park/shared';
-import { variantIcon } from './collection';
+import { variantIcon } from './itemIcon';
 
 /** The stage quiz as the card shows it while the owl is by the stage. */
 export type QuizView =

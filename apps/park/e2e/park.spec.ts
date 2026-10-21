@@ -38,8 +38,8 @@ test.describe('single visitor', () => {
     await openPark(page);
     const before = await state(page);
     await page.locator('#hud .pill').hover();
-    await page.getByRole('button', { name: 'Your owl' }).click();
-    await page.getByRole('button', { name: 'Your owl' }).click();
+    await page.locator('[data-menu-btn]').click();
+    await page.getByRole('button', { name: 'Close the menu' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
     const view = await settleCamera(page);
     const target = { x: before.pos.x - Math.min(200, view.viewW * 0.3), y: before.pos.y + 30 };
@@ -104,17 +104,85 @@ test.describe('single visitor', () => {
     await expect.poll(async () => (await state(page)).walking).toBe(false);
   });
 
-  test('Q opens the collection and closes it again, and Escape closes it too', async ({ page }) => {
+  test('M opens the Menu, T the emotes, Q your owl and J the quests; each key closes its screen again, and so does Escape', async ({ page }) => {
     await openPark(page);
-    const panel = page.getByRole('region', { name: 'Collection' });
-    await page.keyboard.press('KeyQ');
-    await expect(panel).toBeVisible();
-    await page.keyboard.press('KeyQ');
-    await expect(panel).toBeHidden();
-    await page.keyboard.press('KeyQ');
-    await expect(panel).toBeVisible();
+    for (const [key, name] of [
+      ['KeyM', 'Menu'],
+      ['KeyT', 'Emotes'],
+      ['KeyQ', 'Your owl'],
+      ['KeyJ', 'Quests'],
+    ] as const) {
+      const screen = page.getByRole('dialog', { name });
+      await page.keyboard.press(key);
+      await expect(screen, name).toBeVisible();
+      await page.keyboard.press(key);
+      await expect(screen, name).toBeHidden();
+      await page.keyboard.press(key);
+      await expect(screen, name).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(screen, name).toBeHidden();
+      // The focus goes back to the Menu button, even from the owl builder, which hides it while open.
+      await expect(page.locator('[data-menu-btn]'), name).toBeFocused();
+    }
+    // While a screen is open the walking keys leave the owl where it is.
+    const before = (await state(page)).pos;
+    await page.keyboard.press('KeyM');
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(500);
+    expect((await state(page)).walking).toBe(false);
+    await page.keyboard.up('KeyD');
+    expect((await state(page)).pos).toEqual(before);
     await page.keyboard.press('Escape');
-    await expect(panel).toBeHidden();
+  });
+
+  test('the bottom bar is one Menu button, and the Menu leads to the emotes, your owl, the quests and the settings', async ({ page }) => {
+    await openPark(page);
+    await expect(page.locator('#hud .bottom .left button')).toHaveCount(1);
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Emotes/, /^Your owl/, /^Quests/, /^Settings/]);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
+    for (const [id, name] of [
+      ['emotes', 'Emotes'],
+      ['owl', 'Your owl'],
+      ['quests', 'Quests'],
+      ['settings', 'Settings'],
+    ] as const) {
+      await menu.locator(`[data-screen="${id}"]`).click();
+      const screen = page.getByRole('dialog', { name });
+      await expect(screen, name).toBeVisible();
+      await expect(menu).toBeHidden();
+      // Each screen but the wheel goes back to the Menu; the wheel just closes.
+      if (id === 'emotes') {
+        await screen.getByRole('button', { name: 'Close emotes' }).click();
+        await page.locator('[data-menu-btn]').click();
+      } else await screen.getByRole('button', { name: 'Back to the menu' }).click();
+      await expect(screen, name).toBeHidden();
+      await expect(menu).toBeVisible();
+    }
+  });
+
+  test('settings hide the quest cards and the thumbstick, and stay on this device', async ({ page, isMobile }) => {
+    await openPark(page);
+    await expect(page.locator('#hud .tracker')).toBeVisible();
+    await page.locator('[data-menu-btn]').click();
+    await page.locator('[data-screen="settings"]').click();
+    const cards = page.locator('[data-setting="questCards"]');
+    await expect(cards).toHaveAttribute('aria-checked', 'true');
+    await cards.click();
+    await expect(cards).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('#hud .tracker')).toBeHidden();
+    if (isMobile) {
+      await expect(page.locator('#hud .stick')).toBeVisible();
+      await page.locator('[data-setting="thumbstick"]').click();
+      await expect(page.locator('#hud .stick')).toBeHidden();
+    } else await expect(page.locator('[data-setting="thumbstick"]')).toBeHidden();
+    await page.locator('[data-setting="calm"]').click();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-settings.png` });
+    await page.reload();
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(page.locator('#hud .tracker')).toBeHidden();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ questCards: false, thumbstick: !isMobile, calm: true });
   });
 
   test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {

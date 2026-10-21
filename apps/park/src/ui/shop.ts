@@ -1,6 +1,6 @@
 import { DUPLICATE_FEATHERS, RARITY_COLOURS, RARITY_NAMES, variantName, type ShopOffer, type ShopView } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
-import { variantIcon } from './collection';
+import { variantIcon } from './itemIcon';
 import { timeLeft } from './quests';
 
 export interface ShopPanel {

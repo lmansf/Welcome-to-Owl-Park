@@ -4,7 +4,7 @@ export interface ParkState {
   room: string;
   pos: { x: number; y: number };
   walking: boolean;
-  look: { body: string; belly: string; accent: string; species?: string };
+  look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
   peers: Array<{
     id: string;
     pos: { x: number; y: number };

@@ -56,7 +56,9 @@ export class NestDecor {
         .zone(spot.x, spot.y - (box.up - box.down) / 2, box.w, box.up + box.down)
         .setDepth(RING_DEPTH)
         .setInteractive({ useHandCursor: true });
-      hit.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (_p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+      hit.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (p: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+        // Only a tap on the room itself: not one on the Decorate sheet above a spot's ring.
+        if (p.downElement !== this.scene.game.canvas || p.upElement !== this.scene.game.canvas) return;
         event.stopPropagation();
         onPick(spot.id);
       });

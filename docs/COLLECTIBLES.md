@@ -101,9 +101,12 @@ to one per 1.5 s per owl.
 - **Colourways** of wearables and pets rotate the hue of the art by hand on a canvas (Safari's
   canvas has no `filter`); colourway 0 is the art as painted.
 - Until painted art ships every wearable and pet has a drawn placeholder (`itemArt.ts`).
-- HUD: feathers in the top bar, the **Collection** panel (tabs, a card per item with its colourway
-  dots, wear or take off) and the **Emotes** tray; the quest tracker, journal, dialogue and shop
-  are in [QUESTS.md](QUESTS.md).
+- HUD: feathers in the top bar; from the **Menu**, the **owl builder** (`ui/owlBuilder.ts`: the
+  whole screen, the owl drawn big and alive by `game/BuilderScene.ts`, and tabs for its kind,
+  colours, wear, pets and effects, a card per item with its colourway dots; a tap puts it on or
+  takes it off, and what is not owned yet shows greyed with where to find it) and the **emote
+  wheel** (`ui/emoteWheel.ts`: the owned emotes round a ring, eight a page). The quest tracker,
+  the quests screen, dialogue and shop are in [QUESTS.md](QUESTS.md).
 - Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
   shop hooks.
 

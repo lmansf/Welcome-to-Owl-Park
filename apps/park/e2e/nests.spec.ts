@@ -54,7 +54,7 @@ test.describe('the nests (this device)', () => {
     await expect(sheet(page).locator('[data-where]')).toHaveText('1 / 12 · On the floor');
     await expect(sheet(page).locator('[data-piece="lamp"]')).toHaveAttribute('aria-pressed', 'true');
     // The bottom bar and the quest cards give way to the sheet and the room.
-    await expect(page.locator('[data-collection-btn]')).toBeHidden();
+    await expect(page.locator('[data-menu-btn]')).toBeHidden();
     await expect(page.locator('.tracker')).toBeHidden();
 
     // Spot 2: the rug moves there from its own spot; then Take away puts it back with the owl.
@@ -98,7 +98,7 @@ test.describe('the nests (this device)', () => {
     await expect.poll(async () => (await state(page)).nest?.open).toBe(false);
     await sheet(page).getByRole('button', { name: 'Done' }).click();
     await expect(sheet(page)).toBeHidden();
-    await expect(page.locator('[data-collection-btn]')).toBeVisible();
+    await expect(page.locator('[data-menu-btn]')).toBeVisible();
     expect((await state(page)).nest?.decorating).toBe(false);
 
     // Out of the nest the owl comes back to the street in front of its own door.

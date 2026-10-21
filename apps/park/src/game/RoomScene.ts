@@ -61,6 +61,7 @@ import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
+import type { SettingsStore } from '../settings';
 import type { Keys } from '../ui/keyboard';
 import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
@@ -304,7 +305,14 @@ export class RoomScene extends Phaser.Scene {
     // hairline of the clear colour shows at a join while the camera scrolls.
     for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
-    addAmbience(this, room);
+    // Calm motion (a setting) stills the drifting particles, at once and in every room after.
+    const ambience = addAmbience(this, room);
+    const settings = this.registry.get('settings') as SettingsStore | undefined;
+    if (settings) {
+      ambience.setCalm(settings.get().calm);
+      const stop = settings.onChange((s) => ambience.setCalm(s.calm));
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, stop);
+    }
     addNestsSign(this, room);
     if (room.id === STREET_ROOM) {
       this.streetSigns = new StreetDoors(this, room);
@@ -336,7 +344,7 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setCount(1);
     this.hud.setActions([]);
     this.hud.setRoom(room.id);
-    // The owl panel changes colours and species only: today's pledge and the worn collectibles stay.
+    // The owl builder's kind and colours: today's pledge and the worn collectibles stay as they are.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
     this.hud.onAction((id) => this.actions.find((a) => a.id === id)?.run());
     this.hud.onHint((id) => this.walkToDoorway(id));
@@ -513,8 +521,7 @@ export class RoomScene extends Phaser.Scene {
 
   private setupInput(): void {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
-      // Phaser only emits POINTER_UP for releases on the canvas; also require the press to have been on it.
-      if (this.leaving || this.decorating || p.downElement !== this.game.canvas) return;
+      if (this.leaving || this.decorating || !this.onCanvas(p)) return;
       if (Date.now() - this.tapTakenAt < 100) return; // the idol or an NPC took this tap
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
       this.pendingVote = false; // a new destination cancels a walk to the idol
@@ -620,9 +627,17 @@ export class RoomScene extends Phaser.Scene {
     booth: { label: 'Ticket booth', run: () => void this.openBooth() },
   };
 
+  /**
+   * A tap that was pressed and let go on the game itself. Phaser finds what is under a release
+   * anywhere on the page, so a tap on a HUD button over an NPC owl would otherwise talk to it.
+   */
+  private onCanvas(p: Phaser.Input.Pointer): boolean {
+    return p.downElement === this.game.canvas && p.upElement === this.game.canvas;
+  }
+
   /** Tapping the realm's idol: pledge now if standing at it, otherwise walk up and pledge on arrival. */
   private onIdolTap(pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
-    if (this.leaving || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
+    if (this.leaving || !this.onCanvas(pointer) || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
     event.stopPropagation();
     this.tapTakenAt = Date.now();
     this.errand = null;
@@ -704,7 +719,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Tapping an NPC owl: talk now if close enough, otherwise walk up and talk on arrival. */
   private onNpcTap(npc: NpcOwl, pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
-    if (this.leaving || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
+    if (this.leaving || !this.onCanvas(pointer) || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
     event.stopPropagation();
     this.tapTakenAt = Date.now();
     this.pendingVote = false;

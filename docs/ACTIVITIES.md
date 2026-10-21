@@ -82,8 +82,9 @@ kind twice:
 3. around the park: flop into 2 leaf piles, or browse 2 stalls, or answer a quiz question right,
    or copy 2 tunes.
 
-Each task pays 4 feathers, and all three 8 more. They show in the journal (J) and as a line in
-the tracker, with a toast as each moves along; they change at the park's midnight.
+Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J), on its
+Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
+park's midnight.
 
 ## Feathers
 
@@ -111,8 +112,8 @@ to its own clock, and runs the quiz card on the server's clock.
   answers and pushes, and the cards; `game/Lanterns.ts`, `game/QuizStage.ts` and
   `game/Fishing.ts` draw the glows, the zones and the line.
 - `ui/activities.ts`: the quiz and copy cards (top right on wide screens, under the top bar on
-  phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the journal and the
-  tracker; `collect/tasks.ts` keeps them.
+  phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the quests screen and
+  the tracker; `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
 

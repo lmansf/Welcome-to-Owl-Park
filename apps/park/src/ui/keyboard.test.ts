@@ -47,7 +47,14 @@ describe('attachKeyboard', () => {
   const setup = () => {
     const calls: string[] = [];
     const fake = fakeWindow();
-    const keys = attachKeyboard(fake.win, { interact: () => calls.push('interact'), collection: () => calls.push('collection'), journal: () => calls.push('journal'), close: () => calls.push('close') });
+    const keys = attachKeyboard(fake.win, {
+      interact: () => calls.push('interact'),
+      menu: () => calls.push('menu'),
+      emotes: () => calls.push('emotes'),
+      owl: () => calls.push('owl'),
+      journal: () => calls.push('journal'),
+      close: () => calls.push('close'),
+    });
     return { ...fake, keys, calls };
   };
 
@@ -59,14 +66,17 @@ describe('attachKeyboard', () => {
     expect(keys.direction()).toBeNull();
   });
 
-  it('runs E, Q, J and Escape once per press', () => {
+  it('runs E, M, T, Q, J and Escape once per press', () => {
     const { key, calls } = setup();
     key('keydown', 'KeyE');
     key('keydown', 'KeyE', { repeat: true });
+    key('keydown', 'KeyM');
+    key('keydown', 'KeyT');
+    key('keydown', 'KeyT', { repeat: true });
     key('keydown', 'KeyQ');
     key('keydown', 'KeyJ');
     key('keydown', 'Escape');
-    expect(calls).toEqual(['interact', 'collection', 'journal', 'close']);
+    expect(calls).toEqual(['interact', 'menu', 'emotes', 'owl', 'journal', 'close']);
   });
 
   it('leaves typing and browser shortcuts alone', () => {

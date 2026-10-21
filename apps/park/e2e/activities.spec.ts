@@ -30,8 +30,10 @@ test.describe('activities (this device)', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-beam.png` });
     // The beam glows whole: no lantern to light until it goes dark again.
     expect((await state(page)).actions).not.toContain('act:light');
-    // Today's tasks are in the journal.
-    await page.locator('[data-quests-btn]').click();
+    // Today's tasks are in Quests.
+    await page.locator('[data-menu-btn]').click();
+    await page.locator('[data-screen="quests"]').click();
+    await page.locator('.journal [data-tab="today"]').click();
     await expect(page.locator('.journal .today .task')).toHaveCount(3);
   });
 

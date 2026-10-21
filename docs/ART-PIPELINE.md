@@ -293,8 +293,8 @@ turns them to the game's facing-right convention.
 
 Collection icons (`icon-<id>`, one per effect and emote) are jobs too: a single emblem painted in
 white and pale grey only, finished like the face items with
-`pnpm art:finish piece icon-<id> --margin 0.04 --valign centre`. Until an icon ships, the panel
-and the emote tray draw the effect's or emote's simple symbol instead.
+`pnpm art:finish piece icon-<id> --margin 0.04 --valign centre`. Until an icon ships, the owl
+builder and the emote wheel draw the effect's or emote's simple symbol instead.
 
 ### The street of nests, the nest and its furniture
 
