@@ -7,9 +7,9 @@
  * Missing or broken files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type SpeciesId } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
-import { ROOMS } from '../rooms';
+import { ROOMS, roomFor } from '../rooms';
 import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
 import { loadSvgTexture } from './svgLoader';
 
@@ -101,10 +101,12 @@ export const GLOBAL_ART = Object.keys(ART).filter((k) => (ART[k]!.kind === 'owl'
 
 /** Art that belongs to one room (loaded when the room opens, released when it closes). */
 export function roomArtKeys(roomId: string): string[] {
-  const room = Object.hasOwn(ROOMS, roomId) ? ROOMS[roomId] : undefined;
+  const room = roomFor(roomId);
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
+  // A nest can show any piece of furniture: the owner may put out whatever they own.
+  if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
   return keys.filter((k) => k in ART);
 }
 

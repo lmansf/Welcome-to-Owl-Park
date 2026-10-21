@@ -317,6 +317,10 @@ test('the street of nests, its west wing, the nest and the sixteen pieces of fur
   // Green subjects go on magenta, everything else on green.
   assert.deepEqual(decor.filter(([, v]) => v.key_colour === '#FF00FF').map(([k]) => k), ['decor-potted-fern', 'decor-window-box', 'decor-moss-rug']);
   assert.ok(decor.every(([, v]) => v.key_colour === '#00FF00' || v.key_colour === '#FF00FF'));
+  // A nest draws each piece of the furniture catalogue at its art's logical size.
+  const homes = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/homes.ts'), 'utf8');
+  const sizes = Object.fromEntries([...homes.matchAll(/piece\('([a-z][a-z-]*)', '[^']+', '(?:floor|wall)', (\d+), (\d+)\)/g)].map((m) => [`decor-${m[1]}`, [Number(m[2]), Number(m[3])]]));
+  assert.deepEqual(sizes, Object.fromEntries(decor.map(([k, v]) => [k, [v.w, v.h]])));
 });
 
 test('a wing job runs with the mock provider once its canvas exists, and is skipped before', () => {
@@ -625,7 +629,11 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['grove', 'hub', 'lobby', 'market']);
+  assert.deepEqual(Object.keys(g.rooms).sort(), ['grove', 'homes', 'hub', 'lobby', 'market', 'nest']);
+  assert.deepEqual(g.rooms.homes.backgrounds.map((t) => [t.key, t.x]), [['homes-west', 0], ['homes', 1600]]);
+  // Every nest is one template, painted once.
+  assert.deepEqual([g.rooms.nest.size, g.rooms.nest.background], [{ w: 1600, h: 900 }, 'nest']);
+  assert.ok(g.rooms.nest.doors.some((d) => d.id === 'to-street'));
   assert.deepEqual(g.rooms.lobby.size, { w: 3200, h: 900 });
   assert.deepEqual(g.rooms.lobby.backgrounds.map((t) => [t.key, t.x]), [['lobby-west', 0], ['lobby', 1600]]);
   assert.deepEqual(g.rooms.hub.size, { w: 4800, h: 900 });

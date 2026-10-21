@@ -74,22 +74,22 @@ const flat = (f: Furniture): Furniture => ({ ...f, flat: true });
 
 /** The first set: sixteen pieces, sized beside an owl (about 100 x 120 room pixels as drawn). */
 export const FURNITURE: readonly Furniture[] = [
-  flat(piece('rug', 'Rug', 'floor', 260, 90)),
-  piece('armchair', 'Armchair', 'floor', 170, 170),
-  piece('bookshelf', 'Bookshelf', 'floor', 150, 240),
-  piece('lamp', 'Lamp', 'floor', 120, 220),
-  piece('potted-fern', 'Potted fern', 'floor', 130, 170),
-  piece('mushroom-stool', 'Mushroom stool', 'floor', 120, 110),
-  piece('quilt-bed', 'Quilt bed', 'floor', 260, 160),
-  piece('acorn-bowl', 'Acorn bowl', 'floor', 120, 80),
-  piece('teapot-table', 'Teapot table', 'floor', 180, 140),
+  flat(piece('rug', 'Rug', 'floor', 240, 100)),
+  piece('armchair', 'Armchair', 'floor', 150, 150),
+  piece('bookshelf', 'Bookshelf', 'floor', 150, 230),
+  piece('lamp', 'Lamp', 'floor', 120, 210),
+  piece('potted-fern', 'Potted fern', 'floor', 130, 150),
+  piece('mushroom-stool', 'Mushroom stool', 'floor', 120, 100),
+  piece('quilt-bed', 'Quilt bed', 'floor', 260, 170),
+  piece('acorn-bowl', 'Acorn bowl', 'floor', 120, 90),
+  piece('teapot-table', 'Teapot table', 'floor', 170, 140),
   piece('wall-clock', 'Wall clock', 'wall', 100, 140),
   piece('framed-leaf', 'Framed leaf', 'wall', 110, 140),
-  piece('window-box', 'Window box', 'wall', 170, 130),
-  piece('lantern-string', 'String of lanterns', 'wall', 180, 90),
-  flat(piece('moss-rug', 'Moss rug', 'floor', 240, 80)),
+  piece('window-box', 'Window box', 'wall', 180, 110),
+  piece('lantern-string', 'String of lanterns', 'wall', 180, 100),
+  flat(piece('moss-rug', 'Moss rug', 'floor', 220, 100)),
   piece('stump-table', 'Stump table', 'floor', 160, 120),
-  piece('feather-mobile', 'Feather mobile', 'wall', 120, 170),
+  piece('feather-mobile', 'Feather mobile', 'wall', 110, 160),
 ];
 
 /** Every owl owns these from the start. */
@@ -116,8 +116,9 @@ export interface NestSpot {
 
 /**
  * Twelve spots in the nest. On the floor, f1 to f4 along the back wall and f5 to f8 nearer the front,
- * between them, all clear of the door in the west wall. On the back wall, w1 to w4 above the back
- * row, high enough that the tallest floor piece standing beneath leaves them showing.
+ * between them, all clear of the door in the west wall. On the back wall, w1 to w4, two each side of
+ * the round window between the shelves and the hearth, staggered, and high enough that the tallest
+ * floor piece standing beneath leaves them showing.
  */
 export const NEST_SPOTS: readonly NestSpot[] = [
   { id: 'f1', place: 'floor', x: 410, y: 700 },
@@ -128,9 +129,9 @@ export const NEST_SPOTS: readonly NestSpot[] = [
   { id: 'f6', place: 'floor', x: 800, y: 800 },
   { id: 'f7', place: 'floor', x: 1060, y: 800 },
   { id: 'f8', place: 'floor', x: 1320, y: 810 },
-  { id: 'w1', place: 'wall', x: 410, y: 450 },
-  { id: 'w2', place: 'wall', x: 670, y: 420 },
-  { id: 'w3', place: 'wall', x: 930, y: 420 },
+  { id: 'w1', place: 'wall', x: 380, y: 450 },
+  { id: 'w2', place: 'wall', x: 540, y: 360 },
+  { id: 'w3', place: 'wall', x: 1060, y: 360 },
   { id: 'w4', place: 'wall', x: 1190, y: 450 },
 ];
 

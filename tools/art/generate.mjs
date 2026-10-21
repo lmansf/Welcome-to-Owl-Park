@@ -1210,7 +1210,8 @@ export async function resolve(specifier, context, next) {
   register(`data:text/javascript,${encodeURIComponent(hook)}`, pathToFileURL(`${repoRoot}/`));
   const mod = await import(pathToFileURL(path.join(repoRoot, 'packages', 'shared', 'rooms', 'index.ts')).href);
   const rooms = {};
-  for (const [id, room] of Object.entries(mod.ROOMS)) {
+  // Every nest is made from one template, painted once as `nest`.
+  for (const [id, room] of [...Object.entries(mod.ROOMS), ['nest', mod.NEST_ROOM]]) {
     rooms[id] = {
       size: room.size,
       background: room.background,
