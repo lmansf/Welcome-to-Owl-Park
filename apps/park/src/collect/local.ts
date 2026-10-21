@@ -4,11 +4,15 @@ import {
   KIND_RULES,
   LEAF_FEATHERS_PER_DAY,
   MemoryCollectionStore,
+  MemoryNestStore,
+  NestBook,
   NPC_TALK_RADIUS,
   QUIZ_FEATHERS,
   QUIZ_ROOM,
   QuestBook,
   REACH_SLACK,
+  STREET_DOORS,
+  STREET_ROOM,
   USE_COOLDOWN_MS,
   distance,
   getInteractable,
@@ -18,10 +22,16 @@ import {
   lanternFeathers,
   leafFeathers,
   leafRespawnMs,
+  nestIdOf,
   normalizeTimeZone,
+  randomNestId,
+  secureNestId,
   type BuyResult,
   type GiftResult,
   type Inventory,
+  type NestEditResult,
+  type NestLook,
+  type NestView,
   type NpcDef,
   type PlayEvent,
   type PlayResult,
@@ -31,10 +41,14 @@ import {
 } from '@owl-park/shared';
 import type { RoomConnection } from '../net/transport';
 import { ROOMS } from '../rooms';
-import type { ActivityLink, ActivityPushes, CollectionService, HandInReply, NoteReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
+import type { ActivityLink, ActivityPushes, CollectionService, FurnitureGiftReply, HandInReply, NestEditReply, NestLink, NestPushes, NoteReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
 
 const COLLECTOR_KEY = 'owl-park:local-collector';
 const STORE_PREFIX = 'owl-park:collection:';
+/** Every nest in this browser, whichever collector's: the street shows the other ones that are open. */
+const NESTS_KEY = 'owl-park:nests';
+/** A nest's owner changed it: the other tabs of this browser that are inside it hear of it here. */
+const NESTS_CHANNEL = 'owl-park:nests';
 const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
 export interface KeyValueStorage {
@@ -49,6 +63,12 @@ function randomCid(): string {
   let s = 'c_';
   for (const b of bytes) s += alphabet[b % alphabet.length];
   return s;
+}
+
+/** A new nest id from the browser's cryptographic source where there is one. */
+function localNestId(): string {
+  const c = globalThis.crypto;
+  return c && typeof c.getRandomValues === 'function' ? secureNestId((n) => c.getRandomValues(new Uint8Array(n))) : randomNestId(Math.random);
 }
 
 const refused = (reason: string): QuestReply => ({ ok: false, reason, board: null, updates: [] });
@@ -66,6 +86,7 @@ export class LocalCollections implements CollectionService {
   private readonly now: () => number;
   private readonly random: () => number;
   private memory: MemoryCollectionStore | null = null;
+  private nestMemory: MemoryNestStore | null = null;
   /** Shared objects used up in this page: id -> when they are back. */
   private readonly objects = new Map<string, number>();
   private usedAt = Number.NEGATIVE_INFINITY;
@@ -118,6 +139,25 @@ export class LocalCollections implements CollectionService {
     return out;
   }
 
+  /** Run against the latest stored nests and this collector's collection (the gift may pay feathers), then store both again. */
+  private nests<T>(fn: (nests: NestBook) => T): T {
+    let store: MemoryNestStore;
+    try {
+      const raw = this.storage?.getItem(NESTS_KEY) ?? null;
+      store = raw ? MemoryNestStore.from(JSON.parse(raw)) : (this.nestMemory ?? new MemoryNestStore());
+    } catch {
+      store = this.nestMemory ?? new MemoryNestStore();
+    }
+    const out = this.use(({ book }) => fn(new NestBook(store, book, { newId: localNestId, random: this.random })));
+    this.nestMemory = store;
+    try {
+      this.storage?.setItem(NESTS_KEY, JSON.stringify(store.snapshot()));
+    } catch {
+      /* storage full or unavailable: the nests live for this page only */
+    }
+    return out;
+  }
+
   async inventory(): Promise<Inventory> {
     return this.use(({ book }) => book.inventory(this.cid, this.tz, this.now()));
   }
@@ -132,6 +172,63 @@ export class LocalCollections implements CollectionService {
 
   async claimGift(): Promise<GiftResult> {
     return this.use(({ book }) => book.claimGift(this.cid, this.now()));
+  }
+
+  async claimFurnitureGift(): Promise<FurnitureGiftReply> {
+    return this.nests((nests) => nests.claimGift(this.cid, this.now()));
+  }
+
+  /**
+   * The nests in this browser, by the same rules as the room server's: on the street, the visitor's
+   * own nest behind door 0 and other collectors' open ones behind the rest; in a nest, the nest as it
+   * stands (or the visitor turned away) and, in its own, the owner's changes, which reach the other
+   * tabs inside it.
+   */
+  nestLink(room: string, _conn: RoomConnection | null, pushes: NestPushes, look: () => NestLook): NestLink | null {
+    const cid = this.cid;
+    const here = nestIdOf(room);
+    if (room !== STREET_ROOM && !here) return null;
+    let closed = false;
+    const later = (fn: () => void) => setTimeout(() => !closed && fn(), 0);
+    const channel = here && typeof BroadcastChannel === 'function' ? new BroadcastChannel(NESTS_CHANNEL) : null;
+    let mine = false;
+    if (here) {
+      // The room server sends a newcomer the nest right after its welcome, or turns it away; so does this.
+      const visit = this.nests((nests) => nests.visit(here, cid, this.now()));
+      mine = visit?.mine ?? false;
+      later(() => {
+        if (!visit || (!visit.nest.open && !visit.mine)) pushes.onNestClosed?.(visit ? 'closed' : 'gone');
+        else pushes.onNest?.({ nest: visit.nest, mine: visit.mine, ...(visit.owned ? { owned: visit.owned } : {}), ...(visit.gift ? { gift: visit.gift } : {}) });
+      });
+      if (channel) {
+        channel.onmessage = (ev: MessageEvent<unknown>) => {
+          const nest = (ev.data as { nest?: NestView } | null)?.nest;
+          if (closed || !nest || nest.nestId !== here) return;
+          if (!nest.open && !mine) pushes.onNestClosed?.('closed');
+          else pushes.onNest?.({ nest });
+        };
+      }
+    }
+    /** Only the owner, in its own nest, changes it. */
+    const edit = (change: (nests: NestBook) => NestEditResult): NestEditReply => {
+      const res = this.nests((nests): NestEditReply => (here && nests.mine(cid, null, this.now()).nest.nestId === here ? change(nests) : { ok: false, reason: 'not-owner' }));
+      if (res.ok) channel?.postMessage({ nest: res.nest });
+      return res;
+    };
+    return {
+      street: async () =>
+        this.nests((nests) => {
+          const own = nests.mine(cid, look(), this.now()).nest;
+          const doors = nests.street(cid, STREET_DOORS - 1);
+          return { own: { nestId: own.nestId, open: own.open }, doors: Array.from({ length: STREET_DOORS - 1 }, (_, i) => doors[i] ?? null) };
+        }),
+      place: async (spot, item) => edit((nests) => nests.setSpot(cid, spot, item, this.now())),
+      setOpen: async (open) => edit((nests) => nests.setOpen(cid, open, this.now())),
+      close: () => {
+        closed = true;
+        channel?.close();
+      },
+    };
   }
 
   private liveObjects(): Record<string, number> {

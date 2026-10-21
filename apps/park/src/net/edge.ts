@@ -17,7 +17,7 @@ import {
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
-import type { ActRefusal, ActivityLink, HandInReply, QuestLink, QuestReply, UseReply } from '../collect/service';
+import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { MoveBudget } from './budget';
 import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
@@ -39,7 +39,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -310,6 +310,12 @@ export class EdgeTransport implements ParkTransport {
           handlers.onCounts?.(f.counts);
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
+          // This page speaks the room's protocol: a later version change may reload it again.
+          try {
+            sessionStorage.removeItem(RELOAD_GUARD_KEY);
+          } catch {
+            /* no session storage: nothing to clear */
+          }
           break;
         }
         case 'enter':
@@ -358,7 +364,21 @@ export class EdgeTransport implements ParkTransport {
         case 'useResult':
         case 'refused':
         case 'act':
+        case 'street':
           answer(f);
+          break;
+        case 'nest':
+          // The answer to the owner's change, or the nest as it stands (on arrival, and after each change).
+          if (answer(f) || !f.nest) break;
+          handlers.onNest?.({
+            nest: f.nest,
+            ...(f.mine !== undefined ? { mine: f.mine } : {}),
+            ...(f.owned ? { owned: f.owned } : {}),
+            ...(f.gift ? { gift: { taken: f.gift.taken, next: f.gift.next - offset } } : {}),
+          });
+          break;
+        case 'closed':
+          handlers.onNestClosed?.(f.why);
           break;
         case 'lanterns': {
           const lit: Record<string, number> = {};
@@ -501,6 +521,21 @@ export class EdgeTransport implements ParkTransport {
       // The room forgets the owl's line and game when it leaves.
       close: () => undefined,
     };
+    const nestReply = (f: Answer | null): NestEditReply => {
+      if (f?.t === 'nest' && f.ok && f.nest) return { ok: true, nest: f.nest };
+      if (f?.t === 'nest' && f.reason) return { ok: false, reason: f.reason };
+      return { ok: false, reason: 'offline' };
+    };
+    const nests: NestLink = {
+      street: async () => {
+        const f = await request({ t: 'street' });
+        return f?.t === 'street' ? { own: f.own, doors: f.doors } : null;
+      },
+      place: async (spot, item) => nestReply(await request({ t: 'nest', spot, item })),
+      setOpen: async (open) => nestReply(await request({ t: 'nest', open })),
+      // The room forgets the owl when it leaves.
+      close: () => undefined,
+    };
     const failWaiters = () => {
       for (const w of waiters.values()) {
         clearTimeout(w.timer);
@@ -564,7 +599,7 @@ export class EdgeTransport implements ParkTransport {
         if (ws === socket) ws = null;
         failWaiters();
         if (closed) return;
-        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED) {
+        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED) {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop
         }
@@ -620,6 +655,7 @@ export class EdgeTransport implements ParkTransport {
       },
       link,
       acts,
+      nests,
       track(state: PlayerState) {
         current = state;
         spawn = undefined;

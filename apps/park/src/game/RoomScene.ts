@@ -3,6 +3,8 @@ import {
   EMOTE_IDS,
   KIND_RULES,
   MAX_ACTIVE_QUESTS,
+  NEST_SPOTS,
+  NEST_WORDS,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
   PICKUP_CLIENT_RADIUS,
@@ -12,15 +14,21 @@ import {
   ROOM_W,
   RARITY_COLOURS,
   RARITY_NAMES,
+  STREET_ROOM,
   backgroundTiles,
   distance,
   filterOwnedWear,
   findSpawn,
   foregroundTiles,
+  getFurniture,
   getInteractable,
   getNpc,
   getQuest,
   interactablesIn,
+  isNestRoom,
+  nestDoorIndex,
+  nestIdOf,
+  nestLook,
   npcsIn,
   parseVariant,
   pointInRect,
@@ -30,6 +38,8 @@ import {
   variantName,
   type DoorDef,
   type EquipSlot,
+  type NestSpotId,
+  type NestView,
   type OwlLook,
   type PlayerState,
   type QuestBoard,
@@ -40,7 +50,7 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
-import type { ActivityLink, ActivityPushes, QuestLink, QuestPushes, QuestReply } from '../collect/service';
+import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
 import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
@@ -48,6 +58,7 @@ import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import { castVote } from '../net/vote';
 import { getRoom } from '../rooms';
+import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { Keys } from '../ui/keyboard';
 import { gateCard, gateRefusal } from '../ui/tickets';
@@ -59,9 +70,12 @@ import { takesDoorway } from './doors';
 import { placeHints } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
+import { NestDecor, pieceThumb } from './nest';
+import { streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
 import { NpcOwl } from './Npc';
 import { Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
+import { StreetDoors, addNestsSign } from './street';
 
 export interface RoomStart {
   room: string;
@@ -178,6 +192,24 @@ export class RoomScene extends Phaser.Scene {
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
   private acts: ActivityLink | null = null;
+  /** The nests: on the street, who lives behind each door; in a nest, what stands where. */
+  private nests: NestLink | null = null;
+  private street: StreetDoor[] = streetDoors(null);
+  /** Asking the street who lives behind its doors (one question at a time). */
+  private askingStreet = false;
+  private streetSigns: StreetDoors | null = null;
+  private decor: NestDecor | null = null;
+  private nestView: NestView | null = null;
+  /** This nest is the visitor's own: it may decorate it. */
+  private nestMine = false;
+  private owned: string[] = [];
+  private nestGift: { taken: boolean } | null = null;
+  /** Decorate mode: taps pick spots, the owl stays put, and the camera looks at the chosen spot. */
+  private decorating = false;
+  private decorSpot: NestSpotId = 'f1';
+  /** CSS pixels the Decorate sheet covers at the bottom of the screen. */
+  private sheetPx = 0;
+  private readonly thumbs = new Map<string, string | null>();
 
   constructor() {
     super('room');
@@ -225,6 +257,19 @@ export class RoomScene extends Phaser.Scene {
     this.tasks = this.registry.get('tasks') as TaskState;
     this.play = null;
     this.acts = null;
+    this.nests = null;
+    this.street = streetDoors(null);
+    this.askingStreet = false;
+    this.streetSigns = null;
+    this.decor = null;
+    this.nestView = null;
+    this.nestMine = false;
+    this.owned = [];
+    this.nestGift = null;
+    this.decorating = false;
+    this.decorSpot = 'f1';
+    this.sheetPx = 0;
+    this.thumbs.clear();
     this.registry.set('currentRoom', this.room.id);
     this.registry.set('spawnName', data.spawn);
   }
@@ -259,6 +304,12 @@ export class RoomScene extends Phaser.Scene {
     for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     addAmbience(this, room);
+    addNestsSign(this, room);
+    if (room.id === STREET_ROOM) {
+      this.streetSigns = new StreetDoors(this, room);
+      this.streetSigns.show(this.street, nestLook(this.look));
+    }
+    if (isNestRoom(room.id)) this.decor = new NestDecor(this);
     for (const t of foregroundTiles(room)) {
       if (this.textures.exists(t.key)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100);
     }
@@ -324,7 +375,7 @@ export class RoomScene extends Phaser.Scene {
     const live = () => gen === this.gen && !this.leaving;
     const spawnName = this.registry.get('spawnName') as string | undefined;
     // What the room pushes about quests, shared objects and activities (the room server's own, or the local mode's).
-    const pushes: QuestPushes & ActivityPushes = {
+    const pushes: QuestPushes & ActivityPushes & NestPushes = {
       onQuests: (board, updates) => {
         if (!live()) return;
         this.applyBoard(board);
@@ -339,6 +390,8 @@ export class RoomScene extends Phaser.Scene {
       onQuiz: (n, right, won, others) => live() && this.play?.onQuiz(n, right, won, others),
       onPaid: (what, feathers, total) => live() && this.play?.onPaid(what, feathers, total),
       onTasks: (tasks, finished, paid, total) => live() && this.play?.onTasks(tasks, finished, paid, total),
+      onNest: (seen) => live() && this.onNest(seen),
+      onNestClosed: () => live() && this.onNestClosed(),
     };
     const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}) } as PlayerState, {
       ...pushes,
@@ -375,6 +428,8 @@ export class RoomScene extends Phaser.Scene {
     this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
     this.play?.attach(this.acts);
+    this.nests = this.collection.service.nestLink(this.room.id, conn, pushes, () => nestLook(this.look));
+    if (this.room.id === STREET_ROOM) void this.askStreet();
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
@@ -458,7 +513,7 @@ export class RoomScene extends Phaser.Scene {
   private setupInput(): void {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
       // Phaser only emits POINTER_UP for releases on the canvas; also require the press to have been on it.
-      if (this.leaving || p.downElement !== this.game.canvas) return;
+      if (this.leaving || this.decorating || p.downElement !== this.game.canvas) return;
       if (Date.now() - this.tapTakenAt < 100) return; // the idol or an NPC took this tap
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
       this.pendingVote = false; // a new destination cancels a walk to the idol
@@ -470,7 +525,8 @@ export class RoomScene extends Phaser.Scene {
 
   /** WASD and the arrow keys: walk while held (sliding along edges) and stop on letting go. */
   private steer(): void {
-    const dir = this.keys?.direction() ?? null;
+    // Decorating, the arrow keys step through the spots and the owl stays where it is.
+    const dir = this.decorating ? null : (this.keys?.direction() ?? null);
     if (!dir) {
       if (this.keyWalk && this.me.walking) this.stop();
       this.keyDir = null;
@@ -507,7 +563,8 @@ export class RoomScene extends Phaser.Scene {
 
   /** Chips at the screen's edge for open doorways and interactive spots the camera cannot see. */
   private updateHints(): void {
-    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id]).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
+    const own = this.room.id === STREET_ROOM ? 'nest-door-0' : null;
+    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const v = this.cameras.main.worldView;
     const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: TOUCH_HINT_BOTTOM } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
@@ -520,7 +577,15 @@ export class RoomScene extends Phaser.Scene {
         return {
           ...p,
           tint: door.to ? (DOOR_TINTS[door.to.room] ?? '#C9A227') : '#FFD36A',
-          label: spot ? `${spot.label}, off screen: walk there` : door.id === 'gate' ? 'The turnstiles, off screen: walk there' : 'Doorway, off screen: walk there',
+          label: spot
+            ? `${spot.label}, off screen: walk there`
+            : door.id === 'gate'
+              ? 'The turnstiles, off screen: walk there'
+              : door.id === own
+                ? `${NEST_WORDS.yourNest}, off screen: walk there`
+                : door.to?.room === STREET_ROOM
+                  ? `${NEST_WORDS.toNests}, off screen: walk there`
+                  : 'Doorway, off screen: walk there',
         };
       }),
     );
@@ -677,6 +742,7 @@ export class RoomScene extends Phaser.Scene {
   /** What the owl can do here, recomputed every frame: spots first, then the nearest NPC, then interactables. */
   private actionsHere(spots: string[]): Action[] {
     const out: Action[] = spots.map((id) => ({ id, label: this.interactions[id]!.label, run: () => this.interactions[id]?.run() }));
+    if (this.nestMine && this.decor && !this.decorating) out.unshift({ id: 'decorate', label: NEST_WORDS.decorate, run: () => this.startDecorating() });
     const pos = this.me.pos;
     let nearest: NpcOwl | null = null;
     let best = Number.POSITIVE_INFINITY;
@@ -975,6 +1041,7 @@ export class RoomScene extends Phaser.Scene {
     this.me.applyLook(look);
     this.conn?.send({ t: 'state', state: this.snapshot() });
     this.conn?.track(this.snapshot());
+    this.streetSigns?.show(this.street, nestLook(look));
   }
 
   private checkDoors(walkFinished: boolean): void {
@@ -997,13 +1064,20 @@ export class RoomScene extends Phaser.Scene {
     for (const door of this.room.doors) {
       const inside = pointInRect(pos, door.rect);
       if (!inside) continue;
+      const nestDoor = this.room.id === STREET_ROOM ? nestDoorIndex(door.id) : null;
+      if (nestDoor !== null) {
+        if (takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null) && this.enterNest(nestDoor, walkFinished)) return;
+        continue;
+      }
       if (door.to) {
         if (!takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null)) continue;
         if (door.id === 'gate') {
           void this.throughGate(door);
           return;
         }
-        void this.goTo(door.to.room, door.to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
+        // Out of a nest, the owl comes back out by the street door it went in by.
+        const spawn = isNestRoom(this.room.id) && door.to.room === STREET_ROOM ? streetSpawnBack(this.cameFrom) : door.to.spawn;
+        void this.goTo(door.to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
         return;
       }
       if (this.interactions[door.id]) spots.push(door.id);
@@ -1122,6 +1196,13 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async teardown(): Promise<void> {
+    this.endDecorating(false);
+    this.decor?.destroy();
+    this.decor = null;
+    this.streetSigns?.destroy();
+    this.streetSigns = null;
+    this.nests?.close();
+    this.nests = null;
     this.hud.setHints([]);
     this.hud.closeDialogue();
     this.talkingTo = null;
@@ -1147,20 +1228,182 @@ export class RoomScene extends Phaser.Scene {
     if (conn) await conn.leave();
   }
 
+  // ---------- nests ----------
+
+  /** Ask the street who lives behind its doors for this visitor, and hang the flags. */
+  private async askStreet(): Promise<void> {
+    const nests = this.nests;
+    if (this.askingStreet || !nests) return;
+    this.askingStreet = true;
+    const gen = this.gen;
+    const view = await nests.street();
+    if (gen !== this.gen || this.leaving) return;
+    this.askingStreet = false;
+    if (!view) {
+      this.hud.toast(NEST_WORDS.notAnswering, 3500);
+      return;
+    }
+    this.street = streetDoors(view);
+    this.streetSigns?.show(this.street, nestLook(this.look));
+  }
+
+  /** Through street door `n` into the nest behind it, when there is one for this visitor; true if the owl went. */
+  private enterNest(n: number, walkFinished: boolean): boolean {
+    const d = this.street[n];
+    const nestId = d?.kind === 'own' || d?.kind === 'nest' ? d.nestId : null;
+    if (nestId) {
+      void this.goTo(`nest-${nestId}`, 'default', { room: STREET_ROOM, spawn: `from-nest-${n}` });
+      return true;
+    }
+    if (!walkFinished) return false;
+    // The visitor's own door before the street has said which nest is theirs: ask again.
+    if (d?.kind === 'own') void this.askStreet();
+    else this.hud.toast(NEST_WORDS.closedForNow);
+    return false;
+  }
+
+  /** The nest as it stands: on arrival, after each change its owner makes, and in answer to the owner's own. */
+  private onNest(seen: NestSeen): void {
+    if (seen.nest.nestId !== nestIdOf(this.room.id)) return;
+    if (seen.mine !== undefined) this.nestMine = seen.mine;
+    if (seen.owned) this.owned = seen.owned;
+    if (seen.gift) this.nestGift = { taken: seen.gift.taken };
+    this.showNest(seen.nest);
+  }
+
+  private showNest(nest: NestView): void {
+    this.nestView = nest;
+    this.decor?.apply(nest.layout);
+    if (this.decorating) this.hud.updateDecorate(this.decorateView());
+  }
+
+  /** The nest turned the visitor away (closed to visitors, or no such nest) or closed while it was inside. */
+  private onNestClosed(): void {
+    if (this.leaving) return;
+    this.hud.toast(NEST_WORDS.closedForNow, 3000);
+    void this.goTo(STREET_ROOM, streetSpawnBack(this.cameFrom), undefined);
+  }
+
+  private decorateView(): DecorateView {
+    return { layout: this.nestView?.layout ?? {}, owned: this.owned, open: this.nestView?.open ?? true, gift: this.nestGift };
+  }
+
+  /** Decorate the owner's own nest: the spots show, the Decorate sheet opens, and the camera looks at the chosen spot. */
+  private startDecorating(): void {
+    if (this.decorating || this.leaving || !this.nestMine || !this.decor || !this.nestView) return;
+    this.decorating = true;
+    if (this.me.walking) this.stop();
+    this.errand = null;
+    this.pendingVote = false;
+    this.cameras.main.stopFollow();
+    this.decor.showSpots(this.decorSpot, (spot) => this.pickSpot(spot, true));
+    this.hud.openDecorate(this.decorateView(), this.decorSpot, {
+      place: (spot, item) => this.placePiece(spot, item),
+      setOpen: (open) => this.setNestOpen(open),
+      claimGift: () => this.takeFurnitureGift(),
+      select: (spot) => this.pickSpot(spot, false),
+      done: () => this.endDecorating(true),
+      thumb: (art) => this.thumb(art),
+      resize: (px) => {
+        if (!this.decorating) return;
+        this.sheetPx = px;
+        this.fitCamera();
+        this.lookAtSpot();
+      },
+    });
+  }
+
+  /** Back to walking about: the spots go, the sheet closes and (unless the room is closing) the camera follows the owl again. */
+  private endDecorating(camera: boolean): void {
+    if (!this.decorating) return;
+    this.decorating = false;
+    this.sheetPx = 0;
+    this.decor?.hideSpots();
+    this.hud.closeDecorate();
+    if (!camera) return;
+    this.fitCamera();
+    this.cameras.main.startFollow(this.me, true, 0.12, 0.12);
+  }
+
+  /** A spot was chosen, in the room (a tap on its ring) or on the sheet. */
+  private pickSpot(spot: NestSpotId, inRoom: boolean): void {
+    if (!this.decorating) return;
+    this.decorSpot = spot;
+    this.decor?.select(spot);
+    if (inRoom) this.hud.selectDecorateSpot(spot);
+    this.lookAtSpot();
+  }
+
+  private lookAtSpot(): void {
+    if (!this.decorating || !this.decor) return;
+    const f = this.decor.focusOf(this.decorSpot);
+    this.cameras.main.pan(f.x, f.y, 380, 'Sine.easeInOut', true);
+  }
+
+  private async placePiece(spot: NestSpotId, item: string | null): Promise<void> {
+    const res = (await this.nests?.place(spot, item)) ?? ({ ok: false, reason: 'offline' } as const);
+    if (this.leaving) return;
+    if (res.ok) this.showNest(res.nest);
+    else if (res.reason === 'offline' || res.reason === 'busy') this.hud.toast(NEST_WORDS.notAnswering, 3000);
+  }
+
+  private async setNestOpen(open: boolean): Promise<void> {
+    const res = (await this.nests?.setOpen(open)) ?? ({ ok: false, reason: 'offline' } as const);
+    if (this.leaving) return;
+    if (res.ok) this.showNest(res.nest);
+    else if (res.reason === 'offline' || res.reason === 'busy') this.hud.toast(NEST_WORDS.notAnswering, 3000);
+  }
+
+  /** Today's furniture gift: a new piece (shown off in a spot it fits), or feathers once the owl owns every piece. */
+  private async takeFurnitureGift(): Promise<void> {
+    const res = await this.collection.service.claimFurnitureGift();
+    if (this.leaving) return;
+    if (!res.ok && res.reason === 'offline') {
+      this.hud.toast(NEST_WORDS.notAnswering, 3000);
+      return;
+    }
+    this.owned = res.owned;
+    this.nestGift = { taken: true };
+    if (res.ok) {
+      this.collection.setFeathers(res.total);
+      const piece = res.item ? getFurniture(res.item) : null;
+      if (piece) {
+        this.hud.toast(`${NEST_WORDS.newPiece} ${piece.name}!`, 4000, '#FFD36A');
+        const spot = NEST_SPOTS.find((s) => s.place === piece.place && !this.nestView?.layout[s.id]) ?? NEST_SPOTS.find((s) => s.place === piece.place);
+        if (spot) this.pickSpot(spot.id, true);
+      } else this.hud.toast(`+${res.feathers} feathers! ${NEST_WORDS.everyPiece}`, 4000, '#FFD36A');
+    }
+    this.hud.updateDecorate(this.decorateView());
+  }
+
+  /** A piece's picture for the Decorate sheet, drawn once per room. */
+  private thumb(art: string): string | null {
+    if (!this.thumbs.has(art)) this.thumbs.set(art, pieceThumb(this, art));
+    return this.thumbs.get(art) ?? null;
+  }
+
   // ---------- camera ----------
 
   private setupCamera(): void {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, this.room.size.w, this.room.size.h);
     cam.startFollow(this.me, true, 0.12, 0.12);
-    const fit = () => {
-      const { width, height } = this.scale.gameSize;
-      // Cover: the room always fills the screen; on portrait phones the camera pans sideways.
-      cam.setZoom(Math.max(width / this.room.size.w, height / this.room.size.h));
-    };
+    const fit = () => this.fitCamera();
     fit();
     this.scale.on(Phaser.Scale.Events.RESIZE, fit);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, fit));
+  }
+
+  /**
+   * Cover: the room always fills the screen; on portrait phones the camera pans sideways. While the
+   * owner decorates, the room fills the screen above the Decorate sheet instead.
+   */
+  private fitCamera(): void {
+    const cam = this.cameras.main;
+    const { width, height } = this.scale.gameSize;
+    const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
+    cam.setViewport(0, 0, width, h);
+    cam.setZoom(Math.max(width / this.room.size.w, h / this.room.size.h));
   }
 
   private drawDebug(): void {

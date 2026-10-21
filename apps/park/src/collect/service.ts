@@ -1,4 +1,22 @@
-import type { Award, BuyResult, GiftResult, Inventory, QuestBoard, QuestEvent, QuestUpdate, QuizZone, ShopView, TaskView, Vec2 } from '@owl-park/shared';
+import type {
+  Award,
+  BuyResult,
+  FurnitureGiftResult,
+  GiftResult,
+  Inventory,
+  NestEditRefusal,
+  NestLook,
+  NestSpotId,
+  NestView,
+  QuestBoard,
+  QuestEvent,
+  QuestUpdate,
+  QuizZone,
+  ShopView,
+  TaskView,
+  Vec2,
+} from '@owl-park/shared';
+import type { StreetView } from '../game/nestPlan';
 import type { RoomConnection } from '../net/transport';
 
 /** The answer to a quest request: whether it worked, the board as it now stands, and what moved. */
@@ -117,6 +135,45 @@ export interface ActivityPushes {
   onTasks?(tasks: TaskView, finished: string[], paid: number, total: number): void;
 }
 
+/** A nest as the room shows it to this visitor; its owner also learns what it owns and today's gift. */
+export interface NestSeen {
+  nest: NestView;
+  /** Whether it is this visitor's own nest; absent when an update leaves that as it was. */
+  mine?: boolean;
+  owned?: string[];
+  /** Today's furniture gift: taken already or not, and when the next one comes (this device's clock). */
+  gift?: { taken: boolean; next: number };
+}
+
+export type NestEditReply = { ok: true; nest: NestView } | { ok: false; reason: NestEditRefusal };
+
+/** Today's furniture gift as the visitor got it, or why not. */
+export type FurnitureGiftReply = FurnitureGiftResult | { ok: false; reason: 'offline' };
+
+/**
+ * The nests in one room. On the street: who lives behind each door, for this visitor. In the
+ * visitor's own nest: its changes. The room server answers over the room's socket (it knows whose
+ * nest it is); the local mode answers in this browser.
+ */
+export interface NestLink {
+  /** The street's doors for this visitor; null when the room did not answer. */
+  street(): Promise<StreetView | null>;
+  /** Put a piece the owner owns in a spot of its nest, or with null take the spot's piece away. */
+  place(spot: NestSpotId, item: string | null): Promise<NestEditReply>;
+  /** Open the nest to visitors, or close it (visitors inside go back to the street). */
+  setOpen(open: boolean): Promise<NestEditReply>;
+  /** The owl left the room. */
+  close(): void;
+}
+
+/** What the nests push without being asked. */
+export interface NestPushes {
+  /** The nest as it stands: on arrival, and again whenever its owner changes it. */
+  onNest?(seen: NestSeen): void;
+  /** The nest turned this visitor away (closed to visitors, or no such nest), or closed while it was inside. */
+  onNestClosed?(why: 'closed' | 'gone'): void;
+}
+
 /**
  * A visitor's collection, feathers and quests. Two implementations share the rules in
  * `@owl-park/shared`:
@@ -141,6 +198,13 @@ export interface CollectionService {
   questLink(room: string, conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink | null;
   /** The activities in a room, the same way: the room server's over its socket, otherwise this browser's. */
   activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2): ActivityLink | null;
+  /**
+   * The nests, the same way, on the street and in a nest (null in any other room). `look` gives the
+   * visitor's colours for the flag on its own door.
+   */
+  nestLink(room: string, conn: RoomConnection | null, pushes: NestPushes, look: () => NestLook): NestLink | null;
+  /** Today's furniture gift for the visitor's nest (once a park day). */
+  claimFurnitureGift(): Promise<FurnitureGiftReply>;
 }
 
 /** This device's IANA time zone, if the browser reports a usable one. */

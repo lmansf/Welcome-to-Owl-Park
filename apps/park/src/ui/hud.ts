@@ -1,10 +1,11 @@
-import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook, type Vec2 } from '@owl-park/shared';
+import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NestSpotId, type NpcDef, type OwlLook, type Vec2 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
+import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createJoystick } from './joystick';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
@@ -76,6 +77,13 @@ export interface Hud {
   onCopy(cb: (note: string | null) => void): void;
   /** Where the thumbstick points (touch screens), one of eight ways like the walking keys; null while it rests. */
   stickDirection(): Vec2 | null;
+  /** The Decorate sheet for the owner's own nest, starting at `spot`; it hides the bottom bar while open. */
+  openDecorate(view: DecorateView, spot: NestSpotId, actions: DecorateActions): void;
+  /** The nest changed while the sheet is open. */
+  updateDecorate(view: DecorateView): void;
+  /** The room picked a spot. */
+  selectDecorateSpot(spot: NestSpotId): void;
+  closeDecorate(): void;
 }
 
 const CSS = `
@@ -187,6 +195,18 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const emoteWrap = $<HTMLElement>('[data-emote-wrap]');
   let collectionPanel: CollectionPanel | null = null;
+  let decorate: DecorateSheet | null = null;
+  /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
+  let decorateActions: DecorateActions | null = null;
+  const decorateVia: DecorateActions = {
+    place: (spot, item) => decorateActions?.place(spot, item) ?? Promise.resolve(),
+    setOpen: (open) => decorateActions?.setOpen(open) ?? Promise.resolve(),
+    claimGift: () => decorateActions?.claimGift() ?? Promise.resolve(),
+    select: (spot) => decorateActions?.select(spot),
+    done: () => decorateActions?.done(),
+    thumb: (art) => decorateActions?.thumb(art) ?? null,
+    resize: (px) => decorateActions?.resize(px),
+  };
 
   let look: OwlLook = { ...initialLook };
   let lookCb: ((l: OwlLook) => void) | null = null;
@@ -266,6 +286,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     questUi?.closeDialogue();
     shop?.close();
     booth?.close();
+    // Decorating ends with the sheet: the room puts its camera back.
+    if (decorate?.isOpen()) decorateActions?.done();
   };
   const closeOwlPanel = () => {
     panel.classList.remove('open');
@@ -449,5 +471,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     setCopy: (v) => cards.setCopy(v),
     onCopy: (cb) => cards.onCopy(cb),
     stickDirection: () => stick.direction(),
+    openDecorate(view, spot, actions) {
+      decorateActions = actions;
+      decorate ??= createDecorateSheet(
+        root,
+        decorateVia,
+        () => {
+          makeRoom();
+          root.classList.add('decorating');
+        },
+        () => root.classList.remove('decorating'),
+      );
+      decorate.open(view, spot);
+    },
+    updateDecorate: (view) => decorate?.update(view),
+    selectDecorateSpot: (spot) => decorate?.select(spot),
+    closeDecorate: () => decorate?.close(),
   };
 }
