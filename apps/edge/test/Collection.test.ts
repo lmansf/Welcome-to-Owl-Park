@@ -1,41 +1,15 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CollectionBook, DUPLICATE_FEATHERS, LEAF_FEATHERS_PER_DAY, PRESENTS, QuestBook, STARTER_PACK, parkDay, parseVariant, shopRotation, type QuestSpots } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { isCollectorId, mintCollector, mintPass, randomCollectorId, verifyCollector, verifyPass } from '../src/pass';
+import { sqlStorage } from './sqlite';
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
 const MON = Date.UTC(2026, 9, 19, 16, 0, 0);
 const DAY = 24 * 3600_000;
 const CID = 'c_abcdefgh';
 const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
-
-// Node's built-in SQLite stands in for the Durable Object's: same engine, same SQL.
-interface Statement {
-  all(...params: unknown[]): unknown[];
-  run(...params: unknown[]): { changes: number | bigint };
-}
-type Database = new (path: string) => { prepare(sql: string): Statement };
-let DatabaseSync: Database;
-
-beforeAll(async () => {
-  ({ DatabaseSync } = (await import('node:sqlite' as string)) as { DatabaseSync: Database });
-});
-
-/** The slice of `SqlStorage` the store uses: `exec(...).toArray()` and `rowsWritten`. */
-function sqlStorage(): SqlStorage {
-  const db = new DatabaseSync(':memory:');
-  return {
-    exec(query: string, ...bindings: unknown[]) {
-      const st = db.prepare(query);
-      if (/^\s*SELECT/i.test(query)) {
-        const rows = st.all(...bindings);
-        return { toArray: () => rows, rowsWritten: 0 };
-      }
-      return { toArray: () => [], rowsWritten: Number(st.run(...bindings).changes) };
-    },
-  } as unknown as SqlStorage;
-}
 
 function rig() {
   const store = new SqlCollectionStore(sqlStorage());

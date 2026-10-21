@@ -19,3 +19,4 @@ export * from './shop';
 export * from './activities';
 export * from './roomActivities';
 export * from './homes';
+export * from './nestbook';
