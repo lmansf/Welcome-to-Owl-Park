@@ -1,10 +1,11 @@
-import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook } from '@owl-park/shared';
+import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook, type Vec2 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
+import { createJoystick } from './joystick';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
@@ -73,6 +74,8 @@ export interface Hud {
   setCopy(view: CopyView | null): void;
   /** A note button of the copy game (an emote), or null for its Stop button. */
   onCopy(cb: (note: string | null) => void): void;
+  /** Where the thumbstick points (touch screens), one of eight ways like the walking keys; null while it rests. */
+  stickDirection(): Vec2 | null;
 }
 
 const CSS = `
@@ -175,6 +178,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const questsBtn = $<HTMLButtonElement>('[data-quests-btn]');
   const bar = $<HTMLElement>('.bar');
   const cards = createActivityCards(root, bar);
+  const stick = createJoystick($<HTMLElement>('.bottom'));
   let questUi: QuestUi | null = null;
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
@@ -444,5 +448,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     setQuiz: (v) => cards.setQuiz(v),
     setCopy: (v) => cards.setCopy(v),
     onCopy: (cb) => cards.onCopy(cb),
+    stickDirection: () => stick.direction(),
   };
 }

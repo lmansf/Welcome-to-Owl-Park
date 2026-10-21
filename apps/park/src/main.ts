@@ -11,7 +11,7 @@ import { loadLook, loadPlayerId } from './identity';
 import { createTransport, type WalletEntry } from './net';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { createHud } from './ui/hud';
-import { attachKeyboard } from './ui/keyboard';
+import { attachKeyboard, type Keys } from './ui/keyboard';
 import { announcePresents } from './ui/presents';
 import { linkToast } from './ui/tickets';
 
@@ -65,17 +65,15 @@ game.registry.set('collection', collection);
 game.registry.set('quests', quests);
 game.registry.set('tasks', tasks);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
-// WASD and the arrow keys walk (the room scene reads them every frame), E interacts, Q is the
-// collection and J the quest journal.
-game.registry.set(
-  'keys',
-  attachKeyboard(window, {
-    interact: () => void roomScene()?.interact(),
-    collection: () => hud.toggleCollection(),
-    journal: () => hud.toggleJournal(),
-    close: () => hud.closePanels(),
-  }),
-);
+// WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
+// touch screens; E interacts, Q is the collection and J the quest journal.
+const keyboard = attachKeyboard(window, {
+  interact: () => void roomScene()?.interact(),
+  collection: () => hud.toggleCollection(),
+  journal: () => hud.toggleJournal(),
+  close: () => hud.closePanels(),
+});
+game.registry.set('keys', { direction: () => keyboard.direction() ?? hud.stickDirection(), detach: () => keyboard.detach() } satisfies Keys);
 
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 window.addEventListener('resize', () => {
