@@ -319,6 +319,54 @@ test.describe('room server', () => {
     for (const p of [a, b]) await p.context().close();
   });
 
+  test('nests through the room server: an owner decorating, a visitor watching, and a nest that closes on it', async ({ browser }) => {
+    // The host comes onto the street: the server makes its nest, behind door 0.
+    const host = await visitor(browser, { room: 'homes', look: '#2F3E5C,#E0D4F0,#00E5FF' });
+    await expect.poll(async () => {
+      const own = (await state(host)).street?.[0];
+      return own?.kind === 'own' ? own.nestId : null;
+    }, { timeout: 20_000 }).not.toBeNull();
+    const own = (await state(host)).street![0]!;
+    const nestId = own.kind === 'own' ? own.nestId! : '';
+    await walkToDoor(host, 'nest-door-0');
+    await expect.poll(async () => (await state(host)).room, { timeout: 20_000 }).toBe(`nest-${nestId}`);
+    await expect.poll(async () => (await state(host)).nest?.mine, { timeout: 15_000 }).toBe(true);
+    expect(Object.values((await state(host)).nest!.layout).sort()).toEqual(['lamp', 'potted-fern', 'rug', 'stump-table']);
+
+    // A visitor comes to the open nest: it sees the furniture and the host, and cannot decorate.
+    const guest = await visitor(browser, { room: `nest-${nestId}`, look: '#8B5A2B,#F6F1E3,#C9A227' });
+    await expect.poll(async () => (await state(guest)).nest?.mine, { timeout: 15_000 }).toBe(false);
+    expect((await state(guest)).nest?.owned).toEqual([]);
+    await expect.poll(async () => (await state(host)).peers.length, { timeout: 15_000 }).toBe(1);
+    expect((await state(guest)).actions).not.toContain('decorate');
+
+    // The host moves the lamp and takes today's furniture gift; the guest sees the lamp move.
+    const sheet = host.locator('section.decorate');
+    await host.locator('[data-action="decorate"]').click();
+    await sheet.getByRole('button', { name: 'Next spot' }).click();
+    await sheet.locator('[data-piece="lamp"]').click();
+    await expect.poll(async () => (await state(guest)).nest?.layout['f2'], { timeout: 10_000 }).toBe('lamp');
+    await sheet.locator('[data-gift]').click();
+    await expect(host.locator('.toast').filter({ hasText: 'New for your nest:' })).toBeVisible();
+    await expect(sheet.locator('[data-gift]')).toBeDisabled();
+    expect((await state(host)).nest?.owned).toHaveLength(5);
+
+    // The host closes the nest: the server sends the guest out to the street, and keeps newcomers out.
+    await sheet.locator('[data-open]').click();
+    await expect(guest.locator('.toast').filter({ hasText: 'Closed for now' })).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => (await state(guest)).room, { timeout: 20_000 }).toBe('homes');
+    // (Its socket closes before any welcome, so it is opened by hand rather than waiting to be online.)
+    const lateCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const late = await lateCtx.newPage();
+    await late.goto(`/?${new URLSearchParams({ transport: 'edge', room: `nest-${nestId}` })}`);
+    await expect.poll(async () => late.evaluate(() => window.owlPark?.state()?.room ?? null), { timeout: 30_000 }).toBe('homes');
+    await lateCtx.close();
+    // The owner is still at home.
+    expect((await state(host)).room).toBe(`nest-${nestId}`);
+    await expect.poll(async () => (await state(host)).peers.length, { timeout: 15_000 }).toBe(0);
+    for (const p of [host, guest]) await p.context().close();
+  });
+
   test('closing the tab removes the owl for everyone else', async ({ browser }) => {
     const a = await visitor(browser);
     const b = await visitor(browser);
