@@ -231,7 +231,15 @@ emailed magic link and Supabase session.
 same flow at $0 that works on opening night only (date to be announced); one pin, one ticket. It
 gives that night's Realm Vote like any other ticket.
 
-## 10. Open questions for the owner (with the defaults in the code)
+## 10. Feedback from visitors (built)
+
+The HUD's Feedback button opens a short form: what kind of note (bug, idea, praise, other) and up
+to 1,000 characters. `POST /api/feedback` (with the pass) keeps it in the `Collections` object's
+SQLite (`apps/edge/src/feedbackBox.ts`) with the collector token, the room, the screen size and the
+browser's user agent; never an IP address or a name. The park's keepers read it on
+`/admin/feedback` with the admin key. How to read and triage it: `docs/FEEDBACK.md`.
+
+## 11. Open questions for the owner (with the defaults in the code)
 
 1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.

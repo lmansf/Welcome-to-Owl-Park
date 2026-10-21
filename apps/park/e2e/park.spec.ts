@@ -83,6 +83,35 @@ test.describe('single visitor', () => {
     await expect(panel).toBeHidden();
   });
 
+  test('the Feedback button takes a note, and typing in it never walks the owl or opens panels', async ({ page }) => {
+    await openPark(page);
+    const before = (await state(page)).pos;
+    const sheet = page.getByRole('region', { name: 'Feedback' });
+    await page.getByRole('button', { name: 'Feedback' }).click();
+    await expect(sheet).toBeVisible();
+    const send = sheet.getByRole('button', { name: 'Send' });
+    await expect(send).toBeDisabled(); // nothing written yet
+    await sheet.getByRole('button', { name: 'Bug' }).click();
+    const box = sheet.getByRole('textbox', { name: 'Your note' });
+    await box.click();
+    await box.pressSequentially('wasd q j e: the owl stays put');
+    await expect(page.getByRole('region', { name: 'Collection' })).toBeHidden();
+    expect((await state(page)).pos).toEqual(before);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-feedback.png` });
+    await send.click();
+    // Without the park's server the note stays in this browser.
+    await expect(page.getByText('your note is saved on this device')).toBeVisible();
+    await expect(sheet).toBeHidden();
+    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:feedback') ?? '[]') as unknown[]);
+    expect(kept).toEqual([expect.objectContaining({ kind: 'bug', text: 'wasd q j e: the owl stays put', room: 'hub' })]);
+    // Escape closes it from inside the text box too.
+    await page.getByRole('button', { name: 'Feedback' }).click();
+    await expect(box).toHaveValue('');
+    await box.click();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+  });
+
   test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {
     await openPark(page);
     const dpr = (await cameraView(page)).dpr; // 1 on the desktop project, 2 (capped) on the phone project

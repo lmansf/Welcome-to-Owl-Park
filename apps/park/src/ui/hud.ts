@@ -1,8 +1,10 @@
-import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type NpcDef, type OwlLook } from '@owl-park/shared';
+import { ACCENT_COLOURS, BELLY_COLOURS, BODY_COLOURS, getSpecies, selectableSpecies, type FeedbackDraft, type NpcDef, type OwlLook } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
+import type { FeedbackOutcome } from '../net/feedback';
 import { createCollectionPanel, type CollectionActions, type CollectionPanel } from './collection';
+import { createFeedbackPanel, type FeedbackPanel } from './feedback';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
@@ -38,6 +40,8 @@ export interface Hud {
   attachCollection(state: CollectionState, actions: CollectionActions): CollectionPanel;
   /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests. */
   attachQuests(state: QuestState, actions: QuestActions): void;
+  /** Show the Feedback button; each note goes with the room the owl is in and the screen's size. */
+  attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
   /** Talking to an NPC owl: its quests, and the shop for the shopkeeper. */
   openDialogue(npc: NpcDef): void;
   closeDialogue(): void;
@@ -80,6 +84,12 @@ const CSS = `
 #hud .dot{width:8px;height:8px;border-radius:50%;background:#C9A227;box-shadow:0 0 8px #C9A227}
 #hud .dot.offline{background:#999;box-shadow:none}
 #hud .dot.connecting{background:#F6F1E3;opacity:.6}
+/* The owl count and the Feedback button stay together on the right, on a row of their own when the bar is too narrow. */
+#hud .side{display:flex;gap:8px;align-items:center;margin-left:auto}
+#hud .fb{display:none;align-items:center;gap:6px;min-height:38px;padding:7px 13px;font-size:13px}
+#hud .fb.show{display:flex}
+#hud .fb svg{width:16px;height:16px;flex:none}
+@media (pointer:coarse){#hud .fb{min-height:44px;min-width:44px}}
 #hud .bottom{position:absolute;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
 #hud button{pointer-events:auto;cursor:pointer;font:inherit;color:#0C1E36;background:#C9A227;border:0;border-radius:999px;padding:10px 16px;font-weight:700;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.35);min-height:44px}
 #hud button.ghost{background:rgba(12,30,54,.72);color:#F6F1E3;border:1px solid rgba(246,241,227,.18)}
@@ -112,7 +122,7 @@ const CSS = `
 #hud .hints{position:absolute;inset:0;pointer-events:none}
 #hud .hint{position:absolute;width:44px;height:44px;min-height:0;margin:-22px 0 0 -22px;padding:0;border-radius:50%;background:rgba(12,30,54,.8);border:2px solid var(--tint);box-shadow:0 0 12px var(--tint);display:flex;align-items:center;justify-content:center;animation:hud-in .25s ease-out}
 #hud .hint i{display:block;width:0;height:0;border-left:14px solid var(--tint);border-top:9px solid transparent;border-bottom:9px solid transparent;transform-origin:50% 50%}
-@media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
+@media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .fb span{display:none}#hud .fb{width:44px;min-height:44px;padding:0;justify-content:center}}
 `;
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
@@ -126,7 +136,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     <div class="bar">
       <div class="brand" aria-label="Owl Park"><i aria-hidden="true"></i>Owl Park</div>
       <div class="feathers" role="status" aria-label="Feathers" data-feathers><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 28C6 16 15 6 28 3C27 15 18 24 7 27Z" fill="#FFD36A"/><path d="M4 30Q15 18 28 3" stroke="#0C1E36" stroke-width="1.6" fill="none"/></svg><span data-feathers-text>0</span></div>
-      <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
+      <div class="side">
+        <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
+        <button class="ghost fb" data-feedback-btn aria-expanded="false" aria-label="Feedback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-9.5L6 20.5V17H4a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Feedback</span></button>
+      </div>
     </div>
     <div class="hints" data-hints></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
@@ -165,7 +178,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
   const feathersText = $<HTMLElement>('[data-feathers-text]');
   const collectionBtn = $<HTMLButtonElement>('[data-collection-btn]');
   const questsBtn = $<HTMLButtonElement>('[data-quests-btn]');
+  const feedbackBtn = $<HTMLButtonElement>('[data-feedback-btn]');
   const bar = $<HTMLElement>('.bar');
+  let feedback: FeedbackPanel | null = null;
   let questUi: QuestUi | null = null;
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
@@ -253,6 +268,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     questUi?.closeDialogue();
     shop?.close();
     booth?.close();
+    feedback?.close();
   };
   const closeOwlPanel = () => {
     panel.classList.remove('open');
@@ -302,6 +318,19 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     closeOwlPanel();
     closeEmotes();
   };
+  feedbackBtn.addEventListener('click', () => {
+    if (feedback?.isOpen()) feedback.close();
+    else feedback?.open();
+  });
+
+  const toast = (message: string, ms = 2600, accent?: string) => {
+    const el = document.createElement('div');
+    el.className = accent ? 'toast accent' : 'toast';
+    if (accent) el.style.setProperty('--accent', accent);
+    el.textContent = message;
+    toasts.appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  };
 
   return {
     setCount(n) {
@@ -317,14 +346,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
       dot.title = s === 'online' ? (kind === 'local' ? 'Connected (this device only)' : 'Connected') : s === 'connecting' ? 'Connecting…' : 'Offline';
       dot.dataset['status'] = s;
     },
-    toast(message, ms = 2600, accent) {
-      const el = document.createElement('div');
-      el.className = accent ? 'toast accent' : 'toast';
-      if (accent) el.style.setProperty('--accent', accent);
-      el.textContent = message;
-      toasts.appendChild(el);
-      setTimeout(() => el.remove(), ms);
-    },
+    toast,
     attachCollection(state, actions) {
       collectionPanel = createCollectionPanel(root, emoteWrap, state, actions);
       shop = createShopPanel(root, state, actions.toast, makeRoom);
@@ -340,6 +362,19 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook): Hud {
     attachQuests(state, actions) {
       questUi = createQuestUi(root, bar, state, actions, makeRoom);
       if (roomId) questUi.setRoom(roomId);
+    },
+    attachFeedback(send) {
+      feedback = createFeedbackPanel(
+        root,
+        (kind, text) => send({ kind, text, room: roomId || null, screen: `${window.innerWidth}x${window.innerHeight}` }),
+        toast,
+        () => {
+          makeRoom();
+          feedbackBtn.setAttribute('aria-expanded', 'true');
+        },
+        () => feedbackBtn.setAttribute('aria-expanded', 'false'),
+      );
+      feedbackBtn.classList.add('show');
     },
     openDialogue(npc) {
       questUi?.openDialogue(npc);

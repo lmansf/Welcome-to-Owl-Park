@@ -3,7 +3,8 @@
  * One object for the park (`getByName('park')`), called over RPC by the Worker (inventory, the
  * shop, grants) and by the room object (quests, uses, ownership checks for wear and emotes). The
  * rules live in the portable `CollectionBook` and `QuestBook` (packages/shared) over the SQL store
- * in sqlStore.ts. Rewards draw from the platform's cryptographic random source.
+ * in sqlStore.ts. Rewards draw from the platform's cryptographic random source. Visitors' feedback
+ * waits here too, for the keepers' page (feedbackBox.ts).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -14,6 +15,7 @@ import {
   type AbandonResult,
   type AcceptResult,
   type BuyResult,
+  type FeedbackDraft,
   type GatherResult,
   type GiftResult,
   type GrantResult,
@@ -27,6 +29,7 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
+import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ROOMS } from './rooms';
 import { SqlCollectionStore } from './sqlStore';
 import type { Env } from './env';
@@ -52,12 +55,14 @@ export interface FlopResult extends EventResult {
 export class Collections extends DurableObject<Env> {
   private readonly book: CollectionBook;
   private readonly quests: QuestBook;
+  private readonly feedbackBox: FeedbackBox;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     const store = new SqlCollectionStore(ctx.storage.sql);
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
+    this.feedbackBox = new FeedbackBox(ctx.storage.sql);
   }
 
   async owned(cid: string, tzHint?: string): Promise<string[]> {
@@ -121,5 +126,18 @@ export class Collections extends DurableObject<Env> {
 
   async handIn(cid: string, quest: string, npc: string): Promise<HandInResult> {
     return this.quests.handIn(cid, quest, npc, Date.now(), secureRandom);
+  }
+
+  /** A visitor's feedback, kept for the park's keepers (feedbackBox.ts). */
+  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null): Promise<FeedbackAdd> {
+    return this.feedbackBox.add(cid, draft, ua, Date.now());
+  }
+
+  async feedback(status: FeedbackStatus | 'all', limit: number): Promise<FeedbackRow[]> {
+    return this.feedbackBox.list(status, limit);
+  }
+
+  async setFeedbackStatus(id: number, status: FeedbackStatus): Promise<boolean> {
+    return this.feedbackBox.setStatus(id, status);
   }
 }

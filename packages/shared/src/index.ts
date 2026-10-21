@@ -16,3 +16,4 @@ export * from './quests';
 export * from './questCatalog';
 export * from './questbook';
 export * from './shop';
+export * from './feedback';

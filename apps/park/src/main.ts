@@ -8,6 +8,7 @@ import { BootScene } from './game/BootScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
 import { loadLook, loadPlayerId } from './identity';
 import { createTransport, type WalletEntry } from './net';
+import { sendFeedback } from './net/feedback';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { createHud } from './ui/hud';
 import { attachKeyboard } from './ui/keyboard';
@@ -138,17 +139,19 @@ hud.attachQuests(quests, {
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   openShop: () => hud.openShop(),
 });
+let storage: Storage | null = null;
+try {
+  storage = localStorage;
+} catch {
+  storage = null; // a browser that keeps nothing
+}
+// Feedback goes to the park's keepers through the room server (kept in this browser without one).
+hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
 // Load the collection in the background; worn items this collector does not own come off.
 // A present from the park in the collection is announced once on this device.
 void collection.refresh().then(() => {
   roomScene()?.pruneWear();
   if (!collection.inv) return;
-  let storage: Storage | null = null;
-  try {
-    storage = localStorage;
-  } catch {
-    storage = null;
-  }
   announcePresents(collection.inv.owned, (message, ms, accent) => hud.toast(message, ms, accent), storage);
 });
 collection.onChange(() => roomScene()?.pruneWear());

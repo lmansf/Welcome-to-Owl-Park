@@ -6,6 +6,7 @@ import {
   parseServerFrame,
   positionAlongWalk,
   type ClientFrame,
+  type FeedbackDraft,
   type OwlSnapshot,
   type ParkMessage,
   type PlayerState,
@@ -176,6 +177,11 @@ export class EdgeTransport implements ParkTransport {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pass.pass}` },
       body: JSON.stringify({ realm }),
     });
+  }
+
+  /** Feedback for the park's keepers, sent with this visitor's pass. */
+  feedback(draft: FeedbackDraft): Promise<Response> {
+    return this.api('/api/feedback', { method: 'POST', body: JSON.stringify(draft) });
   }
 
   async join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection> {

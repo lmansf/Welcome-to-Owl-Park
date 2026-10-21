@@ -79,6 +79,7 @@ docs/                 architecture, art pipeline, deployment
 - [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
 - [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): wearables, pets, effects and emotes: the catalogue, the numbers and the server.
 - [docs/QUESTS.md](docs/QUESTS.md): quests, NPC owls, leaf piles, feathers, the feather shop and owl species.
+- [docs/FEEDBACK.md](docs/FEEDBACK.md): the Feedback button, where notes are kept, and the keepers' page that reads them.
 - [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
 
 ## Ground rules baked into the code
