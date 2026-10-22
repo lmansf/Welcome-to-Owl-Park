@@ -21,6 +21,10 @@ export { STREET_DOORS, STREET_ROOM } from '../src/homes';
  * lobby's west end leads to. It is two screens wide, its painting the east screen, where the lane
  * from the lobby comes in. Six nest doors stand along it, each into one owl's nest: a room of its
  * own, made from NEST_ROOM. Neither has hiding spots.
+ *
+ * The arcade is one screen off the market street's east end, where the street bends away: a neon
+ * hall with three game cabinets along its back wall under a blank score board. It is built to
+ * widen east later, as the market was. It has no hiding spots.
  */
 export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Our Feathers', 'Hatching Soon'] as const;
 
@@ -250,7 +254,8 @@ export const ROOMS: Record<string, RoomDef> = {
     walkable: [
       [
         // The street, from the curb in front of the stalls down, past the neon stage to where it bends
-        // away; the doorway's threshold on the left.
+        // away, and up the pavement on the right to the arcade's doorway; the doorway's threshold on
+        // the left.
         { x: 0, y: 690 },
         { x: 1500, y: 690 },
         { x: 1520, y: 705 },
@@ -264,20 +269,22 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 2770, y: 712 },
         { x: 2950, y: 705 },
         { x: 3040, y: 662 },
-        { x: 3110, y: 652 },
-        { x: 3130, y: 690 },
-        { x: 3045, y: 720 },
-        { x: 3030, y: 760 },
-        { x: 3025, y: 888 },
+        { x: 3080, y: 678 },
+        { x: 3100, y: 690 },
+        { x: 3155, y: 690 },
+        { x: 3200, y: 708 },
+        { x: 3200, y: 888 },
         { x: 280, y: 888 },
         { x: 250, y: 830 },
         { x: 170, y: 760 },
         { x: 0, y: 760 },
       ],
     ],
-    spawns: { 'default': { x: 330, y: 740 } },
+    spawns: { 'default': { x: 330, y: 740 }, 'from-arcade': { x: 3090, y: 770 } },
     doors: [
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, marker: { x: 70, y: 580 } },
+      // The arcade's doorway on the pavement where the street bends away, under its joystick sign.
+      { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, marker: { x: 3126, y: 640 } },
       { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
       // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
@@ -299,6 +306,40 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 2500, y: 860 },
       { x: 2700, y: 800 },
       { x: 2900, y: 860 },
+    ],
+  },
+  arcade: {
+    id: 'arcade',
+    size: { w: ROOM_W, h: ROOM_H },
+    background: 'arcade',
+    mood: 'arcade',
+    walkable: [
+      [
+        // The wet tiled floor: out through the open entrance on the west onto the street beyond its
+        // threshold, along the foot of the back wall, in front of the three cabinets, and into the
+        // hall that carries on past the chrome pillar on the east.
+        { x: 0, y: 690 },
+        { x: 195, y: 690 },
+        { x: 205, y: 712 },
+        { x: 445, y: 714 },
+        { x: 445, y: 750 },
+        { x: 1170, y: 750 },
+        { x: 1170, y: 716 },
+        { x: 1320, y: 716 },
+        { x: 1330, y: 690 },
+        { x: 1600, y: 690 },
+        { x: 1600, y: 888 },
+        { x: 0, y: 888 },
+      ],
+    ],
+    spawns: { 'default': { x: 300, y: 800 }, 'from-market': { x: 300, y: 800 } },
+    doors: [
+      // The open entrance, out onto the street past its threshold.
+      { id: 'to-market', rect: { x: 0, y: 690, w: 150, h: 70 }, to: { room: 'market', spawn: 'from-arcade' }, marker: { x: 110, y: 650 } },
+      // The three cabinets along the back wall, each spot in front of its cabinet.
+      { id: 'cabinet-crossing', rect: { x: 457, y: 750, w: 140, h: 60 }, marker: { x: 527, y: 412 } },
+      { id: 'cabinet-flight', rect: { x: 733, y: 750, w: 140, h: 60 }, marker: { x: 803, y: 412 } },
+      { id: 'cabinet-sling', rect: { x: 1016, y: 750, w: 140, h: 60 }, marker: { x: 1086, y: 412 } },
     ],
   },
   lobby: {

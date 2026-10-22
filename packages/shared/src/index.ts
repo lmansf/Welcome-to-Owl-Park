@@ -21,3 +21,4 @@ export * from './roomActivities';
 export * from './homes';
 export * from './nestbook';
 export * from './feedback';
+export * from './arcade';

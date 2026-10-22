@@ -94,7 +94,7 @@ def owl_master_of(key: str) -> str:
 
 #: Helper keys used by the generator for anchors and masters; never published as art.
 HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master",
-               "lobby-concept-a", "lobby-concept-b", "lobby-vane")
+               "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door")
 PUBLIC_ROOMS = ("hub", "grove", "market", "lobby", "homes")
 OVERLAY_KEYS = ("hub-fg", "grove-fg", "market-fg")
 PIECE_KEYS = ("guardian", "robot-owl")

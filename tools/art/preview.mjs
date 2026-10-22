@@ -25,7 +25,7 @@ import { parseArgs } from 'node:util';
 
 export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
-export const ROOMS = ['hub', 'grove', 'market', 'lobby', 'homes', 'nest'];
+export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest'];
 
 /** Which room shows each key. Owl layers and signs show in the hub (owls show everywhere). */
 const ROOM_OF = {

@@ -24,6 +24,7 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `grove`, `grove-fg` | 1600 x 900 | Storybook realm background (WebP) and foreground (PNG) |
 | `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
 | `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |
+| `arcade` | 1600 x 900 | The arcade off the market street's east end (WebP): a neon hall with three game cabinets painted along its back wall under a blank score board; the park draws a cabinet's screen over the painting while its game is off |
 | `robot-owl` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored |
 | `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
@@ -218,6 +219,13 @@ node tools/art/generate.mjs select lobby <hash16>                               
 enclosed holes filled, grown a few pixels and feathered, and toned to the painting around the
 patch. Every other pixel is the painting's own. The result is a new raw candidate of the target
 key whose sidecar names both sources; `room` and `wing` carry a `patch:` line into the provenance.
+
+The arcade's doorway on the market street was made the same way, on the published screen rather
+than a raw candidate: `market-arcade-door` is an edit of a crop of `market-east@2x.webp` (`cut
+market-arcade-door --base-key market-east --base apps/park/public/art/market-east@2x.webp`),
+patched back into it, selected and finished with `room market-east --with-2x --grade none`. The
+east overlay's crates stood in front of the new doorway, so they were taken out of
+`market-east-fg` (a hand edit recorded in its provenance); its awning stays.
 
 The lobby is built this way and then widened like the other rooms: concept B1 (the art director's
 pick) with its owl weathervane is the painting, `lobby-west` is its wing (`pnpm art:finish canvas

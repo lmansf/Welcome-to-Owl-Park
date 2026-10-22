@@ -37,6 +37,8 @@ export const ART: Record<string, ArtSpec> = {
   'homes-west': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   homes: { w: ROOM_W, h: ROOM_H, kind: 'room' },
   nest: { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // The arcade, one screen off the market street's east end.
+  arcade: { w: ROOM_W, h: ROOM_H, kind: 'room' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
   // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  CABINET_OFF,
   EMOTE_IDS,
   KIND_RULES,
   MAX_ACTIVE_QUESTS,
@@ -16,6 +17,7 @@ import {
   RARITY_NAMES,
   STREET_ROOM,
   backgroundTiles,
+  cabinetAt,
   distance,
   filterOwnedWear,
   findSpawn,
@@ -66,6 +68,7 @@ import type { Keys } from '../ui/keyboard';
 import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
+import { addCabinets } from './arcade';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { roomScaleCap } from './artFiles';
 import { takesDoorway } from './doors';
@@ -124,7 +127,7 @@ const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
 const TOUCH_HINT_BOTTOM = 190;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
-const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', grove: '#FFB347' };
+const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347' };
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
 const KEY_TURNS = 8;
 /** Never wait longer than this for the park day to turn (timers past ~24 days overflow). */
@@ -305,6 +308,7 @@ export class RoomScene extends Phaser.Scene {
     // hairline of the clear colour shows at a join while the camera scrolls.
     for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
+    addCabinets(this, room);
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
     const settings = this.registry.get('settings') as SettingsStore | undefined;
@@ -1106,6 +1110,7 @@ export class RoomScene extends Phaser.Scene {
       }
       if (this.interactions[door.id]) spots.push(door.id);
       if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
+      if (walkFinished && cabinetAt(this.room.id, door.id)?.live === false) this.hud.toast(CABINET_OFF);
     }
     this.actions = this.actionsHere(spots);
     this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));

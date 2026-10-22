@@ -17,7 +17,7 @@ export function isRoomId(id: string): boolean {
 /** Owls in one nest at once, its owner aside: the owner always gets into its own nest. */
 export const NEST_CAP = 12;
 
-const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, homes: 40, nest: NEST_CAP };
+const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, arcade: 40, homes: 40, nest: NEST_CAP };
 
 /** A room's cap from ROOM_CAPS or the defaults. Every nest shares the `nest` entry. */
 export function roomCap(env: Env, roomId: string): number {

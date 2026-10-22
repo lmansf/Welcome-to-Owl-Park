@@ -42,8 +42,8 @@ export interface RoomDef {
    * walk from the default spawn that never crosses an exit (unit-tested in rooms.test.ts).
    */
   spots?: Vec2[];
-  /** Ambient mood used by the scene for lighting and particles. */
-  mood: 'hub' | 'dusk' | 'neon';
+  /** Ambient mood used by the scene for lighting and particles (`arcade`: neon indoors, no rain). */
+  mood: 'hub' | 'dusk' | 'neon' | 'arcade';
 }
 
 /** One ROOM_W x ROOM_H piece of a room's art, at its top-left corner in room pixels. */

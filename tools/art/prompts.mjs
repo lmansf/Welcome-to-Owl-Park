@@ -889,3 +889,58 @@ const DECOR_JOBS = DECOR.map(([id, , backdrop, size], i) => ({
 }));
 Object.assign(PROMPTS, DECOR_PROMPTS);
 JOBS.push(...DECOR_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// The arcade: one screen off the market street's east end, in the market's style and palette. Its
+// three game cabinets and the blank score board are painted into the room; a cabinet in play and
+// the scores are drawn over them by the park. The cabinets stand a third of the way in, at the
+// centre and two thirds of the way in, as the room data has them; the entrance back to the street
+// is the west edge, and the hall runs on out of the east edge so it can be widened later.
+
+const ARCADE_STYLE = `STYLE: cyberpunk neon market illustration, hand-painted 2D game background with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. Rainy night inside a small arcade hall off a chrome market street. PALETTE: Night Asphalt #0B0B16 base; Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon; Chrome #C7CEDA plating; Violet Haze #6E3AFF mist and mid tones; small touches of brand gold #C9A227 and cream #F6F1E3 in the cabinets' buttons only. SHAPE LANGUAGE: riveted chrome plates and trim, neon tubes and conduit, upright arcade cabinets with glowing screens, hanging cables, a wet tiled floor reflecting neon, rain beyond the entrance. READABILITY: a clear mid-value floor as the ground plane in the lower third of the frame, nearer is lower; the entrance at floor level on the left edge; the three cabinets standing on the far edge of the floor; every screen and display showing only abstract glowing shapes. AVOID: any text, letters, numbers, glyphs, writing, signage lettering, logos or watermarks, including on the cabinets, their screens and the board; any owls, birds, animals, people, robots, faces or characters, including on the screens; more or fewer than three cabinets; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`;
+
+const ARCADE_PROMPT = `Interior of a small neon arcade hall that opens off a rainy cyberpunk market street at night, seen straight on from the middle of the hall, camera slightly elevated, 16:9 wide shot, 3200x1800, hand-painted 2D game background, in the same style, palette and neon night light as the reference painting but a new scene, not a copy of it. The floor fills the lower third of the frame: dark polished tiles wet with rain carried in from the street, mid-dark values reflecting magenta and cyan neon in long soft streaks, nearer is lower, completely open and empty from edge to edge. Along the back wall, standing side by side on the far edge of the floor, are exactly three tall upright arcade cabinets of the same size and shape: one a third of the way in from the left edge, one at the centre and one a third of the way in from the right edge, evenly spaced with plain wall between them, each about a quarter of the frame's height. Each cabinet has a chrome-trimmed case in near-black with a glowing neon edge in its own colour (magenta, cyan and violet), a tilted screen glowing with soft abstract shapes, a small control panel with round buttons and a short joystick, and a plain glowing panel on top where a marquee would be, with no lettering. On the back wall above the three cabinets hangs one large blank score board: a wide, dark, rectangular panel in a riveted chrome frame with a thin cyan neon edge, about two fifths of the frame wide, its face plain and empty. At the left edge of the frame, at floor level, the hall's wide open entrance: a tall chrome-framed opening traced by a magenta neon tube, through which the rainy market street outside is glimpsed with a few soft neon lights and falling rain, and a few puddles on the floor just inside it. The ceiling is low and dark with chrome beams, hanging cables and strips of cyan and magenta neon. Toward the right edge the hall carries on out of the frame, dimmer, past a chrome pillar and neon strips, with nothing standing on its floor. ${ARCADE_STYLE}`;
+
+STYLE.arcade = ARCADE_STYLE;
+WING_SCENE.arcade = 'a neon arcade hall off a rainy cyberpunk market street';
+WING_CARRY.arcade = 'wet tiled floor, back wall, ceiling, chrome trim, neon strips, lighting, perspective, floor height and brush style';
+
+export const ARCADE_JOB = {
+  key: 'arcade',
+  kind: 'room',
+  realm: 'market',
+  size: '3200x1800',
+  seed: 3301,
+  variants: 4,
+  refs: [published('market'), guide('arcade')],
+  providers: { fal: { output_format: 'png' } },
+  prompt: ARCADE_PROMPT,
+};
+PROMPTS.arcade = ARCADE_PROMPT;
+JOBS.push(ARCADE_JOB);
+
+// The arcade's doorway on the market street: an edit of a 1024 px crop of the street's east screen
+// (cut from market-east@2x.webp at x 2176..3200, y 560..1584) that turns the shop fronts nearest
+// the viewer on the right of the street into the arcade's entrance, with a pictogram sign and no
+// letters. Only the doorway is taken from the edit (`pnpm art:finish patch market-east`), so the rest
+// of the approved painting stays as it is.
+const MARKET_ARCADE_DOOR_PROMPT = `Edit this painting, a detail of a rainy cyberpunk neon market street at night: the right side of the street, where a row of small shop fronts and a curtained stall stand along the sidewalk as the street bends away. Change only the shop fronts on the right side of the frame nearest the viewer: they become the entrance of a neon arcade, set into the building at sidewalk level and facing the street, a tall, wide, open doorway in a riveted chrome frame traced by a glowing magenta neon tube, its inside glowing cyan and violet with the dark silhouettes of upright arcade cabinets faintly visible within; above the doorway a small neon sign, a simple glowing pictogram of an arcade joystick in a rounded frame in cyan and magenta, with no letters. The doorway's threshold meets the wet sidewalk, which reflects its neon. Keep everything else exactly as it is: the same framing, colours and lighting, the street and its curb, the far shop fronts up the street, the buildings, the towers and the sky. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+
+export const MARKET_ARCADE_DOOR_JOB = {
+  key: 'market-arcade-door',
+  // A detail edit, not a screen of a room: an anchor-like helper, patched into the street's east
+  // screen (`pnpm art:finish patch market-east`).
+  kind: 'anchor',
+  derives: ['market-east'],
+  realm: 'market',
+  optional: true,
+  size: '1024x1024',
+  seed: 3401,
+  variants: 2,
+  refs: [{ ref: '@canvas:market-arcade-door', role: "a crop of the street's east screen around the shop fronts", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: MARKET_ARCADE_DOOR_PROMPT,
+};
+PROMPTS['market-arcade-door'] = MARKET_ARCADE_DOOR_PROMPT;
+HELPER_KEYS.push('market-arcade-door');
+JOBS.push(MARKET_ARCADE_DOOR_JOB);

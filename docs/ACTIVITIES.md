@@ -72,6 +72,14 @@ wrong note or a slow one ends the game. The robot uses the starter pair (Hoot an
 to two more emotes the owl owns, so every owl can play. The right notes are danced for everyone in
 the street.
 
+## The arcade (off the neon street's east end)
+
+A doorway under a joystick sign where the neon street bends away leads into the arcade: a hall
+with three game cabinets along its back wall under a blank score board (`packages/shared/src/arcade.ts`).
+Each cabinet is a spot in the room data and will play one game, as the visitor's own owl. Until a
+cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
+at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
+
 ## Three small tasks a day
 
 The same three for everyone each park day (`dailyTasks`), one from each slot and never the same

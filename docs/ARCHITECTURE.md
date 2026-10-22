@@ -149,9 +149,12 @@ for later (the quest items a visitor has been handed) follow the room data's `RO
 a room grows on the west, the room server and the browser move them once. A door without `to` can be an
 interactive spot (the gift shop, the idol): an entry in `interactions` in
 `apps/park/src/game/RoomScene.ts` gives it a button label and an action, and standing in it shows
-the button, which E also presses. New interactables, mini games included, follow that pattern. Art is referenced by key; artists replace files under
+the button, which E also presses. New interactables, mini games included, follow that pattern.
+The arcade, one screen off the market street's east end, has three cabinet spots along its back
+wall (`packages/shared/src/arcade.ts`): a cabinet whose game is not live yet shows an unlit screen
+reading "Hatching Soon", and standing at it says so. Art is referenced by key; artists replace files under
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
-variable (defaults: hub 80, grove 40, market 40).
+variable (defaults: lobby and hub 80; grove, market, arcade and the street 40; a nest 12).
 
 ## 6. Scaling knobs
 

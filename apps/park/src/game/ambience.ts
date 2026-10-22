@@ -146,7 +146,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
       const key = `sign-${door.closedSign.toLowerCase().replace(/\s+/g, '-')}`;
       piece(scene, m.x, m.y, scene.textures.exists(key) ? key : 'sign-hatching-soon').setDepth(m.y);
     } else if (door.to) {
-      const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
+      const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'arcade' ? 0x00e5ff : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
       const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(tint).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({ targets: glow, alpha: 0.5, scale: 1.9, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.id === 'shop' || door.id === 'booth') {
@@ -235,6 +235,27 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
     drifting.push(rain);
     haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.05).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
     scene.tweens.add({ targets: haze, fillAlpha: 0.1, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  } else if (room.mood === 'arcade') {
+    // Indoors off the neon street: no rain, a slow drift of neon motes in the cabinets' light.
+    const motes = scene.add
+      .particles(0, 0, 'fx-dot', {
+        x: { min: 0, max: w },
+        y: { min: floorTop - 420, max: h - 40 },
+        lifespan: { min: 5000, max: 9000 },
+        speedX: { min: -8, max: 8 },
+        speedY: { min: -14, max: -4 },
+        scale: { start: 0.3, end: 0.05 },
+        alpha: { start: 0, end: 0.7 },
+        tint: [0xff2aa1, 0x00e5ff, 0x8a4dff],
+        blendMode: Phaser.BlendModes.ADD,
+        frequency: 220 / k,
+        quantity: 1,
+        maxAliveParticles: Math.round(40 * k),
+      })
+      .setDepth(h + 10);
+    drifting.push(motes);
+    haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.03).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({ targets: haze, fillAlpha: 0.06, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   } else {
     const gold = scene.add
       .particles(0, 0, 'fx-dot', {
@@ -267,7 +288,7 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
         else e.start();
         e.setVisible(!calm);
       }
-      // The neon street's pink haze keeps its glow but stops pulsing.
+      // The neon pink haze keeps its glow but stops pulsing.
       if (haze) {
         for (const t of scene.tweens.getTweensOf(haze)) {
           if (calm) t.pause();
