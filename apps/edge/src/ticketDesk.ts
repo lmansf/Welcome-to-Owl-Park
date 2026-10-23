@@ -62,11 +62,12 @@ export function pickForGate(wallet: WalletTicket[], now: number): WalletTicket |
   );
 }
 
-/** Opening night's count as CSV (C42): order numbers and ticket IDs only. */
+/** Opening night's count as CSV (C42): order numbers and ticket IDs only, and what each pass sold for (OP-062). */
 export function openingCsv(rows: ReturnType<TicketBook['opening']>['rows']): string {
   const iso = (ms: number | null) => (ms === null ? '' : new Date(ms).toISOString());
-  const lines = ['kind,ticket,order,status,first_scan,from_ticket'];
-  for (const r of rows) lines.push([r.kind, r.ticket, r.order, r.status, iso(r.firstScan), r.fromTicket ?? ''].join(','));
+  const dollars = (cents: number | null) => (cents === null ? '' : (cents / 100).toFixed(2));
+  const lines = ['kind,ticket,order,status,first_scan,from_ticket,paid'];
+  for (const r of rows) lines.push([r.kind, r.ticket, r.order, r.status, iso(r.firstScan), r.fromTicket ?? '', dollars(r.paid)].join(','));
   return `${lines.join('\n')}\n`;
 }
 
@@ -178,14 +179,16 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
     }
     case '/link-pass': {
-      // A pass order from opening night's offer: the ticket its link named (or none), kept once.
+      // A pass order from opening night's offer: the ticket its link named (or none) and what its passes sold for, kept once.
       const from = body['from'] === null || body['from'] === undefined ? null : str(body['from'], 20);
+      const cents = body['cents'] === undefined || body['cents'] === null ? null : body['cents'];
       if (!order || (body['from'] !== null && body['from'] !== undefined && !from)) return bad();
-      const l = book.linkPass(order, from, now);
+      if (cents !== null && !(Number.isSafeInteger(cents) && (cents as number) >= 0)) return bad();
+      const l = book.linkPass(order, from, now, cents as number | null);
       return l ? json({ linked: l.fromTicket !== null, from: l.fromTicket }) : json({ error: 'unknown order' }, 404);
     }
     case '/pass-offer': {
-      // Whether an Opening Night Ticket on this device may claim its free pass now.
+      // Whether an Opening Night Ticket on this device may claim its pass now.
       const id = str(body['id'], 20);
       if (!id || !device) return bad();
       return json(book.passOffer(id, device, now));

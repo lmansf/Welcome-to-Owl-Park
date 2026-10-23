@@ -1244,8 +1244,8 @@ export class RoomScene extends Phaser.Scene {
 
   /**
    * The lobby's ticket booth: tickets sell in the store; the window shows the tickets on this device.
-   * On opening night (C42) it says every pass is free, and an Opening Night Ticket that went through
-   * the gate tonight offers its free pass.
+   * On opening night (C42) it says every pass is half price, and an Opening Night Ticket that went
+   * through the gate tonight offers its pass.
    */
   private async openBooth(): Promise<void> {
     const tickets = this.transport.tickets;

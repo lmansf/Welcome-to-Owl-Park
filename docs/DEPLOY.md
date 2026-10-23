@@ -147,18 +147,21 @@ turnstiles let everyone through. The steps, in order:
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
    `"from"` and `"until"`, or an `opening-night` with `"from"`) answers with the claim link. Nothing
    is copied to the store for these.
-10. **Opening night** (C42): the annual pass's 100% discount code goes on the Worker as
-    `OPENING_PASS_CODE` (`wrangler secret put`, or a repository secret the deploy uploads), never
-    in a file. The Opening Night Ticket needs no code: a free order gets its ticket at once. During
-    the ticket's window the booth says every pass is free; once an owl's Opening Night Ticket has
-    gone through the gate, the park offers "Your pass is free tonight. Claim it", a cart link with
+10. **Opening night** (C42): the annual pass's 50% discount code (OP-062; an "amount off
+    products" code for the annual pass) goes on the Worker as `OPENING_PASS_CODE`
+    (`wrangler secret put`, or a repository secret the deploy uploads), never in a file. The
+    Opening Night Ticket needs no code: a free order gets its ticket at once. During the ticket's
+    window the booth says every pass is half price; once an owl's Opening Night Ticket has gone
+    through the gate, the park offers "Your pass is half price tonight. Claim it", a cart link with
     the annual pass, the code and the cart attribute `from_ticket` (the ticket's ID). The pass order
-    comes back through `orders/paid`, and the pass goes straight into that owl's wallet. The count
-    is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned, passes
-    claimed through the link and passes without one (the code used some other way), the conversion
-    rate and a CSV, with order numbers and ticket IDs only. It also shows the night's window as the
-    park reads it from the store and whether the free-pass link is ready (the code set, an annual
-    pass on sale). Votes count one per wallet per park day, however many tickets or passes it holds.
+    is a paid order: it comes back through `orders/paid`, the store rates it like any other (step 7),
+    and the pass goes straight into that owl's wallet, working at once when the store rates it low.
+    The count is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned,
+    passes claimed through the link and passes without one (the code used some other way), the
+    conversion rate, the passes' revenue before tax and a CSV, with order numbers, ticket IDs and
+    each pass's amount only. It also shows the night's window as the park reads it from the store
+    and whether the pass link is ready (the code set, an annual pass on sale). Votes count one per
+    wallet per park day, however many tickets or passes it holds.
 
 ### Coding agents
 

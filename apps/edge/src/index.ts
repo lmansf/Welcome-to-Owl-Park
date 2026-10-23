@@ -257,8 +257,8 @@ export default {
       if (url.pathname === '/api/tickets' && request.method === 'GET') {
         const [r, catalogue] = await Promise.all([desk(`/tickets/wallet?device=${encodeURIComponent(device)}`), storeCatalogue(env)]);
         if (r.status !== 200) return reply(r);
-        // Opening night (C42): the booth says passes are free, and a scanned Opening Night Ticket
-        // offers its free pass only when the park can make the link.
+        // Opening night (C42): the booth says passes are half price, and a scanned Opening Night
+        // Ticket offers its pass only when the park can make the link.
         const ready = passLinkReady(env, catalogue);
         const tickets = (r.body['tickets'] as Array<Record<string, unknown>>).map((t) => (t['freePass'] === 'ready' && !(ready.code && ready.pass) ? { ...t, freePass: undefined } : t));
         return json({ tickets, openingNight: openingOn(catalogue, Date.now()) });
@@ -268,7 +268,7 @@ export default {
       if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') return reply(await desk(url.pathname.slice(4), { secret: body['secret'], device }));
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
       if (url.pathname === '/api/tickets/pass') {
-        // Opening night's free pass (C42): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
+        // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
         const r = await desk('/tickets/pass-offer', { id: body['id'], device });
         if (r.status !== 200) return reply(r);
         if (r.body['ok'] !== true) return json(r.body, 409);

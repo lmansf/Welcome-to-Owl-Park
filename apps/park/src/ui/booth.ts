@@ -13,11 +13,11 @@ export interface BoothInfo {
   wallet?: WalletEntry[] | null;
   /** Makes a share link's secret for one ticket on this device. */
   share?: (id: string) => Promise<string | null>;
-  /** Opening night is on (C42): the booth says every pass is free. */
+  /** Opening night is on (C42): the booth says every pass is half price. */
   openingNight?: boolean;
-  /** Opening night's free pass: the store's cart link for each Opening Night Ticket that may claim one now. */
+  /** Opening night's pass offer: the store's cart link for each Opening Night Ticket that may claim one now. */
   passLinks?: Record<string, string>;
-  /** The owl went to claim the free pass of this ticket: the page looks for the pass and says when it comes. */
+  /** The owl went to claim the pass of this ticket: the page looks for the pass and says when it comes. */
   watchPass?: (id: string) => void;
 }
 
@@ -90,7 +90,7 @@ function walletList(info: BoothInfo): HTMLElement {
     st.className = 'st';
     st.textContent = line.status;
     li.append(kind, id, st);
-    // Opening night (C42): the free pass, to claim tonight, or come.
+    // Opening night (C42): the pass offer, to claim tonight, or come.
     const link = info.passLinks?.[t.id];
     if ((line.freePass === 'ready' && link) || line.freePass === 'claimed') {
       const pass = document.createElement('span');
