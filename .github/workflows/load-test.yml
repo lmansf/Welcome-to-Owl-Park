@@ -70,8 +70,21 @@ jobs:
           done
           echo "::error::the throwaway copy never answered (last $code)"
           exit 1
+      # The copy's own logs while it is loaded: an exceeded limit or an exception shows here.
+      - name: Watch the copy's logs
+        working-directory: apps/edge
+        run: |
+          nohup node_modules/.bin/wrangler tail -c wrangler.load.jsonc "$LOAD_NAME" --format json > ../../tail.jsonl 2> ../../tail.err &
+          echo $! > ../../tail.pid
+          sleep 8
       - name: Load it, step by step
         run: node tools/load/run-steps.mjs --url "$LOAD_URL" --seconds 60
+      - name: What the copy's logs said
+        if: always()
+        run: |
+          if [ -f tail.pid ]; then kill "$(cat tail.pid)" 2>/dev/null || true; sleep 2; fi
+          node tools/load/tail-summary.mjs tail.jsonl
+          if [ -s tail.err ]; then echo "wrangler tail said:"; sed -E 's#https://[a-z0-9.-]+\.workers\.dev#https://***.workers.dev#g' tail.err | tail -5; fi
       - name: Delete the throwaway copy
         if: always()
         working-directory: apps/edge

@@ -4,8 +4,8 @@
  * throwaway copy that the load test (OP-068, .github/workflows/load-test.yml) fills with bots and
  * then deletes. The copy has its own name and only its workers.dev address: no domain, so the park's
  * domain can never move to it, and no cron. It trusts X-Forwarded-For, so each bot counts as its own
- * visitor, and its room and per-address caps are raised, so the test finds where movement lags rather
- * than where a cap turns owls away. Never deploy the park with this file.
+ * visitor, and its room caps are raised to the most the server takes (120) and its per-address cap
+ * well past the bots' needs. Never deploy the park with this file.
  *
  *   node tools/load/throwaway-config.mjs
  */
@@ -47,7 +47,8 @@ config.vars = {
   ...config.vars,
   TRUST_FORWARDED_FOR: 'true',
   MAX_SOCKETS_PER_IP: '64',
-  ROOM_CAPS: JSON.stringify({ lobby: 500, hub: 500, grove: 500, market: 500 }),
+  // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
+  ROOM_CAPS: JSON.stringify({ lobby: 120, hub: 120, grove: 120, market: 120 }),
 };
 if (config.name !== LOAD_NAME || 'routes' in config || 'route' in config || config.env) {
   throw new Error('the throwaway copy must have its own name, no domain and no environments');
