@@ -80,6 +80,11 @@ test.describe('single visitor', () => {
 
   test('WASD and the arrow keys walk the owl, facing the way it goes, and letting go stops it', async ({ page }) => {
     await openPark(page);
+    // Start low on the hub's floor. On a slow runner the owl walks on well past each check, sliding up
+    // along the floor's edge as it goes; from the spawn's height that could leave it under the top edge,
+    // with no room to go up.
+    await page.evaluate(() => window.owlPark.walkTo(2400, 815));
+    await waitForArrival(page, 2400, 815);
     const start = (await state(page)).pos;
     await page.keyboard.down('KeyD');
     await expect.poll(async () => (await state(page)).pos.x - start.x).toBeGreaterThan(60);
@@ -91,7 +96,7 @@ test.describe('single visitor', () => {
     expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
 
     await page.keyboard.down('ArrowLeft');
-    // Watch closely: a slow look lets the owl run on to where the floor's edge leaves no room to go up.
+    // Watch closely: the owl keeps walking while the test looks.
     await page.waitForFunction((x) => {
       const s = window.owlPark?.state();
       return !!s && x - s.pos.x > 60;
