@@ -16,7 +16,8 @@ used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec
   finish, then `pnpm art:preview` and show them the compare images before publishing anything.
   The owner approves art; never publish or commit generated art without that.
 - Secrets (`PASS_SIGNING_KEY`, `ADMIN_KEY`) are set with `wrangler secret put`, never committed.
-  `TRUST_FORWARDED_FOR` is for local load tests only. Deploy steps live in `docs/DEPLOY.md`.
+  `TRUST_FORWARDED_FOR` is for local load tests only. Deploy steps live in `docs/DEPLOY.md`; what to
+  do when the park is in trouble, in `docs/PLAYBOOK.md`.
 - This repository is public. Internal working names for unreleased realms, the owner's personal
   details and employer, and the names of other games stay out of code, docs, art, tests and commit
   messages. Closed-realm signs (the blockades in the hub's closed arches) may show only the

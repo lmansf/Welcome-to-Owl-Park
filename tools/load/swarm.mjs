@@ -10,10 +10,15 @@
  * --ip-header adds a distinct X-Forwarded-For per bot; the server keys its per-IP cap on
  * CF-Connecting-IP, so locally this changes nothing. Exits 1 when < 90% of bots were welcomed.
  */
+import { readFileSync } from 'node:fs';
 import WebSocket from 'ws';
 
 const USAGE = 'usage: swarm.mjs [--url http://localhost:8787] [--bots 3] [--seconds 30] [--tap-every 5000] [--room hub|grove|market] [--ip-header]';
-const HELLO = { t: 'hello', v: 2, look: { body: '#8B5A2B', belly: '#F6F1E3', accent: '#C9A227' } };
+// The room server's protocol version, read from the shared source so the bots never fall behind it.
+const EDGE = readFileSync(new URL('../../packages/shared/src/edge.ts', import.meta.url), 'utf8');
+const VERSION = Number(/EDGE_PROTOCOL_VERSION = (\d+)/.exec(EDGE)?.[1]);
+if (!Number.isInteger(VERSION)) throw new Error('could not read EDGE_PROTOCOL_VERSION from packages/shared/src/edge.ts');
+const HELLO = { t: 'hello', v: VERSION, look: { body: '#8B5A2B', belly: '#F6F1E3', accent: '#C9A227' } };
 const HEARTBEAT_MS = 25_000;
 const CONNECT_STAGGER_MS = 60;
 const CLOSE_GRACE_MS = 2_000;

@@ -61,6 +61,8 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
       nodes {
         id
         quantity
+        originalTotalSet { shopMoney { amount } }
+        discountAllocations { allocatedAmountSet { shopMoney { amount } } }
         product {
           productType
           kind: metafield(namespace: "owl_park", key: "ticket_kind") { value }
@@ -73,6 +75,8 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
   }
 }`;
 
+type Money = { shopMoney?: { amount?: string | null } | null } | null;
+
 /** The shape of ORDER_QUERY's answer (only what is read). */
 export interface AdminOrder {
   id: string;
@@ -81,13 +85,16 @@ export interface AdminOrder {
   totalPriceSet?: { shopMoney?: { amount?: string | null } | null } | null;
   /** The discount codes the buyer used. */
   discountCodes?: string[] | null;
-  /** The cart's attributes (C42: `from_ticket`, set by the park's link to the free pass). */
+  /** The cart's attributes (C42: `from_ticket`, set by the park's link to opening night's pass). */
   customAttributes?: Array<{ key: string; value?: string | null }> | null;
   risk?: { recommendation?: string | null; assessments?: Array<{ riskLevel?: string | null }> | null } | null;
   lineItems: {
     nodes: Array<{
       id: string;
       quantity: number;
+      /** The line's price before any discount, and each discount the store put on it (a code's among them). */
+      originalTotalSet?: Money;
+      discountAllocations?: Array<{ allocatedAmountSet?: Money }> | null;
       product?: {
         productType?: string | null;
         kind?: { value?: string | null } | null;
@@ -167,7 +174,7 @@ export function lowRisk(order: AdminOrder): boolean {
   return levels.length > 0 && levels.every((l) => l === 'LOW' || l === 'NONE');
 }
 
-/** A free order: a discount took its total to nothing (opening night's ticket and pass, C42). */
+/** A free order: a discount took its total to nothing (opening night's ticket, C42). */
 export function freeOrder(order: AdminOrder): boolean {
   const amount = order.totalPriceSet?.shopMoney?.amount;
   return typeof amount === 'string' && amount.trim() !== '' && Number(amount) === 0;
@@ -185,9 +192,30 @@ export function usedCode(order: AdminOrder, code: string | undefined): boolean {
   return !!want && (order.discountCodes ?? []).some((c) => c.trim().toLowerCase() === want);
 }
 
+/** An amount in the shop's currency, in cents (0 where the store gives none). */
+function cents(m: Money | undefined): number {
+  const n = Number(m?.shopMoney?.amount ?? 0);
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
+/**
+ * What the buyer paid for the order's lines of one kind, in cents before tax: each line's price less
+ * every discount on it. Opening night's pass (OP-062): the annual pass at half price with the code.
+ */
+export function paidFor(order: AdminOrder, lines: readonly TicketLine[], kind: TicketKind): number {
+  const want = new Set(lines.filter((l) => l.kind === kind).map((l) => l.line));
+  let sum = 0;
+  for (const li of order.lineItems.nodes) {
+    if (!want.has(gidTail(li.id))) continue;
+    const off = (li.discountAllocations ?? []).reduce((n, d) => n + cents(d.allocatedAmountSet), 0);
+    sum += Math.max(0, cents(li.originalTotalSet) - off);
+  }
+  return sum;
+}
+
 /**
  * The ticket products on sale: the annual pass (the opening-night link puts its first variant in
- * the cart) and the Opening Night Ticket's window (the booth says passes are free inside it).
+ * the cart) and the Opening Night Ticket's window (the booth says passes are half price inside it).
  */
 export const CATALOGUE_QUERY = `query OwlParkCatalogue {
   products(first: 20, query: "product_type:Ticket AND status:active") {
@@ -236,8 +264,8 @@ export function catalogueOf(data: AdminCatalogue): Catalogue {
 }
 
 /**
- * The cart link for opening night's free pass (C42): the annual pass in the cart, the code that
- * makes it free, and the ticket it comes from as the cart attribute `from_ticket`.
+ * The cart link for opening night's pass (C42): the annual pass in the cart, the code that takes
+ * half off it (OP-062), and the ticket it comes from as the cart attribute `from_ticket`.
  */
 export function passCartLink(shop: string, variant: string, code: string, ticketId: string): string {
   const q = new URLSearchParams({ discount: code, 'attributes[from_ticket]': ticketId });

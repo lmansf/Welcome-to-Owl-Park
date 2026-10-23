@@ -231,12 +231,21 @@ owl's place frees at once, and a ticket keeps running) and comes back to it. An 
 names a room (`?room=`: tests, the art preview) or says `home=0` goes straight into the park.
 
 Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
-the turnstile gate into the hub on the other. With `GATE=open` (now) the turnstiles let everyone
-through and the booth says tickets are coming. With `GATE=ticket` (once tickets sell),
-`/api/pass` still gives every visitor a guest pass, but a pass that is not admitted opens only the
-lobby: the gate turns it back toward the booth, and the Worker refuses its socket for any other
-room and its use of the shop (its collection still shows). The pass answer carries `gate` and
-`adm` so the client knows which.
+the turnstile gate into the hub on the other. Open (now), the turnstiles let everyone through and
+the booth says tickets are coming. Taking tickets, `/api/pass` still gives every visitor a guest
+pass, but a pass that is not admitted opens only the rooms outside the turnstiles: the gate turns
+it back toward the booth, and the Worker refuses its socket for any other room and its use of the
+shop (its collection still shows). The booth sells only while the gate takes tickets.
+
+**The opening switch (OP-067, `apps/edge/src/gateSwitch.ts`):** the keepers flip the gate on
+`/admin/gate` (or `POST /api/admin/gate` with `{"mode": "ticket" | "open" | "deployed"}`), both
+behind the admin key, with no deploy. The setting lives in the vote ledger's object beside the
+tickets; each Worker reads it at most every ten seconds, so a flip reaches everyone within that.
+Never set, or handed back (`deployed`), `GATE` in `wrangler.jsonc` decides as before. The booth and
+the turnstiles ask `/api/entry` for the gate as it is now before they act. An owl already inside
+when the gate closes stays in: a pass carries when it was made (`iat`), and one made before the
+switch closed the gate stays admitted until it expires; the next pass applies the rule at the
+turnstiles.
 
 The ticket flow (C35; tested against a stand-in store until the store's app exists, see
 `docs/DEPLOY.md`): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach
@@ -270,17 +279,21 @@ is a field on the product, so a moved date is a store edit. A free order has not
 to rate, so its tickets go out at once (from `orders/create` too, in case the store does not send
 `orders/paid` for it). The gate takes the ticket inside its window only; unscanned by its end, it
 expires. During the window (read from the ticket product on sale, `apps/edge/src/opening.ts`) the
-booth says every pass is free. After the scan, the ticket card is followed by "Your pass is free
-tonight. Claim it": `POST /api/tickets/pass` makes a cart link on the store with the annual pass,
-the code `OPENING_PASS_CODE` (a Worker secret) and the cart attribute `from_ticket`; the store's
-checkout opens in a new tab. The pass order comes back through `orders/paid` with that attribute:
+booth says every pass is half price (OP-062; the pass was free at first). After the scan, the
+ticket card is followed by "Your pass is half price tonight. Claim it": `POST /api/tickets/pass`
+makes a cart link on the store with the annual pass, the code `OPENING_PASS_CODE` (a Worker secret,
+50% off the pass) and the cart attribute `from_ticket`; the store's checkout opens in a new tab. The
+pass order is a paid order, so the store rates it like any other (a pass it does not rate low waits
+in the wallet until the check is done). It comes back through `orders/paid` with that attribute:
 the ticket book links the pass to its Opening Night Ticket (only one that went through the gate
-counts), puts the pass straight into that wallet, and switches the pass off if the ticket is
-switched off. A pass bought with the code but without the link counts as a pass without a link.
-`/admin/opening` (the admin key) counts the night: tickets issued and scanned, passes through the
-link and without one, the conversion rate (tickets scanned that turned into a pass), and a CSV of
-the night's tickets with order numbers and ticket IDs only. The Drop-1 pin's $0 entry is retired
-(C42).
+counts), keeps what the order's passes sold for (each pass line's price less every discount on it,
+the code's included, before tax), puts the pass straight into that wallet, and switches the pass
+off if the ticket is switched off. A pass bought with the code but without the link counts as a
+pass without a link. `/admin/opening` (the admin key) counts the night: tickets issued and scanned,
+passes through the link and without one, the conversion rate (tickets scanned that turned into a
+pass), the passes' revenue before tax (less any pass switched off), and a CSV of the night's
+tickets with order numbers, ticket IDs and each pass's amount only. The Drop-1 pin's $0 entry is
+retired (C42).
 
 **Leaving the park (C43, `packages/shared/src/wayout.ts`):** the spot in the hub where owls arrive
 from the turnstiles is also the way out. Its floor's bottom edge there is a doorway (`to-lobby`,

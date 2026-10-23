@@ -367,6 +367,9 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     // A beam still glowing from an earlier run goes dark first.
     await expect.poll(async () => (await state(a)).play?.glowing, { timeout: 50_000 }).toBe(false);
+    // The second owl in is placed around the first, perhaps up in the bay between the two blockades,
+    // where a straight walk west meets the bay's wall: both step down onto the open floor first.
+    await Promise.all([walkAndStop(a, 2330, 760), walkAndStop(b, 2470, 760)]);
     // A from the west end of the beam, B from the east: four rounds, a lantern each.
     const plan: Array<[number, number | null]> = [
       [800, 1125],

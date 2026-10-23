@@ -140,25 +140,33 @@ turnstiles let everyone through. The steps, in order:
    (its tickets show as waiting in the buyer's wallet); a later low rating releases it, or the
    owner adds the order tag `owl-park-release` after checking it, or refunds it.
 8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, for the booth's button; a
-   repository variable for deploys) and switch `GATE` to `ticket` in `wrangler.jsonc` at the same
-   time. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
+   repository variable for deploys) any time before: the booth offers it only while the gate takes
+   tickets. On the day, open `/admin/gate` with the admin key and press **Take tickets now**: the
+   turnstiles take tickets only and the booth sells, within ten seconds and with no deploy. Owls
+   already inside stay in; **Open to everyone** flips it back, and **As deployed** hands it back to
+   `GATE` in `wrangler.jsonc`. The same from a terminal: `POST /api/admin/gate` with the
+   `X-Admin-Key` header and `{"mode": "ticket"}` (or `"open"`, or `"deployed"`); a `GET` says how it
+   is set. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
    first scan starts its time.
 9. **Tickets without a store order** (giveaways and tests): `POST /api/admin/tickets` with the
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
    `"from"` and `"until"`, or an `opening-night` with `"from"`) answers with the claim link. Nothing
    is copied to the store for these.
-10. **Opening night** (C42): the annual pass's 100% discount code goes on the Worker as
-    `OPENING_PASS_CODE` (`wrangler secret put`, or a repository secret the deploy uploads), never
-    in a file. The Opening Night Ticket needs no code: a free order gets its ticket at once. During
-    the ticket's window the booth says every pass is free; once an owl's Opening Night Ticket has
-    gone through the gate, the park offers "Your pass is free tonight. Claim it", a cart link with
+10. **Opening night** (C42): the annual pass's 50% discount code (OP-062; an "amount off
+    products" code for the annual pass) goes on the Worker as `OPENING_PASS_CODE`
+    (`wrangler secret put`, or a repository secret the deploy uploads), never in a file. The
+    Opening Night Ticket needs no code: a free order gets its ticket at once. During the ticket's
+    window the booth says every pass is half price; once an owl's Opening Night Ticket has gone
+    through the gate, the park offers "Your pass is half price tonight. Claim it", a cart link with
     the annual pass, the code and the cart attribute `from_ticket` (the ticket's ID). The pass order
-    comes back through `orders/paid`, and the pass goes straight into that owl's wallet. The count
-    is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned, passes
-    claimed through the link and passes without one (the code used some other way), the conversion
-    rate and a CSV, with order numbers and ticket IDs only. It also shows the night's window as the
-    park reads it from the store and whether the free-pass link is ready (the code set, an annual
-    pass on sale). Votes count one per wallet per park day, however many tickets or passes it holds.
+    is a paid order: it comes back through `orders/paid`, the store rates it like any other (step 7),
+    and the pass goes straight into that owl's wallet, working at once when the store rates it low.
+    The count is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned,
+    passes claimed through the link and passes without one (the code used some other way), the
+    conversion rate, the passes' revenue before tax and a CSV, with order numbers, ticket IDs and
+    each pass's amount only. It also shows the night's window as the park reads it from the store
+    and whether the pass link is ready (the code set, an annual pass on sale). Votes count one per
+    wallet per park day, however many tickets or passes it holds.
 
 ### Coding agents
 
@@ -169,15 +177,19 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (`open` now: everyone walks through the lobby's turnstiles; `ticket` once tickets sell: visitors without a ticket stay in the lobby), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
+`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
-to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
-`/admin/feedback` and opening night's count on `/admin/opening`), and the store's
+to close a month by hand, to issue tickets without a store order, to read visitors' feedback on
+`/admin/feedback` and opening night's count on `/admin/opening`, and to flip the gate on
+`/admin/gate`), and the store's
 secrets (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 
+- `/api/health` answers `"ok": true` when the Worker and the park's three objects (the rooms, the
+  ticket book, the collections) answer; a 503 names the part that did not. When something is wrong,
+  `docs/PLAYBOOK.md` says what to check, how to roll back and how to pause ticket sales.
 - Open the site in two browsers (or a phone and a laptop) and watch the owls see each other.
 - `?debug=1` draws the walkable areas and doors. `?transport=local|supabase|edge` forces a transport.
 - The status dot in the top-right pill is gold when connected, grey when the park is offline.

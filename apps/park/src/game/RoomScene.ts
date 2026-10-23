@@ -1253,8 +1253,8 @@ export class RoomScene extends Phaser.Scene {
 
   /**
    * The lobby's ticket booth: tickets sell in the store; the window shows the tickets on this device.
-   * On opening night (C42) it says every pass is free, and an Opening Night Ticket that went through
-   * the gate tonight offers its free pass.
+   * On opening night (C42) it says every pass is half price, and an Opening Night Ticket that went
+   * through the gate tonight offers its pass.
    */
   private async openBooth(): Promise<void> {
     const tickets = this.transport.tickets;
@@ -1278,13 +1278,13 @@ export class RoomScene extends Phaser.Scene {
     });
   }
 
-  /** Whether the free pass of this Opening Night Ticket has come (C42). */
+  /** Whether the pass this Opening Night Ticket claimed has come (C42). */
   private async passCame(id: string): Promise<boolean> {
     const wallet = (await this.transport.tickets?.wallet()) ?? [];
     return wallet.find((t) => t.id === id)?.freePass === 'claimed';
   }
 
-  /** Opening night (C42): after the ticket card, the free pass its Opening Night Ticket may claim tonight. */
+  /** Opening night (C42): after the ticket card, the half-price pass its Opening Night Ticket may claim tonight. */
   private async offerFreePass(id: string): Promise<void> {
     const tickets = this.transport.tickets;
     if (!tickets) return;

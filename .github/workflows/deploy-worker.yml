@@ -12,7 +12,7 @@
 #      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
 #      The store's go up the same way: SHOPIFY_SHOP with the app's SHOPIFY_CLIENT_ID and
 #      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
-#      and for opening night, OPENING_PASS_CODE (the code that makes the annual pass free).
+#      and for opening night, OPENING_PASS_CODE (the code that takes half off the annual pass).
 #      See docs/DEPLOY.md for the first deploy and for selling tickets.
 name: Deploy to Cloudflare
 

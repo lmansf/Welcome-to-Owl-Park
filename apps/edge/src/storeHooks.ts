@@ -8,11 +8,12 @@
  *
  * Opening night (C42): a free order has nothing to rate, so its tickets go out at once (it is taken
  * from orders/create too, should the store not send orders/paid for it); a pass order from the
- * park's free-pass link keeps the link to the Opening Night Ticket it names, and a pass bought with
- * the night's code but without the link is counted apart.
+ * park's pass link (half price, OP-062: a paid order, rated like any other) keeps the link to the
+ * Opening Night Ticket it names and what its passes sold for, and a pass bought with the night's
+ * code but without the link is counted apart.
  */
 import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
-import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, ticketLines, usedCode, type AdminOrder } from './shopify';
+import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, usedCode, type AdminOrder } from './shopify';
 
 /** The order tag that releases a held order: the owner's fraud check passed it. */
 export const RELEASE_TAG = 'owl-park-release';
@@ -120,9 +121,9 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
   }
   const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !clears(order) });
   const tickets = issued['tickets'] as string[];
-  // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one.
+  // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one, with what it sold for.
   const from = fromTicketOf(order);
-  if (lines.some((l) => l.kind === 'annual') && (from || usedCode(order, deps.openingCode))) await deskOk(deps, '/tickets/link-pass', { order: id, from });
+  if (lines.some((l) => l.kind === 'annual') && (from || usedCode(order, deps.openingCode))) await deskOk(deps, '/tickets/link-pass', { order: id, from, cents: paidFor(order, lines, 'annual') });
   if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
   return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id };
