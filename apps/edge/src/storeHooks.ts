@@ -10,9 +10,18 @@
  * from orders/create too, should the store not send orders/paid for it); a pass order from the
  * park's free-pass link keeps the link to the Opening Night Ticket it names, and a pass bought with
  * the night's code but without the link is counted apart.
+ *
+ * The fraud link (C45), once its endpoint is set: every paid ticket order is scored by the fraud
+ * pipeline before any ticket goes out, once (a webhook sent again finds the first verdict). Approve
+ * releases it; review holds it for the owner (tickets switched off, no link, the order tagged
+ * owl:held) until a Release or a Refund on the owner's page, or 24 hours with no action (released,
+ * fail open); decline refunds it through the store at once, or switches off a free order's tickets;
+ * no answer within 2 seconds releases it (fail open). What the buyer got goes back to the pipeline.
  */
-import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
-import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, ticketLines, usedCode, type AdminOrder } from './shopify';
+import { HELD_TAG, HOLD_MS, postResponse, responsePost, SCORE_BUDGET_MS, scoreOrder, scoreRequest, type ClientDetails, type FraudConfig, type Outcome, type ResponsePost } from './fraudLink';
+import { adminQuery, adminQueryPartial, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
+import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_PAYER_QUERY, ORDER_QUERY, ticketLines, usedCode, type AdminOrder, type TicketLine } from './shopify';
+import type { OrderCheck } from './TicketBook';
 
 /** The order tag that releases a held order: the owner's fraud check passed it. */
 export const RELEASE_TAG = 'owl-park-release';
@@ -25,11 +34,21 @@ export interface HookDeps {
   desk: Desk;
   /** The claim link for a secret, on the park's own address. */
   claimUrl: (secret: string) => string;
+  /** The park's own address the webhook came to (kept with a held order for its claim link later). */
+  origin?: string;
   fetchFn?: typeof fetch;
   /** Waits: before a paid order's second look at a rating still in progress, and between looks at an order another webhook is working on (tests skip it). */
   wait?: (ms: number) => Promise<void>;
   /** Opening night's discount code for the annual pass (C42), to count passes bought with it. */
   openingCode?: string;
+  /** The fraud link (C45); without it the store's own rating decides. */
+  fraud?: FraudConfig;
+  /** The fraud link's clock, ids and wait for a verdict (tests set them). */
+  now?: () => number;
+  uuid?: () => string;
+  scoreBudgetMs?: number;
+  /** Work that may finish after the answer to the store (the checkout response to the pipeline). */
+  later?: (work: Promise<unknown>) => void;
 }
 
 export interface HookResult {
@@ -108,17 +127,24 @@ async function sendLink(deps: HookDeps, id: string, lines: string[], tickets: st
 /** Whether an order's tickets go out at once: the store rated it low risk, or it is free (C42: nothing to rate). */
 const clears = (order: AdminOrder) => lowRisk(order) || freeOrder(order);
 
-async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookResult> {
+async function paid(deps: HookDeps, id: string, onlyFree = false, client: ClientDetails | null = null): Promise<HookResult> {
   let order = await loadOrder(deps, id);
   if (!order || order.cancelledAt || (onlyFree && !freeOrder(order))) return { status: 200, body: { tickets: 0 } };
   const lines = ticketLines(order);
   if (!lines.length) return { status: 200, body: { tickets: 0 } };
+  // C45: the fraud pipeline decides, and the store's rating is one more thing it weighs.
+  if (deps.fraud) return checked(deps, deps.fraud, id, order, lines, client);
   // The store rates an order a few seconds after it is placed: one more look before holding it.
   if (!clears(order) && ratingPending(order)) {
     await (deps.wait ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(2000);
     order = (await loadOrder(deps, id)) ?? order;
   }
-  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !clears(order) });
+  return issue(deps, id, order, lines, !clears(order));
+}
+
+/** An order's tickets, held or not; the opening-night pass link; and the claim link unless held. */
+async function issue(deps: HookDeps, id: string, order: AdminOrder, lines: TicketLine[], held: boolean): Promise<HookResult> {
+  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held });
   const tickets = issued['tickets'] as string[];
   // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one.
   const from = fromTicketOf(order);
@@ -126,6 +152,190 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
   if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
   return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id };
+}
+
+// ---------- the fraud link (C45) ----------
+
+const TAGS_ADD = `mutation OwlParkTagsAdd($id: ID!, $tags: [String!]!) {
+  tagsAdd(id: $id, tags: $tags) {
+    node { id }
+    userErrors { field message }
+  }
+}`;
+
+const TAGS_REMOVE = `mutation OwlParkTagsRemove($id: ID!, $tags: [String!]!) {
+  tagsRemove(id: $id, tags: $tags) {
+    node { id }
+    userErrors { field message }
+  }
+}`;
+
+/** The refund of a declined order (C8): the order cancelled as fraud, its payment refunded, the buyer told by the store's own email. */
+export const REFUND_MUTATION = `mutation OwlParkRefund($orderId: ID!, $refundMethod: OrderCancelRefundMethodInput!) {
+  orderCancel(orderId: $orderId, reason: FRAUD, refundMethod: $refundMethod, restock: true, notifyCustomer: true, staffNote: "Declined by the fraud check") {
+    job { id }
+    orderCancelUserErrors { field message code }
+  }
+}`;
+
+async function refund(deps: HookDeps, id: string): Promise<void> {
+  const data = await adminQuery<{ orderCancel: { orderCancelUserErrors?: Array<{ message?: string }> } | null }>(deps.store, REFUND_MUTATION, { orderId: orderGid(id), refundMethod: { originalPaymentMethodsRefund: true } }, deps.fetchFn);
+  const errs = data.orderCancel?.orderCancelUserErrors ?? [];
+  if (errs.length) throw new StoreError(errs.map((e) => e.message ?? 'error').join('; '));
+}
+
+type Payer = Pick<AdminOrder, 'customer' | 'transactions'>;
+
+/** Who paid (ORDER_PAYER_QUERY): what the store will not let the app read is left out, and the order is scored without it. */
+async function loadPayer(deps: HookDeps, id: string): Promise<Payer> {
+  try {
+    const { data, refused } = await adminQueryPartial<{ order: Payer | null }>(deps.store, ORDER_PAYER_QUERY, { id: orderGid(id) }, deps.fetchFn);
+    if (refused.length) console.error('[owl-park] the fraud check scores an order without part of who paid:', refused.join('; '));
+    return data.order ?? {};
+  } catch (e) {
+    console.error('[owl-park] the fraud check scores an order without who paid:', e instanceof Error ? e.message : e);
+    return {};
+  }
+}
+
+/** The order's fraud check as first decided; the first webhook for the order scores it. */
+async function firstCheck(deps: HookDeps, cfg: FraudConfig, id: string, order: AdminOrder, lines: TicketLine[], client: ClientDetails | null): Promise<OrderCheck> {
+  const known = await deps.desk(`/tickets/check?order=${id}`);
+  if (known.status === 200) return known.body['check'] as OrderCheck;
+  if (known.status !== 404) throw new StoreError(`ticket desk answered ${known.status}`);
+  const now = deps.now ?? Date.now;
+  const uuid = deps.uuid ?? (() => crypto.randomUUID());
+  const receivedAt = now();
+  const ids = { transaction: uuid(), request: uuid() };
+  const payer = await loadPayer(deps, id);
+  const scored = await scoreOrder(cfg, await scoreRequest({ ...order, ...payer }, lines, client, cfg.salt, ids, receivedAt), deps.fetchFn, deps.scoreBudgetMs ?? SCORE_BUDGET_MS, now);
+  const v = scored.verdict;
+  const decision = v?.decision ?? 'fail-open';
+  const outcome: Outcome = decision === 'approve' ? 'approved' : decision === 'review' ? 'held' : decision === 'decline' ? (freeOrder(order) ? 'switched-off' : 'refunded') : 'fail-open';
+  const draft: OrderCheck = {
+    order: id,
+    name: order.name?.trim() || id,
+    transaction: ids.transaction,
+    request: ids.request,
+    decision,
+    score: v?.score ?? null,
+    reasons: v?.reasonCodes ?? [],
+    modelVersion: v?.modelVersion ?? null,
+    scoringMs: scored.ms,
+    timedOut: scored.timedOut,
+    fallback: !v,
+    receivedAt,
+    origin: deps.origin ?? '',
+    outcome,
+    holdUntil: outcome === 'held' ? receivedAt + HOLD_MS : null,
+    settledAt: receivedAt,
+    responded: false,
+  };
+  return (await deskOk(deps, '/tickets/check', { check: draft as unknown as Record<string, unknown> }))['check'] as OrderCheck;
+}
+
+/** Tell the pipeline what the buyer got (`response`, once) or what became of a held order (`outcome`). */
+async function tell(deps: HookDeps, cfg: FraudConfig, kind: ResponsePost['kind'], check: OrderCheck, outcome: Outcome): Promise<void> {
+  const post = responsePost(kind, check, outcome, (deps.now ?? Date.now)());
+  // Marked before it goes, inside the order's lease: a webhook after this one never sends it again.
+  if (kind === 'response') await deskOk(deps, '/tickets/settle', { order: check.order, outcome, responded: true });
+  const work = postResponse(cfg, post, deps.fetchFn);
+  if (deps.later) deps.later(work);
+  else await work;
+}
+
+/** A paid ticket order through the fraud link: scored once, then released, held, refunded or switched off. */
+async function checked(deps: HookDeps, cfg: FraudConfig, id: string, order: AdminOrder, lines: TicketLine[], client: ClientDetails | null): Promise<HookResult> {
+  const check = await firstCheck(deps, cfg, id, order, lines, client);
+  let result: HookResult;
+  switch (check.outcome) {
+    case 'held':
+      result = await issue(deps, id, order, lines, true);
+      await mutate(deps, TAGS_ADD, { id: orderGid(id), tags: [HELD_TAG] });
+      break;
+    case 'refunded':
+      await refund(deps, id);
+      result = { status: 200, body: { tickets: 0 } };
+      break;
+    case 'switched-off':
+      result = { status: 200, body: { tickets: 0 } };
+      break;
+    default:
+      // Approved, released, or no verdict in time (fail open).
+      result = await issue(deps, id, order, lines, false);
+  }
+  if (!check.responded) await tell(deps, cfg, 'response', check, check.outcome);
+  return { ...result, body: { ...result.body, check: check.outcome } };
+}
+
+/** An order held for review, as the book has it; or why it is not one. */
+async function heldCheck(deps: HookDeps, id: string): Promise<OrderCheck | HookResult> {
+  const known = await deps.desk(`/tickets/check?order=${id}`);
+  if (known.status === 404) return { status: 404, body: { error: 'unknown order' } };
+  if (known.status !== 200) throw new StoreError(`ticket desk answered ${known.status}`);
+  const check = known.body['check'] as OrderCheck;
+  return check.outcome === 'held' ? check : { status: 409, body: { error: 'not held', outcome: check.outcome } };
+}
+
+/**
+ * A held order released: by the owner (the Release button, or the order tag), or after its 24 hours
+ * with no action (fail open). Its tickets work and its claim link goes out. One webhook or keeper
+ * at a time per order, as for the store's webhooks.
+ */
+export function releaseHeld(deps: HookDeps, id: string, outcome: 'released' | 'released-after-24h'): Promise<HookResult> {
+  return oneAtATime(deps, id, () => releaseNow(deps, id, outcome));
+}
+
+async function releaseNow(deps: HookDeps, id: string, outcome: 'released' | 'released-after-24h'): Promise<HookResult> {
+  const held = await heldCheck(deps, id);
+  if ('status' in held) return held;
+  const order = await loadOrder(deps, id);
+  if (!order || order.cancelledAt) {
+    // Cancelled in the store meanwhile: nothing to release.
+    await deskOk(deps, '/tickets/settle', { order: id, outcome: 'refunded' });
+    return { status: 409, body: { error: 'cancelled' } };
+  }
+  const r = await deskOk(deps, '/tickets/release', { order: id });
+  const known = await deskOk(deps, `/tickets/order?order=${id}`);
+  // The claim link points at the address the order's webhook came to.
+  const linkDeps: HookDeps = held.origin ? { ...deps, claimUrl: (secret) => claimLink(held.origin, secret) } : deps;
+  await sendLink(linkDeps, id, known['lines'] as string[], r['tickets'] as string[], (r['claim'] as string | null) ?? null);
+  await mutate(deps, TAGS_REMOVE, { id: orderGid(id), tags: [HELD_TAG] });
+  const settled = (await deskOk(deps, '/tickets/settle', { order: id, outcome }))['check'] as OrderCheck;
+  if (deps.fraud) await tell(deps, deps.fraud, 'outcome', settled, outcome);
+  return { status: 200, body: { released: true, outcome }, mirror: id };
+}
+
+/** The owner refunds a held order: refunded through the store (a free order's tickets just switched off). */
+export function refundHeld(deps: HookDeps, id: string): Promise<HookResult> {
+  return oneAtATime(deps, id, () => refundNow(deps, id));
+}
+
+async function refundNow(deps: HookDeps, id: string): Promise<HookResult> {
+  const held = await heldCheck(deps, id);
+  if ('status' in held) return held;
+  const order = await loadOrder(deps, id);
+  const free = !order || freeOrder(order);
+  if (order && !order.cancelledAt && !free) await refund(deps, id);
+  await deskOk(deps, '/tickets/revoke', { order: id, which: 'all' });
+  const outcome: Outcome = free ? 'switched-off' : 'refunded';
+  const settled = (await deskOk(deps, '/tickets/settle', { order: id, outcome }))['check'] as OrderCheck;
+  if (deps.fraud) await tell(deps, deps.fraud, 'outcome', settled, outcome);
+  return { status: 200, body: { refunded: !free, outcome }, mirror: id };
+}
+
+/** Held orders past their 24 hours with no action: each is released (fail open). Returns how many. */
+export async function releaseDue(deps: HookDeps): Promise<number> {
+  const due = (await deskOk(deps, '/tickets/due'))['orders'] as string[];
+  let n = 0;
+  for (const id of due) {
+    try {
+      if ((await releaseHeld(deps, id, 'released-after-24h')).status === 200) n++;
+    } catch (e) {
+      console.error('[owl-park] a held order could not be released:', id, e instanceof Error ? e.message : e);
+    }
+  }
+  return n;
 }
 
 /** A held order changed or got a new rating: release it if the owner tagged it or the store now rates it low. */
@@ -136,11 +346,14 @@ async function recheck(deps: HookDeps, id: string, payload: Record<string, unkno
   if (known.status !== 200) throw new StoreError(`ticket desk answered ${known.status}`);
   if (known.body['held'] !== true) return { status: 200, body: { held: false } };
   let release = tagsOf(payload).includes(RELEASE_TAG);
-  if (!release) {
+  // With the fraud link (C45) a held order waits for the owner, not for the store's rating.
+  if (!release && !deps.fraud) {
     const order = await loadOrder(deps, id);
     release = !!order && !order.cancelledAt && lowRisk(order);
   }
   if (!release) return { status: 200, body: { held: true } };
+  // The owner's tag is their Release (this webhook holds the order's lease already).
+  if ((await deps.desk(`/tickets/check?order=${id}`)).status === 200) return releaseNow(deps, id, 'released');
   const r = await deskOk(deps, '/tickets/release', { order: id });
   await sendLink(deps, id, known.body['lines'] as string[], r['tickets'] as string[], (r['claim'] as string | null) ?? null);
   return { status: 200, body: { released: true }, mirror: id };
@@ -158,6 +371,11 @@ async function refunded(deps: HookDeps, id: string, payload: Record<string, unkn
 
 async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
   const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which: 'all' }))['revoked'] as string[]).length;
+  // A held order the owner cancelled in the store is settled, so it is not released after its 24 hours.
+  if (deps.fraud) {
+    const held = await heldCheck(deps, id);
+    if (!('status' in held)) await deskOk(deps, '/tickets/settle', { order: id, outcome: 'refunded' });
+  }
   return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
 }
 
@@ -184,6 +402,12 @@ async function oneAtATime(deps: HookDeps, id: string, work: () => Promise<HookRe
   }
 }
 
+/** The browser details the store sends with an order (hashed into a device id by the fraud link). */
+function clientOf(payload: Record<string, unknown>): ClientDetails | null {
+  const c = payload['client_details'];
+  return c && typeof c === 'object' && !Array.isArray(c) ? (c as ClientDetails) : null;
+}
+
 /**
  * One webhook. A store or desk failure throws, so the Worker answers with an error and the store
  * sends the webhook again later.
@@ -197,10 +421,10 @@ export async function storeWebhook(topic: string, payload: Record<string, unknow
 function orderWebhook(topic: string, id: string, payload: Record<string, unknown>, deps: HookDeps): Promise<HookResult> {
   switch (topic) {
     case 'orders/paid':
-      return paid(deps, id);
+      return paid(deps, id, false, clientOf(payload));
     case 'orders/create':
       // Only a free order: should the store not send orders/paid for one, its tickets still go out.
-      return paid(deps, id, true);
+      return paid(deps, id, true, clientOf(payload));
     case 'orders/updated':
     case 'orders/risk_assessment_changed':
       return recheck(deps, id, payload);

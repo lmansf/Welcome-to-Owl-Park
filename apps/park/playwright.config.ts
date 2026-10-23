@@ -9,6 +9,9 @@ const EDGE_VARS = {
   SHOPIFY_WEBHOOK_SECRET: E2E_STORE.webhookKey,
   SHOPIFY_TEST_ORIGIN: E2E_STORE.origin,
   OPENING_PASS_CODE: E2E_STORE.passCode,
+  FRAUD_SCORE_URL: E2E_STORE.scoreUrl,
+  FRAUD_SCORE_KEY: E2E_STORE.scoreKey,
+  FRAUD_HASH_SALT: E2E_STORE.hashSalt,
 };
 
 export default defineConfig({
@@ -31,7 +34,7 @@ export default defineConfig({
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
-    { name: 'edge', testMatch: /(edge|opening)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    { name: 'edge', testMatch: /(edge|opening|fraud)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {

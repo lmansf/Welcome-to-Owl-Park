@@ -5,7 +5,8 @@
  */
 import { KINDS, type TicketLine } from './shopify';
 import type { TicketMirror } from './storeApi';
-import type { TicketBook, TicketRecord, WalletTicket } from './TicketBook';
+import type { OrderCheck, TicketBook, TicketRecord, WalletTicket } from './TicketBook';
+import type { Outcome } from './fraudLink';
 import { isTicketId, statusOf, windowed, type TicketKind, type TicketStatus } from './tickets';
 
 /**
@@ -62,6 +63,44 @@ export function pickForGate(wallet: WalletTicket[], now: number): WalletTicket |
   );
 }
 
+const OUTCOMES: readonly Outcome[] = ['approved', 'held', 'refunded', 'switched-off', 'fail-open', 'released', 'released-after-24h'];
+
+/** A fraud check as the Worker sends it; null when it does not add up. */
+function checkOf(v: unknown): OrderCheck | null {
+  if (!v || typeof v !== 'object') return null;
+  const c = v as Record<string, unknown>;
+  const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+  const order = str(c['order'], 40);
+  const transaction = str(c['transaction'], 64);
+  const request = str(c['request'], 64);
+  const decision = c['decision'];
+  const outcome = c['outcome'];
+  const receivedAt = num(c['receivedAt']);
+  if (!order || !transaction || !request || receivedAt === null) return null;
+  if (decision !== 'approve' && decision !== 'review' && decision !== 'decline' && decision !== 'fail-open') return null;
+  if (!OUTCOMES.includes(outcome as Outcome)) return null;
+  const reasons = Array.isArray(c['reasons']) ? (c['reasons'] as unknown[]).filter((r): r is string => typeof r === 'string' && r.length <= 60).slice(0, 20) : [];
+  return {
+    order,
+    name: str(c['name'], 40) ?? order,
+    transaction,
+    request,
+    decision,
+    score: num(c['score']),
+    reasons,
+    modelVersion: str(c['modelVersion'], 100),
+    scoringMs: num(c['scoringMs']),
+    timedOut: c['timedOut'] === true,
+    fallback: c['fallback'] === true,
+    receivedAt,
+    origin: str(c['origin'], 200) ?? '',
+    outcome: outcome as Outcome,
+    holdUntil: num(c['holdUntil']),
+    settledAt: num(c['settledAt']) ?? receivedAt,
+    responded: c['responded'] === true,
+  };
+}
+
 /** Opening night's count as CSV (C42): order numbers and ticket IDs only. */
 export function openingCsv(rows: ReturnType<TicketBook['opening']>['rows']): string {
   const iso = (ms: number | null) => (ms === null ? '' : new Date(ms).toISOString());
@@ -89,6 +128,21 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
     const o = book.orderOf(order);
     if (!o) return json({ error: 'unknown order' }, 404);
     return json({ order, held: o.record.held, sent: o.record.sent, tickets: o.tickets.map((t) => t.id), lines: [...new Set(o.tickets.map((t) => t.line))] });
+  }
+  if (request.method === 'GET' && path === '/check') {
+    // An order's fraud check (C45), if it had one.
+    const order = str(url.searchParams.get('order'), 40);
+    if (!order) return bad();
+    const c = book.check(order);
+    return c ? json({ check: c }) : json({ error: 'unknown order' }, 404);
+  }
+  if (request.method === 'GET' && path === '/checks') {
+    // The owner's page: held orders and the latest checks.
+    return json(book.checks(Number(url.searchParams.get('limit') ?? 50) || 50));
+  }
+  if (request.method === 'GET' && path === '/due') {
+    // Held orders past their 24 hours with no action: the Worker releases them (fail open).
+    return json({ orders: book.dueHolds(now).map((c) => c.order) });
   }
   if (request.method === 'GET' && path === '/opening') {
     // Opening night's count for the keepers (C42); `?csv` for the list of its tickets.
@@ -176,6 +230,18 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
         return json({ ok: false, reason: r.reason, id, ...(kind ? { kind } : {}) });
       }
       return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
+    }
+    case '/check': {
+      // An order's fraud check as first decided: a second webhook for the order gets the first back.
+      const c = checkOf(body['check']);
+      if (!c) return bad();
+      return json({ check: book.recordCheck(c) });
+    }
+    case '/settle': {
+      const outcome = body['outcome'];
+      if (!order || !OUTCOMES.includes(outcome as Outcome)) return bad();
+      const c = book.settleCheck(order, outcome as Outcome, now, typeof body['responded'] === 'boolean' ? body['responded'] : undefined);
+      return c ? json({ check: c }) : json({ error: 'unknown order' }, 404);
     }
     case '/link-pass': {
       // A pass order from opening night's offer: the ticket its link named (or none), kept once.

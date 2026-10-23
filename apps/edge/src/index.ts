@@ -17,7 +17,9 @@ import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId } from './rooms';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
-import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
+import { claimLink, mirrorTickets, refundHeld, releaseDue, releaseHeld, storeWebhook, type Desk, type HookDeps } from './storeHooks';
+import { fraudConfig } from './fraudLink';
+import { holdsPage } from './holdsPage';
 import { DEFAULT_LENGTH_MS, HOUR_MS, OPENING_NIGHT_MS, windowed, type TicketKind } from './tickets';
 import type { Env } from './env';
 
@@ -77,9 +79,20 @@ function deskOf(env: Env): Desk {
 }
 
 /** What the store webhooks need, once the store is set up; null until then. */
-function storeDeps(env: Env, origin: string): HookDeps | null {
+function storeDeps(env: Env, origin: string, ctx?: ExecutionContext): HookDeps | null {
   const store = storeConfig(env);
-  return store ? { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret), ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}) } : null;
+  const fraud = fraudConfig(env);
+  return store
+    ? {
+        store,
+        desk: deskOf(env),
+        claimUrl: (secret) => claimLink(origin, secret),
+        origin,
+        ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}),
+        ...(fraud ? { fraud } : {}),
+        ...(ctx ? { later: (work: Promise<unknown>) => ctx.waitUntil(work) } : {}),
+      }
+    : null;
 }
 
 /** Brings the store's copy of a ticket (or of an order's tickets) up to date after answering. */
@@ -109,6 +122,9 @@ function compLine(body: Record<string, unknown>): TicketLine | null {
   if (!windowed(kind) && lengthMs === null) return null;
   return { line: '1', quantity, kind, lengthMs, validFrom: windowed(kind) ? from : null, validUntil: windowed(kind) ? until : null };
 }
+
+/** The hourly cron in wrangler.jsonc (the other one closes the Realm Vote's month). */
+const HOURLY_CRON = '17 * * * *';
 
 function objectFor(env: Env, roomId: string): DurableObjectStub {
   const name = env.ROOM_SHARDING === 'room' ? `room:${roomId}` : 'park';
@@ -215,13 +231,39 @@ export default {
     }
     if (url.pathname === '/admin/opening') return openingPage();
 
+    // ---- The fraud link (C45): orders held for review, released or refunded by the owner ----
+    if (url.pathname === '/api/admin/holds') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method === 'GET') {
+        const r = await deskOf(env)(`/tickets/checks?limit=${Number(url.searchParams.get('limit') ?? 50) || 50}`);
+        return json({ ...r.body, on: fraudConfig(env) !== null }, r.status);
+      }
+      if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+      const body = await readJson(request);
+      const order = body?.['order'];
+      const action = body?.['action'];
+      if (typeof order !== 'string' || !/^\d{1,20}$/.test(order) || (action !== 'release' && action !== 'refund')) return json({ error: 'bad request' }, 400);
+      const deps = storeDeps(env, url.origin, ctx);
+      if (!deps) return json({ error: 'store not set up' }, 503);
+      try {
+        const r = action === 'release' ? await releaseHeld(deps, order, 'released') : await refundHeld(deps, order);
+        if (r.mirror) mirrorLater(ctx, env, url.origin, { order: r.mirror });
+        return json(r.body, r.status);
+      } catch (e) {
+        console.error('[owl-park] the owner could not', action, 'order', order, e instanceof Error ? e.message : e);
+        return json({ error: 'the store did not answer; try again' }, 502);
+      }
+    }
+    if (url.pathname === '/admin/holds') return holdsPage();
+
     // ---- The store's webhooks (C35): checked against the store's signature before anything is read ----
     if (url.pathname === '/api/store/webhook') {
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
       const raw = await request.arrayBuffer();
       const signed = await webhookSigned([env.SHOPIFY_WEBHOOK_SECRET, env.SHOPIFY_CLIENT_SECRET], raw, request.headers.get('X-Shopify-Hmac-Sha256'));
       if (!signed) return json({ error: 'bad signature' }, 401);
-      const deps = storeDeps(env, url.origin);
+      const deps = storeDeps(env, url.origin, ctx);
       if (!deps) return json({ error: 'store not set up' }, 503);
       const shop = request.headers.get('X-Shopify-Shop-Domain');
       if (shop && shop !== deps.store.shop) return json({ error: 'not this store' }, 401);
@@ -416,7 +458,14 @@ export default {
   },
 
   /** Month-end: decide the previous park month's Realm Vote. */
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    // Every hour: held orders past their 24 hours with no action are released (C45, fail open), the
+    // fraud link on or not: one held before its secrets came off still gets its tickets.
+    if (controller.cron === HOURLY_CRON) {
+      const deps = storeDeps(env, '');
+      if (deps) await releaseDue(deps);
+      return;
+    }
     await votes(env).fetch('https://park/close', { method: 'POST' });
   },
 } satisfies ExportedHandler<Env>;

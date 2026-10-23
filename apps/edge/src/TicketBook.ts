@@ -18,6 +18,7 @@
  *   counts the night: tickets issued and scanned, passes claimed through the link and without it.
  */
 import { isTicketId, scan, statusOf, timeLeft, visualId, type ScanResult, type Ticket, type TicketKind, type TicketStatus } from './tickets';
+import type { Decision, Outcome } from './fraudLink';
 import type { TicketLine } from './shopify';
 
 export interface OrderRecord {
@@ -45,6 +46,39 @@ export interface PassLink {
   at: number;
 }
 
+/**
+ * The fraud check of an order (C45): the pipeline's verdict, or a fail-open when it did not answer,
+ * and what became of the order. Order numbers, the Worker's own ids, the score and the reason codes
+ * only.
+ */
+export interface OrderCheck {
+  order: string;
+  /** The store's order number (`#1001`), for the owner's page. */
+  name: string;
+  /** The Worker's ids for the pipeline: one transaction per order, one request per scoring call. */
+  transaction: string;
+  request: string;
+  decision: Decision | 'fail-open';
+  score: number | null;
+  reasons: string[];
+  modelVersion: string | null;
+  scoringMs: number | null;
+  /** No verdict within the budget (a fail-open); `fallback` is any fail-open, an error included. */
+  timedOut: boolean;
+  fallback: boolean;
+  /** When the paid webhook came in. */
+  receivedAt: number;
+  /** The park's address the webhook came to: a held order's claim link, sent later, points there. */
+  origin: string;
+  outcome: Outcome;
+  /** A held order: when it is released if the owner does nothing. */
+  holdUntil: number | null;
+  /** When the outcome last changed. */
+  settledAt: number;
+  /** The checkout response went back to the pipeline. */
+  responded: boolean;
+}
+
 export interface TicketStore {
   order(order: string): OrderRecord | null;
   orderByClaim(claimHash: string): OrderRecord | null;
@@ -60,6 +94,12 @@ export interface TicketStore {
   passLinksFrom(ticketId: string): PassLink[];
   passLinks(): PassLink[];
   putPassLink(l: PassLink): void;
+  check(order: string): OrderCheck | null;
+  putCheck(c: OrderCheck): void;
+  /** The newest checks first. */
+  recentChecks(limit: number): OrderCheck[];
+  /** Orders held for review, the oldest first. */
+  heldChecks(): OrderCheck[];
 }
 
 export interface WalletTicket {
@@ -367,6 +407,37 @@ export class TicketBook {
     return record ? { record, tickets: this.store.ticketsOf(order) } : null;
   }
 
+  /** An order's fraud check (C45), as first decided: a second webhook for the order finds it here and is not scored again. */
+  recordCheck(c: OrderCheck): OrderCheck {
+    const known = this.store.check(c.order);
+    if (known) return known;
+    this.store.putCheck(c);
+    return c;
+  }
+
+  /** What became of a checked order (held, released, refunded...), and whether the pipeline was told. */
+  settleCheck(order: string, outcome: Outcome, now: number, responded?: boolean): OrderCheck | null {
+    const c = this.store.check(order);
+    if (!c) return null;
+    const next: OrderCheck = { ...c, outcome, settledAt: now, holdUntil: outcome === 'held' ? c.holdUntil : null, responded: responded ?? c.responded };
+    this.store.putCheck(next);
+    return next;
+  }
+
+  check(order: string): OrderCheck | null {
+    return this.store.check(order);
+  }
+
+  /** The owner's page: orders held for review, and the latest checks. */
+  checks(limit: number): { held: OrderCheck[]; recent: OrderCheck[] } {
+    return { held: this.store.heldChecks(), recent: this.store.recentChecks(Math.max(1, Math.min(200, limit))) };
+  }
+
+  /** Held orders left past their time with no action: they are released (fail open). */
+  dueHolds(now: number): OrderCheck[] {
+    return this.store.heldChecks().filter((c) => c.holdUntil !== null && c.holdUntil <= now);
+  }
+
   /** A ticket by its visual ID; null for anything else. */
   get(id: string): TicketRecord | null {
     return isTicketId(id) ? this.store.ticket(id) : null;
@@ -383,6 +454,7 @@ export class MemoryTicketStore implements TicketStore {
   private readonly orders = new Map<string, OrderRecord>();
   private readonly tickets = new Map<string, TicketRecord>();
   private readonly links = new Map<string, PassLink>();
+  private readonly checksByOrder = new Map<string, OrderCheck>();
   order(order: string) {
     return this.orders.get(order) ?? null;
   }
@@ -424,5 +496,18 @@ export class MemoryTicketStore implements TicketStore {
   }
   putPassLink(l: PassLink) {
     this.links.set(l.order, { ...l });
+  }
+  check(order: string) {
+    const c = this.checksByOrder.get(order);
+    return c ? { ...c, reasons: [...c.reasons] } : null;
+  }
+  putCheck(c: OrderCheck) {
+    this.checksByOrder.set(c.order, { ...c, reasons: [...c.reasons] });
+  }
+  recentChecks(limit: number) {
+    return [...this.checksByOrder.values()].sort((a, b) => b.receivedAt - a.receivedAt || b.order.localeCompare(a.order)).slice(0, limit).map((c) => ({ ...c, reasons: [...c.reasons] }));
+  }
+  heldChecks() {
+    return [...this.checksByOrder.values()].filter((c) => c.outcome === 'held').sort((a, b) => a.receivedAt - b.receivedAt).map((c) => ({ ...c, reasons: [...c.reasons] }));
   }
 }

@@ -48,11 +48,19 @@ export async function webhookSigned(keys: Array<string | undefined>, rawBody: Ar
   return false;
 }
 
-/** One query for everything the ledger needs about an order. */
+/**
+ * One query for everything the ledger and the fraud check (C45) need about an order, but who paid
+ * (ORDER_PAYER_QUERY). No name, email, phone or address is asked for.
+ */
 export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
   order(id: $id) {
     id
+    name
+    processedAt
     cancelledAt
+    subtotalPriceSet { shopMoney { amount } }
+    totalDiscountsSet { shopMoney { amount } }
+    totalTaxSet { shopMoney { amount } }
     totalPriceSet { shopMoney { amount } }
     discountCodes
     customAttributes { key value }
@@ -61,7 +69,9 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
       nodes {
         id
         quantity
+        discountedTotalSet { shopMoney { amount } }
         product {
+          handle
           productType
           kind: metafield(namespace: "owl_park", key: "ticket_kind") { value }
           hours: metafield(namespace: "owl_park", key: "length_hours") { value }
@@ -73,12 +83,37 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
   }
 }`;
 
+/**
+ * Who paid, for the fraud check only (C45): the store's customer ID and whether it has an account,
+ * and the card's BIN and masked number, all hashed before they leave. Apart from the ticket query,
+ * so that a field the store will not let the app read (the customer, on a store that wants
+ * `read_customers` for it) costs the fraud check that field, and never a ticket.
+ */
+export const ORDER_PAYER_QUERY = `query OwlParkOrderPayer($id: ID!) {
+  order(id: $id) {
+    customer { id state }
+    transactions(first: 10) { kind status gateway paymentDetails { ... on CardPaymentDetails { bin number } } }
+  }
+}`;
+
+type Money = { shopMoney?: { amount?: string | null } | null } | null;
+
 /** The shape of ORDER_QUERY's answer (only what is read). */
 export interface AdminOrder {
   id: string;
+  /** The order's number as the store shows it (`#1001`). */
+  name?: string | null;
+  processedAt?: string | null;
   cancelledAt?: string | null;
+  subtotalPriceSet?: Money;
+  totalDiscountsSet?: Money;
+  totalTaxSet?: Money;
   /** What the buyer paid, in the shop's currency: "0.0" for an order a discount made free. */
-  totalPriceSet?: { shopMoney?: { amount?: string | null } | null } | null;
+  totalPriceSet?: Money;
+  /** The store's customer record (one per email) and whether it has an account (`ENABLED`): ORDER_PAYER_QUERY. */
+  customer?: { id: string; state?: string | null } | null;
+  /** The order's payments (ORDER_PAYER_QUERY). */
+  transactions?: Array<{ kind?: string | null; status?: string | null; gateway?: string | null; paymentDetails?: { bin?: string | null; number?: string | null } | null }> | null;
   /** The discount codes the buyer used. */
   discountCodes?: string[] | null;
   /** The cart's attributes (C42: `from_ticket`, set by the park's link to the free pass). */
@@ -88,7 +123,9 @@ export interface AdminOrder {
     nodes: Array<{
       id: string;
       quantity: number;
+      discountedTotalSet?: Money;
       product?: {
+        handle?: string | null;
         productType?: string | null;
         kind?: { value?: string | null } | null;
         hours?: { value?: string | null } | null;

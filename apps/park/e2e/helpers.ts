@@ -50,6 +50,10 @@ export const E2E_STORE = {
   token: 'e2e-only-store-token-not-a-secret',
   webhookKey: 'e2e-only-webhook-key-not-a-secret',
   passCode: 'E2E-OPENING-NIGHT',
+  /** The fraud link (C45): the stand-in store also plays the scoring endpoint. */
+  scoreUrl: 'http://localhost:8790/score',
+  scoreKey: 'e2e-only-fraud-key-not-a-secret',
+  hashSalt: 'e2e-only-hash-salt-not-a-secret',
 } as const;
 
 export async function walkToDoor(page: Page, doorId: string): Promise<void> {

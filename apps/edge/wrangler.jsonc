@@ -39,7 +39,9 @@
   // unless this says otherwise.
   "workers_dev": true,
   // Month close for the Realm Vote: 05:05 UTC on the 1st (just after midnight in the park's time zone).
-  "triggers": { "crons": ["5 5 1 * *"] },
+  // Hourly: orders the fraud check held past their 24 hours are released (C45; nothing to do until
+  // the fraud link has held one).
+  "triggers": { "crons": ["5 5 1 * *", "17 * * * *"] },
   "vars": {
     // "single": the whole park lives in one Durable Object (cheapest on the free tier).
     // "room": one object per room (more fan-out capacity, more awake-time billed).
@@ -62,8 +64,9 @@
   // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
   // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
   // the same way once the store's app exists; until then the ticket webhooks are refused. So is
-  // OPENING_PASS_CODE, opening night's code for a free annual pass (C42). All are typed as optional
-  // in src/env.ts.
+  // OPENING_PASS_CODE, opening night's code for a free annual pass (C42), and the fraud link's
+  // FRAUD_SCORE_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT (C45). All are typed as optional in
+  // src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {
     "enabled": true,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { StoreError, adminQuery, fulfillmentInput, storeCheck, storeConfig, ticketUpsert, type FulfillmentOrders } from '../src/storeApi';
+import { StoreError, adminQuery, adminQueryPartial, fulfillmentInput, storeCheck, storeConfig, ticketUpsert, type FulfillmentOrders } from '../src/storeApi';
 
 describe('the store connection', () => {
   it('needs a myshopify domain and a token', () => {
@@ -31,6 +31,15 @@ describe('the store connection', () => {
     await expect(adminQuery(cfg, 'q', {}, bad)).rejects.toThrow(StoreError);
     const down = (async () => new Response('no', { status: 502 })) as unknown as typeof fetch;
     await expect(adminQuery(cfg, 'q', {}, down)).rejects.toThrow('502');
+  });
+
+  it('a query that may come back in part: a field the app may not read is null, with the store’s reason', async () => {
+    const cfg = { shop: 'example.myshopify.com', token: 'tok' };
+    const part = (async () => new Response(JSON.stringify({ data: { order: { customer: null, transactions: [] } }, errors: [{ message: 'Access denied for customer field.' }] }))) as unknown as typeof fetch;
+    expect(await adminQueryPartial(cfg, 'q', {}, part)).toEqual({ data: { order: { customer: null, transactions: [] } }, refused: ['Access denied for customer field.'] });
+    await expect(adminQuery(cfg, 'q', {}, part)).rejects.toThrow('Access denied');
+    const none = (async () => new Response(JSON.stringify({ errors: [{ message: 'Throttled' }] }))) as unknown as typeof fetch;
+    await expect(adminQueryPartial(cfg, 'q', {}, none)).rejects.toThrow('Throttled');
   });
 });
 

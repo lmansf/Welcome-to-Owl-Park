@@ -74,8 +74,7 @@ async function accessToken(cfg: StoreConfig, fetchFn: typeof fetch, fresh = fals
   return body.access_token;
 }
 
-/** One Admin API call; user errors of a mutation come back as a StoreError. */
-export async function adminQuery<T>(cfg: StoreConfig, query: string, variables: Record<string, unknown>, fetchFn: typeof fetch = fetch): Promise<T> {
+async function adminCall<T>(cfg: StoreConfig, query: string, variables: Record<string, unknown>, fetchFn: typeof fetch): Promise<{ data?: T | null; errors?: Array<{ message?: string }> }> {
   const call = async (token: string) =>
     fetchFn(`${base(cfg)}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
       method: 'POST',
@@ -86,10 +85,28 @@ export async function adminQuery<T>(cfg: StoreConfig, query: string, variables: 
   // A traded token the store stopped taking (a new client secret, or the app put in again): trade once more.
   if (res.status === 401 && cfg.client) res = await call(await accessToken(cfg, fetchFn, true));
   if (!res.ok) throw new StoreError(`store answered ${res.status}`);
-  const body = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
-  if (body.errors?.length) throw new StoreError(body.errors.map((e) => e.message ?? 'error').join('; '));
+  return (await res.json()) as { data?: T | null; errors?: Array<{ message?: string }> };
+}
+
+const messages = (errors: Array<{ message?: string }>) => errors.map((e) => e.message ?? 'error');
+
+/** One Admin API call; user errors of a mutation come back as a StoreError. */
+export async function adminQuery<T>(cfg: StoreConfig, query: string, variables: Record<string, unknown>, fetchFn: typeof fetch = fetch): Promise<T> {
+  const body = await adminCall<T>(cfg, query, variables, fetchFn);
+  if (body.errors?.length) throw new StoreError(messages(body.errors).join('; '));
   if (!body.data) throw new StoreError('store sent no data');
   return body.data;
+}
+
+/**
+ * One Admin API query that may ask for a field the store will not let the app read: that field
+ * comes back null, with the store's reason in `refused`, and the rest of the answer stands.
+ */
+export async function adminQueryPartial<T>(cfg: StoreConfig, query: string, variables: Record<string, unknown>, fetchFn: typeof fetch = fetch): Promise<{ data: T; refused: string[] }> {
+  const body = await adminCall<T>(cfg, query, variables, fetchFn);
+  const refused = messages(body.errors ?? []);
+  if (!body.data) throw new StoreError(refused.join('; ') || 'store sent no data');
+  return { data: body.data, refused };
 }
 
 /**

@@ -283,6 +283,115 @@ mode asks its own book). Out of the nest the owl is on the street in front of do
 changes nothing on a ticket: its time keeps running from its first scan, the pass stays admitted,
 and coming back through the turnstiles is the quick scan ("Welcome back").
 
+**The fraud link (C45, built; on once its three secrets are set):** the Worker plays the checkout
+API of the owner's fraud pipeline (`apps/edge/src/fraudLink.ts`). Before any ticket of a paid order
+goes out (a free order's too), the Worker posts the order to `FRAUD_SCORE_URL` with
+`FRAUD_SCORE_KEY` as a bearer token and waits up to 2 seconds for a verdict. It scores each order
+once: a webhook sent again finds the first verdict in the ticket book (`order_checks`), and so does
+a retry after a failure; a free order's two webhooks wait their turn on the order's lease (above),
+as do the owner's Release and Refund, so one order is scored once and its response posted once.
+
+- **approve**: the tickets and the claim link go out as before.
+- **review**: the order is held (its tickets made but switched off, no link) and tagged `owl:held`
+  in the store. The owner releases or refunds it on `/admin/holds` (the admin key), where it waits
+  with its score and reason codes; the order tag `owl-park-release` releases it too. One left 24
+  hours is released by the hourly cron (fail open). A held order cancelled in the store stays
+  cancelled.
+- **decline**: the store cancels the order as fraud, refunds it to the original payment method,
+  restocks it and emails the buyer (`orderCancel`). A free order has nothing to refund: it gets no
+  tickets.
+- **no verdict within 2 seconds** (or an answer that is not a verdict): released (fail open) and
+  recorded as a fallback. A verdict that comes later changes nothing.
+
+The store's own risk level goes along as one more signal (`store_risk`); with the fraud link on, the
+pipeline decides. Nothing that names the buyer leaves the store: no email, name, address, IP address
+or card number. The guest (the store's customer ID), the device (the browser details the store sends
+with the order: user agent, language and window size) and the card (its first digits, the BIN, and its
+last four) go as SHA-256 hashes salted with `FRAUD_HASH_SALT`, so the pipeline can count repeats
+without knowing who. Who paid is read with a query of its own (`ORDER_PAYER_QUERY`), never by the
+ticket flow, so a field the store keeps from the app costs the fraud check that field and never a
+ticket. After the decision the Worker posts back what the buyer got, in the shape of
+the pipeline's checkout responses (`kind: "response"`, once per order), and later what became of a
+held order (`kind: "outcome"`). Both posts go to the same URL; one that fails is logged and is never
+in the buyer's way. Without the three secrets the fraud link is off and the store's rating decides,
+as above.
+
+The scoring request (the order in the pipeline's raw transaction shape):
+
+```json
+{
+  "kind": "score",
+  "transaction": {
+    "transaction_id": "0b7d6c1e-5f2a-4c39-9e0a-7d4b2f8a1c55",
+    "request_id": "c2a9e4f0-81d3-4b6e-a7f5-3e9d0c4b6a12",
+    "source_system": "shopify",
+    "channel": "owl-park-web",
+    "order_number": "#1042",
+    "event_ts": "2026-12-06T00:04:12Z",
+    "currency": "USD",
+    "subtotal": 7.98, "discount": 0, "tax": 0, "total": 7.98,
+    "promo_code": null,
+    "is_guest_checkout": true,
+    "guest_id": "9a3e51c0-7b2d-4f18-a6c3-52e0d17b8f94",
+    "device_id": "<64 hex characters>",
+    "payment_token": "<64 hex characters>",
+    "payment_gateway": "shopify_payments",
+    "store_risk": "LOW",
+    "cart": [
+      { "line_number": 1, "product_handle": "day-ticket", "product_type": "ticket", "qty": 2, "line_total": 7.98, "attributes": {} }
+    ]
+  }
+}
+```
+
+`guest_id`, `device_id` and `payment_token` are null when the order has no customer, the store sent
+no browser details, or the payment has no card. `product_type` is `ticket`, `pass` (an annual pass,
+whose `attributes` carry `from_ticket` when it came through opening night's link) or `merch`.
+`store_risk` is `LOW`, `MEDIUM`, `HIGH`, `PENDING`, `NONE` (a free order) or null.
+
+The verdict (any 2xx JSON answer; only `decision` and `score` are required):
+
+```json
+{ "decision": "review", "score": 0.74, "reason_codes": ["IP_BILLING_MISMATCH"], "model_version": "rules-v0", "decision_id": "d-81f3" }
+```
+
+`decision` is `approve`, `review` or `decline`; `score` a number. Up to 20 reason codes are kept, 60
+characters each. Anything else (another status, no JSON, a missing decision) counts as no verdict.
+
+The checkout response posted back (the same request also answers for an outcome):
+
+```json
+{
+  "kind": "response",
+  "response": {
+    "transaction_id": "0b7d6c1e-5f2a-4c39-9e0a-7d4b2f8a1c55",
+    "request_id": "c2a9e4f0-81d3-4b6e-a7f5-3e9d0c4b6a12",
+    "request_received_at": "2026-12-06T00:04:13.120Z",
+    "response_sent_at": "2026-12-06T00:04:13.410Z",
+    "response_status": "step_up",
+    "customer_message_code": "VERIFY_IDENTITY",
+    "total_latency_ms": 290,
+    "fraud_scoring_ms": 212,
+    "payment_auth_ms": null,
+    "fraud_timeout": false,
+    "fallback_used": false,
+    "fallback_policy": null,
+    "channel": "owl-park-web",
+    "model_version": "rules-v0",
+    "outcome": "held"
+  }
+}
+```
+
+| `outcome` (the park's word) | `response_status` | `customer_message_code` | fallback |
+|---|---|---|---|
+| `approved`, `released` (by the owner) | `approved` | `ORDER_CONFIRMED` | no |
+| `fail-open` (no verdict in time), `released-after-24h` | `approved` | `ORDER_CONFIRMED` | `fail_open` |
+| `held` | `step_up` | `VERIFY_IDENTITY` | no |
+| `refunded`, `switched-off` (a free order) | `declined` | `PAYMENT_NOT_PROCESSED` | no |
+
+`payment_auth_ms` is always null: the store takes the payment before the park hears of the order.
+
 ## 10. Feedback from visitors (built)
 
 Feedback in the Menu (picked out in gold) opens a short form: what kind of note (bug, idea, praise, other) and up

@@ -138,7 +138,8 @@ turnstiles let everyone through. The steps, in order:
    Notifications → Shipping confirmation).
 7. **Fraud check**: an order the store rates low risk gets its link at once. Any other order waits
    (its tickets show as waiting in the buyer's wallet); a later low rating releases it, or the
-   owner adds the order tag `owl-park-release` after checking it, or refunds it.
+   owner adds the order tag `owl-park-release` after checking it, or refunds it. Once the fraud
+   link below is on, the fraud pipeline decides instead.
 8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, for the booth's button; a
    repository variable for deploys) and switch `GATE` to `ticket` in `wrangler.jsonc` at the same
    time. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
@@ -159,6 +160,21 @@ turnstiles let everyone through. The steps, in order:
     rate and a CSV, with order numbers and ticket IDs only. It also shows the night's window as the
     park reads it from the store and whether the free-pass link is ready (the code set, an annual
     pass on sale). Votes count one per wallet per park day, however many tickets or passes it holds.
+11. **The fraud link** (C45; the contract is in `docs/ARCHITECTURE.md`): three Worker secrets
+    switch it on, each with `wrangler secret put` or as a repository secret the deploy uploads:
+    `FRAUD_SCORE_URL` (the pipeline's scoring endpoint, `https://` only), `FRAUD_SCORE_KEY` (the key
+    the Worker sends it as a bearer token) and `FRAUD_HASH_SALT` (16+ random characters; it salts
+    the hashes of the guest, the device and the card, so keep it the same or the pipeline's counts
+    start again). Without all three the store's rating decides, as in step 7. With them, every paid
+    ticket order is scored before its tickets go out: approved orders get their link, declined
+    orders are cancelled and refunded through the store at once, and orders sent to review wait on
+    `/admin/holds` (the admin key) with their score and reasons, for Release or Refund; they carry
+    the order tag `owl:held` in the store meanwhile. One left 24 hours is released (fail open), and
+    so is any order the pipeline does not answer within 2 seconds. The page says whether the fraud
+    link is on. It uses the scopes the app already has (`write_orders` for the refund and the
+    tag). The guest's hash needs the order's customer: a store that keeps it from the app (it may
+    want `read_customers` for it) gets its orders scored without the guest, with a line in the
+    Worker's logs, and the tickets go on as before.
 
 ### Coding agents
 
@@ -173,8 +189,9 @@ Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or 
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
 to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
-`/admin/feedback` and opening night's count on `/admin/opening`), and the store's
-secrets (above). A cron trigger closes the Realm Vote month automatically.
+`/admin/feedback`, opening night's count on `/admin/opening` and the fraud check's holds on
+`/admin/holds`), and the store's secrets (above). Cron triggers close the Realm Vote month and, every
+hour, release orders the fraud check held past their 24 hours.
 
 ## Checking a deployment
 

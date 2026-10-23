@@ -12,7 +12,8 @@
 #      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
 #      The store's go up the same way: SHOPIFY_SHOP with the app's SHOPIFY_CLIENT_ID and
 #      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
-#      and for opening night, OPENING_PASS_CODE (the code that makes the annual pass free).
+#      and for opening night, OPENING_PASS_CODE (the code that makes the annual pass free); and the
+#      fraud link's FRAUD_SCORE_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT.
 #      See docs/DEPLOY.md for the first deploy and for selling tickets.
 name: Deploy to Cloudflare
 
@@ -42,6 +43,9 @@ jobs:
       SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
       SHOPIFY_WEBHOOK_SECRET: ${{ secrets.SHOPIFY_WEBHOOK_SECRET }}
       OPENING_PASS_CODE: ${{ secrets.OPENING_PASS_CODE }}
+      FRAUD_SCORE_URL: ${{ secrets.FRAUD_SCORE_URL }}
+      FRAUD_SCORE_KEY: ${{ secrets.FRAUD_SCORE_KEY }}
+      FRAUD_HASH_SALT: ${{ secrets.FRAUD_HASH_SALT }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -131,3 +135,15 @@ jobs:
           command: secret list
           secrets: |
             OPENING_PASS_CODE
+      - name: Upload the fraud link to the Worker
+        if: env.FRAUD_SCORE_URL != '' && env.FRAUD_SCORE_KEY != '' && env.FRAUD_HASH_SALT != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            FRAUD_SCORE_URL
+            FRAUD_SCORE_KEY
+            FRAUD_HASH_SALT

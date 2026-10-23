@@ -36,4 +36,12 @@ export interface Env extends Cloudflare.Env {
   OPENING_PASS_CODE?: string;
   /** Browser tests only: a stand-in store on this machine (http://localhost:<port>). Never set in production. */
   SHOPIFY_TEST_ORIGIN?: string;
+  /**
+   * The fraud link (C45): the fraud pipeline's scoring endpoint (https), the key the Worker sends it
+   * as a bearer token, and the salt (16+ characters) that hashes the guest, device and card before
+   * they leave. Without all three the fraud link is off and the store's own rating decides.
+   */
+  FRAUD_SCORE_URL?: string;
+  FRAUD_SCORE_KEY?: string;
+  FRAUD_HASH_SALT?: string;
 }

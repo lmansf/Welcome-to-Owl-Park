@@ -1,6 +1,6 @@
-import { createHmac } from 'node:crypto';
 import { devices, expect, test, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { E2E_ADMIN_KEY, E2E_STORE, state, walkToDoor } from './helpers';
+import { FREE, LOW, orderId, putOrder, sentLink, ticketLine, webhook } from './store';
 
 /**
  * Opening night (C42) through the room server and the stand-in store (e2e/standInStore.mjs): the
@@ -8,43 +8,12 @@ import { E2E_ADMIN_KEY, E2E_STORE, state, walkToDoor } from './helpers';
  * each order back from the stand-in.
  */
 const HOUR = 3_600_000;
-const FREE = { totalPriceSet: { shopMoney: { amount: '0.0' } } };
-const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
-
-let made = 0;
-/** A new order number: the room server keeps its ticket book from one test run to the next. */
-const orderId = () => String(Date.now() * 100 + (made++ % 100));
-
-const ticketLine = (n: number, kind: string, quantity = 1, start?: number) => ({
-  id: `gid://shopify/LineItem/${n}`,
-  quantity,
-  product: { productType: 'Ticket', kind: { value: kind }, hours: null, start: start === undefined ? null : { value: new Date(start).toISOString() }, end: null },
-});
-
-/** An order in the stand-in store, as its Admin API would answer for it. */
-async function putOrder(request: APIRequestContext, id: string, lines: unknown[], extra: Record<string, unknown> = {}): Promise<void> {
-  const r = await request.post(`${E2E_STORE.origin}/test/orders`, { data: { id, order: { id: `gid://shopify/Order/${id}`, cancelledAt: null, lineItems: { nodes: lines }, ...extra } } });
-  expect(r.ok()).toBe(true);
-}
-
-/** The store's webhook for an order, signed with the store's key. */
-async function webhook(request: APIRequestContext, topic: string, id: string): Promise<Record<string, unknown>> {
-  const body = JSON.stringify({ id: Number(id), admin_graphql_api_id: `gid://shopify/Order/${id}` });
-  const signature = createHmac('sha256', E2E_STORE.webhookKey).update(body).digest('base64');
-  const r = await request.post('/api/store/webhook', {
-    headers: { 'Content-Type': 'application/json', 'X-Shopify-Topic': topic, 'X-Shopify-Hmac-Sha256': signature, 'X-Shopify-Shop-Domain': E2E_STORE.shop },
-    data: body,
-  });
-  expect(r.status(), await r.text()).toBe(200);
-  return (await r.json()) as Record<string, unknown>;
-}
 
 /** Opening the claim link the store emailed for an order, on a computer or a phone. */
 async function claim(browser: Browser, request: APIRequestContext, order: string, device: BrowserContextOptions): Promise<Page> {
-  const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string | null };
-  expect(link).toMatch(/#claim=[A-Za-z0-9_-]{43}$/);
+  const link = await sentLink(request, order);
   const page = await (await browser.newContext(device)).newPage();
-  await page.goto(`/?transport=edge${new URL(link!).hash}`);
+  await page.goto(`/?transport=edge${new URL(link).hash}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
   await expect(page.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 10_000 });
   return page;
@@ -69,7 +38,7 @@ test.describe('opening night (C42)', () => {
       // The store sells the Opening Night Ticket for nothing: a free order, with no risk rating to wait for.
       const order = orderId();
       await putOrder(request, order, [ticketLine(1, 'opening-night', 1, Date.now() - HOUR)], FREE);
-      expect(await webhook(request, 'orders/paid', order)).toEqual({ tickets: 1, sent: true });
+      expect(await webhook(request, 'orders/paid', order)).toMatchObject({ tickets: 1, sent: true });
       const a = await claim(browser, request, order, device);
       const [night] = await a.evaluate(() => window.owlPark.wallet());
       expect(night).toMatchObject({ kind: 'opening-night', status: 'unused' });
@@ -103,7 +72,7 @@ test.describe('opening night (C42)', () => {
       // The buyer checks out: a free pass order with the code and the ticket, back through the webhook.
       const pass = orderId();
       await putOrder(request, pass, [ticketLine(2, 'annual')], { ...FREE, discountCodes: [E2E_STORE.passCode], customAttributes: [{ key: 'from_ticket', value: night!.id }] });
-      expect(await webhook(request, 'orders/paid', pass)).toEqual({ tickets: 1, sent: true });
+      expect(await webhook(request, 'orders/paid', pass)).toMatchObject({ tickets: 1, sent: true });
 
       // The pass comes straight into this wallet, and the page says so.
       await expect(a.getByText('Your annual pass is in your wallet')).toBeVisible({ timeout: 20_000 });
@@ -117,10 +86,9 @@ test.describe('opening night (C42)', () => {
   test('a ticket for a night that has passed is turned away the day after', async ({ browser, request }) => {
     const order = orderId();
     await putOrder(request, order, [ticketLine(1, 'opening-night', 1, Date.now() - 26 * HOUR)], FREE);
-    expect(await webhook(request, 'orders/create', order)).toEqual({ tickets: 1, sent: true });
-    const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string };
+    expect(await webhook(request, 'orders/create', order)).toMatchObject({ tickets: 1, sent: true });
     const a = await (await browser.newContext(COMPUTER)).newPage();
-    await a.goto(`/?transport=edge${new URL(link).hash}`);
+    await a.goto(`/?transport=edge${new URL(await sentLink(request, order)).hash}`);
     await expect(a.getByText('The tickets on that link were refunded or have run out.')).toBeVisible({ timeout: 20_000 });
     const [night] = await a.evaluate(() => window.owlPark.wallet());
     expect(night).toMatchObject({ kind: 'opening-night', status: 'expired' });
@@ -131,10 +99,9 @@ test.describe('opening night (C42)', () => {
   test('one vote a day for a wallet holding two passes', async ({ browser, request }) => {
     const order = orderId();
     await putOrder(request, order, [ticketLine(1, 'annual', 2)], { totalPriceSet: { shopMoney: { amount: '29.98' } }, ...LOW });
-    expect(await webhook(request, 'orders/paid', order)).toEqual({ tickets: 2, sent: true });
-    const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string };
+    expect(await webhook(request, 'orders/paid', order)).toMatchObject({ tickets: 2, sent: true });
     const a = await (await browser.newContext(COMPUTER)).newPage();
-    await a.goto(`/?transport=edge${new URL(link).hash}`);
+    await a.goto(`/?transport=edge${new URL(await sentLink(request, order)).hash}`);
     await expect(a.getByText('Your tickets are in your wallet')).toBeVisible({ timeout: 20_000 });
     const [first, second] = await a.evaluate(() => window.owlPark.wallet());
 

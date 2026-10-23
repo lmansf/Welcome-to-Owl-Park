@@ -3,7 +3,8 @@
  * Apart from the object class so tests run it against any SQLite with the same
  * `exec(query, ...bindings)` shape. Only order and line numbers are stored, never a buyer.
  */
-import type { OrderRecord, PassLink, TicketRecord, TicketStore } from './TicketBook';
+import type { Decision, Outcome } from './fraudLink';
+import type { OrderCheck, OrderRecord, PassLink, TicketRecord, TicketStore } from './TicketBook';
 import type { TicketKind } from './tickets';
 
 type OrderRow = {
@@ -32,6 +33,46 @@ type TicketRow = {
 };
 
 type LinkRow = { order_id: string; from_ticket: string | null; at: number };
+
+type CheckRow = {
+  order_id: string;
+  name: string;
+  transaction_id: string;
+  request_id: string;
+  decision: string;
+  score: number | null;
+  reasons: string;
+  model_version: string | null;
+  scoring_ms: number | null;
+  timed_out: number;
+  fallback: number;
+  received_at: number;
+  origin: string;
+  outcome: string;
+  hold_until: number | null;
+  settled_at: number;
+  responded: number;
+};
+
+const check = (r: CheckRow): OrderCheck => ({
+  order: r.order_id,
+  name: r.name,
+  transaction: r.transaction_id,
+  request: r.request_id,
+  decision: r.decision as Decision | 'fail-open',
+  score: r.score,
+  reasons: (JSON.parse(r.reasons) as unknown[]).filter((x): x is string => typeof x === 'string'),
+  modelVersion: r.model_version,
+  scoringMs: r.scoring_ms,
+  timedOut: r.timed_out === 1,
+  fallback: r.fallback === 1,
+  receivedAt: r.received_at,
+  origin: r.origin,
+  outcome: r.outcome as Outcome,
+  holdUntil: r.hold_until,
+  settledAt: r.settled_at,
+  responded: r.responded === 1,
+});
 
 const link = (r: LinkRow): PassLink => ({ order: r.order_id, fromTicket: r.from_ticket, at: r.at });
 
@@ -68,6 +109,12 @@ export class SqlTicketStore implements TicketStore {
     // Opening night's pass orders (C42): the Opening Night Ticket each came from, or none.
     sql.exec(`CREATE TABLE IF NOT EXISTS opening_passes (order_id TEXT PRIMARY KEY, from_ticket TEXT, at INTEGER NOT NULL)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS opening_passes_from ON opening_passes (from_ticket)`);
+    // The fraud check of each ticket order (C45): the verdict and what became of the order.
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS order_checks (order_id TEXT PRIMARY KEY, name TEXT NOT NULL, transaction_id TEXT NOT NULL, request_id TEXT NOT NULL, decision TEXT NOT NULL, score REAL, reasons TEXT NOT NULL, model_version TEXT, scoring_ms REAL, timed_out INTEGER NOT NULL, fallback INTEGER NOT NULL, received_at INTEGER NOT NULL, origin TEXT NOT NULL, outcome TEXT NOT NULL, hold_until INTEGER, settled_at INTEGER NOT NULL, responded INTEGER NOT NULL)`,
+    );
+    sql.exec(`CREATE INDEX IF NOT EXISTS order_checks_outcome ON order_checks (outcome, received_at)`);
+    sql.exec(`CREATE INDEX IF NOT EXISTS order_checks_received ON order_checks (received_at)`);
   }
 
   order(id: string) {
@@ -110,6 +157,22 @@ export class SqlTicketStore implements TicketStore {
   }
   putPassLink(l: PassLink) {
     this.sql.exec(`INSERT OR IGNORE INTO opening_passes (order_id, from_ticket, at) VALUES (?, ?, ?)`, l.order, l.fromTicket, l.at);
+  }
+  check(order: string) {
+    const r = this.sql.exec<CheckRow>(`SELECT * FROM order_checks WHERE order_id = ?`, order).toArray()[0];
+    return r ? check(r) : null;
+  }
+  putCheck(c: OrderCheck) {
+    this.sql.exec(
+      `INSERT OR REPLACE INTO order_checks (order_id, name, transaction_id, request_id, decision, score, reasons, model_version, scoring_ms, timed_out, fallback, received_at, origin, outcome, hold_until, settled_at, responded) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      c.order, c.name, c.transaction, c.request, c.decision, c.score, JSON.stringify(c.reasons), c.modelVersion, c.scoringMs, c.timedOut ? 1 : 0, c.fallback ? 1 : 0, c.receivedAt, c.origin, c.outcome, c.holdUntil, c.settledAt, c.responded ? 1 : 0,
+    );
+  }
+  recentChecks(limit: number) {
+    return this.sql.exec<CheckRow>(`SELECT * FROM order_checks ORDER BY received_at DESC, order_id DESC LIMIT ?`, limit).toArray().map(check);
+  }
+  heldChecks() {
+    return this.sql.exec<CheckRow>(`SELECT * FROM order_checks WHERE outcome = 'held' ORDER BY received_at`).toArray().map(check);
   }
   putTicket(t: TicketRecord) {
     this.sql.exec(
