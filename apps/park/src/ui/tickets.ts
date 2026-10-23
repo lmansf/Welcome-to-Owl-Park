@@ -8,10 +8,13 @@ import type { TicketLink } from '../net/ticketLinks';
 
 export const KIND_LABEL: Readonly<Record<WalletEntry['kind'], string>> = { day: 'Day ticket', night: 'Night ticket', annual: 'Annual pass', event: 'Event ticket', 'opening-night': 'Opening Night Ticket' };
 
-/** Opening night's words (C42, the owner's): the booth's line, the free pass's offer and its button, and the pass come. */
+/**
+ * Opening night's words (C42, the owner's): the booth's line, the pass offer and its button, and the
+ * pass come. The pass is half price on the night (OP-062; it was free at first).
+ */
 export const OPENING_WORDS = {
-  booth: 'Opening night: every pass is free',
-  offer: 'Your pass is free tonight.',
+  booth: 'Opening night: every pass is half price',
+  offer: 'Your pass is half price tonight.',
   claim: 'Claim it',
   claimed: 'Your annual pass is in your wallet',
 } as const;
@@ -39,7 +42,7 @@ export interface WalletLine {
   vote: string | null;
   /** It can be passed on with a share link (unused tickets). */
   share: boolean;
-  /** An Opening Night Ticket's free pass (C42): to claim tonight, or claimed. */
+  /** An Opening Night Ticket's pass offer (C42): to claim tonight, or claimed. */
   freePass: 'ready' | 'claimed' | null;
 }
 
@@ -173,12 +176,12 @@ const PASS_CSS = `
 #hud .free-pass button{min-height:44px;color:#0C1E36;border-color:rgba(12,30,54,.3)}
 `;
 
-/** How often, and how long, the page looks for the free pass once the owl has gone to claim it. */
+/** How often, and how long, the page looks for the pass once the owl has gone to claim it. */
 const PASS_LOOK_MS = 4_000;
 const PASS_LOOK_FOR_MS = 20 * 60_000;
 
 export interface FreePassOffer {
-  /** The store's cart link with the free pass. */
+  /** The store's cart link with the pass and the night's code. */
   link: string;
   /** Whether the pass has come (the wallet's Opening Night Ticket says so). */
   claimed(): Promise<boolean>;
@@ -192,9 +195,9 @@ export interface FreePassCard {
 }
 
 /**
- * Opening night's free pass (C42): after the ticket card, "Your pass is free tonight." and Claim it,
- * which opens the store's checkout in a new tab with the pass, its code and the ticket. The page
- * then looks for the pass in the wallet for a while, and says when it has come.
+ * Opening night's pass offer (C42): after the ticket card, "Your pass is half price tonight." and
+ * Claim it, which opens the store's checkout in a new tab with the pass, its code and the ticket. The
+ * page then looks for the pass in the wallet for a while, and says when it has come.
  */
 export function createFreePassCard(root: HTMLElement, toast: (message: string) => void): FreePassCard {
   const style = document.createElement('style');

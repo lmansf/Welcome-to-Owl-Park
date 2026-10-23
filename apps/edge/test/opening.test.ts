@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Ledger, MemoryVoteStore, walletVoter, type VoteStore } from '../src/Ledger';
-import { catalogueOf, freeOrder, fromTicketOf, gidTail, passCartLink, storeTime, ticketLines, usedCode, type AdminOrder } from '../src/shopify';
+import { catalogueOf, freeOrder, fromTicketOf, gidTail, paidFor, passCartLink, storeTime, ticketLines, usedCode, type AdminOrder } from '../src/shopify';
 import { claimLink, storeWebhook, type Desk, type HookDeps } from '../src/storeHooks';
 import { SqlTicketStore } from '../src/sqlTicketStore';
 import { SqlVoteStore } from '../src/sqlVoteStore';
@@ -94,6 +94,26 @@ describe("opening night's fields in the store", () => {
     expect(usedCode(coded, '  ')).toBe(false);
   });
 
+  it('knows what the passes sold for: each pass line less every discount on it, the code among them', () => {
+    const money = (amount: string) => ({ shopMoney: { amount } });
+    const order = orderOf([
+      // Two passes at half price with the night's code: $29.98 less $14.99.
+      { id: 'gid://shopify/LineItem/1', quantity: 2, originalTotalSet: money('29.98'), discountAllocations: [{ allocatedAmountSet: money('14.99') }], product: product('annual') },
+      // A third pass, with the code and a discount on the whole order shared out to it as well.
+      { id: 'gid://shopify/LineItem/2', quantity: 1, originalTotalSet: money('14.99'), discountAllocations: [{ allocatedAmountSet: money('7.50') }, { allocatedAmountSet: money('0.75') }], product: product('annual') },
+      // A day ticket in the same cart is not a pass.
+      { id: 'gid://shopify/LineItem/3', quantity: 1, originalTotalSet: money('3.99'), product: product('day') },
+      // A line the store gives no price for counts nothing.
+      { id: 'gid://shopify/LineItem/4', quantity: 1, product: product('annual') },
+    ]);
+    expect(paidFor(order, ticketLines(order), 'annual')).toBe(1499 + 674);
+    expect(paidFor(order, ticketLines(order), 'day')).toBe(399);
+    expect(paidFor(order, [], 'annual')).toBe(0);
+    // A discount bigger than the line never makes it less than nothing.
+    const free = orderOf([{ id: 'gid://shopify/LineItem/1', quantity: 1, originalTotalSet: money('14.99'), discountAllocations: [{ allocatedAmountSet: money('20.00') }], product: product('annual') }]);
+    expect(paidFor(free, ticketLines(free), 'annual')).toBe(0);
+  });
+
   it("finds the annual pass and the night's window among the ticket products on sale", () => {
     const c = catalogueOf({
       products: {
@@ -108,7 +128,7 @@ describe("opening night's fields in the store", () => {
     expect(catalogueOf({ products: { nodes: [] } })).toEqual({ passVariant: null, opening: null });
   });
 
-  it('makes the cart link: the pass, the code that makes it free, and the ticket it comes from', () => {
+  it('makes the cart link: the pass, the code that takes half off it, and the ticket it comes from', () => {
     const link = new URL(passCartLink('owl-test.myshopify.com', '200', 'OPEN TONIGHT', 'OWL-7K3Q-PX9M'));
     expect(link.origin + link.pathname).toBe('https://owl-test.myshopify.com/cart/200:1');
     expect(link.searchParams.get('discount')).toBe('OPEN TONIGHT');
@@ -142,9 +162,9 @@ for (const [name, make] of STORES) {
       const b = book();
       const night = await scannedNight(b);
       await b.issue('601', [passLine()], false, T0);
-      expect(b.linkPass('601', night, T0)).toEqual({ order: '601', fromTicket: night, at: T0 });
+      expect(b.linkPass('601', night, T0, 749)).toEqual({ order: '601', fromTicket: night, at: T0, cents: 749 });
       // The store sends the webhook again: the first link stands.
-      expect(b.linkPass('601', null, T0 + 1)).toEqual({ order: '601', fromTicket: night, at: T0 });
+      expect(b.linkPass('601', null, T0 + 1, 0)).toEqual({ order: '601', fromTicket: night, at: T0, cents: 749 });
       const pass = b.orderOf('601')!.tickets[0]!;
       expect(pass.device).toBe('c_owl');
       expect(b.wallet('c_owl', T0).map((t) => [t.kind, t.freePass])).toEqual([
@@ -165,7 +185,7 @@ for (const [name, make] of STORES) {
       expect(b.linkPass('603', day.tickets[0]!.id, T0)!.fromTicket).toBeNull();
     });
 
-    it('offers the free pass once the ticket is through the gate, while the night runs, to its own wallet', async () => {
+    it('offers the pass once the ticket is through the gate, while the night runs, to its own wallet', async () => {
       const b = book();
       const { claim, tickets } = await b.issue('504', [nightLine()], false, W0 - HOUR_MS);
       const id = tickets[0]!.id;
@@ -199,35 +219,69 @@ for (const [name, make] of STORES) {
       expect(b.status(b.orderOf('606')!.tickets[0]!.id, T0 + HOUR_MS)).toBe('unused');
     });
 
-    it("counts the night: tickets issued and scanned, passes with and without the link, and the conversion", async () => {
+    it("counts the night: tickets issued and scanned, passes with and without the link, the conversion and the passes' revenue", async () => {
       const b = book();
-      expect(b.opening(T0).counts).toEqual({ issued: 0, scanned: 0, linkedPasses: 0, unlinkedPasses: 0, converted: 0, conversion: null, revoked: 0 });
+      expect(b.opening(T0).counts).toEqual({ issued: 0, scanned: 0, linkedPasses: 0, unlinkedPasses: 0, converted: 0, conversion: null, passRevenue: 0, revoked: 0 });
       const a = await scannedNight(b, '511', 'c_a');
       await scannedNight(b, '512', 'c_b');
       await b.issue('513', [nightLine()], false, W0);
       const gone = await scannedNight(b, '514', 'c_d');
       await b.issue('611', [passLine()], false, T0);
-      b.linkPass('611', a, T0);
+      b.linkPass('611', a, T0, 749);
       await b.issue('612', [passLine()], false, T0);
-      b.linkPass('612', null, T0);
+      b.linkPass('612', null, T0, 750);
       await b.issue('614', [passLine()], false, T0);
-      b.linkPass('614', gone, T0);
+      b.linkPass('614', gone, T0, 749);
       b.revoke('514', 'all', T0);
       const { counts, rows } = b.opening(T0);
-      expect(counts).toEqual({ issued: 3, scanned: 2, linkedPasses: 1, unlinkedPasses: 1, converted: 1, conversion: 0.5, revoked: 2 });
-      expect(rows.filter((r) => r.kind === 'pass').map((r) => [r.order, r.fromTicket, r.status])).toEqual([
-        ['611', a, 'unused'],
-        ['612', null, 'unused'],
-        ['614', gone, 'revoked'],
+      // The switched-off pass takes its $7.49 out of the night's revenue.
+      expect(counts).toEqual({ issued: 3, scanned: 2, linkedPasses: 1, unlinkedPasses: 1, converted: 1, conversion: 0.5, passRevenue: 1499, revoked: 2 });
+      expect(rows.filter((r) => r.kind === 'pass').map((r) => [r.order, r.fromTicket, r.status, r.paid])).toEqual([
+        ['611', a, 'unused', 749],
+        ['612', null, 'unused', 750],
+        ['614', gone, 'revoked', 749],
       ]);
       const csv = openingCsv(rows).trim().split('\n');
-      expect(csv[0]).toBe('kind,ticket,order,status,first_scan,from_ticket');
-      expect(csv).toContain(`opening-night,${a},511,active,${new Date(T0).toISOString()},`);
-      expect(csv).toContain(`pass,${b.orderOf('611')!.tickets[0]!.id},611,unused,,${a}`);
+      expect(csv[0]).toBe('kind,ticket,order,status,first_scan,from_ticket,paid');
+      expect(csv).toContain(`opening-night,${a},511,active,${new Date(T0).toISOString()},,`);
+      expect(csv).toContain(`pass,${b.orderOf('611')!.tickets[0]!.id},611,unused,,${a},7.49`);
       expect(csv.join('\n')).not.toMatch(/@/);
+    });
+
+    it("shares an order's amount out over its passes to the cent, and leaves another ticket in the cart out", async () => {
+      const b = book();
+      const night = await scannedNight(b, '521');
+      // Three passes for $22.48 and a day ticket, in one order.
+      await b.issue('621', [{ ...passLine('P1'), quantity: 3 }, { ...passLine('D1'), kind: 'day', lengthMs: DAY_MS }], false, T0);
+      b.linkPass('621', night, T0, 2248);
+      const passes = () => b.opening(T0).rows.filter((r) => r.kind === 'pass');
+      expect(passes().map((r) => r.paid)).toEqual([750, 749, 749]);
+      expect(b.opening(T0).counts).toMatchObject({ linkedPasses: 3, passRevenue: 2248 });
+      // One pass refunded: its part comes out.
+      b.revoke('621', [{ line: 'P1', quantity: 1 }], T0);
+      expect(b.opening(T0).counts).toMatchObject({ linkedPasses: 2, passRevenue: 2248 - passes().find((r) => r.status === 'revoked')!.paid! });
+      // A pass linked before the park kept amounts counts no revenue, and leaves its CSV cell empty.
+      await b.issue('622', [passLine()], false, T0);
+      b.linkPass('622', null, T0);
+      expect(passes().find((r) => r.order === '622')!.paid).toBeNull();
+      expect(openingCsv(b.opening(T0).rows)).toMatch(/,622,unused,,,\n/);
     });
   });
 }
+
+describe("opening night's pass table, kept from before passes had a price", () => {
+  it('gains the amount column, and the passes linked before it have none', () => {
+    const sql = sqlStorage();
+    sql.exec(`CREATE TABLE opening_passes (order_id TEXT PRIMARY KEY, from_ticket TEXT, at INTEGER NOT NULL)`);
+    sql.exec(`INSERT INTO opening_passes (order_id, from_ticket, at) VALUES ('801', NULL, ?)`, T0);
+    const store = new SqlTicketStore(sql);
+    expect(store.passLink('801')).toEqual({ order: '801', fromTicket: null, at: T0, cents: null });
+    store.putPassLink({ order: '802', fromTicket: null, at: T0, cents: 749 });
+    expect(store.passLink('802')!.cents).toBe(749);
+    // Opening the table again (the next time the object wakes) keeps it as it is.
+    expect(new SqlTicketStore(sql).passLinks().map((l) => l.cents)).toEqual([null, 749]);
+  });
+});
 
 const VOTE_STORES: Array<[string, () => VoteStore]> = [
   ['memory', () => new MemoryVoteStore()],
@@ -323,7 +377,11 @@ class NightStore {
 }
 
 const FREE = { totalPriceSet: { shopMoney: { amount: '0.0' } } };
+const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
 const ticketItem = (n: number, kind: string, start?: string) => ({ id: `gid://shopify/LineItem/${n}`, quantity: 1, product: product(kind, start) });
+/** The annual pass at half price with the night's code (OP-062): $14.99 less $7.50, and tax on top. */
+const halfPricePass = (n: number) => ({ ...ticketItem(n, 'annual'), originalTotalSet: { shopMoney: { amount: '14.99' } }, discountAllocations: [{ allocatedAmountSet: { shopMoney: { amount: '7.50' } } }] });
+const HALF_PRICE = { totalPriceSet: { shopMoney: { amount: '8.01' } }, ...LOW };
 
 describe("opening night's orders through the store webhooks", () => {
   function setup() {
@@ -379,7 +437,7 @@ describe("opening night's orders through the store webhooks", () => {
     expect(await book.claim(store.links.get('705')!.split('#claim=')[1]!, 'c_owl')).toHaveLength(1);
   });
 
-  it("links the pass from the park's link to its ticket, and counts the code used without it", async () => {
+  it("links the half-price pass from the park's link to its ticket with what it sold for, and counts the code used without it", async () => {
     const { store, book, deps } = setup();
     store.put('711', [ticketItem(81, 'opening-night', '2026-12-05T00:00:00Z')], FREE);
     await storeWebhook('orders/paid', hook('711'), deps);
@@ -387,17 +445,44 @@ describe("opening night's orders through the store webhooks", () => {
     const secret = (await book.newClaim('711'))!;
     await book.claim(secret, 'c_owl');
     book.scan(night, 'c_owl', T0);
-    store.put('712', [ticketItem(82, 'annual')], { ...FREE, discountCodes: ['opentonight'], customAttributes: [{ key: 'from_ticket', value: night }] });
+    store.put('712', [halfPricePass(82)], { ...HALF_PRICE, discountCodes: ['opentonight'], customAttributes: [{ key: 'from_ticket', value: night }] });
     expect((await storeWebhook('orders/paid', hook('712'), deps)).body).toEqual({ tickets: 1, sent: true });
-    store.put('713', [ticketItem(83, 'annual')], { ...FREE, discountCodes: ['OPENTONIGHT'] });
+    expect(book.opening(T0).rows.find((r) => r.order === '712')).toMatchObject({ fromTicket: night, paid: 749 });
+    store.put('713', [halfPricePass(83)], { ...HALF_PRICE, discountCodes: ['OPENTONIGHT'] });
     await storeWebhook('orders/paid', hook('713'), deps);
     // A pass bought at its price, with no code and no link, is no part of the night.
-    store.put('714', [ticketItem(84, 'annual')], { totalPriceSet: { shopMoney: { amount: '14.99' } }, risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } });
+    store.put('714', [{ ...ticketItem(84, 'annual'), originalTotalSet: { shopMoney: { amount: '14.99' } } }], { totalPriceSet: { shopMoney: { amount: '16.04' } }, ...LOW });
     await storeWebhook('orders/paid', hook('714'), deps);
-    expect(book.opening(T0).counts).toMatchObject({ issued: 1, scanned: 1, linkedPasses: 1, unlinkedPasses: 1, converted: 1, conversion: 1 });
+    expect(book.opening(T0).counts).toMatchObject({ issued: 1, scanned: 1, linkedPasses: 1, unlinkedPasses: 1, converted: 1, conversion: 1, passRevenue: 1498 });
     expect(book.wallet('c_owl', T0).map((t) => [t.kind, t.freePass])).toEqual([
       ['annual', undefined],
       ['opening-night', 'claimed'],
     ]);
+  });
+
+  it('a half-price pass is a paid order: one the store has not rated low waits like any other, linked and counted already', async () => {
+    const { store, book, deps } = setup();
+    store.put('721', [ticketItem(91, 'opening-night', '2026-12-05T00:00:00Z')], FREE);
+    await storeWebhook('orders/paid', hook('721'), deps);
+    const night = book.orderOf('721')!.tickets[0]!.id;
+    await book.claim((await book.newClaim('721'))!, 'c_owl');
+    book.scan(night, 'c_owl', T0);
+    store.put('722', [halfPricePass(92)], { totalPriceSet: { shopMoney: { amount: '8.01' } }, risk: { recommendation: 'INVESTIGATE', assessments: [{ riskLevel: 'MEDIUM' }] }, discountCodes: ['OPENTONIGHT'], customAttributes: [{ key: 'from_ticket', value: night }] });
+    expect((await storeWebhook('orders/paid', hook('722'), deps)).body).toEqual({ tickets: 1, held: true });
+    expect(store.fulfilled.has('722')).toBe(false);
+    // The pass is in the wallet, waiting on the store's check (a waiting ticket lists last).
+    expect(book.wallet('c_owl', T0).map((t) => [t.kind, t.status, t.freePass])).toEqual([
+      ['opening-night', 'active', 'claimed'],
+      ['annual', 'held', undefined],
+    ]);
+    expect(book.opening(T0).counts).toMatchObject({ linkedPasses: 1, passRevenue: 749 });
+  });
+
+  it('the desk keeps an amount in whole cents only', async () => {
+    const { book, deps } = setup();
+    await book.issue('731', [passLine()], false, T0);
+    for (const cents of [-1, 7.49, '749', Number.MAX_SAFE_INTEGER + 2]) expect((await deps.desk('/tickets/link-pass', { order: '731', from: null, cents })).status).toBe(400);
+    expect((await deps.desk('/tickets/link-pass', { order: '731', from: null, cents: 749 })).body).toEqual({ linked: false, from: null });
+    expect(book.opening(T0).counts.passRevenue).toBe(749);
   });
 });

@@ -62,7 +62,7 @@
   // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
   // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
   // the same way once the store's app exists; until then the ticket webhooks are refused. So is
-  // OPENING_PASS_CODE, opening night's code for a free annual pass (C42). All are typed as optional
+  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062). All are typed as optional
   // in src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {

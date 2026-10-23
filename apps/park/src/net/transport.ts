@@ -78,7 +78,7 @@ export interface WalletEntry {
   validUntil: number | null;
   /** Today's Realm Vote: free, spent, or none while the ticket is not running. */
   voteToday: 'ready' | 'used' | 'none';
-  /** An Opening Night Ticket's free pass (C42): ready to claim tonight, or claimed. */
+  /** An Opening Night Ticket's half-price pass (C42, OP-062): ready to claim tonight, or claimed. */
   freePass?: 'ready' | 'claimed';
 }
 
@@ -97,7 +97,7 @@ export interface TicketWallet {
   scan(id?: string): Promise<ScanReply>;
   /** Whether opening night is on (C42), as the last look at the wallet said. */
   openingNight(): boolean;
-  /** Opening night's free pass for an Opening Night Ticket on this device: the store's cart link; null when there is none to have. */
+  /** Opening night's half-price pass for an Opening Night Ticket on this device: the store's cart link; null when there is none to have. */
   freePass(id: string): Promise<string | null>;
 }
 

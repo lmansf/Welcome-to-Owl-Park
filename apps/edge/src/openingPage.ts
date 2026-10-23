@@ -1,9 +1,10 @@
 /**
  * The keepers' opening-night page (/admin/opening, C42): the night's count, read with the admin key
  * like the feedback page. Tickets issued and scanned, passes claimed through the park's link and
- * passes without one, the conversion rate, and a CSV of the night's tickets: order numbers and ticket
- * IDs only, never a name or an email. It also shows the night's window as the store has it and
- * whether the free-pass link is ready, so a wrong date or a missing code shows before the night.
+ * passes without one, the conversion rate, what the passes sold for (OP-062), and a CSV of the
+ * night's tickets: order numbers, ticket IDs and amounts only, never a name or an email. It also
+ * shows the night's window as the store has it and whether the pass link is ready, so a wrong date
+ * or a missing code shows before the night.
  */
 import { ADMIN_STYLE, adminPage } from './feedbackPage';
 
@@ -25,6 +26,7 @@ const say = (t) => { $('#say').textContent = t; };
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const locked = (yes) => { $('#key').hidden = !yes; $('#board').hidden = yes; };
 const eastern = (ms) => new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' ET';
+const dollars = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 async function call(path) {
   const res = await fetch(path, { headers: { 'X-Admin-Key': keyOf() }, cache: 'no-store' });
@@ -60,6 +62,7 @@ function show(r) {
     ['Passes claimed through the link', c.linkedPasses, 'linked'],
     ['Passes without a link', c.unlinkedPasses, 'unlinked'],
     ['Conversion rate', rate, 'conversion'],
+    ['Pass revenue (before tax)', dollars(c.passRevenue), 'revenue'],
     ['Switched off', c.revoked, 'revoked'],
   ]) {
     const d = el('div');
@@ -73,7 +76,7 @@ function show(r) {
   const missing = [];
   if (!r.link.code) missing.push('the pass code (OPENING_PASS_CODE)');
   if (!r.link.pass) missing.push('an annual pass on sale');
-  $('#link').textContent = missing.length ? 'The free-pass link is not ready: it needs ' + missing.join(' and ') + '.' : 'The free-pass link is ready.';
+  $('#link').textContent = missing.length ? 'The pass link is not ready: it needs ' + missing.join(' and ') + '.' : 'The pass link is ready.';
 }
 
 async function download() {
