@@ -16,7 +16,7 @@
     "e2e": "pnpm --filter @owl-park/park e2e",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
-    "build:edge": "VITE_TRANSPORT=edge pnpm build",
+    "build:edge": "node tools/build-edge.mjs",
     "deploy:edge": "pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy",
     "load": "node tools/load/swarm.mjs",
     "art:generate": "node tools/art/generate.mjs",
