@@ -252,6 +252,17 @@ emailed magic link and Supabase session.
 same flow at $0 that works on opening night only (date to be announced); one pin, one ticket. It
 gives that night's Realm Vote like any other ticket.
 
+**Leaving the park (C43, `packages/shared/src/wayout.ts`):** the spot in the hub where owls arrive
+from the turnstiles is also the way out. Its floor's bottom edge there is a doorway (`to-lobby`,
+marked by a soft ring on the floor) to the lobby's `from-hub` spawn, in front of the turnstiles
+and outside them. The Menu offers the same as "Leave the park" in any room inside the park, after a
+card that asks ("Leave the park? Your ticket keeps running.", Stay or Leave), and "Go home"
+anywhere but the owl's own nest: straight to that nest, whose id the page asks for
+(`GET /api/nest` with the pass, which makes the nest on first sight as the street does; the local
+mode asks its own book). Out of the nest the owl is on the street in front of door 0. Leaving
+changes nothing on a ticket: its time keeps running from its first scan, the pass stays admitted,
+and coming back through the turnstiles is the quick scan ("Welcome back").
+
 ## 10. Feedback from visitors (built)
 
 Feedback in the Menu (picked out in gold) opens a short form: what kind of note (bug, idea, praise, other) and up

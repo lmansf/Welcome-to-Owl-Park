@@ -150,6 +150,11 @@ hud.attachCollection(collection, {
   wear: () => roomScene()?.wear(),
   look: () => game.registry.get('look') as OwlLook,
 });
+// The Menu's ways out (C43): out of the park to the lobby, and home to the owl's own nest.
+hud.attachWayOut({
+  leave: () => void roomScene()?.leavePark(),
+  home: () => void roomScene()?.goHome(),
+});
 // The owl builder shows the owl big: its preview scene runs while the builder is open.
 hud.onOwlPreview((frame) => {
   if (!frame) {

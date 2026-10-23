@@ -178,6 +178,10 @@ export class LocalCollections implements CollectionService {
     return this.nests((nests) => nests.claimGift(this.cid, this.now()));
   }
 
+  async homeNest(): Promise<string | null> {
+    return this.nests((nests) => nests.mine(this.cid, null, this.now()).nest.nestId);
+  }
+
   /**
    * The nests in this browser, by the same rules as the room server's: on the street, the visitor's
    * own nest behind door 0 and other collectors' open ones behind the rest; in a nest, the nest as it

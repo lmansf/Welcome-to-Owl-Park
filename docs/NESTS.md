@@ -82,7 +82,8 @@ and `furniture`; no new Durable Object class, no migration). The room object hol
 the nests as rooms: a nest's room checks with the collections whether the nest is there and open
 before it welcomes a visitor, and turns the visitor away otherwise (a `closed` frame, then close
 4011, which the page does not reconnect after). Protocol 7 (`packages/shared/src/edge.ts`) adds the
-`street` and `nest` frames; see `docs/ARCHITECTURE.md`. The day's gift is `POST /api/nest/gift` with
+`street` and `nest` frames; see `docs/ARCHITECTURE.md`. "Go home" in the Menu asks for the owl's own
+nest with `GET /api/nest` (the nest's id only; made on first sight). The day's gift is `POST /api/nest/gift` with
 the visitor's pass. Population counts add every nest up under one `nests` entry, so they never name
 a nest.
 

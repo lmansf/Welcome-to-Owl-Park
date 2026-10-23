@@ -23,3 +23,4 @@ export * from './nestbook';
 export * from './feedback';
 export * from './arcade';
 export * from './phrases';
+export * from './wayout';
