@@ -160,12 +160,55 @@ variable (defaults: lobby and hub 80; grove, market, arcade and the street 40; a
 
 ## 6. Scaling knobs
 
-1. `ROOM_SHARDING=single` (default): the whole park in one object. Cheapest; fine to a few
-   hundred concurrent.
-2. `ROOM_SHARDING=room`: one object per room; more fan-out capacity, more awake time billed.
+1. `ROOM_SHARDING=single` (default): the whole park in one object. Cheapest, and enough while the
+   whole park has well under 80 owls walking at once (measured below).
+2. `ROOM_SHARDING=room`: one object per room, so each room holds its own cap; more object awake
+   time billed. The park-wide count in the HUD then covers only the owl's own room (the
+   `/api/counts` route still adds up every room), and the lanterns and the quiz start afresh in the
+   hub's own object.
 3. Instances (`hub-1`, `hub-2`): not built yet; the protocol and ids leave room for it.
 4. The `Room` class in `apps/edge/src/Room.ts` has no platform dependency. Porting to a plain
    Node WebSocket process is a small adapter, which is the exit from the hosted platform.
+
+### Measured (OP-068, 2026-10-23)
+
+A throwaway copy of the room server on the park's Cloudflare account (free plan), loaded for 60
+seconds a step by bots on a GitHub runner. A calm bot taps a new spot every 4 seconds; a busy one
+every second (the server allows two). Echo is the time from a bot's move to the server's answer,
+network included. The bots' own timers stayed within 25 ms, so the delays are the server's.
+The Load test workflow runs it again (`tools/load/run-steps.mjs`).
+
+| Owls | A move | Objects | Echo p50 / p95 / p99 (ms) | What happened |
+| --- | --- | --- | --- | --- |
+| 80 in the hub | every 4 s | one | 20 / 35 / 49 | held |
+| 80 in the hub | every 1 s | one | 31 / 71 / 97 | held |
+| 120 in the hub | every 1 s | one | 565 / 2,999 / 3,150 | overloaded: Cloudflare closed 98 sockets with 1013 ("Service overloaded") after 19 s |
+| 240 in four rooms at their caps | every 1 s | one, as today | 819 / 19,591 / 20,821 | overloaded: all 240 closed with 1013 after 22 s |
+| 240 in four rooms at their caps | every 1 s | one per room | 22 / 39 / 54 | held |
+| 480, 120 in each of four rooms | every 1 s | one per room | 14,826 / 33,369 / 36,517 | every object seconds behind |
+
+The four rooms at their caps are the lobby and the hub (80 each) and the grove and the market (40
+each). What runs out is the fan-out: every move goes to everyone else in its room, so an object
+sends about (moves a second) × (owls in the room − 1) frames a second. Eighty busy owls in one room
+come to about 6,300 a second, and hold; 120 come to about 14,000, and do not. A calm owl moves a
+quarter as often, and an owl standing about costs almost nothing.
+
+What it means:
+
+- A room holds its cap of 80 even with every owl in it walking all the time. Keep the caps of busy
+  rooms at 80 or below: 120 busy owls overload an object even when it has nothing else to do.
+- With one object for the whole park (today's setting), every room's fan-out adds up in that one
+  object, so the whole park holds about what one busy room does: 80 owls walking at once in one
+  room, or more spread over several. The four rooms at their caps with everyone walking come to
+  about 15,800 frames a second and overload it. Past its limit, moves lag by seconds, and then
+  Cloudflare drops every owl in the park at once; the client reconnects on its own, first after
+  about half a second and never more than twelve seconds apart.
+- With `ROOM_SHARDING=room`, each room holds its own cap, and a room that overloads no longer takes
+  the others with it. Switch to it (a deploy) before a day that may bring more than about 80 owls
+  at once, such as opening night, when everyone arrives in the lobby together. Each busy room's
+  object is then awake, and billed, on its own (the cost model in section 3).
+- More headroom in one room would come from sending one combined frame per room every 100 ms
+  instead of one per move (not built).
 
 ## 7. The Realm Vote (built, opens with tickets)
 
