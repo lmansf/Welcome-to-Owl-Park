@@ -37,12 +37,21 @@ test.describe('prewritten chat', () => {
     await expect(wheel.locator('[data-group="cheers"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(wheel.locator('[data-phrase]')).toHaveText([/^Thank you!/, /^Great job!/, /^Nice owl!/, /^Well played!/]);
     await a.screenshot({ path: `e2e-screenshots/${test.info().project.name}-say-wheel.png` });
-    await wheel.locator('[data-phrase="6"]').click();
-    await expect(wheel).toBeHidden();
-    // One phrase every 3 s: another at once is not said, and the wheel opened again greys its phrases.
-    expect(await a.evaluate(() => window.owlPark.say(7))).toBe(false);
-    await openSay(a);
-    await expect(wheel.locator('[data-phrase]').first()).toBeDisabled();
+    // One phrase every 3 s. The phrase, another tried at once and the wheel opened again from the
+    // Menu happen in one step in the page, so a slow machine cannot run past the wait between them:
+    // the phrase closes the wheel, the second is not said, and the wheel opened again greys its phrases.
+    const tooSoon = await a.evaluate(() => {
+      const tap = (sel: string) => (document.querySelector(sel) as HTMLElement).click();
+      const phrases = () => document.querySelectorAll<HTMLButtonElement>('[data-phrases] [data-phrase]');
+      tap('[data-phrase="6"]');
+      const closed = !phrases()[0]?.checkVisibility();
+      const second = window.owlPark.say(7);
+      tap('[data-menu-btn]');
+      tap('[data-screen="say"]');
+      return { closed, second, greyed: [...phrases()].map((b) => b.disabled) };
+    });
+    expect(tooSoon).toEqual({ closed: true, second: false, greyed: [true, true, true, true] });
+    await expect(wheel).toBeVisible();
     // The bubble is over the owl here, and over the same owl in the other tab.
     await expect.poll(() => bubbles(a)).toEqual([{ id: 'owl-a', n: 6 }]);
     await expect.poll(() => bubbles(b), { timeout: 10_000 }).toEqual([{ id: 'owl-a', n: 6 }]);
@@ -77,16 +86,28 @@ test.describe('prewritten chat', () => {
     await page.keyboard.press('ArrowLeft');
     await showing('help');
     await expect(wheel.locator('[data-phrase]')).toHaveText([/^Where to\?/, /^I'm lost!/, /^Help me\?/, /^Bye for now!/]);
-    await page.keyboard.press('Digit4');
-    await expect(wheel).toBeHidden();
-    await expect.poll(() => bubbles(page)).toEqual([{ id: 'owl-a', n: 24 }]);
-    // Too soon for another: T opens the wheel with its phrases greyed, and a number says nothing.
-    await page.keyboard.press('KeyT');
+    // 4 says the last phrase of the group. Too soon for another: T opens the wheel with its phrases
+    // greyed, and a number says nothing. The keys go in one step in the page, so a slow machine
+    // cannot run past the 3 s between them.
+    const tooSoon = await page.evaluate(() => {
+      const key = (code: string) => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
+      const phrases = () => document.querySelectorAll<HTMLButtonElement>('[data-phrases] [data-phrase]');
+      key('Digit4');
+      const said = window.owlPark.state()?.bubbles ?? [];
+      const closed = !phrases()[0]?.checkVisibility();
+      key('KeyT');
+      const greyed = [...phrases()].map((b) => b.disabled);
+      key('Digit1');
+      return { said, closed, greyed, stillOpen: !!phrases()[0]?.checkVisibility(), after: window.owlPark.state()?.bubbles ?? [] };
+    });
+    expect(tooSoon).toEqual({
+      said: [{ id: 'owl-a', n: 24 }],
+      closed: true,
+      greyed: [true, true, true, true],
+      stillOpen: true,
+      after: [{ id: 'owl-a', n: 24 }],
+    });
     await expect(wheel).toBeVisible();
-    await expect(wheel.locator('[data-phrase]').first()).toBeDisabled();
-    await page.keyboard.press('Digit1');
-    await expect(wheel).toBeVisible();
-    expect(await bubbles(page)).toEqual([{ id: 'owl-a', n: 24 }]);
     // Its turn comes, in the group it was left on; T closes the wheel as it opens it.
     await expect(wheel.locator('[data-phrase]').first()).toBeEnabled({ timeout: 5_000 });
     await page.keyboard.press('Digit1');
