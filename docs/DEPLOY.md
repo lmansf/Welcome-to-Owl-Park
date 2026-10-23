@@ -194,3 +194,6 @@ secrets (above). A cron trigger closes the Realm Vote month automatically.
 - `?debug=1` draws the walkable areas and doors. `?transport=local|supabase|edge` forces a transport.
 - The status dot in the top-right pill is gold when connected, grey when the park is offline.
 - `node tools/load/swarm.mjs --url https://<host> --bots 20 --seconds 30` runs a small bot swarm and reports echo latency.
+  The full load test runs on GitHub: Actions → Load test → Run workflow. It deploys a throwaway copy
+  under its own name, never the live park, loads it step by step and deletes it; what it found is in
+  `docs/ARCHITECTURE.md`, section 6.
