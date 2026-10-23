@@ -303,6 +303,39 @@ test("the arcade: its painting in the market's style, and an edit of the street'
   assert.match(door.prompt, /no letters/);
 });
 
+test("the arcade's bays: an edit of the published hall, each hall candidate's two east wings, three titles, all helpers", () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  const halls = [1, 2, 3].flatMap((n) => [`arcade-bays-b${n}`, `arcade-bays-c${n}`]);
+  const titles = { 'arcade-title-hoot-hop': 'Hoot & Hop', 'arcade-title-moon-flap': 'Moon Flap', 'arcade-title-nest-knockdown': 'Nest Knockdown' };
+  assert.deepEqual(P.ARCADE_BAYS_KEYS, ['arcade-bays-a', ...halls, ...Object.keys(titles)]);
+  for (const key of P.ARCADE_BAYS_KEYS) {
+    assert.ok(P.HELPER_KEYS.includes(key) && !(key in ASSETS.keys), `${key} is a helper, never published`);
+    assert.equal(jobs.get(key).providers.fal.output_format, 'png', key);
+  }
+  const a = jobs.get('arcade-bays-a');
+  assert.deepEqual([a.kind, a.size, a.variants], ['room', '3200x1800', 5]);
+  assert.deepEqual(a.refs.map((r) => [r.ref, r.optional]), [['@final:arcade', false]]);
+  assert.match(a.prompt, /^Edit this painting/);
+  for (const key of halls) {
+    const j = jobs.get(key);
+    assert.deepEqual([j.kind, j.size, j.optional], ['wing', '3040x1368', true], key);
+    assert.ok(j.variants >= 2, key);
+    assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [[`@canvas:${key}`, false]], key);
+    assert.ok(j.prompt.startsWith('Extend this painting into a wide panorama.'), key);
+  }
+  assert.match(jobs.get('arcade-bays-b1').prompt, /score board/);
+  assert.match(jobs.get('arcade-bays-c1').prompt, /the hall ends/);
+  for (const j of [a, jobs.get('arcade-bays-b1'), jobs.get('arcade-bays-c1')]) {
+    assert.match(j.prompt, /No text, letters or numbers anywhere/, j.key);
+    assert.ok(!j.prompt.includes('more or fewer than three cabinets'), `${j.key}: one cabinet per bay`);
+  }
+  for (const [key, title] of Object.entries(titles)) {
+    const j = jobs.get(key);
+    assert.deepEqual([j.kind, j.variants], ['piece', 3], key);
+    assert.ok(j.prompt.includes(`reads exactly "${title}"`), key);
+  }
+});
+
 test('the street of nests, its west wing, the nest and the sixteen pieces of furniture', () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   // With a reference a job goes to fal's edit endpoint, which answers in JPEG unless asked.
