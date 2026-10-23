@@ -159,6 +159,23 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   return false;
 }
 
+/**
+ * Load a piece of art at 1x under a texture key of its own (`as`): the home screen's backdrop is
+ * the lobby's painting, kept apart from the lobby's own texture so each is freed on its own.
+ */
+export async function loadArtCopy(scene: Phaser.Scene, key: string, as: string): Promise<boolean> {
+  if (scene.textures.exists(as)) return true;
+  if (!ART[key]) return false;
+  for (const c of rasterCandidates(baseUrl(), key, 1)) {
+    const img = await loadImage(c);
+    if (img) {
+      if (!scene.textures.exists(as)) scene.textures.addImage(as, img);
+      return true;
+    }
+  }
+  return false;
+}
+
 const speciesLoads = new Map<SpeciesId, Promise<boolean>>();
 
 /**

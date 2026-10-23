@@ -44,7 +44,7 @@ async function claim(browser: Browser, request: APIRequestContext, order: string
   const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string | null };
   expect(link).toMatch(/#claim=[A-Za-z0-9_-]{43}$/);
   const page = await (await browser.newContext(device)).newPage();
-  await page.goto(`/?transport=edge${new URL(link!).hash}`);
+  await page.goto(`/?transport=edge&home=0${new URL(link!).hash}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
   await expect(page.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 10_000 });
   return page;
@@ -120,7 +120,7 @@ test.describe('opening night (C42)', () => {
     expect(await webhook(request, 'orders/create', order)).toEqual({ tickets: 1, sent: true });
     const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string };
     const a = await (await browser.newContext(COMPUTER)).newPage();
-    await a.goto(`/?transport=edge${new URL(link).hash}`);
+    await a.goto(`/?transport=edge&home=0${new URL(link).hash}`);
     await expect(a.getByText('The tickets on that link were refunded or have run out.')).toBeVisible({ timeout: 20_000 });
     const [night] = await a.evaluate(() => window.owlPark.wallet());
     expect(night).toMatchObject({ kind: 'opening-night', status: 'expired' });
@@ -134,7 +134,7 @@ test.describe('opening night (C42)', () => {
     expect(await webhook(request, 'orders/paid', order)).toEqual({ tickets: 2, sent: true });
     const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string };
     const a = await (await browser.newContext(COMPUTER)).newPage();
-    await a.goto(`/?transport=edge${new URL(link).hash}`);
+    await a.goto(`/?transport=edge&home=0${new URL(link).hash}`);
     await expect(a.getByText('Your tickets are in your wallet')).toBeVisible({ timeout: 20_000 });
     const [first, second] = await a.evaluate(() => window.owlPark.wallet());
 

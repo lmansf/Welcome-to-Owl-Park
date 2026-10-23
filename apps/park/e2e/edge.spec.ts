@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { dist, doAction, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
@@ -139,7 +139,7 @@ test.describe('room server', () => {
 
     // The emailed link opens the park; its secret leaves the address bar at once.
     const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
-    await a.goto(`/?transport=edge#claim=${secret}`);
+    await a.goto(`/?transport=edge&home=0#claim=${secret}`);
     await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     expect(a.url()).not.toContain('claim=');
     await expect(a.getByText('Your tickets are in your wallet')).toBeVisible({ timeout: 10_000 });
@@ -192,7 +192,7 @@ test.describe('room server', () => {
     expect(issued.status()).toBe(200);
     const { link } = (await issued.json()) as { link: string };
     const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
-    await a.goto(`/?transport=edge#claim=${link.split('#claim=')[1] ?? ''}`);
+    await a.goto(`/?transport=edge&home=0#claim=${link.split('#claim=')[1] ?? ''}`);
     await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     await expect(a.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 10_000 });
     await walkToDoor(a, 'gate');
@@ -222,6 +222,40 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
     await a.context().close();
   });
+
+  for (const [name, device] of [
+    ['a computer', { viewport: { width: 1280, height: 800 } }],
+    ['a phone', { ...devices['Pixel 7'] }],
+  ] as const) {
+    test(`on ${name}: a ticket link lands on the home screen logged in, with the ticket; Play puts the owl in the lobby, and the room count follows`, async ({ browser, request }) => {
+      const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
+      expect(issued.status()).toBe(200);
+      const { link } = (await issued.json()) as { link: string };
+      // An owl already in the lobby counts the owls there.
+      const b = await visitor(browser, { room: 'lobby' });
+      const count = async () => Number(/^(\d+)/.exec((await b.locator('[data-count]').textContent()) ?? '')?.[1] ?? 0);
+      const before = await count();
+
+      // A new device opens the link from the store's email: the owl is made here, and the ticket is in its wallet.
+      const a = await (await browser.newContext(device)).newPage();
+      await a.goto(`/?transport=edge${new URL(link).hash}`);
+      await expect(a.locator('[data-home-btn="play"]')).toBeVisible({ timeout: 20_000 });
+      expect(await a.evaluate(() => window.owlPark.home())).toEqual({ shown: true, loggedIn: true });
+      await expect(a.locator('[data-home-note]')).toHaveText('Ticket added');
+      await expect(a.locator('[data-home-wallet]')).toHaveText('Day ticket: ready at the turnstiles');
+      await a.screenshot({ path: `e2e-screenshots/edge-home-ticket-link-${name === 'a phone' ? 'phone' : 'desktop'}.png` });
+
+      await a.locator('[data-home-btn="play"]').click();
+      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
+      await expect.poll(count, { timeout: 15_000 }).toBe(before + 1);
+      // The Menu's Home screen frees the owl's place in the room at once.
+      await a.locator('[data-menu-btn]').click();
+      await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="title"]').click();
+      await expect(a.locator('[data-home-btn="play"]')).toBeVisible({ timeout: 20_000 });
+      await expect.poll(count, { timeout: 15_000 }).toBe(before);
+      for (const p of [a, b]) await p.context().close();
+    });
+  }
 
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);

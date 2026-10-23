@@ -9,6 +9,7 @@ import { createActivityCards, type CopyView, type QuizView } from './activities'
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
+import { HOME_WORDS } from './home';
 import { createJoystick } from './joystick';
 import { createLeaveCard } from './leaveCard';
 import { createMenu, type MenuScreenId } from './menu';
@@ -38,6 +39,8 @@ export interface WayOutActions {
   leave(): void;
   /** "Go home": straight to the owl's own nest. */
   home(): void;
+  /** "Home screen" (OP-065): out of the room as through a door, to the home screen. */
+  title(): void;
 }
 
 /** Something to do where the owl stands: one button each, and E runs the first. */
@@ -102,6 +105,11 @@ export interface Hud {
   isBlocking(): boolean;
   /** Where the owl builder shows the owl, while it is open (CSS pixels); null when it closes. */
   onOwlPreview(cb: (frame: PreviewFrame | null) => void): void;
+  /** The home screen is up (OP-065): the park's bar, buttons, cards and thumbstick are not shown. */
+  setHome(on: boolean): void;
+  /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
+  openOwl(opener: HTMLElement): void;
+  openSettings(opener: HTMLElement): void;
   /** The feather shop. */
   openShop(): void;
   /** The lobby's ticket booth. */
@@ -170,6 +178,7 @@ const CSS = `
 #hud.no-quest-cards .tracker,#hud.no-quest-cards .tracker.show{display:none}
 #hud.covered .bar,#hud.covered .tracker,#hud.covered .tracker.show,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards{visibility:hidden}
 #hud.no-stick .stick{display:none}
+#hud.at-home .bar,#hud.at-home .tracker,#hud.at-home .tracker.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
 #hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
@@ -317,6 +326,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       { id: 'feedback', title: 'Feedback', key: '', sub: () => 'Found a bug? Have an idea? Tell the keepers.', highlight: true },
       { id: 'home', title: WAY_OUT_WORDS.home, key: '', sub: () => '', shown: () => waysOut.home },
       { id: 'leave', title: WAY_OUT_WORDS.leave, key: '', sub: () => '', shown: () => waysOut.leave },
+      { id: 'title', title: HOME_WORDS.menu, key: '', sub: () => '' },
     ],
     (id) => openScreen(id, true),
   );
@@ -350,7 +360,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     closeScreens();
   };
 
-  function openScreen(id: ScreenId, fromMenu = false) {
+  /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button). */
+  function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn) {
     makeRoom();
     if (id === 'menu') {
       menu.open(menuBtn);
@@ -364,13 +375,15 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       builder.setLook(collectionActions?.look() ?? look);
       // The builder covers the whole screen: the bar, the cards and the buttons hide under it.
       root.classList.add('covered');
-      builder.open(fromMenu, undefined, menuBtn);
-    } else if (id === 'quests') questUi?.openJournal(fromMenu, menuBtn);
-    else if (id === 'settings') settingsScreen.open(fromMenu, menuBtn);
-    else if (id === 'feedback') feedback?.open(fromMenu, menuBtn);
-    else if (id === 'leave') leaveCard.open(menuBtn);
+      builder.open(fromMenu, undefined, opener);
+    } else if (id === 'quests') questUi?.openJournal(fromMenu, opener);
+    else if (id === 'settings') settingsScreen.open(fromMenu, opener);
+    else if (id === 'feedback') feedback?.open(fromMenu, opener);
+    else if (id === 'leave') leaveCard.open(opener);
     // Going home asks nothing: the owl's nest is a tap away from anywhere, and the park a tap back.
     else if (id === 'home') wayOut?.home();
+    // Nor does the home screen: Play is a tap back into the lobby.
+    else if (id === 'title') wayOut?.title();
   }
   const toggle = (id: ScreenId, isOpen: () => boolean) => {
     if (isOpen()) closeScreens();
@@ -484,6 +497,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     onOwlPreview(cb) {
       previewCb = cb;
     },
+    setHome(on) {
+      root.classList.toggle('at-home', on);
+    },
+    openOwl: (opener) => openScreen('owl', false, opener),
+    openSettings: (opener) => openScreen('settings', false, opener),
     openShop() {
       shop?.open();
     },

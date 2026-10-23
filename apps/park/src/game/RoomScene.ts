@@ -41,6 +41,7 @@ import {
   parseVariant,
   pointInRect,
   positionAlongWalk,
+  putOn,
   resolveTarget,
   steerTarget,
   variantName,
@@ -666,6 +667,18 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * The Menu's "Home screen" (OP-065): out of the room as through a door (the room frees the owl's
+   * place at once; a ticket keeps running), and the home screen comes up. Play goes on to the lobby.
+   */
+  toHomeScreen(): boolean {
+    if (!this.built || this.leaving) return false;
+    void this.leaveRoom().then((left) => {
+      if (left) this.scene.start('home');
+    });
+    return true;
+  }
+
   /** E: do the first thing the owl can do where it stands (a spot, an NPC owl, a leaf pile). */
   interact(): boolean {
     if (!this.built || this.leaving) return false;
@@ -1101,11 +1114,7 @@ export class RoomScene extends Phaser.Scene {
       const v = parseVariant(variant);
       if (!v || !this.collection.owns(variant)) return false;
     }
-    const wear: Wear = { ...(this.look.wear ?? {}) };
-    if (variant === null) delete wear[slot];
-    else wear[slot] = variant;
-    const { wear: _old, ...rest } = this.look;
-    this.changeLook(Object.keys(wear).length ? { ...rest, wear } : rest);
+    this.changeLook(putOn(this.look, slot, variant));
     return true;
   }
 
@@ -1323,14 +1332,19 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async goTo(roomId: string, spawn: string, from: RoomStart['from']): Promise<void> {
-    if (this.leaving) return;
+    if (await this.leaveRoom()) this.scene.start('room', { room: roomId, spawn, from } satisfies RoomStart);
+  }
+
+  /** The owl stops, the room fades and its connection closes. False when the room is already being left. */
+  private async leaveRoom(): Promise<boolean> {
+    if (this.leaving) return false;
     this.leaving = true;
     this.hud.setHints([]);
     this.me.walk = null;
     this.cameras.main.fadeOut(220, 12, 30, 54);
     await new Promise<void>((r) => this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => r()));
     await this.teardown();
-    this.scene.start('room', { room: roomId, spawn, from } satisfies RoomStart);
+    return true;
   }
 
   private async teardown(): Promise<void> {

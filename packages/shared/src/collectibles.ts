@@ -402,6 +402,15 @@ export function filterOwnedWear(wear: Wear | undefined, owned: ReadonlySet<strin
   return Object.keys(out).length ? out : undefined;
 }
 
+/** A look with `variant` worn in its slot, or that slot taken off (null); no `wear` once nothing is on. */
+export function putOn<L extends { wear?: Wear }>(look: L, slot: EquipSlot, variant: string | null): L {
+  const wear: Wear = { ...(look.wear ?? {}) };
+  if (variant === null) delete wear[slot];
+  else wear[slot] = variant;
+  const { wear: _old, ...rest } = look;
+  return (Object.keys(wear).length ? { ...rest, wear } : rest) as L;
+}
+
 /** The variants a wear uses (for loading their art or checking ownership). */
 export function wearVariants(wear: Wear | undefined): string[] {
   if (!wear) return [];

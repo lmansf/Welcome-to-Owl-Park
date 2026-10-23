@@ -16,7 +16,8 @@ test.describe('single visitor', () => {
     expect(s.room).toBe('hub');
     expect(s.peers).toHaveLength(0);
     await expect(page.getByText('1 owl here')).toBeVisible();
-    await expect(page.getByText('Owl Park')).toBeVisible();
+    // The park's name in the bar (the home screen's heading, hidden in the park, has it too).
+    await expect(page.locator('#hud .brand')).toHaveText('Owl Park');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-hub.png` });
   });
 
@@ -147,7 +148,7 @@ test.describe('single visitor', () => {
     await page.locator('[data-menu-btn]').click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
     // Inside the park the ways out follow Say and the four screens (leave.spec.ts tries them).
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Your owl/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/]);
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Your owl/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/, /^Home screen/]);
     // Feedback is picked out in gold.
     await expect(menu.locator('[data-screen="feedback"]')).toHaveClass(/\bhi\b/);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });

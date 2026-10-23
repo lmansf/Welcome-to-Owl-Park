@@ -20,6 +20,7 @@ import {
 } from '@owl-park/shared';
 import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
+import { COLLECTOR_KEY } from '../identity';
 import { MoveBudget } from './budget';
 import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
@@ -33,8 +34,6 @@ const ECHO_TIMEOUT_MS = 1_500;
 const DEAD_AFTER_MS = HEARTBEAT_INTERVAL_MS * 2 + 10_000;
 const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const RELOAD_GUARD_KEY = 'owl-park:reloaded';
-/** The collector token this browser keeps (one collection per device until email linking exists). */
-const COLLECTOR_KEY = 'owl-park:collector';
 /** How long a quest request waits for the server's answer. */
 const REPLY_TIMEOUT_MS = 6_000;
 
