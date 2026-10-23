@@ -1,10 +1,13 @@
 import {
+  ARCADE_ROOM,
   Activities,
+  ArcadeBook,
   CollectionBook,
   KIND_RULES,
   LEAF_FEATHERS_PER_DAY,
   MemoryCollectionStore,
   MemoryNestStore,
+  MemoryScoreStore,
   NestBook,
   NPC_TALK_RADIUS,
   QUIZ_FEATHERS,
@@ -15,6 +18,7 @@ import {
   STREET_ROOM,
   USE_COOLDOWN_MS,
   distance,
+  endRun,
   getInteractable,
   getNpc,
   getQuest,
@@ -24,8 +28,11 @@ import {
   leafRespawnMs,
   nestIdOf,
   normalizeTimeZone,
+  portraitLook,
   randomNestId,
   secureNestId,
+  startRun,
+  type ArcadeRun,
   type BuyResult,
   type GiftResult,
   type Inventory,
@@ -33,6 +40,7 @@ import {
   type NestLook,
   type NestView,
   type NpcDef,
+  type OwlLook,
   type PlayEvent,
   type PlayResult,
   type QuestSpots,
@@ -49,6 +57,8 @@ const STORE_PREFIX = 'owl-park:collection:';
 const NESTS_KEY = 'owl-park:nests';
 /** A nest's owner changed it: the other tabs of this browser that are inside it hear of it here. */
 const NESTS_CHANNEL = 'owl-park:nests';
+/** The arcade's scores of the day in this browser, every collector's: the wall shows them all. */
+const ARCADE_KEY = 'owl-park:arcade';
 const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
 export interface KeyValueStorage {
@@ -63,6 +73,12 @@ function randomCid(): string {
   let s = 'c_';
   for (const b of bytes) s += alphabet[b % alphabet.length];
   return s;
+}
+
+/** A run's seed, from the browser's cryptographic source where there is one. */
+function runSeed(): number {
+  const c = globalThis.crypto;
+  return c && typeof c.getRandomValues === 'function' ? c.getRandomValues(new Uint32Array(1))[0]! : Math.floor(Math.random() * 2 ** 32);
 }
 
 /** A new nest id from the browser's cryptographic source where there is one. */
@@ -87,6 +103,7 @@ export class LocalCollections implements CollectionService {
   private readonly random: () => number;
   private memory: MemoryCollectionStore | null = null;
   private nestMemory: MemoryNestStore | null = null;
+  private scoreMemory: MemoryScoreStore | null = null;
   /** Shared objects used up in this page: id -> when they are back. */
   private readonly objects = new Map<string, number>();
   private usedAt = Number.NEGATIVE_INFINITY;
@@ -154,6 +171,25 @@ export class LocalCollections implements CollectionService {
       this.storage?.setItem(NESTS_KEY, JSON.stringify(store.snapshot()));
     } catch {
       /* storage full or unavailable: the nests live for this page only */
+    }
+    return out;
+  }
+
+  /** Run against the latest stored scores and this collector's collection (a run pays feathers), then store both again. */
+  private arcade<T>(fn: (arcade: ArcadeBook) => T): T {
+    let store: MemoryScoreStore;
+    try {
+      const raw = this.storage?.getItem(ARCADE_KEY) ?? null;
+      store = raw ? MemoryScoreStore.from(JSON.parse(raw)) : (this.scoreMemory ?? new MemoryScoreStore());
+    } catch {
+      store = this.scoreMemory ?? new MemoryScoreStore();
+    }
+    const out = this.use(({ book }) => fn(new ArcadeBook(store, book)));
+    this.scoreMemory = store;
+    try {
+      this.storage?.setItem(ARCADE_KEY, JSON.stringify(store.snapshot()));
+    } catch {
+      /* storage full or unavailable: the scores live for this page only */
     }
     return out;
   }
@@ -337,8 +373,9 @@ export class LocalCollections implements CollectionService {
   /**
    * The activities, run by the same class as the room server's, for the one owl on this device: the
    * lantern beam is this page's alone, and the stage quiz settles on a timer while the owl is in the hub.
+   * The arcade's runs are checked and paid by the same rules, and its wall shows this browser's scores.
    */
-  activityLink(room: string, _conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2): ActivityLink {
+  activityLink(room: string, _conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2, look: () => OwlLook): ActivityLink {
     const cid = this.cid;
     let host = this.activities.get(room);
     if (!host) {
@@ -379,9 +416,15 @@ export class LocalCollections implements CollectionService {
       quizTimer = setTimeout(settleQuiz, Math.max(0, acts.nextQuizClose() - this.now()) + 50);
     };
     armQuiz();
-    // The room server sends a newcomer the beam as it burns; so does this.
+    // The room server sends a newcomer the beam as it burns, and the arcade's wall; so does this.
     const beam = acts.lanternState();
     if (Object.keys(beam.lit).length) later(() => pushes.onLanterns?.({ lit: beam.lit, glowUntil: beam.glowUntil }, null));
+    if (room === ARCADE_ROOM) {
+      const wall = this.arcade((a) => ({ walls: a.walls(this.now()), mine: a.mine(cid, this.now()) }));
+      later(() => pushes.onWall?.(wall.walls, wall.mine));
+    }
+    /** The run started at a cabinet and not yet scored. */
+    let run: ArcadeRun | null = null;
     return {
       parkNow: () => this.now(),
       light: async () => {
@@ -434,6 +477,23 @@ export class LocalCollections implements CollectionService {
         }
       },
       tasks: async () => this.use(({ book }) => book.tasks(cid, this.now())),
+      run: async (game) => {
+        const r = startRun(room, where(), game, runSeed(), this.now());
+        if (!r.ok) return r;
+        run = r.run;
+        return { ok: true, game, seed: r.run.seed, startedAt: r.run.startedAt };
+      },
+      score: async (result, seed) => {
+        const verdict = endRun(run, result, seed, this.now());
+        if (verdict === 'idle') return { ok: false, reason: 'idle' };
+        // One result per run, whether or not it holds up.
+        run = null;
+        if (verdict === 'unknown') return { ok: false, reason: 'unknown' };
+        const settled = this.arcade((a) => a.finish(cid, result, portraitLook(look()), this.now()));
+        const t = settled.tasks;
+        if (t) later(() => pushes.onTasks?.(t.tasks, t.finished, t.paid, t.total));
+        return { ok: true, paid: settled.paid };
+      },
       close: () => {
         closed = true;
         if (quizTimer) clearTimeout(quizTimer);

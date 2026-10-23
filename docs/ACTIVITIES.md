@@ -72,13 +72,40 @@ wrong note or a slow one ends the game. The robot uses the starter pair (Hoot an
 to two more emotes the owl owns, so every owl can play. The right notes are danced for everyone in
 the street.
 
-## The arcade (off the neon street's east end)
+## Neon Roost, the arcade (off the neon street's east end)
 
-A doorway under a joystick sign where the neon street bends away leads into the arcade: a hall
-with three game cabinets along its back wall under a blank score board (`packages/shared/src/arcade.ts`).
-Each cabinet is a spot in the room data and will play one game, as the visitor's own owl. Until a
-cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
-at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
+A doorway under a joystick sign where the neon street bends away leads into the arcade (C40): a
+hall with three game cabinets along its back wall under the score wall. Each cabinet is a spot in
+the room data with its game's name on its marquee; standing at it, **Play Hoot & Hop**, **Play Moon
+Flap** or **Play Nest Knockdown** (or E) opens the game over the whole screen, drawn as neon
+line-art in the cabinet's colours, with the visitor's own owl (its kind, colours and what it wears,
+without its pet or effect) as the player. A cabinet can be switched off (`live` in
+`packages/shared/src/arcade.ts`): its screen goes dark and reads "Hatching Soon", and standing at it
+says so.
+
+| Game | How it plays | Score | 1 to 6 feathers at |
+| --- | --- | --- | --- |
+| Hoot & Hop | Tap (or Space) to hop a lane on; cross five lanes of drones and noodle carts to the far kerb and back. Each crossing quickens the traffic by a tenth (up to twice its speed); a bump ends the run. | crossings | 1, 3, 5, 8, 12, 17 |
+| Moon Flap | Tap (or Space) to flap; fly through the gaps between neon branches, which come every 1.5 s. Touching a branch or the ground ends the run. | gaps passed | 2, 5, 10, 15, 25, 40 |
+| Nest Knockdown | Pull back and let go (or aim with the arrow keys and press Space) at stacks of neon crates on stands. A crate struck is knocked off with all that stood on it alone. Ten stacks, three shots each: a stack down in one shot scores 3, in two 2, in three 1; a stack still standing ends the run. | points (at most 30) | 2, 5, 9, 14, 20, 26 |
+
+The first time each park day a run beats the day's best on the wall for its game, it pays 3
+feathers more. A run's feathers are inside the activities' shared cap (25 a park day), so the
+arcade adds nothing to what a day in the park can pay. The games are free: the shop stays the only
+place feathers are spent. Every run counts toward "Play a round in the arcade", a task at a game.
+
+**The score wall** above the cabinets shows each game's best five of the park day, best first (the
+earlier of two equal scores first), as small portraits in the owls' own colours with their scores:
+no names anywhere. Each owl's own best of the day is underneath its column, and the game's screen
+shows "Today's best" and "Your best". The wall starts empty at the park's midnight.
+
+**The room server keeps it honest.** The page plays the run; the room server starts it (`run`, at
+the cabinet, with a seed for the run's course, kept on the visitor's socket so it outlasts the
+object's sleep), and takes its result once (`score`). A result it could not have reached in the
+time the run took is refused (`plausibleRun`): a crossing takes at least six hops of 180 ms, the
+branches come at a fixed pace, and a shot takes at least 1.2 s. It pays through the `Collections`
+ledger (`ArcadeBook` over the SQLite table `arcade_scores`, which keeps only the day's best per owl
+and game) and sends the changed column of the wall to everyone in the arcade.
 
 ## Three small tasks a day
 
@@ -86,7 +113,8 @@ The same three for everyone each park day (`dailyTasks`), one from each slot and
 kind twice:
 
 1. at the lanterns: light 3, or light 5, or light the whole beam;
-2. at a game: catch a fish, or 3, or answer a quiz question right, or copy a tune;
+2. at a game: catch a fish, or 3, or answer a quiz question right, or copy a tune, or play a round
+   in the arcade (while one of its cabinets is live);
 3. around the park: flop into 2 leaf piles, or browse 2 stalls, or answer a quiz question right,
    or copy 2 tunes.
 
@@ -103,8 +131,10 @@ The activities share one cap: at most 25 feathers a park day per collector
 ## Wire protocol and the room server
 
 Protocol 6 (`packages/shared/src/edge.ts`) adds one client frame, `act`, with a request number
-`r`: `a` is `light`, `cast`, `reel`, `copy`, `note` (with `e`, an emote id) or `tasks`. The answer
-is an `act` frame with the same `r`. The room also pushes `lanterns` (the beam, to everyone in the
+`r`: `a` is `light`, `cast`, `reel`, `copy`, `note` (with `e`, an emote id) or `tasks`; protocol 8
+adds the arcade's `run` (with `g`, the game) and `score` (with `g`, the score `s`, the run's seed
+`k`, and for Nest Knockdown its shots `n`), and the `wall` frame. The answer is an `act` frame
+with the same `r`. The room also pushes `lanterns` (the beam, to everyone in the
 hub when a lantern is lit, and to a newcomer), `quiz` (a question closed: the right zone and the
 owls in it), `paid` (feathers for a full beam or a right answer) and `tasks` (the day's tasks when
 something moved them).
@@ -123,7 +153,13 @@ to its own clock, and runs the quiz card on the server's clock.
   phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the quests screen and
   the tracker; `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
-  that page's alone, and its quiz settles on a timer while the owl is in the hub.
+  that page's alone, and its quiz settles on a timer while the owl is in the hub. Its arcade runs
+  are checked and paid by the same rules, and its wall shows this browser's scores.
+- `arcade/`: the three games themselves (`hop.ts`, `flap.ts`, `knock.ts`), plain rules stepped in
+  fixed slices from the run's seed; `game/ArcadeScene.ts` draws one over the room;
+  `ui/arcadeScreen.ts` is its screen (the score, how to play, the run's end and Play again);
+  `game/arcade.ts` puts the names on the marquees and the wall on the board and runs a run from
+  Play to its pay.
 
 ## Tests
 
@@ -132,8 +168,15 @@ to its own clock, and runs the quiz card on the server's clock.
 - `apps/park/e2e/activities.spec.ts` (this device): one owl lights the whole beam, a catch at the
   pond, a copied tune and a wrong note, and a right quiz answer (it waits for the next question,
   up to 90 s).
+- `packages/shared/src/arcade.test.ts`, `arcadebook.test.ts`: the bands, the time check, the
+  day's-best bonus, the wall and the cap; `apps/park/src/arcade/*.test.ts`: each game's rules, and
+  that every stack of Nest Knockdown can be knocked down in its three shots.
+- `apps/park/e2e/arcade.spec.ts` (this device, a phone and a computer): a run of each game, played
+  by its rules, paid and on the wall; Play again; back out to the street.
 - `apps/park/e2e/edge.spec.ts` (the room server): two owls light the beam together and are both
-  paid, a catch, and a tune danced for another owl.
+  paid, a catch, a tune danced for another owl, and an arcade run paid and shown on another owl's
+  wall. `apps/edge/test/RoomObject.test.ts` checks a run's start at its cabinet, a result too quick
+  for its time, a run kept through the object's sleep, and the cap.
 
 ## Waiting on the owner
 

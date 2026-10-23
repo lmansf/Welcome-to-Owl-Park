@@ -6,6 +6,7 @@ import type { ConnectionStatus } from '../net';
 import type { FeedbackOutcome } from '../net/feedback';
 import type { SettingsStore } from '../settings';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
+import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
@@ -87,6 +88,13 @@ export interface Hud {
   openBooth(info: BoothInfo): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
+  /** The arcade's game screen over everything while a run is played (again, if it is open); `handlers` take the play. */
+  openArcade(view: ArcadeView, handlers: ArcadeHandlers): void;
+  /** The run's score and its line of the moment, as it goes. */
+  arcadePlaying(score: number, banner: string): void;
+  /** The run is over: how it ended and what it paid. */
+  arcadeResult(result: ArcadeResultView): void;
+  closeArcade(): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
@@ -298,8 +306,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     // Decorating ends with the sheet: the room puts its camera back.
     if (decorate?.isOpen()) decorateActions?.done();
   };
+  // The arcade's game screen covers the whole park while a run is played, like the owl builder.
+  const arcade = createArcadeScreen(root);
+  arcade.onClose(() => root.classList.remove('covered'));
   /** Close the Menu and every screen it opens. */
   const closeScreens = () => {
+    arcade.close();
     menu.close();
     wheel?.close();
     builder?.close();
@@ -307,7 +319,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     settingsScreen.close();
     feedback?.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || arcade.isOpen();
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
@@ -442,6 +454,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       ticketCard ??= createTicketCard(root);
       ticketCard.show(card);
     },
+    openArcade(view, handlers) {
+      if (!arcade.isOpen()) makeRoom();
+      root.classList.add('covered');
+      arcade.open(view, handlers);
+    },
+    arcadePlaying: (score, banner) => arcade.playing(score, banner),
+    arcadeResult: (r) => arcade.result(r),
+    closeArcade: () => arcade.close(),
     setRoom(id) {
       roomId = id;
       questUi?.setRoom(id);

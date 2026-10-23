@@ -3,11 +3,35 @@ import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, 
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 
+describe('protocol v8, the arcade', () => {
+  it('is version 8, and a page speaking 7 is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(8);
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 7, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 8, look }))).toEqual({ t: 'hello', v: 8, look });
+  });
+
+  it('starts a run of a game it knows, and nothing else', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'run', g: 'flight', r: 1 }))).toEqual({ t: 'act', a: 'run', g: 'flight', r: 1 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'run', g: 'Moon Flap', r: 1 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'run', r: 1 }))).toBeNull();
+  });
+
+  it('reads a run’s result: the game, a whole score, the run’s seed, and shots only when sent', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 99, r: 2 }))).toEqual({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 99, r: 2 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'sling', s: 9, n: 4, k: 0, r: 3 }))).toEqual({ t: 'act', a: 'score', g: 'sling', s: 9, n: 4, k: 0, r: 3 });
+    for (const bad of [{ s: -1 }, { s: 1.5 }, { s: '7' }, { s: 2e6 }, { k: undefined }, { k: -1 }, { n: 1.5 }, { g: 'golf' }])
+      expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 1, r: 4, ...bad })), JSON.stringify(bad)).toBeNull();
+  });
+
+  it('passes the score wall on to the page', () => {
+    const wall: ServerFrame = { t: 'wall', walls: [{ game: 'flight', top: [{ score: 12, look }] }], mine: { flight: 12 } };
+    expect(parseServerFrame(JSON.stringify(wall))).toEqual(wall);
+  });
+});
+
 describe('protocol v7, the nests', () => {
-  it('is version 7, and a page speaking 6 is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(7);
+  it('refuses a page that speaks an older protocol at its hello', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 6, look }))).toBeNull();
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 7, look }))).toEqual({ t: 'hello', v: 7, look });
     expect(CLOSE.NEST_CLOSED).toBe(4011);
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
   });

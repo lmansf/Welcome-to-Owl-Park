@@ -73,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v7 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v8 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -84,7 +84,8 @@ Client to server: `hello` (once, within 5 s; look, optional spawn name and resum
 `move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
 (an emote id), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
 `accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
-the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks); and for
+the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks, and in
+the arcade `run` to start a run at a cabinet and `score` for its result); and for
 the nests `street` (on the street: the visitor's own nest and five other owls' open ones) and
 `nest` (in its own nest, the owner puts a piece in a spot, takes one away, or opens or closes it).
 
@@ -94,8 +95,8 @@ everyone including the sender; only the sender's copy carries `seq`, which is th
 acknowledgement), `look`, `leave`, `counts`, `full`, `emote` (to everyone else in the room), and
 for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, `refused`, plus
 `objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`), and for
-the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks` (see
-`docs/ACTIVITIES.md`), and for the nests `street` (the answer), `nest` (a nest as it stands: to a
+the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks`, and the arcade's score
+wall `wall` (see `docs/ACTIVITIES.md`), and for the nests `street` (the answer), `nest` (a nest as it stands: to a
 newcomer after its welcome, to everyone inside when its owner changes it, and as the answer to the
 change) and `closed` (a nest turned the visitor away or closed with it inside; close 4011 follows).
 
@@ -150,9 +151,10 @@ a room grows on the west, the room server and the browser move them once. A door
 interactive spot (the gift shop, the idol): an entry in `interactions` in
 `apps/park/src/game/RoomScene.ts` gives it a button label and an action, and standing in it shows
 the button, which E also presses. New interactables, mini games included, follow that pattern.
-The arcade, one screen off the market street's east end, has three cabinet spots along its back
-wall (`packages/shared/src/arcade.ts`): a cabinet whose game is not live yet shows an unlit screen
-reading "Hatching Soon", and standing at it says so. Art is referenced by key; artists replace files under
+The arcade, Neon Roost, one screen off the market street's east end, has three cabinet spots along
+its back wall (`packages/shared/src/arcade.ts`), each the Play button for one of its games; a
+cabinet switched off shows an unlit screen reading "Hatching Soon" instead, and standing at it says
+so (`docs/ACTIVITIES.md`). Art is referenced by key; artists replace files under
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
 variable (defaults: lobby and hub 80; grove, market, arcade and the street 40; a nest 12).
 

@@ -1,28 +1,90 @@
 import { expect, test, type Page } from '@playwright/test';
+import { crossOnce, flyThrough, getBumped, knockByKeys, knockByPull, playAt, run, untilOver, type Game } from './arcadePlay';
 import { openPark, state, walkToDoor } from './helpers';
 
 async function inRoom(page: Page, room: string): Promise<void> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe(room);
 }
 
-// Two room changes and a walk along the three cabinets.
-test.describe.configure({ timeout: 90_000 });
+/** The feathers this page knows of, once its collection has loaded. */
+async function feathers(page: Page): Promise<number> {
+  await expect.poll(() => page.evaluate(() => window.owlPark.collection() !== null), { timeout: 10_000 }).toBe(true);
+  return page.evaluate(() => window.owlPark.collection()?.feathers ?? 0);
+}
+
+/** From the doorway at the neon street's east end into the arcade. */
+async function intoArcade(page: Page, collector: string): Promise<number> {
+  await openPark(page, { room: 'market', spawn: 'from-arcade', collector, tz: 'UTC' });
+  const before = await feathers(page);
+  await walkToDoor(page, 'to-arcade');
+  await inRoom(page, 'arcade');
+  return before;
+}
+
+/** The run's card: the line that ends it, what it paid, a new best; then back to the room and the wall. */
+async function paidAndOnTheWall(page: Page, game: Game, line: RegExp, before: number): Promise<void> {
+  const score = (await run(page))!.score;
+  const card = page.locator('.arcade [data-result]');
+  await expect(card).toBeVisible();
+  await expect(card.locator('[data-line]')).toHaveText(line);
+  await expect(card.locator('[data-paid]')).toHaveText(/^\+\d+ feathers?$/);
+  await expect(card.locator('[data-new]')).toHaveText('New best!');
+  await expect(card.locator('[data-best]')).toHaveText(`Your best ${score}`);
+  await expect.poll(() => feathers(page)).toBeGreaterThan(before);
+  await card.locator('[data-done]').click();
+  await expect(page.locator('.arcade-layer')).toBeHidden();
+  const wall = (await state(page)).wall!;
+  expect(wall.mine[game]).toBe(score);
+  expect(wall.walls.find((w) => w.game === game)!.top[0]!.score).toBe(score);
+}
+
+// Each test walks in and plays a whole run.
+test.describe.configure({ timeout: 150_000 });
 
 test.describe('the arcade (this device)', () => {
-  test('in by the doorway at the neon street’s east end, every cabinet still hatching, and back out', async ({ page }) => {
-    // On the pavement in front of the doorway, where an owl stands when it comes back out.
-    await openPark(page, { room: 'market', spawn: 'from-arcade', collector: 'e2e-arcade' });
-    await walkToDoor(page, 'to-arcade');
-    await inRoom(page, 'arcade');
-
-    // No game is live yet: standing at a cabinet says so, and offers nothing to press.
-    for (const cabinet of ['cabinet-crossing', 'cabinet-flight', 'cabinet-sling']) {
-      await walkToDoor(page, cabinet);
-      await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
-      await expect(page.locator('.toast').filter({ hasText: 'Hatching Soon' }).last()).toBeVisible();
-      await expect(page.locator('[data-action]')).toHaveCount(0);
+  test('Hoot & Hop: hop across the lanes and back, bumped at last, paid and on the score wall', async ({ page }) => {
+    const before = await intoArcade(page, `e2e-hop-${test.info().project.name}`);
+    await playAt(page, 'crossing');
+    await expect(page.locator('.arcade [data-hint]')).toHaveText('Tap to hop');
+    // A page can stall for a moment mid-dash (a slow frame) and the owl is bumped before it gets
+    // across: then Play again, as a visitor would, up to three runs.
+    for (let attempt = 1; (await crossOnce(page)) !== 'across'; attempt++) {
+      expect(attempt, 'runs bumped before a crossing').toBeLessThan(3);
+      await untilOver(page);
+      const seed = await page.evaluate(() => window.owlPark.arcade()?.seed);
+      await page.locator('.arcade [data-result] [data-again]').click();
+      await expect.poll(() => page.evaluate(() => window.owlPark.arcade()?.seed)).not.toBe(seed);
     }
+    expect((await run(page))!.score).toBe(1);
+    await getBumped(page);
+    await paidAndOnTheWall(page, 'crossing', /^Bumped! \d+ crossings?\.$/, before);
+  });
 
+  test('Moon Flap: through the gaps, down at last, paid; Play goes again at the same cabinet', async ({ page }) => {
+    const before = await intoArcade(page, `e2e-flap-${test.info().project.name}`);
+    await playAt(page, 'flight');
+    await flyThrough(page, 2);
+    await untilOver(page);
+    await expect(page.locator('.arcade [data-result] [data-line]')).toHaveText(/^(Touched down|Clipped a branch) at \d+\.$/);
+    // Play again: a new run, with a new course.
+    const seed = await page.evaluate(() => window.owlPark.arcade()?.seed);
+    await page.locator('.arcade [data-result] [data-again]').click();
+    await expect.poll(() => page.evaluate(() => window.owlPark.arcade()?.seed)).not.toBe(seed);
+    await expect(page.locator('.arcade [data-result]')).toBeHidden();
+    await flyThrough(page, 3);
+    await untilOver(page);
+    await paidAndOnTheWall(page, 'flight', /^(Touched down|Clipped a branch) at \d+\.$/, before);
+  });
+
+  test('Nest Knockdown: the first stack down in one shot, out of shots at the second, paid; and back out to the street', async ({ page }) => {
+    const before = await intoArcade(page, `e2e-knock-${test.info().project.name}`);
+    await playAt(page, 'sling');
+    await expect(page.locator('.arcade [data-hint]')).toHaveText('Pull back and let go');
+    // On a phone the owl is pulled back on the screen; on a computer it is aimed with the keys.
+    if (test.info().project.name === 'phone') await knockByPull(page);
+    else await knockByKeys(page);
+    expect(await run(page)).toMatchObject({ score: 3, over: true });
+    await paidAndOnTheWall(page, 'sling', /^Out of shots at stack 2\. 3 points\.$/, before);
     // Back past the cabinets to the entrance, and out: on the pavement in front of the doorway.
     await page.evaluate(() => window.owlPark.walkTo(300, 820));
     await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);

@@ -29,6 +29,8 @@ export interface ParkState {
     copy: { tune: string[]; got: number; level: number; listening: boolean } | null;
     quiz: { n: number; right: 'a' | 'b' | 'c'; revealAt: number } | null;
   } | null;
+  /** In the arcade: the score wall as the page shows it. */
+  wall: { walls: Array<{ game: string; top: Array<{ score: number; look: { body: string; belly: string; accent: string; species?: string } }> }>; mine: Record<string, number> } | null;
   street: Array<{ kind: 'own'; nestId: string | null } | { kind: 'nest'; nestId: string; look: { body: string; belly: string; accent: string } | null } | { kind: 'empty' }> | null;
   nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
 }

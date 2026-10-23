@@ -9,9 +9,13 @@
  * tasks, and the `lanterns`, `quiz`, `paid` and `tasks` frames the room sends. v7 adds the nests
  * (homes.ts, nestbook.ts): `street` asks for the street's nest doors and `nest` carries an owner's
  * change to its nest; the room answers with `street` and `nest`, sends `nest` to everyone in a nest
- * when it changes, and `closed` before closing a socket a nest turns away (4011).
+ * when it changes, and `closed` before closing a socket a nest turns away (4011). v8 adds the arcade
+ * (arcade.ts, arcadebook.ts): the `act` frames `run` (start a run at a cabinet; answered with the
+ * run's seed) and `score` (its result; answered with what it paid), and the `wall` frame the room
+ * sends a newcomer in the arcade and everyone there whenever a run changes today's best five.
  */
 import type { QuizZone, TaskView } from './activities';
+import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
 import type { Award } from './book';
 import { parseNestEdit, type NestEdit, type NestRefusal, type NestView } from './homes';
 import { cleanLook } from './look';
@@ -20,8 +24,8 @@ import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 7;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: the arcade), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 8;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -114,14 +118,20 @@ export interface ClientGather {
 }
 /**
  * An activity (activities.ts): light a lantern, cast or reel in at the pond, start the robot owl's
- * copy game or play it a note (`e`, an emote the owl owns), or ask for today's tasks. Answered with `act`.
+ * copy game or play it a note (`e`, an emote the owl owns), or ask for today's tasks. In the arcade
+ * (arcade.ts): start a run of a game (`g`) at its cabinet, or end the run whose seed is `k` with its
+ * score `s` (and for Nest Knockdown its shots, `n`). Answered with `act`.
  */
-export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks';
-export const ACT_KINDS: readonly ActKind[] = ['light', 'cast', 'reel', 'copy', 'note', 'tasks'];
+export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks' | 'run' | 'score';
+export const ACT_KINDS: readonly ActKind[] = ['light', 'cast', 'reel', 'copy', 'note', 'tasks', 'run', 'score'];
 export interface ClientAct {
   t: 'act';
   a: ActKind;
   e?: string;
+  g?: ArcadeGame;
+  s?: number;
+  n?: number;
+  k?: number;
   r: number;
 }
 /** On the street: ask for its nest doors, this visitor's own nest and other owls' open ones. Answered with `street`. */
@@ -270,8 +280,20 @@ export type ServerAct = { t: 'act'; r: number } & (
   | { a: 'note'; ok: true; step: 'won'; level: number; feathers: number; total: number }
   | { a: 'note'; ok: true; step: 'wrong' | 'slow'; level: number; expected: string }
   | { a: 'tasks'; ok: true; tasks: TaskView }
+  | { a: 'run'; ok: true; game: ArcadeGame; seed: number; startedAt: number }
+  | { a: 'score'; ok: true; paid: RunPaid }
   | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' }
 );
+/**
+ * The arcade's score wall: today's best five per game (portraits and scores, no names). A newcomer
+ * in the arcade gets every column and its own bests; everyone there gets a column again when a run
+ * changes it.
+ */
+export interface ServerWall {
+  t: 'wall';
+  walls: GameWall[];
+  mine?: OwnBests;
+}
 /** Why an owner's change to its nest was refused: the rules' reason, not the owner's nest, too fast, or the collections were away. */
 export type NestEditRefusal = NestRefusal | 'not-owner' | 'busy' | 'offline';
 /**
@@ -329,6 +351,7 @@ export type ServerFrame =
   | ServerAct
   | ServerNest
   | ServerStreet
+  | ServerWall
   | ServerClosed;
 
 // ---- validation (server side, strict) ----
@@ -337,6 +360,8 @@ const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const OBJECT_ID = /^[a-z][a-z0-9-]{0,47}$/;
 
 const isRequest = (r: unknown): r is number => typeof r === 'number' && Number.isInteger(r) && r >= 0 && r <= 1e9;
+/** A whole number from 0 to `max`. */
+const isCount = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;
 
 /** Parse and validate one client frame. Returns null for anything malformed. */
 export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): ClientFrame | null {
@@ -393,6 +418,12 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       const a = v['a'];
       if (!isRequest(v['r']) || !(ACT_KINDS as readonly unknown[]).includes(a)) return null;
       if (a === 'note') return isEmoteId(v['e']) ? { t: 'act', a, e: v['e'], r: v['r'] } : null;
+      if (a === 'run') return isArcadeGame(v['g']) ? { t: 'act', a, g: v['g'], r: v['r'] } : null;
+      if (a === 'score') {
+        const { g, s, n, k } = v;
+        if (!isArcadeGame(g) || !isCount(s, 1e6) || !isCount(k, 2 ** 32 - 1) || (n !== undefined && !isCount(n, 1000))) return null;
+        return n === undefined ? { t: 'act', a, g, s, k, r: v['r'] } : { t: 'act', a, g, s, n, k, r: v['r'] };
+      }
       return { t: 'act', a: a as ActKind, r: v['r'] };
     }
     case 'street':
@@ -407,7 +438,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'closed']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

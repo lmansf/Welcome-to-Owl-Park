@@ -1,36 +1,277 @@
 import Phaser from 'phaser';
-import { ARCADE_ROOM, CABINETS, CABINET_OFF, type RoomDef } from '@owl-park/shared';
+import {
+  ARCADE_GAMES,
+  ARCADE_ROOM,
+  CABINETS,
+  CABINET_OFF,
+  GAMES,
+  WALL_SIZE,
+  cabinetOf,
+  hexToInt,
+  runFeathers,
+  type ArcadeGame,
+  type GameWall,
+  type OwlLook,
+  type OwnBests,
+  type PortraitLook,
+  type RoomDef,
+  type RunResult,
+} from '@owl-park/shared';
+import { cabinetFace } from '../arcade/cabinets';
+import { FlapGame } from '../arcade/flap';
+import { HopGame } from '../arcade/hop';
+import { KnockGame } from '../arcade/knock';
+import type { ActivityLink } from '../collect/service';
+import type { ArcadeInput } from '../ui/arcadeScreen';
+import type { Hud } from '../ui/hud';
+import { ARCADE_INK, type ArcadeScene, type ArcadeSim } from './ArcadeScene';
+import type { PreviewRect } from './BuilderScene';
 
-/** Each cabinet's screen on the arcade's painting (room pixels), and its neon colours. */
-const SCREENS: Readonly<Record<string, { x: number; y: number; w: number; h: number; ink: string; glow: string }>> = {
-  'cabinet-crossing': { x: 494, y: 497, w: 102, h: 73, ink: '#FF8AD0', glow: '#FF2AA1' },
-  'cabinet-flight': { x: 758, y: 500, w: 97, h: 70, ink: '#8AF4FF', glow: '#00E5FF' },
-  'cabinet-sling': { x: 1022, y: 497, w: 103, h: 73, ink: '#CDB0FF', glow: '#8A4DFF' },
+/** Each cabinet's screen and marquee on the arcade's painting (room pixels), and its neon colours. */
+const CABINET_ART: Readonly<Record<string, { x: number; y: number; w: number; h: number; marquee: { x: number; y: number }; ink: string; glow: string }>> = {
+  'cabinet-crossing': { x: 494, y: 497, w: 102, h: 73, marquee: { x: 538, y: 441 }, ink: '#FF8AD0', glow: '#FF2AA1' },
+  'cabinet-flight': { x: 758, y: 500, w: 97, h: 70, marquee: { x: 805, y: 441 }, ink: '#8AF4FF', glow: '#00E5FF' },
+  'cabinet-sling': { x: 1022, y: 497, w: 103, h: 73, marquee: { x: 1080, y: 441 }, ink: '#CDB0FF', glow: '#8A4DFF' },
 };
 
-/**
- * The arcade's cabinets as the park draws them over the painting: a cabinet whose game is not live
- * yet has its screen switched off, dark and reading "Hatching Soon" in its own neon colour. The
- * screens are part of the back wall, so every owl walks in front of them.
- */
-export function addCabinets(scene: Phaser.Scene, room: RoomDef): void {
-  if (room.id !== ARCADE_ROOM) return;
-  for (const cabinet of CABINETS) {
-    const s = SCREENS[cabinet.spot];
-    if (!s || cabinet.live) continue;
-    scene.add.graphics().fillStyle(0x05060d, 0.88).fillRoundedRect(s.x, s.y, s.w, s.h, 10).setDepth(2);
-    scene.add
-      .text(s.x + s.w / 2, s.y + s.h / 2, CABINET_OFF.replace(' ', '\n'), {
-        fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-        fontSize: '16px',
-        fontStyle: '700',
-        color: s.ink,
-        align: 'center',
-        lineSpacing: 2,
-        resolution: 2,
-      })
-      .setOrigin(0.5)
-      .setShadow(0, 0, s.glow, 10, false, true)
-      .setDepth(3);
+/** The score wall's board on the painting (room pixels): one column per game. */
+const BOARD = { x: 505, y: 170, w: 585, h: 185 };
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+/** How to play, under each game's field. Visitor-facing. */
+const HINTS: Readonly<Record<ArcadeGame, string>> = {
+  crossing: 'Tap to hop',
+  flight: 'Tap to flap',
+  sling: 'Pull back and let go',
+};
+
+/** What the arcade needs of the room it is in. */
+export interface ArcadeHost {
+  scene: Phaser.Scene;
+  hud: Hud;
+  /** The room's activities (null until connected). */
+  acts(): ActivityLink | null;
+  look(): OwlLook;
+  /** The feather balance changed. */
+  feathers(total: number): void;
+}
+
+/** A run under way at a cabinet: its game, its seed, and its result once the room took it. */
+interface Run {
+  game: ArcadeGame;
+  seed: number;
+  sim: ArcadeSim;
+  /** Sent to the room (once). */
+  sent: boolean;
+}
+
+/** A shrunken owl's face in its own colours: the portraits on the score wall (no names anywhere). */
+export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: number, look: PortraitLook, r = 9): void {
+  const body = hexToInt(look.body);
+  const belly = hexToInt(look.belly);
+  const accent = hexToInt(look.accent);
+  // Ear tufts for the owls that have them.
+  if (!look.species || look.species === 'great-horned' || look.species === 'screech') {
+    g.fillStyle(body, 1);
+    g.fillTriangle(x - r * 0.9, y - r * 0.3, x - r * 0.35, y - r * 0.8, x - r * 0.95, y - r * 1.35);
+    g.fillTriangle(x + r * 0.9, y - r * 0.3, x + r * 0.35, y - r * 0.8, x + r * 0.95, y - r * 1.35);
   }
+  g.fillStyle(body, 1).fillCircle(x, y, r);
+  g.fillStyle(belly, 1).fillEllipse(x, y + r * 0.15, r * 1.5, r * 1.3);
+  g.fillStyle(0x0c1e36, 1).fillCircle(x - r * 0.36, y - r * 0.05, r * 0.24).fillCircle(x + r * 0.36, y - r * 0.05, r * 0.24);
+  g.fillStyle(accent, 1).fillTriangle(x - r * 0.16, y + r * 0.22, x + r * 0.16, y + r * 0.22, x, y + r * 0.55);
+}
+
+/**
+ * Neon Roost, the arcade (C40), in the room: each cabinet's name on its marquee (or, switched off, a
+ * dark screen reading "Hatching Soon"), the score wall on the board above them, and a run of a game
+ * from Play at a cabinet to what it paid. The game itself is drawn by ArcadeScene over the room, in
+ * the HUD's arcade screen; the room server (or the local mode) starts each run and pays it.
+ */
+export class Arcade {
+  private readonly walls = new Map<ArcadeGame, GameWall>();
+  private mine: OwnBests = {};
+  private readonly wallLayer: Phaser.GameObjects.Container;
+  private readonly portraits: Phaser.GameObjects.Graphics;
+  private run: Run | null = null;
+  private frameRect: PreviewRect | null = null;
+  private destroyed = false;
+
+  constructor(private readonly host: ArcadeHost) {
+    const { scene } = host;
+    for (const cabinet of CABINETS) {
+      const art = CABINET_ART[cabinet.spot];
+      if (!art) continue;
+      const face = cabinetFace(cabinet);
+      if (!face.off) {
+        scene.add
+          .text(art.marquee.x, art.marquee.y, face.text, { fontFamily: FONT, fontSize: '15px', fontStyle: '800', color: art.glow, stroke: '#05060d', strokeThickness: 4, resolution: 2 })
+          .setOrigin(0.5)
+          .setShadow(0, 0, art.glow, 8, true, true)
+          .setDepth(3);
+        continue;
+      }
+      scene.add.graphics().fillStyle(0x05060d, 0.88).fillRoundedRect(art.x, art.y, art.w, art.h, 10).setDepth(2);
+      scene.add
+        .text(art.x + art.w / 2, art.y + art.h / 2, face.text, { fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: art.ink, align: 'center', lineSpacing: 2, resolution: 2 })
+        .setOrigin(0.5)
+        .setShadow(0, 0, art.glow, 10, false, true)
+        .setDepth(3);
+    }
+    this.wallLayer = scene.add.container(0, 0).setDepth(3);
+    this.portraits = scene.add.graphics();
+    this.wallLayer.add(this.portraits);
+    for (const game of ARCADE_GAMES) this.walls.set(game, { game, top: [] });
+    this.renderWall();
+  }
+
+  /** The wall as the room sent it: every column and the owl's own bests on arrival, or a column that changed. */
+  onWall(walls: GameWall[], mine: OwnBests | null): void {
+    for (const w of walls) this.walls.set(w.game, w);
+    if (mine) this.mine = { ...mine };
+    this.renderWall();
+  }
+
+  private renderWall(): void {
+    if (this.destroyed) return;
+    const { scene } = this.host;
+    for (const child of [...this.wallLayer.list]) if (child !== this.portraits) child.destroy();
+    this.portraits.clear();
+    const col = BOARD.w / ARCADE_GAMES.length;
+    const text = (x: number, y: number, s: string, size: number, color: string, alpha = 1) =>
+      this.wallLayer.add(scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: '700', color, resolution: 2 }).setOrigin(0.5).setAlpha(alpha));
+    ARCADE_GAMES.forEach((game, i) => {
+      const cx = BOARD.x + col * i + col / 2;
+      const art = CABINET_ART[cabinetOf(game).spot]!;
+      text(cx, BOARD.y + 16, GAMES[game].name, 13, art.glow);
+      text(cx, BOARD.y + 33, "Today's best", 10, '#F6F1E3', 0.7);
+      const top = this.walls.get(game)?.top ?? [];
+      for (let k = 0; k < WALL_SIZE; k++) {
+        const y = BOARD.y + 54 + k * 22;
+        const e = top[k];
+        if (!e) {
+          text(cx, y, '·', 12, '#F6F1E3', 0.3);
+          continue;
+        }
+        drawPortrait(this.portraits, cx - 22, y, e.look, 8);
+        this.wallLayer.add(scene.add.text(cx - 8, y, String(e.score), { fontFamily: FONT, fontSize: '14px', fontStyle: '800', color: '#F6F1E3', resolution: 2 }).setOrigin(0, 0.5));
+      }
+      const own = this.mine[game];
+      if (own !== undefined) text(cx, BOARD.y + BOARD.h - 12, `Your best ${own}`, 10, art.ink);
+    });
+  }
+
+  /** Play at a cabinet: the room starts a run, the HUD's arcade screen opens, and the game begins. */
+  async play(game: ArcadeGame): Promise<void> {
+    const acts = this.host.acts();
+    if (!acts || this.destroyed) return;
+    const reply = await acts.run(game);
+    if (this.destroyed) return;
+    if (!reply.ok) {
+      const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : 'The park did not catch that. Try again in a moment.';
+      this.host.hud.toast(line);
+      this.host.hud.closeArcade();
+      return;
+    }
+    const sim: ArcadeSim = game === 'crossing' ? new HopGame(reply.seed) : game === 'flight' ? new FlapGame(reply.seed) : new KnockGame();
+    this.run = { game, seed: reply.seed, sim, sent: false };
+    const top = this.walls.get(game)?.top[0]?.score ?? null;
+    this.host.hud.openArcade(
+      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game], top, best: this.mine[game] ?? null },
+      {
+        input: (i) => this.input(i),
+        frame: (rect) => this.frame(rect),
+        again: () => void this.play(game),
+      },
+    );
+    const view = this.view();
+    view.play(sim, this.host.look(), (s) => this.step(s));
+    if (this.frameRect) view.frame(this.frameRect);
+  }
+
+  /** The game's scene, started over the room if it is not running. */
+  private view(): ArcadeScene {
+    const plugin = this.host.scene.scene;
+    if (!plugin.isActive('arcade')) plugin.run('arcade');
+    return plugin.get('arcade') as ArcadeScene;
+  }
+
+  private frame(rect: PreviewRect | null): void {
+    this.frameRect = rect;
+    if (!rect) {
+      // The screen closed: the run is left where it was (the room forgets it with the next one).
+      this.run = null;
+      if (this.host.scene.scene.isActive('arcade')) this.host.scene.scene.stop('arcade');
+      return;
+    }
+    (this.host.scene.scene.get('arcade') as ArcadeScene | null)?.frame(rect);
+  }
+
+  private input(i: ArcadeInput): void {
+    const sim = this.run?.sim;
+    if (!sim || sim.over) return;
+    if (i.kind === 'tap') {
+      if (sim.game !== 'sling') sim.tap();
+      return;
+    }
+    if (sim.game !== 'sling') return;
+    if (i.kind === 'aim') sim.aimByPull(i.dx, i.dy);
+    else if (i.kind === 'nudge') sim.nudge(i.angle, i.power);
+    else sim.release();
+  }
+
+  /** Every frame of a run: the score on the screen, and once it is over, its result to the room. */
+  private step(sim: ArcadeSim): void {
+    const run = this.run;
+    if (!run || run.sim !== sim) return;
+    this.host.hud.arcadePlaying(sim.score, sim.game === 'sling' ? sim.banner : '');
+    if (sim.over && !run.sent) {
+      run.sent = true;
+      void this.finish(run);
+    }
+  }
+
+  private async finish(run: Run): Promise<void> {
+    const { sim, game } = run;
+    const result: RunResult = sim.game === 'sling' ? { game, score: sim.score, shots: sim.shots } : { game, score: sim.score };
+    const line = sim.overLine();
+    const reply = await this.host.acts()?.score(result, run.seed);
+    if (this.destroyed || this.run !== run) return;
+    if (!reply?.ok) {
+      this.host.hud.arcadeResult({ line, feathers: null, newBest: false, best: this.mine[game] ?? null, note: 'The park did not catch that run.' });
+      return;
+    }
+    const paid = reply.paid;
+    this.host.feathers(paid.total);
+    this.onWall([paid.wall], paid.mine);
+    const capped = paid.added < runFeathers(game, paid.score);
+    this.host.hud.arcadeResult({
+      line,
+      feathers: paid.added,
+      newBest: paid.best,
+      best: paid.mine[game] ?? null,
+      ...(capped ? { note: 'No more feathers from games today.' } : {}),
+    });
+  }
+
+  /** The run as tests see it (the game itself, to play it by its rules). */
+  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean } | null {
+    return this.run ? { ...this.run } : null;
+  }
+
+  /** The wall as it stands, for tests. */
+  wall(): { walls: GameWall[]; mine: OwnBests } {
+    return { walls: ARCADE_GAMES.map((g) => this.walls.get(g)!), mine: { ...this.mine } };
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    this.run = null;
+    if (this.host.scene.scene.isActive('arcade')) this.host.scene.scene.stop('arcade');
+  }
+}
+
+/** The arcade, for its room only. */
+export function arcadeFor(room: RoomDef, host: ArcadeHost): Arcade | null {
+  return room.id === ARCADE_ROOM ? new Arcade(host) : null;
 }

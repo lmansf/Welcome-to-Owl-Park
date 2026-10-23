@@ -3,13 +3,16 @@
  * idle park costs nothing, answers heartbeats without waking, and rebuilds every room from
  * the socket attachments when the object wakes up or is moved. Besides the park's rooms it
  * holds the street of nests and every nest with owls in it, each nest a room of its own made
- * from NEST_ROOM; whose nest it is and how it stands come from the collections object.
+ * from NEST_ROOM; whose nest it is and how it stands come from the collections object. An arcade
+ * run lives on its visitor's socket from start to score, so it outlasts the object's sleep.
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
+  ARCADE_ROOM,
   Activities,
   CLOSE,
   COPY_BASE_EMOTES,
+  DEFAULT_LOOK,
   HEARTBEAT_FRAME,
   KIND_RULES,
   LANTERN_ROOM,
@@ -20,6 +23,7 @@ import {
   STREET_DOORS,
   STREET_ROOM,
   distance,
+  endRun,
   filterOwnedWear,
   getInteractable,
   getNpc,
@@ -33,7 +37,10 @@ import {
   nestLook,
   npcsIn,
   parseClientFrame,
+  portraitLook,
+  startRun,
   wearVariants,
+  type ArcadeRun,
   type ClientAct,
   type ClientFrame,
   type ClientHello,
@@ -47,6 +54,7 @@ import {
   type PlayResult,
   type QuestBoard,
   type QuestUpdate,
+  type RunResult,
   type ServerFrame,
   type ServerNest,
   type Wear,
@@ -70,6 +78,8 @@ interface Attachment {
   tz?: string;
   /** In a nest: this owl is its owner (the collections object said so at its hello). Only the owner changes a nest. */
   owner?: boolean;
+  /** In the arcade: the run this owl started and has not scored yet. */
+  run?: ArcadeRun;
 }
 
 /** What a collector owns, as last read from the collections object. */
@@ -341,6 +351,8 @@ export class RoomObject extends DurableObject<Env> {
     // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
     if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
     if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
+    // The arcade's score wall as it stands, with this owl's own bests.
+    if (att.room === ARCADE_ROOM) this.serial(att, () => this.sendWall(ws, att));
     // Arriving in a room counts for quests that ask to visit it (none asks for a nest).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
@@ -622,9 +634,47 @@ export class RoomObject extends DurableObject<Env> {
             }
           }
         }
+        case 'run': {
+          const res = startRun(att.room, room.positionOf(att.id), frame.g!, crypto.getRandomValues(new Uint32Array(1))[0]!, Date.now());
+          if (!res.ok) return no(res.reason);
+          this.keepRun(ws, res.run);
+          return this.send(ws, { t: 'act', r, a, ok: true, game: res.run.game, seed: res.run.seed, startedAt: res.run.startedAt });
+        }
+        case 'score': {
+          const result: RunResult = frame.n === undefined ? { game: frame.g!, score: frame.s! } : { game: frame.g!, score: frame.s!, shots: frame.n };
+          const verdict = endRun((ws.deserializeAttachment() as Attachment | null)?.run, result, frame.k!, Date.now());
+          if (verdict === 'idle') return no('idle');
+          // One result per run, whether or not it holds up.
+          this.keepRun(ws, undefined);
+          if (verdict === 'unknown') return no('unknown');
+          const settled = await stub.arcadeRun(cid, result, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK));
+          this.send(ws, { t: 'act', r, a, ok: true, paid: settled.paid });
+          // Everyone else in the arcade sees the wall change; the player has it in the answer.
+          if (settled.changed) room.broadcast({ t: 'wall', walls: [settled.paid.wall] }, att.id);
+          if (settled.tasks) this.send(ws, { t: 'tasks', ...settled.tasks });
+          return;
+        }
       }
     } catch {
       return no('offline');
+    }
+  }
+
+  /** Keep the visitor's arcade run on its socket (or, with none, drop it). */
+  private keepRun(ws: WebSocket, run: ArcadeRun | undefined): void {
+    const cur = ws.deserializeAttachment() as Attachment | null;
+    if (!cur) return;
+    const { run: _done, ...rest } = cur;
+    ws.serializeAttachment((run ? { ...rest, run } : rest) satisfies Attachment);
+  }
+
+  /** The arcade's score wall for a newcomer, with its own bests (the wall fills in with the next run if the collections are away). */
+  private async sendWall(ws: WebSocket, att: Attachment): Promise<void> {
+    try {
+      const { walls, mine } = await this.collections().arcadeWalls(att.cid ?? null);
+      this.send(ws, { t: 'wall', walls, mine });
+    } catch {
+      /* best effort */
     }
   }
 

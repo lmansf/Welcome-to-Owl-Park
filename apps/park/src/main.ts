@@ -6,6 +6,7 @@ import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
+import { ArcadeScene } from './game/ArcadeScene';
 import { BuilderScene } from './game/BuilderScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
 import { loadLook, loadPlayerId } from './identity';
@@ -57,8 +58,8 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.NONE, zoom: 1 / dpr },
   input: { activePointers: 2 },
   render: { antialias: true, pixelArt: false, roundPixels: false },
-  // The owl builder's preview draws over the room, which keeps running underneath.
-  scene: [BootScene, RoomScene, BuilderScene],
+  // The owl builder's preview and the arcade's games draw over the room, which keeps running underneath.
+  scene: [BootScene, RoomScene, BuilderScene, ArcadeScene],
 });
 
 game.registry.set('config', cfg);
@@ -133,6 +134,8 @@ declare global {
       emote(e: string): boolean;
       /** The tickets on this device (empty without the park's server). */
       wallet(): Promise<WalletEntry[]>;
+      /** The arcade's run under way: its game, its seed and the game itself (null when none). */
+      arcade(): ReturnType<RoomScene['arcadeRun']>;
     };
   }
 }
@@ -217,4 +220,5 @@ window.owlPark = {
   },
   emote: (e) => roomScene()?.emote(e) ?? false,
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
+  arcade: () => roomScene()?.arcadeRun() ?? null,
 };

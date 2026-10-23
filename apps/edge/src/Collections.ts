@@ -1,14 +1,16 @@
 /**
  * Durable Object holding every collector's collection, feathers and quests in its SQLite storage,
- * and every owl's nest and furniture beside them. One object for the park (`getByName('park')`),
- * called over RPC by the Worker (inventory, the shop, grants, the furniture gift) and by the room
- * object (quests, uses, ownership checks for wear and emotes, the nests). The rules live in the
- * portable `CollectionBook`, `QuestBook` and `NestBook` (packages/shared) over the SQL stores in
- * sqlStore.ts and sqlNestStore.ts. Rewards and nest ids draw from the platform's cryptographic
- * random source. Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts).
+ * and beside them every owl's nest and furniture and the arcade's scores of the day. One object for
+ * the park (`getByName('park')`), called over RPC by the Worker (inventory, the shop, grants, the
+ * furniture gift) and by the room object (quests, uses, ownership checks for wear and emotes, the
+ * nests, the arcade's runs). The rules live in the portable `CollectionBook`, `QuestBook`,
+ * `NestBook` and `ArcadeBook` (packages/shared) over the SQL stores in sqlStore.ts, sqlNestStore.ts
+ * and sqlScoreStore.ts. Rewards and nest ids draw from the platform's cryptographic random source.
+ * Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
+  ArcadeBook,
   CollectionBook,
   LEAF_FEATHERS_PER_DAY,
   NestBook,
@@ -17,6 +19,11 @@ import {
   secureNestId,
   type AbandonResult,
   type AcceptResult,
+  type GameWall,
+  type OwnBests,
+  type PortraitLook,
+  type RunResult,
+  type RunSettled,
   type BuyResult,
   type FeedbackDraft,
   type FurnitureGiftResult,
@@ -44,6 +51,7 @@ import {
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ROOMS } from './rooms';
 import { SqlNestStore } from './sqlNestStore';
+import { SqlScoreStore } from './sqlScoreStore';
 import { SqlCollectionStore } from './sqlStore';
 import type { Env } from './env';
 
@@ -72,6 +80,7 @@ export class Collections extends DurableObject<Env> {
   private readonly book: CollectionBook;
   private readonly quests: QuestBook;
   private readonly nests: NestBook;
+  private readonly arcade: ArcadeBook;
   private readonly feedbackBox: FeedbackBox;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -80,6 +89,7 @@ export class Collections extends DurableObject<Env> {
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
     this.nests = new NestBook(new SqlNestStore(ctx.storage.sql), this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
+    this.arcade = new ArcadeBook(new SqlScoreStore(ctx.storage.sql), this.book);
     this.feedbackBox = new FeedbackBox(ctx.storage.sql);
   }
 
@@ -149,6 +159,19 @@ export class Collections extends DurableObject<Env> {
   /** Today's three tasks and this collector's progress. */
   async tasks(cid: string): Promise<TaskView> {
     return this.book.tasks(cid, Date.now());
+  }
+
+  // ---------- the arcade: no answer carries a collector id ----------
+
+  /** A run the room server checked against its time: its pay under the activities' cap, the wall, the tasks. */
+  async arcadeRun(cid: string, run: RunResult, look: PortraitLook): Promise<RunSettled> {
+    return this.arcade.finish(cid, run, look, Date.now());
+  }
+
+  /** Today's score wall, and this collector's own bests (none for a page without a collection). */
+  async arcadeWalls(cid: string | null): Promise<{ walls: GameWall[]; mine: OwnBests }> {
+    const now = Date.now();
+    return { walls: this.arcade.walls(now), mine: cid ? this.arcade.mine(cid, now) : {} };
   }
 
   async gather(cid: string, quest: string, n: number, room: string, pos: Vec2): Promise<GatherResult> {
