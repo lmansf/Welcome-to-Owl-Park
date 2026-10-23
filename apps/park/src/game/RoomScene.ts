@@ -1242,12 +1242,48 @@ export class RoomScene extends Phaser.Scene {
     }
   }
 
-  /** The lobby's ticket booth: tickets sell in the store; the window shows the tickets on this device. */
+  /**
+   * The lobby's ticket booth: tickets sell in the store; the window shows the tickets on this device.
+   * On opening night (C42) it says every pass is free, and an Opening Night Ticket that went through
+   * the gate tonight offers its free pass.
+   */
   private async openBooth(): Promise<void> {
     const tickets = this.transport.tickets;
     const [entry, wallet] = await Promise.all([this.entry(), tickets ? tickets.wallet().catch(() => null) : Promise.resolve(null)]);
     if (this.leaving) return;
-    this.hud.openBooth({ ticketsUrl: this.cfg.ticketsUrl || null, ...entry, wallet, ...(tickets ? { share: (id: string) => tickets.share(id) } : {}) });
+    const ready = (wallet ?? []).filter((t) => t.freePass === 'ready');
+    const links = tickets ? await Promise.all(ready.map(async (t) => [t.id, await tickets.freePass(t.id).catch(() => null)] as const)) : [];
+    if (this.leaving) return;
+    this.hud.openBooth({
+      ticketsUrl: this.cfg.ticketsUrl || null,
+      ...entry,
+      wallet,
+      ...(tickets
+        ? {
+            share: (id: string) => tickets.share(id),
+            openingNight: tickets.openingNight(),
+            passLinks: Object.fromEntries(links.filter((l): l is readonly [string, string] => l[1] !== null)),
+            watchPass: (id: string) => this.hud.watchFreePass(() => this.passCame(id)),
+          }
+        : {}),
+    });
+  }
+
+  /** Whether the free pass of this Opening Night Ticket has come (C42). */
+  private async passCame(id: string): Promise<boolean> {
+    const wallet = (await this.transport.tickets?.wallet()) ?? [];
+    return wallet.find((t) => t.id === id)?.freePass === 'claimed';
+  }
+
+  /** Opening night (C42): after the ticket card, the free pass its Opening Night Ticket may claim tonight. */
+  private async offerFreePass(id: string): Promise<void> {
+    const tickets = this.transport.tickets;
+    if (!tickets) return;
+    const wallet = await tickets.wallet().catch(() => []);
+    if (wallet.find((t) => t.id === id)?.freePass !== 'ready') return;
+    const link = await tickets.freePass(id).catch(() => null);
+    // The ticket card has had its moment: the offer follows it.
+    if (link) setTimeout(() => this.hud.offerFreePass({ link, claimed: () => this.passCame(id) }), 2700);
   }
 
   /**
@@ -1266,7 +1302,7 @@ export class RoomScene extends Phaser.Scene {
     const entry = await this.entry();
     if (this.leaving) return;
     if (!scan.ok && entry.gate === 'ticket' && !entry.admitted) {
-      this.hud.toast(gateRefusal(scan.reason), 4500);
+      this.hud.toast(gateRefusal(scan.reason, scan.kind), 4500);
       this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h + 70 });
       this.time.delayedCall(1500, () => {
         this.passingGate = false;
@@ -1276,6 +1312,7 @@ export class RoomScene extends Phaser.Scene {
     this.pieces.gate?.react();
     if (scan.ok) this.hud.showTicket(gateCard(scan, Date.now()));
     else this.hud.toast('Welcome to Owl Park!', 2600);
+    if (scan.ok && scan.kind === 'opening-night') void this.offerFreePass(scan.id);
     // The card stays up a moment before the walk on into the hub.
     this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }));
   }

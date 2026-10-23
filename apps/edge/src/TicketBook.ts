@@ -13,8 +13,11 @@
  *   device at a time: a holder can pass one on with a share link before its first scan, and
  *   opening a link moves it.
  * - The gate scans a ticket held on this device; the first scan starts its time.
+ * - Opening night (C42): a pass order from the park's free-pass link keeps the link to the Opening
+ *   Night Ticket it came from, and goes with that ticket if the ticket is switched off. The book
+ *   counts the night: tickets issued and scanned, passes claimed through the link and without it.
  */
-import { isTicketId, scan, statusOf, timeLeft, visualId, type ScanResult, type Ticket, type TicketStatus } from './tickets';
+import { isTicketId, scan, statusOf, timeLeft, visualId, type ScanResult, type Ticket, type TicketKind, type TicketStatus } from './tickets';
 import type { TicketLine } from './shopify';
 
 export interface OrderRecord {
@@ -34,6 +37,14 @@ export interface TicketRecord extends Ticket {
   shareHash: string | null;
 }
 
+/** A pass order from opening night's offer (C42), and the Opening Night Ticket it came from. */
+export interface PassLink {
+  order: string;
+  /** The ticket, when the park's link named one that went through the gate; null: a pass without a link. */
+  fromTicket: string | null;
+  at: number;
+}
+
 export interface TicketStore {
   order(order: string): OrderRecord | null;
   orderByClaim(claimHash: string): OrderRecord | null;
@@ -42,7 +53,13 @@ export interface TicketStore {
   ticketByShare(shareHash: string): TicketRecord | null;
   ticketsOf(order: string): TicketRecord[];
   onDevice(device: string): TicketRecord[];
+  /** Every ticket of a kind (opening night's count). */
+  ofKind(kind: TicketKind): TicketRecord[];
   putTicket(t: TicketRecord): void;
+  passLink(order: string): PassLink | null;
+  passLinksFrom(ticketId: string): PassLink[];
+  passLinks(): PassLink[];
+  putPassLink(l: PassLink): void;
 }
 
 export interface WalletTicket {
@@ -52,9 +69,40 @@ export interface WalletTicket {
   /** Time left once it is running, or until an unused ticket expires; null where it has none. */
   msLeft: number | null;
   firstScan: number | null;
-  /** Event tickets: their window, so the wallet can show the night and the gate can tell it is open. */
+  /** Windowed tickets: their window, so the wallet can show the night and the gate can tell it is open. */
   validFrom: number | null;
   validUntil: number | null;
+  /**
+   * An Opening Night Ticket's free pass (C42): `ready` once the ticket has gone through the gate
+   * and while its night runs, `claimed` once a pass came from it through the link.
+   */
+  freePass?: 'ready' | 'claimed';
+}
+
+/** Opening night's count (C42), for the keepers' page. Switched-off tickets are left out. */
+export interface OpeningCounts {
+  /** Opening Night Tickets issued, and those that went through the gate. */
+  issued: number;
+  scanned: number;
+  /** Passes claimed through the park's link, and passes sold with the code but no link. */
+  linkedPasses: number;
+  unlinkedPasses: number;
+  /** Tickets that turned into a pass, as a share of the tickets scanned (null before any scan). */
+  converted: number;
+  conversion: number | null;
+  /** Opening Night Tickets and opening passes switched off (refunded, cancelled or declined). */
+  revoked: number;
+}
+
+/** One ticket of opening night, as the keepers' CSV lists it: order numbers and ticket IDs only. */
+export interface OpeningRow {
+  kind: 'opening-night' | 'pass';
+  ticket: string;
+  order: string;
+  status: TicketStatus;
+  firstScan: number | null;
+  /** A pass: the Opening Night Ticket it came from (empty without a link). */
+  fromTicket: string | null;
 }
 
 export type Random = (n: number) => Uint8Array;
@@ -76,12 +124,34 @@ function secret(random: Random): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** How long one webhook may work on an order before another may take it over (one that died part way). */
+export const ORDER_LEASE_MS = 20_000;
+
 export class TicketBook {
+  /** Orders a webhook is working on now. Kept in memory: a lease lasts seconds, never across a restart. */
+  private readonly leases = new Map<string, number>();
+
   constructor(
     private readonly store: TicketStore,
     private readonly random: Random = cryptoRandom,
     private readonly hash: Hash = sha256Hex,
   ) {}
+
+  /**
+   * One webhook at a time per order: false while another holds the order's lease. The store sends a
+   * free order's orders/create and orders/paid together (C42), and any webhook may come twice.
+   */
+  lease(order: string, now: number): boolean {
+    const until = this.leases.get(order);
+    if (until !== undefined && until > now) return false;
+    if (this.leases.size > 1000) for (const [o, u] of this.leases) if (u <= now) this.leases.delete(o);
+    this.leases.set(order, now + ORDER_LEASE_MS);
+    return true;
+  }
+
+  unlease(order: string): void {
+    this.leases.delete(order);
+  }
 
   /**
    * A paid order's tickets. Returns the claim secret to send in the link for a new order that is not
@@ -153,7 +223,8 @@ export class TicketBook {
 
   /**
    * A refund (that many units of each line) or a cancellation (`all`): those tickets stop working.
-   * Unused tickets go first. Votes they cast stay counted.
+   * Unused tickets go first. Votes they cast stay counted. A pass that came from an Opening Night
+   * Ticket through the park's link goes with it (C42).
    */
   revoke(order: string, which: 'all' | Array<{ line: string; quantity: number }>, now: number): TicketRecord[] {
     const tickets = this.store.ticketsOf(order).filter((t) => t.revoked === null);
@@ -165,9 +236,76 @@ export class TicketBook {
         pick.push(...ofLine.slice(0, Math.max(0, quantity)));
       }
     }
-    const out = pick.map((t) => ({ ...t, revoked: now }));
+    const out: TicketRecord[] = pick.map((t) => ({ ...t, revoked: now }));
     for (const t of out) this.store.putTicket(t);
+    for (const t of out.filter((x) => x.kind === 'opening-night')) {
+      for (const l of this.store.passLinksFrom(t.id)) out.push(...this.revoke(l.order, 'all', now));
+    }
     return out;
+  }
+
+  /**
+   * A pass order from opening night's offer (C42), kept once: the Opening Night Ticket the park's
+   * link named, when that ticket went through the gate and still works; otherwise it counts as a
+   * pass without a link (the code used some other way). A linked pass that is on no device yet goes
+   * onto the ticket's, so the owl finds it in the wallet it claimed it from.
+   */
+  linkPass(order: string, fromTicket: string | null, now: number): PassLink | null {
+    if (!this.store.order(order)) return null;
+    const known = this.store.passLink(order);
+    if (known) return known;
+    const from = fromTicket ? this.get(fromTicket) : null;
+    const linked = from !== null && from.kind === 'opening-night' && from.firstScan !== null && from.revoked === null ? from : null;
+    const link: PassLink = { order, fromTicket: linked?.id ?? null, at: now };
+    this.store.putPassLink(link);
+    if (linked?.device) {
+      for (const p of this.store.ticketsOf(order)) if (p.device === null && p.revoked === null) this.store.putTicket({ ...p, device: linked.device });
+    }
+    return link;
+  }
+
+  /** The free pass of an Opening Night Ticket, as its wallet line shows it (undefined for other tickets). */
+  private freePass(t: TicketRecord, status: TicketStatus): WalletTicket['freePass'] {
+    if (t.kind !== 'opening-night') return undefined;
+    if (this.store.passLinksFrom(t.id).length) return 'claimed';
+    return status === 'active' ? 'ready' : undefined;
+  }
+
+  /** Whether an Opening Night Ticket on this device may claim its free pass now (C42). */
+  passOffer(id: string, device: string, now: number): { ok: true } | { ok: false; reason: 'unknown' | 'not-yours' | 'not-ready' | 'claimed' } {
+    const t = this.get(id);
+    if (!t || t.kind !== 'opening-night') return { ok: false, reason: 'unknown' };
+    if (t.device !== device) return { ok: false, reason: 'not-yours' };
+    const pass = this.freePass(t, statusOf(t, now));
+    return pass === 'ready' ? { ok: true } : { ok: false, reason: pass === 'claimed' ? 'claimed' : 'not-ready' };
+  }
+
+  /** Opening night's count and its tickets (C42): order numbers and ticket IDs only. */
+  opening(now: number): { counts: OpeningCounts; rows: OpeningRow[] } {
+    const tickets = this.store.ofKind('opening-night');
+    const links = this.store.passLinks();
+    const rows: OpeningRow[] = tickets.map((t) => ({ kind: 'opening-night', ticket: t.id, order: t.order, status: statusOf(t, now), firstScan: t.firstScan, fromTicket: null }));
+    for (const l of links) {
+      for (const p of this.store.ticketsOf(l.order)) rows.push({ kind: 'pass', ticket: p.id, order: p.order, status: statusOf(p, now), firstScan: p.firstScan, fromTicket: l.fromTicket });
+    }
+    const live = rows.filter((r) => r.status !== 'revoked');
+    const nights = live.filter((r) => r.kind === 'opening-night');
+    const scanned = nights.filter((r) => r.firstScan !== null).length;
+    const passes = live.filter((r) => r.kind === 'pass');
+    const fromLive = new Set(nights.map((r) => r.ticket));
+    const converted = new Set(passes.filter((r) => r.fromTicket !== null && fromLive.has(r.fromTicket)).map((r) => r.fromTicket)).size;
+    return {
+      counts: {
+        issued: nights.length,
+        scanned,
+        linkedPasses: passes.filter((r) => r.fromTicket !== null).length,
+        unlinkedPasses: passes.filter((r) => r.fromTicket === null).length,
+        converted,
+        conversion: scanned > 0 ? converted / scanned : null,
+        revoked: rows.length - live.length,
+      },
+      rows,
+    };
   }
 
   /** The emailed link: the order's live tickets move onto this device. Null for an unknown secret. */
@@ -206,7 +344,11 @@ export class TicketBook {
     return this.store
       .onDevice(device)
       .sort((a, b) => b.created - a.created || a.id.localeCompare(b.id))
-      .map((t) => ({ id: t.id, kind: t.kind, ...timeLeft(t, now), firstScan: t.firstScan, validFrom: t.validFrom, validUntil: t.validUntil }));
+      .map((t) => {
+        const left = timeLeft(t, now);
+        const freePass = this.freePass(t, left.status);
+        return { id: t.id, kind: t.kind, ...left, firstScan: t.firstScan, validFrom: t.validFrom, validUntil: t.validUntil, ...(freePass ? { freePass } : {}) };
+      });
   }
 
   /** The gate scans a ticket held on this device; the first scan starts its time. */
@@ -240,6 +382,7 @@ export class TicketBook {
 export class MemoryTicketStore implements TicketStore {
   private readonly orders = new Map<string, OrderRecord>();
   private readonly tickets = new Map<string, TicketRecord>();
+  private readonly links = new Map<string, PassLink>();
   order(order: string) {
     return this.orders.get(order) ?? null;
   }
@@ -263,7 +406,23 @@ export class MemoryTicketStore implements TicketStore {
   onDevice(device: string) {
     return [...this.tickets.values()].filter((t) => t.device === device).map((t) => ({ ...t }));
   }
+  ofKind(kind: TicketKind) {
+    return [...this.tickets.values()].filter((t) => t.kind === kind).sort((a, b) => a.created - b.created || a.id.localeCompare(b.id)).map((t) => ({ ...t }));
+  }
   putTicket(t: TicketRecord) {
     this.tickets.set(t.id, { ...t });
+  }
+  passLink(order: string) {
+    const l = this.links.get(order);
+    return l ? { ...l } : null;
+  }
+  passLinksFrom(ticketId: string) {
+    return [...this.links.values()].filter((l) => l.fromTicket === ticketId).map((l) => ({ ...l }));
+  }
+  passLinks() {
+    return [...this.links.values()].sort((a, b) => a.at - b.at || a.order.localeCompare(b.order)).map((l) => ({ ...l }));
+  }
+  putPassLink(l: PassLink) {
+    this.links.set(l.order, { ...l });
   }
 }

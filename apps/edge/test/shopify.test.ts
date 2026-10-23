@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gidTail, lowRisk, ticketLines, verifyWebhook, webhookSignature, type AdminOrder } from '../src/shopify';
+import { gidTail, lowRisk, ticketLines, verifyWebhook, webhookSignature, webhookSigned, type AdminOrder } from '../src/shopify';
 import { DEFAULT_LENGTH_MS, HOUR_MS } from '../src/tickets';
 
 describe('webhook signatures', () => {
@@ -15,6 +15,14 @@ describe('webhook signatures', () => {
     expect(await verifyWebhook(secret, body, null)).toBe(false);
     expect(await verifyWebhook(undefined, body, sig)).toBe(false);
     expect(await verifyWebhook(secret, body, sig.slice(0, -2))).toBe(false);
+  });
+
+  it('accept either key the park holds: the store’s own, or the app’s client secret', async () => {
+    const byApp = await webhookSignature('app-client-secret', body);
+    expect(await webhookSigned(['store-key', 'app-client-secret'], body, byApp)).toBe(true);
+    expect(await webhookSigned([undefined, 'app-client-secret'], body, byApp)).toBe(true);
+    expect(await webhookSigned(['store-key', undefined], body, byApp)).toBe(false);
+    expect(await webhookSigned([], body, byApp)).toBe(false);
   });
 });
 

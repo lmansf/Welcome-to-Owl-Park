@@ -3,11 +3,13 @@
  * checks the signature before reading a byte of the order. An order's ticket lines, their kinds and
  * lengths, and the store's fraud rating come from one Admin API query (ORDER_QUERY), so the
  * products can change in the store without a code change: a ticket product has the product type
- * `Ticket` (C23) and metafields in the `owl_park` namespace: `ticket_kind` (day, night, annual or
- * event) and `length_hours`. An event entry (opening night, which comes with the Drop-1 pin) can
- * ride on any product, with `ticket_kind` event and its window in `event_start` / `event_end`.
+ * `Ticket` (C23) and metafields in the `owl_park` namespace: `ticket_kind` (day, night, annual,
+ * opening-night or event) and `length_hours`. The Opening Night Ticket (C42) has its window in
+ * `event_start` and, optionally, `event_end` (24 hours after the start without it), so a moved date
+ * is a store edit. An event entry can ride on any product, with `ticket_kind` event and its window
+ * in `event_start` / `event_end`.
  */
-import { DEFAULT_LENGTH_MS, HOUR_MS, type TicketKind } from './tickets';
+import { DEFAULT_LENGTH_MS, HOUR_MS, OPENING_NIGHT_MS, isTicketId, type TicketKind } from './tickets';
 
 const enc = new TextEncoder();
 
@@ -37,11 +39,23 @@ export async function verifyWebhook(secret: string | undefined, rawBody: ArrayBu
   return same(await webhookSignature(secret, rawBody), header.trim());
 }
 
+/**
+ * Whether a webhook is signed with one of the keys the park holds: the store's own key (webhooks
+ * made in the store's admin) or the app's client secret (webhooks the app subscribes).
+ */
+export async function webhookSigned(keys: Array<string | undefined>, rawBody: ArrayBuffer | Uint8Array | string, header: string | null): Promise<boolean> {
+  for (const key of keys) if (await verifyWebhook(key, rawBody, header)) return true;
+  return false;
+}
+
 /** One query for everything the ledger needs about an order. */
 export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
   order(id: $id) {
     id
     cancelledAt
+    totalPriceSet { shopMoney { amount } }
+    discountCodes
+    customAttributes { key value }
     risk { recommendation assessments { riskLevel } }
     lineItems(first: 50) {
       nodes {
@@ -63,6 +77,12 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
 export interface AdminOrder {
   id: string;
   cancelledAt?: string | null;
+  /** What the buyer paid, in the shop's currency: "0.0" for an order a discount made free. */
+  totalPriceSet?: { shopMoney?: { amount?: string | null } | null } | null;
+  /** The discount codes the buyer used. */
+  discountCodes?: string[] | null;
+  /** The cart's attributes (C42: `from_ticket`, set by the park's link to the free pass). */
+  customAttributes?: Array<{ key: string; value?: string | null }> | null;
   risk?: { recommendation?: string | null; assessments?: Array<{ riskLevel?: string | null }> | null } | null;
   lineItems: {
     nodes: Array<{
@@ -86,20 +106,33 @@ export interface TicketLine {
   kind: TicketKind;
   /** How long a scanned ticket lasts; null where the store gives no hours and the kind has no default. */
   lengthMs: number | null;
-  /** Event entries: the window, when the store has set it (ms). */
+  /** Windowed tickets (an event, opening night): the window, when the store has set it (ms). */
   validFrom: number | null;
   validUntil: number | null;
 }
 
-const KINDS: readonly TicketKind[] = ['day', 'night', 'annual', 'event'];
+export const KINDS: readonly TicketKind[] = ['day', 'night', 'annual', 'event', 'opening-night'];
 
 export function gidTail(gid: string): string {
   return gid.slice(gid.lastIndexOf('/') + 1);
 }
 
-function time(v: string | null | undefined): number | null {
-  const t = v ? Date.parse(v) : NaN;
+/**
+ * A date and time from a metafield, in ms. The store keeps a `date_time` without a time zone and
+ * means GMT by it; one with an offset (`-05:00`) or `Z` is read as written.
+ */
+export function storeTime(v: string | null | undefined): number | null {
+  const s = (v ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/.test(s)) return null;
+  const t = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(s) ? s : `${s}Z`);
   return Number.isFinite(t) ? t : null;
+}
+
+/** A windowed kind's window from its product: the start, and the end or opening night's 24 hours. */
+function windowOf(kind: TicketKind, start: string | null | undefined, end: string | null | undefined): [number, number] | null {
+  const from = storeTime(start);
+  const until = storeTime(end) ?? (kind === 'opening-night' && from !== null ? from + OPENING_NIGHT_MS : null);
+  return from !== null && until !== null && until > from ? [from, until] : null;
 }
 
 /**
@@ -116,9 +149,8 @@ export function ticketLines(order: AdminOrder): TicketLine[] {
     if (kind !== 'event' && (p.productType ?? '').trim().toLowerCase() !== 'ticket') continue;
     const hours = Number(p.hours?.value);
     const lengthMs = Number.isFinite(hours) && hours > 0 && hours <= 24 * 366 ? Math.round(hours * HOUR_MS) : DEFAULT_LENGTH_MS[kind];
-    const [from, until] = kind === 'event' ? [time(p.start?.value), time(p.end?.value)] : [null, null];
-    const window = from !== null && until !== null && until > from;
-    out.push({ line: gidTail(li.id), quantity: Math.min(li.quantity, 50), kind, lengthMs, validFrom: window ? from : null, validUntil: window ? until : null });
+    const window = kind === 'event' || kind === 'opening-night' ? windowOf(kind, p.start?.value, p.end?.value) : null;
+    out.push({ line: gidTail(li.id), quantity: Math.min(li.quantity, 50), kind, lengthMs, validFrom: window?.[0] ?? null, validUntil: window?.[1] ?? null });
   }
   return out;
 }
@@ -133,4 +165,81 @@ export function lowRisk(order: AdminOrder): boolean {
   if ((r.recommendation ?? '').toUpperCase() !== 'ACCEPT') return false;
   const levels = (r.assessments ?? []).map((a) => (a.riskLevel ?? '').toUpperCase());
   return levels.length > 0 && levels.every((l) => l === 'LOW' || l === 'NONE');
+}
+
+/** A free order: a discount took its total to nothing (opening night's ticket and pass, C42). */
+export function freeOrder(order: AdminOrder): boolean {
+  const amount = order.totalPriceSet?.shopMoney?.amount;
+  return typeof amount === 'string' && amount.trim() !== '' && Number(amount) === 0;
+}
+
+/** The ticket a pass order came from: the `from_ticket` cart attribute the park's link sets (C42). */
+export function fromTicketOf(order: AdminOrder): string | null {
+  const v = (order.customAttributes ?? []).find((a) => a.key === 'from_ticket')?.value?.trim().toUpperCase() ?? '';
+  return isTicketId(v) ? v : null;
+}
+
+/** Whether the buyer used this discount code (the store's codes ignore case). */
+export function usedCode(order: AdminOrder, code: string | undefined): boolean {
+  const want = code?.trim().toLowerCase();
+  return !!want && (order.discountCodes ?? []).some((c) => c.trim().toLowerCase() === want);
+}
+
+/**
+ * The ticket products on sale: the annual pass (the opening-night link puts its first variant in
+ * the cart) and the Opening Night Ticket's window (the booth says passes are free inside it).
+ */
+export const CATALOGUE_QUERY = `query OwlParkCatalogue {
+  products(first: 20, query: "product_type:Ticket AND status:active") {
+    nodes {
+      kind: metafield(namespace: "owl_park", key: "ticket_kind") { value }
+      start: metafield(namespace: "owl_park", key: "event_start") { value }
+      end: metafield(namespace: "owl_park", key: "event_end") { value }
+      variants(first: 1) { nodes { id } }
+    }
+  }
+}`;
+
+export interface AdminCatalogue {
+  products: {
+    nodes: Array<{
+      kind?: { value?: string | null } | null;
+      start?: { value?: string | null } | null;
+      end?: { value?: string | null } | null;
+      variants?: { nodes: Array<{ id: string }> } | null;
+    }>;
+  };
+}
+
+export interface Catalogue {
+  /** The annual pass's variant (the number at the end of its id), for the cart link. */
+  passVariant: string | null;
+  /** Opening night's window (ms), from the Opening Night Ticket on sale. */
+  opening: { from: number; until: number } | null;
+}
+
+export function catalogueOf(data: AdminCatalogue): Catalogue {
+  let passVariant: string | null = null;
+  let opening: Catalogue['opening'] = null;
+  for (const p of data.products.nodes) {
+    const kind = (p.kind?.value ?? '').trim().toLowerCase();
+    if (kind === 'annual' && passVariant === null) {
+      const v = gidTail(p.variants?.nodes[0]?.id ?? '');
+      if (/^\d{1,20}$/.test(v)) passVariant = v;
+    }
+    if (kind === 'opening-night' && opening === null) {
+      const w = windowOf('opening-night', p.start?.value, p.end?.value);
+      if (w) opening = { from: w[0], until: w[1] };
+    }
+  }
+  return { passVariant, opening };
+}
+
+/**
+ * The cart link for opening night's free pass (C42): the annual pass in the cart, the code that
+ * makes it free, and the ticket it comes from as the cart attribute `from_ticket`.
+ */
+export function passCartLink(shop: string, variant: string, code: string, ticketId: string): string {
+  const q = new URLSearchParams({ discount: code, 'attributes[from_ticket]': ticketId });
+  return `https://${shop}/cart/${variant}:1?${q.toString()}`;
 }

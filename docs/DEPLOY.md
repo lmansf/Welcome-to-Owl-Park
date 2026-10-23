@@ -92,24 +92,42 @@ Tickets (C35) are sold by the Shopify store, which keeps the buyer; the park kee
 its order and line numbers only. None of this is needed before tickets go on sale: until then the
 turnstiles let everyone through. The steps, in order:
 
-1. **The store's custom app** (the owner's account): Admin API access to orders (read, and write for
-   the order's ticket list), products (read), merchant-managed fulfillment orders (read and write)
-   and metaobjects (write). Its Admin API token never goes in a file.
+1. **The store's app** (the owner's account). Since January 2026 a new app is made in Shopify's
+   Dev Dashboard (the store's admin no longer makes new custom apps): Create app, then Start from
+   Dev Dashboard; in its version give it the scopes `read_orders`, `write_orders`, `read_products`,
+   `read_merchant_managed_fulfillment_orders`, `write_merchant_managed_fulfillment_orders` and
+   `write_metaobjects` (the App URL can stay as it is: the park never opens inside the admin),
+   Release, then Install app on the store. Its Settings show the Client ID and the Client secret;
+   the park trades them with the store for a token that lasts a day (the client credentials grant,
+   for an app and a store in the same organization). An app made in the store's admin before
+   2026 has a fixed Admin API token instead, which works too. Neither ever goes in a file.
 2. **The Worker's secrets**, each with `pnpm --filter @owl-park/edge exec wrangler secret put <NAME>`
-   (or as repository secrets, which the deploy workflow uploads together):
-   `SHOPIFY_SHOP` (the store's `*.myshopify.com` domain), `SHOPIFY_ADMIN_TOKEN` (the app's Admin API
-   token) and `SHOPIFY_WEBHOOK_SECRET` (the secret the store signs webhooks with: the app's client
-   secret, or the one shown under Settings → Notifications → Webhooks for webhooks made there).
-   Without them the store's webhooks are refused.
+   (or as repository secrets, which the deploy workflow uploads): `SHOPIFY_SHOP` (the store's
+   `name.myshopify.com` domain, nothing more), and the app's `SHOPIFY_CLIENT_ID` and
+   `SHOPIFY_CLIENT_SECRET` (or, for an app made in the admin, its `SHOPIFY_ADMIN_TOKEN`). Then
+   `GET /api/admin/store` with the `X-Admin-Key` header checks them: which are set (never their
+   values), whether the app signs in, any scope it still lacks, and whether the store lets it read
+   orders (they hold customer data: if not, request protected customer data access for the app in
+   the Dev Dashboard; the park reads no names, emails or addresses).
 3. **Webhooks** (JSON) to `https://<the park's own domain>/api/store/webhook`: `orders/paid`,
-   `orders/updated`, `orders/cancelled` and `refunds/create`, plus `orders/risk_assessment_changed`
-   where the store offers it. The claim link in the store's email uses the address the webhooks are
-   sent to, so use the park's own domain.
+   `orders/create`, `orders/updated`, `orders/cancelled` and `refunds/create`, plus
+   `orders/risk_assessment_changed` where the store offers it, made under Settings → Notifications →
+   Webhooks. (`orders/create` matters only for free orders, should the store not send
+   `orders/paid` for them; the park ignores it for any other order.) The store signs
+   those with a key shown on that page: set it as `SHOPIFY_WEBHOOK_SECRET`. (Webhooks the app
+   subscribes itself are signed with its client secret, which the park also accepts.) Without a
+   key the store's webhooks are refused. The claim link in the store's email uses the address the
+   webhooks are sent to, so use the park's own domain; the page's "Send test notification" should
+   get a 200.
 4. **The ticket products**: product type `Ticket` and the metafield `owl_park.ticket_kind` (`day`,
-   `night` or `annual`); `owl_park.length_hours` sets a ticket's length (night tickets need it; day
-   tickets last 24 hours and annual passes 365 days without it). The opening-night entry that comes
-   with the Drop-1 pin is `owl_park.ticket_kind` = `event` on the pin, with `owl_park.event_start`
-   and `owl_park.event_end` (date and time) once the night is set.
+   `night`, `annual` or `opening-night`); `owl_park.length_hours` sets a ticket's length (night
+   tickets need it; day tickets last 24 hours and annual passes 365 days without it). The Opening
+   Night Ticket (C42) also has `owl_park.event_start`, the opening moment (date and time), and
+   optionally `owl_park.event_end` (24 hours later without it): the gate takes the ticket only in
+   that window, and a moved date is an edit of that field. The store reads a date and time without
+   a time zone as GMT, so write it with its offset (for 7 pm Eastern in December,
+   `2026-12-05T19:00:00-05:00`); the opening-night page below shows the window as the park reads it.
+   An event entry on any other product is `owl_park.ticket_kind` = `event` with both fields.
 5. **The store's copy of each ticket** (optional): a metaobject definition `owl_park_ticket` with
    single-line text fields `ticket_id`, `kind`, `status`, `order_id`, `first_scan`, `valid_until`,
    `votes_cast` and `todays_vote`, and an order metafield definition `owl_park.tickets` (a list of
@@ -127,7 +145,20 @@ turnstiles let everyone through. The steps, in order:
    first scan starts its time.
 9. **Tickets without a store order** (giveaways and tests): `POST /api/admin/tickets` with the
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
-   `"from"` and `"until"`) answers with the claim link. Nothing is copied to the store for these.
+   `"from"` and `"until"`, or an `opening-night` with `"from"`) answers with the claim link. Nothing
+   is copied to the store for these.
+10. **Opening night** (C42): the annual pass's 100% discount code goes on the Worker as
+    `OPENING_PASS_CODE` (`wrangler secret put`, or a repository secret the deploy uploads), never
+    in a file. The Opening Night Ticket needs no code: a free order gets its ticket at once. During
+    the ticket's window the booth says every pass is free; once an owl's Opening Night Ticket has
+    gone through the gate, the park offers "Your pass is free tonight. Claim it", a cart link with
+    the annual pass, the code and the cart attribute `from_ticket` (the ticket's ID). The pass order
+    comes back through `orders/paid`, and the pass goes straight into that owl's wallet. The count
+    is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned, passes
+    claimed through the link and passes without one (the code used some other way), the conversion
+    rate and a CSV, with order numbers and ticket IDs only. It also shows the night's window as the
+    park reads it from the store and whether the free-pass link is ready (the code set, an annual
+    pass on sale). Votes count one per wallet per park day, however many tickets or passes it holds.
 
 ### Coding agents
 
@@ -142,8 +173,8 @@ Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or 
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
 to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
-`/admin/feedback`), and the store's three
-(above). A cron trigger closes the Realm Vote month automatically.
+`/admin/feedback` and opening night's count on `/admin/opening`), and the store's
+secrets (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 

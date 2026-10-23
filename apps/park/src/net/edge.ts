@@ -88,6 +88,8 @@ export class EdgeTransport implements ParkTransport {
   private passLoad: Promise<Pass> | null = null;
   /** The ticket the gate last let this visitor through with: a renewed pass is admitted with it again. */
   private ticketId: string | null = null;
+  /** Opening night is on (C42), as the last look at the wallet said. */
+  private opening = false;
 
   private getPass(force = false): Promise<Pass> {
     if (!force && this.pass && this.pass.exp * 1000 > Date.now() + 60_000) return Promise.resolve(this.pass);
@@ -123,7 +125,7 @@ export class EdgeTransport implements ParkTransport {
     const r = (await res.json()) as ScanReply & { pass?: string; exp?: number; gate?: Pass['gate'] };
     if (!r.ok) {
       if (id && id === this.ticketId) this.ticketId = null;
-      return { ok: false, reason: r.reason, ...(r.id ? { id: r.id } : {}) };
+      return { ok: false, reason: r.reason, ...(r.id ? { id: r.id } : {}), ...(r.kind ? { kind: r.kind } : {}) };
     }
     if (r.pass && r.exp) {
       this.pass = { ...pass, pass: r.pass, exp: r.exp, adm: true, ...(r.gate ? { gate: r.gate } : {}) };
@@ -135,7 +137,10 @@ export class EdgeTransport implements ParkTransport {
   readonly tickets: TicketWallet = {
     wallet: async () => {
       const res = await this.api('/api/tickets');
-      return res.ok ? ((await res.json()) as { tickets: WalletEntry[] }).tickets : [];
+      if (!res.ok) return [];
+      const body = (await res.json()) as { tickets: WalletEntry[]; openingNight?: boolean };
+      this.opening = body.openingNight === true;
+      return body.tickets;
     },
     open: async (link) => {
       const res = await this.api(`/api/tickets/${link.kind}`, { method: 'POST', body: JSON.stringify({ secret: link.secret }) });
@@ -151,6 +156,12 @@ export class EdgeTransport implements ParkTransport {
       } catch {
         return { ok: false, reason: 'offline' };
       }
+    },
+    openingNight: () => this.opening,
+    freePass: async (id) => {
+      const res = await this.api('/api/tickets/pass', { method: 'POST', body: JSON.stringify({ id }) });
+      const body = res.ok ? ((await res.json()) as { url?: unknown }) : {};
+      return typeof body.url === 'string' && body.url.startsWith('https://') ? body.url : null;
     },
   };
 

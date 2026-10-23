@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { MemoryTicketStore, TicketBook, type TicketStore } from '../src/TicketBook';
+import { MemoryTicketStore, ORDER_LEASE_MS, TicketBook, type TicketStore } from '../src/TicketBook';
 import { SqlTicketStore } from '../src/sqlTicketStore';
 import type { TicketLine } from '../src/shopify';
 import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, isTicketId } from '../src/tickets';
@@ -124,3 +124,16 @@ for (const [name, make] of STORES) {
     });
   });
 }
+
+describe('one webhook at a time per order', () => {
+  it('an order is held until it is let go, or until a webhook that died would have finished', () => {
+    const b = new TicketBook(new MemoryTicketStore(), seq());
+    expect(b.lease('1001', T0)).toBe(true);
+    expect(b.lease('1001', T0 + 1)).toBe(false);
+    expect(b.lease('1002', T0 + 1)).toBe(true);
+    b.unlease('1001');
+    expect(b.lease('1001', T0 + 2)).toBe(true);
+    expect(b.lease('1001', T0 + 1 + ORDER_LEASE_MS)).toBe(false);
+    expect(b.lease('1001', T0 + 2 + ORDER_LEASE_MS)).toBe(true);
+  });
+});

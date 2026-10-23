@@ -19,6 +19,8 @@ class FakeStore {
   risk: Risk[] = ['LOW'];
   ticketsLeft = 2;
   failFulfil = 0;
+  /** How long the store takes to make a fulfillment (and send its email). */
+  fulfilDelayMs = 0;
   readonly calls: Array<{ op: string; variables: Record<string, unknown> }> = [];
   readonly sent: Array<Record<string, unknown>> = [];
 
@@ -65,6 +67,9 @@ class FakeStore {
           this.failFulfil--;
           return new Response('busy', { status: 503 });
         }
+        if (this.fulfilDelayMs) await new Promise((r) => setTimeout(r, this.fulfilDelayMs));
+        // As the store does: the ticket line can be fulfilled once.
+        if (!this.ticketsLeft) return data({ fulfillmentCreate: { fulfillment: null, userErrors: [{ field: ['fulfillment'], message: 'Fulfillment order has no remaining quantity' }] } });
         this.sent.push(variables['fulfillment'] as Record<string, unknown>);
         this.ticketsLeft = 0;
         return data({ fulfillmentCreate: { fulfillment: { id: 'gid://shopify/Fulfillment/1', status: 'SUCCESS' }, userErrors: [] } });
@@ -122,6 +127,31 @@ describe('the store webhooks', () => {
     await storeWebhook('orders/paid', PAID, deps);
     expect(store.sent).toHaveLength(1);
     expect(book.orderOf('1001')!.tickets).toHaveLength(2);
+  });
+
+  it('the store sending an order’s webhook twice at once: one link goes out, and it opens the tickets', async () => {
+    // A free order's orders/create and orders/paid come together (C42); a paid order's webhook can come twice.
+    const store = new FakeStore();
+    store.fulfilDelayMs = 30;
+    const { book, deps, secretOf } = park(store);
+    const live: HookDeps = { ...deps, wait: (ms) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 10))) };
+    const both = await Promise.all([storeWebhook('orders/paid', PAID, live), storeWebhook('orders/paid', PAID, live)]);
+    expect(both.map((r) => r.body)).toEqual([
+      { tickets: 2, sent: true },
+      { tickets: 2, sent: true },
+    ]);
+    expect(store.sent).toHaveLength(1);
+    expect(await book.claim(secretOf(store.sent[0]!), 'c_buyer')).toHaveLength(2);
+  });
+
+  it('a webhook that finds another working on its order too long fails, so the store sends it again later', async () => {
+    const store = new FakeStore();
+    const { book, deps } = park(store);
+    expect(book.lease('1001', T0)).toBe(true);
+    await expect(storeWebhook('orders/paid', PAID, deps)).rejects.toThrow(/busy/);
+    expect(store.sent).toHaveLength(0);
+    book.unlease('1001');
+    expect((await storeWebhook('orders/paid', PAID, deps)).body).toEqual({ tickets: 2, sent: true });
   });
 
   it('an order of merch only makes no tickets and writes nothing to the store', async () => {

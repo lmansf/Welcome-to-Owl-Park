@@ -9,7 +9,7 @@ import { BootScene } from './game/BootScene';
 import { BuilderScene } from './game/BuilderScene';
 import { RoomScene, type RoomStart } from './game/RoomScene';
 import { loadLook, loadPlayerId } from './identity';
-import { createTransport, type WalletEntry } from './net';
+import { createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { createHud } from './ui/hud';
@@ -135,6 +135,8 @@ declare global {
       say(n: number): boolean;
       /** The tickets on this device (empty without the park's server). */
       wallet(): Promise<WalletEntry[]>;
+      /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
+      scan(id?: string): Promise<ScanReply>;
     };
   }
 }
@@ -227,4 +229,5 @@ window.owlPark = {
   emote: (e) => roomScene()?.emote(e) ?? false,
   say: (n) => roomScene()?.say(n) ?? false,
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
+  scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };

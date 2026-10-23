@@ -218,7 +218,7 @@ owl species: `docs/QUESTS.md`. The activities (the lantern beam, the stage quiz,
 owl's copy game and three small tasks a day), which pay feathers under their own daily cap:
 `docs/ACTIVITIES.md`.
 
-## 9. The lobby and tickets (built; the store's side waits for its custom app)
+## 9. The lobby and tickets (built; the store's side waits for its app)
 
 Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
 the turnstile gate into the hub on the other. With `GATE=open` (now) the turnstiles let everyone
@@ -228,10 +228,11 @@ lobby: the gate turns it back toward the booth, and the Worker refuses its socke
 room and its use of the shop (its collection still shows). The pass answer carries `gate` and
 `adm` so the client knows which.
 
-The ticket flow (C35; tested against a stand-in store until the store's custom app exists, see
+The ticket flow (C35; tested against a stand-in store until the store's app exists, see
 `docs/DEPLOY.md`): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach
 `/api/store/webhook` and are checked against the store's signature before anything is read
-(`apps/edge/src/storeHooks.ts`). A paid order makes one ticket per unit in the ticket book
+(`apps/edge/src/storeHooks.ts`). The Worker signs in to the store's Admin API with the app's client
+credentials, traded for a token that lasts a day (`apps/edge/src/storeApi.ts`). A paid order makes one ticket per unit in the ticket book
 (`TicketBook.ts`, in the vote ledger's Durable Object beside the votes): a visual ID such as
 `OWL-7K3Q-PX9M`, the kind, and the order and line numbers only (no names or emails). An order the
 store rates low risk gets its claim link at once, through a fulfillment of its ticket lines whose
@@ -243,14 +244,33 @@ takes out of the address bar at once) puts the order's tickets in the wallet on 
 device at a time; a share link (`#take=<secret>`) passes one ticket on. The turnstiles scan a ticket
 held on the device: its time starts at its first scan (a day ticket 24 hours, an annual pass 365
 days, a night ticket the store's hours; an unused ticket expires a year after purchase; an event
-ticket works inside its window), and the Worker answers with a pass admitted by that ticket, which
-votes as the ticket: one Realm Vote per ticket per park day. A metaobject per ticket, listed on its
-order, mirrors its state for the owner; the park never reads it. This replaces the earlier plan's
-emailed magic link and Supabase session.
+ticket works inside its window), and the Worker answers with a pass admitted by that ticket. Votes
+count per wallet (C42): one Realm Vote per wallet (the device's collector) per park day, however many
+tickets or passes it holds, and each vote keeps the ticket that let the owl in, which votes once a
+day too, so moving a ticket to another device does not vote twice (`Ledger.ts`). A metaobject per
+ticket, listed on its order, mirrors its state for the owner; the park never reads it. The store
+may send a webhook twice, and sends a free order's `orders/create` and `orders/paid` together: the
+Worker works on one order at a time (a lease in the ticket book, 20 seconds at most), so a second
+webhook waits for the first and finds its work done, and never replaces the claim link the first is
+emailing. This replaces the earlier plan's emailed magic link and Supabase session.
 
-**Opening-night entry with the Drop-1 pin (canon):** each pin order makes one ticket through the
-same flow at $0 that works on opening night only (date to be announced); one pin, one ticket. It
-gives that night's Realm Vote like any other ticket.
+**Opening night (C42, built; the store's side is OP-047):** the Opening Night Ticket is a Ticket
+product of kind `opening-night` whose window (`owl_park.event_start`, and `event_end` or 24 hours)
+is a field on the product, so a moved date is a store edit. A free order has nothing for the store
+to rate, so its tickets go out at once (from `orders/create` too, in case the store does not send
+`orders/paid` for it). The gate takes the ticket inside its window only; unscanned by its end, it
+expires. During the window (read from the ticket product on sale, `apps/edge/src/opening.ts`) the
+booth says every pass is free. After the scan, the ticket card is followed by "Your pass is free
+tonight. Claim it": `POST /api/tickets/pass` makes a cart link on the store with the annual pass,
+the code `OPENING_PASS_CODE` (a Worker secret) and the cart attribute `from_ticket`; the store's
+checkout opens in a new tab. The pass order comes back through `orders/paid` with that attribute:
+the ticket book links the pass to its Opening Night Ticket (only one that went through the gate
+counts), puts the pass straight into that wallet, and switches the pass off if the ticket is
+switched off. A pass bought with the code but without the link counts as a pass without a link.
+`/admin/opening` (the admin key) counts the night: tickets issued and scanned, passes through the
+link and without one, the conversion rate (tickets scanned that turned into a pass), and a CSV of
+the night's tickets with order numbers and ticket IDs only. The Drop-1 pin's $0 entry is retired
+(C42).
 
 **Leaving the park (C43, `packages/shared/src/wayout.ts`):** the spot in the hub where owls arrive
 from the turnstiles is also the way out. Its floor's bottom edge there is a doorway (`to-lobby`,

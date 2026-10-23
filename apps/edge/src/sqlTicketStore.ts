@@ -3,7 +3,7 @@
  * Apart from the object class so tests run it against any SQLite with the same
  * `exec(query, ...bindings)` shape. Only order and line numbers are stored, never a buyer.
  */
-import type { OrderRecord, TicketRecord, TicketStore } from './TicketBook';
+import type { OrderRecord, PassLink, TicketRecord, TicketStore } from './TicketBook';
 import type { TicketKind } from './tickets';
 
 type OrderRow = {
@@ -30,6 +30,10 @@ type TicketRow = {
   device: string | null;
   share_hash: string | null;
 };
+
+type LinkRow = { order_id: string; from_ticket: string | null; at: number };
+
+const link = (r: LinkRow): PassLink => ({ order: r.order_id, fromTicket: r.from_ticket, at: r.at });
 
 const order = (r: OrderRow): OrderRecord => ({ order: r.order_id, claimHash: r.claim_hash, held: r.held === 1, created: r.created, sent: r.sent === 1 });
 
@@ -60,6 +64,10 @@ export class SqlTicketStore implements TicketStore {
     sql.exec(`CREATE INDEX IF NOT EXISTS tickets_order ON tickets (order_id)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS tickets_device ON tickets (device)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS tickets_share ON tickets (share_hash)`);
+    sql.exec(`CREATE INDEX IF NOT EXISTS tickets_kind ON tickets (kind)`);
+    // Opening night's pass orders (C42): the Opening Night Ticket each came from, or none.
+    sql.exec(`CREATE TABLE IF NOT EXISTS opening_passes (order_id TEXT PRIMARY KEY, from_ticket TEXT, at INTEGER NOT NULL)`);
+    sql.exec(`CREATE INDEX IF NOT EXISTS opening_passes_from ON opening_passes (from_ticket)`);
   }
 
   order(id: string) {
@@ -86,6 +94,22 @@ export class SqlTicketStore implements TicketStore {
   }
   onDevice(device: string) {
     return this.sql.exec<TicketRow>(`SELECT * FROM tickets WHERE device = ?`, device).toArray().map(ticket);
+  }
+  ofKind(kind: TicketKind) {
+    return this.sql.exec<TicketRow>(`SELECT * FROM tickets WHERE kind = ? ORDER BY created, id`, kind).toArray().map(ticket);
+  }
+  passLink(order: string) {
+    const r = this.sql.exec<LinkRow>(`SELECT * FROM opening_passes WHERE order_id = ?`, order).toArray()[0];
+    return r ? link(r) : null;
+  }
+  passLinksFrom(ticketId: string) {
+    return this.sql.exec<LinkRow>(`SELECT * FROM opening_passes WHERE from_ticket = ?`, ticketId).toArray().map(link);
+  }
+  passLinks() {
+    return this.sql.exec<LinkRow>(`SELECT * FROM opening_passes ORDER BY at, order_id`).toArray().map(link);
+  }
+  putPassLink(l: PassLink) {
+    this.sql.exec(`INSERT OR IGNORE INTO opening_passes (order_id, from_ticket, at) VALUES (?, ?, ?)`, l.order, l.fromTicket, l.at);
   }
   putTicket(t: TicketRecord) {
     this.sql.exec(

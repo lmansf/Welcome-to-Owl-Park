@@ -1,5 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
-import { E2E_ADMIN_KEY } from './e2e/helpers';
+import { E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
+
+/** The room server's test settings: the admin key, and a store that is the stand-in on this machine. */
+const EDGE_VARS = {
+  ADMIN_KEY: E2E_ADMIN_KEY,
+  SHOPIFY_SHOP: E2E_STORE.shop,
+  SHOPIFY_ADMIN_TOKEN: E2E_STORE.token,
+  SHOPIFY_WEBHOOK_SECRET: E2E_STORE.webhookKey,
+  SHOPIFY_TEST_ORIGIN: E2E_STORE.origin,
+  OPENING_PASS_CODE: E2E_STORE.passCode,
+};
 
 export default defineConfig({
   testDir: './e2e',
@@ -21,7 +31,7 @@ export default defineConfig({
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
-    { name: 'edge', testMatch: /edge\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    { name: 'edge', testMatch: /(edge|opening)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {
@@ -31,8 +41,16 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      // The admin key lets the ticket test issue tickets without a store; it exists only on this test server.
-      command: `pnpm build && pnpm --filter @owl-park/edge dev --var ADMIN_KEY:${E2E_ADMIN_KEY}`,
+      // The store the room server reaches in these tests: a stand-in on this machine.
+      command: `node e2e/standInStore.mjs ${E2E_STORE.port}`,
+      url: `${E2E_STORE.origin}/health`,
+      reuseExistingServer: true,
+      timeout: 10_000,
+    },
+    {
+      // The admin key lets the ticket tests issue tickets without a store, and the store is the
+      // stand-in above; these settings exist only on this test server.
+      command: `pnpm build && pnpm --filter @owl-park/edge dev ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
       url: 'http://localhost:8787/api/counts',
       reuseExistingServer: true,
       timeout: 180_000,

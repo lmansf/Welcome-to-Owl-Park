@@ -39,6 +39,19 @@ export interface ParkState {
 /** The admin key the local room server runs with in these tests (playwright.config.ts): a test value, not a secret. */
 export const E2E_ADMIN_KEY = 'e2e-only-admin-key-not-a-secret';
 
+/**
+ * The stand-in store the local room server reaches in these tests (e2e/standInStore.mjs), and the
+ * store settings it runs with (playwright.config.ts): test values, not secrets.
+ */
+export const E2E_STORE = {
+  port: 8790,
+  origin: 'http://localhost:8790',
+  shop: 'owl-e2e.myshopify.com',
+  token: 'e2e-only-store-token-not-a-secret',
+  webhookKey: 'e2e-only-webhook-key-not-a-secret',
+  passCode: 'E2E-OPENING-NIGHT',
+} as const;
+
 export async function walkToDoor(page: Page, doorId: string): Promise<void> {
   const s = await state(page);
   const door = s.doors.find((d) => d.id === doorId);
