@@ -6,9 +6,10 @@
  * machine's cores, and adds their measurements together. Between steps it waits for the copy to see
  * the last step's owls leave.
  *
- *   node tools/load/run-steps.mjs --url http://localhost:8787 [--seconds 60] [--quick]
+ *   node tools/load/run-steps.mjs --url http://localhost:8787 [--seconds 60] [--quick] [--only 3,5]
  *
  * --quick runs every step with a tenth of the owls for 10 seconds: a check that the steps work.
+ * --only runs the steps with those numbers (1 is the first).
  */
 import { spawn } from 'node:child_process';
 import { appendFileSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -41,6 +42,7 @@ const arg = (name) => {
 };
 const url = arg('--url');
 const quick = process.argv.includes('--quick');
+const only = arg('--only')?.split(',').map(Number);
 const seconds = quick ? 10 : Number(arg('--seconds') ?? 60);
 if (!url || !(seconds > 0)) {
   console.error('usage: run-steps.mjs --url <address> [--seconds 60] [--quick]');
@@ -124,7 +126,8 @@ async function step(s, n) {
 
 const rows = [];
 for (const [n, s] of STEPS.entries()) {
-  if (n > 0) await sleep(quick ? 2_000 : PAUSE_MS);
+  if (only && !only.includes(n + 1)) continue;
+  if (rows.length > 0) await sleep(quick ? 2_000 : PAUSE_MS);
   const r = await step(s, n);
   rows.push(r);
   console.log(

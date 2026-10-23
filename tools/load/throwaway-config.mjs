@@ -45,6 +45,8 @@ config.workers_dev = true;
 config.triggers = { crons: [] };
 config.vars = {
   ...config.vars,
+  // LOAD_SHARDING=room tries each room on its own object (ROOM_SHARDING); otherwise as the park has it.
+  ...(process.env.LOAD_SHARDING === 'room' ? { ROOM_SHARDING: 'room' } : {}),
   TRUST_FORWARDED_FOR: 'true',
   MAX_SOCKETS_PER_IP: '64',
   // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
@@ -54,4 +56,4 @@ if (config.name !== LOAD_NAME || 'routes' in config || 'route' in config || conf
   throw new Error('the throwaway copy must have its own name, no domain and no environments');
 }
 writeFileSync(OUT, `${JSON.stringify(config, null, 2)}\n`);
-console.log(`wrote apps/edge/wrangler.load.jsonc: ${LOAD_NAME}, its workers.dev address only, no cron`);
+console.log(`wrote apps/edge/wrangler.load.jsonc: ${LOAD_NAME}, its workers.dev address only, no cron, ROOM_SHARDING ${config.vars.ROOM_SHARDING}`);
