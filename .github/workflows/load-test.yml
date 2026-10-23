@@ -1,0 +1,81 @@
+# The room server's load test (OP-068), on the owner's OK. It deploys a throwaway copy of the park's
+# Worker under its own name (owl-park-load: its workers.dev address only, no domain, no cron, its own
+# empty Durable Objects; tools/load/throwaway-config.mjs), fills it with bots from this runner
+# (tools/load/run-steps.mjs), and deletes it whatever happened. The live park is never touched, but
+# the copy's requests count toward the account's free daily allowance (a few thousand of 100,000).
+# It runs only on a push to its own branch and is never merged.
+name: Load test
+
+on:
+  push:
+    branches: [claude/load-test]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+jobs:
+  load:
+    if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      LOAD_NAME: owl-park-load
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Write the throwaway copy's config
+        run: |
+          node tools/load/throwaway-config.mjs
+          test "$(node -p "JSON.parse(require('fs').readFileSync('apps/edge/wrangler.load.jsonc', 'utf8')).name")" = "$LOAD_NAME"
+          # The bots never ask for the page: a stand-in keeps the Worker's static assets valid.
+          mkdir -p apps/park/dist
+          printf '<!doctype html><title>Load test</title>\n' > apps/park/dist/index.html
+      # Wrangler prints the copy's address, which names the account: it goes to a file, is masked,
+      # and only then is the output shown.
+      - name: Deploy the throwaway copy
+        working-directory: apps/edge
+        run: |
+          if ! pnpm exec wrangler deploy -c wrangler.load.jsonc --name "$LOAD_NAME" > ../../deploy.log 2>&1; then
+            sed -E 's#https://[a-z0-9.-]+\.workers\.dev#https://***.workers.dev#g' ../../deploy.log
+            exit 1
+          fi
+          url=$(grep -oE "https://$LOAD_NAME\.[a-z0-9-]+\.workers\.dev" ../../deploy.log | head -1)
+          test -n "$url"
+          echo "::add-mask::$url"
+          echo "::add-mask::${url#https://}"
+          echo "LOAD_URL=$url" >> "$GITHUB_ENV"
+          sed -E 's#https://[a-z0-9.-]+\.workers\.dev#https://***.workers.dev#g' ../../deploy.log
+      - name: Wait for the copy to answer
+        run: |
+          for attempt in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$LOAD_URL/api/pass" || true)
+            if [ "$code" = "200" ]; then echo "answering"; exit 0; fi
+            sleep 3
+          done
+          echo "::error::the throwaway copy never answered (last $code)"
+          exit 1
+      - name: Load it, step by step
+        run: node tools/load/run-steps.mjs --url "$LOAD_URL" --seconds 60
+      - name: Delete the throwaway copy
+        if: always()
+        working-directory: apps/edge
+        run: |
+          test "$LOAD_NAME" = "owl-park-load"
+          test -f wrangler.load.jsonc || node ../../tools/load/throwaway-config.mjs
+          pnpm exec wrangler delete -c wrangler.load.jsonc "$LOAD_NAME" --force 2>&1 | sed -E 's#https://[a-z0-9.-]+\.workers\.dev#https://***.workers.dev#g'
