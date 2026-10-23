@@ -101,6 +101,8 @@ function css(): string {
 #hud .home .h-stage{min-width:0;min-height:0}
 @media (max-width:520px){
   #hud .home{grid-template-columns:minmax(0,50vw) minmax(0,1fr)}
+  /* Make your owl on one line on a phone (a very narrow one may still wrap it). */
+  #hud .home .h-main{font-size:clamp(15px,4.8vw,20px);padding-left:10px;padding-right:10px}
   #hud .home .h-side{padding-left:max(14px,env(safe-area-inset-left));padding-right:10px}
   #hud .home .h-brand{flex-direction:column;align-items:flex-start;gap:8px}
   #hud .home h1{font-size:clamp(24px,7.4vw,32px)}
