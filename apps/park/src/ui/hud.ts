@@ -1,4 +1,4 @@
-import { MAX_ACTIVE_QUESTS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { MAX_ACTIVE_QUESTS, WAY_OUT_WORDS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -10,6 +10,7 @@ import { createDecorateSheet, type DecorateActions, type DecorateSheet, type Dec
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createJoystick } from './joystick';
+import { createLeaveCard } from './leaveCard';
 import { createMenu, type MenuScreenId } from './menu';
 import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuilder';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
@@ -28,6 +29,14 @@ export interface CollectionActions {
   wear(): Wear | undefined;
   /** The owl's look right now (its kind, colours and what it wears). */
   look(): OwlLook;
+}
+
+/** The Menu's ways out (C43), as the room scene carries them out. */
+export interface WayOutActions {
+  /** "Leave the park": to the lobby, outside the gate (the card asked first). */
+  leave(): void;
+  /** "Go home": straight to the owl's own nest. */
+  home(): void;
 }
 
 /** Something to do where the owl stands: one button each, and E runs the first. */
@@ -60,6 +69,10 @@ export interface Hud {
   attachCollection(state: CollectionState, actions: CollectionActions): void;
   /** Feedback in the Menu; each note goes with the room the owl is in and the screen's size. */
   attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
+  /** The Menu's ways out: what "Leave the park" and "Go home" do. */
+  attachWayOut(actions: WayOutActions): void;
+  /** Which ways out the Menu offers where the owl is: leaving inside the park, going home outside its own nest. */
+  setWaysOut(ways: { leave: boolean; home: boolean }): void;
   /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests and today's tasks. */
   attachQuests(state: QuestState, actions: QuestActions, tasks: TaskState): void;
   /** Talking to an NPC owl: its quests, and the shop for the shopkeeper. */
@@ -222,6 +235,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let feedback: FeedbackScreen | null = null;
   let builder: OwlBuilder | null = null;
   let collectionActions: CollectionActions | null = null;
+  let wayOut: WayOutActions | null = null;
+  let waysOut = { leave: false, home: false };
   let previewCb: ((frame: PreviewFrame | null) => void) | null = null;
   let decorate: DecorateSheet | null = null;
   /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
@@ -284,9 +299,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       },
       { id: 'settings', title: 'Settings', key: '', sub: () => 'Quest cards, thumbstick, calm motion, controls' },
       { id: 'feedback', title: 'Feedback', key: '', sub: () => 'Found a bug? Have an idea? Tell the keepers.', highlight: true },
+      { id: 'home', title: WAY_OUT_WORDS.home, key: '', sub: () => '', shown: () => waysOut.home },
+      { id: 'leave', title: WAY_OUT_WORDS.leave, key: '', sub: () => '', shown: () => waysOut.leave },
     ],
     (id) => openScreen(id, true),
   );
+  const leaveCard = createLeaveCard(root, () => wayOut?.leave());
   const settingsScreen = createSettingsScreen(root, settings, () => openScreen('menu'));
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
 
@@ -306,8 +324,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     questUi?.closeJournal();
     settingsScreen.close();
     feedback?.close();
+    leaveCard.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || leaveCard.isOpen();
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
@@ -330,6 +349,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     } else if (id === 'quests') questUi?.openJournal(fromMenu, menuBtn);
     else if (id === 'settings') settingsScreen.open(fromMenu, menuBtn);
     else if (id === 'feedback') feedback?.open(fromMenu, menuBtn);
+    else if (id === 'leave') leaveCard.open(menuBtn);
+    // Going home asks nothing: the owl's nest is a tap away from anywhere, and the park a tap back.
+    else if (id === 'home') wayOut?.home();
   }
   const toggle = (id: ScreenId, isOpen: () => boolean) => {
     if (isOpen()) closeScreens();
@@ -400,6 +422,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         toast,
         () => openScreen('menu'),
       );
+    },
+    attachWayOut(actions) {
+      wayOut = actions;
+    },
+    setWaysOut(ways) {
+      waysOut = { ...ways };
+      menu.refresh();
     },
     attachQuests(state, actions, tasks) {
       questState = state;

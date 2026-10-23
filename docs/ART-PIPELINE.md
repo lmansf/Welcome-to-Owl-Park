@@ -140,12 +140,13 @@ pnpm dev                              # open http://localhost:5173/?debug=1 and 
    `seed + i`), use low-denoise edits for variations, and never ask for another franchise's look.
 2. **The hub redo.** The hub is the inside of the tree: visitors stand on the floor of its
    hollow base, a moonlit nave of living wood, with a knothole moon overhead, growth rings on the
-   floor and five root buttresses diving under it. The only ways out are four archways cut into
-   the wood, and the tree changes style around each: a cosy storybook arch with lanterns and
-   fireflies on the left, a chrome and neon arch on the right, and two sealed arches at the back
-   whose surrounding wood has turned to ink wash and to stained glass, with the closed-realm signs
-   (now construction blockades) standing in front of them. `BRIEF` in `prompts.mjs` has the full
-   brief; the guide image shows where the room data puts the floor, the doors and the blockades.
+   floor and five root buttresses diving under it. Four archways cut into the wood lead into the
+   realms (the way back to the lobby is the floor where owls arrive, C43), and the tree changes
+   style around each: a cosy storybook arch with lanterns and fireflies on the left, a chrome and
+   neon arch on the right, and two sealed arches at the back whose surrounding wood has turned to
+   ink wash and to stained glass, with the closed-realm signs (now construction blockades) standing
+   in front of them. `BRIEF` in `prompts.mjs` has the full brief; the guide image shows where the
+   room data puts the floor, the doors and the blockades.
 3. **Pick winners.** `sheet <key>` lays out every candidate with its hash and seed;
    `select <key> <hash16|latest>` marks the one to finish. A candidate from anywhere (a picks
    folder, a hand-edited file) can be finished with `--raw <file>`.

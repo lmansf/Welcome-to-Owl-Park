@@ -16,6 +16,8 @@ export { STREET_DOORS, STREET_ROOM } from '../src/homes';
  * The lobby is the park's front entrance, where every visitor arrives: the ticket booth on one
  * side, the turnstile gate into the hub on the other. It is two screens wide, its painting the
  * east screen. It is outside the park, so it has no hiding spots and quests never send owls there.
+ * The way back out is where the owls come in: the hub's floor at the foot of its spawn, whose
+ * bottom edge leads to the lobby, outside the gate (C43, wayout.ts).
  *
  * The street (`homes`) is outside the park too, and free: a lane of tree houses at dusk that the
  * lobby's west end leads to. It is two screens wide, its painting the east screen, where the lane
@@ -100,6 +102,9 @@ export const ROOMS: Record<string, RoomDef> = {
       // The marker is the foot of each arch's blockade; the rect is the strip in front of it.
       { id: 'closed-a', rect: { x: 2040, y: 660, w: 210, h: 30 }, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } },
       { id: 'closed-b', rect: { x: 2560, y: 660, w: 210, h: 30 }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
+      // The way out (C43): the floor's bottom edge below where owls arrive from the turnstiles, back
+      // to the lobby outside the gate. A soft ring on the floor marks it.
+      { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 } },
     ],
     spots: [
       { x: 300, y: 840 },
@@ -395,7 +400,8 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 2200, y: 820 }, 'from-homes': { x: 190, y: 850 } },
+    // An owl that leaves the park stands in front of the turnstiles, outside the gate.
+    spawns: { 'default': { x: 2200, y: 820 }, 'from-homes': { x: 190, y: 850 }, 'from-hub': { x: 2595, y: 800 } },
     doors: [
       // The lane to the street of nests, past the west end of the balustrade.
       { id: 'to-homes', rect: { x: 0, y: 790, w: 110, h: 98 }, to: { room: 'homes', spawn: 'from-lobby' }, marker: { x: 55, y: 790 } },

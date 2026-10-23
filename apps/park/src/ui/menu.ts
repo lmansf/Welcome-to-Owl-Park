@@ -1,7 +1,7 @@
 import { createModal, modalHeader } from './modal';
 
-/** The screens the Menu leads to. */
-export type MenuScreenId = 'owl' | 'quests' | 'settings' | 'feedback';
+/** The screens the Menu leads to, and its two ways out (C43): home to the owl's nest, and out of the park. */
+export type MenuScreenId = 'owl' | 'quests' | 'settings' | 'feedback' | 'home' | 'leave';
 
 export interface MenuEntry {
   id: MenuScreenId;
@@ -12,6 +12,8 @@ export interface MenuEntry {
   sub(): string;
   /** Picked out in gold, to be noticed. */
   highlight?: boolean;
+  /** Whether it is offered where the owl is (always, without this). */
+  shown?(): boolean;
 }
 
 export interface Menu {
@@ -32,6 +34,9 @@ const ICONS: Record<MenuScreenId, string> = {
     '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 7l3.4 4.6 5.6-1.3 1.3 5.6 4.6 3.4-2.6 5.1 2.6 5.1-4.6 3.4-1.3 5.6-5.6-1.3L24 41l-3.4-4.6-5.6 1.3-1.3-5.6-4.6-3.4 2.6-5.1-2.6-5.1 4.6-3.4 1.3-5.6 5.6 1.3z" fill="#C9A227"/><circle cx="24" cy="24" r="7" fill="#0C1E36"/><circle cx="24" cy="24" r="3.2" fill="#F6F1E3"/></svg>',
   feedback:
     '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 9h28a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H23l-9 7v-7h-4a5 5 0 0 1-5-5V14a5 5 0 0 1 5-5z" fill="#FFD36A"/><circle cx="16" cy="21" r="2.6" fill="#0C1E36"/><circle cx="24" cy="21" r="2.6" fill="#0C1E36"/><circle cx="32" cy="21" r="2.6" fill="#0C1E36"/></svg>',
+  home: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 24L24 10l16 14" fill="none" stroke="#C9A227" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 22v17h22V22" fill="#F6F1E3"/><circle cx="24" cy="29" r="5" fill="#0C1E36"/><path d="M19 39h10" stroke="#C9A227" stroke-width="3" stroke-linecap="round"/></svg>',
+  leave:
+    '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M11 8h17v32H11z" fill="#F6F1E3"/><circle cx="23" cy="25" r="2" fill="#0C1E36"/><path d="M28 24h13m-5-6 6 6-6 6" fill="none" stroke="#C9A227" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 const CSS = `
@@ -44,6 +49,7 @@ const CSS = `
 #hud .menu .tile b{font-size:16px}
 #hud .menu .tile small{font-size:12.5px;opacity:.82;line-height:1.3}
 #hud .menu .tile kbd{position:absolute;top:12px;right:12px;margin:0}
+#hud .menu .tile[hidden]{display:none}
 #hud .menu .tile.hi{background:linear-gradient(135deg,rgba(201,162,39,.32),rgba(201,162,39,.1));border-color:rgba(255,211,106,.75);box-shadow:0 0 18px rgba(255,211,106,.2)}
 #hud .menu .tile.hi:focus-visible{background:rgba(201,162,39,.38);border-color:#FFD36A}
 @media (hover:hover){#hud .menu .tile.hi:hover{background:rgba(201,162,39,.38);border-color:#FFD36A}}
@@ -53,7 +59,8 @@ const CSS = `
 /**
  * The Menu: what the bottom bar's Menu button opens. A tile for each screen (your owl, quests,
  * settings, feedback), each with a line saying how things stand; choosing one opens it in the
- * menu's place.
+ * menu's place. Below them the ways out: "Go home" to the owl's own nest, and "Leave the park"
+ * inside the park; each shows only where it leads somewhere.
  */
 export function createMenu(root: HTMLElement, entries: readonly MenuEntry[], choose: (id: MenuScreenId) => void): Menu {
   const style = document.createElement('style');
@@ -66,6 +73,7 @@ export function createMenu(root: HTMLElement, entries: readonly MenuEntry[], cho
   tiles.className = 'tiles';
   modal.box.appendChild(tiles);
   const subs = new Map<MenuScreenId, HTMLElement>();
+  const tilesById = new Map<MenuScreenId, HTMLButtonElement>();
   for (const e of entries) {
     const b = document.createElement('button');
     b.className = e.highlight ? 'tile hi' : 'tile';
@@ -80,11 +88,15 @@ export function createMenu(root: HTMLElement, entries: readonly MenuEntry[], cho
       b.appendChild(k);
     }
     subs.set(e.id, b.querySelector('small')!);
+    tilesById.set(e.id, b);
     b.addEventListener('click', () => choose(e.id));
     tiles.appendChild(b);
   }
   const refresh = () => {
-    for (const e of entries) subs.get(e.id)!.textContent = e.sub();
+    for (const e of entries) {
+      subs.get(e.id)!.textContent = e.sub();
+      tilesById.get(e.id)!.hidden = e.shown ? !e.shown() : false;
+    }
   };
 
   return {

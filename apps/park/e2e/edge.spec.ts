@@ -187,6 +187,42 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
+  test('leaving the park keeps a ticket running, the turnstiles let the owl back in, and Go home finds its nest', async ({ browser, request }) => {
+    const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
+    expect(issued.status()).toBe(200);
+    const { link } = (await issued.json()) as { link: string };
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    await a.goto(`/?transport=edge#claim=${link.split('#claim=')[1] ?? ''}`);
+    await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(a.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 10_000 });
+    await walkToDoor(a, 'gate');
+    await expect(a.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    const started = (await a.evaluate(() => window.owlPark.wallet()))[0]!;
+    expect(started.status).toBe('active');
+
+    // Out of the park from the Menu: the card asks, and the owl stands outside the gate.
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="leave"]').click();
+    await a.getByRole('dialog', { name: 'Leave the park' }).locator('[data-leave="leave"]').click();
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
+    // Leaving changed nothing on the ticket: its time runs from the same first scan.
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ id: started.id, status: 'active', firstScan: started.firstScan });
+
+    // Back in through the turnstiles: the quick scan.
+    await walkToDoor(a, 'gate');
+    await expect(a.locator('[data-ticket-card]')).toContainText('Welcome back', { timeout: 15_000 });
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ status: 'active', firstScan: started.firstScan });
+
+    // Go home: straight to the owl's own nest, which the room server makes on first sight.
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').click();
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+    await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
+    await a.context().close();
+  });
+
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
     await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');

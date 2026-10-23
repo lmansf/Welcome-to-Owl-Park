@@ -268,7 +268,17 @@ export default {
       return json({ error: 'not found' }, 404);
     }
 
-    // ---- Nests: the day's furniture gift. The nests are outside the turnstiles, so it needs no ticket. ----
+    // ---- Nests: the owl's own (for "Go home", made on first sight as on the street) and the day's
+    // furniture gift. The nests are outside the turnstiles, so neither needs a ticket. ----
+    if (url.pathname === '/api/nest') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET') return json({ error: 'not found' }, 404);
+      const pass = await passFrom(request, env);
+      if (!pass) return json({ error: 'bad-pass' }, 401);
+      if (!pass.cid) return json({ error: 'no-collector' }, 401);
+      // Only the nest's id: whose it is never leaves the collections object.
+      return json({ nestId: (await collections(env).myNest(pass.cid, null)).nest.nestId });
+    }
     if (url.pathname === '/api/nest/gift') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);

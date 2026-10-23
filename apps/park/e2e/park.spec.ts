@@ -146,7 +146,8 @@ test.describe('single visitor', () => {
     await expect(wheel).toBeHidden();
     await page.locator('[data-menu-btn]').click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Your owl/, /^Quests/, /^Settings/, /^Feedback/]);
+    // Inside the park the ways out follow the four screens (leave.spec.ts tries them).
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Your owl/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/]);
     // Feedback is picked out in gold.
     await expect(menu.locator('[data-screen="feedback"]')).toHaveClass(/\bhi\b/);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
