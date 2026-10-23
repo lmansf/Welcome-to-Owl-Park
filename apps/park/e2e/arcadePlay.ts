@@ -112,10 +112,11 @@ export async function getBumped(page: Page): Promise<void> {
 /**
  * Moon Flap: through `gaps` gaps, then let the owl fall. Each frame looks ahead on a copy of the
  * flight: flap when the owl has sunk below the next gap's middle and a flap is safe, or when not
- * flapping would end the run.
+ * flapping would end the run. A slow page cannot act between its frames, so a choice must hold
+ * through a frame as slow as the slowest of late (a phone in a busy test run drops frames).
  */
 export async function flyThrough(page: Page, gaps: number): Promise<void> {
-  const score = await page.evaluate(async (gaps) => {
+  const { score, slowest } = await page.evaluate(async (gaps) => {
     interface Flap {
       score: number;
       over: boolean;
@@ -127,37 +128,51 @@ export async function flyThrough(page: Page, gaps: number): Promise<void> {
       clone(): Flap;
     }
     const g = window.owlPark.arcade()?.sim as unknown as Flap | undefined;
-    if (!g) return -1;
+    if (!g) return { score: -1, slowest: 0 };
     const stage = document.querySelector('.arcade [data-stage]') as HTMLElement;
     const tap = () => stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
     const FRAME = 1000 / 60;
     const steady = (f: Flap) => f.y > (f.ahead()?.gapY ?? 320) + 18 && f.vy > 0;
-    /** Whether the flight lasts the next second, flapping now or not, and steadily after. */
-    const lasts = (flapNow: boolean) => {
+    /** Whether the flight lasts the next second, flapping now or not, with no say for `blind` ms and steady flaps after. */
+    const lasts = (flapNow: boolean, blind: number) => {
       const c = g.clone();
       if (flapNow) c.tap();
       for (let i = 0; i < 60 && !c.over; i++) {
         c.advance(FRAME);
-        if (steady(c)) c.tap();
+        if ((i + 1) * FRAME >= blind && steady(c)) c.tap();
       }
       return !c.over;
     };
     tap();
     const t0 = performance.now();
+    let last = t0;
+    let slow = 50;
+    let slowest = 0;
     await new Promise<void>((done) => {
       const tick = () => {
-        if (g.over || g.score >= gaps || performance.now() - t0 > 60_000) return done();
-        if ((steady(g) && lasts(true)) || (!lasts(false) && lasts(true))) tap();
+        const now = performance.now();
+        slowest = Math.max(slowest, now - last);
+        // The next frame may be as slow as the slowest of late (forgotten bit by bit).
+        slow = Math.min(150, Math.max(34, slow * 0.98, (now - last) * 1.5));
+        last = now;
+        if (g.over || g.score >= gaps || now - t0 > 60_000) return done();
+        // A choice that holds through a slow frame, or one that holds frame by frame when none does.
+        for (const blind of [slow, 0]) {
+          const flap = lasts(true, blind);
+          const wait = lasts(false, blind);
+          if (!flap && !wait) continue;
+          if (flap && (steady(g) || !wait)) tap();
+          break;
+        }
         requestAnimationFrame(tick);
       };
       tick();
     });
-    return g.score;
+    return { score: g.score, slowest: Math.round(slowest) };
   }, gaps);
-  expect(score).toBeGreaterThanOrEqual(gaps);
+  expect(score, `the slowest frame took ${slowest} ms`).toBeGreaterThanOrEqual(gaps);
 }
 
-/** Waits until the run is over (a falling owl, a last shot). */
 export async function untilOver(page: Page): Promise<void> {
   await expect.poll(async () => (await run(page))?.over ?? null, { timeout: 30_000, intervals: [100] }).toBe(true);
 }
