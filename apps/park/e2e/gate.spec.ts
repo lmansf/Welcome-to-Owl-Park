@@ -17,10 +17,10 @@ async function flip(request: APIRequestContext, mode: 'open' | 'ticket' | 'deplo
   return (await r.json()) as Record<string, unknown>;
 }
 
-/** A visitor arriving in the lobby (with a ticket link's hash, when given). */
+/** A visitor arriving in the lobby (with a ticket link's hash, when given), past the home screen. */
 async function arrive(browser: Browser, device: BrowserContextOptions, hash = ''): Promise<Page> {
   const page = await (await browser.newContext(device)).newPage();
-  await page.goto(`/?transport=edge${hash}`);
+  await page.goto(`/?transport=edge&home=0${hash}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
   return page;
 }
