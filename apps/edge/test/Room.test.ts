@@ -266,6 +266,36 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(b.count('emote')).toBe(2);
   });
 
+  it('relays a phrase’s number to the others, one phrase every three seconds per owl', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    expect(room.say('a', 3)).toBe(true);
+    expect(b.last('say')).toEqual({ t: 'say', id: 'a', n: 3 });
+    expect(a.count('say')).toBe(0); // the sender shows its own bubble
+    // Too soon: dropped, and the next owl's phrases are its own business.
+    now += LIMITS.sayEveryMs - 1;
+    expect(room.say('a', 1)).toBe(false);
+    expect(room.say('b', 1)).toBe(true);
+    now += 1;
+    expect(room.say('a', 24)).toBe(true);
+    expect(b.count('say')).toBe(2);
+    expect(LIMITS.sayEveryMs).toBe(3000);
+  });
+
+  it('drops a phrase the list does not have, and says nothing for a visitor who is not here', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    for (const n of [0, 25, 999, -1, 2.5]) expect(room.say('a', n), String(n)).toBe(false);
+    expect(room.say('nobody', 1)).toBe(false);
+    expect(b.count('say')).toBe(0);
+    // A dropped number does not use up the owl's turn.
+    expect(room.say('a', 2)).toBe(true);
+  });
+
   it('sends used-up objects on join and lets a shared object be used once until it is back', () => {
     const a = new FakePeer();
     const b = new FakePeer();

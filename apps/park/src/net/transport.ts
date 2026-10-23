@@ -24,6 +24,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onFull?(room: string): void;
   /** A peer played an emote. */
   onPeerEmote?(id: string, emote: string): void;
+  /** A peer said a prewritten phrase (its number in the phrase list). */
+  onPeerSay?(id: string, phrase: number): void;
 }
 
 export interface RoomConnection {

@@ -5,13 +5,15 @@ Owl Park is a virtual owl park you visit online. Every visitor is an owl. You wa
 now doing the same. This repository holds the park application.
 
 Two buttons sit at the bottom. **Emotes** opens the emote wheel. **Menu** leads to everything
-else: the owl builder (your owl's kind, colours, and what it wears, its pet and its effect), the
-quests, the settings (kept on the device) and Feedback. On a computer the keyboard works too:
-WASD or the arrow keys walk while held, E uses whatever the owl is standing at (the gift shop,
-the Realm Vote, a lantern, the fishing line), T opens the emote wheel and 1 to 8 play an emote at
-once, M opens the Menu, Q the owl builder, J the quests, and Escape closes whatever is open.
+else: Say (a prewritten phrase in a bubble over your owl, seen by everyone in the room), the owl
+builder (your owl's kind, colours, and what it wears, its pet and its effect), the quests, the
+settings (kept on the device) and Feedback. On a computer the keyboard works too: WASD or the
+arrow keys walk while held, E uses whatever the owl is standing at (the gift shop, the Realm Vote,
+a lantern, the fishing line), T opens Say, 1 to 8 play an emote at once, M opens the Menu, Q the
+owl builder, J the quests, and Escape closes whatever is open.
 
-Version 1 is **presence only**: owls appear, walk, change rooms, and leave. No chat yet.
+Version 1 is **presence only**: owls appear, walk, change rooms, and leave. There is no typing:
+owls talk in prewritten phrases (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), section 11).
 Owls also find **collectibles** around the park (wearables, pets, effects and emotes), a few
 every half day: see [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md).
 

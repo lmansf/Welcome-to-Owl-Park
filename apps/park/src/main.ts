@@ -79,7 +79,7 @@ const keyboard = attachKeyboard(window, {
     if (!hud.isBlocking()) void roomScene()?.interact();
   },
   menu: () => hud.toggleMenu(),
-  emotes: () => hud.toggleEmotes(),
+  say: () => hud.toggleSay(),
   emoteKey: (n) => hud.emoteKey(n),
   owl: () => hud.toggleOwl(),
   journal: () => hud.toggleJournal(),
@@ -131,6 +131,8 @@ declare global {
       equip(variant: string): boolean;
       /** Play an owned emote. */
       emote(e: string): boolean;
+      /** Say a prewritten phrase by its number (false: too soon after the last, or not a phrase). */
+      say(n: number): boolean;
       /** The tickets on this device (empty without the park's server). */
       wallet(): Promise<WalletEntry[]>;
     };
@@ -157,6 +159,8 @@ hud.onOwlPreview((frame) => {
   if (!game.scene.isActive('builder')) game.scene.run('builder');
   (game.scene.getScene('builder') as BuilderScene).frame(frame);
 });
+// The Say wheel says a phrase here and for everyone in the room.
+hud.onSay((n) => roomScene()?.say(n) ?? false);
 hud.attachQuests(quests, {
   accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
@@ -216,5 +220,6 @@ window.owlPark = {
     return slot ? (roomScene()?.equip(slot, variant) ?? false) : false;
   },
   emote: (e) => roomScene()?.emote(e) ?? false,
+  say: (n) => roomScene()?.say(n) ?? false,
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
 };

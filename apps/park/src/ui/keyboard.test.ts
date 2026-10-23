@@ -50,7 +50,7 @@ describe('attachKeyboard', () => {
     const keys = attachKeyboard(fake.win, {
       interact: () => calls.push('interact'),
       menu: () => calls.push('menu'),
-      emotes: () => calls.push('emotes'),
+      say: () => calls.push('say'),
       emoteKey: (n) => calls.push(`emote ${n}`),
       owl: () => calls.push('owl'),
       journal: () => calls.push('journal'),
@@ -77,7 +77,7 @@ describe('attachKeyboard', () => {
     key('keydown', 'KeyQ');
     key('keydown', 'KeyJ');
     key('keydown', 'Escape');
-    expect(calls).toEqual(['interact', 'menu', 'emotes', 'owl', 'journal', 'close']);
+    expect(calls).toEqual(['interact', 'menu', 'say', 'owl', 'journal', 'close']);
   });
 
   it('plays emotes 1 to 8 from the number row and the keypad, once per press', () => {

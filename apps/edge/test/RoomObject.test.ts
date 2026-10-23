@@ -386,3 +386,28 @@ describe('the street in the room object', () => {
     expect(owner.last('welcome')?.counts).toEqual({ homes: 1, nests: 1 });
   });
 });
+
+describe('prewritten chat in the room object', () => {
+  it('relays a phrase’s number to the other owls in the room, and nothing for a number the list lacks', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b');
+    await send(obj, a, { t: 'say', n: 5 });
+    expect(b.last('say')).toEqual({ t: 'say', id: 'v_a', n: 5 });
+    expect(a.of('say')).toEqual([]);
+    // A page without a collection may speak too: every phrase is everyone's.
+    clock += 3_000;
+    await send(obj, b, { t: 'say', n: 24 });
+    expect(a.last('say')).toEqual({ t: 'say', id: 'v_b', n: 24 });
+    // A number in range the list does not have is dropped; the socket stays open.
+    clock += 3_000;
+    await send(obj, a, { t: 'say', n: 777 });
+    expect(b.of('say')).toHaveLength(1);
+    expect(a.closed).toBeNull();
+    // Words never travel: a frame that carries them is malformed.
+    const words: Record<string, unknown> = { t: 'say', n: 'Hi!' };
+    await send(obj, a, words);
+    expect(a.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
+  });
+});
+

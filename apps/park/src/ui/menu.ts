@@ -1,7 +1,7 @@
 import { createModal, modalHeader } from './modal';
 
 /** The screens the Menu leads to. */
-export type MenuScreenId = 'owl' | 'quests' | 'settings' | 'feedback';
+export type MenuScreenId = 'say' | 'owl' | 'quests' | 'settings' | 'feedback';
 
 export interface MenuEntry {
   id: MenuScreenId;
@@ -25,6 +25,7 @@ export interface Menu {
 
 /** Small line drawings for the tiles, in the park's gold and cream. */
 const ICONS: Record<MenuScreenId, string> = {
+  say: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 10h22a5 5 0 0 1 5 5v9a5 5 0 0 1-5 5H19l-7 6v-6H9a5 5 0 0 1-5-5v-9a5 5 0 0 1 5-5z" fill="#F6F1E3"/><path d="M27 31h8l6 5v-5h1a4 4 0 0 0 4-4v-7a4 4 0 0 0-4-4h-4" fill="#C9A227"/><path d="M11 17h18M11 22h12" stroke="#0C1E36" stroke-width="2.4" stroke-linecap="round" opacity=".75"/></svg>',
   owl: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 14l6 5h16l6-5v18c0 7-6 11-14 11S10 39 10 32z" fill="#C9A227"/><ellipse cx="24" cy="33" rx="8" ry="8.5" fill="#F6F1E3"/><circle cx="18.5" cy="22" r="5" fill="#F6F1E3"/><circle cx="29.5" cy="22" r="5" fill="#F6F1E3"/><circle cx="18.5" cy="22" r="2.4" fill="#0C1E36"/><circle cx="29.5" cy="22" r="2.4" fill="#0C1E36"/><path d="M22.5 26l1.5 3 1.5-3z" fill="#E07A5F"/></svg>',
   quests:
     '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="11" y="8" width="26" height="32" rx="4" fill="#F6F1E3"/><path d="M11 12h26M11 36h26" stroke="#C9A227" stroke-width="4"/><path d="M17 19h14M17 24h14M17 29h9" stroke="#0C1E36" stroke-width="2.2" stroke-linecap="round" opacity=".7"/><circle cx="36" cy="34" r="8" fill="#FFD36A"/><path d="M36 29.5v5.5" stroke="#0C1E36" stroke-width="2.6" stroke-linecap="round"/><circle cx="36" cy="38.3" r="1.5" fill="#0C1E36"/></svg>',
@@ -37,6 +38,7 @@ const ICONS: Record<MenuScreenId, string> = {
 const CSS = `
 #hud .layer .modal.menu{width:min(520px,calc(100vw - 24px))}
 #hud .menu .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#hud .menu .tile:last-child:nth-child(odd){grid-column:1 / -1}
 #hud .menu .tile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:118px;padding:14px;border-radius:18px;text-align:left;background:rgba(246,241,227,.07);color:#F6F1E3;border:1px solid rgba(246,241,227,.16);box-shadow:none;font-weight:400}
 #hud .menu .tile:focus-visible{background:rgba(201,162,39,.2);border-color:#C9A227}
 @media (hover:hover){#hud .menu .tile:hover{background:rgba(201,162,39,.2);border-color:#C9A227}}
@@ -51,7 +53,7 @@ const CSS = `
 `;
 
 /**
- * The Menu: what the bottom bar's Menu button opens. A tile for each screen (your owl, quests,
+ * The Menu: what the bottom bar's Menu button opens. A tile for each screen (Say, your owl, quests,
  * settings, feedback), each with a line saying how things stand; choosing one opens it in the
  * menu's place.
  */

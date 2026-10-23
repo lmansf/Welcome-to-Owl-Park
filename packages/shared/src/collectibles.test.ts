@@ -135,6 +135,11 @@ describe('wear on a look', () => {
     expect(isParkMessage({ t: 'emote', id: 'a', e: 'hoot' })).toBe(true);
     expect(isParkMessage({ t: 'emote', id: 'a', e: 'crown~0' })).toBe(false);
     expect(isParkMessage({ t: 'emote', id: 'a', e: '<b>hi</b>' })).toBe(false);
+    // Phrases travel as numbers the list has; anything else is dropped.
+    expect(isParkMessage({ t: 'say', id: 'a', n: 1 })).toBe(true);
+    expect(isParkMessage({ t: 'say', id: 'a', n: 25 })).toBe(false);
+    expect(isParkMessage({ t: 'say', id: 'a', n: 'Hi!' })).toBe(false);
+    expect(isParkMessage({ t: 'say', id: '', n: 1 })).toBe(false);
   });
 });
 

@@ -31,7 +31,7 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
   [['E'], 'Do what you are standing at'],
   [['M'], 'Menu'],
-  [['T'], 'The emote wheel'],
+  [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],
   [['Q'], 'Your owl'],
   [['J'], 'Quests'],
@@ -39,8 +39,9 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
 ];
 
 /**
- * Settings, on this device: the quest cards on screen, the thumbstick (touch screens), calm motion,
- * full screen where the browser allows it, and which keys and touches do what.
+ * Settings, on this device: the quest cards on screen, the thumbstick (touch screens), the bubbles
+ * of what owls say, calm motion, full screen where the browser allows it, and which keys and touches
+ * do what.
  */
 export function createSettingsScreen(root: HTMLElement, store: SettingsStore, back: () => void): SettingsScreen {
   const style = document.createElement('style');
@@ -55,9 +56,11 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     row.className = `opt ${cls}`.trim();
     const text = document.createElement('span');
     text.append(title);
-    const small = document.createElement('small');
-    small.textContent = note;
-    text.appendChild(small);
+    if (note) {
+      const small = document.createElement('small');
+      small.textContent = note;
+      text.appendChild(small);
+    }
     const sw = document.createElement('button');
     sw.className = 'switch';
     sw.dataset['setting'] = key;
@@ -80,6 +83,7 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
       h('On screen'),
       toggle('questCards', 'Quest cards', 'Your quests and today’s tasks under the top bar.'),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
+      toggle('bubbles', 'Show what owls say', ''),
       h('Motion'),
       toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
     );

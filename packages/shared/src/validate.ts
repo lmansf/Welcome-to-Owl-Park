@@ -4,6 +4,7 @@
  */
 import { EMOTE_IDS, isWear } from './collectibles';
 import { isHexColour, isPledge } from './look';
+import { isPhrase } from './phrases';
 import { isSpecies } from './species';
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from './protocol';
 import { ROOM_MAX_H, ROOM_MAX_W } from './room';
@@ -69,6 +70,9 @@ export function isParkMessage(value: unknown): value is ParkMessage {
       return isId(value['id']);
     case 'emote':
       return isId(value['id']) && isEmoteId(value['e']);
+    case 'say':
+      // A phrase this page does not know is dropped: there is nothing to show for it.
+      return isId(value['id']) && isPhrase(value['n']);
     default:
       return false;
   }

@@ -289,6 +289,13 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return { x: p.x * k * this.dir * this.drawnFacing, y: p.y * k };
   }
 
+  /** How far above its feet the owl reaches: the top of its head, or of the hat it wears (a world offset, negative). */
+  crown(): number {
+    const hat = this.wearImgs.head;
+    const head = this.localAnchor('head').y;
+    return (hat.visible ? Math.min(head, hat.y - hat.displayHeight) : head) * OWL_SCALE * this.size;
+  }
+
   // ---------- movement ----------
 
   /** Begin (or replace) a walk. Facing flips immediately. */

@@ -3,13 +3,31 @@ import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, 
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 
-describe('protocol v7, the nests', () => {
-  it('is version 7, and a page speaking 6 is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(7);
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 6, look }))).toBeNull();
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 7, look }))).toEqual({ t: 'hello', v: 7, look });
-    expect(CLOSE.NEST_CLOSED).toBe(4011);
+describe('protocol v8, prewritten chat', () => {
+  it('is version 8, and a page speaking 7 is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(8);
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 7, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 8, look }))).toEqual({ t: 'hello', v: 8, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
+  });
+
+  it('reads a phrase by its number only, and never words', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 3 }))).toEqual({ t: 'say', n: 3 });
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 7, text: 'anything at all' }))).toEqual({ t: 'say', n: 7 });
+    // A whole number in range reaches the room, which drops one its list does not have.
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 999 }))).toEqual({ t: 'say', n: 999 });
+    for (const n of [undefined, 0, -1, 1.5, '3', 'Hi!', 1000, null]) expect(parseClientFrame(JSON.stringify({ t: 'say', n })), String(n)).toBeNull();
+  });
+
+  it('passes a phrase from the room on to the page', () => {
+    const say: ServerFrame = { t: 'say', id: 'v_a', n: 12 };
+    expect(parseServerFrame(JSON.stringify(say))).toEqual(say);
+  });
+});
+
+describe('protocol v7, the nests', () => {
+  it('has a close code of its own for a nest that turns an owl away', () => {
+    expect(CLOSE.NEST_CLOSED).toBe(4011);
   });
 
   it('reads a street request with its request number only', () => {

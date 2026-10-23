@@ -9,19 +9,22 @@
  * tasks, and the `lanterns`, `quiz`, `paid` and `tasks` frames the room sends. v7 adds the nests
  * (homes.ts, nestbook.ts): `street` asks for the street's nest doors and `nest` carries an owner's
  * change to its nest; the room answers with `street` and `nest`, sends `nest` to everyone in a nest
- * when it changes, and `closed` before closing a socket a nest turns away (4011).
+ * when it changes, and `closed` before closing a socket a nest turns away (4011). v8 adds prewritten
+ * chat (phrases.ts): `say` carries a phrase's number, and the room relays it with the owl's id to
+ * everyone else in the room (never words).
  */
 import type { QuizZone, TaskView } from './activities';
 import type { Award } from './book';
 import { parseNestEdit, type NestEdit, type NestRefusal, type NestView } from './homes';
 import { cleanLook } from './look';
 import type { NestGiftState, StreetDoor } from './nestbook';
+import { PHRASE_NUMBER_MAX } from './phrases';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 7;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 8;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -82,6 +85,11 @@ export interface ClientEmote {
   t: 'emote';
   e: string;
 }
+/** Say a prewritten phrase to everyone in the room: its number in the phrase list (phrases.ts). */
+export interface ClientSay {
+  t: 'say';
+  n: number;
+}
 /** Ask for this collector's quest board (answered with `quests`). */
 export interface ClientQuests {
   t: 'quests';
@@ -131,7 +139,7 @@ export interface ClientStreet {
 }
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -180,6 +188,12 @@ export interface ServerEmote {
   t: 'emote';
   id: string;
   e: string;
+}
+/** An owl said a prewritten phrase (its number; the page shows the phrase in a bubble above the owl). */
+export interface ServerSay {
+  t: 'say';
+  id: string;
+  n: number;
 }
 /**
  * The collector's quest board: the answer to `quests`, `talk`, `accept`, `abandon` and `gather`
@@ -316,6 +330,7 @@ export type ServerFrame =
   | ServerCounts
   | ServerFull
   | ServerEmote
+  | ServerSay
   | ServerQuests
   | ServerHandIn
   | ServerObjects
@@ -374,6 +389,11 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       return { t: 'bye' };
     case 'emote':
       return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
+    case 'say': {
+      // A whole number in range; whether the phrase list has it is the room's to decide.
+      const n = v['n'];
+      return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= PHRASE_NUMBER_MAX ? { t: 'say', n } : null;
+    }
     case 'quests':
       return isRequest(v['r']) ? { t: 'quests', r: v['r'] } : null;
     case 'talk':
@@ -407,7 +427,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'closed']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'closed']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

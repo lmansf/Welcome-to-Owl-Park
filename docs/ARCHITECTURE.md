@@ -73,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v7 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v8 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -82,7 +82,7 @@ are server milliseconds; clients never put their own clock on the wire.
 
 Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
 `move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
-(an emote id), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
+(an emote id), `say` (a prewritten phrase's number), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
 `accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
 the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks); and for
 the nests `street` (on the street: the visitor's own nest and five other owls' open ones) and
@@ -91,7 +91,7 @@ the nests `street` (on the street: the visitor's own nest and five other owls' o
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
 everyone including the sender; only the sender's copy carries `seq`, which is the
-acknowledgement), `look`, `leave`, `counts`, `full`, `emote` (to everyone else in the room), and
+acknowledgement), `look`, `leave`, `counts`, `full`, `emote` and `say` (to everyone else in the room), and
 for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, `refused`, plus
 `objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`), and for
 the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks` (see
@@ -109,7 +109,9 @@ IP address per object. Quests and collectibles: talks, uses and hand-ins count o
 of the owl's position on the server clock (plus 40 px of slack), a quest item only within 56 px,
 and one quest request runs at a time per visitor; one use per 1.2 s; worn items the visitor's
 collection does not hold are dropped from a look before it is broadcast; emotes must be owned and
-are limited to one per 1.5 s; quest and emote frames count toward the frame limit. Nests: a nest's
+are limited to one per 1.5 s; a phrase must be one of the list's, one per 3 s per owl (any other
+number is dropped, and a `say` frame with words in it closes the socket as malformed); quest,
+emote and phrase frames count toward the frame limit. Nests: a nest's
 room is `nest-<nestId>`, the id random and never taken from the collector; its hello waits for the
 collections object (later frames wait behind it), a closed nest lets in only its owner, its owner
 gets in however full it is (12 others), only its owner changes it (one change per 250 ms), and
@@ -258,7 +260,23 @@ SQLite (`apps/edge/src/feedbackBox.ts`) with the collector token, the room, the 
 browser's user agent; never an IP address or a name. The park's keepers read it on
 `/admin/feedback` with the admin key. How to read and triage it: `docs/FEEDBACK.md`.
 
-## 11. Open questions for the owner (with the defaults in the code)
+## 11. Prewritten chat (built)
+
+Owls talk only in prewritten phrases (C44): there is no typing anywhere in the park. The phrases
+are data in one file, `packages/shared/src/phrases.ts`: 24 in six groups of four, each under a
+number that keeps its phrase for good, so a new phrase is one more line there (with the owner's
+approval). **Say** in the Menu (T on a keyboard) opens a wheel of the six groups with the chosen
+group's four phrases under it (`apps/park/src/ui/sayWheel.ts`); a tap, or 1 to 4, says one.
+
+Only the number travels: `say` carries it to the room server, which relays it with the owl's id
+to everyone else in the room, never words, and drops a number the list does not have. The room
+server keeps one phrase every 3 s per owl; the page keeps the same pace, greying the wheel until
+the owl may speak again. The phrase shows for 4 s in a bubble over the owl
+(`apps/park/src/game/bubbles.ts`), one per owl, its words the same size on every screen. The local
+mode and Supabase pass the same number between tabs. **Show what owls say** in the settings (on by
+default, kept on the device) hides every bubble when off.
+
+## 12. Open questions for the owner (with the defaults in the code)
 
 1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.

@@ -208,8 +208,8 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect(wheel).toBeHidden();
     await expect(page.locator('[data-emotes-btn]')).toHaveAttribute('aria-expanded', 'false');
     await expect.poll(seen, { timeout: 10_000 }).toBe('dance');
-    // On a keyboard, T opens it and a number plays that slot.
-    await page.keyboard.press('KeyT');
+    // Open again, a number on a keyboard plays that slot. (T is Say's key, C44.)
+    await page.locator('[data-emotes-btn]').click();
     await expect(wheel).toBeVisible();
     await page.keyboard.press('Digit1');
     await expect(wheel).toBeHidden();

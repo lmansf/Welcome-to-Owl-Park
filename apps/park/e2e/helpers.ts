@@ -12,6 +12,8 @@ export interface ParkState {
     look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
     emote: string | null;
   }>;
+  /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
+  bubbles: Array<{ id: string; n: number }>;
   connected: boolean;
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */

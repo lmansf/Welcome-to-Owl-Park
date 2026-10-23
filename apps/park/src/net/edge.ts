@@ -410,6 +410,9 @@ export class EdgeTransport implements ParkTransport {
         case 'used':
           handlers.onUsed?.(f.id, f.by === selfId ? null : f.by, f.until - offset);
           break;
+        case 'say':
+          if (f.id !== selfId) handlers.onPeerSay?.(f.id, f.n);
+          break;
         case 'emote':
           if (f.id !== selfId) handlers.onPeerEmote?.(f.id, f.e);
           break;
@@ -654,6 +657,9 @@ export class EdgeTransport implements ParkTransport {
             break;
           case 'emote':
             sendFrame({ t: 'emote', e: msg.e });
+            break;
+          case 'say':
+            sendFrame({ t: 'say', n: msg.n });
             break;
           case 'hello':
             break;

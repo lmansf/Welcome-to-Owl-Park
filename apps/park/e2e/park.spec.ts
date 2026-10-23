@@ -104,11 +104,11 @@ test.describe('single visitor', () => {
     await expect.poll(async () => (await state(page)).walking).toBe(false);
   });
 
-  test('M opens the Menu, T the emotes, Q your owl and J the quests; each key closes its screen again, and so does Escape', async ({ page }) => {
+  test('M opens the Menu, T Say, Q your owl and J the quests; each key closes its screen again, and so does Escape', async ({ page }) => {
     await openPark(page);
     for (const [key, name, opener] of [
       ['KeyM', 'Menu', '[data-menu-btn]'],
-      ['KeyT', 'Emotes', '[data-emotes-btn]'],
+      ['KeyT', 'Say', '[data-menu-btn]'],
       ['KeyQ', 'Your owl', '[data-menu-btn]'],
       ['KeyJ', 'Quests', '[data-menu-btn]'],
     ] as const) {
@@ -135,7 +135,7 @@ test.describe('single visitor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('the bottom bar is Menu and Emotes; the Menu leads to your owl, the quests, the settings and Feedback', async ({ page }) => {
+  test('the bottom bar is Menu and Emotes; the Menu leads to Say, your owl, the quests, the settings and Feedback', async ({ page }) => {
     await openPark(page);
     await expect(page.locator('#hud .bottom .left button')).toHaveCount(2);
     // Emotes are one tap away.
@@ -146,10 +146,19 @@ test.describe('single visitor', () => {
     await expect(wheel).toBeHidden();
     await page.locator('[data-menu-btn]').click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Your owl/, /^Quests/, /^Settings/, /^Feedback/]);
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Your owl/, /^Quests/, /^Settings/, /^Feedback/]);
     // Feedback is picked out in gold.
     await expect(menu.locator('[data-screen="feedback"]')).toHaveClass(/\bhi\b/);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
+    // Say opens its wheel in the menu's place; closing the wheel goes back to the room.
+    await menu.locator('[data-screen="say"]').click();
+    const say = page.getByRole('dialog', { name: 'Say' });
+    await expect(say).toBeVisible();
+    await expect(menu).toBeHidden();
+    await say.getByRole('button', { name: 'Close Say' }).click();
+    await expect(say).toBeHidden();
+    await expect(menu).toBeHidden();
+    await page.locator('[data-menu-btn]').click();
     for (const [id, name] of [
       ['owl', 'Your owl'],
       ['quests', 'Quests'],
@@ -186,7 +195,7 @@ test.describe('single visitor', () => {
     await page.reload();
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     await expect(page.locator('#hud .tracker')).toBeHidden();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ questCards: false, thumbstick: !isMobile, calm: true });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ questCards: false, thumbstick: !isMobile, calm: true, bubbles: true });
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {

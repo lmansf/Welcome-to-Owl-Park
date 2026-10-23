@@ -13,6 +13,7 @@ import { createJoystick } from './joystick';
 import { createMenu, type MenuScreenId } from './menu';
 import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuilder';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
+import { createSayWheel } from './sayWheel';
 import { createSettingsScreen } from './settingsScreen';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
@@ -69,9 +70,16 @@ export interface Hud {
   dialogueNpc(): string | null;
   /** M: open or close the Menu (closing the other screens). */
   toggleMenu(): void;
-  /** T (or the Emotes button): open or close the emote wheel. */
+  /** The Emotes button: open or close the emote wheel. */
   toggleEmotes(): void;
-  /** 1 to 8: play that emote of the wheel (its page, while it is open), unless another screen is open. */
+  /** T: open or close the Say wheel. */
+  toggleSay(): void;
+  /** The Say wheel says a phrase through this (false: it was not said). */
+  onSay(cb: (n: number) => boolean): void;
+  /**
+   * 1 to 8: play that emote of the wheel (its page, while it is open), unless another screen is open;
+   * while the Say wheel is open, 1 to 4 say a phrase of its group.
+   */
   emoteKey(n: number): void;
   /** Q: open or close the owl builder. */
   toggleOwl(): void;
@@ -189,7 +197,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="bottom">
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd></button>
-        <button class="emote-btn" data-emotes-btn aria-label="Emotes" aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="T">${EMOTES_ICON}<kbd aria-hidden="true">T</kbd></button>
+        <button class="emote-btn" data-emotes-btn aria-label="Emotes" aria-haspopup="dialog" aria-expanded="false">${EMOTES_ICON}</button>
       </div>
       <div class="actions" data-actions></div>
     </div>`;
@@ -261,9 +269,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   applySettings();
 
   // ---- the Menu and its screens: one open at a time ----
+  let sayCb: ((n: number) => boolean) | null = null;
+  const sayWheel = createSayWheel(root, (n) => sayCb?.(n) ?? false);
   const menu = createMenu(
     root,
     [
+      { id: 'say', title: 'Say', key: 'T', sub: () => '' },
       {
         id: 'owl',
         title: 'Your owl',
@@ -302,12 +313,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const closeScreens = () => {
     menu.close();
     wheel?.close();
+    sayWheel.close();
     builder?.close();
     questUi?.closeJournal();
     settingsScreen.close();
     feedback?.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen();
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
@@ -322,6 +334,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     } else if (id === 'emotes' && wheel) {
       wheel.open(emotesBtn);
       emotesBtn.setAttribute('aria-expanded', 'true');
+    } else if (id === 'say') {
+      sayWheel.open(menuBtn);
     } else if (id === 'owl' && builder) {
       builder.setLook(collectionActions?.look() ?? look);
       // The builder covers the whole screen: the bar, the cards and the buttons hide under it.
@@ -418,8 +432,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     dialogueNpc: () => questUi?.dialogueNpc() ?? null,
     toggleMenu: () => toggle('menu', () => menu.isOpen()),
     toggleEmotes: () => toggle('emotes', () => !!wheel?.isOpen()),
+    toggleSay: () => toggle('say', () => sayWheel.isOpen()),
+    onSay(cb) {
+      sayCb = cb;
+    },
     emoteKey(n) {
-      if (wheel?.isOpen()) wheel.press(n);
+      if (sayWheel.isOpen()) sayWheel.press(n);
+      else if (wheel?.isOpen()) wheel.press(n);
       else if (!isBlocking() && collectionState && collectionActions) {
         const emote = wheelEmotes(collectionState)[n - 1];
         if (emote) collectionActions.emote(emote.id);

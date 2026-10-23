@@ -304,6 +304,11 @@ export class RoomObject extends DurableObject<Env> {
       case 'emote':
         if (!room.admit(att.id)) return;
         return this.emote(ws, att, room, frame.e);
+      case 'say':
+        // Every phrase is everyone's: no collection is needed to say one.
+        if (!room.admit(att.id)) return;
+        room.say(att.id, frame.n);
+        return;
       case 'quests':
       case 'talk':
       case 'accept':

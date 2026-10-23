@@ -217,6 +217,48 @@ test.describe('room server', () => {
     for (const p of [a, b, c]) await p.context().close();
   });
 
+  test('a phrase through the room server: only its number travels, and the other owls in the room see it over the owl', async ({ browser }) => {
+    const a = await visitor(browser);
+    // The other owl on a phone-sized screen, where the words must still be readable.
+    const b = await (await browser.newContext({ viewport: { width: 412, height: 839 } })).newPage();
+    const heard: unknown[] = [];
+    b.on('websocket', (ws) =>
+      ws.on('framereceived', (f) => {
+        if (typeof f.payload !== 'string' || !f.payload.startsWith('{')) return;
+        const frame = JSON.parse(f.payload) as { t?: string };
+        if (frame.t === 'say') heard.push(frame);
+      }),
+    );
+    await openPark(b, { transport: 'edge' });
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
+    const aId = (await state(b)).peers[0]!.id;
+    const bId = (await state(a)).peers[0]!.id;
+
+    expect(await a.evaluate(() => window.owlPark.say(13))).toBe(true);
+    expect((await state(a)).bubbles.map((s) => s.n)).toEqual([13]);
+    // One phrase every 3 s.
+    expect(await a.evaluate(() => window.owlPark.say(14))).toBe(false);
+    await expect.poll(async () => (await state(b)).bubbles, { timeout: 10_000 }).toEqual([{ id: aId, n: 13 }]);
+    // On the wire, the owl's id and the phrase's number: never words.
+    await expect.poll(() => heard).toEqual([{ t: 'say', id: aId, n: 13 }]);
+
+    // The other owl answers, and its bubble shows over it on its own screen too.
+    expect(await b.evaluate(() => window.owlPark.say(9))).toBe(true);
+    await expect.poll(async () => (await state(a)).bubbles, { timeout: 10_000 }).toContainEqual({ id: bId, n: 9 });
+    await b.screenshot({ path: 'e2e-screenshots/edge-say-phone.png' });
+
+    // The first owl's turn comes again.
+    await expect.poll(() => a.evaluate(() => window.owlPark.say(14)), { timeout: 5_000 }).toBe(true);
+    await expect.poll(async () => (await state(b)).bubbles, { timeout: 10_000 }).toContainEqual({ id: aId, n: 14 });
+    await expect.poll(() => heard).toEqual([
+      { t: 'say', id: aId, n: 13 },
+      { t: 'say', id: aId, n: 14 },
+    ]);
+    await a.context().close();
+    await b.context().close();
+  });
+
   test('the shop and the collection live on the server, for this collector only', async ({ browser, request }) => {
     const a = await visitor(browser);
     const out = await a.evaluate(async () => {

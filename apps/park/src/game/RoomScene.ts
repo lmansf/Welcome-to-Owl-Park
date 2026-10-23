@@ -15,6 +15,7 @@ import {
   ROOM_W,
   RARITY_COLOURS,
   RARITY_NAMES,
+  SAY_EVERY_MS,
   STREET_ROOM,
   backgroundTiles,
   cabinetAt,
@@ -28,6 +29,7 @@ import {
   getQuest,
   interactablesIn,
   isNestRoom,
+  isPhrase,
   nestDoorIndex,
   nestIdOf,
   nestLook,
@@ -70,6 +72,7 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { addCabinets } from './arcade';
 import { loadArt, releaseArt, roomArtKeys } from './art';
+import { SpeechBubbles } from './bubbles';
 import { roomScaleCap } from './artFiles';
 import { takesDoorway } from './doors';
 import { placeHints } from './hints';
@@ -193,6 +196,9 @@ export class RoomScene extends Phaser.Scene {
   private boardTimer: Phaser.Time.TimerEvent | null = null;
   private unwatchBoard: (() => void) | null = null;
   private readonly peerEmotes = new Map<string, string>();
+  /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
+  private bubbles: SpeechBubbles | null = null;
+  private saidAt = Number.NEGATIVE_INFINITY;
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
@@ -259,6 +265,7 @@ export class RoomScene extends Phaser.Scene {
     this.boardTimer = null;
     this.unwatchBoard = null;
     this.peerEmotes.clear();
+    this.bubbles = null;
     this.tasks = this.registry.get('tasks') as TaskState;
     this.play = null;
     this.acts = null;
@@ -311,10 +318,16 @@ export class RoomScene extends Phaser.Scene {
     addCabinets(this, room);
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
+    // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
+    this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
-      const stop = settings.onChange((s) => ambience.setCalm(s.calm));
+      this.bubbles.setShown(settings.get().bubbles);
+      const stop = settings.onChange((s) => {
+        ambience.setCalm(s.calm);
+        this.bubbles?.setShown(s.bubbles);
+      });
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, stop);
     }
     addNestsSign(this, room);
@@ -372,6 +385,7 @@ export class RoomScene extends Phaser.Scene {
       this.updateHints();
     }
     for (const owl of this.peers.values()) owl.tick(now);
+    this.bubbles?.tick(now);
     for (const npc of this.npcs.values()) npc.tick(now);
     for (const pile of this.piles.values()) pile.tick(now);
     this.play?.tick();
@@ -431,6 +445,11 @@ export class RoomScene extends Phaser.Scene {
         if (!live()) return;
         this.peerEmotes.set(id, e);
         this.peers.get(id)?.playEmote(e);
+      },
+      onPeerSay: (id, n) => {
+        if (!live()) return;
+        const owl = this.peers.get(id);
+        if (owl) this.bubbles?.say(owl, n, Date.now());
       },
     });
     if (!live() || !this.scene.isActive()) {
@@ -510,6 +529,7 @@ export class RoomScene extends Phaser.Scene {
     const owl = this.peers.get(id);
     if (!owl) return;
     this.peers.delete(id);
+    this.bubbles?.drop(id);
     this.hud.setCount(this.peers.size + 1);
     this.tweens.add({ targets: owl, alpha: 0, duration: 300, onComplete: () => owl.destroy() });
   }
@@ -662,6 +682,8 @@ export class RoomScene extends Phaser.Scene {
     walking: boolean;
     look: OwlLook;
     peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null }>;
+    /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
+    bubbles: Array<{ id: string; n: number }>;
     connected: boolean;
     doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
     /** Where the owl's eyes are, left (-) or right (+) of its feet: the way its painting faces. */
@@ -693,6 +715,7 @@ export class RoomScene extends Phaser.Scene {
       walking: this.me.walking,
       look: this.look,
       peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
+      bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
       owlArt: this.me.artKey,
@@ -1017,6 +1040,20 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * Say a prewritten phrase (its number in the phrase list): a bubble over the owl here, and the
+   * number to everyone in the room. One phrase every SAY_EVERY_MS, as the room server keeps it.
+   */
+  say(n: number): boolean {
+    if (!this.built || !isPhrase(n)) return false;
+    const now = Date.now();
+    if (now - this.saidAt < SAY_EVERY_MS) return false;
+    this.saidAt = now;
+    this.bubbles?.say(this.me, n, now);
+    this.conn?.send({ t: 'say', id: this.playerId, n });
+    return true;
+  }
+
   /** What the owl wears now. */
   wear(): Wear | undefined {
     return this.look.wear;
@@ -1249,6 +1286,8 @@ export class RoomScene extends Phaser.Scene {
     this.glows.clear();
     this.play?.destroy();
     this.play = null;
+    this.bubbles?.clear();
+    this.bubbles = null;
     this.acts?.close();
     this.acts = null;
     this.link = null;

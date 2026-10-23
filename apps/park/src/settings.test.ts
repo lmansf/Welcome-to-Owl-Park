@@ -7,13 +7,14 @@ function memory(initial?: string) {
 }
 
 describe('settings', () => {
-  it('start with the quest cards and the thumbstick shown, and calm motion when the device asks for less motion', () => {
-    expect(defaultSettings(false)).toEqual({ questCards: true, thumbstick: true, calm: false });
-    expect(defaultSettings(true)).toEqual({ questCards: true, thumbstick: true, calm: true });
+  it('start with the quest cards, the thumbstick and what owls say shown, and calm motion when the device asks for less motion', () => {
+    expect(defaultSettings(false)).toEqual({ questCards: true, thumbstick: true, calm: false, bubbles: true });
+    expect(defaultSettings(true)).toEqual({ questCards: true, thumbstick: true, calm: true, bubbles: true });
   });
 
   it('keep each saved setting that is a boolean and drop the rest', () => {
-    expect(parseSettings('{"questCards":false,"calm":true}', false)).toEqual({ questCards: false, thumbstick: true, calm: true });
+    expect(parseSettings('{"questCards":false,"calm":true}', false)).toEqual({ questCards: false, thumbstick: true, calm: true, bubbles: true });
+    expect(parseSettings('{"bubbles":false}', false).bubbles).toBe(false);
     expect(parseSettings('{"questCards":"no","thumbstick":0,"calm":null,"extra":true}', true)).toEqual(defaultSettings(true));
     for (const bad of [null, '', 'nope', '[]', '42', 'null', '"x"']) expect(parseSettings(bad, false), String(bad)).toEqual(defaultSettings(false));
   });
@@ -26,7 +27,7 @@ describe('settings', () => {
     store.set({ questCards: false });
     store.set({ questCards: false });
     expect(seen).toEqual([false]);
-    expect(JSON.parse(storage.data.get(SETTINGS_KEY)!)).toEqual({ questCards: false, thumbstick: true, calm: false });
+    expect(JSON.parse(storage.data.get(SETTINGS_KEY)!)).toEqual({ questCards: false, thumbstick: true, calm: false, bubbles: true });
     expect(new SettingsStore(storage, false).get().questCards).toBe(false);
     stop();
     store.set({ questCards: true });
@@ -46,6 +47,6 @@ describe('settings', () => {
       false,
     );
     store.set({ calm: true, ...({ admin: true } as object) });
-    expect(store.get()).toEqual({ questCards: true, thumbstick: true, calm: true });
+    expect(store.get()).toEqual({ questCards: true, thumbstick: true, calm: true, bubbles: true });
   });
 });

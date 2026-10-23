@@ -60,7 +60,7 @@ const me: PlayerState = { id: 'me', look: { body: '#111111', belly: '#222222', a
 const other: PlayerState = { ...me, id: 'other', pos: { x: 9, y: 9 } };
 
 describe('SupabaseTransport', () => {
-  const handlers = { onPeerState: vi.fn(), onPeerMove: vi.fn(), onPeerLeave: vi.fn(), onStatus: vi.fn() };
+  const handlers = { onPeerState: vi.fn(), onPeerMove: vi.fn(), onPeerLeave: vi.fn(), onStatus: vi.fn(), onPeerSay: vi.fn() };
   beforeEach(() => {
     channels.length = 0;
     removed = 0;
@@ -92,6 +92,13 @@ describe('SupabaseTransport', () => {
     ch.fire('broadcast', 'park', { payload: { t: 'move', id: 'me', walk } });
     expect(handlers.onPeerMove).toHaveBeenCalledTimes(1);
     expect(handlers.onPeerMove).toHaveBeenCalledWith('other', walk);
+
+    // A phrase travels as its number, from a listed peer, and only one the list has.
+    ch.fire('broadcast', 'park', { payload: { t: 'say', id: 'other', n: 2 } });
+    ch.fire('broadcast', 'park', { payload: { t: 'say', id: 'other', n: 'Hi!' } });
+    ch.fire('broadcast', 'park', { payload: { t: 'say', id: 'ghost', n: 2 } });
+    expect(handlers.onPeerSay).toHaveBeenCalledTimes(1);
+    expect(handlers.onPeerSay).toHaveBeenCalledWith('other', 2);
 
     ch.fire('broadcast', 'park', { payload: { nonsense: true } });
     ch.presence = { me: [me] };

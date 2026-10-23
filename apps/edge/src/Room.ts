@@ -9,6 +9,8 @@ import {
   MOVE_REFILL_PER_S,
   USE_COOLDOWN_MS,
   REACH_SLACK,
+  SAY_EVERY_MS,
+  isPhrase,
   findSpawn,
   isWalkable,
   nestDoorIndex,
@@ -53,6 +55,8 @@ interface Visitor {
   strikes: number[];
   frames: number[];
   emotedAt: number;
+  /** When this visitor last said a phrase. */
+  saidAt: number;
   /** When this visitor last used an interactable (leaf piles, stalls). */
   usedAt: number;
   /** When this visitor, the owner of the nest it is in, last changed it. */
@@ -84,6 +88,8 @@ export const LIMITS = {
   leaverMemoryMs: 120_000,
   /** One emote per visitor this often; faster ones are dropped quietly. */
   emoteEveryMs: 1_500,
+  /** One prewritten phrase per visitor this often; faster ones are dropped quietly. */
+  sayEveryMs: SAY_EVERY_MS,
   /** One use of an interactable per visitor this often. */
   useEveryMs: USE_COOLDOWN_MS,
   /** One change to its nest per owner this often. */
@@ -233,7 +239,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0, arrangedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -257,7 +263,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0, arrangedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -377,6 +383,20 @@ export class Room {
     if (now - v.emotedAt < LIMITS.emoteEveryMs) return false;
     v.emotedAt = now;
     this.broadcast({ t: 'emote', id, e }, id);
+    return true;
+  }
+
+  /**
+   * Say a prewritten phrase to everyone else in the room: only its number goes out, and only a
+   * number the phrase list has (an unknown one is dropped). One phrase every `sayEveryMs` per owl.
+   */
+  say(id: string, n: number): boolean {
+    const v = this.visitors.get(id);
+    if (!v || !isPhrase(n)) return false;
+    const now = this.now();
+    if (now - v.saidAt < LIMITS.sayEveryMs) return false;
+    v.saidAt = now;
+    this.broadcast({ t: 'say', id, n }, id);
     return true;
   }
 
