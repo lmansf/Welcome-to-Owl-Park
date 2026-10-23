@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import {
   CABINET_OFF,
   EMOTE_IDS,
+  LEFT_PARK_SPAWN,
+  LOBBY_ROOM,
   KIND_RULES,
   MAX_ACTIVE_QUESTS,
   NEST_SPOTS,
@@ -26,11 +28,13 @@ import {
   getInteractable,
   getNpc,
   getQuest,
+  insidePark,
   interactablesIn,
   isNestRoom,
   nestDoorIndex,
   nestIdOf,
   nestLook,
+  nestRoomId,
   npcsIn,
   parseVariant,
   pointInRect,
@@ -348,6 +352,7 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setCount(1);
     this.hud.setActions([]);
     this.hud.setRoom(room.id);
+    this.showWaysOut();
     // The owl builder's kind and colours: today's pledge and the worn collectibles stay as they are.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
     this.hud.onAction((id) => this.actions.find((a) => a.id === id)?.run());
@@ -609,6 +614,36 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built || this.leaving || !door) return;
     this.pendingVote = false;
     this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 });
+  }
+
+  /** The Menu's ways out from here: leaving inside the park, going home anywhere but the owl's own nest. */
+  private showWaysOut(): void {
+    this.hud.setWaysOut({ leave: insidePark(this.room.id), home: !(isNestRoom(this.room.id) && this.nestMine) });
+  }
+
+  /** "Leave the park" (the card asked first): to the lobby, outside the gate. The ticket keeps running. */
+  leavePark(): boolean {
+    if (!this.built || this.leaving || !insidePark(this.room.id)) return false;
+    void this.goTo(LOBBY_ROOM, LEFT_PARK_SPAWN, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
+    return true;
+  }
+
+  /**
+   * "Go home": straight to the owl's own nest, from anywhere. Out of it again, the owl is on the street
+   * in front of its own door, as if it had come in that way.
+   */
+  async goHome(): Promise<boolean> {
+    if (!this.built || this.leaving) return false;
+    const nestId = await this.collection.service.homeNest();
+    if (!this.built || this.leaving) return false;
+    const home = nestId ? nestRoomId(nestId) : null;
+    if (!home) {
+      this.hud.toast(NEST_WORDS.notAnswering, 3500);
+      return false;
+    }
+    if (home === this.room.id) return false;
+    void this.goTo(home, 'default', { room: STREET_ROOM, spawn: 'from-nest-0' });
+    return true;
   }
 
   /** E: do the first thing the owl can do where it stands (a spot, an NPC owl, a leaf pile). */
@@ -1294,7 +1329,10 @@ export class RoomScene extends Phaser.Scene {
   /** The nest as it stands: on arrival, after each change its owner makes, and in answer to the owner's own. */
   private onNest(seen: NestSeen): void {
     if (seen.nest.nestId !== nestIdOf(this.room.id)) return;
-    if (seen.mine !== undefined) this.nestMine = seen.mine;
+    if (seen.mine !== undefined) {
+      this.nestMine = seen.mine;
+      this.showWaysOut();
+    }
     if (seen.owned) this.owned = seen.owned;
     if (seen.gift) this.nestGift = { taken: seen.gift.taken };
     this.showNest(seen.nest);

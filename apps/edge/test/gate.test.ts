@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { WAY_OUT_DOOR } from '@owl-park/shared';
+import { ROOMS } from '@owl-park/shared/rooms';
 import { LOBBY, admitted, gateMode, isFreeRoom, mayEnter } from '../src/gate';
 
 describe('the front gate', () => {
@@ -29,6 +31,15 @@ describe('the front gate', () => {
       expect(isFreeRoom(room), room).toBe(false);
       expect(mayEnter('ticket', { adm: false }, room), room).toBe(false);
     }
+  });
+
+  it('keeps the way out of the park open to everyone, and lets a ticket holder who left come back in', () => {
+    const wayOut = ROOMS['hub']!.doors.find((d) => d.id === WAY_OUT_DOOR)!;
+    expect(wayOut.to?.room).toBe(LOBBY);
+    expect(mayEnter('ticket', { adm: false }, wayOut.to!.room)).toBe(true);
+    // Leaving changes nothing on the pass the turnstiles admitted: it opens the park again.
+    expect(mayEnter('ticket', { adm: true }, 'hub')).toBe(true);
+    expect(mayEnter('ticket', { adm: false }, 'hub')).toBe(false);
   });
 
   it('admits everyone while the gate is open, and only ticket-holders once it takes tickets', () => {

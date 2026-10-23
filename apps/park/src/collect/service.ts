@@ -205,6 +205,8 @@ export interface CollectionService {
   nestLink(room: string, conn: RoomConnection | null, pushes: NestPushes, look: () => NestLook): NestLink | null;
   /** Today's furniture gift for the visitor's nest (once a park day). */
   claimFurnitureGift(): Promise<FurnitureGiftReply>;
+  /** The id of the visitor's own nest, for "Go home" (made on first sight, as on the street); null when it cannot be had. */
+  homeNest(): Promise<string | null>;
 }
 
 /** This device's IANA time zone, if the browser reports a usable one. */

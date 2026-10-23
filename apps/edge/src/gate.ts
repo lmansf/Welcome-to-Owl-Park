@@ -4,11 +4,13 @@
  * admitted (no ticket) opens only the rooms outside the turnstiles: the lobby, so a visitor can still
  * reach the booth, and the street of nests with every owl's nest, which are free.
  */
-import { STREET_ROOM, isNestRoom } from '@owl-park/shared';
+import { LOBBY_ROOM, isFreeRoom } from '@owl-park/shared';
 import type { PassPayload } from './pass';
 
 /** The room every visitor may enter. */
-export const LOBBY = 'lobby';
+export const LOBBY = LOBBY_ROOM;
+/** Rooms outside the turnstiles, free to every pass: the lobby, the street of nests and the nests. */
+export { isFreeRoom };
 
 export type GateMode = 'open' | 'ticket';
 
@@ -19,11 +21,6 @@ export function gateMode(gate: string | undefined): GateMode {
 /** Whether a pass goes through the turnstiles (and so may use what is inside, like the shop). */
 export function admitted(mode: GateMode, pass: Pick<PassPayload, 'adm'>): boolean {
   return mode === 'open' || pass.adm;
-}
-
-/** Rooms outside the turnstiles, free to every pass: the lobby, the street of nests and the nests. */
-export function isFreeRoom(roomId: string): boolean {
-  return roomId === LOBBY || roomId === STREET_ROOM || isNestRoom(roomId);
 }
 
 /** Whether a pass may join a room. */
