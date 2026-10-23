@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handle, MODEL_VERSION, restTables, secretKey, type Deps, type Row, type Table, type Tables } from '../src/handler.ts';
+import { gameTables, handle, MODEL_VERSION, type Db, type Deps, type Row, type Table, type Tables } from '../src/handler.ts';
 
 const KEY = 'test-key-not-a-secret-0123456789';
 const T0 = Date.UTC(2026, 11, 6, 0, 4, 13);
@@ -281,50 +281,52 @@ describe('the scoring endpoint: what the buyer got', () => {
   });
 });
 
-describe('the pipeline’s tables through its REST API', () => {
-  function recorder(status = 201) {
-    const calls: Array<{ url: string; init: RequestInit }> = [];
-    const fetchFn = (async (url: string, init: RequestInit) => {
-      calls.push({ url, init });
-      return new Response(status < 300 ? null : 'permission denied for table raw_transactions', { status });
-    }) as unknown as typeof fetch;
-    return { calls, fetchFn };
+describe('the park’s tables in the pipeline’s game schema', () => {
+  function recorder(fail?: Error) {
+    const calls: Array<{ query: string; params: unknown[] }> = [];
+    const db: Db = {
+      async unsafe(query, params) {
+        calls.push({ query, params });
+        if (fail) throw fail;
+        return [];
+      },
+    };
+    return { calls, db };
   }
 
-  it('inserts a row with the new secret key in the apikey header only', async () => {
-    const { calls, fetchFn } = recorder();
-    await restTables('https://pipeline.example/', 'sb_secret_test', false, fetchFn).insert('raw_fraud_decisions', { decision: 'approve' });
-    expect(calls[0]!.url).toBe('https://pipeline.example/rest/v1/raw_fraud_decisions');
-    expect(calls[0]!.init.method).toBe('POST');
-    expect(calls[0]!.init.headers).toEqual({ apikey: 'sb_secret_test', 'Content-Type': 'application/json', Prefer: 'return=minimal' });
-    expect(calls[0]!.init.body).toBe('{"decision":"approve"}');
+  it('inserts a row as one parameter, its JSON, which the database spreads over the columns named', async () => {
+    const { calls, db } = recorder();
+    await gameTables(db).insert('raw_fraud_decisions', { decision: 'approve', reason_codes: ['A'], features_json: { n_items: 1 }, model_latency_ms: undefined });
+    expect(calls).toEqual([
+      {
+        query:
+          'insert into game.raw_fraud_decisions (decision, reason_codes, features_json) select decision, reason_codes, features_json from jsonb_populate_record(null::game.raw_fraud_decisions, $1::text::jsonb)',
+        params: ['{"decision":"approve","reason_codes":["A"],"features_json":{"n_items":1}}'],
+      },
+    ]);
   });
 
-  it('sets the status on the park’s row only, and sends a legacy key as a bearer token too', async () => {
-    const { calls, fetchFn } = recorder(204);
-    await restTables('https://pipeline.example', 'legacy.jwt.key', true, fetchFn).setStatus(TX, 'declined');
-    expect(calls[0]!.url).toBe(`https://pipeline.example/rest/v1/raw_transactions?transaction_id=eq.${TX}&source_system=eq.shopify`);
-    expect(calls[0]!.init).toMatchObject({ method: 'PATCH', body: '{"status":"declined"}' });
-    expect(calls[0]!.init.headers).toMatchObject({ apikey: 'legacy.jwt.key', Authorization: 'Bearer legacy.jwt.key' });
+  it('sets the status on the park’s row only', async () => {
+    const { calls, db } = recorder();
+    await gameTables(db).setStatus(TX, 'declined');
+    expect(calls).toEqual([{ query: "update game.raw_transactions set status = $1 where transaction_id = $2 and source_system = 'shopify'", params: ['declined', TX] }]);
   });
 
-  it('checks the key with a read of one row', async () => {
-    const { calls, fetchFn } = recorder(200);
-    await restTables('https://pipeline.example', 'sb_secret_test', false, fetchFn).check();
-    expect(calls[0]!.url).toBe('https://pipeline.example/rest/v1/raw_transactions?select=id&limit=1');
-    expect(calls[0]!.init.method).toBeUndefined();
+  it('checks the connection with a read of one row', async () => {
+    const { calls, db } = recorder();
+    await gameTables(db).check();
+    expect(calls).toEqual([{ query: 'select 1 from game.raw_transactions limit 1', params: [] }]);
   });
 
-  it('throws when the tables refuse, with what they said', async () => {
-    const { fetchFn } = recorder(403);
-    await expect(restTables('https://pipeline.example', 'k', false, fetchFn).insert('raw_transactions', {})).rejects.toThrow('insert into raw_transactions answered 403: permission denied for table raw_transactions');
+  it('never writes a name it does not trust into the query', async () => {
+    const { calls, db } = recorder();
+    await expect(gameTables(db).insert('raw_transactions', { 'status) select 1; --': 'x' })).rejects.toThrow('not a column');
+    expect(calls).toEqual([]);
   });
 
-  it('finds the secret key: the new kind first, then the legacy one', () => {
-    const env = (vars: Record<string, string>) => (name: string) => vars[name];
-    expect(secretKey(env({ SUPABASE_SECRET_KEYS: '{"default":"sb_secret_a"}', SUPABASE_SERVICE_ROLE_KEY: 'legacy' }))).toEqual({ key: 'sb_secret_a', legacy: false });
-    expect(secretKey(env({ SUPABASE_SECRET_KEYS: 'not json', SUPABASE_SERVICE_ROLE_KEY: 'legacy' }))).toEqual({ key: 'legacy', legacy: true });
-    expect(secretKey(env({ SUPABASE_SECRET_KEYS: '{"other":"sb_secret_b"}' }))).toBeNull();
-    expect(secretKey(env({}))).toBeNull();
+  it('throws when the database refuses, with what it said', async () => {
+    const { db } = recorder(new Error('permission denied for schema game'));
+    await expect(gameTables(db).insert('raw_transactions', { status: null })).rejects.toThrow('permission denied for schema game');
+    await expect(gameTables(db).check()).rejects.toThrow('permission denied for schema game');
   });
 });

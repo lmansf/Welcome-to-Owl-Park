@@ -2,8 +2,8 @@
  * The scoring endpoint of the owner's fraud pipeline (C45, OP-052), first version. The park's Worker
  * posts each ticket order here before its tickets go out (`apps/edge/src/fraudLink.ts`; the contract
  * is in docs/ARCHITECTURE.md). This version approves every order (the pipeline's own scoring comes
- * later) and lands what the park sends in the pipeline's raw tables, each row marked
- * `source_system = 'shopify'`:
+ * later) and lands what the park sends in the pipeline project's `game` schema, apart from the
+ * simulated tables in `public` but with the same columns, each row marked `source_system = 'shopify'`:
  *
  * - `kind: "score"`: the order in `raw_transactions` and the verdict in `raw_fraud_decisions`, then
  *   the verdict back to the Worker. With `dry_run: true` (the owner's check, never the Worker) it
@@ -28,7 +28,7 @@ const MIN_KEY = 16;
 export type Table = 'raw_transactions' | 'raw_fraud_decisions' | 'raw_checkout_responses';
 export type Row = Record<string, unknown>;
 
-/** Where the rows go: the pipeline's tables through its REST API (`restTables`), or a fake in tests. */
+/** Where the rows go: the `game` schema through a database connection (`gameTables`), or a fake in tests. */
 export interface Tables {
   /** Throws unless the tables answer (the dry run's check of the key). */
   check(): Promise<void>;
@@ -246,44 +246,40 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   }
 }
 
-/**
- * The pipeline's tables through its REST API, with its secret key. A new secret key (`sb_secret_…`)
- * goes in the `apikey` header only; the legacy service role key, a JWT, goes in `Authorization` too.
- */
-export function restTables(baseUrl: string, key: string, legacy: boolean, fetchFn: typeof fetch = fetch): Tables {
-  const rest = `${baseUrl.replace(/\/+$/, '')}/rest/v1`;
-  const headers: Record<string, string> = { apikey: key, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
-  if (legacy) headers['Authorization'] = `Bearer ${key}`;
-  const check = async (res: Response, what: string) => {
-    if (!res.ok) throw new Error(`${what} answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  };
-  return {
-    async check() {
-      await check(await fetchFn(`${rest}/raw_transactions?select=id&limit=1`, { headers }), 'read raw_transactions');
-    },
-    async insert(table, row) {
-      await check(await fetchFn(`${rest}/${table}`, { method: 'POST', headers, body: JSON.stringify(row) }), `insert into ${table}`);
-    },
-    async setStatus(transactionId, status) {
-      const q = new URLSearchParams({ transaction_id: `eq.${transactionId}`, source_system: 'eq.shopify' });
-      await check(await fetchFn(`${rest}/raw_transactions?${q.toString()}`, { method: 'PATCH', headers, body: JSON.stringify({ status }) }), 'update raw_transactions');
-    },
-  };
+/** The schema the park's rows go to, in the fraud pipeline's project (the owner's call, OP-052). */
+export const SCHEMA = 'game';
+
+/** What the tables need of a Postgres client: a query with numbered parameters. postgres.js's `sql.unsafe` is one. */
+export interface Db {
+  unsafe(query: string, params: unknown[]): PromiseLike<unknown>;
 }
 
+const COLUMN = /^[a-z_]{1,40}$/;
+
 /**
- * The secret key from the Edge Function's environment: the new kind (`SUPABASE_SECRET_KEYS`, a JSON
- * object of named keys, `default` first), else the legacy service role key, which the platform
- * retires at the end of 2026.
+ * The park's tables in the `game` schema, over a direct connection to the project's database (the
+ * function's own SUPABASE_DB_URL): the schema is not in the project's public API at all, and the
+ * connection's role owns it. A row goes as one parameter, its JSON, and the database gives each value
+ * its column's type (the order as sent, the cart and the verdict's lists stay JSON), so nothing the
+ * park sends is spliced into the query.
  */
-export function secretKey(env: (name: string) => string | undefined): { key: string; legacy: boolean } | null {
-  try {
-    const keys = JSON.parse(env('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, unknown>;
-    const key = keys['default'];
-    if (typeof key === 'string' && key) return { key, legacy: false };
-  } catch {
-    // Not JSON: fall back to the legacy key.
-  }
-  const legacy = env('SUPABASE_SERVICE_ROLE_KEY');
-  return legacy ? { key: legacy, legacy: true } : null;
+export function gameTables(db: Db): Tables {
+  return {
+    async check() {
+      await db.unsafe(`select 1 from ${SCHEMA}.raw_transactions limit 1`, []);
+    },
+    async insert(table, row) {
+      const cols = Object.keys(row).filter((c) => row[c] !== undefined);
+      for (const c of cols) if (!COLUMN.test(c)) throw new Error(`not a column: ${c}`);
+      const list = cols.join(', ');
+      // Sent as text and read as JSON by the database: a client that encodes JSON parameters itself
+      // (postgres.js does) would otherwise encode it twice and keep a string.
+      await db.unsafe(`insert into ${SCHEMA}.${table} (${list}) select ${list} from jsonb_populate_record(null::${SCHEMA}.${table}, $1::text::jsonb)`, [
+        JSON.stringify(row),
+      ]);
+    },
+    async setStatus(transactionId, status) {
+      await db.unsafe(`update ${SCHEMA}.raw_transactions set status = $1 where transaction_id = $2 and source_system = 'shopify'`, [status, transactionId]);
+    },
+  };
 }
