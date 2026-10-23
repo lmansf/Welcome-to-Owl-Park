@@ -2,7 +2,9 @@
 
 pnpm monorepo. `apps/park` is the Vite + Phaser client, `packages/shared` holds the protocol,
 geometry and room data, and `apps/edge` is the Cloudflare project: the Worker, both Durable
-Objects and `wrangler.jsonc`. Run Wrangler through the package scripts so the pinned version is
+Objects and `wrangler.jsonc`. `apps/score-endpoint` is not the park's: it is the fraud pipeline's
+scoring endpoint, a Supabase Edge Function deployed to the owner's project on the owner's go (its
+README). Run Wrangler through the package scripts so the pinned version is
 used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec wrangler <command>`.
 
 - Checks before a push: `pnpm check` (typecheck, unit tests, build) and `pnpm e2e` (Playwright).
