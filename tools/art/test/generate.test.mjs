@@ -336,6 +336,29 @@ test("the arcade's bays: an edit of the published hall, each hall candidate's tw
   }
 });
 
+test("the arcade's games: each background over its field guide at 2x, each piece alone on a chroma backdrop, all helpers", () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  const pieces = { hop: ['drone', 'cart'], flap: ['branch', 'ground'], knock: ['sling', 'crate', 'stand'] };
+  assert.deepEqual(P.ARCADE_GAME_KEYS, Object.entries(pieces).flatMap(([game, ps]) => [`arcade-${game}-bg`, ...ps.map((p) => `arcade-${game}-${p}`)]));
+  for (const key of P.ARCADE_GAME_KEYS) {
+    const j = jobs.get(key);
+    assert.ok(P.HELPER_KEYS.includes(key) && !(key in ASSETS.keys), `${key} is a helper, never published`);
+    assert.ok(j.variants >= 3, key);
+    assert.equal(j.providers.fal.output_format, 'png', key);
+    assert.match(j.prompt, /owls, birds, animals, people, robots, faces or characters/, `${key}: no owl or character`);
+    if (key.endsWith('-bg')) {
+      assert.deepEqual([j.kind, j.size, j.key_colour], ['anchor', '960x1280', undefined], key);
+      assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [[`@canvas:${key}`, false]], `${key}: painted over its field guide`);
+    } else {
+      assert.equal(j.kind, 'piece', key);
+      assert.deepEqual(j.refs, [], `${key}: painted alone`);
+      assert.match(j.key_colour, /^#(00FF00|FF00FF)$/, key);
+    }
+  }
+  // The flight game's neon is cyan, so its pieces stand on magenta.
+  for (const key of ['arcade-flap-branch', 'arcade-flap-ground']) assert.equal(jobs.get(key).key_colour, '#FF00FF', key);
+});
+
 test('the street of nests, its west wing, the nest and the sixteen pieces of furniture', () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   // With a reference a job goes to fal's edit endpoint, which answers in JPEG unless asked.

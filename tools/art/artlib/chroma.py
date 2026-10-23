@@ -28,7 +28,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from . import ArtError, hex_of, parse_hex
-from .labels import dilate, fill_holes, masked_mean_fill, remove_specks
+from .labels import dilate, erode, fill_holes, masked_mean_fill, remove_specks
 
 
 class ChromaError(ArtError):
@@ -259,3 +259,22 @@ def key_out(img: Image.Image, params: ChromaParams | None = None) -> tuple[Image
     info["opaque_px"] = int((a8 == 255).sum())
     info["params"] = p.as_dict()
     return Image.fromarray(out, "RGBA"), info
+
+
+def solidify(rgba: Image.Image, src: Image.Image, edge: int = 4) -> tuple[Image.Image, dict]:
+    """A subject that is one opaque board (a sign): every pixel inside its outline, more than
+    ``edge`` px in from it, made fully opaque in its painted colour; only the outer ``edge`` px keep
+    the soft matte. The matte alone can leave such a board see-through where its paint is near the
+    key (chrome reflecting the backdrop) and holed where a detail is the key's own hue (a green
+    lamp on green); a board is never either.
+    """
+    out = np.asarray(rgba.convert("RGBA")).copy()
+    alpha = out[..., 3]
+    outline = alpha > 32
+    filled, _ = fill_holes(outline, outline.size)
+    inner = erode(filled, edge)
+    changed = inner & (alpha < 255)
+    out[changed, :3] = np.asarray(src.convert("RGB"))[changed]
+    out[changed, 3] = 255
+    return Image.fromarray(out, "RGBA"), {"solid_edge": edge, "solid_px": int(changed.sum())}
+
