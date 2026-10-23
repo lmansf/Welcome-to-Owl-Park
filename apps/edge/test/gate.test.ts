@@ -47,4 +47,20 @@ describe('the front gate', () => {
     expect(admitted('ticket', { adm: false })).toBe(false);
     expect(admitted('ticket', { adm: true })).toBe(true);
   });
+
+  it('keeps an owl inside when the switch closes the gate: a pass from before then stays admitted', () => {
+    const closedAt = Date.UTC(2026, 11, 1, 14, 0);
+    const gate = { mode: 'ticket' as const, closedAt };
+    const before = { adm: false, iat: closedAt / 1000 - 60 };
+    const after = { adm: false, iat: closedAt / 1000 + 1 };
+    expect(admitted(gate, before)).toBe(true);
+    expect(mayEnter(gate, before, 'market')).toBe(true);
+    expect(admitted(gate, after)).toBe(false);
+    expect(mayEnter(gate, after, 'market')).toBe(false);
+    expect(mayEnter(gate, after, LOBBY)).toBe(true);
+    // A pass that does not say when it was made, or a gate deployed closed, keeps no one in.
+    expect(admitted(gate, { adm: false })).toBe(false);
+    expect(admitted({ mode: 'ticket', closedAt: null }, before)).toBe(false);
+    expect(admitted({ mode: 'open', closedAt: null }, after)).toBe(true);
+  });
 });

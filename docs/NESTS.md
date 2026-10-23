@@ -2,7 +2,7 @@
 
 Every owl has a nest of its own: a cosy round room inside a tree, on a street of tree houses outside
 the turnstiles (proposal C39). It is all free and needs no ticket, also once the park takes tickets
-(`GATE=ticket`): the lobby, the street and the nests are open to every visitor. Every number and
+(the opening switch on `/admin/gate`, or `GATE=ticket`): the lobby, the street and the nests are open to every visitor. Every number and
 every visitor-facing word below is a default waiting on the owner's approval; the paintings are
 approved (see Art).
 

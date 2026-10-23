@@ -177,8 +177,21 @@ export class EdgeTransport implements ParkTransport {
     }
   }
 
-  /** The front gate as the server sees this visitor's pass. */
+  /**
+   * The front gate as it is now, for this visitor's pass: the keepers can flip it at any time (the
+   * opening switch, OP-067), so the booth and the turnstiles ask before they act. Offline, what the
+   * pass said when it was minted.
+   */
   async entry(): Promise<Entry> {
+    try {
+      const res = await this.api('/api/entry');
+      if (res.ok) {
+        const e = (await res.json()) as { gate?: unknown; admitted?: unknown };
+        return e.gate === 'ticket' ? { gate: 'ticket', admitted: e.admitted === true } : OPEN_ENTRY;
+      }
+    } catch {
+      // Offline: the pass's word below.
+    }
     const pass = await this.getPass();
     return pass.gate === 'ticket' ? { gate: 'ticket', admitted: pass.adm === true } : OPEN_ENTRY;
   }
