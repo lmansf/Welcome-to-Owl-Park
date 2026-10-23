@@ -174,7 +174,9 @@ turnstiles let everyone through. The steps, in order:
     link is on. It uses the scopes the app already has (`write_orders` for the refund and the
     tag). The guest's hash needs the order's customer: a store that keeps it from the app (it may
     want `read_customers` for it) gets its orders scored without the guest, with a line in the
-    Worker's logs, and the tickets go on as before.
+    Worker's logs, and the tickets go on as before. The pipeline's endpoint is
+    `apps/score-endpoint`, a Supabase Edge Function in the owner's pipeline project: its README
+    says how it is deployed there and where its key goes (the same value as `FRAUD_SCORE_KEY`).
 
 ### Coding agents
 
