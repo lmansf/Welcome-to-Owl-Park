@@ -115,6 +115,9 @@ test.describe('the opening switch (OP-067)', () => {
     const late = await arrive(browser, COMPUTER);
     await walkToDoor(late, 'gate');
     await expect(late.getByText(TURNED_BACK)).toBeVisible({ timeout: 15_000 });
+    // Three parks drawing at once starve a test machine's browser to a few frames a second, which
+    // stretches the game's timers (the pause before the hub ran twenty seconds): the holder comes alone.
+    for (const p of [inside, late]) await p.context().close();
 
     // With a ticket, it goes through.
     const issued = await request.post('/api/admin/tickets', { headers: ADMIN, data: { kind: 'day' } });
@@ -125,6 +128,6 @@ test.describe('the opening switch (OP-067)', () => {
     await walkToDoor(holder, 'gate');
     await expect(holder.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
     await expect.poll(async () => (await state(holder)).room, { timeout: 20_000 }).toBe('hub');
-    for (const p of [inside, late, holder]) await p.context().close();
+    await holder.context().close();
   });
 });
