@@ -1,0 +1,380 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import { Ledger, MemoryVoteStore, walletVoter, type VoteStore } from '../src/Ledger';
+import { catalogueOf, freeOrder, fromTicketOf, gidTail, passCartLink, storeTime, ticketLines, usedCode, type AdminOrder } from '../src/shopify';
+import { claimLink, storeWebhook, type Desk, type HookDeps } from '../src/storeHooks';
+import { SqlTicketStore } from '../src/sqlTicketStore';
+import { SqlVoteStore } from '../src/sqlVoteStore';
+import { MemoryTicketStore, TicketBook, type TicketStore } from '../src/TicketBook';
+import { openingCsv, ticketDesk } from '../src/ticketDesk';
+import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, scan, statusOf, type Ticket } from '../src/tickets';
+import { sqlStorage } from './sqlite';
+
+/** Opening night: 7 pm Eastern on a Friday in December (midnight UTC is 7 pm in New York then). */
+const W0 = Date.UTC(2026, 11, 5, 0, 0, 0);
+const NIGHT = { validFrom: W0, validUntil: W0 + DAY_MS };
+const T0 = W0 + HOUR_MS;
+
+function seq(): (n: number) => Uint8Array {
+  let x = 41;
+  return (n) => Uint8Array.from({ length: n }, () => (x = (x * 1103515245 + 12345) >>> 0) >>> 16);
+}
+
+const nightLine = (line = 'N1', quantity = 1) => ({ line, quantity, kind: 'opening-night' as const, lengthMs: null, ...NIGHT });
+const passLine = (line = 'P1') => ({ line, quantity: 1, kind: 'annual' as const, lengthMs: DEFAULT_LENGTH_MS.annual, validFrom: null, validUntil: null });
+
+describe('the Opening Night Ticket (C42)', () => {
+  const ticket: Ticket = { id: 'OWL-AAAA-AAAA', kind: 'opening-night', lengthMs: null, order: '1', line: 'N1', unit: 1, created: W0 - DAY_MS, held: false, firstScan: null, revoked: null, ...NIGHT };
+
+  it('goes through the gate on its night only, and the night is its time', () => {
+    expect(scan(ticket, W0 - HOUR_MS)).toEqual({ ok: false, reason: 'not-yet' });
+    const r = scan(ticket, W0 + 3 * HOUR_MS);
+    expect(r).toMatchObject({ ok: true, started: true, ticket: { firstScan: W0 + 3 * HOUR_MS, validUntil: W0 + DAY_MS } });
+    if (!r.ok) return;
+    expect(statusOf(r.ticket, W0 + 20 * HOUR_MS)).toBe('active');
+    // The day after: a scanned ticket is used, and one never scanned has expired.
+    expect(statusOf(r.ticket, W0 + DAY_MS + HOUR_MS)).toBe('used');
+    expect(statusOf(ticket, W0 + DAY_MS + HOUR_MS)).toBe('expired');
+    expect(scan(ticket, W0 + DAY_MS + HOUR_MS)).toEqual({ ok: false, reason: 'expired' });
+  });
+});
+
+const product = (kind: string | null, start?: string, end?: string, productType = 'Ticket') => ({
+  productType,
+  kind: kind === null ? null : { value: kind },
+  hours: null,
+  start: start === undefined ? null : { value: start },
+  end: end === undefined ? null : { value: end },
+});
+const orderOf = (nodes: AdminOrder['lineItems']['nodes'], extra: Partial<AdminOrder> = {}): AdminOrder => ({ id: 'gid://shopify/Order/1', cancelledAt: null, lineItems: { nodes }, ...extra });
+
+describe("opening night's fields in the store", () => {
+  it("reads the night's window from the product: its start, and 24 hours or the end it gives", () => {
+    const lines = ticketLines(
+      orderOf([
+        { id: 'gid://shopify/LineItem/1', quantity: 1, product: product('opening-night', '2026-12-04T19:00:00-05:00') },
+        { id: 'gid://shopify/LineItem/2', quantity: 1, product: product('opening-night', '2026-12-05T00:00:00Z', '2026-12-05T08:00:00Z') },
+        // The store keeps a date and time without a zone as GMT.
+        { id: 'gid://shopify/LineItem/3', quantity: 1, product: product('opening-night', '2026-12-05T00:00:00') },
+        // No start yet: a ticket all the same, which the gate keeps out until the store sets one.
+        { id: 'gid://shopify/LineItem/4', quantity: 1, product: product('opening-night') },
+        // Opening night is a Ticket product, like every other kind but an event entry.
+        { id: 'gid://shopify/LineItem/5', quantity: 1, product: product('opening-night', '2026-12-05T00:00:00Z', undefined, 'Pin') },
+      ]),
+    );
+    expect(lines.map((l) => [l.line, l.kind, l.validFrom, l.validUntil])).toEqual([
+      ['1', 'opening-night', W0, W0 + DAY_MS],
+      ['2', 'opening-night', W0, W0 + 8 * HOUR_MS],
+      ['3', 'opening-night', W0, W0 + DAY_MS],
+      ['4', 'opening-night', null, null],
+    ]);
+  });
+
+  it('takes times with a zone, a Z or none, and nothing else', () => {
+    expect(storeTime('2026-12-05T00:00:00Z')).toBe(W0);
+    expect(storeTime('2026-12-04T19:00-05:00')).toBe(W0);
+    expect(storeTime('2026-12-05T00:00:00.000')).toBe(W0);
+    expect(storeTime('2026-12-05')).toBeNull();
+    expect(storeTime('next Friday')).toBeNull();
+    expect(storeTime(null)).toBeNull();
+  });
+
+  it('knows a free order, the ticket a pass came from, and the code it used', () => {
+    expect(freeOrder(orderOf([], { totalPriceSet: { shopMoney: { amount: '0.0' } } }))).toBe(true);
+    expect(freeOrder(orderOf([], { totalPriceSet: { shopMoney: { amount: '14.99' } } }))).toBe(false);
+    expect(freeOrder(orderOf([]))).toBe(false);
+    const attrs = (value: string) => orderOf([], { customAttributes: [{ key: 'gift', value: 'no' }, { key: 'from_ticket', value }] });
+    expect(fromTicketOf(attrs('OWL-7K3Q-PX9M'))).toBe('OWL-7K3Q-PX9M');
+    expect(fromTicketOf(attrs(' owl-7k3q-px9m '))).toBe('OWL-7K3Q-PX9M');
+    expect(fromTicketOf(attrs('OWL-0000-0000'))).toBeNull();
+    expect(fromTicketOf(orderOf([]))).toBeNull();
+    const coded = orderOf([], { discountCodes: ['WELCOME', 'OpenTonight'] });
+    expect(usedCode(coded, 'OPENTONIGHT')).toBe(true);
+    expect(usedCode(coded, 'OTHER')).toBe(false);
+    expect(usedCode(coded, undefined)).toBe(false);
+    expect(usedCode(coded, '  ')).toBe(false);
+  });
+
+  it("finds the annual pass and the night's window among the ticket products on sale", () => {
+    const c = catalogueOf({
+      products: {
+        nodes: [
+          { kind: { value: 'day' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/100' }] } },
+          { kind: { value: 'annual' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/200' }] } },
+          { kind: { value: 'opening-night' }, start: { value: '2026-12-05T00:00:00Z' }, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/300' }] } },
+        ],
+      },
+    });
+    expect(c).toEqual({ passVariant: '200', opening: { from: W0, until: W0 + DAY_MS } });
+    expect(catalogueOf({ products: { nodes: [] } })).toEqual({ passVariant: null, opening: null });
+  });
+
+  it('makes the cart link: the pass, the code that makes it free, and the ticket it comes from', () => {
+    const link = new URL(passCartLink('owl-test.myshopify.com', '200', 'OPEN TONIGHT', 'OWL-7K3Q-PX9M'));
+    expect(link.origin + link.pathname).toBe('https://owl-test.myshopify.com/cart/200:1');
+    expect(link.searchParams.get('discount')).toBe('OPEN TONIGHT');
+    expect(link.searchParams.get('attributes[from_ticket]')).toBe('OWL-7K3Q-PX9M');
+  });
+});
+
+/** Every rule runs against both stores: in memory, and the Durable Object's SQLite tables. */
+const STORES: Array<[string, () => TicketStore]> = [
+  ['memory', () => new MemoryTicketStore()],
+  ['sqlite', () => new SqlTicketStore(sqlStorage())],
+];
+let makeStore: () => TicketStore = STORES[0]![1];
+
+/** An Opening Night Ticket claimed onto a device and scanned at the gate. */
+async function scannedNight(b: TicketBook, order = '501', device = 'c_owl') {
+  const { claim, tickets } = await b.issue(order, [nightLine()], false, W0 - HOUR_MS);
+  await b.claim(claim!, device);
+  expect(b.scan(tickets[0]!.id, device, T0).ok).toBe(true);
+  return tickets[0]!.id;
+}
+
+for (const [name, make] of STORES) {
+  describe(`opening night in the ticket book (${name})`, () => {
+    beforeAll(() => {
+      makeStore = make;
+    });
+    const book = () => new TicketBook(makeStore(), seq());
+
+    it("links a pass to the scanned ticket its link named, once, and puts it in that ticket's wallet", async () => {
+      const b = book();
+      const night = await scannedNight(b);
+      await b.issue('601', [passLine()], false, T0);
+      expect(b.linkPass('601', night, T0)).toEqual({ order: '601', fromTicket: night, at: T0 });
+      // The store sends the webhook again: the first link stands.
+      expect(b.linkPass('601', null, T0 + 1)).toEqual({ order: '601', fromTicket: night, at: T0 });
+      const pass = b.orderOf('601')!.tickets[0]!;
+      expect(pass.device).toBe('c_owl');
+      expect(b.wallet('c_owl', T0).map((t) => [t.kind, t.freePass])).toEqual([
+        ['annual', undefined],
+        ['opening-night', 'claimed'],
+      ]);
+      expect(b.linkPass('nope', night, T0)).toBeNull();
+    });
+
+    it('counts a pass without a link when its ticket never went through the gate, or is no Opening Night Ticket', async () => {
+      const b = book();
+      const { tickets } = await b.issue('502', [nightLine()], false, W0 - HOUR_MS);
+      await b.issue('602', [passLine()], false, T0);
+      expect(b.linkPass('602', tickets[0]!.id, T0)!.fromTicket).toBeNull();
+      expect(b.orderOf('602')!.tickets[0]!.device).toBeNull();
+      const day = await b.issue('503', [{ ...passLine('D1'), kind: 'day', lengthMs: DAY_MS }], false, T0);
+      await b.issue('603', [passLine()], false, T0);
+      expect(b.linkPass('603', day.tickets[0]!.id, T0)!.fromTicket).toBeNull();
+    });
+
+    it('offers the free pass once the ticket is through the gate, while the night runs, to its own wallet', async () => {
+      const b = book();
+      const { claim, tickets } = await b.issue('504', [nightLine()], false, W0 - HOUR_MS);
+      const id = tickets[0]!.id;
+      await b.claim(claim!, 'c_owl');
+      expect(b.wallet('c_owl', T0)[0]!.freePass).toBeUndefined();
+      expect(b.passOffer(id, 'c_owl', T0)).toEqual({ ok: false, reason: 'not-ready' });
+      b.scan(id, 'c_owl', T0);
+      expect(b.wallet('c_owl', T0)[0]!.freePass).toBe('ready');
+      expect(b.passOffer(id, 'c_owl', T0)).toEqual({ ok: true });
+      expect(b.passOffer(id, 'c_other', T0)).toEqual({ ok: false, reason: 'not-yours' });
+      expect(b.passOffer('OWL-2222-2222', 'c_owl', T0)).toEqual({ ok: false, reason: 'unknown' });
+      // After the night the offer is gone.
+      expect(b.wallet('c_owl', W0 + DAY_MS)[0]!.freePass).toBeUndefined();
+      await b.issue('604', [passLine()], false, T0);
+      b.linkPass('604', id, T0);
+      expect(b.passOffer(id, 'c_owl', T0)).toEqual({ ok: false, reason: 'claimed' });
+    });
+
+    it('switches a linked pass off with its ticket; a pass without a link stays', async () => {
+      const b = book();
+      const night = await scannedNight(b, '505');
+      await b.issue('605', [passLine()], false, T0);
+      b.linkPass('605', night, T0);
+      await b.issue('606', [passLine()], false, T0);
+      b.linkPass('606', null, T0);
+      const off = b.revoke('505', 'all', T0 + HOUR_MS);
+      expect(off.map((t) => [t.order, t.kind])).toEqual([
+        ['505', 'opening-night'],
+        ['605', 'annual'],
+      ]);
+      expect(b.status(b.orderOf('606')!.tickets[0]!.id, T0 + HOUR_MS)).toBe('unused');
+    });
+
+    it("counts the night: tickets issued and scanned, passes with and without the link, and the conversion", async () => {
+      const b = book();
+      expect(b.opening(T0).counts).toEqual({ issued: 0, scanned: 0, linkedPasses: 0, unlinkedPasses: 0, converted: 0, conversion: null, revoked: 0 });
+      const a = await scannedNight(b, '511', 'c_a');
+      await scannedNight(b, '512', 'c_b');
+      await b.issue('513', [nightLine()], false, W0);
+      const gone = await scannedNight(b, '514', 'c_d');
+      await b.issue('611', [passLine()], false, T0);
+      b.linkPass('611', a, T0);
+      await b.issue('612', [passLine()], false, T0);
+      b.linkPass('612', null, T0);
+      await b.issue('614', [passLine()], false, T0);
+      b.linkPass('614', gone, T0);
+      b.revoke('514', 'all', T0);
+      const { counts, rows } = b.opening(T0);
+      expect(counts).toEqual({ issued: 3, scanned: 2, linkedPasses: 1, unlinkedPasses: 1, converted: 1, conversion: 0.5, revoked: 2 });
+      expect(rows.filter((r) => r.kind === 'pass').map((r) => [r.order, r.fromTicket, r.status])).toEqual([
+        ['611', a, 'unused'],
+        ['612', null, 'unused'],
+        ['614', gone, 'revoked'],
+      ]);
+      const csv = openingCsv(rows).trim().split('\n');
+      expect(csv[0]).toBe('kind,ticket,order,status,first_scan,from_ticket');
+      expect(csv).toContain(`opening-night,${a},511,active,${new Date(T0).toISOString()},`);
+      expect(csv).toContain(`pass,${b.orderOf('611')!.tickets[0]!.id},611,unused,,${a}`);
+      expect(csv.join('\n')).not.toMatch(/@/);
+    });
+  });
+}
+
+const VOTE_STORES: Array<[string, () => VoteStore]> = [
+  ['memory', () => new MemoryVoteStore()],
+  ['sqlite', () => new SqlVoteStore(sqlStorage())],
+];
+
+for (const [name, make] of VOTE_STORES) {
+  describe(`votes per wallet (${name})`, () => {
+    const realms = ['grove', 'market'];
+
+    it('one vote per wallet per park day, however many passes it holds', () => {
+      const l = new Ledger(make(), realms);
+      const w = walletVoter('c_owl');
+      expect(l.vote(w, 'grove', '2026-12-05', 1, 'OWL-AAAA-AAAA').ok).toBe(true);
+      expect(l.vote(w, 'market', '2026-12-05', 2, 'OWL-BBBB-BBBB')).toEqual({ ok: false, reason: 'already', votedFor: 'grove' });
+      expect(l.status(w, '2026-12-05', 'OWL-BBBB-BBBB').votedFor).toBe('grove');
+      expect(l.vote(w, 'market', '2026-12-06', 3, 'OWL-BBBB-BBBB').ok).toBe(true);
+      expect(l.tally('2026-12').counts).toEqual({ grove: 1, market: 1 });
+      expect([l.castBy('OWL-AAAA-AAAA'), l.castBy('OWL-BBBB-BBBB')]).toEqual([1, 1]);
+    });
+
+    it('a ticket moved to another wallet does not vote twice the same day', () => {
+      const l = new Ledger(make(), realms);
+      expect(l.vote(walletVoter('c_one'), 'grove', '2026-12-05', 1, 'OWL-AAAA-AAAA').ok).toBe(true);
+      expect(l.vote(walletVoter('c_two'), 'market', '2026-12-05', 2, 'OWL-AAAA-AAAA')).toEqual({ ok: false, reason: 'already', votedFor: 'grove' });
+      expect(l.status(walletVoter('c_two'), '2026-12-05', 'OWL-AAAA-AAAA').votedFor).toBe('grove');
+      expect(l.status(walletVoter('c_two'), '2026-12-05').votedFor).toBeNull();
+    });
+
+    it('still knows the votes kept under the ticket itself, from before wallets counted', () => {
+      const l = new Ledger(make(), realms);
+      l.vote('OWL-AAAA-AAAA', 'grove', '2026-12-04', 1);
+      expect(l.castBy('OWL-AAAA-AAAA')).toBe(1);
+      expect(l.vote(walletVoter('c_one'), 'market', '2026-12-04', 2, 'OWL-AAAA-AAAA')).toMatchObject({ ok: false, votedFor: 'grove' });
+    });
+  });
+}
+
+describe('the vote table from before wallets counted', () => {
+  it('gains its ticket column and keeps its votes', () => {
+    const sql = sqlStorage();
+    sql.exec(`CREATE TABLE votes (day TEXT NOT NULL, visitor TEXT NOT NULL, realm TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (day, visitor))`);
+    sql.exec(`INSERT INTO votes (day, visitor, realm, at) VALUES ('2026-12-04', 'OWL-AAAA-AAAA', 'grove', 1)`);
+    const l = new Ledger(new SqlVoteStore(sql), ['grove', 'market']);
+    expect(l.castBy('OWL-AAAA-AAAA')).toBe(1);
+    expect(l.vote(walletVoter('c_one'), 'market', '2026-12-05', 2, 'OWL-AAAA-AAAA').ok).toBe(true);
+    expect(l.castBy('OWL-AAAA-AAAA')).toBe(2);
+    // A second start finds the column there.
+    expect(() => new SqlVoteStore(sql)).not.toThrow();
+  });
+});
+
+/** A store selling opening night: orders by number, each with its lines, total, codes and cart attributes. */
+class NightStore {
+  readonly orders = new Map<string, AdminOrder>();
+  readonly fulfilled = new Set<string>();
+
+  put(id: string, nodes: AdminOrder['lineItems']['nodes'], extra: Partial<AdminOrder> = {}): void {
+    this.orders.set(id, { id: `gid://shopify/Order/${id}`, cancelledAt: null, lineItems: { nodes }, ...extra });
+  }
+
+  readonly fetch = (async (_url: string, init: RequestInit) => {
+    const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: Record<string, unknown> };
+    const op = /(?:query|mutation)\s+(\w+)/.exec(query)![1]!;
+    const data = (d: unknown) => Response.json({ data: d });
+    const id = gidTail(String(variables['id'] ?? ''));
+    switch (op) {
+      case 'OwlParkOrder':
+        return data({ order: this.orders.get(id) ?? null });
+      case 'OwlParkFulfillmentOrders': {
+        const done = this.fulfilled.has(id);
+        const nodes = this.orders.get(id)!.lineItems.nodes.map((li) => ({ id: `${li.id}0`, remainingQuantity: done ? 0 : li.quantity, lineItem: { id: li.id } }));
+        return data({ order: { fulfillmentOrders: { nodes: [{ id: `gid://shopify/FulfillmentOrder/${id}`, status: done ? 'CLOSED' : 'OPEN', lineItems: { nodes } }] } } });
+      }
+      case 'OwlParkSendTickets': {
+        const f = variables['fulfillment'] as { lineItemsByFulfillmentOrder: Array<{ fulfillmentOrderId: string }> };
+        this.fulfilled.add(gidTail(f.lineItemsByFulfillmentOrder[0]!.fulfillmentOrderId));
+        return data({ fulfillmentCreate: { fulfillment: { id: 'gid://shopify/Fulfillment/1', status: 'SUCCESS' }, userErrors: [] } });
+      }
+      default:
+        return data(null);
+    }
+  }) as typeof fetch;
+}
+
+const FREE = { totalPriceSet: { shopMoney: { amount: '0.0' } } };
+const ticketItem = (n: number, kind: string, start?: string) => ({ id: `gid://shopify/LineItem/${n}`, quantity: 1, product: product(kind, start) });
+
+describe("opening night's orders through the store webhooks", () => {
+  function setup() {
+    const store = new NightStore();
+    const book = new TicketBook(new MemoryTicketStore(), seq());
+    const desk: Desk = async (path, body) => {
+      const req = body === undefined ? new Request(`https://park${path}`) : new Request(`https://park${path}`, { method: 'POST', body: JSON.stringify(body) });
+      const r = await ticketDesk(book, req, T0, () => ({ cast: 0, today: false }));
+      return { status: r.status, body: (await r.json()) as Record<string, unknown> };
+    };
+    let waited = 0;
+    const deps: HookDeps = {
+      store: { shop: 'owl-test.myshopify.com', token: 'shpat_test' },
+      desk,
+      claimUrl: (s) => claimLink('https://park.example', s),
+      fetchFn: store.fetch,
+      wait: async () => {
+        waited++;
+      },
+      openingCode: 'OPENTONIGHT',
+    };
+    return { store, book, deps, waited: () => waited };
+  }
+  const hook = (id: string) => ({ id: Number(id), admin_graphql_api_id: `gid://shopify/Order/${id}` });
+
+  it('a free order has nothing to rate: its ticket goes out at once, from orders/paid or orders/create', async () => {
+    const { store, book, deps, waited } = setup();
+    store.put('701', [ticketItem(71, 'opening-night', '2026-12-05T00:00:00Z')], FREE);
+    expect((await storeWebhook('orders/create', hook('701'), deps)).body).toEqual({ tickets: 1, sent: true });
+    expect(waited()).toBe(0);
+    const t = book.orderOf('701')!.tickets[0]!;
+    expect([t.kind, t.held, t.validFrom, t.validUntil]).toEqual(['opening-night', false, W0, W0 + DAY_MS]);
+    // orders/paid after it changes nothing.
+    expect((await storeWebhook('orders/paid', hook('701'), deps)).body).toEqual({ tickets: 1, sent: true });
+    expect(store.fulfilled.has('701')).toBe(true);
+    // A paid order on orders/create waits for orders/paid and its rating.
+    store.put('702', [ticketItem(72, 'day')], { totalPriceSet: { shopMoney: { amount: '3.99' } } });
+    expect((await storeWebhook('orders/create', hook('702'), deps)).body).toEqual({ tickets: 0 });
+    expect(book.orderOf('702')).toBeNull();
+  });
+
+  it("links the pass from the park's link to its ticket, and counts the code used without it", async () => {
+    const { store, book, deps } = setup();
+    store.put('711', [ticketItem(81, 'opening-night', '2026-12-05T00:00:00Z')], FREE);
+    await storeWebhook('orders/paid', hook('711'), deps);
+    const night = book.orderOf('711')!.tickets[0]!.id;
+    const secret = (await book.newClaim('711'))!;
+    await book.claim(secret, 'c_owl');
+    book.scan(night, 'c_owl', T0);
+    store.put('712', [ticketItem(82, 'annual')], { ...FREE, discountCodes: ['opentonight'], customAttributes: [{ key: 'from_ticket', value: night }] });
+    expect((await storeWebhook('orders/paid', hook('712'), deps)).body).toEqual({ tickets: 1, sent: true });
+    store.put('713', [ticketItem(83, 'annual')], { ...FREE, discountCodes: ['OPENTONIGHT'] });
+    await storeWebhook('orders/paid', hook('713'), deps);
+    // A pass bought at its price, with no code and no link, is no part of the night.
+    store.put('714', [ticketItem(84, 'annual')], { totalPriceSet: { shopMoney: { amount: '14.99' } }, risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } });
+    await storeWebhook('orders/paid', hook('714'), deps);
+    expect(book.opening(T0).counts).toMatchObject({ issued: 1, scanned: 1, linkedPasses: 1, unlinkedPasses: 1, converted: 1, conversion: 1 });
+    expect(book.wallet('c_owl', T0).map((t) => [t.kind, t.freePass])).toEqual([
+      ['annual', undefined],
+      ['opening-night', 'claimed'],
+    ]);
+  });
+});

@@ -3,14 +3,18 @@
  * Rules (canon): one vote per ticket-holder per park day, cast at a realm's idol; the
  * month's winner is the realm with the most votes; ties go to the realm with the fewest
  * all-time wins (then the first in the park's fixed realm order, an engineering default).
- * The voter is the ticket (C35): every ticket and pass has its own vote each park day.
+ * The voter is the wallet (C42): one vote per wallet per park day, however many tickets or
+ * passes it holds. Each vote also keeps the ticket that let the owl in, and that ticket votes
+ * once a day too, so moving it to another wallet does not vote twice.
  */
 export interface VoteStore {
   get(day: string, visitor: string): { realm: string } | null;
-  put(day: string, visitor: string, realm: string, at: number): void;
+  /** The day's vote cast with this ticket, whichever wallet cast it. */
+  getByTicket(day: string, ticket: string): { realm: string } | null;
+  put(day: string, visitor: string, realm: string, at: number, ticket: string | null): void;
   countByRealm(month: string): Record<string, number>;
-  /** Every vote this voter has cast, all days. */
-  countOf(visitor: string): number;
+  /** Every vote cast with this ticket, all days. */
+  countOf(ticket: string): number;
   /** All-time wins per realm. */
   wins(): Record<string, number>;
   winOf(month: string): string | null;
@@ -33,21 +37,23 @@ export class Ledger {
     readonly realms: string[],
   ) {}
 
-  vote(visitor: string, realm: string, day: string, now: number): VoteResult {
+  /** A vote by a wallet (`walletVoter`), with the ticket that let the owl in. */
+  vote(visitor: string, realm: string, day: string, now: number, ticket: string | null = null): VoteResult {
     if (!this.realms.includes(realm)) return { ok: false, reason: 'realm' };
-    const existing = this.store.get(day, visitor);
+    const existing = this.store.get(day, visitor) ?? (ticket ? this.store.getByTicket(day, ticket) : null);
     if (existing) return { ok: false, reason: 'already', votedFor: existing.realm };
-    this.store.put(day, visitor, realm, now);
+    this.store.put(day, visitor, realm, now, ticket);
     return { ok: true, realm, day };
   }
 
-  status(visitor: string, day: string): { day: string; votedFor: string | null } {
-    return { day, votedFor: this.store.get(day, visitor)?.realm ?? null };
+  /** Today's vote of a wallet, or of the ticket that let the owl in. */
+  status(visitor: string, day: string, ticket: string | null = null): { day: string; votedFor: string | null } {
+    return { day, votedFor: (this.store.get(day, visitor) ?? (ticket ? this.store.getByTicket(day, ticket) : null))?.realm ?? null };
   }
 
-  /** How many votes this voter has cast, all days. */
-  castBy(visitor: string): number {
-    return this.store.countOf(visitor);
+  /** How many votes were cast with this ticket, all days. */
+  castBy(ticket: string): number {
+    return this.store.countOf(ticket);
   }
 
   tally(month: string): Tally {
@@ -71,6 +77,11 @@ export class Ledger {
   }
 }
 
+/** The voter for a wallet: the device (its collector id) that holds the tickets. */
+export function walletVoter(device: string): string {
+  return `wallet:${device}`;
+}
+
 /** The park's calendar day for a moment in time, in the park's time zone. */
 export function parkDay(at: Date, timeZone: string): string {
   // en-CA gives YYYY-MM-DD.
@@ -90,23 +101,28 @@ export function previousMonth(month: string): string {
 
 /** In-memory store for tests and local experiments. */
 export class MemoryVoteStore implements VoteStore {
-  private votes = new Map<string, { realm: string; at: number }>();
+  private votes = new Map<string, { realm: string; at: number; ticket: string | null }>();
   private winsByMonth = new Map<string, string>();
   get(day: string, visitor: string) {
     const v = this.votes.get(`${day}|${visitor}`);
     return v ? { realm: v.realm } : null;
   }
-  put(day: string, visitor: string, realm: string, at: number) {
-    this.votes.set(`${day}|${visitor}`, { realm, at });
+  getByTicket(day: string, ticket: string) {
+    for (const [k, v] of this.votes) if (k.startsWith(`${day}|`) && (v.ticket === ticket || k.slice(k.indexOf('|') + 1) === ticket)) return { realm: v.realm };
+    return null;
+  }
+  put(day: string, visitor: string, realm: string, at: number, ticket: string | null) {
+    if (!this.votes.has(`${day}|${visitor}`)) this.votes.set(`${day}|${visitor}`, { realm, at, ticket });
   }
   countByRealm(month: string) {
     const out: Record<string, number> = {};
     for (const [k, v] of this.votes) if (k.startsWith(month)) out[v.realm] = (out[v.realm] ?? 0) + 1;
     return out;
   }
-  countOf(visitor: string) {
+  countOf(ticket: string) {
     let n = 0;
-    for (const k of this.votes.keys()) if (k.slice(k.indexOf('|') + 1) === visitor) n++;
+    // Votes from before wallets counted (C35) were kept under the ticket itself.
+    for (const [k, v] of this.votes) if (v.ticket === ticket || k.slice(k.indexOf('|') + 1) === ticket) n++;
     return n;
   }
   wins() {

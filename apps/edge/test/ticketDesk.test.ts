@@ -47,7 +47,7 @@ describe('the ticket desk', () => {
     await call(book, '/claim', { secret: body['claim'], device: 'c_one' });
     expect((await call(book, '/mirror', { id })).body['tickets']).toEqual([{ id, kind: 'day', status: 'unused', order: '2002', firstScan: null, validUntil: null, votesCast: 0, voteToday: 'none' }]);
     await call(book, '/scan', { device: 'c_one', id }, T0 + HOUR_MS);
-    const votes: VotesOf = (t) => (t === id ? { cast: 3, today: true } : { cast: 0, today: false });
+    const votes: VotesOf = (t) => (t.id === id ? { cast: 3, today: true } : { cast: 0, today: false });
     expect((await call(book, '/mirror', { order: '2002' }, T0 + 2 * HOUR_MS, votes)).body['tickets']).toMatchObject([{ status: 'active', votesCast: 3, voteToday: 'used', firstScan: T0 + HOUR_MS }]);
     // The wallet shows the same vote.
     expect((await call(book, '/wallet?device=c_one', undefined, T0 + 2 * HOUR_MS, votes)).body['tickets']).toMatchObject([{ id, voteToday: 'used' }]);

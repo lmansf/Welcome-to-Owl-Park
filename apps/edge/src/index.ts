@@ -8,14 +8,17 @@ import { isTimeZone, isVariantId, parseFeedback } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
 import { feedbackPage } from './feedbackPage';
+import { walletVoter } from './Ledger';
+import { openingOn, passLinkReady, storeCatalogue } from './opening';
+import { openingPage } from './openingPage';
 import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId } from './rooms';
-import { webhookSigned, type TicketLine } from './shopify';
+import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
-import { DEFAULT_LENGTH_MS, HOUR_MS, type TicketKind } from './tickets';
+import { DEFAULT_LENGTH_MS, HOUR_MS, OPENING_NIGHT_MS, windowed, type TicketKind } from './tickets';
 import type { Env } from './env';
 
 export { RoomObject } from './RoomObject';
@@ -76,7 +79,7 @@ function deskOf(env: Env): Desk {
 /** What the store webhooks need, once the store is set up; null until then. */
 function storeDeps(env: Env, origin: string): HookDeps | null {
   const store = storeConfig(env);
-  return store ? { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret) } : null;
+  return store ? { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret), ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}) } : null;
 }
 
 /** Brings the store's copy of a ticket (or of an order's tickets) up to date after answering. */
@@ -91,8 +94,6 @@ function mirrorLater(ctx: ExecutionContext, env: Env, origin: string, which: { i
   );
 }
 
-const KINDS: readonly TicketKind[] = ['day', 'night', 'annual', 'event'];
-
 /** One ticket line for tickets the park gives away or tests with (no store order); null when it does not add up. */
 function compLine(body: Record<string, unknown>): TicketLine | null {
   const kind = body['kind'] as TicketKind;
@@ -101,11 +102,12 @@ function compLine(body: Record<string, unknown>): TicketLine | null {
   if (!KINDS.includes(kind) || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) return null;
   if (hours !== null && !(hours > 0 && hours <= 24 * 366)) return null;
   const from = typeof body['from'] === 'string' ? Date.parse(body['from']) : NaN;
-  const until = typeof body['until'] === 'string' ? Date.parse(body['until']) : NaN;
-  if (kind === 'event' && !(until > from)) return null;
+  // Opening night lasts its 24 hours unless an end is given.
+  const until = typeof body['until'] === 'string' ? Date.parse(body['until']) : kind === 'opening-night' ? from + OPENING_NIGHT_MS : NaN;
+  if (windowed(kind) && !(until > from)) return null;
   const lengthMs = hours !== null ? Math.round(hours * HOUR_MS) : DEFAULT_LENGTH_MS[kind];
-  if (kind !== 'event' && lengthMs === null) return null;
-  return { line: '1', quantity, kind, lengthMs, validFrom: kind === 'event' ? from : null, validUntil: kind === 'event' ? until : null };
+  if (!windowed(kind) && lengthMs === null) return null;
+  return { line: '1', quantity, kind, lengthMs, validFrom: windowed(kind) ? from : null, validUntil: windowed(kind) ? until : null };
 }
 
 function objectFor(env: Env, roomId: string): DurableObjectStub {
@@ -198,6 +200,21 @@ export default {
     }
     if (url.pathname === '/admin/feedback') return feedbackPage();
 
+    // ---- Opening night's count for the keepers (C42): order numbers and ticket IDs only ----
+    if (url.pathname === '/api/admin/opening') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (url.searchParams.has('csv')) {
+        const r = await deskOf(env)('/tickets/opening?csv');
+        if (r.status !== 200) return json(r.body, r.status);
+        return new Response(r.body['csv'] as string, { headers: { ...CORS, 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="owl-park-opening-night.csv"' } });
+      }
+      const [r, catalogue] = await Promise.all([deskOf(env)('/tickets/opening'), storeCatalogue(env)]);
+      if (r.status !== 200) return json(r.body, r.status);
+      return json({ counts: r.body['counts'], window: catalogue?.opening ?? null, link: passLinkReady(env, catalogue) });
+    }
+    if (url.pathname === '/admin/opening') return openingPage();
+
     // ---- The store's webhooks (C35): checked against the store's signature before anything is read ----
     if (url.pathname === '/api/store/webhook') {
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
@@ -237,11 +254,30 @@ export default {
       const device = pass.cid;
       const desk = deskOf(env);
       const reply = (r: { status: number; body: Record<string, unknown> }) => json(r.body, r.status);
-      if (url.pathname === '/api/tickets' && request.method === 'GET') return reply(await desk(`/tickets/wallet?device=${encodeURIComponent(device)}`));
+      if (url.pathname === '/api/tickets' && request.method === 'GET') {
+        const [r, catalogue] = await Promise.all([desk(`/tickets/wallet?device=${encodeURIComponent(device)}`), storeCatalogue(env)]);
+        if (r.status !== 200) return reply(r);
+        // Opening night (C42): the booth says passes are free, and a scanned Opening Night Ticket
+        // offers its free pass only when the park can make the link.
+        const ready = passLinkReady(env, catalogue);
+        const tickets = (r.body['tickets'] as Array<Record<string, unknown>>).map((t) => (t['freePass'] === 'ready' && !(ready.code && ready.pass) ? { ...t, freePass: undefined } : t));
+        return json({ tickets, openingNight: openingOn(catalogue, Date.now()) });
+      }
       const body = request.method === 'POST' ? await readJson(request) : null;
       if (!body) return json({ error: 'bad request' }, 400);
       if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') return reply(await desk(url.pathname.slice(4), { secret: body['secret'], device }));
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
+      if (url.pathname === '/api/tickets/pass') {
+        // Opening night's free pass (C42): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
+        const r = await desk('/tickets/pass-offer', { id: body['id'], device });
+        if (r.status !== 200) return reply(r);
+        if (r.body['ok'] !== true) return json(r.body, 409);
+        const store = storeConfig(env);
+        const code = env.OPENING_PASS_CODE?.trim();
+        const variant = (await storeCatalogue(env))?.passVariant;
+        if (!store || !code || !variant) return json({ ok: false, reason: 'not-set-up' }, 503);
+        return json({ ok: true, url: passCartLink(store.shop, variant, code, body['id'] as string) });
+      }
       if (url.pathname === '/api/tickets/scan') {
         const r = await desk('/tickets/scan', body['id'] === undefined ? { device } : { device, id: body['id'] });
         if (r.status !== 200 || r.body['ok'] !== true) return reply(r);
@@ -303,10 +339,13 @@ export default {
       if (!pass) return Response.json({ error: 'bad-pass' }, { status: 401, headers: CORS });
       // Only ticket-holders vote: a guest pass is refused until the ticket gate admits the visitor.
       if (!pass.adm) return Response.json({ error: 'tickets-required' }, { status: 403, headers: CORS });
-      // Every ticket and pass has its own vote each park day (C35): the voter is the ticket.
-      const voter = pass.tid ?? pass.id;
+      if (!pass.cid) return Response.json({ error: 'no-collector' }, { status: 401, headers: CORS });
+      // One vote per wallet per park day, however many tickets or passes it holds (C42); the vote
+      // keeps the ticket that let the owl in, which votes once a day too.
+      const voter = walletVoter(pass.cid);
+      const ticket = pass.tid ?? null;
       if (url.pathname === '/api/vote/me') {
-        const r = await votes(env).fetch(`https://park/status?visitor=${encodeURIComponent(voter)}`);
+        const r = await votes(env).fetch(`https://park/status?visitor=${encodeURIComponent(voter)}${ticket ? `&ticket=${encodeURIComponent(ticket)}` : ''}`);
         return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
       }
       if (url.pathname === '/api/vote' && request.method === 'POST') {
@@ -317,7 +356,7 @@ export default {
           return Response.json({ error: 'bad request' }, { status: 400, headers: CORS });
         }
         if (!/^[a-z][a-z0-9-]{0,23}$/.test(realm)) return Response.json({ error: 'bad request' }, { status: 400, headers: CORS });
-        const r = await votes(env).fetch('https://park/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visitor: voter, realm }) });
+        const r = await votes(env).fetch('https://park/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visitor: voter, realm, ticket }) });
         if (pass.tid && r.ok) mirrorLater(ctx, env, url.origin, { id: pass.tid });
         return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
       }

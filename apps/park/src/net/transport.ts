@@ -66,22 +66,24 @@ export interface ParkTransport {
 export interface WalletEntry {
   /** Visual ID, `OWL-XXXX-XXXX`. */
   id: string;
-  kind: 'day' | 'night' | 'annual' | 'event';
+  kind: 'day' | 'night' | 'annual' | 'event' | 'opening-night';
   status: 'held' | 'unused' | 'active' | 'used' | 'expired' | 'revoked';
   /** Time left once it is running, or until an unused ticket expires. */
   msLeft: number | null;
   firstScan: number | null;
-  /** Event tickets: their window. */
+  /** Windowed tickets (an event, opening night): their window. */
   validFrom: number | null;
   validUntil: number | null;
   /** Today's Realm Vote: free, spent, or none while the ticket is not running. */
   voteToday: 'ready' | 'used' | 'none';
+  /** An Opening Night Ticket's free pass (C42): ready to claim tonight, or claimed. */
+  freePass?: 'ready' | 'claimed';
 }
 
 /** Why the gate did not take a ticket (`none`: this device holds no ticket it could scan). */
 export type ScanRefusal = 'none' | 'held' | 'used' | 'expired' | 'revoked' | 'not-yet' | 'no-length' | 'unknown' | 'elsewhere' | 'offline';
 
-export type ScanReply = { ok: true; id: string; kind: WalletEntry['kind']; started: boolean; validUntil: number | null } | { ok: false; reason: ScanRefusal; id?: string };
+export type ScanReply = { ok: true; id: string; kind: WalletEntry['kind']; started: boolean; validUntil: number | null } | { ok: false; reason: ScanRefusal; id?: string; kind?: WalletEntry['kind'] };
 
 export interface TicketWallet {
   wallet(): Promise<WalletEntry[]>;
@@ -91,6 +93,10 @@ export interface TicketWallet {
   share(id: string): Promise<string | null>;
   /** The gate scans a ticket (the server picks one when none is named); a ticket that goes through admits this visitor. */
   scan(id?: string): Promise<ScanReply>;
+  /** Whether opening night is on (C42), as the last look at the wallet said. */
+  openingNight(): boolean;
+  /** Opening night's free pass for an Opening Night Ticket on this device: the store's cart link; null when there is none to have. */
+  freePass(id: string): Promise<string | null>;
 }
 
 /** The front gate: `open` lets everyone through; `ticket` lets through admitted passes only. */

@@ -5,7 +5,8 @@
  * text, and the page runs nothing but its own script (a fresh nonce on every load).
  */
 
-const STYLE = `
+/** The keepers' pages' look (this page's, and opening night's). */
+export const ADMIN_STYLE = `
 :root{color-scheme:light dark;--bg:#0C1E36;--card:#132a4a;--ink:#F6F1E3;--dim:#b9c3d3;--gold:#C9A227;--line:rgba(246,241,227,.16)}
 @media (prefers-color-scheme:light){:root{--bg:#f6f1e3;--card:#fffdf7;--ink:#0C1E36;--dim:#4c5a70;--line:rgba(12,30,54,.14)}}
 *{box-sizing:border-box}
@@ -143,7 +144,7 @@ function html(nonce: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Owl Park feedback</title>
-<style nonce="${nonce}">${STYLE}</style>
+<style nonce="${nonce}">${ADMIN_STYLE}</style>
 </head>
 <body>
 <main>
@@ -177,6 +178,11 @@ function html(nonce: string): string {
 
 /** The page, uncached, kept out of search engines, and running only its own script and style. */
 export function feedbackPage(): Response {
+  return adminPage(html);
+}
+
+/** A keepers' page: uncached, kept out of search engines, and running only its own script and style (a fresh nonce each load). */
+export function adminPage(html: (nonce: string) => string): Response {
   const nonce = crypto.randomUUID().replace(/-/g, '');
   return new Response(html(nonce), {
     headers: {

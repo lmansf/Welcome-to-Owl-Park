@@ -3,13 +3,16 @@
  * live together). The Worker calls them after it has checked the store's webhook signature or the
  * visitor's pass; `device` is the visitor's collector id. Nothing here is reachable from outside.
  */
-import type { TicketLine } from './shopify';
+import { KINDS, type TicketLine } from './shopify';
 import type { TicketMirror } from './storeApi';
 import type { TicketBook, TicketRecord, WalletTicket } from './TicketBook';
-import { isTicketId, statusOf, type TicketStatus } from './tickets';
+import { isTicketId, statusOf, windowed, type TicketKind, type TicketStatus } from './tickets';
 
-/** What the votes say about a ticket: how many it has cast, and whether today's is spent. */
-export type VotesOf = (ticketId: string) => { cast: number; today: boolean };
+/**
+ * What the votes say about a ticket: how many were cast with it, and whether today's is spent (by
+ * the wallet that holds it, C42, or with the ticket itself).
+ */
+export type VotesOf = (t: { id: string; device: string | null }) => { cast: number; today: boolean };
 
 /** Today's vote: free, spent, or none (the ticket is not running, so it cannot vote now). */
 export type VoteToday = TicketMirror['voteToday'];
@@ -33,38 +36,47 @@ function lines(v: unknown): TicketLine[] | null {
     const quantity = Number(l?.['quantity']);
     const kind = l?.['kind'];
     if (!line || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) return null;
-    if (kind !== 'day' && kind !== 'night' && kind !== 'annual' && kind !== 'event') return null;
+    if (!KINDS.includes(kind as TicketKind)) return null;
     const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
-    out.push({ line, quantity, kind, lengthMs: num(l['lengthMs']), validFrom: num(l['validFrom']), validUntil: num(l['validUntil']) });
+    out.push({ line, quantity, kind: kind as TicketKind, lengthMs: num(l['lengthMs']), validFrom: num(l['validFrom']), validUntil: num(l['validUntil']) });
   }
   return out;
 }
 
 /**
- * The ticket the gate scans when the visitor does not name one: a running ticket first, then an
- * event ticket whose night has begun (it is gone after the night), then the unused ticket that
- * expires soonest. An event ticket for a later night comes after those, so the gate can say it is
- * not time yet, and a ticket still waiting on the store's check last, so the gate can say that.
+ * The ticket the gate scans when the visitor does not name one: a running ticket first, then a
+ * windowed ticket (an event, opening night) whose night has begun (it is gone after the night),
+ * then the unused ticket that expires soonest. A windowed ticket for a later night comes after
+ * those, so the gate can say it is not time yet, and a ticket still waiting on the store's check
+ * last, so the gate can say that.
  */
 export function pickForGate(wallet: WalletTicket[], now: number): WalletTicket | null {
   const unused = wallet.filter((t) => t.status === 'unused');
   return (
     wallet.find((t) => t.status === 'active') ??
-    unused.find((t) => t.kind === 'event' && t.validFrom !== null && t.validFrom <= now) ??
-    unused.filter((t) => t.kind !== 'event').sort((a, b) => (a.msLeft ?? Infinity) - (b.msLeft ?? Infinity))[0] ??
+    unused.find((t) => windowed(t.kind) && t.validFrom !== null && t.validFrom <= now) ??
+    unused.filter((t) => !windowed(t.kind)).sort((a, b) => (a.msLeft ?? Infinity) - (b.msLeft ?? Infinity))[0] ??
     unused[0] ??
     wallet.find((t) => t.status === 'held') ??
     null
   );
 }
 
+/** Opening night's count as CSV (C42): order numbers and ticket IDs only. */
+export function openingCsv(rows: ReturnType<TicketBook['opening']>['rows']): string {
+  const iso = (ms: number | null) => (ms === null ? '' : new Date(ms).toISOString());
+  const lines = ['kind,ticket,order,status,first_scan,from_ticket'];
+  for (const r of rows) lines.push([r.kind, r.ticket, r.order, r.status, iso(r.firstScan), r.fromTicket ?? ''].join(','));
+  return `${lines.join('\n')}\n`;
+}
+
 export async function ticketDesk(book: TicketBook, request: Request, now: number, votesOf: VotesOf): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/tickets/, '');
-  const wallet = (device: string): DeskTicket[] => book.wallet(device, now).map((t) => ({ ...t, voteToday: voteToday(t.status, votesOf(t.id)) }));
+  const wallet = (device: string): DeskTicket[] => book.wallet(device, now).map((t) => ({ ...t, voteToday: voteToday(t.status, votesOf({ id: t.id, device })) }));
   const mirror = (t: TicketRecord): TicketMirror => {
     const status = statusOf(t, now);
-    const v = votesOf(t.id);
+    const v = votesOf(t);
     return { id: t.id, kind: t.kind, status, order: t.order, firstScan: t.firstScan, validUntil: t.validUntil, votesCast: v.cast, voteToday: voteToday(status, v) };
   };
   if (request.method === 'GET' && path === '/wallet') {
@@ -77,6 +89,11 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
     const o = book.orderOf(order);
     if (!o) return json({ error: 'unknown order' }, 404);
     return json({ order, held: o.record.held, sent: o.record.sent, tickets: o.tickets.map((t) => t.id), lines: [...new Set(o.tickets.map((t) => t.line))] });
+  }
+  if (request.method === 'GET' && path === '/opening') {
+    // Opening night's count for the keepers (C42); `?csv` for the list of its tickets.
+    const { counts, rows } = book.opening(now);
+    return url.searchParams.has('csv') ? json({ csv: openingCsv(rows) }) : json({ counts });
   }
   if (request.method !== 'POST') return json({ error: 'not found' }, 404);
   let body: Record<string, unknown>;
@@ -143,8 +160,25 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       const id = named ?? pickForGate(book.wallet(device, now), now)?.id ?? null;
       if (!id) return json({ ok: false, reason: 'none' });
       const r = book.scan(id, device, now);
-      if (!r.ok) return json({ ok: false, reason: r.reason, id });
+      if (!r.ok) {
+        // This device's own ticket: its kind too, so the gate can say what kind of night it waits for.
+        const kind = r.reason === 'unknown' || r.reason === 'elsewhere' ? undefined : book.get(id)?.kind;
+        return json({ ok: false, reason: r.reason, id, ...(kind ? { kind } : {}) });
+      }
       return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
+    }
+    case '/link-pass': {
+      // A pass order from opening night's offer: the ticket its link named (or none), kept once.
+      const from = body['from'] === null || body['from'] === undefined ? null : str(body['from'], 20);
+      if (!order || (body['from'] !== null && body['from'] !== undefined && !from)) return bad();
+      const l = book.linkPass(order, from, now);
+      return l ? json({ linked: l.fromTicket !== null, from: l.fromTicket }) : json({ error: 'unknown order' }, 404);
+    }
+    case '/pass-offer': {
+      // Whether an Opening Night Ticket on this device may claim its free pass now.
+      const id = str(body['id'], 20);
+      if (!id || !device) return bad();
+      return json(book.passOffer(id, device, now));
     }
     case '/mirror': {
       // The store's copy of one ticket, or of every ticket of an order.

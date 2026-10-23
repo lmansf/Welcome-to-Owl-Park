@@ -21,18 +21,28 @@ export interface StoreConfig {
   token?: string;
   /** Or a Dev Dashboard app's client credentials, traded for a token when one is needed. */
   client?: { id: string; secret: string };
+  /** Browser tests only: a stand-in store on this machine, reached instead of the shop. */
+  origin?: string;
 }
 
+type StoreKeys = { SHOPIFY_SHOP?: string; SHOPIFY_ADMIN_TOKEN?: string; SHOPIFY_CLIENT_ID?: string; SHOPIFY_CLIENT_SECRET?: string; SHOPIFY_TEST_ORIGIN?: string };
+
 /** The store, once its domain and one way to sign in are set; a fixed token wins over client credentials. */
-export function storeConfig(env: { SHOPIFY_SHOP?: string; SHOPIFY_ADMIN_TOKEN?: string; SHOPIFY_CLIENT_ID?: string; SHOPIFY_CLIENT_SECRET?: string }): StoreConfig | null {
+export function storeConfig(env: StoreKeys): StoreConfig | null {
   const shop = env.SHOPIFY_SHOP?.trim() ?? '';
   if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) return null;
+  // A stand-in store for the browser tests, and only ever one on this machine.
+  const test = env.SHOPIFY_TEST_ORIGIN?.trim() ?? '';
+  const origin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(test) ? { origin: test } : {};
   const token = env.SHOPIFY_ADMIN_TOKEN?.trim() ?? '';
-  if (token) return { shop, token };
+  if (token) return { shop, token, ...origin };
   const id = env.SHOPIFY_CLIENT_ID?.trim() ?? '';
   const secret = env.SHOPIFY_CLIENT_SECRET?.trim() ?? '';
-  return id && secret ? { shop, client: { id, secret } } : null;
+  return id && secret ? { shop, client: { id, secret }, ...origin } : null;
 }
+
+/** Where the store's Admin API answers. */
+const base = (cfg: StoreConfig) => cfg.origin ?? `https://${cfg.shop}`;
 
 export class StoreError extends Error {}
 
@@ -48,7 +58,7 @@ async function accessToken(cfg: StoreConfig, fetchFn: typeof fetch, fresh = fals
   const key = `${cfg.shop} ${cfg.client.id}`;
   const held = traded.get(key);
   if (held && !fresh && held.until > Date.now()) return held.token;
-  const res = await fetchFn(`https://${cfg.shop}/admin/oauth/access_token`, {
+  const res = await fetchFn(`${base(cfg)}/admin/oauth/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: cfg.client.id, client_secret: cfg.client.secret, grant_type: 'client_credentials' }).toString(),
@@ -67,7 +77,7 @@ async function accessToken(cfg: StoreConfig, fetchFn: typeof fetch, fresh = fals
 /** One Admin API call; user errors of a mutation come back as a StoreError. */
 export async function adminQuery<T>(cfg: StoreConfig, query: string, variables: Record<string, unknown>, fetchFn: typeof fetch = fetch): Promise<T> {
   const call = async (token: string) =>
-    fetchFn(`https://${cfg.shop}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
+    fetchFn(`${base(cfg)}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
       body: JSON.stringify({ query, variables }),
@@ -111,7 +121,7 @@ export interface StoreCheck {
   error?: string;
 }
 
-type StoreEnv = Parameters<typeof storeConfig>[0] & { SHOPIFY_WEBHOOK_SECRET?: string };
+type StoreEnv = StoreKeys & { SHOPIFY_WEBHOOK_SECRET?: string };
 
 export async function storeCheck(env: StoreEnv, fetchFn: typeof fetch = fetch): Promise<StoreCheck> {
   const cfg = storeConfig(env);

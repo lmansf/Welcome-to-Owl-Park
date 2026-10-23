@@ -28,4 +28,12 @@ export interface Env extends Cloudflare.Env {
    * Webhooks the app subscribes are signed with its client secret instead. Neither: every webhook is refused.
    */
   SHOPIFY_WEBHOOK_SECRET?: string;
+  /**
+   * Opening night (C42): the discount code that makes the annual pass free, never advertised. The
+   * park puts it in the cart link it gives an owl whose Opening Night Ticket went through the gate,
+   * and counts passes bought with it but without that link. Unset: no free-pass link.
+   */
+  OPENING_PASS_CODE?: string;
+  /** Browser tests only: a stand-in store on this machine (http://localhost:<port>). Never set in production. */
+  SHOPIFY_TEST_ORIGIN?: string;
 }

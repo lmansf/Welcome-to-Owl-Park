@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { feedbackPage } from '../src/feedbackPage';
+import { openingPage } from '../src/openingPage';
 
 describe("the keepers' feedback page", () => {
   it('is never cached or indexed, and runs only its own script and style', async () => {
@@ -30,5 +31,19 @@ describe("the keepers' feedback page", () => {
     const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (path: string, encoding: string) => string };
     const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, '')) as { assets: { run_worker_first: string[] } };
     expect(config.assets.run_worker_first).toContain('/admin/*');
+  });
+});
+
+describe("the keepers' opening-night page", () => {
+  it('is locked like the feedback page and asks the park for the count with the key', async () => {
+    const res = openingPage();
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('X-Robots-Tag')).toBe('noindex, nofollow');
+    const nonce = /script-src 'nonce-([0-9a-f]{32})'/.exec(res.headers.get('Content-Security-Policy') ?? '')?.[1];
+    const html = await res.text();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    expect(html).toContain('/api/admin/opening');
+    for (const words of ['Tickets issued', 'Tickets scanned', 'Passes claimed through the link', 'Passes without a link', 'Conversion rate', 'Download CSV']) expect(html).toContain(words);
+    expect(html).not.toMatch(/innerHTML|insertAdjacentHTML|document\.write/);
   });
 });

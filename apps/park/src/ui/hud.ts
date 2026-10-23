@@ -16,7 +16,7 @@ import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createSettingsScreen } from './settingsScreen';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
-import { createTicketCard, type GateCard } from './tickets';
+import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard } from './tickets';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
 export interface CollectionActions {
@@ -87,6 +87,10 @@ export interface Hud {
   openBooth(info: BoothInfo): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
+  /** Opening night (C42): after the ticket card, the free pass to claim. */
+  offerFreePass(offer: FreePassOffer): void;
+  /** Look for a free pass the owl went to claim, and say when it has come. */
+  watchFreePass(claimed: () => Promise<boolean>): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
@@ -217,6 +221,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
   let ticketCard: ReturnType<typeof createTicketCard> | null = null;
+  let freePass: FreePassCard | null = null;
   let roomId = '';
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
@@ -441,6 +446,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     showTicket(card) {
       ticketCard ??= createTicketCard(root);
       ticketCard.show(card);
+    },
+    offerFreePass(offer) {
+      freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
+      freePass.show(offer);
+    },
+    watchFreePass(claimed) {
+      freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
+      freePass.watch(claimed);
     },
     setRoom(id) {
       roomId = id;
