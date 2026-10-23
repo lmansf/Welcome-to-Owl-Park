@@ -102,6 +102,30 @@
       "kind": "room",
       "with_2x": true
     },
+    "homes-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "homes": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "nest": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
     "guardian": {
       "w": 720,
       "h": 820,
@@ -126,6 +150,118 @@
     "blockade-hatching-soon": {
       "w": 300,
       "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-rug": {
+      "w": 240,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-armchair": {
+      "w": 150,
+      "h": 150,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-bookshelf": {
+      "w": 150,
+      "h": 230,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-lamp": {
+      "w": 120,
+      "h": 210,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-potted-fern": {
+      "w": 130,
+      "h": 150,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "decor-mushroom-stool": {
+      "w": 120,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-quilt-bed": {
+      "w": 260,
+      "h": 170,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-acorn-bowl": {
+      "w": 120,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-teapot-table": {
+      "w": 170,
+      "h": 140,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-wall-clock": {
+      "w": 100,
+      "h": 140,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-framed-leaf": {
+      "w": 110,
+      "h": 140,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-window-box": {
+      "w": 180,
+      "h": 110,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "decor-lantern-string": {
+      "w": 180,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-moss-rug": {
+      "w": 220,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "decor-stump-table": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-feather-mobile": {
+      "w": 110,
+      "h": 160,
       "kind": "piece",
       "key_colour": "#00FF00",
       "with_2x": true

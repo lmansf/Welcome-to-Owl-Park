@@ -1,33 +1,49 @@
 /**
- * Durable Object holding every collector's collection, feathers and quests in its SQLite storage.
- * One object for the park (`getByName('park')`), called over RPC by the Worker (inventory, the
- * shop, grants) and by the room object (quests, uses, ownership checks for wear and emotes). The
- * rules live in the portable `CollectionBook` and `QuestBook` (packages/shared) over the SQL store
- * in sqlStore.ts. Rewards draw from the platform's cryptographic random source.
+ * Durable Object holding every collector's collection, feathers and quests in its SQLite storage,
+ * and every owl's nest and furniture beside them. One object for the park (`getByName('park')`),
+ * called over RPC by the Worker (inventory, the shop, grants, the furniture gift) and by the room
+ * object (quests, uses, ownership checks for wear and emotes, the nests). The rules live in the
+ * portable `CollectionBook`, `QuestBook` and `NestBook` (packages/shared) over the SQL stores in
+ * sqlStore.ts and sqlNestStore.ts. Rewards and nest ids draw from the platform's cryptographic
+ * random source. Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
   CollectionBook,
   LEAF_FEATHERS_PER_DAY,
+  NestBook,
   QuestBook,
   leafFeathers,
+  secureNestId,
   type AbandonResult,
   type AcceptResult,
   type BuyResult,
+  type FeedbackDraft,
+  type FurnitureGiftResult,
   type GatherResult,
   type GiftResult,
   type GrantResult,
   type HandInResult,
   type Inventory,
+  type MyNest,
+  type NestEditResult,
+  type NestLook,
+  type NestVisit,
   type QuestBoard,
   type QuestEvent,
   type QuestUpdate,
+  type PlayEvent,
+  type PlayResult,
   type ShopView,
   type Source,
+  type StreetDoor,
+  type TaskView,
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
+import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ROOMS } from './rooms';
+import { SqlNestStore } from './sqlNestStore';
 import { SqlCollectionStore } from './sqlStore';
 import type { Env } from './env';
 
@@ -35,6 +51,9 @@ import type { Env } from './env';
 function secureRandom(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296;
 }
+
+/** Random bytes from the platform's cryptographic source. */
+const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 const SPOTS = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
@@ -52,12 +71,16 @@ export interface FlopResult extends EventResult {
 export class Collections extends DurableObject<Env> {
   private readonly book: CollectionBook;
   private readonly quests: QuestBook;
+  private readonly nests: NestBook;
+  private readonly feedbackBox: FeedbackBox;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     const store = new SqlCollectionStore(ctx.storage.sql);
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
+    this.nests = new NestBook(new SqlNestStore(ctx.storage.sql), this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
+    this.feedbackBox = new FeedbackBox(ctx.storage.sql);
   }
 
   async owned(cid: string, tzHint?: string): Promise<string[]> {
@@ -115,11 +138,71 @@ export class Collections extends DurableObject<Env> {
     return { feathers: added, total: feathers, updates, ...(updates.length ? { board: this.quests.board(cid, now) } : {}) };
   }
 
+  /**
+   * Feathers from an activity (lanterns, the quiz, fishing, the copy game) under their shared daily
+   * cap, and the event's progress on today's tasks (`feathers` may be 0: a lantern lit, a leaf pile).
+   */
+  async play(cid: string, feathers: number, ev: PlayEvent | null): Promise<PlayResult> {
+    return this.book.play(cid, feathers, ev, Date.now());
+  }
+
+  /** Today's three tasks and this collector's progress. */
+  async tasks(cid: string): Promise<TaskView> {
+    return this.book.tasks(cid, Date.now());
+  }
+
   async gather(cid: string, quest: string, n: number, room: string, pos: Vec2): Promise<GatherResult> {
     return this.quests.gather(cid, quest, n, room, pos, Date.now());
   }
 
   async handIn(cid: string, quest: string, npc: string): Promise<HandInResult> {
     return this.quests.handIn(cid, quest, npc, Date.now(), secureRandom);
+  }
+
+  // ---------- nests: none of these answers carries a collector id ----------
+
+  /** The collector's own nest (made on first sight), keeping its colours for the flag on its street door. */
+  async myNest(cid: string, look: NestLook | null): Promise<MyNest> {
+    return this.nests.mine(cid, look, Date.now());
+  }
+
+  /** A nest by its id as this visitor finds it (null: no such nest): whether it is the visitor's own is decided here. */
+  async nestById(nestId: string, visitorCid?: string): Promise<NestVisit | null> {
+    return this.nests.visit(nestId, visitorCid ?? null, Date.now());
+  }
+
+  /** The owner puts a piece in a spot of its nest, or with `item` null takes the spot's piece away. */
+  async setNestSpot(cid: string, spot: string, item: string | null): Promise<NestEditResult> {
+    return this.nests.setSpot(cid, spot, item, Date.now());
+  }
+
+  /** The owner opens its nest to visitors or closes it. */
+  async setNestOpen(cid: string, open: boolean): Promise<NestEditResult> {
+    return this.nests.setOpen(cid, open === true, Date.now());
+  }
+
+  /** Up to `n` other owls' open nests for the street's doors. */
+  async streetNests(cid: string, n: number): Promise<StreetDoor[]> {
+    return this.nests.street(cid, n);
+  }
+
+  /** Today's furniture gift, once a park day. */
+  async claimFurnitureGift(cid: string): Promise<FurnitureGiftResult> {
+    return this.nests.claimGift(cid, Date.now());
+  }
+
+  // ---------- feedback ----------
+
+  /** A visitor's feedback, kept for the park's keepers (feedbackBox.ts). */
+  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null): Promise<FeedbackAdd> {
+    return this.feedbackBox.add(cid, draft, ua, Date.now());
+  }
+
+  async feedback(status: FeedbackStatus | 'all', limit: number): Promise<FeedbackRow[]> {
+    return this.feedbackBox.list(status, limit);
+  }
+
+  async setFeedbackStatus(id: number, status: FeedbackStatus): Promise<boolean> {
+    return this.feedbackBox.setStatus(id, status);
   }
 }

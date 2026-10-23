@@ -147,7 +147,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
       const key = blockadeKey(door.closedSign);
       if (scene.textures.exists(key)) piece(scene, m.x, m.y, key).setDepth(m.y);
     } else if (door.to) {
-      const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
+      const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'arcade' ? 0x00e5ff : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
       const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(tint).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({ targets: glow, alpha: 0.5, scale: 1.9, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.id === 'shop' || door.id === 'booth') {
@@ -185,14 +185,21 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
   return pieces;
 }
 
+/** The room's drifting particles, which calm motion (a setting) stills and hides. */
+export interface Ambience {
+  setCalm(calm: boolean): void;
+}
+
 /** Mood particles: fireflies, neon rain, drifting gold dust, spread over the whole room. */
-export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
+export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
+  const drifting: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
+  let haze: Phaser.GameObjects.Rectangle | null = null;
   const floorTop = Math.min(...room.walkable.flat().map((p) => p.y));
   const { w, h } = room.size;
   // A room several screens wide gets as many particles per screen as a one-screen room.
   const k = Math.max(1, w / ROOM_W);
   if (room.mood === 'dusk') {
-    scene.add
+    const dust = scene.add
       .particles(0, 0, 'fx-dot', {
         x: { min: 40, max: w - 40 },
         y: { min: floorTop - 260, max: h - 60 },
@@ -208,8 +215,9 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
         maxAliveParticles: Math.round(70 * k),
       })
       .setDepth(h + 10);
+    drifting.push(dust);
   } else if (room.mood === 'neon') {
-    scene.add
+    const rain = scene.add
       .particles(0, 0, 'fx-rain', {
         x: { min: -100, max: w + 100 },
         y: -30,
@@ -225,10 +233,32 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
         maxAliveParticles: Math.round(140 * k),
       })
       .setDepth(h + 20);
-    const haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.05).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
+    drifting.push(rain);
+    haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.05).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
     scene.tweens.add({ targets: haze, fillAlpha: 0.1, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  } else if (room.mood === 'arcade') {
+    // Indoors off the neon street: no rain, a slow drift of neon motes in the cabinets' light.
+    const motes = scene.add
+      .particles(0, 0, 'fx-dot', {
+        x: { min: 0, max: w },
+        y: { min: floorTop - 420, max: h - 40 },
+        lifespan: { min: 5000, max: 9000 },
+        speedX: { min: -8, max: 8 },
+        speedY: { min: -14, max: -4 },
+        scale: { start: 0.3, end: 0.05 },
+        alpha: { start: 0, end: 0.7 },
+        tint: [0xff2aa1, 0x00e5ff, 0x8a4dff],
+        blendMode: Phaser.BlendModes.ADD,
+        frequency: 220 / k,
+        quantity: 1,
+        maxAliveParticles: Math.round(40 * k),
+      })
+      .setDepth(h + 10);
+    drifting.push(motes);
+    haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.03).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({ targets: haze, fillAlpha: 0.06, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   } else {
-    scene.add
+    const gold = scene.add
       .particles(0, 0, 'fx-dot', {
         x: { min: 0, max: w },
         y: { min: 0, max: h },
@@ -244,6 +274,7 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
         maxAliveParticles: Math.round(40 * k),
       })
       .setDepth(h + 10);
+    drifting.push(gold);
     const anchors = ANCHORS['hub'];
     const tb = anchors?.['tree-base'];
     if (tb) {
@@ -251,4 +282,20 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): void {
       scene.tweens.add({ targets: glow, alpha: 0.3, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
+  return {
+    setCalm(calm) {
+      for (const e of drifting) {
+        if (calm) e.stop(true);
+        else e.start();
+        e.setVisible(!calm);
+      }
+      // The neon pink haze keeps its glow but stops pulsing.
+      if (haze) {
+        for (const t of scene.tweens.getTweensOf(haze)) {
+          if (calm) t.pause();
+          else t.resume();
+        }
+      }
+    },
+  };
 }

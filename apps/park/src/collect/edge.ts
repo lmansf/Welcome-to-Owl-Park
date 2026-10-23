@@ -1,7 +1,7 @@
-import type { BuyResult, GiftResult, Inventory, ShopView } from '@owl-park/shared';
+import type { BuyResult, FurnitureGiftResult, GiftResult, Inventory, ShopView } from '@owl-park/shared';
 import type { EdgeTransport } from '../net/edge';
 import type { RoomConnection } from '../net/transport';
-import type { CollectionService, QuestLink } from './service';
+import type { ActivityLink, CollectionService, FurnitureGiftReply, NestLink, QuestLink } from './service';
 
 /**
  * The collection kept by the room server. Inventory and the shop go over HTTP with the visitor's
@@ -38,5 +38,21 @@ export class EdgeCollections implements CollectionService {
   questLink(_room: string, conn: RoomConnection | null): QuestLink | null {
     // The transport routes the room's pushes to the scene's handlers itself.
     return conn?.link ?? null;
+  }
+
+  activityLink(_room: string, conn: RoomConnection | null): ActivityLink | null {
+    return conn?.acts ?? null;
+  }
+
+  nestLink(_room: string, conn: RoomConnection | null): NestLink | null {
+    return conn?.nests ?? null;
+  }
+
+  async claimFurnitureGift(): Promise<FurnitureGiftReply> {
+    try {
+      return await this.json<FurnitureGiftResult>('/api/nest/gift', { method: 'POST' });
+    } catch {
+      return { ok: false, reason: 'offline' };
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cameraView, dist, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { cameraView, dist, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 /** Whether the park ships `<key>.svg` (the loader's first choice); a dev server may answer a miss with index.html. */
 async function hasSvg(page: Page, key: string): Promise<boolean> {
@@ -24,8 +24,12 @@ test.describe('single visitor', () => {
     await openPark(page);
     const before = await state(page);
     const view = await settleCamera(page);
-    // A point to the right of the owl that is on screen even on a narrow portrait phone.
-    const target = { x: before.pos.x + Math.min(220, view.viewW * 0.3), y: before.pos.y + 40 };
+    // A point beside the owl that is on screen even on a narrow portrait phone, and not under a button.
+    const step = Math.min(220, view.viewW * 0.3);
+    const target = await openGround(page, [
+      { x: before.pos.x + step, y: before.pos.y + 40 },
+      { x: before.pos.x - step, y: before.pos.y + 40 },
+    ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
   });
@@ -34,13 +38,43 @@ test.describe('single visitor', () => {
     await openPark(page);
     const before = await state(page);
     await page.locator('#hud .pill').hover();
-    await page.getByRole('button', { name: 'Your owl' }).click();
-    await page.getByRole('button', { name: 'Your owl' }).click();
+    await page.locator('[data-menu-btn]').click();
+    await page.getByRole('button', { name: 'Close the menu' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
     const view = await settleCamera(page);
     const target = { x: before.pos.x - Math.min(200, view.viewW * 0.3), y: before.pos.y + 30 };
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y);
+  });
+
+  test('on a touch screen the thumbstick walks the owl and letting go stops it; a computer has none', async ({ page, isMobile }) => {
+    await openPark(page);
+    const stick = page.locator('#hud .stick');
+    if (!isMobile) {
+      await expect(stick).toBeHidden();
+      return;
+    }
+    await expect(stick).toBeVisible();
+    // The buttons keep clear of it: to its left, or above it.
+    const s = (await stick.boundingBox())!;
+    for (const b of await page.locator('#hud .bottom .left > button, #hud .bottom .left > div > button, #hud [data-action]').all()) {
+      const r = await b.boundingBox();
+      if (r) expect(r.x + r.width <= s.x + 1 || r.y + r.height <= s.y + 1).toBe(true);
+    }
+    const start = (await state(page)).pos;
+    const toward = start.x < 2400 ? 1 : -1; // toward the middle of the hub, where there is floor
+    const c = { x: s.x + s.width / 2, y: s.y + s.height / 2 };
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + toward * 45, c.y, { steps: 5 });
+    await expect.poll(async () => toward * ((await state(page)).pos.x - start.x)).toBeGreaterThan(80);
+    expect(Math.sign((await state(page)).eyes)).toBe(toward); // it faces the way the stick points
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-stick.png` });
+    await page.mouse.up();
+    await expect.poll(async () => (await state(page)).walking).toBe(false);
+    const stopped = (await state(page)).pos;
+    await page.waitForTimeout(400);
+    expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
   });
 
   test('WASD and the arrow keys walk the owl, facing the way it goes, and letting go stops it', async ({ page }) => {
@@ -70,17 +104,124 @@ test.describe('single visitor', () => {
     await expect.poll(async () => (await state(page)).walking).toBe(false);
   });
 
-  test('Q opens the collection and closes it again, and Escape closes it too', async ({ page }) => {
+  test('M opens the Menu, T the emotes, Q your owl and J the quests; each key closes its screen again, and so does Escape', async ({ page }) => {
     await openPark(page);
-    const panel = page.getByRole('region', { name: 'Collection' });
-    await page.keyboard.press('KeyQ');
-    await expect(panel).toBeVisible();
-    await page.keyboard.press('KeyQ');
-    await expect(panel).toBeHidden();
-    await page.keyboard.press('KeyQ');
-    await expect(panel).toBeVisible();
+    for (const [key, name, opener] of [
+      ['KeyM', 'Menu', '[data-menu-btn]'],
+      ['KeyT', 'Emotes', '[data-emotes-btn]'],
+      ['KeyQ', 'Your owl', '[data-menu-btn]'],
+      ['KeyJ', 'Quests', '[data-menu-btn]'],
+    ] as const) {
+      const screen = page.getByRole('dialog', { name });
+      await page.keyboard.press(key);
+      await expect(screen, name).toBeVisible();
+      await page.keyboard.press(key);
+      await expect(screen, name).toBeHidden();
+      await page.keyboard.press(key);
+      await expect(screen, name).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(screen, name).toBeHidden();
+      // The focus goes back to the button for it, even from the owl builder, which hides the buttons while open.
+      await expect(page.locator(opener), name).toBeFocused();
+    }
+    // While a screen is open the walking keys leave the owl where it is.
+    const before = (await state(page)).pos;
+    await page.keyboard.press('KeyM');
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(500);
+    expect((await state(page)).walking).toBe(false);
+    await page.keyboard.up('KeyD');
+    expect((await state(page)).pos).toEqual(before);
     await page.keyboard.press('Escape');
-    await expect(panel).toBeHidden();
+  });
+
+  test('the bottom bar is Menu and Emotes; the Menu leads to your owl, the quests, the settings and Feedback', async ({ page }) => {
+    await openPark(page);
+    await expect(page.locator('#hud .bottom .left button')).toHaveCount(2);
+    // Emotes are one tap away.
+    await page.locator('[data-emotes-btn]').click();
+    const wheel = page.getByRole('dialog', { name: 'Emotes' });
+    await expect(wheel).toBeVisible();
+    await wheel.getByRole('button', { name: 'Close emotes' }).click();
+    await expect(wheel).toBeHidden();
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Your owl/, /^Quests/, /^Settings/, /^Feedback/]);
+    // Feedback is picked out in gold.
+    await expect(menu.locator('[data-screen="feedback"]')).toHaveClass(/\bhi\b/);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
+    for (const [id, name] of [
+      ['owl', 'Your owl'],
+      ['quests', 'Quests'],
+      ['settings', 'Settings'],
+      ['feedback', 'Feedback'],
+    ] as const) {
+      await menu.locator(`[data-screen="${id}"]`).click();
+      const screen = page.getByRole('dialog', { name });
+      await expect(screen, name).toBeVisible();
+      await expect(menu).toBeHidden();
+      await screen.getByRole('button', { name: 'Back to the menu' }).click();
+      await expect(screen, name).toBeHidden();
+      await expect(menu).toBeVisible();
+    }
+  });
+
+  test('settings hide the quest cards and the thumbstick, and stay on this device', async ({ page, isMobile }) => {
+    await openPark(page);
+    await expect(page.locator('#hud .tracker')).toBeVisible();
+    await page.locator('[data-menu-btn]').click();
+    await page.locator('[data-screen="settings"]').click();
+    const cards = page.locator('[data-setting="questCards"]');
+    await expect(cards).toHaveAttribute('aria-checked', 'true');
+    await cards.click();
+    await expect(cards).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('#hud .tracker')).toBeHidden();
+    if (isMobile) {
+      await expect(page.locator('#hud .stick')).toBeVisible();
+      await page.locator('[data-setting="thumbstick"]').click();
+      await expect(page.locator('#hud .stick')).toBeHidden();
+    } else await expect(page.locator('[data-setting="thumbstick"]')).toBeHidden();
+    await page.locator('[data-setting="calm"]').click();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-settings.png` });
+    await page.reload();
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(page.locator('#hud .tracker')).toBeHidden();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ questCards: false, thumbstick: !isMobile, calm: true });
+  });
+
+  test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
+    await openPark(page);
+    const before = (await state(page)).pos;
+    const sheet = page.getByRole('dialog', { name: 'Feedback' });
+    const openFeedback = async () => {
+      await page.locator('[data-menu-btn]').click();
+      await page.locator('[data-screen="feedback"]').click();
+    };
+    await openFeedback();
+    await expect(sheet).toBeVisible();
+    const send = sheet.getByRole('button', { name: 'Send' });
+    await expect(send).toBeDisabled(); // nothing written yet
+    await sheet.getByRole('button', { name: 'Bug' }).click();
+    const box = sheet.getByRole('textbox', { name: 'Your note' });
+    await box.click();
+    await box.pressSequentially('wasd q j e m t 1 2: the owl stays put');
+    // Only one screen opens at a time: had a key opened another, this one would have closed.
+    await expect(sheet).toBeVisible();
+    await expect(box).toHaveValue('wasd q j e m t 1 2: the owl stays put');
+    expect((await state(page)).pos).toEqual(before);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-feedback.png` });
+    await send.click();
+    // Without the park's server the note stays in this browser.
+    await expect(page.getByText('your note is saved on this device')).toBeVisible();
+    await expect(sheet).toBeHidden();
+    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:feedback') ?? '[]') as unknown[]);
+    expect(kept).toEqual([expect.objectContaining({ kind: 'bug', text: 'wasd q j e m t 1 2: the owl stays put', room: 'hub' })]);
+    // Escape closes it from inside the text box too.
+    await openFeedback();
+    await expect(box).toHaveValue('');
+    await box.click();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
   });
 
   test('art is rasterized for the device: sharper on dense screens, bounded for rooms', async ({ page }) => {

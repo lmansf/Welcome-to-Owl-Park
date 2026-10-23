@@ -286,6 +286,58 @@ test('the lobby: two concepts, an edit of the pick around its weathervane, and a
   assert.equal(ASSETS.keys.lobby.kind, 'room');
 });
 
+test("the arcade: its painting in the market's style, and an edit of the street's east screen for its doorway", () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  const room = jobs.get('arcade');
+  assert.deepEqual([room.kind, room.realm, room.size, room.variants], ['room', 'market', '3200x1800', 4]);
+  assert.deepEqual(room.refs.map((r) => r.ref), ['@final:market', '@guide:arcade']);
+  assert.match(room.prompt, /exactly three tall upright arcade cabinets/);
+  assert.match(room.prompt, /no lettering/);
+  assert.equal(ASSETS.keys.arcade.kind, 'room');
+  const door = jobs.get('market-arcade-door');
+  assert.ok(P.HELPER_KEYS.includes('market-arcade-door'), 'the edit is a helper, never published');
+  assert.deepEqual([door.size, door.variants, door.derives], ['1024x1024', 2, ['market-east']]);
+  assert.deepEqual(door.refs.map((r) => [r.ref, r.optional]), [['@canvas:market-arcade-door', false]]);
+  assert.match(door.prompt, /^Edit this painting/);
+  assert.match(door.prompt, /no letters/);
+});
+
+test('the street of nests, its west wing, the nest and the sixteen pieces of furniture', () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  // With a reference a job goes to fal's edit endpoint, which answers in JPEG unless asked.
+  for (const key of ['homes', 'homes-west', 'nest', ...P.DECOR_KEYS]) assert.equal(jobs.get(key).providers?.fal?.output_format, 'png', key);
+  for (const key of ['homes', 'nest']) {
+    const j = jobs.get(key);
+    assert.deepEqual([j.kind, j.realm, j.size, j.variants], ['room', 'homes', '3200x1800', 4], key);
+    assert.equal(j.refs[0].ref, '@final:grove', `${key}: painted in the style of the published grove`);
+  }
+  // A layout guide draws a room's first screen, which is the wing's, not this painting's.
+  assert.deepEqual(jobs.get('homes').refs.map((r) => r.ref), ['@final:grove']);
+  const wing = jobs.get('homes-west');
+  assert.deepEqual([wing.kind, wing.realm, wing.size, wing.variants, wing.optional], ['wing', 'homes', '3040x1368', 2, true]);
+  assert.deepEqual(wing.refs.map((r) => [r.ref, r.optional]), [['@canvas:homes-west', false]]);
+  assert.ok(wing.prompt.startsWith('Extend this painting into a wide panorama.'));
+  assert.ok(wing.prompt.endsWith(P.STYLE.homes), "carries the street's style block");
+  assert.ok(!P.WING_KEYS.includes('homes-west'), 'the five approved wings keep their own list');
+  const decor = Object.entries(ASSETS.keys).filter(([k]) => k.startsWith('decor-'));
+  assert.equal(decor.length, 16);
+  assert.deepEqual(decor.map(([k]) => k), P.DECOR_KEYS);
+  for (const [key, v] of decor) {
+    const j = jobs.get(key);
+    assert.deepEqual([v.kind, v.with_2x, j.kind, j.realm, j.variants], ['piece', true, 'piece', 'decor', 2], key);
+    assert.equal(j.size, `${2 * v.w}x${2 * v.h}`, `${key}: generated at twice the logical size`);
+    assert.equal(j.key_colour, v.key_colour, `${key}: job and table agree on the backdrop`);
+    assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [['@final:nest', true]], `${key}: the published nest is its style reference`);
+  }
+  // Green subjects go on magenta, everything else on green.
+  assert.deepEqual(decor.filter(([, v]) => v.key_colour === '#FF00FF').map(([k]) => k), ['decor-potted-fern', 'decor-window-box', 'decor-moss-rug']);
+  assert.ok(decor.every(([, v]) => v.key_colour === '#00FF00' || v.key_colour === '#FF00FF'));
+  // A nest draws each piece of the furniture catalogue at its art's logical size.
+  const homes = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/homes.ts'), 'utf8');
+  const sizes = Object.fromEntries([...homes.matchAll(/piece\('([a-z][a-z-]*)', '[^']+', '(?:floor|wall)', (\d+), (\d+)\)/g)].map((m) => [`decor-${m[1]}`, [Number(m[2]), Number(m[3])]]));
+  assert.deepEqual(sizes, Object.fromEntries(decor.map(([k, v]) => [k, [v.w, v.h]])));
+});
+
 test('a wing job runs with the mock provider once its canvas exists, and is skipped before', () => {
   const out = tmp('wing');
   const env = { ...process.env, ART_NOW: '2026-10-20T10:00:00Z' };
@@ -592,7 +644,12 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['grove', 'hub', 'lobby', 'market']);
+  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'grove', 'homes', 'hub', 'lobby', 'market', 'nest']);
+  assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 1600, h: 900 }, 'arcade']);
+  assert.deepEqual(g.rooms.homes.backgrounds.map((t) => [t.key, t.x]), [['homes-west', 0], ['homes', 1600]]);
+  // Every nest is one template, painted once.
+  assert.deepEqual([g.rooms.nest.size, g.rooms.nest.background], [{ w: 1600, h: 900 }, 'nest']);
+  assert.ok(g.rooms.nest.doors.some((d) => d.id === 'to-street'));
   assert.deepEqual(g.rooms.lobby.size, { w: 3200, h: 900 });
   assert.deepEqual(g.rooms.lobby.backgrounds.map((t) => [t.key, t.x]), [['lobby-west', 0], ['lobby', 1600]]);
   assert.deepEqual(g.rooms.hub.size, { w: 4800, h: 900 });

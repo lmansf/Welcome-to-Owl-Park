@@ -141,7 +141,8 @@ Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or 
 `GATE` (`open` now: everyone walks through the lobby's turnstiles; `ticket` once tickets sell: visitors without a ticket stay in the lobby), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
-to close a month by hand and to issue tickets without a store order), and the store's three
+to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
+`/admin/feedback`), and the store's three
 (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment

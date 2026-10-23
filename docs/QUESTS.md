@@ -12,7 +12,8 @@ server and the zero-backend local mode run the same rules and Node unit-tests th
 
 1. An owl with a gold **!** over its head has quests. Walk up (or tap it) and **talk**: the
    dialogue shows what it offers, what you are doing for it and what you can hand back.
-2. **Take on** a quest. Its steps show in the tracker under the top bar and in the journal (J).
+2. **Take on** a quest. Its steps show in the tracker under the top bar and in Quests (from the
+   Menu, or J).
 3. Do the steps in order: talk to someone, visit a place, flop into leaf piles, browse the
    market stalls, bask in the moonbeam, play an emote for someone, or find things a quest hides
    (acorns, lost gears, moonstones) that only you can see.
@@ -161,7 +162,9 @@ Old pages speaking v3 are refused and reload themselves.
   asks for them), leaf piles with the flop and poof, glows under the stalls and the moonbeam,
   quest-item markers, and the action buttons (E runs the first). Tapping an NPC or a pile walks
   up and does it on arrival.
-- HUD: feathers in the top bar, the quest tracker, the journal (J), the NPC dialogue and the shop.
+- HUD: feathers in the top bar, the quest tracker, the quests screen (`ui/quests.ts`; from the
+  Menu, J, or a tap on the tracker: tabs for the quests under way, today's tasks, and who has
+  more), the NPC dialogue and the shop.
 - Test hooks on `window.owlPark`: `quests()`, `talk(npc)`, `use(target)`, `accept(quest)`,
   `abandon(quest)`, `handIn(quest)`, `gather(quest, n)`, `shop()`, `buy(variant)`, `gift()`.
 

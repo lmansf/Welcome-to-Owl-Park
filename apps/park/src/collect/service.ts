@@ -1,4 +1,22 @@
-import type { Award, BuyResult, GiftResult, Inventory, QuestBoard, QuestEvent, QuestUpdate, ShopView, Vec2 } from '@owl-park/shared';
+import type {
+  Award,
+  BuyResult,
+  FurnitureGiftResult,
+  GiftResult,
+  Inventory,
+  NestEditRefusal,
+  NestLook,
+  NestSpotId,
+  NestView,
+  QuestBoard,
+  QuestEvent,
+  QuestUpdate,
+  QuizZone,
+  ShopView,
+  TaskView,
+  Vec2,
+} from '@owl-park/shared';
+import type { StreetView } from '../game/nestPlan';
 import type { RoomConnection } from '../net/transport';
 
 /** The answer to a quest request: whether it worked, the board as it now stands, and what moved. */
@@ -57,6 +75,105 @@ export interface QuestPushes {
   onUsed?(id: string, by: string | null, until: number): void;
 }
 
+/** Why the room did not take an activity. */
+export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown';
+type No = { ok: false; reason: ActRefusal };
+
+/** The robot owl's tune to copy: played until `listenUntil`, then each note due by `deadline`. */
+export interface CopyTune {
+  tune: string[];
+  listenUntil: number;
+  deadline: number;
+  /** Tunes copied so far this game. */
+  level: number;
+}
+
+export type LightReply = { ok: true; id: string } | No;
+export type CastReply = { ok: true; biteAt: number } | No;
+export type ReelReply = { ok: true; outcome: 'early' | 'late' } | { ok: true; outcome: 'caught'; fish: string; feathers: number; total: number } | No;
+/** A new game: the emotes the robot plays this game, and its first tune. */
+export type CopyReply = ({ ok: true; notes: string[] } & CopyTune) | No;
+export type NoteReply =
+  | { ok: true; step: 'note' | 'early'; deadline: number }
+  | ({ ok: true; step: 'tune'; feathers: number; total: number } & CopyTune)
+  | { ok: true; step: 'won'; level: number; feathers: number; total: number }
+  | { ok: true; step: 'wrong' | 'slow'; level: number; expected: string }
+  | No;
+
+/**
+ * The park's activities in one room (activities.ts in @owl-park/shared): the hub's lanterns, the pond
+ * in the grove, the market robot owl's copy game, and today's tasks. Times in answers and pushes are
+ * on this device's clock; the stage quiz runs on the park clock, `parkNow()`.
+ */
+export interface ActivityLink {
+  /** The room's clock: the stage quiz's schedule runs on it. */
+  parkNow(): number;
+  /** Light the dark lantern above the owl. */
+  light(): Promise<LightReply>;
+  /** Cast a line from the jetty; a fish bites at `biteAt`. */
+  cast(): Promise<CastReply>;
+  reel(): Promise<ReelReply>;
+  /** Start the robot owl's copy game, standing in front of it. */
+  copy(): Promise<CopyReply>;
+  /** Play a note (an emote) of the tune. */
+  note(e: string): Promise<NoteReply>;
+  /** Today's three tasks (null when the room did not answer). */
+  tasks(): Promise<TaskView | null>;
+  /** The owl left the room. */
+  close(): void;
+}
+
+/** What the activities push without being asked. */
+export interface ActivityPushes {
+  /** The lantern beam (this device's clock); `lit` names a lantern just lit and by whom (null: this visitor). */
+  onLanterns?(beam: { lit: Record<string, number>; glowUntil: number }, lit: { id: string; by: string | null } | null): void;
+  /** A stage quiz question closed: the right zone, whether this visitor stood in it, and the other owls that did. */
+  onQuiz?(n: number, right: QuizZone, won: boolean, others: string[]): void;
+  /** Feathers from something shared: a full lantern beam, a right quiz answer. */
+  onPaid?(what: 'beam' | 'quiz', feathers: number, total: number): void;
+  /** Today's tasks moved: as they stand, the ones just finished, what they paid and the balance. */
+  onTasks?(tasks: TaskView, finished: string[], paid: number, total: number): void;
+}
+
+/** A nest as the room shows it to this visitor; its owner also learns what it owns and today's gift. */
+export interface NestSeen {
+  nest: NestView;
+  /** Whether it is this visitor's own nest; absent when an update leaves that as it was. */
+  mine?: boolean;
+  owned?: string[];
+  /** Today's furniture gift: taken already or not, and when the next one comes (this device's clock). */
+  gift?: { taken: boolean; next: number };
+}
+
+export type NestEditReply = { ok: true; nest: NestView } | { ok: false; reason: NestEditRefusal };
+
+/** Today's furniture gift as the visitor got it, or why not. */
+export type FurnitureGiftReply = FurnitureGiftResult | { ok: false; reason: 'offline' };
+
+/**
+ * The nests in one room. On the street: who lives behind each door, for this visitor. In the
+ * visitor's own nest: its changes. The room server answers over the room's socket (it knows whose
+ * nest it is); the local mode answers in this browser.
+ */
+export interface NestLink {
+  /** The street's doors for this visitor; null when the room did not answer. */
+  street(): Promise<StreetView | null>;
+  /** Put a piece the owner owns in a spot of its nest, or with null take the spot's piece away. */
+  place(spot: NestSpotId, item: string | null): Promise<NestEditReply>;
+  /** Open the nest to visitors, or close it (visitors inside go back to the street). */
+  setOpen(open: boolean): Promise<NestEditReply>;
+  /** The owl left the room. */
+  close(): void;
+}
+
+/** What the nests push without being asked. */
+export interface NestPushes {
+  /** The nest as it stands: on arrival, and again whenever its owner changes it. */
+  onNest?(seen: NestSeen): void;
+  /** The nest turned this visitor away (closed to visitors, or no such nest), or closed while it was inside. */
+  onNestClosed?(why: 'closed' | 'gone'): void;
+}
+
 /**
  * A visitor's collection, feathers and quests. Two implementations share the rules in
  * `@owl-park/shared`:
@@ -79,6 +196,15 @@ export interface CollectionService {
    * is missing).
    */
   questLink(room: string, conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink | null;
+  /** The activities in a room, the same way: the room server's over its socket, otherwise this browser's. */
+  activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2): ActivityLink | null;
+  /**
+   * The nests, the same way, on the street and in a nest (null in any other room). `look` gives the
+   * visitor's colours for the flag on its own door.
+   */
+  nestLink(room: string, conn: RoomConnection | null, pushes: NestPushes, look: () => NestLook): NestLink | null;
+  /** Today's furniture gift for the visitor's nest (once a park day). */
+  claimFurnitureGift(): Promise<FurnitureGiftReply>;
 }
 
 /** This device's IANA time zone, if the browser reports a usable one. */

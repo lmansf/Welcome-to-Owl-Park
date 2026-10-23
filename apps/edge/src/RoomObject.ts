@@ -1,35 +1,59 @@
 /**
  * Durable Object adapter around `Room`. Holds the WebSockets with the Hibernation API so an
  * idle park costs nothing, answers heartbeats without waking, and rebuilds every room from
- * the socket attachments when the object wakes up or is moved.
+ * the socket attachments when the object wakes up or is moved. Besides the park's rooms it
+ * holds the street of nests and every nest with owls in it, each nest a room of its own made
+ * from NEST_ROOM; whose nest it is and how it stands come from the collections object.
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
+  Activities,
   CLOSE,
+  COPY_BASE_EMOTES,
   HEARTBEAT_FRAME,
   KIND_RULES,
+  LANTERN_ROOM,
+  QUIZ_FEATHERS,
+  QUIZ_ROOM,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
+  STREET_DOORS,
+  STREET_ROOM,
   distance,
   filterOwnedWear,
   getInteractable,
   getNpc,
   getQuest,
+  isEmoteId,
+  isNestRoom,
   isTimeZone,
+  lanternFeathers,
   leafRespawnMs,
+  nestIdOf,
+  nestLook,
   npcsIn,
   parseClientFrame,
   wearVariants,
+  type ClientAct,
   type ClientFrame,
+  type ClientHello,
+  type ClientNest,
+  type LanternState,
+  type NestEditRefusal,
+  type NestEditResult,
+  type NestView,
+  type NestVisit,
   type OwlLook,
+  type PlayResult,
   type QuestBoard,
   type QuestUpdate,
   type ServerFrame,
+  type ServerNest,
   type Wear,
 } from '@owl-park/shared';
 import type { Collections } from './Collections';
 import { Room, type Peer, type VisitorState } from './Room';
-import { ROOMS, roomCap } from './rooms';
+import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
 import { isCollectorId } from './pass';
 import type { Env } from './env';
 
@@ -44,6 +68,8 @@ interface Attachment {
   /** The collector behind this page (from the pass), if any: owns the quests, wear and emotes. */
   cid?: string;
   tz?: string;
+  /** In a nest: this owl is its owner (the collections object said so at its hello). Only the owner changes a nest. */
+  owner?: boolean;
 }
 
 /** What a collector owns, as last read from the collections object. */
@@ -64,6 +90,9 @@ const OWNED_REFRESH_MS = 2_000;
 const OWNED_CACHE_MAX = 1_000;
 /** Storage key for used-up shared objects (leaf piles): room id -> object id -> when it is back. */
 const OBJECTS_KEY = 'objects';
+/** Storage keys for the hub's lantern beam and the last stage quiz round settled. */
+const LANTERNS_KEY = 'lanterns';
+const QUIZ_KEY = 'quiz';
 
 function withoutWear(look: OwlLook): OwlLook {
   const { wear: _wear, ...rest } = look;
@@ -97,8 +126,19 @@ function randomSid(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+/** Close a socket that may be closed already. */
+function closeSocket(ws: WebSocket, code: number, reason: string): void {
+  try {
+    ws.close(code, reason);
+  } catch {
+    /* already closed */
+  }
+}
+
 export class RoomObject extends DurableObject<Env> {
   private readonly rooms = new Map<string, Room>();
+  /** The activities of each room (activities.ts): lanterns, the quiz, fishing, the copy game. */
+  private readonly acts = new Map<string, Activities>();
   private lastCounts = '';
   private lastCountsAt = 0;
   private countsDirty = false;
@@ -107,6 +147,13 @@ export class RoomObject extends DurableObject<Env> {
   private readonly lastEquipped = new Map<string, string>();
   /** Quest requests run one at a time per visitor, in arrival order. */
   private readonly queues = new Map<string, Promise<void>>();
+  /**
+   * Nest hellos still waiting on the collections object, by socket session, with their room. Frames
+   * that arrive from that socket meanwhile wait behind its hello.
+   */
+  private readonly admitting = new Map<string, { room: string; done: Promise<void> }>();
+  /** The latest view of each nest with owls in it or at its door, by nest id: the owner's changes land here first. */
+  private readonly nestViews = new Map<string, NestView>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -130,19 +177,23 @@ export class RoomObject extends DurableObject<Env> {
     void ctx.blockConcurrencyWhile(async () => {
       const saved = await ctx.storage.get<Record<string, Record<string, number>>>(OBJECTS_KEY);
       for (const [id, until] of Object.entries(saved ?? {})) if (Object.hasOwn(ROOMS, id)) this.room(id).restoreObjects(until);
+      // A lantern beam still burning, and the last quiz round paid, so a round is never paid twice.
+      const lanterns = await ctx.storage.get<LanternState>(LANTERNS_KEY);
+      if (lanterns && Object.hasOwn(ROOMS, LANTERN_ROOM)) this.activities(LANTERN_ROOM).restoreLanterns(lanterns);
+      const settled = await ctx.storage.get<number>(QUIZ_KEY);
+      if (typeof settled === 'number' && Object.hasOwn(ROOMS, QUIZ_ROOM)) this.activities(QUIZ_ROOM).quizSettled = settled;
     });
   }
 
+  /** Every visitor sees these: the nests are summed under one key, so no count names a nest. */
   private counts(): Record<string, number> {
-    const out: Record<string, number> = {};
-    for (const [id, r] of this.rooms) out[id] = r.count;
-    return out;
+    return publicCounts(this.rooms);
   }
 
   private room(id: string): Room {
     let r = this.rooms.get(id);
     if (!r) {
-      const def = Object.hasOwn(ROOMS, id) ? ROOMS[id] : undefined;
+      const def = roomDef(id);
       if (!def) throw new Error(`unknown room ${id}`);
       r = new Room(def, {
         now: () => Date.now(),
@@ -152,6 +203,15 @@ export class RoomObject extends DurableObject<Env> {
       this.rooms.set(id, r);
     }
     return r;
+  }
+
+  private activities(id: string): Activities {
+    let a = this.acts.get(id);
+    if (!a) {
+      a = new Activities(this.room(id), () => Date.now());
+      this.acts.set(id, a);
+    }
+    return a;
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -165,7 +225,7 @@ export class RoomObject extends DurableObject<Env> {
     const ip = request.headers.get('X-Visitor-Ip') ?? 'unknown';
     const cid = request.headers.get('X-Collector-Id');
     const tz = request.headers.get('X-Collector-Tz');
-    if (!Object.hasOwn(ROOMS, roomId) || !id) return new Response('bad room', { status: 400 });
+    if (!isRoomId(roomId) || !id) return new Response('bad room', { status: 400 });
     const perIp = Number(this.env.MAX_SOCKETS_PER_IP) || DEFAULT_MAX_SOCKETS_PER_IP;
     if (this.ctx.getWebSockets(`ip:${ip}`).length >= perIp) return new Response('too many connections from this address', { status: 429 });
 
@@ -181,7 +241,14 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const att = ws.deserializeAttachment() as Attachment | null;
+    let att = ws.deserializeAttachment() as Attachment | null;
+    // A nest's hello waits on the collections object: frames that arrive meanwhile wait behind it, in order.
+    const waiting = att ? this.admitting.get(att.sid) : undefined;
+    if (waiting) {
+      await waiting.done;
+      if (ws.readyState !== WebSocket.READY_STATE_OPEN) return; // turned away
+      att = ws.deserializeAttachment() as Attachment | null; // the hello put its owl in the room
+    }
     if (!att) return ws.close(CLOSE.BAD_PROTOCOL, 'no session');
     if (typeof message !== 'string') return ws.close(CLOSE.BAD_PROTOCOL, 'text frames only');
     if (message === HEARTBEAT_FRAME) return; // normally answered by the auto-response without reaching here
@@ -190,27 +257,30 @@ export class RoomObject extends DurableObject<Env> {
       if (message.length > 1024) return ws.close(CLOSE.TOO_LARGE, 'frame too large');
       return ws.close(CLOSE.BAD_PROTOCOL, 'malformed frame');
     }
-    const room = this.room(att.room);
 
     if (!att.state) {
       if (frame.t !== 'hello') return ws.close(CLOSE.BAD_PROTOCOL, 'hello first');
       if (this.env.GATE === 'ticket' && att.ip !== 'admitted') {
         // v2 hook: the Worker marks admitted passes; guests are refused when the gate is closed.
       }
-      // Wear the collector does not own (or is not yet known to own) is left off until checked.
-      const { look, recheck } = this.vetLook(att, frame.look);
-      const result = room.join(peerOf(ws), att.id, { ...frame, look }, att.sid);
-      if (result === 'full') {
-        ws.send(JSON.stringify({ t: 'full', room: att.room, cap: room.cap } satisfies ServerFrame));
-        return ws.close(CLOSE.ROOM_FULL, 'room full');
+      if (!isNestRoom(att.room)) {
+        await this.join(ws, att, frame);
+        return;
       }
-      this.emitCounts();
-      if (recheck) void this.recheckLook(att, frame.look);
-      // Arriving in a room counts for quests that ask to visit it.
-      this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
-      return;
+      // A nest asks the collections object whose it is and how it stands before letting anyone in.
+      const room = att.room;
+      const sid = att.sid;
+      const done = this.helloNest(ws, att, frame)
+        .catch(() => closeSocket(ws, 1011, 'try again'))
+        .finally(() => {
+          this.admitting.delete(sid);
+          this.forget(room);
+        });
+      this.admitting.set(sid, { room, done });
+      return done;
     }
 
+    const room = this.room(att.room);
     switch (frame.t) {
       case 'hello':
         return ws.close(CLOSE.BAD_PROTOCOL, 'duplicate hello');
@@ -225,8 +295,10 @@ export class RoomObject extends DurableObject<Env> {
       }
       case 'bye':
         room.leave(att.id, att.sid);
+        this.acts.get(att.room)?.forget(att.id);
         ws.serializeAttachment({ ...att, state: null } satisfies Attachment);
         ws.close(1000, 'bye');
+        this.forget(att.room);
         this.emitCounts();
         return;
       case 'emote':
@@ -241,7 +313,142 @@ export class RoomObject extends DurableObject<Env> {
       case 'gather':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.quest(ws, att, room, frame));
+      case 'act':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.act(ws, att, room, frame));
+      case 'street':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.streetDoors(ws, att, room, frame.r));
+      case 'nest':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.arrange(ws, att, room, frame));
     }
+  }
+
+  /** Put a visitor whose hello arrived in its room and tell everyone. False when the room is full (the socket closes 4010). */
+  private async join(ws: WebSocket, att: Attachment, hello: ClientHello, opts: { overCap?: boolean } = {}): Promise<boolean> {
+    const room = this.room(att.room);
+    // Wear the collector does not own (or is not yet known to own) is left off until checked.
+    const { look, recheck } = this.vetLook(att, hello.look);
+    const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, opts);
+    if (result === 'full') {
+      this.send(ws, { t: 'full', room: att.room, cap: room.cap });
+      closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
+      return false;
+    }
+    this.emitCounts();
+    if (recheck) void this.recheckLook(att, hello.look);
+    // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
+    if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
+    if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
+    // Arriving in a room counts for quests that ask to visit it (none asks for a nest).
+    if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
+    return true;
+  }
+
+  // ---------- the nests ----------
+
+  /**
+   * A nest's hello. The collections object says whose nest it is and how it stands, though a view
+   * this object holds is newer (the owner's changes land here first). A closed nest lets only its
+   * owner in, and its owner always gets in, however full it is. The newcomer gets the nest right
+   * after its welcome; its owner also the furniture it owns and today's furniture gift.
+   */
+  private async helloNest(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
+    const nestId = nestIdOf(att.room);
+    if (!nestId) return;
+    let visit: NestVisit | null;
+    try {
+      visit = await this.collections().nestById(nestId, att.cid);
+    } catch {
+      return closeSocket(ws, 1011, 'try again');
+    }
+    if (ws.readyState !== WebSocket.READY_STATE_OPEN) return;
+    const view = visit ? (this.nestViews.get(nestId) ?? visit.nest) : null;
+    const mine = visit?.mine === true;
+    if (!view || (!view.open && !mine)) {
+      const why = view ? 'closed' : 'gone';
+      this.send(ws, { t: 'closed', room: att.room, why });
+      return closeSocket(ws, CLOSE.NEST_CLOSED, why);
+    }
+    const me: Attachment = { ...att, owner: mine };
+    ws.serializeAttachment(me);
+    if (!(await this.join(ws, me, hello, { overCap: mine }))) return;
+    this.nestViews.set(nestId, view);
+    const frame: ServerNest = { t: 'nest', nest: view, mine };
+    if (mine && visit?.owned && visit.gift) {
+      frame.owned = visit.owned;
+      frame.gift = visit.gift;
+    }
+    this.send(ws, frame);
+  }
+
+  /**
+   * The owner changes its nest: a piece in a spot, or open or closed to visitors. The answer goes to
+   * the owner and the nest as it now stands to everyone else inside; closing it sends every visitor
+   * out to the street.
+   */
+  private async arrange(ws: WebSocket, att: Attachment, room: Room, frame: ClientNest): Promise<void> {
+    const r = frame.r;
+    const no = (reason: NestEditRefusal) => this.send(ws, { t: 'nest', r, ok: false, reason });
+    const nestId = nestIdOf(att.room);
+    if (!nestId || !att.cid || !att.owner || room.sessionOf(att.id) !== att.sid) return no('not-owner');
+    if (!room.takeArrange(att.id)) return no('busy');
+    const stub = this.collections();
+    let res: NestEditResult;
+    try {
+      res = 'open' in frame ? await stub.setNestOpen(att.cid, frame.open) : await stub.setNestSpot(att.cid, frame.spot, frame.item);
+    } catch {
+      return no('offline');
+    }
+    if (!res.ok) return no(res.reason);
+    // The owner's own nest is this room's; any other would be a mix-up, shown to nobody.
+    if (res.nest.nestId !== nestId) return no('not-owner');
+    const nest = res.nest;
+    if (room.count) this.nestViews.set(nestId, nest);
+    this.send(ws, { t: 'nest', r, ok: true, nest });
+    if (!nest.open) this.sendVisitorsAway(att.room);
+    room.broadcast({ t: 'nest', nest }, att.id);
+  }
+
+  /** A nest just closed: every visitor in it is told so and sent out; only its owner stays. */
+  private sendVisitorsAway(roomId: string): void {
+    for (const ws of this.ctx.getWebSockets(`room:${roomId}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      // An owl still at the door is turned away by its own hello, which finds the nest closed.
+      if (!att?.state || att.owner) continue;
+      this.send(ws, { t: 'closed', room: roomId, why: 'closed' });
+      closeSocket(ws, CLOSE.NEST_CLOSED, 'closed');
+      this.drop(ws);
+    }
+  }
+
+  /** The street's nest doors for this visitor: its own nest behind door 0, and up to five other owls' open nests. */
+  private async streetDoors(ws: WebSocket, att: Attachment, room: Room, r: number): Promise<void> {
+    const refuse = (reason: 'unknown' | 'busy' | 'offline') => this.send(ws, { t: 'refused', r, reason });
+    if (att.room !== STREET_ROOM || !att.cid) return refuse('unknown');
+    if (room.sessionOf(att.id) !== att.sid) return;
+    if (!room.takeUse(att.id)) return refuse('busy');
+    const look = room.lookOf(att.id);
+    const stub = this.collections();
+    try {
+      // The owner's colours go on its own door's flag, as it comes by.
+      const [own, others] = await Promise.all([stub.myNest(att.cid, look ? nestLook(look) : null), stub.streetNests(att.cid, STREET_DOORS - 1)]);
+      const doors = Array.from({ length: STREET_DOORS - 1 }, (_, i) => others[i] ?? null);
+      this.send(ws, { t: 'street', r, own: { nestId: own.nest.nestId, open: own.nest.open }, doors });
+    } catch {
+      refuse('offline');
+    }
+  }
+
+  /** A nest nobody is in or at the door of is let go: its room, and the view kept while owls were there. */
+  private forget(roomId: string): void {
+    const nestId = nestIdOf(roomId);
+    if (!nestId || this.rooms.get(roomId)?.count) return;
+    for (const a of this.admitting.values()) if (a.room === roomId) return;
+    this.rooms.delete(roomId);
+    this.acts.delete(roomId);
+    this.nestViews.delete(nestId);
   }
 
   // ---------- quests, NPC owls and interactables ----------
@@ -314,17 +521,20 @@ export class RoomObject extends DurableObject<Env> {
           if (!room.near(att.id, it.pos, rules.reach)) return refuse('far');
           if (!room.takeUse(att.id)) return refuse('busy');
           const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
+          // Leaf piles and stalls count toward today's tasks too.
+          const task = it.kind === 'leaf-pile' ? 'flop' : it.kind === 'stall' ? 'browse' : null;
           if (rules.shared) {
             if (!room.useObject(att.id, it.id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
             this.saveObjects();
             const res = await stub.flop(cid, ev, att.room);
             this.send(ws, { t: 'useResult', r, ok: true, feathers: res.feathers, total: res.total, updates: res.updates });
             if (res.board) this.sendBoard(ws, res.board, res.updates);
-            return;
+          } else {
+            const res = await stub.questEvent(cid, ev, att.room);
+            this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: res.board?.feathers ?? -1, updates: res.updates });
+            if (res.board) this.sendBoard(ws, res.board, res.updates);
           }
-          const res = await stub.questEvent(cid, ev, att.room);
-          this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: res.board?.feathers ?? -1, updates: res.updates });
-          if (res.board) this.sendBoard(ws, res.board, res.updates);
+          if (task) this.pushTasks(ws, await stub.play(cid, 0, { kind: task }));
           return;
         }
         case 'gather': {
@@ -338,6 +548,157 @@ export class RoomObject extends DurableObject<Env> {
     } catch {
       return refuse('offline');
     }
+  }
+
+  // ---------- activities: lanterns, fishing, the copy game, the stage quiz ----------
+
+  private async act(ws: WebSocket, att: Attachment, room: Room, frame: ClientAct): Promise<void> {
+    const { r, a } = frame;
+    const no = (reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown') => this.send(ws, { t: 'act', r, a, ok: false, reason });
+    if (!att.cid) return no('unknown');
+    if (room.sessionOf(att.id) !== att.sid) return;
+    const cid = att.cid;
+    const stub = this.collections();
+    try {
+      if (a === 'tasks') return this.send(ws, { t: 'act', r, a, ok: true, tasks: await stub.tasks(cid) });
+      // The nests have no activities: today's tasks are all that is asked for there.
+      if (isNestRoom(att.room)) return no('unknown');
+      const acts = this.activities(att.room);
+      switch (a) {
+        case 'light': {
+          const res = acts.light(att.id);
+          if (!res.ok) return no(res.reason);
+          this.send(ws, { t: 'act', r, a, ok: true, id: res.id });
+          room.broadcast(acts.lanternFrame({ id: res.id, by: att.id }));
+          this.saveLanterns(acts);
+          this.pushTasks(ws, await stub.play(cid, 0, { kind: 'light' }));
+          if (res.full) await this.payBeam(res.full);
+          return;
+        }
+        case 'cast': {
+          const res = acts.cast(att.id);
+          return res.ok ? this.send(ws, { t: 'act', r, a, ok: true, biteAt: res.biteAt }) : no(res.reason);
+        }
+        case 'reel': {
+          const res = acts.reel(att.id);
+          if (!res.ok) return no(res.reason);
+          if (res.outcome !== 'caught') return this.send(ws, { t: 'act', r, a, ok: true, outcome: res.outcome });
+          const played = await stub.play(cid, res.fish.feathers, { kind: 'fish' });
+          this.send(ws, { t: 'act', r, a, ok: true, outcome: 'caught', fish: res.fish.id, feathers: played.added, total: played.total });
+          return this.pushTasks(ws, played);
+        }
+        case 'copy': {
+          // The robot plays tunes of the emotes this owl owns (the starter pair at least).
+          const owned = await this.loadOwned(cid, att.tz);
+          const emotes = owned ? [...owned.set].filter((v) => isEmoteId(v)) : [...COPY_BASE_EMOTES];
+          const res = acts.startCopy(att.id, emotes);
+          if (!res.ok) return no(res.reason);
+          const g = res.game;
+          return this.send(ws, { t: 'act', r, a, ok: true, notes: g.notes, tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level });
+        }
+        case 'note': {
+          const e = frame.e ?? '';
+          const step = acts.note(att.id, e);
+          if (step.kind === 'idle' || step.kind === 'busy') return no(step.kind);
+          // A right note is danced for everyone in the room (the owl owns it: the robot only plays owned emotes).
+          if (step.kind === 'note' || step.kind === 'tune' || step.kind === 'won') room.broadcast({ t: 'emote', id: att.id, e }, att.id);
+          switch (step.kind) {
+            case 'early':
+            case 'note':
+              return this.send(ws, { t: 'act', r, a, ok: true, step: step.kind, deadline: step.game.deadline });
+            case 'wrong':
+            case 'slow':
+              return this.send(ws, { t: 'act', r, a, ok: true, step: step.kind, level: step.level, expected: step.expected });
+            case 'tune': {
+              const played = await stub.play(cid, step.feathers, { kind: 'copy' });
+              const g = step.game;
+              this.send(ws, { t: 'act', r, a, ok: true, step: 'tune', tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level, feathers: played.added, total: played.total });
+              return this.pushTasks(ws, played);
+            }
+            case 'won': {
+              const played = await stub.play(cid, step.feathers, { kind: 'copy' });
+              this.send(ws, { t: 'act', r, a, ok: true, step: 'won', level: step.level, feathers: played.added, total: played.total });
+              return this.pushTasks(ws, played);
+            }
+          }
+        }
+      }
+    } catch {
+      return no('offline');
+    }
+  }
+
+  /** Tell a visitor their tasks moved (and what finishing them paid). */
+  private pushTasks(ws: WebSocket, played: PlayResult): void {
+    if (played.tasks) this.send(ws, { t: 'tasks', ...played.tasks });
+  }
+
+  /** The visitors' sockets in this object, by visitor id. */
+  private socketOf(id: string): WebSocket | null {
+    for (const ws of this.ctx.getWebSockets(`id:${id}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att?.state) return ws;
+    }
+    return null;
+  }
+
+  /** A full lantern beam: every owl that helped light it, and is still here, is paid. */
+  private async payBeam(helpers: string[]): Promise<void> {
+    const each = lanternFeathers(helpers.length);
+    for (const id of helpers) {
+      const ws = this.socketOf(id);
+      const att = ws?.deserializeAttachment() as Attachment | null | undefined;
+      if (!ws || !att?.cid) continue;
+      try {
+        const played = await this.collections().play(att.cid, each, { kind: 'beam' });
+        this.send(ws, { t: 'paid', what: 'beam', feathers: played.added, total: played.total });
+        this.pushTasks(ws, played);
+      } catch {
+        /* the beam still glows; pay is best effort */
+      }
+    }
+  }
+
+  /** A stage quiz question that just closed: the answer for everyone in the hub, and pay for the owls in its zone. */
+  private async settleQuiz(): Promise<void> {
+    const hub = this.rooms.get(QUIZ_ROOM);
+    if (!hub?.count) return;
+    const acts = this.activities(QUIZ_ROOM);
+    const due = acts.quizDue();
+    if (!due) return;
+    const { right, winners } = acts.settleQuiz(due);
+    await this.ctx.storage.put(QUIZ_KEY, due.n);
+    hub.broadcast({ t: 'quiz', n: due.n, right, winners });
+    for (const id of winners) {
+      const ws = this.socketOf(id);
+      const att = ws?.deserializeAttachment() as Attachment | null | undefined;
+      if (!ws || !att?.cid) continue;
+      try {
+        const played = await this.collections().play(att.cid, QUIZ_FEATHERS, { kind: 'quiz' });
+        this.send(ws, { t: 'paid', what: 'quiz', feathers: played.added, total: played.total });
+        this.pushTasks(ws, played);
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+
+  private saveLanterns(acts: Activities): void {
+    this.ctx.waitUntil(this.ctx.storage.put(LANTERNS_KEY, acts.lanternState()));
+  }
+
+  /** When the object should wake next: the housekeeping minute, or sooner when a hub quiz question closes. */
+  private nextWake(now: number): number {
+    let next = now + ALARM_EVERY_MS;
+    if (this.rooms.get(QUIZ_ROOM)?.count) next = Math.min(next, this.activities(QUIZ_ROOM).nextQuizClose());
+    return next;
+  }
+
+  /** Wake no later than the next quiz question's close while owls are in the hub. */
+  private async scheduleAlarm(): Promise<void> {
+    const next = this.nextWake(Date.now());
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > next) await this.ctx.storage.setAlarm(next);
   }
 
   /** Keep the used-up shared objects in storage as well as in memory (see the constructor). */
@@ -459,8 +820,11 @@ export class RoomObject extends DurableObject<Env> {
     if (!att) return;
     if (att.state) {
       // Only the session that owns the visitor may remove it; a replaced socket's close is ignored.
-      this.rooms.get(att.room)?.leave(att.id, att.sid);
+      const room = this.rooms.get(att.room);
+      if (room?.sessionOf(att.id) === att.sid) this.acts.get(att.room)?.forget(att.id);
+      room?.leave(att.id, att.sid);
     }
+    this.forget(att.room);
     this.emitCounts();
   }
 
@@ -487,8 +851,9 @@ export class RoomObject extends DurableObject<Env> {
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ALARM_EVERY_MS);
   }
 
-  /** Every minute while anyone is connected: close silent sockets and refresh counts. */
+  /** Every minute while anyone is connected: close silent sockets and refresh counts; and when a hub quiz question closes. */
   override async alarm(): Promise<void> {
+    await this.settleQuiz();
     const now = Date.now();
     const sockets = this.ctx.getWebSockets();
     for (const ws of sockets) {
@@ -507,6 +872,6 @@ export class RoomObject extends DurableObject<Env> {
       }
     }
     this.emitCounts(true);
-    if (this.ctx.getWebSockets().length > 0) await this.ctx.storage.setAlarm(now + ALARM_EVERY_MS);
+    if (this.ctx.getWebSockets().length > 0) await this.ctx.storage.setAlarm(this.nextWake(Date.now()));
   }
 }

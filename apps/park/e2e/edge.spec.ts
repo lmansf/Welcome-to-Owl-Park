@@ -1,12 +1,12 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { dist, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
  * browser context, so nothing is shared between them except the server.
  */
-async function visitor(browser: Browser, params: Record<string, string> = {}): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+async function visitor(browser: Browser, params: Record<string, string> = {}, viewport = { width: 1280, height: 800 }): Promise<Page> {
+  const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   await openPark(page, { transport: 'edge', ...params });
   return page;
@@ -245,6 +245,174 @@ test.describe('room server', () => {
     expect((await request.get('/api/collection')).status()).toBe(401);
     expect((await request.get('/api/shop')).status()).toBe(401);
     expect((await request.post('/api/admin/grant', { data: { cid: 'c_abcdefgh12', variant: 'crown~0' } })).status()).toBe(403);
+    await a.context().close();
+  });
+
+  test('two owls light the lantern beam together, and the room server pays them both', async ({ browser }) => {
+    test.slow(); // two live parks, seven lanterns
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    // A beam still glowing from an earlier run goes dark first.
+    await expect.poll(async () => (await state(a)).play?.glowing, { timeout: 50_000 }).toBe(false);
+    // A from the west end of the beam, B from the east: four rounds, a lantern each.
+    const plan: Array<[number, number | null]> = [
+      [800, 1125],
+      [800, 1125],
+      [970, 1235],
+      [970, null],
+    ];
+    const at: Record<'a' | 'b', number> = { a: -1, b: -1 };
+    let litAt = 0;
+    for (const [xa, xb] of plan) {
+      await Promise.all([xa !== at.a ? walkAndStop(a, xa, 760) : null, xb !== null && xb !== at.b ? walkAndStop(b, xb, 760) : null]);
+      at.a = xa;
+      if (xb !== null) at.b = xb;
+      const wait = litAt + 2_550 - Date.now();
+      if (wait > 0) await a.waitForTimeout(wait);
+      await expect.poll(async () => (await state(a)).actions[0], { intervals: [50] }).toBe('act:light');
+      await a.keyboard.press('e');
+      if (xb !== null) {
+        await expect.poll(async () => (await state(b)).actions[0], { intervals: [50] }).toBe('act:light');
+        await b.keyboard.press('e');
+      }
+      litAt = Date.now();
+    }
+    await expect.poll(async () => (await state(a)).play?.glowing, { timeout: 10_000 }).toBe(true);
+    await expect.poll(async () => (await state(b)).play?.glowing, { timeout: 10_000 }).toBe(true);
+    // Four feathers each, and one more for the other owl who helped.
+    await expect(a.getByText(/^You helped light the whole beam! \+5 feathers/)).toBeVisible();
+    await expect(b.getByText(/^You helped light the whole beam! \+5 feathers/)).toBeVisible();
+    await a.screenshot({ path: 'e2e-screenshots/edge-beam.png' });
+    // A newcomer sees the beam glowing.
+    const c = await visitor(browser);
+    await expect.poll(async () => (await state(c)).play?.glowing, { timeout: 10_000 }).toBe(true);
+    for (const p of [a, b, c]) await p.context().close();
+  });
+
+  test('fishing through the room server: the bite comes when it says, and the catch pays', async ({ browser }) => {
+    const a = await visitor(browser, { room: 'grove' });
+    await walkToJetty(a);
+    await doAction(a, 'act:cast');
+    await expect.poll(async () => (await state(a)).play?.line, { timeout: 12_000, intervals: [50] }).toBe('bite');
+    await a.keyboard.press('e');
+    await expect(a.getByText(/^(You caught .+!|You fished out an old boot!)/)).toBeVisible();
+    await a.context().close();
+  });
+
+  test("the robot owl's tune through the room server, danced for everyone in the street", async ({ browser }) => {
+    const a = await visitor(browser, { room: 'market' });
+    // B only watches: a small window costs little to draw, so A's notes keep to the tune's timing on a slow machine.
+    const b = await visitor(browser, { room: 'market' }, { width: 320, height: 200 });
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    await walkAndStop(a, 1480, 755);
+    await doAction(a, 'act:copy');
+    const card = a.locator('.play-card.copy');
+    await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 8_000 });
+    const tune = (await state(a)).play!.copy!.tune;
+    for (const [i, note] of tune.entries()) {
+      // Each note has a few seconds: press it at once rather than wait for the card to sit still.
+      await card.locator(`[data-note="${note}"]`).dispatchEvent('click');
+      if (i < tune.length - 1) await expect.poll(async () => (await state(a)).play?.copy?.got).toBe(i + 1);
+    }
+    await expect(a.getByText(/^Tune copied! \+1 feather/)).toBeVisible();
+    // B saw A play the notes.
+    await expect.poll(async () => (await state(b)).peers[0]?.emote, { timeout: 5_000 }).toBe(tune[tune.length - 1]);
+    for (const p of [a, b]) await p.context().close();
+  });
+
+  test('nests through the room server: an owner decorating, a visitor watching, and a nest that closes on it', async ({ browser }) => {
+    // The host comes onto the street: the server makes its nest, behind door 0.
+    const host = await visitor(browser, { room: 'homes', look: '#2F3E5C,#E0D4F0,#00E5FF' });
+    await expect.poll(async () => {
+      const own = (await state(host)).street?.[0];
+      return own?.kind === 'own' ? own.nestId : null;
+    }, { timeout: 20_000 }).not.toBeNull();
+    const own = (await state(host)).street![0]!;
+    const nestId = own.kind === 'own' ? own.nestId! : '';
+    await walkToDoor(host, 'nest-door-0');
+    await expect.poll(async () => (await state(host)).room, { timeout: 20_000 }).toBe(`nest-${nestId}`);
+    await expect.poll(async () => (await state(host)).nest?.mine, { timeout: 15_000 }).toBe(true);
+    expect(Object.values((await state(host)).nest!.layout).sort()).toEqual(['lamp', 'potted-fern', 'rug', 'stump-table']);
+
+    // A visitor comes to the open nest: it sees the furniture and the host, and cannot decorate.
+    const guest = await visitor(browser, { room: `nest-${nestId}`, look: '#8B5A2B,#F6F1E3,#C9A227' });
+    await expect.poll(async () => (await state(guest)).nest?.mine, { timeout: 15_000 }).toBe(false);
+    expect((await state(guest)).nest?.owned).toEqual([]);
+    await expect.poll(async () => (await state(host)).peers.length, { timeout: 15_000 }).toBe(1);
+    expect((await state(guest)).actions).not.toContain('decorate');
+
+    // The host moves the lamp and takes today's furniture gift; the guest sees the lamp move.
+    const sheet = host.locator('section.decorate');
+    await host.locator('[data-action="decorate"]').click();
+    await sheet.getByRole('button', { name: 'Next spot' }).click();
+    await sheet.locator('[data-piece="lamp"]').click();
+    await expect.poll(async () => (await state(guest)).nest?.layout['f2'], { timeout: 10_000 }).toBe('lamp');
+    await sheet.locator('[data-gift]').click();
+    await expect(host.locator('.toast').filter({ hasText: 'New for your nest:' })).toBeVisible();
+    await expect(sheet.locator('[data-gift]')).toBeDisabled();
+    expect((await state(host)).nest?.owned).toHaveLength(5);
+
+    // The host closes the nest: the server sends the guest out to the street, and keeps newcomers out.
+    await sheet.locator('[data-open]').click();
+    await expect(guest.locator('.toast').filter({ hasText: 'Closed for now' })).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => (await state(guest)).room, { timeout: 20_000 }).toBe('homes');
+    // (Its socket closes before any welcome, so it is opened by hand rather than waiting to be online.)
+    const lateCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const late = await lateCtx.newPage();
+    await late.goto(`/?${new URLSearchParams({ transport: 'edge', room: `nest-${nestId}` })}`);
+    await expect.poll(async () => late.evaluate(() => window.owlPark?.state()?.room ?? null), { timeout: 30_000 }).toBe('homes');
+    await lateCtx.close();
+    // The owner is still at home.
+    expect((await state(host)).room).toBe(`nest-${nestId}`);
+    await expect.poll(async () => (await state(host)).peers.length, { timeout: 15_000 }).toBe(0);
+    for (const p of [host, guest]) await p.context().close();
+  });
+
+  test("feedback from the Menu reaches the keepers' page, which needs the admin key and marks notes done", async ({ browser, request }) => {
+    const a = await visitor(browser);
+    const words = `More lanterns by the pond, please (${Date.now()})`;
+    const sheet = a.getByRole('dialog', { name: 'Feedback' });
+    const openFeedback = async () => {
+      await a.locator('[data-menu-btn]').click();
+      await a.locator('[data-screen="feedback"]').click();
+    };
+    await openFeedback();
+    await sheet.getByRole('button', { name: 'Idea' }).click();
+    await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
+    await sheet.getByRole('button', { name: 'Send' }).click();
+    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+    // A second note straight away waits its turn.
+    await openFeedback();
+    await sheet.getByRole('textbox', { name: 'Your note' }).fill('And a second thought');
+    await sheet.getByRole('button', { name: 'Send' }).click();
+    await expect(sheet.getByText('One note at a time')).toBeVisible();
+
+    // Reading it takes the admin key; sending it takes a pass.
+    expect((await request.get('/api/admin/feedback')).status()).toBe(403);
+    expect((await request.post('/api/feedback', { data: { kind: 'bug', text: 'no pass' } })).status()).toBe(401);
+    const open = await request.get('/api/admin/feedback?status=open', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY } });
+    const notes = ((await open.json()) as { feedback: Array<{ id: number; kind: string; text: string; room: string | null; screen: string | null; ua: string | null }> }).feedback;
+    expect(notes.find((n) => n.text === words)).toMatchObject({ kind: 'idea', room: 'hub', screen: '1280x800' });
+    expect(notes.find((n) => n.text === words)?.ua).toContain('Chrome');
+
+    const keeper = await browser.newPage();
+    const page = await keeper.goto('/admin/feedback');
+    expect(page?.headers()['cache-control']).toBe('no-store');
+    expect(page?.headers()['x-robots-tag']).toContain('noindex');
+    await keeper.getByRole('textbox', { name: 'Admin key' }).fill('not the key');
+    await keeper.getByRole('button', { name: 'Open' }).click();
+    await expect(keeper.getByText('That key did not open it.')).toBeVisible();
+    await keeper.getByRole('textbox', { name: 'Admin key' }).fill(E2E_ADMIN_KEY);
+    await keeper.getByRole('button', { name: 'Open' }).click();
+    const note = keeper.getByRole('listitem').filter({ hasText: words });
+    await expect(note).toBeVisible();
+    await keeper.screenshot({ path: 'e2e-screenshots/edge-feedback-admin.png' });
+    await note.getByRole('button', { name: 'Done' }).click();
+    await expect(note).toBeHidden();
+    await keeper.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'Done' }).click();
+    await expect(keeper.getByRole('listitem').filter({ hasText: words })).toBeVisible();
+    await keeper.close();
     await a.context().close();
   });
 

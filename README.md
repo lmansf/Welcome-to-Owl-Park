@@ -4,9 +4,12 @@ Owl Park is a virtual owl park you visit online. Every visitor is an owl. You wa
 2D rooms by tapping where you want to go, and you see everyone else who is there right
 now doing the same. This repository holds the park application.
 
-On a computer the keyboard works too: WASD or the arrow keys walk while held, E uses whatever
-the owl is standing at (the gift shop, the Realm Vote), Q opens the collection and Escape
-closes panels.
+Two buttons sit at the bottom. **Emotes** opens the emote wheel. **Menu** leads to everything
+else: the owl builder (your owl's kind, colours, and what it wears, its pet and its effect), the
+quests, the settings (kept on the device) and Feedback. On a computer the keyboard works too:
+WASD or the arrow keys walk while held, E uses whatever the owl is standing at (the gift shop,
+the Realm Vote, a lantern, the fishing line), T opens the emote wheel and 1 to 8 play an emote at
+once, M opens the Menu, Q the owl builder, J the quests, and Escape closes whatever is open.
 
 Version 1 is **presence only**: owls appear, walk, change rooms, and leave. No chat yet.
 Owls also find **collectibles** around the park (wearables, pets, effects and emotes), a few
@@ -79,6 +82,9 @@ docs/                 architecture, art pipeline, deployment
 - [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
 - [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): wearables, pets, effects and emotes: the catalogue, the numbers and the server.
 - [docs/QUESTS.md](docs/QUESTS.md): quests, NPC owls, leaf piles, feathers, the feather shop and owl species.
+- [docs/ACTIVITIES.md](docs/ACTIVITIES.md): things to do in the park: the lantern beam, the stage quiz, fishing, the robot owl's copy game and three small tasks a day.
+- [docs/NESTS.md](docs/NESTS.md): every owl's own nest on the street outside the turnstiles: decorating it, the day's furniture gift, and visiting other owls' nests.
+- [docs/FEEDBACK.md](docs/FEEDBACK.md): Feedback in the Menu, where notes are kept, and the keepers' page that reads them.
 - [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
 
 ## Ground rules baked into the code

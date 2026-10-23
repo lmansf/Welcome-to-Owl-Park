@@ -74,10 +74,11 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect.poll(() => owns(page, 'leaf-crown~0')).toBe(true);
     expect((await page.evaluate(() => window.owlPark.collection()))?.feathers).toBeGreaterThanOrEqual(50);
 
-    // The journal (J) lists what comes next.
+    // Quests (J) lists what comes next.
     await page.keyboard.press('Escape');
     await page.keyboard.press('KeyJ');
     await expect(page.locator('.journal')).toBeVisible();
+    await page.locator('.journal [data-tab="more"]').click();
     await expect(page.locator('.journal')).toContainText('Who has quests for you');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-journal.png` });
   });
@@ -158,30 +159,82 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect.poll(async () => (await state(b)).peers[0]?.emote, { timeout: 10_000 }).toBe('hoot');
   });
 
-  test('the collection panel shows progress, what is worn, and where the rest comes from', async ({ page }) => {
+  test('the owl builder shows progress, puts on and takes off what is owned, and says where the rest comes from', async ({ page }) => {
     await seed(page, 'e2e-panel', 'witch-hat~3');
     await openPark(page, { collector: 'e2e-panel', tz: 'UTC' });
     await expect.poll(() => owns(page, 'witch-hat~3')).toBe(true);
     expect(await page.evaluate(() => window.owlPark.equip('witch-hat~3'))).toBe(true);
 
-    await page.getByRole('button', { name: 'Collection' }).click();
-    await expect(page.getByText(/of 1180 · \d+ feathers/)).toBeVisible();
-    await page.locator('.card[data-item="witch-hat"]').click();
-    await expect(page.getByRole('button', { name: 'Take off' })).toBeVisible();
-    await page.locator('.card[data-item="crown"]').click();
-    await expect(page.getByText(/earn it on a quest, or look for it in the feather shop/)).toBeVisible();
-    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-collection.png` });
-    await page.getByRole('button', { name: 'Close collection' }).click();
-    await page.getByRole('button', { name: 'Emotes' }).click();
-    await expect(page.locator('[data-emote="hoot"]')).toBeVisible();
+    await page.locator('[data-menu-btn]').click();
+    await page.locator('[data-screen="owl"]').click();
+    const builder = page.getByRole('dialog', { name: 'Your owl' });
+    await expect(builder.getByText(/of 1180 collected · \d+ feathers/)).toBeVisible();
+    // The owl is drawn big while the builder is open, over the room.
+    await expect.poll(() => page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
+    await builder.locator('[data-tab="wear"]').click();
+    const hat = builder.locator('.card[data-item="witch-hat"]');
+    await expect(hat).toHaveAttribute('aria-pressed', 'true');
+    await hat.click();
+    await expect.poll(async () => (await state(page)).look.wear?.head ?? null).toBeNull();
+    await hat.click();
+    await expect.poll(async () => (await state(page)).look.wear?.head ?? null).toBe('witch-hat~3');
+    await expect(builder.getByRole('button', { name: 'Take off' })).toBeVisible();
+    await builder.locator('.card[data-item="crown"]').click();
+    await expect(builder.getByText(/earn it on a quest, or look for it in the feather shop/)).toBeVisible();
+    expect((await state(page)).look.wear?.head).toBe('witch-hat~3');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-owl-builder.png` });
+    await builder.getByRole('button', { name: 'Done: close your owl' }).click();
+    await expect(builder).toBeHidden();
+    await expect.poll(() => page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(false);
   });
 
-  test('the owl panel picks a kind of owl: drawn in its own art at its size, seen by others, kept on return', async ({ page, context }) => {
+  test('the Emotes button opens the wheel, which plays one and closes; on a keyboard 1 to 8 play one at once', async ({ page, context }) => {
+    test.slow(); // two live parks in one browser
+    await seed(page, 'e2e-wheel', 'dance');
+    const other = await context.newPage();
+    await openPark(page, { id: 'owl-a', collector: 'e2e-wheel', tz: 'UTC' });
+    await openPark(other, { id: 'owl-b', collector: 'e2e-wheel-b', tz: 'UTC' });
+    await expect.poll(() => owns(page, 'dance')).toBe(true);
+    const seen = async () => (await state(other)).peers.find((p) => p.id === 'owl-a')?.emote;
+    await page.locator('[data-emotes-btn]').click();
+    const wheel = page.getByRole('dialog', { name: 'Emotes' });
+    await expect(page.locator('[data-emotes-btn]')).toHaveAttribute('aria-expanded', 'true');
+    // The starter pack's two and the one earned, in the catalogue's order.
+    await expect(wheel.locator('[data-emote]')).toHaveCount(3);
+    await expect(wheel.locator('[data-emote]').first()).toHaveAttribute('data-emote', 'hoot');
+    const order = await wheel.locator('[data-emote]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset['emote']));
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-emote-wheel.png` });
+    await wheel.locator('[data-emote="dance"]').click();
+    await expect(wheel).toBeHidden();
+    await expect(page.locator('[data-emotes-btn]')).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(seen, { timeout: 10_000 }).toBe('dance');
+    // On a keyboard, T opens it and a number plays that slot.
+    await page.keyboard.press('KeyT');
+    await expect(wheel).toBeVisible();
+    await page.keyboard.press('Digit1');
+    await expect(wheel).toBeHidden();
+    await expect.poll(seen, { timeout: 10_000 }).toBe('hoot');
+    // With nothing open a number plays that emote at once (after the room's pause between emotes).
+    await page.waitForTimeout(1_600);
+    await page.keyboard.press('Digit2');
+    await expect.poll(seen, { timeout: 10_000 }).toBe(order[1]);
+    // While another screen is open the numbers are left alone.
+    await page.waitForTimeout(1_600);
+    await page.keyboard.press('KeyM');
+    await page.keyboard.press('Digit1');
+    await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(await seen()).toBe(order[1]);
+    await page.keyboard.press('Escape');
+  });
+
+  test('the owl builder picks a kind of owl: drawn in its own art at its size, seen by others, kept on return', async ({ page, context }) => {
     test.slow(); // two live parks in one browser
     const other = await context.newPage();
     await openPark(page, { id: 'owl-a', collector: 'e2e-species', tz: 'UTC' });
     await openPark(other, { id: 'owl-b', collector: 'e2e-species-b', tz: 'UTC' });
-    await page.getByRole('button', { name: 'Your owl' }).click();
+    await page.locator('[data-menu-btn]').click();
+    await page.locator('[data-screen="owl"]').click();
     // A barn owl wears its own painted layers, loaded when it first shows up.
     await page.getByRole('button', { name: 'Barn owl' }).click();
     await expect.poll(async () => (await state(page)).owlArt, { timeout: 15_000 }).toBe('owl-barn-body');
@@ -189,6 +242,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await page.getByRole('button', { name: 'Screech owl' }).click();
     await expect.poll(async () => (await state(page)).look.species).toBe('screech');
     await expect.poll(async () => (await state(page)).owlArt, { timeout: 15_000 }).toBe('owl-screech-body');
+    await page.locator('.builder [data-tab="colours"]').click();
     await page.getByRole('button', { name: 'Natural colours' }).click();
     await expect.poll(async () => (await state(page)).look.body).toBe('#6B6B6B');
     await expect.poll(async () => (await state(other)).peers.find((p) => p.id === 'owl-a')?.look.species, { timeout: 15_000 }).toBe('screech');

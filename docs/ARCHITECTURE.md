@@ -73,7 +73,7 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v4 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v7 (`packages/shared/src/edge.ts`)
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -83,14 +83,21 @@ are server milliseconds; clients never put their own clock on the wire.
 Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
 `move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
 (an emote id), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
-`accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item).
+`accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
+the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks); and for
+the nests `street` (on the street: the visitor's own nest and five other owls' open ones) and
+`nest` (in its own nest, the owner puts a piece in a spot, takes one away, or opens or closes it).
 
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
 everyone including the sender; only the sender's copy carries `seq`, which is the
 acknowledgement), `look`, `leave`, `counts`, `full`, `emote` (to everyone else in the room), and
 for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, `refused`, plus
-`objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`).
+`objects` and `used` for shared interactables such as leaf piles (see `docs/QUESTS.md`), and for
+the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks` (see
+`docs/ACTIVITIES.md`), and for the nests `street` (the answer), `nest` (a nest as it stands: to a
+newcomer after its welcome, to everyone inside when its owner changes it, and as the answer to the
+change) and `closed` (a nest turned the visitor away or closed with it inside; close 4011 follows).
 
 Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
 normally match the client's prediction; a walk in progress is continued from its current
@@ -102,18 +109,25 @@ IP address per object. Quests and collectibles: talks, uses and hand-ins count o
 of the owl's position on the server clock (plus 40 px of slack), a quest item only within 56 px,
 and one quest request runs at a time per visitor; one use per 1.2 s; worn items the visitor's
 collection does not hold are dropped from a look before it is broadcast; emotes must be owned and
-are limited to one per 1.5 s; quest and emote frames count toward the frame limit.
+are limited to one per 1.5 s; quest and emote frames count toward the frame limit. Nests: a nest's
+room is `nest-<nestId>`, the id random and never taken from the collector; its hello waits for the
+collections object (later frames wait behind it), a closed nest lets in only its owner, its owner
+gets in however full it is (12 others), only its owner changes it (one change per 250 ms), and
+closing it sends every visitor out. No frame carries a collector id, and counts sum all the nests
+under one `nests` key.
 
 Client rules: the clock offset is set from `welcome` and refined with a min-filter over
 later `move` frames; remote owls are drawn 100 ms behind server time so jitter never shows;
 the local owl walks immediately on the tap and is corrected only if the echo differs by more
 than 2 px; reconnects back off from 0.5 s to 8 s and resume near the last position; a stale
-bundle (protocol mismatch) reloads itself.
+bundle (protocol mismatch) reloads itself, once until a room welcomes it again.
 
-Everything about a visitor that must survive hibernation (id, look, position, walk and collector
-id) is kept in the socket attachment, so an object that was evicted rebuilds every room from its
-sockets. Used-up leaf piles are kept in the object's storage as well, so an evicted object
-brings them back.
+Everything about a visitor that must survive hibernation (id, look, position, walk, collector id,
+and in a nest whether it is the owner's) is kept in the socket attachment, so an object that was
+evicted rebuilds every room, nests included, from its sockets. Used-up leaf piles, the hub's
+lantern beam and the last stage quiz round paid are kept in the object's storage as well, so an
+evicted object brings them back; while owls are in the hub, the alarm also wakes the object when a
+quiz question closes.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
@@ -135,9 +149,12 @@ for later (the quest items a visitor has been handed) follow the room data's `RO
 a room grows on the west, the room server and the browser move them once. A door without `to` can be an
 interactive spot (the gift shop, the idol): an entry in `interactions` in
 `apps/park/src/game/RoomScene.ts` gives it a button label and an action, and standing in it shows
-the button, which E also presses. New interactables, mini games included, follow that pattern. Art is referenced by key; artists replace files under
+the button, which E also presses. New interactables, mini games included, follow that pattern.
+The arcade, one screen off the market street's east end, has three cabinet spots along its back
+wall (`packages/shared/src/arcade.ts`): a cabinet whose game is not live yet shows an unlit screen
+reading "Hatching Soon", and standing at it says so. Art is referenced by key; artists replace files under
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
-variable (defaults: hub 80, grove 40, market 40).
+variable (defaults: lobby and hub 80; grove, market, arcade and the street 40; a nest 12).
 
 ## 6. Scaling knobs
 
@@ -195,7 +212,9 @@ into the pass.
   (with the pass), and `POST /api/admin/grant` (admin key; the hook purchases will use).
 
 The catalogue and its numbers: `docs/COLLECTIBLES.md`. Quests, NPC owls, leaf piles, the shop and
-owl species: `docs/QUESTS.md`.
+owl species: `docs/QUESTS.md`. The activities (the lantern beam, the stage quiz, fishing, the robot
+owl's copy game and three small tasks a day), which pay feathers under their own daily cap:
+`docs/ACTIVITIES.md`.
 
 ## 9. The lobby and tickets (built; the store's side waits for its custom app)
 
@@ -231,7 +250,15 @@ emailed magic link and Supabase session.
 same flow at $0 that works on opening night only (date to be announced); one pin, one ticket. It
 gives that night's Realm Vote like any other ticket.
 
-## 10. Open questions for the owner (with the defaults in the code)
+## 10. Feedback from visitors (built)
+
+Feedback in the Menu (picked out in gold) opens a short form: what kind of note (bug, idea, praise, other) and up
+to 1,000 characters. `POST /api/feedback` (with the pass) keeps it in the `Collections` object's
+SQLite (`apps/edge/src/feedbackBox.ts`) with the collector token, the room, the screen size and the
+browser's user agent; never an IP address or a name. The park's keepers read it on
+`/admin/feedback` with the admin key. How to read and triage it: `docs/FEEDBACK.md`.
+
+## 11. Open questions for the owner (with the defaults in the code)
 
 1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.
@@ -240,3 +267,4 @@ gives that night's Realm Vote like any other ticket.
 5. Room caps: hub 80 / grove 40 / market 40, or flat.
 6. Pre-ticket access: open to all guests (today), or a bot check on `/api/pass` if abuse shows.
 7. Collectibles: how purchases with money reach a collection (quest rewards, leaf-pile feathers and the shop follow canon C31; defaults in `docs/QUESTS.md` and `docs/COLLECTIBLES.md`).
+8. Activities (C30): their numbers and words, defaults in `docs/ACTIVITIES.md`.

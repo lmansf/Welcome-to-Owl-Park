@@ -1,5 +1,8 @@
+import { isNestRoom } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
+
+export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
@@ -13,6 +16,15 @@ import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
  * The lobby is the park's front entrance, where every visitor arrives: the ticket booth on one
  * side, the turnstile gate into the hub on the other. It is two screens wide, its painting the
  * east screen. It is outside the park, so it has no hiding spots and quests never send owls there.
+ *
+ * The street (`homes`) is outside the park too, and free: a lane of tree houses at dusk that the
+ * lobby's west end leads to. It is two screens wide, its painting the east screen, where the lane
+ * from the lobby comes in. Six nest doors stand along it, each into one owl's nest: a room of its
+ * own, made from NEST_ROOM. Neither has hiding spots.
+ *
+ * The arcade is one screen off the market street's east end, where the street bends away: a neon
+ * hall with three game cabinets along its back wall under a blank score board. It is built to
+ * widen east later, as the market was. It has no hiding spots.
  */
 export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Our Feathers', 'Hatching Soon'] as const;
 
@@ -248,7 +260,8 @@ export const ROOMS: Record<string, RoomDef> = {
     walkable: [
       [
         // The street, from the curb in front of the stalls down, past the neon stage to where it bends
-        // away; the doorway's threshold on the left.
+        // away, and up the pavement on the right to the arcade's doorway; the doorway's threshold on
+        // the left.
         { x: 0, y: 690 },
         { x: 1500, y: 690 },
         { x: 1520, y: 705 },
@@ -262,20 +275,22 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 2770, y: 712 },
         { x: 2950, y: 705 },
         { x: 3040, y: 662 },
-        { x: 3110, y: 652 },
-        { x: 3130, y: 690 },
-        { x: 3045, y: 720 },
-        { x: 3030, y: 760 },
-        { x: 3025, y: 888 },
+        { x: 3080, y: 678 },
+        { x: 3100, y: 690 },
+        { x: 3155, y: 690 },
+        { x: 3200, y: 708 },
+        { x: 3200, y: 888 },
         { x: 280, y: 888 },
         { x: 250, y: 830 },
         { x: 170, y: 760 },
         { x: 0, y: 760 },
       ],
     ],
-    spawns: { 'default': { x: 330, y: 740 } },
+    spawns: { 'default': { x: 330, y: 740 }, 'from-arcade': { x: 3090, y: 770 } },
     doors: [
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, marker: { x: 70, y: 580 } },
+      // The arcade's doorway on the pavement where the street bends away, under its joystick sign.
+      { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, marker: { x: 3126, y: 640 } },
       { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
       // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
@@ -297,6 +312,40 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 2500, y: 860 },
       { x: 2700, y: 800 },
       { x: 2900, y: 860 },
+    ],
+  },
+  arcade: {
+    id: 'arcade',
+    size: { w: ROOM_W, h: ROOM_H },
+    background: 'arcade',
+    mood: 'arcade',
+    walkable: [
+      [
+        // The wet tiled floor: out through the open entrance on the west onto the street beyond its
+        // threshold, along the foot of the back wall, in front of the three cabinets, and into the
+        // hall that carries on past the chrome pillar on the east.
+        { x: 0, y: 690 },
+        { x: 195, y: 690 },
+        { x: 205, y: 712 },
+        { x: 445, y: 714 },
+        { x: 445, y: 750 },
+        { x: 1170, y: 750 },
+        { x: 1170, y: 716 },
+        { x: 1320, y: 716 },
+        { x: 1330, y: 690 },
+        { x: 1600, y: 690 },
+        { x: 1600, y: 888 },
+        { x: 0, y: 888 },
+      ],
+    ],
+    spawns: { 'default': { x: 300, y: 800 }, 'from-market': { x: 300, y: 800 } },
+    doors: [
+      // The open entrance, out onto the street past its threshold.
+      { id: 'to-market', rect: { x: 0, y: 690, w: 150, h: 70 }, to: { room: 'market', spawn: 'from-arcade' }, marker: { x: 110, y: 650 } },
+      // The three cabinets along the back wall, each spot in front of its cabinet.
+      { id: 'cabinet-crossing', rect: { x: 457, y: 750, w: 140, h: 60 }, marker: { x: 527, y: 412 } },
+      { id: 'cabinet-flight', rect: { x: 733, y: 750, w: 140, h: 60 }, marker: { x: 803, y: 412 } },
+      { id: 'cabinet-sling', rect: { x: 1016, y: 750, w: 140, h: 60 }, marker: { x: 1086, y: 412 } },
     ],
   },
   lobby: {
@@ -346,14 +395,168 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 2200, y: 820 } },
+    spawns: { 'default': { x: 2200, y: 820 }, 'from-homes': { x: 190, y: 850 } },
     doors: [
+      // The lane to the street of nests, past the west end of the balustrade.
+      { id: 'to-homes', rect: { x: 0, y: 790, w: 110, h: 98 }, to: { room: 'homes', spawn: 'from-lobby' }, marker: { x: 55, y: 790 } },
       // The ticket window of the birdhouse booth.
       { id: 'booth', rect: { x: 1890, y: 702, w: 170, h: 88 }, marker: { x: 1960, y: 590 } },
       // The five turnstiles beneath the owls' wings: through them is the hub.
       { id: 'gate', rect: { x: 2400, y: 650, w: 390, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
     ],
   },
+  homes: {
+    id: 'homes',
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'homes',
+    backgrounds: [
+      { key: 'homes-west', x: 0, y: 0 },
+      { key: 'homes', x: ROOM_W, y: 0 },
+    ],
+    mood: 'dusk',
+    walkable: [
+      [
+        // The lane beneath the tree houses, from the mossy bank that closes its west end past the six
+        // nest doors (each a step up onto its doorstep) to the east end, where it bends away past the
+        // two posts to the lobby. Where the screens join it narrows between the roots behind and the
+        // dark mounds in front, and at the east end the mossy bank in the corner is not lane.
+        { x: 312, y: 724 },
+        { x: 480, y: 718 },
+        { x: 500, y: 712 },
+        { x: 504, y: 704 },
+        { x: 598, y: 704 },
+        { x: 606, y: 714 },
+        { x: 745, y: 716 },
+        { x: 800, y: 700 },
+        { x: 1000, y: 696 },
+        { x: 1010, y: 691 },
+        { x: 1114, y: 691 },
+        { x: 1124, y: 697 },
+        { x: 1260, y: 698 },
+        { x: 1290, y: 684 },
+        { x: 1450, y: 682 },
+        { x: 1458, y: 669 },
+        { x: 1544, y: 669 },
+        { x: 1552, y: 682 },
+        { x: 1700, y: 686 },
+        { x: 1830, y: 690 },
+        { x: 1866, y: 690 },
+        { x: 1872, y: 684 },
+        { x: 1978, y: 684 },
+        { x: 1986, y: 690 },
+        { x: 2340, y: 690 },
+        { x: 2344, y: 666 },
+        { x: 2454, y: 666 },
+        { x: 2458, y: 690 },
+        { x: 2810, y: 695 },
+        { x: 2816, y: 676 },
+        { x: 2928, y: 676 },
+        { x: 2934, y: 696 },
+        { x: 3080, y: 702 },
+        { x: 3110, y: 664 },
+        { x: 3150, y: 646 },
+        { x: 3200, y: 640 },
+        { x: 3200, y: 718 },
+        { x: 3100, y: 772 },
+        { x: 3000, y: 832 },
+        { x: 2944, y: 880 },
+        { x: 1860, y: 880 },
+        { x: 1760, y: 830 },
+        { x: 1700, y: 806 },
+        { x: 1676, y: 780 },
+        { x: 1648, y: 760 },
+        { x: 1610, y: 756 },
+        { x: 1576, y: 756 },
+        { x: 1566, y: 768 },
+        { x: 1490, y: 774 },
+        { x: 1445, y: 794 },
+        { x: 1400, y: 834 },
+        { x: 1372, y: 880 },
+        { x: 462, y: 880 },
+        { x: 444, y: 832 },
+        { x: 436, y: 782 },
+        { x: 345, y: 780 },
+        { x: 318, y: 770 },
+      ],
+    ],
+    spawns: {
+      'default': { x: 2640, y: 790 },
+      'from-lobby': { x: 3030, y: 750 },
+      'from-nest-0': { x: 2872, y: 752 },
+      'from-nest-1': { x: 2399, y: 742 },
+      'from-nest-2': { x: 1935, y: 762 },
+      'from-nest-3': { x: 1495, y: 742 },
+      'from-nest-4': { x: 1070, y: 768 },
+      'from-nest-5': { x: 565, y: 782 },
+    },
+    doors: [
+      // The lane back to the lobby, past the two posts at the east end.
+      { id: 'to-lobby', rect: { x: 3130, y: 670, w: 70, h: 66 }, to: { room: 'lobby', spawn: 'from-homes' }, marker: { x: 3170, y: 680 } },
+      // The nest doors, one at the foot of each trunk, door 0 nearest the lobby: blue, red and yellow
+      // on the east screen, green, teal and red on the west. Door 0 is always the visitor's own nest
+      // and the others are other owls' open nests, so where each one leads is decided per visitor and
+      // none has a `to`. The rect is the doorstep and the strip of lane in front of it, its middle
+      // just behind the lane's edge, so a walk along the lane to a door reaches it; the marker is
+      // where the door's flag hangs, high over the door and clear of its lantern.
+      { id: 'nest-door-0', rect: { x: 2802, y: 676, w: 140, h: 40 }, marker: { x: 2872, y: 375 } },
+      { id: 'nest-door-1', rect: { x: 2329, y: 666, w: 140, h: 46 }, marker: { x: 2399, y: 377 } },
+      { id: 'nest-door-2', rect: { x: 1855, y: 672, w: 140, h: 36 }, marker: { x: 1925, y: 377 } },
+      { id: 'nest-door-3', rect: { x: 1430, y: 666, w: 140, h: 32 }, marker: { x: 1500, y: 410 } },
+      { id: 'nest-door-4', rect: { x: 993, y: 682, w: 140, h: 32 }, marker: { x: 1063, y: 405 } },
+      { id: 'nest-door-5', rect: { x: 480, y: 700, w: 140, h: 40 }, marker: { x: 550, y: 405 } },
+    ],
+  },
+};
+
+/**
+ * The nest every owl has: a cosy round room inside a trunk, one screen. It is a template rather than
+ * a room of the registry: each nest is this room under its own id, `nest-<nestId>`, as roomFor gives
+ * it (homes.ts has the nest ids and the spots where the furniture stands).
+ */
+export const NEST_ROOM: RoomDef = {
+  id: 'nest',
+  size: { w: ROOM_W, h: ROOM_H },
+  background: 'nest',
+  // Gold dust drifting in the lamplight, as inside the hub's tree.
+  mood: 'hub',
+  walkable: [
+    [
+      // The round floor of the hollow: in from the door in the west wall, along the back wall beneath
+      // the round window, and in front of the stone hearth in the east wall, between the dark curve
+      // of the trunk on either side.
+      { x: 270, y: 888 },
+      { x: 232, y: 820 },
+      { x: 214, y: 772 },
+      { x: 250, y: 724 },
+      { x: 250, y: 676 },
+      { x: 340, y: 676 },
+      { x: 372, y: 678 },
+      { x: 420, y: 668 },
+      { x: 530, y: 654 },
+      { x: 560, y: 634 },
+      { x: 800, y: 630 },
+      { x: 1040, y: 634 },
+      { x: 1080, y: 652 },
+      { x: 1130, y: 656 },
+      { x: 1215, y: 668 },
+      { x: 1245, y: 688 },
+      { x: 1280, y: 702 },
+      { x: 1320, y: 712 },
+      { x: 1350, y: 718 },
+      { x: 1388, y: 732 },
+      { x: 1396, y: 772 },
+      { x: 1376, y: 812 },
+      { x: 1340, y: 860 },
+      { x: 1320, y: 888 },
+    ],
+  ],
+  spawns: { 'default': { x: 340, y: 740 } },
+  doors: [
+    // The round door in the west wall, out to the street: its rect is the doorway's floor. The owl
+    // comes out by the nest door it went in by (`from-nest-<n>`, which only the visit knows), else
+    // by door 0, its own nest's.
+    { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, marker: { x: 290, y: 580 } },
+  ],
 };
 
 /** Named anchors for large set pieces drawn by the scene (depth-sorted with the owls). */
@@ -378,6 +581,13 @@ export function relayout(room: string, p: Vec2, from: number): Vec2 {
   return { x, y: p.y };
 }
 
+/** The room with this id: one of ROOMS, or a nest made from NEST_ROOM; undefined for anything else. */
+export function roomFor(id: string): RoomDef | undefined {
+  if (Object.hasOwn(ROOMS, id)) return ROOMS[id];
+  return isNestRoom(id) ? { ...NEST_ROOM, id } : undefined;
+}
+
+/** The room with this id, or the hub for an id that is no room. */
 export function getRoom(id: string): RoomDef {
-  return Object.hasOwn(ROOMS, id) ? ROOMS[id]! : ROOMS['hub']!;
+  return roomFor(id) ?? ROOMS['hub']!;
 }

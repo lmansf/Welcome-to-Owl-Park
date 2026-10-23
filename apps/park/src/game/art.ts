@@ -7,9 +7,9 @@
  * Missing or broken files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type SpeciesId } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
-import { ROOMS } from '../rooms';
+import { ROOMS, roomFor } from '../rooms';
 import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
 import { loadSvgTexture } from './svgLoader';
 
@@ -33,8 +33,32 @@ export const ART: Record<string, ArtSpec> = {
   'grove-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   market: { w: ROOM_W, h: ROOM_H, kind: 'room' },
   'market-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // The street of nests (two screens: `homes-west` at x 0, `homes` at x 1600) and a nest's interior.
+  'homes-west': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  homes: { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  nest: { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // The arcade, one screen off the market street's east end.
+  arcade: { w: ROOM_W, h: ROOM_H, kind: 'room' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
+  // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall
+  // pieces are the clock, the framed leaf, the window box, the lanterns and the feather mobile.
+  'decor-rug': { w: 240, h: 100, kind: 'piece' },
+  'decor-armchair': { w: 150, h: 150, kind: 'piece' },
+  'decor-bookshelf': { w: 150, h: 230, kind: 'piece' },
+  'decor-lamp': { w: 120, h: 210, kind: 'piece' },
+  'decor-potted-fern': { w: 130, h: 150, kind: 'piece' },
+  'decor-mushroom-stool': { w: 120, h: 100, kind: 'piece' },
+  'decor-quilt-bed': { w: 260, h: 170, kind: 'piece' },
+  'decor-acorn-bowl': { w: 120, h: 90, kind: 'piece' },
+  'decor-teapot-table': { w: 170, h: 140, kind: 'piece' },
+  'decor-wall-clock': { w: 100, h: 140, kind: 'piece' },
+  'decor-framed-leaf': { w: 110, h: 140, kind: 'piece' },
+  'decor-window-box': { w: 180, h: 110, kind: 'piece' },
+  'decor-lantern-string': { w: 180, h: 100, kind: 'piece' },
+  'decor-moss-rug': { w: 220, h: 100, kind: 'piece' },
+  'decor-stump-table': { w: 160, h: 120, kind: 'piece' },
+  'decor-feather-mobile': { w: 110, h: 160, kind: 'piece' },
   // Construction blockades in the hub's two closed arches, each carrying its doorway's phrase.
   'blockade-not-yet-fledged': { w: 300, h: 300, kind: 'piece' },
   'blockade-hatching-soon': { w: 300, h: 300, kind: 'piece' },
@@ -83,11 +107,13 @@ export function blockadeKey(phrase: string): string {
 
 /** Art that belongs to one room (loaded when the room opens, released when it closes). */
 export function roomArtKeys(roomId: string): string[] {
-  const room = Object.hasOwn(ROOMS, roomId) ? ROOMS[roomId] : undefined;
+  const room = roomFor(roomId);
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
   for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
+  // A nest can show any piece of furniture: the owner may put out whatever they own.
+  if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
   return keys.filter((k) => k in ART);
 }
 

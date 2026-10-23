@@ -2,7 +2,8 @@ import type { Vec2 } from '@owl-park/shared';
 
 /**
  * Keyboard controls: WASD and the arrow keys walk the owl while held, E interacts with what the
- * owl stands at, Q opens and closes the collection, J the quest journal, Escape closes open panels. Keys are matched
+ * owl stands at, M opens and closes the Menu, T the emote wheel, 1 to 8 play an emote, Q the owl
+ * builder, J the quests, and Escape closes whatever is open. Keys are matched
  * by place (`KeyboardEvent.code`), so ZQSD walks on an AZERTY keyboard. Typing in a text field,
  * and shortcuts with Ctrl, Alt or Cmd, are left alone.
  */
@@ -37,9 +38,15 @@ export function heldDirection(codes: Iterable<string>): Vec2 | null {
 export interface KeyActions {
   /** E: use whatever the owl is standing at. */
   interact(): void;
-  /** Q: open or close the collection. */
-  collection(): void;
-  /** J: open or close the quest journal. */
+  /** M: open or close the Menu. */
+  menu(): void;
+  /** T: open or close the emote wheel. */
+  emotes(): void;
+  /** 1 to 8 (the number row or the keypad): play an emote, as numbered on the wheel. */
+  emoteKey(n: number): void;
+  /** Q: open or close the owl builder. */
+  owl(): void;
+  /** J: open or close the quests. */
   journal(): void;
   /** Escape: close open panels. */
   close(): void;
@@ -69,9 +76,15 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
     }
     if (e.repeat) return;
     if (e.code === 'KeyE') actions.interact();
-    else if (e.code === 'KeyQ') actions.collection();
+    else if (e.code === 'KeyM') actions.menu();
+    else if (e.code === 'KeyT') actions.emotes();
+    else if (e.code === 'KeyQ') actions.owl();
     else if (e.code === 'KeyJ') actions.journal();
     else if (e.code === 'Escape') actions.close();
+    else {
+      const n = /^(?:Digit|Numpad)([1-8])$/.exec(e.code)?.[1];
+      if (n) actions.emoteKey(Number(n));
+    }
   };
   const onUp = (e: KeyboardEvent) => {
     held.delete(e.code);

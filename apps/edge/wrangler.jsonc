@@ -12,7 +12,8 @@
     "binding": "ASSETS",
     // The API, the sockets and the page itself reach the Worker first; the page is served uncached
     // (src/page.ts), so a deploy never leaves a cached page pointing at a script bundle that is gone.
-    "run_worker_first": ["/ws/*", "/api/*", "/", "/index.html"]
+    // /admin/* holds the keepers' pages (src/feedbackPage.ts).
+    "run_worker_first": ["/ws/*", "/api/*", "/admin/*", "/", "/index.html"]
   },
   "durable_objects": {
     "bindings": [

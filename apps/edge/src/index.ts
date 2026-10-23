@@ -1,15 +1,17 @@
 /**
  * The Worker: serves the built client as static assets, mints guest passes and collector
- * tokens, answers the collection, shop and ticket API, takes the store's webhooks, and upgrades
- * /ws/<room> to a WebSocket held by the park's Durable Object (where quests, NPC owls and leaf
- * piles live).
+ * tokens, answers the collection, shop, furniture gift and ticket API, keeps visitors' feedback for
+ * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
+ * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { isTimeZone, isVariantId } from '@owl-park/shared';
+import { isTimeZone, isVariantId, parseFeedback } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
+import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
+import { feedbackPage } from './feedbackPage';
 import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { isPage, uncachedPage } from './page';
-import { ROOMS } from './rooms';
+import { ROOMS, isRoomId } from './rooms';
 import { verifyWebhook, type TicketLine } from './shopify';
 import { storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
@@ -36,6 +38,9 @@ function collections(env: Env) {
 }
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: CORS });
+
+/** A feedback request body is a few lines of words: anything past this is refused unread. */
+const FEEDBACK_BODY_MAX = 16_384;
 
 async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   try {
@@ -150,6 +155,42 @@ export default {
       return json({ order, tickets: r.body['tickets'], link: claimLink(url.origin, r.body['claim'] as string) });
     }
 
+    // ---- Feedback: visitors send it with their pass; the keepers read it with the admin key ----
+    if (url.pathname === '/api/feedback') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+      const pass = await passFrom(request, env);
+      if (!pass) return json({ error: 'bad-pass' }, 401);
+      if (!pass.cid) return json({ error: 'no-collector' }, 401);
+      // A few lines of words: refuse anything far larger before reading it.
+      if (Number(request.headers.get('Content-Length') ?? 0) > FEEDBACK_BODY_MAX) return json({ error: 'too large' }, 413);
+      const draft = parseFeedback(await readJson(request));
+      if (!draft) return json({ error: 'bad request' }, 400);
+      const ua = request.headers.get('User-Agent')?.slice(0, 300) || null;
+      const r = await collections(env).addFeedback(pass.cid, draft, ua);
+      return json(r, r.ok ? 200 : 429);
+    }
+    if (url.pathname === '/api/admin/feedback') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      const isStatus = (v: unknown): v is FeedbackStatus => typeof v === 'string' && (FEEDBACK_STATUSES as readonly string[]).includes(v);
+      if (request.method === 'GET') {
+        const status = url.searchParams.get('status') ?? 'open';
+        const limit = Number(url.searchParams.get('limit') ?? 100);
+        if (status !== 'all' && !isStatus(status)) return json({ error: 'bad request' }, 400);
+        return json({ feedback: await collections(env).feedback(status, Number.isFinite(limit) ? limit : 100) });
+      }
+      if (request.method === 'POST') {
+        const body = await readJson(request);
+        const id = body?.['id'];
+        const status = body?.['status'];
+        if (typeof id !== 'number' || !Number.isInteger(id) || !isStatus(status)) return json({ error: 'bad request' }, 400);
+        return (await collections(env).setFeedbackStatus(id, status)) ? json({ ok: true }) : json({ error: 'not found' }, 404);
+      }
+      return json({ error: 'not found' }, 404);
+    }
+    if (url.pathname === '/admin/feedback') return feedbackPage();
+
     // ---- The store's webhooks (C35): checked against the store's signature before anything is read ----
     if (url.pathname === '/api/store/webhook') {
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
@@ -227,6 +268,16 @@ export default {
       return json({ error: 'not found' }, 404);
     }
 
+    // ---- Nests: the day's furniture gift. The nests are outside the turnstiles, so it needs no ticket. ----
+    if (url.pathname === '/api/nest/gift') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+      const pass = await passFrom(request, env);
+      if (!pass) return json({ error: 'bad-pass' }, 401);
+      if (!pass.cid) return json({ error: 'no-collector' }, 401);
+      return json(await collections(env).claimFurnitureGift(pass.cid));
+    }
+
     // ---- Realm Vote ----
     if (url.pathname.startsWith('/api/vote')) {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -283,7 +334,8 @@ export default {
 
     if (url.pathname.startsWith('/ws/')) {
       const roomId = url.pathname.slice(4);
-      if (!Object.hasOwn(ROOMS, roomId)) return new Response('unknown room', { status: 404 });
+      // One of the park's rooms, or a nest (`nest-<id>`): whether that nest is there, and open, is the room object's to say.
+      if (!isRoomId(roomId)) return new Response('unknown room', { status: 404 });
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
       const pass = await verifyPass(signingSecret(env), url.searchParams.get('pass'));
       if (!pass) return new Response('bad pass', { status: 401 });
@@ -291,6 +343,9 @@ export default {
       const headers = new Headers(request.headers);
       headers.set('X-Room', roomId);
       headers.set('X-Visitor-Id', pass.id);
+      // Only the pass says whose collection (and nest) this is: whatever the page sent under these names goes.
+      headers.delete('X-Collector-Id');
+      headers.delete('X-Collector-Tz');
       if (pass.cid) headers.set('X-Collector-Id', pass.cid);
       if (pass.tz) headers.set('X-Collector-Tz', pass.tz);
       // Local load tests set TRUST_FORWARDED_FOR so each bot can claim its own address; never in production.

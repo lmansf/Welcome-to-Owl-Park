@@ -11,6 +11,7 @@ import {
   REACH_SLACK,
   findSpawn,
   isWalkable,
+  nestDoorIndex,
   positionAlongWalk,
   resolveTarget,
   distance,
@@ -54,6 +55,8 @@ interface Visitor {
   emotedAt: number;
   /** When this visitor last used an interactable (leaf piles, stalls). */
   usedAt: number;
+  /** When this visitor, the owner of the nest it is in, last changed it. */
+  arrangedAt: number;
 }
 
 export interface RoomOptions {
@@ -83,6 +86,8 @@ export const LIMITS = {
   emoteEveryMs: 1_500,
   /** One use of an interactable per visitor this often. */
   useEveryMs: USE_COOLDOWN_MS,
+  /** One change to its nest per owner this often. */
+  arrangeEveryMs: 250,
   /** Extra reach the server allows for talks and uses (the client's owl is drawn a little ahead). */
   reachSlackPx: REACH_SLACK,
 } as const;
@@ -172,9 +177,12 @@ export class Room {
     return false;
   }
 
-  /** Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. */
+  /**
+   * Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. A
+   * nest door on the street leads into a nest though it has no `to` (each visitor's door goes to its own place).
+   */
   private inExit(p: Vec2): boolean {
-    return this.def.doors.some((d) => d.to !== undefined && p.x >= d.rect.x && p.x <= d.rect.x + d.rect.w && p.y >= d.rect.y && p.y <= d.rect.y + d.rect.h);
+    return this.def.doors.some((d) => (d.to !== undefined || nestDoorIndex(d.id) !== null) && p.x >= d.rect.x && p.x <= d.rect.x + d.rect.w && p.y >= d.rect.y && p.y <= d.rect.y + d.rect.h);
   }
 
   /** A point the owl may be put on: walkable, not in an exit, not on top of another owl. */
@@ -199,9 +207,9 @@ export class Room {
   /**
    * Admit a visitor. Returns 'full' (caller sends `full` and closes 4010) or 'ok' after
    * the welcome and enter frames have been sent. A second session for the same id
-   * replaces the first (closed 4005).
+   * replaces the first (closed 4005). `overCap` lets a nest's owner into its own nest however full.
    */
-  join(peer: Peer, id: string, hello: ClientHello, sid = ''): 'ok' | 'full' {
+  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean } = {}): 'ok' | 'full' {
     const existing = this.visitors.get(id);
     if (existing) {
       // The newer session wins; remember where the old one stood so the newcomer can resume there.
@@ -209,7 +217,7 @@ export class Room {
       existing.peer.close(CLOSE.REPLACED, 'replaced by a newer session');
       this.visitors.delete(id);
       this.broadcast({ t: 'leave', id });
-    } else if (this.visitors.size >= this.opts.cap) {
+    } else if (this.visitors.size >= this.opts.cap && !opts.overCap) {
       return 'full';
     }
     // An explicit spawn name means the visitor came through a door: keep them close to it.
@@ -225,7 +233,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0, arrangedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -249,7 +257,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0, arrangedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -385,6 +393,16 @@ export class Room {
     const now = this.now();
     if (now - v.usedAt < LIMITS.useEveryMs) return false;
     v.usedAt = now;
+    return true;
+  }
+
+  /** Count a change to its nest against the owner's cooldown. False when too soon. */
+  takeArrange(id: string): boolean {
+    const v = this.visitors.get(id);
+    if (!v) return false;
+    const now = this.now();
+    if (now - v.arrangedAt < LIMITS.arrangeEveryMs) return false;
+    v.arrangedAt = now;
     return true;
   }
 

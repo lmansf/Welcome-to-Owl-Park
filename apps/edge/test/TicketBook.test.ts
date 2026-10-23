@@ -3,6 +3,7 @@ import { MemoryTicketStore, TicketBook, type TicketStore } from '../src/TicketBo
 import { SqlTicketStore } from '../src/sqlTicketStore';
 import type { TicketLine } from '../src/shopify';
 import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, isTicketId } from '../src/tickets';
+import { sqlStorage } from './sqlite';
 
 const T0 = Date.UTC(2026, 10, 1, 12, 0, 0);
 const day = (quantity: number, line = 'L1'): TicketLine => ({ line, quantity, kind: 'day', lengthMs: DEFAULT_LENGTH_MS.day, validFrom: null, validUntil: null });
@@ -11,32 +12,6 @@ const day = (quantity: number, line = 'L1'): TicketLine => ({ line, quantity, ki
 function seq(): (n: number) => Uint8Array {
   let x = 7;
   return (n) => Uint8Array.from({ length: n }, () => (x = (x * 1103515245 + 12345) >>> 0) >>> 16);
-}
-
-// Node's built-in SQLite stands in for the Durable Object's: same engine, same SQL.
-interface Statement {
-  all(...params: unknown[]): unknown[];
-  run(...params: unknown[]): { changes: number | bigint };
-}
-type Database = new (path: string) => { prepare(sql: string): Statement };
-let DatabaseSync: Database;
-
-beforeAll(async () => {
-  ({ DatabaseSync } = (await import('node:sqlite' as string)) as { DatabaseSync: Database });
-});
-
-function sqlStorage(): SqlStorage {
-  const db = new DatabaseSync(':memory:');
-  return {
-    exec(query: string, ...bindings: unknown[]) {
-      const st = db.prepare(query);
-      if (/^\s*SELECT/i.test(query)) {
-        const rows = st.all(...bindings);
-        return { toArray: () => rows, rowsWritten: 0 };
-      }
-      return { toArray: () => [], rowsWritten: Number(st.run(...bindings).changes) };
-    },
-  } as unknown as SqlStorage;
 }
 
 /** Every rule runs against both stores: in memory, and the Durable Object's SQLite tables. */
