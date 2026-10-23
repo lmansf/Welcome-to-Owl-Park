@@ -1269,13 +1269,13 @@ export class RoomScene extends Phaser.Scene {
     });
   }
 
-  /** Whether the free pass of this Opening Night Ticket has come (C42). */
+  /** Whether the pass this Opening Night Ticket claimed has come (C42). */
   private async passCame(id: string): Promise<boolean> {
     const wallet = (await this.transport.tickets?.wallet()) ?? [];
     return wallet.find((t) => t.id === id)?.freePass === 'claimed';
   }
 
-  /** Opening night (C42): after the ticket card, the free pass its Opening Night Ticket may claim tonight. */
+  /** Opening night (C42): after the ticket card, the half-price pass its Opening Night Ticket may claim tonight. */
   private async offerFreePass(id: string): Promise<void> {
     const tickets = this.transport.tickets;
     if (!tickets) return;

@@ -108,9 +108,9 @@ export interface Hud {
   openBooth(info: BoothInfo): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
-  /** Opening night (C42): after the ticket card, the free pass to claim. */
+  /** Opening night (C42): after the ticket card, the half-price pass to claim. */
   offerFreePass(offer: FreePassOffer): void;
-  /** Look for a free pass the owl went to claim, and say when it has come. */
+  /** Look for a pass the owl went to claim, and say when it has come. */
   watchFreePass(claimed: () => Promise<boolean>): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
