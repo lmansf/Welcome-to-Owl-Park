@@ -140,8 +140,13 @@ turnstiles let everyone through. The steps, in order:
    (its tickets show as waiting in the buyer's wallet); a later low rating releases it, or the
    owner adds the order tag `owl-park-release` after checking it, or refunds it.
 8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, for the booth's button; a
-   repository variable for deploys) and switch `GATE` to `ticket` in `wrangler.jsonc` at the same
-   time. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
+   repository variable for deploys) any time before: the booth offers it only while the gate takes
+   tickets. On the day, open `/admin/gate` with the admin key and press **Take tickets now**: the
+   turnstiles take tickets only and the booth sells, within ten seconds and with no deploy. Owls
+   already inside stay in; **Open to everyone** flips it back, and **As deployed** hands it back to
+   `GATE` in `wrangler.jsonc`. The same from a terminal: `POST /api/admin/gate` with the
+   `X-Admin-Key` header and `{"mode": "ticket"}` (or `"open"`, or `"deployed"`); a `GET` says how it
+   is set. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
    first scan starts its time.
 9. **Tickets without a store order** (giveaways and tests): `POST /api/admin/tickets` with the
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
@@ -169,11 +174,12 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (`open` now: everyone walks through the lobby's turnstiles; `ticket` once tickets sell: visitors without a ticket stay in the lobby), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
+`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
-to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
-`/admin/feedback` and opening night's count on `/admin/opening`), and the store's
+to close a month by hand, to issue tickets without a store order, to read visitors' feedback on
+`/admin/feedback` and opening night's count on `/admin/opening`, and to flip the gate on
+`/admin/gate`), and the store's
 secrets (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment

@@ -13,6 +13,8 @@ import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
 import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
+import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
+import { gatePage } from './gatePage';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId } from './rooms';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
@@ -66,6 +68,16 @@ async function passFrom(request: Request, env: Env) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : new URL(request.url).searchParams.get('pass');
   return verifyPass(signingSecret(env), token);
 }
+
+/** The opening switch as the vote ledger keeps it (OP-067). */
+async function readGate(env: Env): Promise<GateSet> {
+  const r = await votes(env).fetch('https://park/gate');
+  if (!r.ok) throw new Error(`the vote ledger answered ${r.status}`);
+  return ((await r.json()) as { gate: GateSet }).gate;
+}
+
+/** The front gate now: the opening switch, or GATE where the switch was never set. */
+const gateOf = (env: Env) => gateNow(() => readGate(env), env.GATE);
 
 /** The ticket book's internal routes in the vote ledger's object (`ticketDesk.ts`). */
 function deskOf(env: Env): Desk {
@@ -127,13 +139,22 @@ export default {
       const known = await verifyCollector(secret, given);
       const cid = known ?? randomCollectorId();
       const collector = known && given ? given : await mintCollector(secret, cid);
-      const exp = Math.floor(Date.now() / 1000) + GUEST_PASS_TTL_S;
-      const payload: PassPayload = { id: randomVisitorId(), exp, adm: false, cid };
+      const iat = Math.floor(Date.now() / 1000);
+      const exp = iat + GUEST_PASS_TTL_S;
+      const payload: PassPayload = { id: randomVisitorId(), exp, iat, adm: false, cid };
       const tz = url.searchParams.get('tz');
       if (isTimeZone(tz)) payload.tz = tz;
       const pass = await mintPass(secret, payload);
       // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
-      return Response.json({ pass, exp, collector, gate: gateMode(env.GATE), adm: payload.adm }, { headers: CORS });
+      return Response.json({ pass, exp, collector, gate: (await gateOf(env)).mode, adm: payload.adm }, { headers: CORS });
+    }
+
+    if (url.pathname === '/api/entry') {
+      // The front gate as it is now, for this pass: the booth's words and the turnstiles ask before they act.
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      const pass = await passFrom(request, env);
+      if (!pass) return json({ error: 'bad-pass' }, 401);
+      return json({ gate: (await gateOf(env)).mode, admitted: pass.adm });
     }
 
     // ---- Collectibles (the collector comes from the pass) ----
@@ -215,6 +236,27 @@ export default {
     }
     if (url.pathname === '/admin/opening') return openingPage();
 
+    // ---- The opening switch (OP-067): the front gate open to everyone, or taking tickets, with no deploy ----
+    if (url.pathname === '/api/admin/gate') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      const deployed = gateMode(env.GATE);
+      if (request.method === 'POST') {
+        const mode = (await readJson(request))?.['mode'];
+        if (mode !== 'open' && mode !== 'ticket' && mode !== 'deployed') return json({ error: 'bad request' }, 400);
+        const r = await votes(env).fetch('https://park/gate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode === 'deployed' ? null : mode }) });
+        if (!r.ok) return json({ error: 'the switch did not take' }, 502);
+        forgetGate();
+        const set = ((await r.json()) as { gate: GateSet }).gate;
+        console.log(`[owl-park] the opening switch: the gate is now ${gateFrom(set, env.GATE).mode} (${set ? 'set by the switch' : 'as deployed'})`);
+        return json({ ...gateFrom(set, env.GATE), set, deployed });
+      }
+      if (request.method !== 'GET') return json({ error: 'not found' }, 404);
+      const set = await readGate(env);
+      return json({ ...gateFrom(set, env.GATE), set, deployed });
+    }
+    if (url.pathname === '/admin/gate') return gatePage();
+
     // ---- The store's webhooks (C35): checked against the store's signature before anything is read ----
     if (url.pathname === '/api/store/webhook') {
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
@@ -288,7 +330,7 @@ export default {
         const exp = Math.min(nowS + GUEST_PASS_TTL_S, typeof until === 'number' ? Math.floor(until / 1000) : Infinity);
         const admittedPass = await mintPass(signingSecret(env), { ...pass, exp, adm: true, tid });
         if (r.body['started'] === true) mirrorLater(ctx, env, url.origin, { id: tid });
-        return json({ ...r.body, pass: admittedPass, exp, gate: gateMode(env.GATE), adm: true });
+        return json({ ...r.body, pass: admittedPass, exp, gate: (await gateOf(env)).mode, adm: true });
       }
       return json({ error: 'not found' }, 404);
     }
@@ -299,7 +341,7 @@ export default {
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       // The collection shows anywhere; the shop is inside the park, past the turnstiles.
-      if (url.pathname !== '/api/collection' && !admitted(gateMode(env.GATE), pass)) return json({ error: 'tickets-required' }, 403);
+      if (url.pathname !== '/api/collection' && !admitted(await gateOf(env), pass)) return json({ error: 'tickets-required' }, 403);
       const stub = collections(env);
       if (url.pathname === '/api/collection' && request.method === 'GET') return json(await stub.inventory(pass.cid, pass.tz));
       if (url.pathname === '/api/shop' && request.method === 'GET') return json(await stub.shop(pass.cid));
@@ -396,7 +438,7 @@ export default {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
       const pass = await verifyPass(signingSecret(env), url.searchParams.get('pass'));
       if (!pass) return new Response('bad pass', { status: 401 });
-      if (!mayEnter(gateMode(env.GATE), pass, roomId)) return new Response('not admitted', { status: 403 });
+      if (!mayEnter(await gateOf(env), pass, roomId)) return new Response('not admitted', { status: 403 });
       const headers = new Headers(request.headers);
       headers.set('X-Room', roomId);
       headers.set('X-Visitor-Id', pass.id);

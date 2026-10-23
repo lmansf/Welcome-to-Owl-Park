@@ -221,12 +221,21 @@ owl's copy game and three small tasks a day), which pay feathers under their own
 ## 9. The lobby and tickets (built; the store's side waits for its app)
 
 Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
-the turnstile gate into the hub on the other. With `GATE=open` (now) the turnstiles let everyone
-through and the booth says tickets are coming. With `GATE=ticket` (once tickets sell),
-`/api/pass` still gives every visitor a guest pass, but a pass that is not admitted opens only the
-lobby: the gate turns it back toward the booth, and the Worker refuses its socket for any other
-room and its use of the shop (its collection still shows). The pass answer carries `gate` and
-`adm` so the client knows which.
+the turnstile gate into the hub on the other. Open (now), the turnstiles let everyone through and
+the booth says tickets are coming. Taking tickets, `/api/pass` still gives every visitor a guest
+pass, but a pass that is not admitted opens only the rooms outside the turnstiles: the gate turns
+it back toward the booth, and the Worker refuses its socket for any other room and its use of the
+shop (its collection still shows). The booth sells only while the gate takes tickets.
+
+**The opening switch (OP-067, `apps/edge/src/gateSwitch.ts`):** the keepers flip the gate on
+`/admin/gate` (or `POST /api/admin/gate` with `{"mode": "ticket" | "open" | "deployed"}`), both
+behind the admin key, with no deploy. The setting lives in the vote ledger's object beside the
+tickets; each Worker reads it at most every ten seconds, so a flip reaches everyone within that.
+Never set, or handed back (`deployed`), `GATE` in `wrangler.jsonc` decides as before. The booth and
+the turnstiles ask `/api/entry` for the gate as it is now before they act. An owl already inside
+when the gate closes stays in: a pass carries when it was made (`iat`), and one made before the
+switch closed the gate stays admitted until it expires; the next pass applies the rule at the
+turnstiles.
 
 The ticket flow (C35; tested against a stand-in store until the store's app exists, see
 `docs/DEPLOY.md`): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach

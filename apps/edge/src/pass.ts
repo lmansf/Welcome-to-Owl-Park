@@ -15,6 +15,8 @@ export interface PassPayload {
   id: string;
   /** Expiry, Unix seconds. */
   exp: number;
+  /** Issued at, Unix seconds: a pass from before the gate closed keeps its owl in the park (OP-067). */
+  iat?: number;
   /** Admitted through a ticket. Guests are false. */
   adm: boolean;
   /** The ticket the gate scanned to admit this pass: it votes as that ticket. */
@@ -129,6 +131,7 @@ export async function verifyPass(secret: string, token: string | null, nowS = Ma
   if (isCollectorId(p['cid'])) out.cid = p['cid'];
   if (isTimeZone(p['tz'])) out.tz = p['tz'];
   if (isTicketId(p['tid'])) out.tid = p['tid'];
+  if (Number.isSafeInteger(p['iat'])) out.iat = p['iat'] as number;
   return out;
 }
 
