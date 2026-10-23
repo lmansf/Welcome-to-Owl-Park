@@ -67,6 +67,20 @@ test.describe('the opening switch (OP-067)', () => {
     expect(await (await request.get('/api/entry', { headers: auth })).json()).toEqual({ gate: 'open', admitted: false });
   });
 
+  test("anyone may ask the park's health, and the keepers' gate page shows it first", async ({ browser, request }) => {
+    const h = await request.get('/api/health');
+    expect(h.status()).toBe(200);
+    const body = (await h.json()) as { ok: boolean; parts: Record<string, boolean>; ms: number };
+    expect(body).toMatchObject({ ok: true, parts: { rooms: true, tickets: true, collections: true } });
+    expect(JSON.stringify(body)).not.toMatch(/key|secret|shop/i);
+    const keeper = await (await browser.newContext(COMPUTER)).newPage();
+    await keeper.goto('/admin/gate');
+    await keeper.getByLabel('Admin key').fill(E2E_ADMIN_KEY);
+    await keeper.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(keeper.locator('#health')).toContainText('The park is up: every part answered in');
+    await keeper.context().close();
+  });
+
   for (const [name, device] of [
     ['a computer', COMPUTER],
     ['a phone', PHONE],

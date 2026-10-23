@@ -2,7 +2,7 @@
  * The keepers' front gate page (/admin/gate, OP-067): the opening switch, read and flipped with the
  * admin key like the other keepers' pages. It shows whether the turnstiles let everyone through or
  * take tickets, since when, and flips it after a confirm. A flip reaches every visitor within ten
- * seconds; owls already inside stay in.
+ * seconds; owls already inside stay in. Its first line is the park's health (OP-068).
  */
 import { ADMIN_STYLE, adminPage } from './feedbackPage';
 
@@ -11,6 +11,9 @@ const STYLE = `
 .state strong{display:block;font-size:20px;margin-bottom:4px}
 .state p{margin:0;color:var(--dim)}
 .flip{margin:0 0 14px}
+.health{margin:0 0 14px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);font-weight:700}
+.health.up{border-color:#3f9d5a}
+.health.down{border-color:#d0574f}
 `;
 
 const SCRIPT = `
@@ -26,6 +29,21 @@ const ASK = {
   open: 'Open the gate to everyone? The turnstiles let every owl through and the booth stops selling.',
   deployed: 'Hand the gate back to the deployed setting (GATE in wrangler.jsonc)?',
 };
+
+const PART = { rooms: 'the rooms', tickets: 'the ticket book', collections: 'the collections' };
+
+async function checkHealth() {
+  const line = $('#health');
+  try {
+    const h = await (await fetch('/api/health', { cache: 'no-store' })).json();
+    const down = Object.keys(h.parts).filter((k) => !h.parts[k]).map((k) => PART[k] || k);
+    line.className = 'health ' + (h.ok ? 'up' : 'down');
+    line.textContent = h.ok ? 'The park is up: every part answered in ' + h.ms + ' ms.' : 'Something is down: ' + down.join(', ') + ' did not answer. See the playbook.';
+  } catch {
+    line.className = 'health down';
+    line.textContent = 'The park did not answer the health check.';
+  }
+}
 
 async function call(method, body) {
   const res = await fetch('/api/admin/gate', { method, headers: { 'X-Admin-Key': keyOf(), 'Content-Type': 'application/json' }, cache: 'no-store', ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -53,6 +71,7 @@ async function load() {
     show(await call('GET'));
     locked(false);
     say('');
+    checkHealth();
   } catch (e) {
     if (e.message !== 'key') return say('The park did not answer just now. Try again in a moment.');
     saveKey('');
@@ -104,6 +123,7 @@ function html(nonce: string): string {
 </form>
 <p id="say" role="status" aria-live="polite"></p>
 <section id="board" hidden>
+<p class="health" id="health" role="status">Checking the park…</p>
 <div class="state" id="state"><strong id="mode"></strong><p id="what"></p><p id="since"></p></div>
 <div class="tabs flip">
 <button class="primary" data-mode="ticket">Take tickets now</button>

@@ -184,6 +184,9 @@ secrets (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 
+- `/api/health` answers `"ok": true` when the Worker and the park's three objects (the rooms, the
+  ticket book, the collections) answer; a 503 names the part that did not. When something is wrong,
+  `docs/PLAYBOOK.md` says what to check, how to roll back and how to pause ticket sales.
 - Open the site in two browsers (or a phone and a laptop) and watch the owls see each other.
 - `?debug=1` draws the walkable areas and doors. `?transport=local|supabase|edge` forces a transport.
 - The status dot in the top-right pill is gold when connected, grey when the park is offline.

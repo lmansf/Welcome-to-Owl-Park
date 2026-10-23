@@ -15,6 +15,7 @@ import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollect
 import { admitted, gateMode, mayEnter } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
+import { health } from './health';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId } from './rooms';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
@@ -413,6 +414,19 @@ export default {
         return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
       }
       return Response.json({ error: 'not found' }, { status: 404, headers: CORS });
+    }
+
+    if (url.pathname === '/api/health') {
+      // The park's health (OP-068): the rooms, the ticket book and the collections each answer in time.
+      const h = await health({
+        rooms: async () => {
+          const r = await objectFor(env, 'hub').fetch('https://park/counts');
+          if (!r.ok) throw new Error(`the rooms answered ${r.status}`);
+        },
+        tickets: () => readGate(env),
+        collections: () => collections(env).ping(),
+      });
+      return json(h, h.ok ? 200 : 503);
     }
 
     if (url.pathname === '/api/counts') {
