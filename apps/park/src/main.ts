@@ -225,7 +225,7 @@ hud.onOwlPreview((frame) => {
 
 // ---- the home screen (OP-065) ----
 let collecting = false;
-/** Load the collection (a first visit waits for Log in): worn items this collector does not own come off, and a present is announced once. */
+/** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */
 const startCollection = () => {
   if (collecting) return;
   collecting = true;

@@ -1,6 +1,6 @@
 /**
  * The home screen (OP-065): what the park opens on, before the lobby. Logged out (no owl on this
- * device yet): the park's name with its mascot, Log in and Settings. Logged in: Play, a line about
+ * device yet): the park's name with its mascot, Make your owl and Settings. Logged in: Play, a line about
  * the tickets on this device, Your owl and Settings, with the visitor's own owl drawn big beside
  * them (the builder's preview scene draws it in the frame this screen leaves for it). "Logged in"
  * means only that this device holds an owl: the park has no accounts, and nobody types a thing.
@@ -12,7 +12,8 @@ import { KIND_LABEL, timeLeft } from './tickets';
 /** Every word the home screen shows (for the owner's approval). */
 export const HOME_WORDS = {
   name: 'Owl Park',
-  logIn: 'Log in',
+  /** The first visit's button: there is no account to log into yet, so it makes the owl on this device (Log in returns with OP-050's sign-in). */
+  logIn: 'Make your owl',
   play: 'Play',
   owl: 'Your owl',
   settings: 'Settings',
@@ -146,7 +147,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   play.textContent = HOME_WORDS.play;
   owl.textContent = HOME_WORDS.owl;
   settings.textContent = HOME_WORDS.settings;
-  // Logged in, the Log in button goes: the builder hands the focus back to Your owl.
+  // Logged in, Make your owl goes: the builder hands the focus back to Your owl.
   login.addEventListener('click', () => actions.logIn(owl));
   play.addEventListener('click', () => actions.play());
   owl.addEventListener('click', () => actions.owl(owl));

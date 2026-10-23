@@ -14,7 +14,7 @@ async function openHome(page: Page): Promise<void> {
   await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
 }
 
-/** A first visit: Log in makes the owl and opens the builder on it; closing it leaves the owl beside Play. */
+/** A first visit: Make your owl makes the owl and opens the builder on it; closing it leaves the owl beside Play. */
 async function logIn(page: Page): Promise<void> {
   await button(page, 'login').click();
   const builder = page.getByRole('dialog', { name: 'Your owl' });
@@ -33,7 +33,7 @@ test.describe('the home screen (OP-065)', () => {
   test('a first visit logs in: the owl is made, the builder opens on it, and Play goes to the lobby', async ({ page }) => {
     await openHome(page);
     await expect(page.locator('[data-home] h1')).toHaveText('Owl Park');
-    await expect(button(page, 'login')).toBeVisible();
+    await expect(button(page, 'login')).toHaveText('Make your owl');
     await expect(button(page, 'settings')).toBeVisible();
     await expect(button(page, 'play')).toBeHidden();
     await expect(button(page, 'owl')).toBeHidden();
@@ -44,7 +44,7 @@ test.describe('the home screen (OP-065)', () => {
     expect(await page.evaluate(() => localStorage.getItem('owl-park:look'))).toBeNull();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-first-visit.png` });
 
-    // Log in: the owl is kept on this device, and the builder opens on it before anything else.
+    // Make your owl: the owl is kept on this device, and the builder opens on it before anything else.
     await button(page, 'login').click();
     const builder = page.getByRole('dialog', { name: 'Your owl' });
     await expect(builder).toBeVisible();
