@@ -6,6 +6,11 @@ branch; Crow posts the words below once the owner approves them; Claude keeps th
 
 ## 1. Is it down?
 
+- The alert: every 15 minutes GitHub asks `/api/health` (`.github/workflows/uptime.yml`, with the
+  park's address in the repository variable `PARK_URL`). Three failures in a row fail the run, and
+  GitHub emails the owner about it (the account the workflow runs under; GitHub's notification
+  settings decide where).
+
 - On a phone, open `https://<the park's address>/api/health`. `"ok": true` means the Worker and the
   park's three objects answered: `rooms` (the rooms and the nests), `tickets` (the ticket book, the
   votes and the opening switch) and `collections` (collections, quests, the shop). A 503 names the part
@@ -49,8 +54,8 @@ branch; Crow posts the words below once the owner approves them; Claude keeps th
 
 The park runs on Cloudflare's free plan: about 100,000 Worker requests and 100,000 Durable Object
 requests a day, counted from midnight UTC. Past either one the park fails closed until midnight UTC.
-Every owl's socket counts: its connection is one Durable Object request, and Cloudflare counts the
-messages owls send at twenty to a request. Watch Workers & Pages → Usage, with a notification at half
+Every owl's socket counts: its connection is one Durable Object request, and the messages owls send
+count too (Cloudflare's pricing counts twenty of them as one request). Watch Workers & Pages → Usage, with a notification at half
 the daily cap (`docs/DEPLOY.md`, Operations). The fix is Workers Paid at $5 a month, which lifts the
 daily caps: a Money call, the owner's.
 
