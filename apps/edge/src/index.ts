@@ -12,8 +12,8 @@ import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintPass, randomCollect
 import { admitted, gateMode, mayEnter } from './gate';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId } from './rooms';
-import { verifyWebhook, type TicketLine } from './shopify';
-import { storeConfig, type TicketMirror } from './storeApi';
+import { webhookSigned, type TicketLine } from './shopify';
+import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
 import { DEFAULT_LENGTH_MS, HOUR_MS, type TicketKind } from './tickets';
 import type { Env } from './env';
@@ -143,6 +143,13 @@ export default {
       if (!body || !isCollectorId(body['cid']) || !isVariantId(body['variant']) || !SOURCES.includes(source)) return json({ error: 'bad request' }, 400);
       return json(await collections(env).grant(body['cid'], body['variant'], source));
     }
+    if (url.pathname === '/api/admin/store') {
+      // The owner's check of the store setup: which of its secrets are set (never their values),
+      // whether the app signs in, the scopes it still lacks, and whether it may read orders.
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      return json(await storeCheck(env));
+    }
     if (url.pathname === '/api/admin/tickets') {
       // Tickets the park gives away or tests with: no store order behind them, so nothing is copied to the store.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -195,7 +202,8 @@ export default {
     if (url.pathname === '/api/store/webhook') {
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
       const raw = await request.arrayBuffer();
-      if (!(await verifyWebhook(env.SHOPIFY_WEBHOOK_SECRET, raw, request.headers.get('X-Shopify-Hmac-Sha256')))) return json({ error: 'bad signature' }, 401);
+      const signed = await webhookSigned([env.SHOPIFY_WEBHOOK_SECRET, env.SHOPIFY_CLIENT_SECRET], raw, request.headers.get('X-Shopify-Hmac-Sha256'));
+      if (!signed) return json({ error: 'bad signature' }, 401);
       const deps = storeDeps(env, url.origin);
       if (!deps) return json({ error: 'store not set up' }, 503);
       const shop = request.headers.get('X-Shopify-Shop-Domain');

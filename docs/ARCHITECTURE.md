@@ -216,7 +216,7 @@ owl species: `docs/QUESTS.md`. The activities (the lantern beam, the stage quiz,
 owl's copy game and three small tasks a day), which pay feathers under their own daily cap:
 `docs/ACTIVITIES.md`.
 
-## 9. The lobby and tickets (built; the store's side waits for its custom app)
+## 9. The lobby and tickets (built; the store's side waits for its app)
 
 Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
 the turnstile gate into the hub on the other. With `GATE=open` (now) the turnstiles let everyone
@@ -226,10 +226,11 @@ lobby: the gate turns it back toward the booth, and the Worker refuses its socke
 room and its use of the shop (its collection still shows). The pass answer carries `gate` and
 `adm` so the client knows which.
 
-The ticket flow (C35; tested against a stand-in store until the store's custom app exists, see
+The ticket flow (C35; tested against a stand-in store until the store's app exists, see
 `docs/DEPLOY.md`): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach
 `/api/store/webhook` and are checked against the store's signature before anything is read
-(`apps/edge/src/storeHooks.ts`). A paid order makes one ticket per unit in the ticket book
+(`apps/edge/src/storeHooks.ts`). The Worker signs in to the store's Admin API with the app's client
+credentials, traded for a token that lasts a day (`apps/edge/src/storeApi.ts`). A paid order makes one ticket per unit in the ticket book
 (`TicketBook.ts`, in the vote ledger's Durable Object beside the votes): a visual ID such as
 `OWL-7K3Q-PX9M`, the kind, and the order and line numbers only (no names or emails). An order the
 store rates low risk gets its claim link at once, through a fulfillment of its ticket lines whose

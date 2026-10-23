@@ -37,6 +37,15 @@ export async function verifyWebhook(secret: string | undefined, rawBody: ArrayBu
   return same(await webhookSignature(secret, rawBody), header.trim());
 }
 
+/**
+ * Whether a webhook is signed with one of the keys the park holds: the store's own key (webhooks
+ * made in the store's admin) or the app's client secret (webhooks the app subscribes).
+ */
+export async function webhookSigned(keys: Array<string | undefined>, rawBody: ArrayBuffer | Uint8Array | string, header: string | null): Promise<boolean> {
+  for (const key of keys) if (await verifyWebhook(key, rawBody, header)) return true;
+  return false;
+}
+
 /** One query for everything the ledger needs about an order. */
 export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
   order(id: $id) {

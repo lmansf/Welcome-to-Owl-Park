@@ -92,19 +92,31 @@ Tickets (C35) are sold by the Shopify store, which keeps the buyer; the park kee
 its order and line numbers only. None of this is needed before tickets go on sale: until then the
 turnstiles let everyone through. The steps, in order:
 
-1. **The store's custom app** (the owner's account): Admin API access to orders (read, and write for
-   the order's ticket list), products (read), merchant-managed fulfillment orders (read and write)
-   and metaobjects (write). Its Admin API token never goes in a file.
+1. **The store's app** (the owner's account). Since January 2026 a new app is made in Shopify's
+   Dev Dashboard (the store's admin no longer makes new custom apps): Create app, then Start from
+   Dev Dashboard; in its version give it the scopes `read_orders`, `write_orders`, `read_products`,
+   `read_merchant_managed_fulfillment_orders`, `write_merchant_managed_fulfillment_orders` and
+   `write_metaobjects` (the App URL can stay as it is: the park never opens inside the admin),
+   Release, then Install app on the store. Its Settings show the Client ID and the Client secret;
+   the park trades them with the store for a token that lasts a day (the client credentials grant,
+   for an app and a store in the same organization). An app made in the store's admin before
+   2026 has a fixed Admin API token instead, which works too. Neither ever goes in a file.
 2. **The Worker's secrets**, each with `pnpm --filter @owl-park/edge exec wrangler secret put <NAME>`
-   (or as repository secrets, which the deploy workflow uploads together):
-   `SHOPIFY_SHOP` (the store's `*.myshopify.com` domain), `SHOPIFY_ADMIN_TOKEN` (the app's Admin API
-   token) and `SHOPIFY_WEBHOOK_SECRET` (the secret the store signs webhooks with: the app's client
-   secret, or the one shown under Settings → Notifications → Webhooks for webhooks made there).
-   Without them the store's webhooks are refused.
+   (or as repository secrets, which the deploy workflow uploads): `SHOPIFY_SHOP` (the store's
+   `name.myshopify.com` domain, nothing more), and the app's `SHOPIFY_CLIENT_ID` and
+   `SHOPIFY_CLIENT_SECRET` (or, for an app made in the admin, its `SHOPIFY_ADMIN_TOKEN`). Then
+   `GET /api/admin/store` with the `X-Admin-Key` header checks them: which are set (never their
+   values), whether the app signs in, any scope it still lacks, and whether the store lets it read
+   orders (they hold customer data: if not, request protected customer data access for the app in
+   the Dev Dashboard; the park reads no names, emails or addresses).
 3. **Webhooks** (JSON) to `https://<the park's own domain>/api/store/webhook`: `orders/paid`,
    `orders/updated`, `orders/cancelled` and `refunds/create`, plus `orders/risk_assessment_changed`
-   where the store offers it. The claim link in the store's email uses the address the webhooks are
-   sent to, so use the park's own domain.
+   where the store offers it, made under Settings → Notifications → Webhooks. The store signs
+   those with a key shown on that page: set it as `SHOPIFY_WEBHOOK_SECRET`. (Webhooks the app
+   subscribes itself are signed with its client secret, which the park also accepts.) Without a
+   key the store's webhooks are refused. The claim link in the store's email uses the address the
+   webhooks are sent to, so use the park's own domain; the page's "Send test notification" should
+   get a 200.
 4. **The ticket products**: product type `Ticket` and the metafield `owl_park.ticket_kind` (`day`,
    `night` or `annual`); `owl_park.length_hours` sets a ticket's length (night tickets need it; day
    tickets last 24 hours and annual passes 365 days without it). The opening-night entry that comes
@@ -142,8 +154,8 @@ Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or 
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
 to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
-`/admin/feedback`), and the store's three
-(above). A cron trigger closes the Realm Vote month automatically.
+`/admin/feedback`), and the store's
+secrets (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 

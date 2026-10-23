@@ -59,9 +59,10 @@
   // Secrets (PASS_SIGNING_KEY, ADMIN_KEY) are set with `wrangler secret put`, never written here,
   // and are deliberately not declared as `secrets.required`: that would refuse the first deploy of
   // a new Worker until both exist, while the Worker runs with a development key (and a logged
-  // warning) until they are set. The store's (SHOPIFY_SHOP, SHOPIFY_ADMIN_TOKEN,
-  // SHOPIFY_WEBHOOK_SECRET) are set the same way once the store's custom app exists; until then
-  // the ticket webhooks are refused. All are typed as optional in src/env.ts.
+  // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
+  // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
+  // the same way once the store's app exists; until then the ticket webhooks are refused. All are
+  // typed as optional in src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {
     "enabled": true,
