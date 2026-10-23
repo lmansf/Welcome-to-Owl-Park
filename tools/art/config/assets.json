@@ -140,6 +140,20 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "blockade-not-yet-fledged": {
+      "w": 300,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "blockade-hatching-soon": {
+      "w": 300,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
     "decor-rug": {
       "w": 240,
       "h": 100,
@@ -251,30 +265,6 @@
       "kind": "piece",
       "key_colour": "#00FF00",
       "with_2x": true
-    },
-    "sign-not-yet-fledged": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
-    "sign-closed-for-molting": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
-    "sign-pardon-our-feathers": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
-    },
-    "sign-hatching-soon": {
-      "w": 420,
-      "h": 520,
-      "kind": "sign",
-      "generated": false
     },
     "owl-body": {
       "w": 200,

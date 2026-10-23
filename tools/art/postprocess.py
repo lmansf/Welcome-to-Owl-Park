@@ -63,7 +63,7 @@ from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WOR
                     owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
-from artlib.chroma import ChromaParams, key_out  # noqa: E402
+from artlib.chroma import ChromaParams, clear_glow, key_out  # noqa: E402
 from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
@@ -389,6 +389,12 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     img = open_raw(raw)
     kc = key_colour_for(ctx, key, a.key_colour, sc)
     rgba, cinfo = key_out(img, chroma_params(a, kc))
+    glow = ""
+    if a.clear_glow:
+        # Light painted over the key around a lamp: paint it backdrop inside the boxes and key again.
+        img, n = clear_glow(img, [parse_ints(b, 4, "--clear-glow") for b in a.clear_glow], cinfo["backdrop"], a.glow_margin)
+        rgba, cinfo = key_out(img, chroma_params(a, kc))
+        glow = f" clear_glow={';'.join(a.clear_glow)} margin={a.glow_margin} ({n} px)"
     rgba = _floor_cut(rgba, a.floor_cut)
     if a.flip:
         rgba = ImageOps.mirror(rgba)
@@ -396,7 +402,7 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
     canvas2x = apply_grade(canvas2x, pal, strength)
     one = downsample(canvas2x, W, H)
-    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (" flip" if a.flip else "") + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "")]
+    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (" flip" if a.flip else "") + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "") + glow]
     if gline:
         tools.append(gline)
     outputs = {}
@@ -1173,6 +1179,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--raw", default=None)
     add_chroma_flags(sp)
     sp.add_argument("--floor-cut", type=int, default=None, help="drop everything below this source row")
+    sp.add_argument("--clear-glow", action="append", default=[], metavar="X0,Y0,X1,Y1", help="before keying, paint the backdrop over pixels leaning to the key's hue inside this box of the source (a lamp's light painted over the key); repeatable")
+    sp.add_argument("--glow-margin", type=int, default=24, help="how far a pixel must lean to the key's channels to count as glow (lower clears paler light)")
     sp.add_argument("--fit", choices=("contain",), default="contain")
     sp.add_argument("--margin", type=float, default=0.02)
     sp.add_argument("--anchor-x", type=float, default=0.5)

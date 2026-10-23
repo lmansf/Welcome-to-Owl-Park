@@ -42,7 +42,7 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 NAVY, GOLD, CREAM = "#0C1E36", "#C9A227", "#F6F1E3"
 
-#: Logical sizes mirrored from apps/park/src/game/art.ts (kind: room | piece | sign | owl).
+#: Logical sizes mirrored from apps/park/src/game/art.ts (kind: room | piece | owl).
 BUILTIN_ASSETS: dict[str, dict] = {
     "hub": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
     "hub-fg": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
@@ -52,10 +52,8 @@ BUILTIN_ASSETS: dict[str, dict] = {
     "market-fg": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
     "guardian": {"w": 720, "h": 820, "kind": "piece"},
     "robot-owl": {"w": 900, "h": 900, "kind": "piece"},
-    "sign-not-yet-fledged": {"w": 420, "h": 520, "kind": "sign"},
-    "sign-closed-for-molting": {"w": 420, "h": 520, "kind": "sign"},
-    "sign-pardon-our-feathers": {"w": 420, "h": 520, "kind": "sign"},
-    "sign-hatching-soon": {"w": 420, "h": 520, "kind": "sign"},
+    "blockade-not-yet-fledged": {"w": 300, "h": 300, "kind": "piece"},
+    "blockade-hatching-soon": {"w": 300, "h": 300, "kind": "piece"},
     "owl-body": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
     "owl-belly": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
     "owl-accent": {"w": OWL_W, "h": OWL_H, "kind": "owl"},

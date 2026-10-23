@@ -214,7 +214,6 @@ test('every generated asset key in art.ts has a job (directly or derived) and th
   const covered = new Set();
   for (const j of jobs) { covered.add(j.key); for (const d of j.derives ?? []) covered.add(d); }
   for (const [key, spec] of Object.entries(parseArtTable())) {
-    if (spec.kind === 'sign') { assert.ok(!covered.has(key), `${key}: signs are not regenerated`); continue; }
     assert.ok(covered.has(key), `${key} has a generation job`);
   }
   for (const j of jobs) {

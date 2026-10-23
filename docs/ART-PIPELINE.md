@@ -6,7 +6,7 @@ key the game tries, in order: `<key>.svg`, then (on dense screens) `<key>@2x.web
 does not change. Whatever the file's resolution, it is drawn at the logical size in the table below.
 
 - **SVG** is rasterized when the room opens, at the device's pixel density (rooms and big set pieces
-  capped at 1.5x by default, `VITE_ART_SCALE_MAX`; owls and signs up to 2x), so one file is sharp on
+  capped at 1.5x by default, `VITE_ART_SCALE_MAX`; owls up to 2x), so one file is sharp on
   every screen.
 - **WebP and PNG** are used as-is. Supply `<key>@2x.*` at twice the logical size for phones and
   `<key>.*` at the logical size; the game picks the 2x file on dense screens when it exists. Painted
@@ -26,7 +26,7 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |
 | `arcade` | 1600 x 900 | The arcade off the market street's east end (WebP): a neon hall with three game cabinets painted along its back wall under a blank score board; the park draws a cabinet's screen over the painting while its game is off |
 | `robot-owl` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored |
-| `sign-*` (four keys) | 420 x 520 | Closed-realm signs; the post's base is the bottom-centre |
+| `blockade-<phrase>` (two keys) | 300 x 300 | Construction blockades in the hub's closed arches, each carrying its doorway's approved phrase; transparent PNG, 1x and 2x, bottom-centre on the door's marker |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
 | `owl-face`, `owl-blink` | 200 x 240 | Eyes and beak in fixed colours (not tinted); the blink frame replaces the face for a moment, so it must include the beak |
 | `owl-<species>-body` and the rest (barn, burrowing, snowy, screech) | 200 x 240 | A species' own five layers, by the same rules as the owl's; loaded when an owl of that species shows up, and until then (or without them) it wears the great horned owl's at its own size |
@@ -51,7 +51,7 @@ about 70 px wide in a 1600-wide room.
 
 ## Rules every asset must follow
 
-- Original work only. No text except the four approved closed-realm phrases on the signs.
+- Original work only. No text except the four approved closed-realm phrases on the blockades' signs.
 - No realm names, no company or zoo names, no personal names, in file names, ids, comments or metadata.
 - Self-contained SVG: no external images, scripts, fonts or `foreignObject`. Generic font families only.
 - A PNG carries no walkable layer, so after replacing a room's art the walkable polygons, doors and
@@ -77,7 +77,8 @@ layout changes, update:
 
 - `walkable`: one or more simple polygons the owl may stand on (feet position).
 - `doors`: trigger rectangles. Open doors have `to: { room, spawn }`. Closed doors have `closedSign`
-  (one of the approved phrases) and show a sign at `marker`. Two spots are not doors: `shop` is the
+  (one of the approved phrases) and show its blockade, bottom-centre at `marker`, with the walkable floor
+  ending in front of it. Two spots are not doors: `shop` is the
   gift-shop spot, and `idol` is where visitors stand at the realm's mythical owl to cast a Realm Vote.
 - `spawns`: where an owl appears when entering; `default` is required.
 - `ANCHORS`: bottom-centre points for large set pieces (guardian, robot owl, tree base).
@@ -143,9 +144,9 @@ pnpm dev                              # open http://localhost:5173/?debug=1 and 
    realms (the way back to the lobby is the floor where owls arrive, C43), and the tree changes
    style around each: a cosy storybook arch with lanterns and fireflies on the left, a chrome and
    neon arch on the right, and two sealed arches at the back whose surrounding wood has turned to
-   ink wash and to stained glass, with the closed-realm signs standing in front of them. `BRIEF`
-   in `prompts.mjs` has the full brief; the guide image shows where the room data puts the floor,
-   the doors and the signs.
+   ink wash and to stained glass, with the closed-realm signs (now construction blockades) standing
+   in front of them. `BRIEF` in `prompts.mjs` has the full brief; the guide image shows where the
+   room data puts the floor, the doors and the blockades.
 3. **Pick winners.** `sheet <key>` lays out every candidate with its hash and seed;
    `select <key> <hash16|latest>` marks the one to finish. A candidate from anywhere (a picks
    folder, a hand-edited file) can be finished with `--raw <file>`.
@@ -272,9 +273,9 @@ screen sees it): `overlay --check` fails when opaque pixels cover more than
 5 % of the walkable interior (eroded by 60 px; the frame edge is not an edge, owls stand right
 at the bottom of the hub, which is why the hub overlay keeps its whole lower half empty) or sit
 within 24 px of a spawn, a door centre, a sign, the shop or the gathering spot, and it draws the
-composite for you. Two more rules guard what the disc test misses: a closed sign's lettered board
-(the top band of the 420 x 520 sign, the same in all four sign arts) may be at most 1 % covered,
-because every sign phrase must stay readable; and glow painted over the key colour must not
+composite for you. Two more rules guard what the disc test misses: a closed doorway's lettered
+board (the top band of the 300 x 300 blockade, the union of both blockade arts' boards) may be at
+most 1 % covered, because every sign phrase must stay readable; and glow painted over the key colour must not
 survive keying (more than 0.5 % of the visible pixels bright, saturated and within 45 degrees of
 the key's hue fails: green halos round lanterns, while cyan neon next to a green key passes).
 Prompts cannot pin props to exact places, so the finish has two deterministic fixes, each recorded
