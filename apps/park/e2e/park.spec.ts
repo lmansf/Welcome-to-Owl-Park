@@ -136,6 +136,7 @@ test.describe('single visitor', () => {
   });
 
   test('the bottom bar is Menu and Emotes; the Menu leads to Say, your owl, the quests, the settings and Feedback', async ({ page }) => {
+    test.slow(); // the emotes, Say and four screens open and close in turn: 28 to 40 s here, more on a slow CI runner
     await openPark(page);
     await expect(page.locator('#hud .bottom .left button')).toHaveCount(2);
     // Emotes are one tap away.
