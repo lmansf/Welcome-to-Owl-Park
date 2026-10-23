@@ -338,14 +338,18 @@ The scoring request (the order in the pipeline's raw transaction shape):
     "payment_gateway": "shopify_payments",
     "store_risk": "LOW",
     "cart": [
-      { "line_number": 1, "product_handle": "day-ticket", "product_type": "ticket", "qty": 2, "line_total": 7.98, "attributes": {} }
+      { "line_number": 1, "product_handle": "day-ticket", "product_type": "ticket", "qty": 2, "unit_price": 3.99, "line_discount": 0, "line_total": 7.98, "attributes": {} }
     ]
   }
 }
 ```
 
 `guest_id`, `device_id` and `payment_token` are null when the order has no customer, the store sent
-no browser details, or the payment has no card. `product_type` is `ticket`, `pass` (an annual pass,
+no browser details, or the payment has no card. The amounts add up as in the pipeline: each line
+carries its price before discounts (`unit_price`), every discount the store put on it (a code's, and
+its share of an order-wide one) as `line_discount`, and what it sold for (`line_total`);
+`subtotal` is the lines' total, `discount` only what no line carries, and `total` = `subtotal` -
+`discount` + `tax`. Opening night's half-price pass is a $14.99 line with a $7.50 `line_discount`. `product_type` is `ticket`, `pass` (an annual pass,
 whose `attributes` carry `from_ticket` when it came through opening night's link) or `merch`.
 `store_risk` is `LOW`, `MEDIUM`, `HIGH`, `PENDING`, `NONE` (a free order) or null.
 

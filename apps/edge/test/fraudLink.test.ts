@@ -23,7 +23,6 @@ function order(id: string, over: Partial<AdminOrder> = {}): AdminOrder {
     name: `#${id}`,
     processedAt: new Date(T0).toISOString(),
     cancelledAt: null,
-    subtotalPriceSet: money('22.98'),
     totalDiscountsSet: money('0.0'),
     totalTaxSet: money('1.84'),
     totalPriceSet: money('24.82'),
@@ -34,8 +33,8 @@ function order(id: string, over: Partial<AdminOrder> = {}): AdminOrder {
     risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] },
     lineItems: {
       nodes: [
-        { id: 'gid://shopify/LineItem/11', quantity: 2, discountedTotalSet: money('7.98'), product: { handle: 'day-ticket', productType: 'Ticket', kind: { value: 'day' }, hours: null, start: null, end: null } },
-        { id: 'gid://shopify/LineItem/12', quantity: 1, discountedTotalSet: money('15.00'), product: { handle: 'owl-mug', productType: 'Mug', kind: null, hours: null, start: null, end: null } },
+        { id: 'gid://shopify/LineItem/11', quantity: 2, originalTotalSet: money('7.98'), discountAllocations: [], product: { handle: 'day-ticket', productType: 'Ticket', kind: { value: 'day' }, hours: null, start: null, end: null } },
+        { id: 'gid://shopify/LineItem/12', quantity: 1, originalTotalSet: money('15.00'), discountAllocations: [], product: { handle: 'owl-mug', productType: 'Mug', kind: null, hours: null, start: null, end: null } },
       ],
     },
     ...over,
@@ -78,8 +77,8 @@ describe('the fraud link (C45): what the Worker sends', () => {
       store_risk: 'LOW',
     });
     expect(t.cart).toEqual([
-      { line_number: 1, product_handle: 'day-ticket', product_type: 'ticket', qty: 2, line_total: 7.98, attributes: {} },
-      { line_number: 2, product_handle: 'owl-mug', product_type: 'merch', qty: 1, line_total: 15, attributes: {} },
+      { line_number: 1, product_handle: 'day-ticket', product_type: 'ticket', qty: 2, unit_price: 3.99, line_discount: 0, line_total: 7.98, attributes: {} },
+      { line_number: 2, product_handle: 'owl-mug', product_type: 'merch', qty: 1, unit_price: 15, line_discount: 0, line_total: 15, attributes: {} },
     ]);
     expect(t.guest_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(t.guest_id).toBe(await saltedUuid(SALT, 'guest', '777'));
@@ -95,19 +94,50 @@ describe('the fraud link (C45): what the Worker sends', () => {
     for (const secret of ['203.0.113.9', '424242', '4242', 'Customer/777', 'Mozilla']) expect(sent).not.toContain(secret);
   });
 
-  it('marks a pass from the free-pass link with its ticket, and a member checkout as not a guest', async () => {
+  it("marks a pass from opening night's link with its ticket, and a member checkout as not a guest", async () => {
     const o = order('1002', {
       customer: { id: 'gid://shopify/Customer/9', state: 'ENABLED' },
       customAttributes: [{ key: 'from_ticket', value: 'OWL-7K3Q-PX9M' }],
+      totalDiscountsSet: money('14.99'),
+      totalTaxSet: money('0.0'),
       totalPriceSet: money('0.0'),
       risk: null,
       transactions: [],
-      lineItems: { nodes: [{ id: 'gid://shopify/LineItem/21', quantity: 1, discountedTotalSet: money('0.0'), product: { handle: 'annual-pass', productType: 'Ticket', kind: { value: 'annual' }, hours: null, start: null, end: null } }] },
+      lineItems: { nodes: [{ id: 'gid://shopify/LineItem/21', quantity: 1, originalTotalSet: money('14.99'), discountAllocations: [{ allocatedAmountSet: money('14.99') }], product: { handle: 'annual-pass', productType: 'Ticket', kind: { value: 'annual' }, hours: null, start: null, end: null } }] },
     });
     const t = (await scoreRequest(o, ticketLines(o), null, SALT, { transaction: 'tx', request: 'rq' }, T0)).transaction;
     expect(t.cart[0]).toMatchObject({ product_type: 'pass', attributes: { from_ticket: 'OWL-7K3Q-PX9M' } });
     expect(t.is_guest_checkout).toBe(false);
     expect([t.device_id, t.payment_token, t.store_risk]).toEqual([null, null, 'NONE']);
+    expect([t.subtotal, t.discount, t.total, t.cart[0]!.line_discount, t.cart[0]!.line_total]).toEqual([0, 0, 0, 14.99, 0]);
+  });
+
+  it('puts each discount on its line, a code’s and an order-wide one alike, so the amounts add up as in the pipeline', async () => {
+    // The annual pass at half price with the night's code ($7.50 off), and $0.75 of a 10% order code shared onto it.
+    const o = order('1003', {
+      discountCodes: ['NIGHT-CODE'],
+      totalDiscountsSet: money('8.25'),
+      totalTaxSet: money('0.47'),
+      totalPriceSet: money('7.21'),
+      lineItems: {
+        nodes: [
+          {
+            id: 'gid://shopify/LineItem/31',
+            quantity: 1,
+            originalTotalSet: money('14.99'),
+            discountAllocations: [{ allocatedAmountSet: money('7.50') }, { allocatedAmountSet: money('0.75') }],
+            product: { handle: 'annual-pass', productType: 'Ticket', kind: { value: 'annual' }, hours: null, start: null, end: null },
+          },
+        ],
+      },
+    });
+    const t = (await scoreRequest(o, ticketLines(o), null, SALT, { transaction: 'tx', request: 'rq' }, T0)).transaction;
+    expect(t.cart[0]).toMatchObject({ product_type: 'pass', qty: 1, unit_price: 14.99, line_discount: 8.25, line_total: 6.74 });
+    expect(t).toMatchObject({ subtotal: 6.74, discount: 0, tax: 0.47, total: 7.21, promo_code: 'NIGHT-CODE' });
+    expect(Math.round((t.subtotal - t.discount + t.tax) * 100)).toBe(Math.round(t.total * 100));
+    // A discount the store keeps off every line (on shipping, say) is the order's own.
+    const shipped = (await scoreRequest({ ...o, totalDiscountsSet: money('9.25') }, ticketLines(o), null, SALT, { transaction: 'tx', request: 'rq' }, T0)).transaction;
+    expect(shipped.discount).toBe(1);
   });
 });
 

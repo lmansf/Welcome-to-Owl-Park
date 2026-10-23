@@ -8,7 +8,6 @@ import { LOW, orderId, putOrder, sentLink, ticketLine, webhook } from './store';
  */
 const PAID = {
   totalPriceSet: { shopMoney: { amount: '3.99' } },
-  subtotalPriceSet: { shopMoney: { amount: '3.99' } },
   customer: { id: 'gid://shopify/Customer/4242', state: 'DISABLED' },
   transactions: [{ kind: 'SALE', status: 'SUCCESS', gateway: 'shopify_payments', paymentDetails: { bin: '424242', number: '•••• •••• •••• 4242' } }],
   ...LOW,
@@ -37,7 +36,7 @@ async function sentOrNull(request: APIRequestContext, order: string): Promise<st
 test.describe('the fraud link (C45)', () => {
   test('approve: scored once with hashes only, the link goes out, and the pipeline hears ORDER_CONFIRMED', async ({ request }) => {
     const order = orderId();
-    await putOrder(request, order, [ticketLine(1, 'day')], PAID);
+    await putOrder(request, order, [{ ...ticketLine(1, 'day'), originalTotalSet: { shopMoney: { amount: '3.99' } }, discountAllocations: [] }], PAID);
     expect(await webhook(request, 'orders/paid', order, CLIENT)).toMatchObject({ tickets: 1, sent: true, check: 'approved' });
     await sentLink(request, order);
     // The store sends the webhook again: the first verdict stands, with no second score.
@@ -46,7 +45,8 @@ test.describe('the fraud link (C45)', () => {
     const h = await history(request, order);
     expect(h.scored).toHaveLength(1);
     const tx = h.scored[0]!;
-    expect(tx).toMatchObject({ source_system: 'shopify', channel: 'owl-park-web', order_number: `#${order}`, total: 3.99 });
+    expect(tx).toMatchObject({ source_system: 'shopify', channel: 'owl-park-web', order_number: `#${order}`, subtotal: 3.99, discount: 0, total: 3.99 });
+    expect(tx['cart']).toEqual([{ line_number: 1, product_handle: null, product_type: 'ticket', qty: 1, unit_price: 3.99, line_discount: 0, line_total: 3.99, attributes: {} }]);
     expect(String(tx['guest_id'])).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(String(tx['device_id'])).toMatch(/^[0-9a-f]{64}$/);
     expect(String(tx['payment_token'])).toMatch(/^[0-9a-f]{64}$/);

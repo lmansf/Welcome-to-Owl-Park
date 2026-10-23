@@ -70,10 +70,23 @@ export async function saltedUuid(salt: string, kind: string, value: string): Pro
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
+const cents = (n: number) => Math.round(n * 100) / 100;
+
 const money = (m: { shopMoney?: { amount?: string | null } | null } | null | undefined) => {
   const n = Number(m?.shopMoney?.amount);
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  return Number.isFinite(n) ? cents(n) : 0;
 };
+
+/**
+ * A line's amounts as the pipeline keeps them: its price before discounts, every discount the store
+ * put on it (a code's among them; the store shares an order-wide discount out over the lines too),
+ * and what it sold for.
+ */
+function lineAmounts(li: AdminOrder['lineItems']['nodes'][number]): { unit: number; discount: number; total: number } {
+  const original = money(li.originalTotalSet);
+  const discount = Math.min(original, cents((li.discountAllocations ?? []).reduce((n, a) => n + money(a.allocatedAmountSet), 0)));
+  return { unit: cents(original / Math.max(1, li.quantity)), discount, total: cents(original - discount) };
+}
 
 /** What a line is to the pipeline: a ticket, a pass or merch. */
 function productType(line: TicketLine | undefined): 'ticket' | 'pass' | 'merch' {
@@ -110,7 +123,7 @@ export interface ScoreRequest {
     payment_token: string | null;
     payment_gateway: string | null;
     store_risk: string | null;
-    cart: Array<{ line_number: number; product_handle: string | null; product_type: 'ticket' | 'pass' | 'merch'; qty: number; line_total: number; attributes: Record<string, string> }>;
+    cart: Array<{ line_number: number; product_handle: string | null; product_type: 'ticket' | 'pass' | 'merch'; qty: number; unit_price: number; line_discount: number; line_total: number; attributes: Record<string, string> }>;
   };
 }
 
@@ -136,6 +149,8 @@ export async function scoreRequest(order: AdminOrder, lines: TicketLine[], clien
   const device = ua ? [ua, client?.accept_language, client?.browser_width, client?.browser_height].map((v) => (v === undefined || v === null ? '' : String(v))).join('|') : '';
   const gateway = (order.transactions ?? []).find((t) => t.gateway)?.gateway ?? null;
   const levels = (order.risk?.assessments ?? []).map((a) => (a.riskLevel ?? '').toUpperCase()).filter(Boolean);
+  const amounts = order.lineItems.nodes.map(lineAmounts);
+  const onLines = cents(amounts.reduce((n, a) => n + a.discount, 0));
   return {
     kind: 'score',
     transaction: {
@@ -146,8 +161,10 @@ export async function scoreRequest(order: AdminOrder, lines: TicketLine[], clien
       order_number: order.name?.trim() || gidTail(order.id),
       event_ts: order.processedAt ?? new Date(now).toISOString(),
       currency: 'USD',
-      subtotal: money(order.subtotalPriceSet),
-      discount: money(order.totalDiscountsSet),
+      // As in the pipeline: the subtotal is the lines' total after their discounts, and the order's own
+      // discount only what no line carries, so total = subtotal - discount + tax.
+      subtotal: cents(amounts.reduce((n, a) => n + a.total, 0)),
+      discount: cents(Math.max(0, money(order.totalDiscountsSet) - onLines)),
       tax: money(order.totalTaxSet),
       total: money(order.totalPriceSet),
       promo_code: order.discountCodes?.[0] ?? null,
@@ -165,7 +182,9 @@ export async function scoreRequest(order: AdminOrder, lines: TicketLine[], clien
           product_handle: li.product?.handle ?? null,
           product_type: type,
           qty: li.quantity,
-          line_total: money(li.discountedTotalSet),
+          unit_price: amounts[i]!.unit,
+          line_discount: amounts[i]!.discount,
+          line_total: amounts[i]!.total,
           attributes: type === 'pass' && from ? { from_ticket: from } : {},
         };
       }),

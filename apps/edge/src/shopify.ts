@@ -58,7 +58,6 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
     name
     processedAt
     cancelledAt
-    subtotalPriceSet { shopMoney { amount } }
     totalDiscountsSet { shopMoney { amount } }
     totalTaxSet { shopMoney { amount } }
     totalPriceSet { shopMoney { amount } }
@@ -69,7 +68,8 @@ export const ORDER_QUERY = `query OwlParkOrder($id: ID!) {
       nodes {
         id
         quantity
-        discountedTotalSet { shopMoney { amount } }
+        originalTotalSet { shopMoney { amount } }
+        discountAllocations { allocatedAmountSet { shopMoney { amount } } }
         product {
           handle
           productType
@@ -105,7 +105,6 @@ export interface AdminOrder {
   name?: string | null;
   processedAt?: string | null;
   cancelledAt?: string | null;
-  subtotalPriceSet?: Money;
   totalDiscountsSet?: Money;
   totalTaxSet?: Money;
   /** What the buyer paid, in the shop's currency: "0.0" for an order a discount made free. */
@@ -123,7 +122,9 @@ export interface AdminOrder {
     nodes: Array<{
       id: string;
       quantity: number;
-      discountedTotalSet?: Money;
+      /** The line's price before any discount, and each discount the store put on it (a code's among them). */
+      originalTotalSet?: Money;
+      discountAllocations?: Array<{ allocatedAmountSet?: Money }> | null;
       product?: {
         handle?: string | null;
         productType?: string | null;
