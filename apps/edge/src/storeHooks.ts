@@ -26,7 +26,7 @@ export interface HookDeps {
   /** The claim link for a secret, on the park's own address. */
   claimUrl: (secret: string) => string;
   fetchFn?: typeof fetch;
-  /** Waits before the paid order's second look at a rating still in progress (tests skip it). */
+  /** Waits: before a paid order's second look at a rating still in progress, and between looks at an order another webhook is working on (tests skip it). */
   wait?: (ms: number) => Promise<void>;
   /** Opening night's discount code for the annual pass (C42), to count passes bought with it. */
   openingCode?: string;
@@ -161,6 +161,29 @@ async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
   return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
 }
 
+/** How long a webhook waits for another one working on the same order: well inside the store's 5 seconds. */
+const LEASE_WAIT_MS = 3_000;
+const LEASE_POLL_MS = 250;
+
+/**
+ * One webhook at a time per order. The store sends a free order's orders/create and orders/paid
+ * together (C42), and may send any webhook twice: without this the second could replace the claim
+ * link the first is emailing. The second waits for the first and then finds its work done; one that
+ * waits too long fails, and the store sends it again later.
+ */
+async function oneAtATime(deps: HookDeps, id: string, work: () => Promise<HookResult>): Promise<HookResult> {
+  const pause = deps.wait ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let waited = 0; (await deskOk(deps, '/tickets/lease', { order: id }))['ok'] !== true; waited += LEASE_POLL_MS) {
+    if (waited >= LEASE_WAIT_MS) throw new StoreError(`order ${id} is busy with another webhook`);
+    await pause(LEASE_POLL_MS);
+  }
+  try {
+    return await work();
+  } finally {
+    await deps.desk('/tickets/unlease', { order: id }).catch(() => undefined);
+  }
+}
+
 /**
  * One webhook. A store or desk failure throws, so the Worker answers with an error and the store
  * sends the webhook again later.
@@ -168,6 +191,10 @@ async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
 export async function storeWebhook(topic: string, payload: Record<string, unknown>, deps: HookDeps): Promise<HookResult> {
   const id = orderIdOf(payload, topic);
   if (!id) return { status: 200, body: { ignored: 'no order' } };
+  return oneAtATime(deps, id, () => orderWebhook(topic, id, payload, deps));
+}
+
+function orderWebhook(topic: string, id: string, payload: Record<string, unknown>, deps: HookDeps): Promise<HookResult> {
   switch (topic) {
     case 'orders/paid':
       return paid(deps, id);
@@ -182,7 +209,7 @@ export async function storeWebhook(topic: string, payload: Record<string, unknow
     case 'orders/cancelled':
       return cancelled(deps, id);
     default:
-      return { status: 200, body: { ignored: topic } };
+      return Promise.resolve({ status: 200, body: { ignored: topic } });
   }
 }
 

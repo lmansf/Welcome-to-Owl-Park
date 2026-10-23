@@ -117,6 +117,16 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       const r = await book.release(order);
       return json({ claim: r.claim, tickets: r.tickets.map((t) => t.id) });
     }
+    case '/lease': {
+      // One webhook at a time per order (see TicketBook.lease).
+      if (!order) return bad();
+      return json({ ok: book.lease(order, now) });
+    }
+    case '/unlease': {
+      if (!order) return bad();
+      book.unlease(order);
+      return json({ ok: true });
+    }
     case '/claim-again': {
       if (!order) return bad();
       return json({ claim: await book.newClaim(order) });

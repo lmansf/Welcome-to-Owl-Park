@@ -124,12 +124,34 @@ function secret(random: Random): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** How long one webhook may work on an order before another may take it over (one that died part way). */
+export const ORDER_LEASE_MS = 20_000;
+
 export class TicketBook {
+  /** Orders a webhook is working on now. Kept in memory: a lease lasts seconds, never across a restart. */
+  private readonly leases = new Map<string, number>();
+
   constructor(
     private readonly store: TicketStore,
     private readonly random: Random = cryptoRandom,
     private readonly hash: Hash = sha256Hex,
   ) {}
+
+  /**
+   * One webhook at a time per order: false while another holds the order's lease. The store sends a
+   * free order's orders/create and orders/paid together (C42), and any webhook may come twice.
+   */
+  lease(order: string, now: number): boolean {
+    const until = this.leases.get(order);
+    if (until !== undefined && until > now) return false;
+    if (this.leases.size > 1000) for (const [o, u] of this.leases) if (u <= now) this.leases.delete(o);
+    this.leases.set(order, now + ORDER_LEASE_MS);
+    return true;
+  }
+
+  unlease(order: string): void {
+    this.leases.delete(order);
+  }
 
   /**
    * A paid order's tickets. Returns the claim secret to send in the link for a new order that is not

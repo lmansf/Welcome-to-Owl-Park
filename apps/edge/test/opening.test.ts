@@ -284,6 +284,10 @@ describe('the vote table from before wallets counted', () => {
 class NightStore {
   readonly orders = new Map<string, AdminOrder>();
   readonly fulfilled = new Set<string>();
+  /** The claim link each order's email carried. */
+  readonly links = new Map<string, string>();
+  /** How long the store takes to make a fulfillment (and send its email). */
+  fulfilDelayMs = 0;
 
   put(id: string, nodes: AdminOrder['lineItems']['nodes'], extra: Partial<AdminOrder> = {}): void {
     this.orders.set(id, { id: `gid://shopify/Order/${id}`, cancelledAt: null, lineItems: { nodes }, ...extra });
@@ -303,8 +307,13 @@ class NightStore {
         return data({ order: { fulfillmentOrders: { nodes: [{ id: `gid://shopify/FulfillmentOrder/${id}`, status: done ? 'CLOSED' : 'OPEN', lineItems: { nodes } }] } } });
       }
       case 'OwlParkSendTickets': {
-        const f = variables['fulfillment'] as { lineItemsByFulfillmentOrder: Array<{ fulfillmentOrderId: string }> };
-        this.fulfilled.add(gidTail(f.lineItemsByFulfillmentOrder[0]!.fulfillmentOrderId));
+        const f = variables['fulfillment'] as { lineItemsByFulfillmentOrder: Array<{ fulfillmentOrderId: string }>; trackingInfo: { url: string } };
+        const order = gidTail(f.lineItemsByFulfillmentOrder[0]!.fulfillmentOrderId);
+        if (this.fulfilDelayMs) await new Promise((r) => setTimeout(r, this.fulfilDelayMs));
+        // As the store does: an order's ticket line can be fulfilled once.
+        if (this.fulfilled.has(order)) return data({ fulfillmentCreate: { fulfillment: null, userErrors: [{ field: ['fulfillment'], message: 'Fulfillment order has no remaining quantity' }] } });
+        this.fulfilled.add(order);
+        this.links.set(order, f.trackingInfo.url);
         return data({ fulfillmentCreate: { fulfillment: { id: 'gid://shopify/Fulfillment/1', status: 'SUCCESS' }, userErrors: [] } });
       }
       default:
@@ -354,6 +363,20 @@ describe("opening night's orders through the store webhooks", () => {
     store.put('702', [ticketItem(72, 'day')], { totalPriceSet: { shopMoney: { amount: '3.99' } } });
     expect((await storeWebhook('orders/create', hook('702'), deps)).body).toEqual({ tickets: 0 });
     expect(book.orderOf('702')).toBeNull();
+  });
+
+  it('a free order’s orders/create and orders/paid at the same moment: one email, and its link opens the ticket', async () => {
+    const { store, book, deps } = setup();
+    store.put('705', [ticketItem(75, 'opening-night', '2026-12-05T00:00:00Z')], FREE);
+    store.fulfilDelayMs = 30;
+    const live: HookDeps = { ...deps, wait: (ms) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 10))) };
+    const both = await Promise.all([storeWebhook('orders/create', hook('705'), live), storeWebhook('orders/paid', hook('705'), live)]);
+    expect(both.map((r) => r.body)).toEqual([
+      { tickets: 1, sent: true },
+      { tickets: 1, sent: true },
+    ]);
+    expect(book.orderOf('705')!.tickets).toHaveLength(1);
+    expect(await book.claim(store.links.get('705')!.split('#claim=')[1]!, 'c_owl')).toHaveLength(1);
   });
 
   it("links the pass from the park's link to its ticket, and counts the code used without it", async () => {

@@ -246,8 +246,11 @@ ticket works inside its window), and the Worker answers with a pass admitted by 
 count per wallet (C42): one Realm Vote per wallet (the device's collector) per park day, however many
 tickets or passes it holds, and each vote keeps the ticket that let the owl in, which votes once a
 day too, so moving a ticket to another device does not vote twice (`Ledger.ts`). A metaobject per
-ticket, listed on its order, mirrors its state for the owner; the park never reads it. This
-replaces the earlier plan's emailed magic link and Supabase session.
+ticket, listed on its order, mirrors its state for the owner; the park never reads it. The store
+may send a webhook twice, and sends a free order's `orders/create` and `orders/paid` together: the
+Worker works on one order at a time (a lease in the ticket book, 20 seconds at most), so a second
+webhook waits for the first and finds its work done, and never replaces the claim link the first is
+emailing. This replaces the earlier plan's emailed magic link and Supabase session.
 
 **Opening night (C42, built; the store's side is OP-047):** the Opening Night Ticket is a Ticket
 product of kind `opening-night` whose window (`owl_park.event_start`, and `event_end` or 24 hours)
