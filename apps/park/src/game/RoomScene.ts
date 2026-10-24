@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import {
+  CABINETS,
   CABINET_OFF,
   EMOTE_IDS,
+  GAMES,
   JUMP_EMOTE,
   JUMP_EVERY_MS,
   LEFT_PARK_SPAWN,
@@ -79,7 +81,7 @@ import type { PreviewFrame } from '../ui/owlBuilder';
 import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
-import { addCabinets } from './arcade';
+import { arcadeFor, type Arcade } from './arcade';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomScaleCap } from './artFiles';
@@ -214,6 +216,8 @@ export class RoomScene extends Phaser.Scene {
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
+  /** The arcade's cabinets, score wall and runs, in the arcade only. */
+  private arcade: Arcade | null = null;
   private acts: ActivityLink | null = null;
   /** The nests: on the street, who lives behind each door; in a nest, what stands where. */
   private nests: NestLink | null = null;
@@ -283,6 +287,7 @@ export class RoomScene extends Phaser.Scene {
     this.bubbles = null;
     this.tasks = this.registry.get('tasks') as TaskState;
     this.play = null;
+    this.arcade = null;
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -330,7 +335,13 @@ export class RoomScene extends Phaser.Scene {
     // hairline of the clear colour shows at a join while the camera scrolls.
     for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
-    addCabinets(this, room);
+    this.arcade = arcadeFor(room, {
+      scene: this,
+      hud: this.hud,
+      acts: () => this.acts,
+      look: () => this.look,
+      feathers: (total) => this.collection.setFeathers(total),
+    });
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
@@ -439,6 +450,7 @@ export class RoomScene extends Phaser.Scene {
       onQuiz: (n, right, won, others) => live() && this.play?.onQuiz(n, right, won, others),
       onPaid: (what, feathers, total) => live() && this.play?.onPaid(what, feathers, total),
       onTasks: (tasks, finished, paid, total) => live() && this.play?.onTasks(tasks, finished, paid, total),
+      onWall: (walls, mine) => live() && this.arcade?.onWall(walls, mine),
       onNest: (seen) => live() && this.onNest(seen),
       onNestClosed: () => live() && this.onNestClosed(),
     };
@@ -482,7 +494,7 @@ export class RoomScene extends Phaser.Scene {
     }
     this.conn = conn;
     this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
-    this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
+    this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
     this.nests = this.collection.service.nestLink(this.room.id, conn, pushes, () => nestLook(this.look));
     if (this.room.id === STREET_ROOM) void this.askStreet();
@@ -782,6 +794,8 @@ export class RoomScene extends Phaser.Scene {
     shop: { label: 'Gift shop', run: () => this.openShop() },
     idol: { label: 'Vote for this realm', run: () => void this.vote() },
     booth: { label: 'Ticket booth', run: () => void this.openBooth() },
+    // The arcade's cabinets whose games are live: Play starts a run (a cabinet switched off says Hatching Soon).
+    ...Object.fromEntries(CABINETS.filter((c) => c.live).map((c) => [c.spot, { label: `Play ${GAMES[c.game].name}`, run: () => void this.arcade?.play(c.game) }])),
     mirror: { label: NEST_WORDS.mirror, run: () => this.lookInMirror() },
   };
 
@@ -807,6 +821,11 @@ export class RoomScene extends Phaser.Scene {
     if (!spot) return;
     this.pendingVote = true;
     this.walkTo({ x: spot.rect.x + spot.rect.w / 2, y: spot.rect.y + spot.rect.h / 2 });
+  }
+
+  /** The arcade's run under way, for tests: its game itself, to play it by its rules. */
+  arcadeRun(): ReturnType<Arcade['debug']> {
+    return this.arcade?.debug() ?? null;
   }
 
   /** Read-only snapshot for tests and the console. */
@@ -838,6 +857,8 @@ export class RoomScene extends Phaser.Scene {
     talkingTo: string | null;
     /** The activities here: lanterns lit, the fishing line, the copy game, the next quiz question. */
     play: ReturnType<ActivityLayer['debug']> | null;
+    /** In the arcade: the score wall as this page shows it. */
+    wall: ReturnType<Arcade['wall']> | null;
     /** On the street: who lives behind each door for this visitor (door 0 is its own). */
     street: StreetDoor[] | null;
     /** In a nest: which, whether it is this visitor's, how it stands, and Decorate mode. */
@@ -864,6 +885,7 @@ export class RoomScene extends Phaser.Scene {
       actions: this.actions.map((a) => a.id),
       talkingTo: this.talkingTo,
       play: this.play?.debug() ?? null,
+      wall: this.arcade?.wall() ?? null,
       street: this.room.id === STREET_ROOM ? this.street : null,
       nest: this.nestView
         ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
@@ -1507,6 +1529,8 @@ export class RoomScene extends Phaser.Scene {
     this.glows.clear();
     this.play?.destroy();
     this.play = null;
+    this.arcade?.destroy();
+    this.arcade = null;
     this.bubbles?.clear();
     this.bubbles = null;
     this.acts?.close();

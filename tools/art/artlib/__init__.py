@@ -92,7 +92,8 @@ def owl_master_of(key: str) -> str:
 
 #: Helper keys used by the generator for anchors and masters; never published as art.
 HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master",
-               "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door")
+               "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door",
+               "arcade-bays-a", "arcade-bays-b1", "arcade-bays-c1", "arcade-bays-b2", "arcade-bays-c2", "arcade-bays-b3", "arcade-bays-c3")
 PUBLIC_ROOMS = ("hub", "grove", "market", "lobby", "homes")
 OVERLAY_KEYS = ("hub-fg", "grove-fg", "market-fg")
 PIECE_KEYS = ("guardian", "robot-owl")
@@ -107,6 +108,12 @@ def is_overlay(key: str, assets: dict) -> bool:
 def is_room_background(key: str, assets: dict) -> bool:
     """One screen of a room's painting, shipped as WebP: ``<room>``, ``<room>-west`` or ``<room>-east``."""
     return assets.get(key, {}).get("kind") == "room" and not key.endswith("-fg")
+
+
+def ships_as_webp(key: str, assets: dict) -> bool:
+    """Art published as WebP: a room's painted screen, or another opaque painting the table marks
+    ``"format": "webp"`` (the arcade's game fields); everything cut out ships as PNG."""
+    return is_room_background(key, assets) or assets.get(key, {}).get("format") == "webp"
 
 
 #: Which realm's palette grades which key.

@@ -7,7 +7,8 @@
  * Missing or broken files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type SpeciesId } from '@owl-park/shared';
+import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type SpeciesId } from '@owl-park/shared';
+import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
 import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
@@ -17,7 +18,11 @@ export const ART_PATH = 'art/';
 export const OWL_W = 200;
 export const OWL_H = 240;
 
-export type ArtKind = 'room' | 'piece' | 'owl';
+/**
+ * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
+ * the screen), and never given a placeholder: the arcade draws its neon stand-in for anything missing.
+ */
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade';
 
 export interface ArtSpec {
   w: number;
@@ -37,8 +42,12 @@ export const ART: Record<string, ArtSpec> = {
   'homes-west': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   homes: { w: ROOM_W, h: ROOM_H, kind: 'room' },
   nest: { w: ROOM_W, h: ROOM_H, kind: 'room' },
-  // The arcade, one screen off the market street's east end.
-  arcade: { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // The arcade's three screens are tiles of its room data (below); these are its title signs over the
+  // cabinets, and each game's painted field and pieces at the size the game draws them.
+  'arcade-title-hoot-hop': { w: 364, h: 114, kind: 'arcade' },
+  'arcade-title-moon-flap': { w: 251, h: 115, kind: 'arcade' },
+  'arcade-title-nest-knockdown': { w: 280, h: 110, kind: 'arcade' },
+  ...Object.fromEntries(Object.values(GAME_ART).flatMap((art) => Object.entries(art).map(([key, size]): [string, ArtSpec] => [key, { ...size, kind: 'arcade' }]))),
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
   // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall
@@ -112,19 +121,21 @@ export function roomArtKeys(roomId: string): string[] {
   for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
+  if (roomId === ARCADE_ROOM) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
   return keys.filter((k) => k in ART);
 }
 
 /**
- * How many texture pixels per room pixel to rasterize at. Owls are small, so they
- * get the full device ratio; rooms and big set pieces are capped to keep GPU memory bounded
+ * How many texture pixels per room pixel to rasterize at. Owls are small, and the arcade's games
+ * fill the screen, so they get the full device ratio (up to 2); rooms and big set pieces are capped
+ * to keep GPU memory bounded
  * (a 1600 x 900 room tile costs about 5.8 MB per unit of scale squared; see roomScaleCap for rooms
  * of several tiles).
  */
 export function artScale(kind: ArtKind, pixelRatio: number, roomMax: number): number {
-  const target = kind === 'owl' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
+  const target = kind === 'owl' || kind === 'arcade' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
   return Math.max(1, Math.round(target * 4) / 4);
 }
 
@@ -231,7 +242,7 @@ export function releaseArt(scene: Phaser.Scene, keys: string[]): void {
 export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
   if (scene.textures.exists(key)) return;
   const spec = ART[key];
-  if (!spec) return;
+  if (!spec || spec.kind === 'arcade') return;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
   const { w, h } = spec;
   switch (spec.kind) {

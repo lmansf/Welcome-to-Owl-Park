@@ -1,4 +1,5 @@
 import { devices, expect, test, type Browser, type Page } from '@playwright/test';
+import { flyThrough, playAt, run, untilOver } from './arcadePlay';
 import { dist, doAction, E2E_ADMIN_KEY, openPark, peakHeight, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
@@ -451,6 +452,20 @@ test.describe('room server', () => {
     await expect(a.getByText(/^Tune copied! \+1 feather/)).toBeVisible();
     // B saw A play the notes.
     await expect.poll(async () => (await state(b)).peers[0]?.emote, { timeout: 5_000 }).toBe(tune[tune.length - 1]);
+    for (const p of [a, b]) await p.context().close();
+  });
+
+  test('a run in the arcade, checked and paid by the room server, goes up on the wall for the other owl there', async ({ browser }) => {
+    const a = await visitor(browser, { room: 'arcade' });
+    // B only watches the wall.
+    const b = await visitor(browser, { room: 'arcade' }, { width: 640, height: 400 });
+    await playAt(a, 'flight');
+    await flyThrough(a, 2);
+    await untilOver(a);
+    const score = (await run(a))!.score;
+    await expect(a.locator('.arcade [data-result] [data-paid]')).toHaveText(/^\+\d+ feathers?$/);
+    await expect(a.locator('.arcade [data-result] [data-new]')).toHaveText('New best!');
+    await expect.poll(async () => (await state(b)).wall?.walls.find((w) => w.game === 'flight')?.top.some((e) => e.score === score), { timeout: 10_000 }).toBe(true);
     for (const p of [a, b]) await p.context().close();
   });
 

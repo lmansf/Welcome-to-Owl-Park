@@ -6,6 +6,7 @@ import {
   parseServerFrame,
   positionAlongWalk,
   type ActKind,
+  type ClientAct,
   type ClientFrame,
   type FeedbackDraft,
   type LineStatus,
@@ -481,6 +482,9 @@ export class EdgeTransport implements ParkTransport {
         case 'tasks':
           handlers.onTasks?.(toLocalTasks(f.tasks), f.finished, f.paid, f.total);
           break;
+        case 'wall':
+          handlers.onWall?.(f.walls, f.mine ?? null);
+          break;
         case 'objects': {
           const until: Record<string, number> = {};
           for (const [id, t] of Object.entries(f.until)) until[id] = t - offset;
@@ -556,9 +560,9 @@ export class EdgeTransport implements ParkTransport {
       // The room counts arrivals and emotes itself.
       note: () => undefined,
     };
-    /** An activity request, and its answer (an `act` frame, or why there is none). */
-    const act = async (a: ActKind, e?: string): Promise<ServerAct | { ok: false; reason: ActRefusal }> => {
-      const f = await request(e === undefined ? { t: 'act', a } : { t: 'act', a, e });
+    /** An activity request (with its note, or its game and result), and its answer (an `act` frame, or why there is none). */
+    const act = async (a: ActKind, extra: Omit<ClientAct, 't' | 'a' | 'r'> = {}): Promise<ServerAct | { ok: false; reason: ActRefusal }> => {
+      const f = await request({ t: 'act', a, ...extra });
       if (f?.t === 'act') return f;
       return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline' };
     };
@@ -587,7 +591,7 @@ export class EdgeTransport implements ParkTransport {
         return f.a === 'copy' ? { ok: true, notes: f.notes, tune: f.tune, listenUntil: f.listenUntil - offset, deadline: f.deadline - offset, level: f.level } : unknown;
       },
       note: async (e) => {
-        const f = await act('note', e);
+        const f = await act('note', { e });
         if (!f.ok) return f;
         if (f.a !== 'note') return unknown;
         switch (f.step) {
@@ -606,6 +610,16 @@ export class EdgeTransport implements ParkTransport {
       tasks: async () => {
         const f = await act('tasks');
         return f.ok && f.a === 'tasks' ? toLocalTasks(f.tasks) : null;
+      },
+      run: async (g) => {
+        const f = await act('run', { g });
+        if (!f.ok) return f;
+        return f.a === 'run' ? { ok: true, game: f.game, seed: f.seed, startedAt: f.startedAt - offset } : unknown;
+      },
+      score: async (result, k) => {
+        const f = await act('score', { g: result.game, s: result.score, k, ...(result.shots !== undefined ? { n: result.shots } : {}) });
+        if (!f.ok) return f;
+        return f.a === 'score' ? { ok: true, paid: f.paid } : unknown;
       },
       // The room forgets the owl's line and game when it leaves.
       close: () => undefined,

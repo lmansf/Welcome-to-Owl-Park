@@ -284,6 +284,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.jitter = dx;
   }
 
+  /** The shadow at its feet (off for an owl in the air, as in the arcade's flight). */
+  showShadow(on: boolean): void {
+    this.shadow.setVisible(on);
+  }
+
   /** An anchor in owl canvas units inside the owl's containers (origin at the feet, as painted). */
   localAnchor(name: AnchorName): { x: number; y: number } {
     const a = this.anchors;

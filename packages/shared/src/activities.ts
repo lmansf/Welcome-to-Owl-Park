@@ -5,6 +5,7 @@
  * the room server, the local mode and the tests. Every number and every visitor-facing word here is
  * a default the owner may change; places and things are where the paintings have them.
  */
+import { CABINETS } from './arcade';
 import { pointInRect, type Rect } from './geometry';
 import type { Vec2 } from './protocol';
 
@@ -354,7 +355,7 @@ export function copyAlive(g: CopyGame, now: number): boolean {
 
 // ---------- three small tasks a day ----------
 
-export type TaskKind = 'light' | 'beam' | 'fish' | 'quiz' | 'copy' | 'flop' | 'browse';
+export type TaskKind = 'light' | 'beam' | 'fish' | 'quiz' | 'copy' | 'arcade' | 'flop' | 'browse';
 
 export interface TaskDef {
   kind: TaskKind;
@@ -362,6 +363,9 @@ export interface TaskDef {
   /** Visitor-facing. */
   text: string;
 }
+
+/** A round of any game in the arcade (C40); it joins the tasks at a game once a cabinet plays. */
+export const ARCADE_TASK: TaskDef = { kind: 'arcade', count: 1, text: 'Play a round in the arcade' };
 
 /** The day's first task is at the lanterns, the second at a game, the third around the park; never the same kind twice. */
 export const TASK_SLOTS: ReadonlyArray<readonly TaskDef[]> = [
@@ -375,6 +379,7 @@ export const TASK_SLOTS: ReadonlyArray<readonly TaskDef[]> = [
     { kind: 'fish', count: 3, text: 'Catch 3 fish at the pond' },
     { kind: 'quiz', count: 1, text: 'Answer a stage quiz question right' },
     { kind: 'copy', count: 1, text: "Copy one of the robot owl's tunes" },
+    ...(CABINETS.some((c) => c.live) ? [ARCADE_TASK] : []),
   ],
   [
     { kind: 'flop', count: 2, text: 'Flop into 2 leaf piles' },

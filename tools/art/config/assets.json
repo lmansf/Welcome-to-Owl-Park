@@ -126,6 +126,109 @@
       "kind": "room",
       "with_2x": true
     },
+    "arcade-mid": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade-end": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade-title-hoot-hop": {
+      "w": 364,
+      "h": 114,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-title-moon-flap": {
+      "w": 251,
+      "h": 115,
+      "kind": "arcade",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "arcade-title-nest-knockdown": {
+      "w": 280,
+      "h": 110,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-bg": {
+      "w": 480,
+      "h": 640,
+      "kind": "arcade",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-hop-drone": {
+      "w": 44,
+      "h": 36,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-cart": {
+      "w": 96,
+      "h": 84,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-flap-bg": {
+      "w": 480,
+      "h": 640,
+      "kind": "arcade",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-flap-branch": {
+      "w": 128,
+      "h": 575,
+      "kind": "arcade",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "arcade-flap-ground": {
+      "w": 180,
+      "h": 40,
+      "kind": "arcade",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "arcade-knock-bg": {
+      "w": 480,
+      "h": 640,
+      "kind": "arcade",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-knock-sling": {
+      "w": 60,
+      "h": 120,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-crate": {
+      "w": 36,
+      "h": 36,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-stand": {
+      "w": 72,
+      "h": 72,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
     "guardian": {
       "w": 720,
       "h": 820,
