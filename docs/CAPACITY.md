@@ -86,14 +86,21 @@ unless changed, up to 15.
   (owls a minute); the wait is the owl's place divided by that, rounded up. Before the line has
   moved at all the screen says the wait shows once it starts moving.
 - **Counting the park**: the overflow object asks the room objects how many owls they hold, at most
-  every five seconds and only while the line is on and someone is arriving or waiting. With one
-  object per room it counts every room and copy; the nests (each their own object then) are left out.
+  every five seconds, and only while the line is on (or on by itself) and owls are coming and going.
+  With one object per room it counts every room and copy; the nests (each their own object then) are
+  left out.
 - **What it costs**: each waiting owl's page asks where it stands every 5 seconds near the front and
   every 15 seconds further back, and the Worker answers from what it keeps, without asking the line
   (one Durable Object request per Worker every three seconds, plus one per arrival and one per turn).
   A hundred owls waiting come to roughly 30,000 Worker requests an hour: a line that lasts hours does
   not fit the free plan's 100,000 a day (`docs/PLAYBOOK.md`, section 5). Buy Workers Paid before a
   night that may need one.
+- **Left on by itself**: with no line in front of the park it still costs a little while owls come
+  and go. Each Worker serving owls asks the overflow object at most every three seconds (every thirty
+  with everything off), and the park is counted at most every five seconds: one request with one
+  object, one per room and copy with one object per room. A day of steady visitors can come to tens
+  of thousands of Durable Object requests; an empty park costs nothing. On the free plan, turn it on
+  for the nights that need it rather than leaving it on.
 - **Settings to start from**: as deployed (one object), on by itself at 80. With one object per room,
   the sum of the caps you are willing to fill, for example 240 for the lobby, the hub, the grove and
   the market at their caps.
