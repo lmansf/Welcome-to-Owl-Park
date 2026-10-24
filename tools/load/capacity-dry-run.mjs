@@ -202,7 +202,8 @@ async function main() {
   const walkedIn = [];
   for (const w of called) walkedIn.push(await bot('lobby', { entry: w.entry, pass: w.pass, n: w.n }));
   note('3', 'called owls open the lobby with their entry', split(walkedIn));
-  note('3', 'still waiting', waiting.filter((w) => !w.entry).map((w) => `#${w.s.place ?? '?'}`).join(' ') || 'none');
+  const still = waiting.filter((w) => !w.entry);
+  note('3', 'the rest of the line', still.length ? still.map((w) => `the owl that was #${waiting.indexOf(w) + 1} is now #${w.s.place ?? '?'}`).join(', ') : 'none left');
 
   // Put everything back as deployed, and let every bot go.
   await admin('POST', { line: { mode: 'off', threshold: 80, holdMin: 3 } });

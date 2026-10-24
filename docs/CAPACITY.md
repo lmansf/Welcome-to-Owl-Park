@@ -38,9 +38,10 @@ The tools, cheapest first:
 
 `/admin/capacity` on the park's address, opened with the admin key like the other keepers' pages.
 It needs `ADMIN_KEY` on the Worker (OP-001); until it is set, every setting stays at its default (no
-line, no ribbon, no copies) and the page stays locked. A change reaches every new arrival within
-three seconds (each Worker keeps what it read that long); owls already in a room get the ribbon at
-once, or within a minute at most.
+line, no ribbon, no copies) and the page stays locked. A change reaches every new arrival within half
+a minute: each Worker keeps what it read for three seconds while anything is on, and for thirty on a
+quiet night, so a quiet park costs the overflow object almost nothing. Owls already in a room get the
+ribbon at once; the home screen asks for it every minute.
 
 The same settings answer to the admin API, for a script or a phone without the page:
 
@@ -160,7 +161,31 @@ the Worker with one object per room and the hub's cap at 30 (`tools/load/throwaw
 rehearses with bots (`tools/load/capacity-dry-run.mjs`), and deletes the copy. The live park is never
 touched; a run spends a few hundred of the day's free requests.
 
-Results: to be filled in from the first run.
+First run, 2026-10-24 (Load test run 4, from the branch that built this): 18 seconds of bots, about
+forty seconds with the deploy and the delete.
+
+| Step | What happened |
+| --- | --- |
+| 20 owls into the hub | all in the hub itself |
+| Open copy 2 of the hub | the change took 0.23 s; the first owl went to copy 2 0.39 s after it opened |
+| 24 more owls into the hub | 18 to copy 2, 6 to the hub itself: 26 and 18 inside |
+| Drain copy 2, then 6 more owls | 1 to copy 2 still, 4 to the hub itself until it was full (30), 1 turned away (room full) |
+| Copy 2's 19 owls leave | the capacity page read 0 within 0.1 s; copy 2 closed |
+| The line on, at the 30 owls inside; 8 owls arrive | places 1 to 8 |
+| An owl without its turn opens a room | turned away to the line (4012) |
+| 4 owls inside leave | the first 4 in line called 8.5 to 8.7 s later; each opened the lobby with its entry; the other 4 moved up to places 1 to 4 |
+
+What it showed:
+
+- Opening a copy takes effect at once, and newcomers go where there is room, but not in perfectly
+  even turns: each Worker weighs counts up to two seconds old, and several Workers served the
+  arrivals. Every room still held its cap.
+- A change reaches every Worker within three seconds, so an owl or two may still reach a copy just
+  drained. Wait for the count to read 0 before closing it, as the page says.
+- With the room itself full and its only copy draining, newcomers to that room are turned away as
+  full and go back where they came from. On a busy night, open another copy before draining one.
+- The line called owls about eight seconds after places freed: it moves every five seconds, and a
+  waiting page looks every five seconds near the front.
 
 ## 10. Defaults chosen (OP-075's open questions)
 

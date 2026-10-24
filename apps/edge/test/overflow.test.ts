@@ -271,3 +271,28 @@ describe('the overflow object (OP-075)', () => {
     expect((await post<OverflowState>('/settings', { copy: { room: 'hub', n: 2, state: 'closed' } })).body.copies).toEqual({});
   });
 });
+
+describe('the Worker reading the overflow object (OP-075)', () => {
+  it('looks again every few seconds while anything is on, and every half minute on a quiet night', async () => {
+    const { overflowNow, forgetOverflow, OVERFLOW_KEEP_MS, OVERFLOW_QUIET_KEEP_MS, QUIET } = await import('../src/overflowState');
+    forgetOverflow();
+    let state: OverflowState = QUIET;
+    const read = vi.fn(async () => state);
+    await overflowNow(read, T0);
+    await overflowNow(read, T0 + OVERFLOW_QUIET_KEEP_MS - 1);
+    expect(read).toHaveBeenCalledTimes(1);
+    state = { ...QUIET, ribbon: { on: true, words: null }, notice: RIBBON_WORDS };
+    expect((await overflowNow(read, T0 + OVERFLOW_QUIET_KEEP_MS)).notice).toBe(RIBBON_WORDS);
+    await overflowNow(read, T0 + OVERFLOW_QUIET_KEEP_MS + OVERFLOW_KEEP_MS - 1);
+    expect(read).toHaveBeenCalledTimes(2);
+    await overflowNow(read, T0 + OVERFLOW_QUIET_KEEP_MS + OVERFLOW_KEEP_MS);
+    expect(read).toHaveBeenCalledTimes(3);
+    // The object out of reach: the last answer stands.
+    const down = vi.fn(async (): Promise<OverflowState> => {
+      throw new Error('away');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect((await overflowNow(down, T0 + 10 * OVERFLOW_QUIET_KEEP_MS)).notice).toBe(RIBBON_WORDS);
+    forgetOverflow();
+  });
+});

@@ -129,10 +129,10 @@ $('#key').addEventListener('submit', (e) => {
 for (const b of document.querySelectorAll('[data-line]')) b.addEventListener('click', () => {
   const mode = b.dataset.line;
   if (!confirm(ASK[mode])) return;
-  change({ line: { mode, threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Done. New owls see it within a few seconds.');
+  change({ line: { mode, threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Done. Every new owl sees it within half a minute.');
 });
 $('#line-save').addEventListener('click', () => change({ line: { threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Saved.'));
-for (const b of document.querySelectorAll('[data-ribbon]')) b.addEventListener('click', () => change({ ribbon: { on: b.dataset.ribbon === 'on' } }, 'Done. Everyone sees it within a few seconds.'));
+for (const b of document.querySelectorAll('[data-ribbon]')) b.addEventListener('click', () => change({ ribbon: { on: b.dataset.ribbon === 'on' } }, 'Done. Owls in the rooms see it at once, and the home screen within a minute.'));
 $('#words-save').addEventListener('click', () => change({ ribbon: { words: $('#words').value } }, 'Saved.'));
 $('#refresh').addEventListener('click', load);
 $('#forget').addEventListener('click', () => { saveKey(''); say(''); locked(true); });
