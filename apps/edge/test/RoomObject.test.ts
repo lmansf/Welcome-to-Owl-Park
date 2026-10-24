@@ -453,21 +453,23 @@ describe('busy nights in the room object (OP-075)', () => {
     expect(plain.last('welcome')?.copy).toBeUndefined();
   });
 
-  it('shows the ribbon to everyone inside when the overflow object says it changed, and only when it did', async () => {
+  it('shows the ribbon to everyone inside when the overflow object says it changed, woken from hibernation or not', async () => {
     const obj = roomObject();
     const a = await join(obj, 'hub', 'v_one');
     const b = await join(obj, 'grove', 'v_two');
-    const tell = (words: string | null) => obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words }) }));
-    await tell("It's busy tonight; things may be slow");
+    const tell = (o: Obj, words: string | null) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words }) }));
+    await tell(obj, "It's busy tonight; things may be slow");
     expect(a.last('notice')).toEqual({ t: 'notice', words: "It's busy tonight; things may be slow" });
     expect(b.last('notice')).toEqual({ t: 'notice', words: "It's busy tonight; things may be slow" });
-    await tell("It's busy tonight; things may be slow");
-    expect(a.of('notice')).toHaveLength(1);
     // A newcomer gets it in its welcome.
     const c = await join(obj, 'hub', 'v_three');
     expect(c.last('welcome')?.notice).toBe("It's busy tonight; things may be slow");
-    await tell(null);
+    // Woken from hibernation, the object holds no words while its owls still show them: off reaches them all the same.
+    const woken = roomObject();
+    await tell(woken, null);
     expect(a.last('notice')).toEqual({ t: 'notice', words: null });
+    expect(b.last('notice')).toEqual({ t: 'notice', words: null });
+    expect(c.last('notice')).toEqual({ t: 'notice', words: null });
   });
 });
 

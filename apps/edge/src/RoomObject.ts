@@ -240,10 +240,14 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  /** The ribbon changed: everyone in this object's rooms sees it (or sees it go). */
-  private setNotice(words: unknown): void {
+  /**
+   * The ribbon changed: everyone in this object's rooms sees it (or sees it go). `told`: the overflow
+   * object says it changed, so it goes out even when it matches what this object holds, since an object
+   * woken from hibernation holds no words while its owls still show the old ones.
+   */
+  private setNotice(words: unknown, told = false): void {
     const w = typeof words === 'string' && words ? words.slice(0, RIBBON_MAX_CHARS) : null;
-    if (w === this.notice) return;
+    if (w === this.notice && !told) return;
     this.notice = w;
     for (const room of this.rooms.values()) room.broadcast({ t: 'notice', words: w });
   }
@@ -257,7 +261,7 @@ export class RoomObject extends DurableObject<Env> {
       // The overflow object's word that the ribbon changed.
       const body = (await request.json().catch(() => null)) as { words?: unknown } | null;
       this.noticeAt = Date.now();
-      this.setNotice(body?.words);
+      this.setNotice(body?.words, true);
       return Response.json({ ok: true });
     }
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
