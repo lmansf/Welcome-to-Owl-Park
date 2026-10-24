@@ -101,6 +101,7 @@ test.describe('busy nights (OP-075)', () => {
   });
 
   test('the ribbon: on for everyone in a room and on the home screen, hidden for a visit, back with new words, then off', async ({ browser, request }) => {
+    test.slow(); // two live parks in one browser, both drawn with software WebGL on CI runners: 78 s here, past 90 s on a slow runner
     const inside = await straightIn(browser, COMPUTER);
     await inPark(inside);
     const phone = await visitor(browser, PHONE);
