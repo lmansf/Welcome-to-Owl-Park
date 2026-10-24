@@ -24,6 +24,8 @@ export const NEST_WORDS = {
   /** Door 0 on the street. */
   yourNest: 'Your nest',
   decorate: 'Decorate',
+  /** The nest's mirror, where an owl changes how it looks (OP-077). */
+  mirror: 'Look in the mirror',
   done: 'Done',
   takeAway: 'Take away',
   openToVisitors: 'Open to visitors',

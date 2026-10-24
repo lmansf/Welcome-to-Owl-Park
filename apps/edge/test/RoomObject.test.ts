@@ -337,6 +337,26 @@ describe('a nest in the room object', () => {
   });
 });
 
+describe("a nest's mirror in the room object (OP-077)", () => {
+  it("changes only the owl looking into it: a visitor's new look in another owl's nest leaves the owner and the nest as they were", async () => {
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    const obj = roomObject();
+    const owner = await join(obj, `nest-${nestId}`, 'v_owner', OWNER);
+    const guest = await join(obj, `nest-${nestId}`, 'v_guest', GUEST);
+    // The mirror is the client's: what reaches the room is the owl's own look, as from anywhere.
+    const mirrored: OwlLook = { body: '#3E6B48', belly: '#F2E6C9', accent: '#C9A227', species: 'snowy' };
+    await send(obj, guest, { t: 'look', look: mirrored });
+    await settle();
+    expect(owner.last('look')).toEqual({ t: 'look', id: 'v_guest', look: mirrored });
+    expect(guest.of('look')).toEqual([]);
+    // A newcomer finds the guest changed, the owner as it was, and the nest as it was.
+    const late = await join(obj, `nest-${nestId}`, 'v_other', OTHER);
+    const looks = Object.fromEntries(late.last('welcome')!.owls.map((o) => [o.id, o.look]));
+    expect(looks).toEqual({ v_owner: LOOK, v_guest: mirrored });
+    expect(late.last('nest')?.nest).toEqual({ nestId, open: true, layout: STARTER_LAYOUT, look: COLOURS });
+  });
+});
+
 describe('the street in the room object', () => {
   it("answers with the visitor's own nest and five doors of other owls' open nests", async () => {
     collections.nests.mine(OWNER, COLOURS, clock);

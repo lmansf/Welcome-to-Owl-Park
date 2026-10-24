@@ -1,9 +1,10 @@
 /**
  * The home screen (OP-065): what the park opens on, before the lobby. Logged out (no owl on this
  * device yet): the park's name with its mascot, Make your owl and Settings. Logged in: Play, a line about
- * the tickets on this device, Your owl and Settings, with the visitor's own owl drawn big beside
- * them (the builder's preview scene draws it in the frame this screen leaves for it). "Logged in"
- * means only that this device holds an owl: the park has no accounts, and nobody types a thing.
+ * the tickets on this device, Go to your nest (where the mirror is, OP-077) and Settings, with the
+ * visitor's own owl drawn big beside them (the builder's preview scene draws it in the frame this
+ * screen leaves for it). "Logged in" means only that this device holds an owl: the park has no
+ * accounts, and nobody types a thing.
  */
 import type { Entry, WalletEntry } from '../net';
 import type { PreviewFrame } from './owlBuilder';
@@ -15,7 +16,8 @@ export const HOME_WORDS = {
   /** The first visit's button: there is no account to log into yet, so it makes the owl on this device (Log in returns with OP-050's sign-in). */
   logIn: 'Make your owl',
   play: 'Play',
-  owl: 'Your owl',
+  /** Your owl is at the mirror in the owl's nest (OP-077): this goes there. */
+  owl: 'Go to your nest',
   settings: 'Settings',
   added: 'Ticket added',
   ready: 'ready at the turnstiles',
@@ -52,7 +54,8 @@ export function walletSummary(tickets: readonly WalletEntry[], gate: Entry['gate
 export interface HomeActions {
   logIn(button: HTMLElement): void;
   play(): void;
-  owl(button: HTMLElement): void;
+  /** Go to your nest (OP-077): into the park, before the nest's mirror. */
+  owl(): void;
   settings(button: HTMLElement): void;
   /** Where the owl stands moved (the screen came up, or its size changed). */
   stage(frame: PreviewFrame): void;
@@ -149,10 +152,10 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   play.textContent = HOME_WORDS.play;
   owl.textContent = HOME_WORDS.owl;
   settings.textContent = HOME_WORDS.settings;
-  // Logged in, Make your owl goes: the builder hands the focus back to Your owl.
+  // Logged in, Make your owl goes: the builder hands the focus back to Go to your nest.
   login.addEventListener('click', () => actions.logIn(owl));
   play.addEventListener('click', () => actions.play());
-  owl.addEventListener('click', () => actions.owl(owl));
+  owl.addEventListener('click', () => actions.owl());
   settings.addEventListener('click', () => actions.settings(settings));
 
   let shown = false;

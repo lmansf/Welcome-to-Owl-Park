@@ -3,9 +3,9 @@ import type { Vec2 } from '@owl-park/shared';
 /**
  * Keyboard controls: WASD and the arrow keys walk the owl while held, E interacts with what the
  * owl stands at, the space bar hops, M opens and closes the Menu, T the Say wheel, 1 to 8 play an
- * emote, Q the owl builder, J the quests, and Escape closes whatever is open. Keys are matched
- * by place (`KeyboardEvent.code`), so ZQSD walks on an AZERTY keyboard. Typing in a text field,
- * and shortcuts with Ctrl, Alt or Cmd, are left alone.
+ * emote, Q goes to the mirror in the owl's nest where Your owl is (OP-077), J the quests, and
+ * Escape closes whatever is open. Keys are matched by place (`KeyboardEvent.code`), so ZQSD walks
+ * on an AZERTY keyboard. Typing in a text field, and shortcuts with Ctrl, Alt or Cmd, are left alone.
  */
 
 type Way = 'up' | 'down' | 'left' | 'right';
@@ -46,7 +46,7 @@ export interface KeyActions {
   say(): void;
   /** 1 to 8 (the number row or the keypad): play an emote, as numbered on the wheel. */
   emoteKey(n: number): void;
-  /** Q: open or close the owl builder. */
+  /** Q: to the mirror in the owl's nest, where Your owl is (OP-077), or close Your owl. */
   owl(): void;
   /** J: open or close the quests. */
   journal(): void;
