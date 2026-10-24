@@ -26,10 +26,16 @@ test.describe('single visitor', () => {
     const before = await state(page);
     const view = await settleCamera(page);
     // A point beside the owl that is on screen even on a narrow portrait phone, and not under a button.
+    // On a phone the pad and the stick stand low on either side of the owl (it stands low on the
+    // screen at the hub's spawn), so beside it at its own height, or a little behind, does too.
     const step = Math.min(220, view.viewW * 0.3);
     const target = await openGround(page, [
       { x: before.pos.x + step, y: before.pos.y + 40 },
       { x: before.pos.x - step, y: before.pos.y + 40 },
+      { x: before.pos.x + step, y: before.pos.y },
+      { x: before.pos.x - step, y: before.pos.y },
+      { x: before.pos.x + step, y: before.pos.y - 30 },
+      { x: before.pos.x - step, y: before.pos.y - 30 },
     ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
