@@ -1,5 +1,11 @@
 # Nests
 
+- Status: BUILT (C39); the mirror PLANNED (OP-077)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: packages/shared/src/homes.ts, nestbook.ts, rooms/index.ts; apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, game/nest.ts, game/street.ts
+- Tickets: OP-029, OP-032, OP-033, OP-077, OP-093
+- Related: docs/ARCHITECTURE.md section 4 (protocol) and section 9 (Go home)
+
 Every owl has a nest of its own: a cosy round room inside a tree, on a street of tree houses outside
 the turnstiles (proposal C39). It is all free and needs no ticket, also once the park takes tickets
 (the opening switch on `/admin/gate`, or `GATE=ticket`): the lobby, the street and the nests are open to every visitor. Every number and
@@ -67,7 +73,7 @@ keeps them out: closing sends any visitors inside back to the street. **Done** (
 
 Everyone inside sees each change as it happens. Only the owner can change its nest.
 
-## The mirror (planned, OP-077, In progress)
+## The mirror [PLANNED (OP-077, In progress)]
 
 Not built yet. Once it lands, customising an owl happens in its own nest, at a mirror: one
 interactable in the nest's inside, with one action, **Look in the mirror**, shown only where the

@@ -1,12 +1,18 @@
 # Capacity: caps, full rooms and busy nights
 
+- Status: the caps BUILT; the queue, ribbon and capacity process PLANNED (OP-075)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: apps/edge/src/rooms.ts, apps/edge/src/Room.ts, apps/edge/src/RoomObject.ts, apps/park/src/game/RoomScene.ts, tools/load
+- Tickets: OP-068, OP-075, OP-088, OP-100
+- Related: docs/ARCHITECTURE.md section 6, docs/PLAYBOOK.md section 5
+
 What the park holds today, what happens at the cap, and what is planned for busy nights (OP-075).
 The process for adding and removing capacity, with its dry run, is OP-075's to write once it is
-built; this file states what exists and marks the rest **planned**. The measurements behind the
+built; this file states what exists and marks the rest `PLANNED (OP-xxx)`. The measurements behind the
 numbers are in `docs/ARCHITECTURE.md`, section 6 (OP-068); what to do when the park is in trouble
 is `docs/PLAYBOOK.md`.
 
-## The caps (built)
+## The caps [BUILT]
 
 Room caps are the server's `ROOM_CAPS` variable (a JSON object in `apps/edge/wrangler.jsonc`), or
 the defaults in `apps/edge/src/rooms.ts`:
@@ -29,7 +35,7 @@ Two more limits: at most 8 sockets per client address per object (`MAX_SOCKETS_P
 `wrangler.jsonc`; a household shares one address), and the free plan's daily request caps
 (`docs/PLAYBOOK.md`, section 5).
 
-## At the cap (built)
+## At the cap [BUILT]
 
 - The room server answers a `full` frame and closes the socket with code 4010
   (`apps/edge/src/Room.ts`, `join`).
@@ -38,7 +44,7 @@ Two more limits: at most 8 sockets per client address per object (`MAX_SOCKETS_P
   `roomFull`). There is no queue and no place is held.
 - A nest's owner is let in however full the nest is (`overCap`); visitors are not.
 
-## What the park holds (measured, OP-068)
+## What the park holds [MEASURED (OP-068)]
 
 With the whole park in one object (`ROOM_SHARDING=single`, today's setting), the park holds about
 80 owls walking at once in total. One room holds its cap of 80 even with every owl walking every
@@ -51,7 +57,7 @@ cap and a room that overloads no longer takes the others with it: the four rooms
 more than about 80 owls at once, such as opening night (`docs/PLAYBOOK.md`, section 5). Each busy
 room's object is then awake, and billed, on its own (`docs/ARCHITECTURE.md`, section 3).
 
-## Planned (OP-075, In progress)
+## The queue, the ribbon and the capacity process [PLANNED (OP-075, In progress)]
 
 Nothing below exists in the code yet. OP-075 builds all three; Claude reviews the words.
 

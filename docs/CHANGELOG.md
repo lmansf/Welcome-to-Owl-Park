@@ -1,5 +1,11 @@
 # Changelog
 
+- Status: complete for every Done ticket as of 2026-10-23
+- Verified against: the Ticket Board as read 2026-10-23; commits on main 67ca3ab
+- Code: none
+- Tickets: OP-103
+- Related: docs/agents.md
+
 One line per ticket that reached Done on the Ticket Board, newest first, grouped by week (weeks
 start on Monday). Entries name the ticket, the date it closed, and the commit or branch from its
 Deliverable link where there is one. Dropped tickets are not listed. Proposals and decisions

@@ -1,5 +1,11 @@
 # Feedback from visitors
 
+- Status: BUILT (OP-028); the preview nudge and the feedback reward PLANNED (OP-063, OP-064)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts; apps/park/src/ui/feedback.ts
+- Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089
+- Related: docs/ARCHITECTURE.md section 10
+
 **Feedback** in the Menu (its tile picked out in gold) opens a short form: what kind of note it is
 (Bug, Idea, Praise, Other) and a few words, up to 1,000 characters. The form asks visitors to leave
 out names, emails and other personal details. On a phone it sits at the top of the screen, so the

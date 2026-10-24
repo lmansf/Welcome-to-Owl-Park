@@ -1,5 +1,11 @@
 # Quests, NPC owls, leaf piles and the feather shop
 
+- Status: BUILT; the founder perk PLANNED (OP-049)
+- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the numbers are Claude Code's as written
+- Code: packages/shared/src/quests.ts, questCatalog.ts, questbook.ts, npcs.ts, interactables.ts, shop.ts, species.ts; apps/edge/src/Collections.ts; apps/park/src/ui/quests.ts
+- Tickets: OP-013, OP-014, OP-015, OP-016, OP-018, OP-019
+- Related: docs/COLLECTIBLES.md, docs/ACTIVITIES.md; the Quest Log sheet in the Drive
+
 Collectibles are earned now, not found lying around: NPC owls give quests, quests pay feathers
 and collectibles, leaf piles turn up the odd feather, and Nova's feather shop sells a rotating
 shelf for feathers. This document is the design, the numbers and how to add more. The
@@ -185,6 +191,6 @@ they load, and for any species added later until its art is approved, a species 
 great horned owl's layers at its own size. Hats, glasses and scarves sit where each
 species' crown, eyes and chest are, measured from the layers it wears. The screech owl is meant for
 founders only; until founder status exists it is open to everyone (`FOUNDER_SPECIES_OPEN`).
-**Planned (OP-049, C42)**: a Drop-1 pin order marks its wallet as a Founding Nester, the screech owl
+PLANNED (OP-049, C42): a Drop-1 pin order marks its wallet as a Founding Nester, the screech owl
 becomes founders-only when the owner flips it, and the wallet receives a Founder's pin wearable
 that matches the physical pin (the great horned owl mascot).

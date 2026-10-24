@@ -1,11 +1,14 @@
 # The agents: who does what
 
-The roster of everyone who works on Owl Park, human and agent, and the rules each one works
-under. Read this before any other file if you are new. The source of each rule is the ticket or
-the document named beside it; nothing here was decided in this file. Gaps are listed as questions
-at the bottom.
+- Status: current roster; the Red Team and the Shopify agent are not stood up
+- Verified against: main 67ca3ab (2026-10-23); the Ticket Board as read 2026-10-23
+- Code: none
+- Tickets: OP-078, OP-079, OP-080, OP-081, OP-096
+- Related: docs/README.md (the map and the board conventions)
 
-Agent-first, human-readable: short sentences, paths and ticket IDs spelled out.
+The roster: every agent and human on Owl Park, what each may write to, what each never does, how
+work moves. Every rule names its source ticket or document; nothing was decided here. Gaps are
+`OPEN QUESTION` lines at the bottom. Grep an agent's name for its section.
 
 ## Where work lives
 
@@ -246,19 +249,19 @@ Findings (OP-080's format, used by QA and Red Team): a NEW ticket for Claude Cod
 the question or check it came from in the description, and a flag of To-do or Informational
 (the Lists tab does not carry those two flags yet; see the questions below).
 
-## Questions (gaps in the sources, not decisions)
+## OPEN QUESTIONS (gaps in the sources, not decisions)
 
-1. OP-081 says Claude Code never edits `docs/`; OP-103 says Claude Code appends a line to
+1. OPEN QUESTION: OP-081 says Claude Code never edits `docs/`; OP-103 says Claude Code appends a line to
    `docs/CHANGELOG.md` when it sets a ticket to Done. Which holds? Until decided, this file
    records both, and `docs/CHANGELOG.md` carries OP-103's rule.
-2. OP-080's To-do and Informational flags are not on the Lists tab. Add them, or use Notes?
-3. "Doc agent" (Owner) and "Docs" (Type and Area) are used by OP-096 to OP-103 but are not on
+2. OPEN QUESTION: OP-080's To-do and Informational flags are not on the Lists tab. Add them, or use Notes?
+3. OPEN QUESTION: "Doc agent" (Owner) and "Docs" (Type and Area) are used by OP-096 to OP-103 but are not on
    the Lists tab, and the Doc agent has no row on the Agents tab. "Red Team" and "Shopify agent"
    are not on the Lists tab either. The Agents tab says to add a row and a list entry when an
    agent joins; the doc agent writes only under `docs/`, so someone else adds them.
-4. OP-081's trigger (after each merge to `main`, or nightly) does not exist yet; the doc agent runs
+4. OPEN QUESTION: OP-081's trigger (after each merge to `main`, or nightly) does not exist yet; the doc agent runs
    as sessions against its tickets. Who creates the trigger, and which?
-5. OP-081 asks whether `DEPLOY.md` and `CAPACITY.md` live under `docs/` or at the root with a
+5. OPEN QUESTION: OP-081 asks whether `DEPLOY.md` and `CAPACITY.md` live under `docs/` or at the root with a
    pointer. Both are under `docs/` today; is that the answer?
-6. The Protocol says the reviewer logs Approved or Changes requested and "sets the Owner back".
+6. OPEN QUESTION: The Protocol says the reviewer logs Approved or Changes requested and "sets the Owner back".
    For doc tickets, does Claude set Done, or hand the ticket back to the Doc agent to close?

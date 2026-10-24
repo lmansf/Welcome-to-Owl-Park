@@ -1,5 +1,11 @@
 # Collectibles
 
+- Status: BUILT; Purchases is groundwork only, PLANNED (OP-049 for the founder perk)
+- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the numbers are Claude Code's as written
+- Code: packages/shared/src/collectibles.ts, book.ts, shop.ts; apps/edge/src/Collections.ts, sqlStore.ts; apps/park/src/collect, apps/park/src/game/itemArt.ts
+- Tickets: OP-013, OP-014, OP-015, OP-025, OP-029
+- Related: docs/QUESTS.md, docs/ARCHITECTURE.md section 8
+
 Visitors collect wearables (hats, glasses, collars), little pets that trot after their owl,
 effects (glows, sparkles, eyes on fire) and emotes. Everything that can ever be bought can also
 be earned in the park. This document is the catalogue, the numbers, and how the pieces fit.
@@ -138,7 +144,7 @@ stay neutral under a hue rotation); the other colourways are rotations of it. Th
 4. Optionally add a `FEATURED_SETS` entry in `shop.ts` with the drop's dates and items.
 5. Deploy: new variants enter quest rewards and the shop rotation at once.
 
-## Purchases (groundwork only)
+## Purchases [groundwork only; PLANNED (OP-049 founder perk, store link)]
 
 Everything purchasable can be earned in the park, and purchases sell a **specific** variant, never a random
 draw (paid random draws are restricted in several countries and cost collectors' trust). The

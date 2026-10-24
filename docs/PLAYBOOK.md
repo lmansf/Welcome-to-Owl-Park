@@ -1,5 +1,11 @@
 # When the park is in trouble
 
+- Status: BUILT; section 7 marks the coming controls PLANNED (OP-082, OP-083)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: apps/edge/src/health.ts, .github/workflows/uptime.yml, apps/edge/src/gateSwitch.ts, apps/park/src/ui
+- Tickets: OP-067, OP-068, OP-099
+- Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/ARCHITECTURE.md section 13
+
 The incident playbook for the preview and after (OP-068). Who does what: the owner decides and holds
 the keys (Cloudflare, Shopify, GitHub, the admin key); Claude Code finds the cause and fixes it on a
 branch; Crow posts the words below once the owner approves them; Claude keeps the board.
@@ -73,7 +79,7 @@ its own cap of 80.
 
 Nothing more specific (no times, no refunds, no causes) without the owner's word.
 
-## 7. Controls and the Menu (for helpers answering visitors)
+## 7. Controls and the Menu [BUILT; the pad and quests-in-Menu PLANNED (OP-082, OP-083)]
 
 What a visitor has in hand today (main 67ca3ab), and what is coming. Nothing a visitor does needs
 typing.
@@ -94,7 +100,7 @@ device and shared with the home screen), Feedback (in gold, `docs/FEEDBACK.md`),
 Go home (to the owl's own nest), Leave the park (inside the park, after "Leave the park? Your ticket
 keeps running.") and Home screen.
 
-**Coming (OP-082, In progress; not live yet)**: a Game Boy Advance SP style pad on phones. The
+PLANNED (OP-082, In progress; not live yet): a Game Boy Advance SP style pad on phones. The
 joystick stays on the right at its size and translucency. Two round buttons on the left on a
 diagonal: the inner one is **Interact** (what the on-screen action button does today), the outer
 one **Jump**, a short hop with a two-frame wing flap, about 400 ms, silent by default, purely visual
@@ -105,13 +111,13 @@ On a computer the space bar hops; nothing else changes. Open on the ticket: whet
 button stays or joins the pad, and a mirrored pad for left-handed play (`docs/FEEDBACK.md`,
 candidates).
 
-**Coming (OP-083, In progress; not live yet)**: quests leave the screen for the Menu. A new quest
+PLANNED (OP-083, In progress; not live yet): quests leave the screen for the Menu. A new quest
 or a finished one shows a badge dot on the Menu button and a 2-second toast at the top edge ("New
 quest", "Quest complete"), then goes quiet; the Quests tab lists each active quest with its goal and
 progress, and the reward is collected there (tap the quest, tap Collect). The owner decides after
 trying it whether the new-quest toast stays.
 
-**Later, not planned for the preview (OP-084)**: the hop may grow into flight (double flap,
+LATER (OP-084), not for the preview: the hop may grow into flight (double flap,
 hold-to-glide, upper levels). Do not describe the hop as final; it is built as a visual offset so
 flight can replace it.
 

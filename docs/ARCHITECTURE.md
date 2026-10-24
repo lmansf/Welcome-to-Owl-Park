@@ -1,7 +1,13 @@
 # Owl Park architecture
 
-Status: the park as built on `main` at 2026-10-23 (OP-098 refresh), with what is planned marked
-**planned (OP-xxx)**. Version 1 was presence only; the park now has quests, collectibles, a shop,
+- Status: mixed; each section is tagged BUILT or PLANNED (OP-xxx)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: apps/edge/src, packages/shared/src, apps/park/src, apps/edge/wrangler.jsonc, .github/workflows
+- Tickets: OP-002, OP-010, OP-022, OP-048, OP-051, OP-055, OP-065, OP-067, OP-068, OP-071, OP-098; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-075, OP-076, OP-077
+- Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/PLAYBOOK.md, docs/GLOSSARY.md
+
+How to read this file: headings carry [BUILT] or [PLANNED (OP-xxx)]; inside a section, `PLANNED (OP-xxx)` marks
+what does not exist on `main` yet. Grep `PLANNED` for everything unbuilt. Version 1 was presence only; the park now has quests, collectibles, a shop,
 activities, nests, prewritten chat, the lobby and tickets, the home screen and the keepers' pages.
 This document names no unreleased realm names and no reference products; the detailed
 reverse-engineering notes behind it live in the team's internal drive, not in this public
@@ -87,7 +93,7 @@ The client keeps a transport interface, so all three exist in the repository:
 | Collections | `Collections` Durable Object (SQLite) keyed by the collector token; rules in `packages/shared/src/book.ts` | our code |
 | Tickets and votes | The ticket book and the Realm Vote ledger in the `VoteLedger` Durable Object (SQLite): `apps/edge/src/TicketBook.ts`, `Ledger.ts`; the opening switch beside them (`gateSwitch.ts`) | our code |
 | The store | Shopify sells tickets and passes and keeps the buyer; the Worker signs in with a Dev Dashboard app's client credentials (`storeApi.ts`) and takes signed webhooks at `/api/store/webhook` (`storeHooks.ts`) | service |
-| The fraud link | **planned (OP-052, OP-053, OP-072)**: the owner's fraud pipeline scores every paid ticket order before release (section 12) | our code / the owner's pipeline |
+| The fraud link | PLANNED (OP-052, OP-053, OP-072): the owner's fraud pipeline scores every paid ticket order before release (section 12) | our code / the owner's pipeline |
 | CI | GitHub Actions, Playwright | service / Apache-2.0 |
 
 ### Cost model (room server, assumptions: visitor-hours per day = 8 x peak; ~30 billed object requests per visitor-hour)
@@ -188,7 +194,7 @@ reading "Hatching Soon", and standing at it says so. Art is referenced by key; a
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
 variable (defaults in `apps/edge/src/rooms.ts`: lobby and hub 80; grove, market, arcade and the
 street 40; a nest 12, its owner always admitted). What happens at the cap, and the queue and ribbon
-that are **planned (OP-075)**, are in `docs/CAPACITY.md`.
+that are PLANNED (OP-075), are in `docs/CAPACITY.md`.
 
 ## 6. Scaling knobs and capacity
 
@@ -241,11 +247,11 @@ What it means:
   object is then awake, and billed, on its own (the cost model in section 3).
 - More headroom in one room would come from sending one combined frame per room every 100 ms
   instead of one per move (not built).
-- **Planned (OP-075)**: a queue in front of the park with a waiting screen on the home screen, a
+- PLANNED (OP-075): a queue in front of the park with a waiting screen on the home screen, a
   "busy tonight" ribbon, and a rehearsed way to open and drain a second copy of a room. Today a
   full room answers `full` and the page walks the owl back where it came from (`docs/CAPACITY.md`).
 
-## 7. The Realm Vote (built, opens with tickets)
+## 7. The Realm Vote [BUILT; opens with tickets]
 
 Canon: every ticket-holder gets one vote per park day, cast by walking up to a realm's idol (its
 mythical owl) and tapping; votes are tied to ticket identity and guests cannot vote; the month's
@@ -275,7 +281,7 @@ winner sets the next merch drop; ties go to the realm with the fewest all-time w
   feeds the sales and data pipeline. Mirroring rows into the Supabase ticket ledger is a small
   follow-up once that ledger exists.
 
-## 8. Collectibles, quests and the feather shop (built)
+## 8. Collectibles, quests and the feather shop [BUILT]
 
 Visitors earn wearables, pets, effects and emotes from quests that NPC owls give, and buy them
 with feathers in a rotating shop; feathers come from quests, leaf piles and duplicates. Identity
@@ -296,16 +302,16 @@ owl species: `docs/QUESTS.md`. The activities (the lantern beam, the stage quiz,
 owl's copy game and three small tasks a day), which pay feathers under their own daily cap:
 `docs/ACTIVITIES.md`.
 
-## 9. The lobby, tickets and the home screen (built; the store's setup is OP-024, pending)
+## 9. The lobby, tickets and the home screen [BUILT; the store's setup PLANNED (OP-024)]
 
-**Identity (C35, OP-065).** There are no accounts and nothing is typed. A device holds an anonymous
+**Identity** BUILT (C35, OP-065). There are no accounts and nothing is typed. A device holds an anonymous
 collector token (`owl-park:collector` in localStorage, HMAC-signed by the Worker with
 `PASS_SIGNING_KEY`) that names its collection, its nest and its ticket wallet. `GET /api/pass` takes
 the token and answers a guest pass that lasts 12 hours (`GUEST_PASS_TTL_S`), carries the collector
 id (`cid`), when it was made (`iat`) and whether a ticket admitted it (`adm`). A ticket lives on one
 device at a time: opening its claim link on another device moves it there, and a share link
 (`#take=`) passes one unused ticket on; the owl and its collection stay on their device until the
-friends design settles identity across devices (**planned (OP-050)**). Prices (C41, the owner,
+friends design settles identity across devices (PLANNED (OP-050)). Prices (C41, the owner,
 2026-10-21): day ticket $3.99 for 24 hours from the first scan, annual pass $14.99 for 365 days;
 no night ticket at launch; the store is on Shopify Basic. Opening night's prices are C42 and
 OP-062 (below).
@@ -316,9 +322,9 @@ look and no collection) offers Make your owl, which keeps the owl on the device 
 on it. A device that holds one offers Play (into the lobby), a line about its tickets, Your owl
 and Settings (the park's own, one store), with the owl drawn big beside them by the builder's
 preview scene. There are no accounts and nothing is typed. A ticket link lands there logged in,
-with a note that the ticket came. **Planned (OP-076)**: a short picture-answer quiz ("which owl
+with a note that the ticket came. PLANNED (OP-076): a short picture-answer quiz ("which owl
 are you") between the first sign-in and the builder, once per device, skippable, with a retake on
-the result screen and in Settings. **Planned (OP-077)**: the owl builder moves to a mirror in the
+the result screen and in Settings. PLANNED (OP-077): the owl builder moves to a mirror in the
 owl's own nest (`docs/NESTS.md`); the home screen's builder button becomes "Go to your nest". The Menu's Home screen leaves the room as a door does (the
 owl's place frees at once, and a ticket keeps running) and comes back to it. An address that
 names a room (`?room=`: tests, the art preview) or says `home=0` goes straight into the park.
@@ -330,7 +336,7 @@ pass, but a pass that is not admitted opens only the rooms outside the turnstile
 it back toward the booth, and the Worker refuses its socket for any other room and its use of the
 shop (its collection still shows). The booth sells only while the gate takes tickets.
 
-**The opening switch (OP-067, `apps/edge/src/gateSwitch.ts`):** the keepers flip the gate on
+**The opening switch** BUILT (OP-067, `apps/edge/src/gateSwitch.ts`): the keepers flip the gate on
 `/admin/gate` (or `POST /api/admin/gate` with `{"mode": "ticket" | "open" | "deployed"}`), both
 behind the admin key, with no deploy. The setting lives in the vote ledger's object beside the
 tickets; each Worker reads it at most every ten seconds, so a flip reaches everyone within that.
@@ -341,8 +347,8 @@ switch closed the gate stays admitted until it expires; the next pass applies th
 turnstiles.
 
 The ticket flow (C35; the Worker's side is built, OP-071, and tested against a stand-in store;
-the store's own setup, the app, its secrets and the webhooks, is **planned (OP-024)**; the
-products are **planned (OP-009, OP-047, OP-063)**; see `docs/DEPLOY.md`, Selling tickets): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach
+the store's own setup, the app, its secrets and the webhooks, is PLANNED (OP-024); the
+products are PLANNED (OP-009, OP-047, OP-063); see `docs/DEPLOY.md`, Selling tickets): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach
 `/api/store/webhook` and are checked against the store's signature before anything is read
 (`apps/edge/src/storeHooks.ts`). The Worker signs in to the store's Admin API with the app's client
 credentials, traded for a token that lasts a day (`apps/edge/src/storeApi.ts`). A paid order makes one ticket per unit in the ticket book
@@ -351,8 +357,8 @@ credentials, traded for a token that lasts a day (`apps/edge/src/storeApi.ts`). 
 store rates low risk gets its claim link at once, through a fulfillment of its ticket lines whose
 tracking link is the claim link, so the store's own shipping email delivers it; any other order
 waits until a later low rating or the owner's order tag `owl-park-release` releases it (or a
-refund). That release rule is C35's default; C45 supersedes it with the fraud link, **planned
-(OP-053)**, section 12, under which every paid order is scored before any ticket is released. A refund switches off that many tickets of a line, unused ones first, and a cancellation
+refund). That release rule is C35's default; C45 supersedes it with the fraud link, PLANNED
+(OP-053), section 12, under which every paid order is scored before any ticket is released. A refund switches off that many tickets of a line, unused ones first, and a cancellation
 all of them; votes already cast stay counted. Opening the link (`#claim=<secret>`, which the page
 takes out of the address bar at once) puts the order's tickets in the wallet on that device, one
 device at a time; a share link (`#take=<secret>`) passes one ticket on. The turnstiles scan a ticket
@@ -368,8 +374,8 @@ Worker works on one order at a time (a lease in the ticket book, 20 seconds at m
 webhook waits for the first and finds its work done, and never replaces the claim link the first is
 emailing. This replaces the earlier plan's emailed magic link and Supabase session.
 
-**Preview period (planned, OP-063; the owner's target for opening the park is 2026-12-01,
-OP-066):** before opening night the park opens early with a $0.99 Preview Ticket (product type
+**Preview period** PLANNED (OP-063; the owner's target for opening the park is 2026-12-01,
+OP-066): before opening night the park opens early with a $0.99 Preview Ticket (product type
 Ticket, kind `preview`, a day ticket valid while the preview runs) carrying a pledge to leave
 feedback. The pledge is enforced in the park by a nudge that opens the existing Feedback form
 (section 10), with a Worker setting for its frequency and off switch; an admin count of preview
@@ -377,8 +383,8 @@ tickets sold, notes per ticket and the pledge-kept rate. Preview Ticket holders 
 on opening night and do not count toward the founder perk (OP-049). The proposal is OP-063's;
 the preview go/no-go checklist is OP-066.
 
-**Opening night (C42, built; the store's side is planned (OP-047), the pass at half price per
-OP-062):** the Opening Night Ticket is a Ticket
+**Opening night** BUILT (C42; the store's side PLANNED (OP-047); the pass at half price per
+OP-062): the Opening Night Ticket is a Ticket
 product of kind `opening-night` whose window (`owl_park.event_start`, and `event_end` or 24 hours)
 is a field on the product, so a moved date is a store edit. A free order has nothing for the store
 to rate, so its tickets go out at once (from `orders/create` too, in case the store does not send
@@ -400,7 +406,7 @@ pass), the passes' revenue before tax (less any pass switched off), and a CSV of
 tickets with order numbers, ticket IDs and each pass's amount only. The Drop-1 pin's $0 entry is
 retired (C42).
 
-**Leaving the park (C43, `packages/shared/src/wayout.ts`):** the spot in the hub where owls arrive
+**Leaving the park** BUILT (C43, `packages/shared/src/wayout.ts`): the spot in the hub where owls arrive
 from the turnstiles is also the way out. Its floor's bottom edge there is a doorway (`to-lobby`,
 marked by a soft ring on the floor) to the lobby's `from-hub` spawn, in front of the turnstiles
 and outside them. The Menu offers the same as "Leave the park" in any room inside the park, after a
@@ -411,17 +417,17 @@ mode asks its own book). Out of the nest the owl is on the street in front of do
 changes nothing on a ticket: its time keeps running from its first scan, the pass stays admitted,
 and coming back through the turnstiles is the quick scan ("Welcome back").
 
-## 10. Feedback from visitors (built)
+## 10. Feedback from visitors [BUILT]
 
 Feedback in the Menu (picked out in gold) opens a short form: what kind of note (bug, idea, praise, other) and up
 to 1,000 characters. `POST /api/feedback` (with the pass) keeps it in the `Collections` object's
 SQLite (`apps/edge/src/feedbackBox.ts`) with the collector token, the room, the screen size and the
 browser's user agent; never an IP address or a name. The park's keepers read it on
-`/admin/feedback` with the admin key. How to read and triage it: `docs/FEEDBACK.md`. **Planned**:
+`/admin/feedback` with the admin key. How to read and triage it: `docs/FEEDBACK.md`. PLANNED:
 the preview's feedback nudge and its setting (OP-063), and a one-time collectible for visitors who
 give feedback (OP-064).
 
-## 11. Prewritten chat (built)
+## 11. Prewritten chat [BUILT]
 
 Owls talk only in prewritten phrases (C44): there is no typing anywhere in the park. The phrases
 are data in one file, `packages/shared/src/phrases.ts`: 24 in six groups of four, each under a
@@ -437,7 +443,7 @@ the owl may speak again. The phrase shows for 4 s in a bubble over the owl
 mode and Supabase pass the same number between tabs. **Show what owls say** in the settings (on by
 default, kept on the device) hides every bubble when off.
 
-## 12. The fraud link (planned: OP-052 the endpoint, OP-053 the Worker side, OP-072 real scoring)
+## 12. The fraud link [PLANNED (OP-052 the endpoint, OP-053 the Worker side, OP-072 real scoring)]
 
 Canon C45 (approved 2026-10-22). Nothing of it is on `main` yet; the Worker side is on branch
 `claude/fraud-link` (OP-053, In progress) and goes live after the endpoint exists and on the
@@ -473,7 +479,7 @@ owner's go. Until then the store's own risk rating and the release tag (section 
   pipeline's real scoring goes behind it after the preview opens (OP-072). Its URL and key are
   Worker secrets. QA checks the fail-open path in OP-090.
 
-## 13. Operations (OP-068, built)
+## 13. Operations [BUILT (OP-068)]
 
 - **Health**: `GET /api/health` (`apps/edge/src/health.ts`) asks the three objects (`rooms`,
   `tickets`, `collections`) at once and answers `"ok": true` when each replies within 3 seconds,
@@ -538,7 +544,7 @@ ticket and the steps from the store to the scan are skipped. Where it takes tick
 is not admitted opens only the lobby, the street and the nests (`mayEnter` in
 `apps/edge/src/gate.ts`), and the shop and the vote refuse it.
 
-## 15. Open questions for the owner (with the defaults in the code)
+## 15. OPEN QUESTIONS for the owner (with the defaults in the code)
 
 1. Walk speed: 260 px/s today (one constant in `packages/shared/src/walk.ts`); 200 feels calmer on a phone.
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.

@@ -1,8 +1,49 @@
 # The docs: a map
 
-One line per file under `docs/`, what it is for and who keeps it; then how the Ticket Board works,
-so a new agent can find any doc and file a ticket correctly from this page alone. A map, not a
-manual. The roster of agents and their rules is `agents.md`; read it first if you are new.
+- Status: current
+- Verified against: main 67ca3ab (2026-10-23); the Ticket Board as read 2026-10-23
+- Code: none
+- Tickets: OP-101, OP-102
+- Related: docs/agents.md, docs/GLOSSARY.md
+
+The map of `docs/`: which file answers which question, how the files are written so an agent can
+grep them, how the Ticket Board works, and what is not documented yet. A map, not a manual. New
+here: read `agents.md` first, then `GLOSSARY.md`.
+
+## Start here, by task
+
+| Your task | Read | Then |
+| --- | --- | --- |
+| Join the project as a new agent | `agents.md` | `GLOSSARY.md`; this page's Ticket Board section |
+| Pick up any ticket that touches code | `ARCHITECTURE.md` section 0, then the section for the area | the area doc below; `CHANGELOG.md` for what shipped |
+| Deploy, set a secret, set up the store | `DEPLOY.md` | `PLAYBOOK.md` if something breaks |
+| The park is down or slow | `PLAYBOOK.md` | `CAPACITY.md` |
+| Review or test a ticket (QA) | the ticket's Done-when; `ARCHITECTURE.md` for the mechanism | `agents.md` (QA agent), `CAPACITY.md` (OP-088) |
+| Answer a visitor's question | `PLAYBOOK.md` section 7 | `ACTIVITIES.md`, `QUESTS.md`, `NESTS.md` |
+| Change art | `ART-PIPELINE.md`, `CLAUDE.md` | `tools/art/README.md` |
+| Find what a word means | `GLOSSARY.md` | the file it points to |
+| Find what is unbuilt | `grep -rn PLANNED docs/` | the ticket it names |
+| Find what is undecided | `grep -rn "OPEN QUESTION" docs/`; `ARCHITECTURE.md` section 15 | the owner, as a Needs Logan ticket |
+
+## How the docs are written (the conventions)
+
+- **Header block**: every file opens with `- Status:`, `- Verified against:` (the `main` commit and
+  date the doc was last checked), `- Code:` (the paths it describes), `- Tickets:` and
+  `- Related:`. Trust a file to the commit it names; a newer `main` may have moved on.
+- **Markers**, one spelling each, so grep finds them: `BUILT` (on `main`), `PLANNED (OP-xxx)` (not
+  on `main`; the ticket that builds it), `MEASURED (OP-xxx)` (a number from a test), `LATER
+  (OP-xxx)` (not before the preview), `OPEN QUESTION:` (undecided; the owner's). Section headings
+  carry the marker in square brackets; inline text carries it bare.
+- **Names**: file paths, exported constants and ticket IDs are spelled out and in backticks, so a
+  grep in the code and a grep in the docs meet. Rooms are named by their ids (`hub`, `grove`,
+  `market`, `lobby`, `homes`, `arcade`, `nest-<id>`) or their public descriptions, never by realm
+  names.
+- **Sentences**: short and declarative. Every number names the constant that holds it where one
+  exists. No history beyond a ticket ID and a date; the history is `CHANGELOG.md` and the board.
+- **Sources**: a rule names the ticket or Bible item it comes from (OP-###, C##). A doc never
+  decides anything; where the sources disagree it writes an `OPEN QUESTION` line.
+- **Who writes**: the doc agent, under `docs/` only. Claude Code leaves `TODO-DOCS` comments in
+  code. When the code and a Done ticket disagree, the doc agent files a Finding instead of guessing.
 
 Who updates what: the doc agent keeps every file under `docs/` and is the only writer here
 (OP-081; `agents.md`). Claude Code leaves a `TODO-DOCS` comment in code when a change needs a doc
@@ -14,6 +55,7 @@ doc tickets. The owner approves every visitor-facing word the docs quote. Anythi
 
 | File | What it is for | Read it when |
 | --- | --- | --- |
+| `GLOSSARY.md` | Every term the code, the board and the Bible use, one line each, with the file that defines it | A word is unclear |
 | `agents.md` | Who does what: the owner, Claude, Claude Code, Crow, the QA agent, the doc agent, Red Team and the Shopify agent; what each may write to and never does; how work moves; the board's columns and statuses | You are new, or handing work to another agent |
 | `ARCHITECTURE.md` | The system: the repository's packages, the room server and its Durable Objects, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, a diagram from purchase to the hub, open questions | Before any ticket that touches code |
 | `DEPLOY.md` | Cloudflare, GitHub and Supabase setup; where to run commands (bash and PowerShell); the error table; deploys from GitHub; selling tickets (the store's app, secrets, webhooks, products, opening night) | Deploying, setting a secret, setting up the store |
@@ -112,6 +154,6 @@ gets a file or a section when it is built or when its proposal is approved.
 - OP-070: the privacy and terms words for the park's site and the store, before the preview.
 - OP-063's build tickets (the Preview Ticket's kind, the nudge and its setting, the admin counts):
   summarised in `ARCHITECTURE.md` section 9 until they exist.
-- OP-078's `QA.md`, OP-080's `REDTEAM.md` and OP-081's `DOCS.md`, `SYSTEM.md`, `GLOSSARY.md` and the
+- OP-078's `QA.md`, OP-080's `REDTEAM.md` and OP-081's `DOCS.md`, `SYSTEM.md` and the
   per-area files (`worker.md`, `rooms.md`, `client.md`, `store.md`, `art.md`): named in their
-  tickets, not written yet.
+  tickets, not written yet. `GLOSSARY.md` exists as a first pass.

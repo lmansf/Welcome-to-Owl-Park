@@ -1,5 +1,11 @@
 # Things to do in the park
 
+- Status: the first wave BUILT (C36); the arcade's games, quests in the Menu, the hop and seasons PLANNED
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, book.ts; apps/park/src/game/activities.ts; apps/park/src/ui/activities.ts
+- Tickets: OP-004, OP-026, OP-037; planned OP-038, OP-059, OP-074, OP-082, OP-083, OP-084
+- Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7
+
 The first wave of activities (C30): lanterns that a room lights together under the great tree, a
 quiz on the stump stage answered by standing in a zone, fishing from the jetty in the treehouse
 clearing, the neon street's robot owl and its copy game, and three small tasks a day. Every number
@@ -72,7 +78,7 @@ wrong note or a slow one ends the game. The robot uses the starter pair (Hoot an
 to two more emotes the owl owns, so every owl can play. The right notes are danced for everyone in
 the street.
 
-## The arcade (off the neon street's east end)
+## The arcade (off the neon street's east end) [BUILT room; games PLANNED (OP-038, OP-059)]
 
 A doorway under a joystick sign where the neon street bends away leads into the arcade: a hall
 with three game cabinets along its back wall under a blank score board (`packages/shared/src/arcade.ts`).
@@ -80,7 +86,7 @@ Each cabinet is a spot in the room data and will play one game, as the visitor's
 cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
 at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
 
-**Planned (C40, amended C46; OP-059 the hall and its art, OP-038 the games)**: the arcade becomes
+PLANNED (C40, amended C46; OP-059 the hall and its art, OP-038 the games): the arcade becomes
 a hall about three screens wide with a bay per game, each with its title as a neon sign and a
 cabinet of its own, and the score wall in the middle. The three games, all in one wave and played
 as the visitor's own owl: **Hoot & Hop** (hop across lanes of drones and noodle carts; each crossing
@@ -108,28 +114,27 @@ Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, 
 Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
 park's midnight.
 
-## Quests on screen (how they show today, and what is coming)
+## Quests on screen [BUILT today; the Menu version PLANNED (OP-083)]
 
 Today a quest's steps show in the tracker under the top bar and in Quests (the Menu, or J); a new
-offer, a finished step and a hand-in show as toasts and cards (`docs/QUESTS.md`). **Coming
-(OP-083, In progress)**: the pop-ups go. A new quest or a finished one shows a badge dot on the
+offer, a finished step and a hand-in show as toasts and cards (`docs/QUESTS.md`). PLANNED (OP-083, In progress): the pop-ups go. A new quest or a finished one shows a badge dot on the
 Menu button and a short toast ("New quest", "Quest complete") and then goes quiet; the Quests tab
 lists each active quest with its one-line goal and progress (2/5), and the reward is collected
 there (tap the quest, tap Collect). Quest state and rewards do not change; only the surface does.
 Open on the ticket: the badge dot on the desktop Menu, how many quests show before the tab scrolls
 (5 suggested), and whether the preview's feedback nudge (OP-063) moves into the Menu too.
 
-## Emotes
+## Emotes [BUILT; the hop PLANNED (OP-082)]
 
 The emotes an owl can play are collectibles (`docs/COLLECTIBLES.md`): 24 in the catalogue, every
 owl starts with Hoot and Wing Flap (plus the Sparkle effect), and the rest come from quests and the
 shop. The emote wheel (the Emotes button; 1 to 8 on a keyboard) plays one; the room server relays
 the emote's id to everyone else in the room, checks that the owl owns it, and allows one per 1.5 s
-per owl. **Coming (OP-082)**: a **hop**, the Jump button's short wing-flap, sent as a `hop` emote
+per owl. PLANNED (OP-082): a **hop**, the Jump button's short wing-flap, sent as a `hop` emote
 so others see it, at most one per 600 ms on the page, purely visual (`docs/PLAYBOOK.md`, section
 7). The hop is a candidate for flight later (OP-084); do not document it as final.
 
-## Seasons (planned, OP-074)
+## Seasons [PLANNED (OP-074)]
 
 The owner's decisions of 2026-10-23: a seasonal switch first (a Worker setting with start and end
 dates that turns an event's layer, actions and tasks on and off with no deploy; the base paintings

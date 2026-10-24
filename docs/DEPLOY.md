@@ -1,5 +1,11 @@
 # Deploying Owl Park (free tiers only)
 
+- Status: BUILT; the store's setup (Selling tickets) is the owner's, PLANNED (OP-024)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: apps/edge/wrangler.jsonc, tools/build-edge.mjs, .github/workflows/deploy-worker.yml, apps/edge/src/env.ts
+- Tickets: OP-001, OP-002, OP-020, OP-024, OP-062, OP-067, OP-071, OP-097
+- Related: docs/PLAYBOOK.md, docs/ARCHITECTURE.md section 13
+
 The park is a static site plus a multiplayer backend. There are three ways to run it, all
 free at a small scale. The code is the same; only configuration differs.
 
