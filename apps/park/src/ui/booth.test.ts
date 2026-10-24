@@ -8,12 +8,18 @@ describe('the ticket booth window', () => {
     expect(t.say).toContain('coming soon');
   });
 
-  it('offers the store once its ticket page is set', () => {
-    expect(boothText({ ticketsUrl: 'https://store.example/collections/tickets', gate: 'open', admitted: true }).buy).toBe(true);
-    expect(boothText({ ticketsUrl: 'https://store.example/collections/tickets', gate: 'ticket', admitted: false })).toEqual({
+  it('sells once the gate takes tickets: the opening switch opens the sale and closes the gate together', () => {
+    const url = 'https://store.example/collections/tickets';
+    // The store's page can be set ahead: the booth says coming soon until the switch flips.
+    expect(boothText({ ticketsUrl: url, gate: 'open', admitted: true })).toEqual({
+      say: 'Tickets and passes are coming soon. Until then the turnstiles let everyone through, so go on in and explore.',
+      buy: false,
+    });
+    expect(boothText({ ticketsUrl: url, gate: 'ticket', admitted: false })).toEqual({
       say: 'The park is open to ticket-holders. Get your ticket here, then walk through the turnstiles.',
       buy: true,
     });
+    expect(boothText({ ticketsUrl: url, gate: 'ticket', admitted: true }).buy).toBe(true);
   });
 
   it('tells a ticket-holder to go on through', () => {

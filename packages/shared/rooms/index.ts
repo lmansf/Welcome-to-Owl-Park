@@ -16,6 +16,8 @@ export { STREET_DOORS, STREET_ROOM } from '../src/homes';
  * The lobby is the park's front entrance, where every visitor arrives: the ticket booth on one
  * side, the turnstile gate into the hub on the other. It is two screens wide, its painting the
  * east screen. It is outside the park, so it has no hiding spots and quests never send owls there.
+ * The way back out is where the owls come in: the hub's floor at the foot of its spawn, whose
+ * bottom edge leads to the lobby, outside the gate (C43, wayout.ts).
  *
  * The street (`homes`) is outside the park too, and free: a lane of tree houses at dusk that the
  * lobby's west end leads to. It is two screens wide, its painting the east screen, where the lane
@@ -65,11 +67,16 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 1806, y: 634 },
         { x: 1868, y: 634 },
         { x: 1900, y: 566 },
-        { x: 2020, y: 600 },
-        { x: 2200, y: 612 },
+        // The two closed arches are boarded up: the floor stops at the front of each blockade.
+        { x: 1990, y: 600 },
+        { x: 2000, y: 672 },
+        { x: 2290, y: 672 },
+        { x: 2300, y: 620 },
         { x: 2400, y: 630 },
-        { x: 2600, y: 612 },
-        { x: 2780, y: 600 },
+        { x: 2505, y: 620 },
+        { x: 2515, y: 672 },
+        { x: 2815, y: 672 },
+        { x: 2830, y: 600 },
         { x: 2900, y: 566 },
         { x: 2932, y: 634 },
         { x: 2994, y: 634 },
@@ -93,8 +100,12 @@ export const ROOMS: Record<string, RoomDef> = {
     doors: [
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 } },
       { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 } },
-      { id: 'closed-a', rect: { x: 2030, y: 560, w: 140, h: 90 }, closedSign: 'Not Yet Fledged', marker: { x: 2100, y: 598 } },
-      { id: 'closed-b', rect: { x: 2630, y: 560, w: 140, h: 90 }, closedSign: 'Hatching Soon', marker: { x: 2700, y: 598 } },
+      // The marker is the foot of each arch's blockade; the rect is the strip in front of it.
+      { id: 'closed-a', rect: { x: 2040, y: 660, w: 210, h: 30 }, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } },
+      { id: 'closed-b', rect: { x: 2560, y: 660, w: 210, h: 30 }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
+      // The way out (C43): the floor's bottom edge below where owls arrive from the turnstiles, back
+      // to the lobby outside the gate. A soft ring on the floor marks it.
+      { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 } },
     ],
     spots: [
       { x: 300, y: 840 },
@@ -419,7 +430,8 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 2200, y: 820 }, 'from-homes': { x: 190, y: 850 } },
+    // An owl that leaves the park stands in front of the turnstiles, outside the gate.
+    spawns: { 'default': { x: 2200, y: 820 }, 'from-homes': { x: 190, y: 850 }, 'from-hub': { x: 2595, y: 800 } },
     doors: [
       // The lane to the street of nests, past the west end of the balustrade.
       { id: 'to-homes', rect: { x: 0, y: 790, w: 110, h: 98 }, to: { room: 'homes', spawn: 'from-lobby' }, marker: { x: 55, y: 790 } },
@@ -574,14 +586,37 @@ export const NEST_ROOM: RoomDef = {
       { x: 1320, y: 888 },
     ],
   ],
-  spawns: { 'default': { x: 340, y: 740 } },
+  spawns: {
+    'default': { x: 340, y: 740 },
+    // In front of the mirror (OP-077), facing it: where Play puts the owl, every visit (OP-105).
+    mirror: { x: 650, y: 720 },
+  },
   doors: [
     // The round door in the west wall, out to the street: its rect is the doorway's floor. The owl
     // comes out by the nest door it went in by (`from-nest-<n>`, which only the visit knows), else
     // by door 0, its own nest's.
     { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, marker: { x: 290, y: 580 } },
+    // The floor in front of the mirror (NEST_MIRROR): standing here, Look in the mirror opens Your owl.
+    { id: 'mirror', rect: { x: 560, y: 686, w: 140, h: 64 } },
   ],
 };
+
+/**
+ * Where a nest's standing mirror stands (OP-077): the middle of its foot, against the back wall
+ * between the lamp's spot (f1) and the round window, clear of the furniture spots either side. High
+ * on the floor, so on a phone it shows above the pad and the stick, which cover the front corners.
+ * It is part of the room, not a furnishing, so every nest has it, furnished or not, and any owl may
+ * look into it: it shows that owl, and changes only that owl.
+ */
+export const NEST_MIRROR: Vec2 = { x: 590, y: 660 };
+
+/**
+ * Where every nest's "To the park" sign stands (OP-105): the middle of its words' foot, on the round
+ * door itself, above its little window. Play lands every owl in its own nest, so the way out is
+ * marked on the door. The wall over the door is a furniture spot (w1), and no wall piece hung there
+ * reaches down this far.
+ */
+export const NEST_PARK_SIGN: Vec2 = { x: 287, y: 400 };
 
 /** Named anchors for large set pieces drawn by the scene (depth-sorted with the owls). */
 export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> = {

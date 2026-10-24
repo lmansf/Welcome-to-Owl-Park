@@ -12,6 +12,7 @@ import {
   isWear,
   normalizeTimeZone,
   parseVariant,
+  putOn,
   sanitizeWear,
   variantName,
   variantsByRarity,
@@ -131,10 +132,25 @@ describe('wear on a look', () => {
     expect(filterOwnedWear(undefined, owned)).toBeUndefined();
   });
 
+  it('puts a variant on in its slot, or takes the slot off', () => {
+    const on = putOn(DEFAULT_LOOK, 'head', 'crown~0');
+    expect(on).toEqual({ ...DEFAULT_LOOK, wear: { head: 'crown~0' } });
+    expect(putOn(on, 'pet', 'mouse~1').wear).toEqual({ head: 'crown~0', pet: 'mouse~1' });
+    expect(putOn(on, 'head', 'crown~2').wear).toEqual({ head: 'crown~2' });
+    // The last thing off leaves no wear at all.
+    expect(putOn(on, 'head', null)).toEqual(DEFAULT_LOOK);
+    expect(putOn(on, 'head', null)).not.toHaveProperty('wear');
+  });
+
   it('relays emotes between peers only for catalogue emotes', () => {
     expect(isParkMessage({ t: 'emote', id: 'a', e: 'hoot' })).toBe(true);
     expect(isParkMessage({ t: 'emote', id: 'a', e: 'crown~0' })).toBe(false);
     expect(isParkMessage({ t: 'emote', id: 'a', e: '<b>hi</b>' })).toBe(false);
+    // Phrases travel as numbers the list has; anything else is dropped.
+    expect(isParkMessage({ t: 'say', id: 'a', n: 1 })).toBe(true);
+    expect(isParkMessage({ t: 'say', id: 'a', n: 25 })).toBe(false);
+    expect(isParkMessage({ t: 'say', id: 'a', n: 'Hi!' })).toBe(false);
+    expect(isParkMessage({ t: 'say', id: '', n: 1 })).toBe(false);
   });
 });
 

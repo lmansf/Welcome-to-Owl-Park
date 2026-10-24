@@ -15,7 +15,12 @@ export interface ParkConfig {
   shopUrl: string;
   /** The store's ticket page; empty until tickets go on sale (the booth then says they are coming). */
   ticketsUrl: string;
-  /** Starting room id and spawn, from the query string; every visit starts in the lobby. */
+  /**
+   * The home screen comes first (OP-065), and Play goes on to the owl's own nest (OP-105); an
+   * address that names a room (tests, the art preview) or says `home=0` goes straight into the park.
+   */
+  home: boolean;
+  /** Where an address that goes straight in starts, from the query string: the lobby unless it names a room. */
   room: string;
   spawn: string | undefined;
   /** Fixed player id for tests; otherwise a fresh id is generated per page load. */
@@ -58,6 +63,7 @@ export function readConfig(): ParkConfig {
     edgeUrl,
     shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
     ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),
+    home: !q.has('room') && q.get('home') !== '0',
     room: q.get('room') ?? 'lobby',
     spawn: q.get('spawn') ?? undefined,
     id: q.get('id') ?? undefined,

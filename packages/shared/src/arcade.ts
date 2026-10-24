@@ -15,6 +15,14 @@
  * score wall (the leaf-pile and fishing model). A cabinet whose game is not live shows an unlit
  * screen reading "Hatching Soon" (one of the approved closed-sign phrases), and standing at it
  * says so. Every number and every visitor-facing word here is a default the owner may change.
+ *
+ * TODO-DOCS (OP-038, OP-059): docs/ACTIVITIES.md marks the arcade's games PLANNED and
+ * docs/ARCHITECTURE.md section 4 is protocol v8. Once the games go live: the three games, their pay
+ * (runFeathers and the day's-best bonus) under the activities' daily cap, the score wall (ArcadeBook
+ * over the arcade_scores table), the task "Play a round in the arcade", protocol v9 (`act` run and
+ * score, the `wall` frame), and the page's arcade/ modules and ArcadeScene. The write-up drafted with
+ * OP-038 is in commit c342d60 (its docs/ACTIVITIES.md and docs/ARCHITECTURE.md) to start from; the
+ * hall and the paintings are noted in apps/park/src/game/arcade.ts.
  */
 import { CLOSED_SIGNS } from '../rooms';
 import type { OwlLook } from './protocol';

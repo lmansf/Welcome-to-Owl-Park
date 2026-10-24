@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NEST_SPOTS, getFurniture, getNestSpot } from '@owl-park/shared';
-import { FLAT_DEPTH, WALL_DEPTH, pieceDepth, piecesFor, spotNumber, stepSpot, streetDoors, streetSpawnBack } from './nestPlan';
+import { FLAT_DEPTH, MIRROR_GLINT_KEY, NEST_WELCOME_KEY, WALL_DEPTH, firstGlint, firstNestWelcome, mirrorKey, pieceDepth, piecesFor, spotNumber, stepSpot, streetDoors, streetSpawnBack, type MirrorKeyState } from './nestPlan';
 
 const spot = (id: string) => getNestSpot(id)!;
 const piece = (id: string) => getFurniture(id)!;
@@ -101,5 +101,60 @@ describe('streetSpawnBack', () => {
     expect(streetSpawnBack({ room: 'homes', spawn: 'from-lobby' })).toBe('from-nest-0');
     expect(streetSpawnBack({ room: 'homes', spawn: 'from-nest-9' })).toBe('from-nest-0');
     expect(streetSpawnBack({ room: 'homes' })).toBe('from-nest-0');
+  });
+});
+
+describe("the nest's mirror (OP-077)", () => {
+  const storage = (keys: Record<string, string> = {}) => ({
+    keys,
+    getItem: (k: string) => keys[k] ?? null,
+    setItem: (k: string, v: string) => void (keys[k] = v),
+  });
+
+  it('glints once on a device, the first time its owl is home, and never again', () => {
+    const device = storage();
+    expect(firstGlint(device)).toBe(true);
+    expect(device.keys[MIRROR_GLINT_KEY]).toBe('1');
+    expect(firstGlint(device)).toBe(false);
+    expect(firstGlint(device)).toBe(false);
+    // Another device has its own first time.
+    expect(firstGlint(storage())).toBe(true);
+  });
+
+  it('does not glint where the browser keeps nothing, so it never glints on every visit', () => {
+    expect(firstGlint(null)).toBe(false);
+    const denied = { getItem: () => { throw new Error('denied'); }, setItem: () => undefined };
+    expect(firstGlint(denied)).toBe(false);
+    const full = { getItem: () => null, setItem: () => { throw new Error('quota'); } };
+    expect(firstGlint(full)).toBe(false);
+  });
+
+  it('welcomes a device to its nest once, apart from the glint, and never where the browser keeps nothing (OP-105)', () => {
+    const device = storage({ [MIRROR_GLINT_KEY]: '1' });
+    // An owl already home before the welcome came still sees it, once.
+    expect(firstNestWelcome(device)).toBe(true);
+    expect(device.keys[NEST_WELCOME_KEY]).toBe('1');
+    expect(firstNestWelcome(device)).toBe(false);
+    expect(firstGlint(device)).toBe(false);
+    // The welcome does not use up the glint.
+    const fresh = storage();
+    expect(firstNestWelcome(fresh)).toBe(true);
+    expect(firstGlint(fresh)).toBe(true);
+    expect(firstNestWelcome(null)).toBe(false);
+    expect(firstNestWelcome({ getItem: () => null, setItem: () => { throw new Error('quota'); } })).toBe(false);
+  });
+
+  it('makes Q lead to the mirror: the nest from the home screen, the mirror in the park, and Q again closes Your owl', () => {
+    const at = (over: Partial<MirrorKeyState>): MirrorKeyState => ({ owlOpen: false, blocking: false, atHome: false, loggedIn: true, ...over });
+    expect(mirrorKey(at({}))).toBe('mirror');
+    expect(mirrorKey(at({ atHome: true }))).toBe('nest');
+    // No owl on this device yet: Make your owl comes first, and Q does nothing.
+    expect(mirrorKey(at({ atHome: true, loggedIn: false }))).toBeNull();
+    // Your owl open (at a mirror, or the first run's on the home screen): Q closes it, whatever else is up.
+    expect(mirrorKey(at({ owlOpen: true }))).toBe('close');
+    expect(mirrorKey(at({ owlOpen: true, blocking: true, atHome: true }))).toBe('close');
+    // Another screen open: the owl stays put.
+    expect(mirrorKey(at({ blocking: true }))).toBeNull();
+    expect(mirrorKey(at({ blocking: true, atHome: true }))).toBeNull();
   });
 });

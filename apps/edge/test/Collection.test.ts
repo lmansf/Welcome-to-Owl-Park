@@ -116,9 +116,9 @@ describe('collector tokens and passes', () => {
     expect(await verifyCollector(secret, token)).toBe(cid);
     expect(await verifyCollector('another-secret-entirely-xx', token)).toBeNull();
     expect(await verifyPass(secret, token)).toBeNull(); // not a pass
-    const pass = await mintPass(secret, { id: 'v_abcdefgh12', exp: 9_999_999_999, adm: false, cid, tz: 'Asia/Kolkata' });
+    const pass = await mintPass(secret, { id: 'v_abcdefgh12', exp: 9_999_999_999, iat: 1_790_000_000, adm: false, cid, tz: 'Asia/Kolkata' });
     expect(await verifyCollector(secret, pass)).toBeNull(); // not a collector token
-    expect(await verifyPass(secret, pass)).toEqual({ id: 'v_abcdefgh12', exp: 9_999_999_999, adm: false, cid, tz: 'Asia/Kolkata' });
+    expect(await verifyPass(secret, pass)).toEqual({ id: 'v_abcdefgh12', exp: 9_999_999_999, iat: 1_790_000_000, adm: false, cid, tz: 'Asia/Kolkata' });
   });
 
   it('drops a malformed collector id or zone from a pass', async () => {

@@ -346,17 +346,12 @@ export class ActivityLayer {
     this.tasksTimer = this.host.scene.time.delayedCall(Math.min(MAX_TIMER_MS, Math.max(1000, view.endsAt - this.now() + 1500)), () => void this.refreshTasks());
   }
 
+  /** Today's tasks moved: a task done pays and says so; a step along one shows only in Quests' Today tab (OP-083). */
   onTasks(view: TaskView, finished: string[], paid: number, total: number): void {
-    const before = this.host.tasks.view;
     this.host.tasks.set(view);
     if (paid) this.host.feathers(total);
     for (const text of finished) this.host.hud.toast(`Task done: ${text}! ${feathersText(TASK_FEATHERS)}`, 3600, '#FFD36A');
     if (paid > finished.length * TASK_FEATHERS) this.host.hud.toast(`All three of today's tasks done! ${feathersText(TASKS_BONUS)} more`, 4200, '#FFD36A');
-    if (finished.length || !before || before.day !== view.day) return;
-    // A step along a task that is not done yet.
-    view.tasks.forEach((t, i) => {
-      if (t.done > (before.tasks[i]?.done ?? 0) && t.done < t.count) this.host.hud.toast(`Today: ${t.text} (${t.done} of ${t.count})`, 2400);
-    });
   }
 
   // ---------- every frame ----------

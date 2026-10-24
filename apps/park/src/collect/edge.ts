@@ -1,4 +1,4 @@
-import type { BuyResult, FurnitureGiftResult, GiftResult, Inventory, ShopView } from '@owl-park/shared';
+import { isNestId, type BuyResult, type FurnitureGiftResult, type GiftResult, type Inventory, type ShopView } from '@owl-park/shared';
 import type { EdgeTransport } from '../net/edge';
 import type { RoomConnection } from '../net/transport';
 import type { ActivityLink, CollectionService, FurnitureGiftReply, NestLink, QuestLink } from './service';
@@ -53,6 +53,15 @@ export class EdgeCollections implements CollectionService {
       return await this.json<FurnitureGiftResult>('/api/nest/gift', { method: 'POST' });
     } catch {
       return { ok: false, reason: 'offline' };
+    }
+  }
+
+  async homeNest(): Promise<string | null> {
+    try {
+      const { nestId } = await this.json<{ nestId: unknown }>('/api/nest');
+      return isNestId(nestId) ? nestId : null;
+    } catch {
+      return null;
     }
   }
 }

@@ -4,8 +4,10 @@
  * admission and the store's signatures before calling in; this object only applies the rules.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { Ledger, parkDay, parkMonth, previousMonth, type VoteStore } from './Ledger';
+import { GateSetting } from './gateSwitch';
+import { Ledger, parkDay, parkMonth, previousMonth, walletVoter } from './Ledger';
 import { SqlTicketStore } from './sqlTicketStore';
+import { SqlVoteStore } from './sqlVoteStore';
 import { TicketBook } from './TicketBook';
 import { ticketDesk } from './ticketDesk';
 import type { Env } from './env';
@@ -13,44 +15,10 @@ import type { Env } from './env';
 /** Realms with an idol to vote at, in the park's fixed order (neutral ids, never public names). */
 export const VOTABLE_REALMS = ['grove', 'market'];
 
-class SqlVoteStore implements VoteStore {
-  constructor(private readonly sql: SqlStorage) {
-    sql.exec(`CREATE TABLE IF NOT EXISTS votes (day TEXT NOT NULL, visitor TEXT NOT NULL, realm TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (day, visitor))`);
-    sql.exec(`CREATE INDEX IF NOT EXISTS votes_day ON votes (day)`);
-    sql.exec(`CREATE INDEX IF NOT EXISTS votes_visitor ON votes (visitor)`);
-    sql.exec(`CREATE TABLE IF NOT EXISTS wins (month TEXT PRIMARY KEY, realm TEXT NOT NULL, at INTEGER NOT NULL)`);
-  }
-  get(day: string, visitor: string) {
-    const row = this.sql.exec<{ realm: string }>(`SELECT realm FROM votes WHERE day = ? AND visitor = ?`, day, visitor).toArray()[0];
-    return row ? { realm: row.realm } : null;
-  }
-  put(day: string, visitor: string, realm: string, at: number) {
-    this.sql.exec(`INSERT OR IGNORE INTO votes (day, visitor, realm, at) VALUES (?, ?, ?, ?)`, day, visitor, realm, at);
-  }
-  countByRealm(month: string) {
-    const out: Record<string, number> = {};
-    for (const row of this.sql.exec<{ realm: string; n: number }>(`SELECT realm, COUNT(*) AS n FROM votes WHERE day LIKE ? GROUP BY realm`, `${month}-%`).toArray()) out[row.realm] = row.n;
-    return out;
-  }
-  countOf(visitor: string) {
-    return this.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM votes WHERE visitor = ?`, visitor).one().n;
-  }
-  wins() {
-    const out: Record<string, number> = {};
-    for (const row of this.sql.exec<{ realm: string; n: number }>(`SELECT realm, COUNT(*) AS n FROM wins GROUP BY realm`).toArray()) out[row.realm] = row.n;
-    return out;
-  }
-  winOf(month: string) {
-    return this.sql.exec<{ realm: string }>(`SELECT realm FROM wins WHERE month = ?`, month).toArray()[0]?.realm ?? null;
-  }
-  recordWin(month: string, realm: string, at: number) {
-    this.sql.exec(`INSERT OR IGNORE INTO wins (month, realm, at) VALUES (?, ?, ?)`, month, realm, at);
-  }
-}
-
 export class VoteLedger extends DurableObject<Env> {
   private readonly ledger: Ledger;
   private readonly tickets: TicketBook;
+  private readonly gate: GateSetting;
   private readonly tz: string;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -58,6 +26,7 @@ export class VoteLedger extends DurableObject<Env> {
     this.tz = env.PARK_TZ || 'America/New_York';
     this.ledger = new Ledger(new SqlVoteStore(ctx.storage.sql), VOTABLE_REALMS);
     this.tickets = new TicketBook(new SqlTicketStore(ctx.storage.sql));
+    this.gate = new GateSetting(ctx.storage.sql);
   }
 
   /** Internal API, called by the Worker with the visitor already authenticated and admitted. */
@@ -66,18 +35,30 @@ export class VoteLedger extends DurableObject<Env> {
     const now = new Date();
     const day = parkDay(now, this.tz);
     if (url.pathname.startsWith('/tickets/')) {
-      // A ticket votes as itself: its votes, and whether today's is spent.
-      return ticketDesk(this.tickets, request, now.getTime(), (id) => ({ cast: this.ledger.castBy(id), today: this.ledger.status(id, day).votedFor !== null }));
+      // A ticket's votes, and whether today's is spent: by the wallet that holds it, or with the ticket itself.
+      return ticketDesk(this.tickets, request, now.getTime(), (t) => ({
+        cast: this.ledger.castBy(t.id),
+        today: this.ledger.status(t.device ? walletVoter(t.device) : '', day, t.id).votedFor !== null,
+      }));
+    }
+    if (url.pathname === '/gate') {
+      // The opening switch (OP-067): read it, or set it ({"mode": "open" | "ticket"}, or null to clear it).
+      if (request.method !== 'POST') return Response.json({ gate: this.gate.get() });
+      const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
+      const mode = body?.mode;
+      if (mode !== null && mode !== 'open' && mode !== 'ticket') return Response.json({ error: 'bad request' }, { status: 400 });
+      return Response.json({ gate: this.gate.set(mode, now.getTime()) });
     }
     if (url.pathname === '/vote' && request.method === 'POST') {
-      const body = (await request.json()) as { visitor?: string; realm?: string };
+      const body = (await request.json()) as { visitor?: string; realm?: string; ticket?: string | null };
       if (typeof body.visitor !== 'string' || typeof body.realm !== 'string') return Response.json({ error: 'bad request' }, { status: 400 });
-      const result = this.ledger.vote(body.visitor, body.realm, day, now.getTime());
+      const ticket = typeof body.ticket === 'string' && body.ticket ? body.ticket : null;
+      const result = this.ledger.vote(body.visitor, body.realm, day, now.getTime(), ticket);
       return Response.json({ ...result, day });
     }
     if (url.pathname === '/status') {
       const visitor = url.searchParams.get('visitor') ?? '';
-      return Response.json(this.ledger.status(visitor, day));
+      return Response.json(this.ledger.status(visitor, day, url.searchParams.get('ticket')));
     }
     if (url.pathname === '/tally') {
       const month = url.searchParams.get('month') ?? parkMonth(now, this.tz);

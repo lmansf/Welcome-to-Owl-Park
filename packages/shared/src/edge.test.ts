@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { EMOTE_IDS, JUMP_EMOTE } from './collectibles';
 import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, type ServerFrame } from './edge';
+import { isEmoteId, isParkMessage } from './validate';
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 
-describe('protocol v8, the arcade', () => {
-  it('is version 8, and a page speaking 7 is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(8);
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 7, look }))).toBeNull();
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 8, look }))).toEqual({ t: 'hello', v: 8, look });
+describe('protocol v9, the arcade', () => {
+  it('is version 9, and a page speaking 8 is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(9);
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 8, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 9, look }))).toEqual({ t: 'hello', v: 9, look });
+    expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
   });
 
   it('starts a run of a game it knows, and nothing else', () => {
@@ -29,11 +32,24 @@ describe('protocol v8, the arcade', () => {
   });
 });
 
+describe('protocol v8, prewritten chat', () => {
+  it('reads a phrase by its number only, and never words', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 3 }))).toEqual({ t: 'say', n: 3 });
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 7, text: 'anything at all' }))).toEqual({ t: 'say', n: 7 });
+    // A whole number in range reaches the room, which drops one its list does not have.
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 999 }))).toEqual({ t: 'say', n: 999 });
+    for (const n of [undefined, 0, -1, 1.5, '3', 'Hi!', 1000, null]) expect(parseClientFrame(JSON.stringify({ t: 'say', n })), String(n)).toBeNull();
+  });
+
+  it('passes a phrase from the room on to the page', () => {
+    const say: ServerFrame = { t: 'say', id: 'v_a', n: 12 };
+    expect(parseServerFrame(JSON.stringify(say))).toEqual(say);
+  });
+});
+
 describe('protocol v7, the nests', () => {
-  it('refuses a page that speaks an older protocol at its hello', () => {
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 6, look }))).toBeNull();
+  it('has a close code of its own for a nest that turns an owl away', () => {
     expect(CLOSE.NEST_CLOSED).toBe(4011);
-    expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
   });
 
   it('reads a street request with its request number only', () => {
@@ -84,6 +100,16 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1, y: 2 }, seq: 3 }))).toEqual({ t: 'move', to: { x: 1, y: 2 }, seq: 3 });
     expect(parseClientFrame(JSON.stringify({ t: 'look', look, extra: 1 }))).toEqual({ t: 'look', look });
     expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
+  });
+
+  it('accepts an emote from the catalogue and the hop every owl has, and nothing else', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'hoot' }))).toEqual({ t: 'emote', e: 'hoot' });
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: JUMP_EMOTE }))).toEqual({ t: 'emote', e: JUMP_EMOTE });
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'fly' }))).toBeNull();
+    // The hop is not a collectible: no catalogue emote, so a quest, the wheel or the shop never meet it.
+    expect(EMOTE_IDS).not.toContain(JUMP_EMOTE);
+    expect(isEmoteId(JUMP_EMOTE)).toBe(false);
+    expect(isParkMessage({ t: 'emote', id: 'p1', e: JUMP_EMOTE })).toBe(true);
   });
 
   it('accepts positions anywhere in a room wider than one screen', () => {

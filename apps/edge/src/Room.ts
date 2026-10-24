@@ -9,6 +9,10 @@ import {
   MOVE_REFILL_PER_S,
   USE_COOLDOWN_MS,
   REACH_SLACK,
+  SAY_EVERY_MS,
+  JUMP_EMOTE,
+  JUMP_EVERY_MS,
+  isPhrase,
   findSpawn,
   isWalkable,
   nestDoorIndex,
@@ -24,6 +28,7 @@ import {
   type RoomDef,
   type ServerFrame,
   type ServerWalk,
+  type ServerWelcome,
   type Vec2,
 } from '@owl-park/shared';
 
@@ -53,6 +58,10 @@ interface Visitor {
   strikes: number[];
   frames: number[];
   emotedAt: number;
+  /** When this visitor last hopped. */
+  jumpedAt: number;
+  /** When this visitor last said a phrase. */
+  saidAt: number;
   /** When this visitor last used an interactable (leaf piles, stalls). */
   usedAt: number;
   /** When this visitor, the owner of the nest it is in, last changed it. */
@@ -84,6 +93,10 @@ export const LIMITS = {
   leaverMemoryMs: 120_000,
   /** One emote per visitor this often; faster ones are dropped quietly. */
   emoteEveryMs: 1_500,
+  /** One hop (the Jump button) per visitor this often, a little under the page's own limit to allow for the network; faster ones are dropped quietly. */
+  jumpEveryMs: Math.round(JUMP_EVERY_MS * 0.8),
+  /** One prewritten phrase per visitor this often; faster ones are dropped quietly. */
+  sayEveryMs: SAY_EVERY_MS,
   /** One use of an interactable per visitor this often. */
   useEveryMs: USE_COOLDOWN_MS,
   /** One change to its nest per owner this often. */
@@ -209,7 +222,11 @@ export class Room {
    * the welcome and enter frames have been sent. A second session for the same id
    * replaces the first (closed 4005). `overCap` lets a nest's owner into its own nest however full.
    */
-  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean } = {}): 'ok' | 'full' {
+  /**
+   * Put a visitor in the room and send its welcome. `welcome` adds what the room object knows beyond
+   * the room: which copy it is, the visitor's entry, and the busy ribbon (OP-075).
+   */
+  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean; welcome?: Pick<ServerWelcome, 'copy' | 'entry' | 'notice'> } = {}): 'ok' | 'full' {
     const existing = this.visitors.get(id);
     if (existing) {
       // The newer session wins; remember where the old one stood so the newcomer can resume there.
@@ -233,7 +250,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0, arrangedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, jumpedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -248,6 +265,7 @@ export class Room {
       you: { pos },
       owls: this.snapshot(id),
       counts: this.opts.counts?.() ?? { [this.def.id]: this.visitors.size },
+      ...opts.welcome,
     });
     this.send(v, { t: 'objects', until: this.objectStates() });
     this.broadcast({ t: 'enter', owl: { id, look: v.st.look, pos, walk: null } }, id);
@@ -257,7 +275,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, usedAt: 0, arrangedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, jumpedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -377,6 +395,31 @@ export class Room {
     if (now - v.emotedAt < LIMITS.emoteEveryMs) return false;
     v.emotedAt = now;
     this.broadcast({ t: 'emote', id, e }, id);
+    return true;
+  }
+
+  /** A hop for everyone else in the room: every owl has it, so no collection is asked. Rate limited apart from emotes. */
+  jump(id: string): boolean {
+    const v = this.visitors.get(id);
+    if (!v) return false;
+    const now = this.now();
+    if (now - v.jumpedAt < LIMITS.jumpEveryMs) return false;
+    v.jumpedAt = now;
+    this.broadcast({ t: 'emote', id, e: JUMP_EMOTE }, id);
+    return true;
+  }
+
+  /**
+   * Say a prewritten phrase to everyone else in the room: only its number goes out, and only a
+   * number the phrase list has (an unknown one is dropped). One phrase every `sayEveryMs` per owl.
+   */
+  say(id: string, n: number): boolean {
+    const v = this.visitors.get(id);
+    if (!v || !isPhrase(n)) return false;
+    const now = this.now();
+    if (now - v.saidAt < LIMITS.sayEveryMs) return false;
+    v.saidAt = now;
+    this.broadcast({ t: 'say', id, n }, id);
     return true;
   }
 

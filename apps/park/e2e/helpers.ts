@@ -11,7 +11,13 @@ export interface ParkState {
     walking: boolean;
     look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
     emote: string | null;
+    /** How high this owl is drawn above the floor (a hop), in room pixels. */
+    height: number;
   }>;
+  /** How high this visitor's owl is drawn above the floor (a hop), in room pixels; `pos` stays on the floor. */
+  height: number;
+  /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
+  bubbles: Array<{ id: string; n: number }>;
   connected: boolean;
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
@@ -33,11 +39,28 @@ export interface ParkState {
   wall: { walls: Array<{ game: string; top: Array<{ score: number; look: { body: string; belly: string; accent: string; species?: string } }> }>; mine: Record<string, number> } | null;
   street: Array<{ kind: 'own'; nestId: string | null } | { kind: 'nest'; nestId: string; look: { body: string; belly: string; accent: string } | null } | { kind: 'empty' }> | null;
   nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
+  /** In a nest, its mirror: where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
+  mirror: { x: number; y: number; stage: { x: number; y: number; w: number; h: number } | null } | null;
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */
 /** The admin key the local room server runs with in these tests (playwright.config.ts): a test value, not a secret. */
 export const E2E_ADMIN_KEY = 'e2e-only-admin-key-not-a-secret';
+
+/**
+ * The stand-in store the local room server reaches in these tests (e2e/standInStore.mjs), and the
+ * store settings it runs with (playwright.config.ts): test values, not secrets.
+ */
+export const E2E_STORE = {
+  port: 8790,
+  origin: 'http://localhost:8790',
+  shop: 'owl-e2e.myshopify.com',
+  token: 'e2e-only-store-token-not-a-secret',
+  webhookKey: 'e2e-only-webhook-key-not-a-secret',
+  passCode: 'E2E-OPENING-NIGHT',
+  /** The store's ticket page the room server's client is built with (the booth sells while the gate takes tickets). */
+  ticketsUrl: 'https://owl-e2e.myshopify.com/collections/tickets',
+} as const;
 
 export async function walkToDoor(page: Page, doorId: string): Promise<void> {
   const s = await state(page);
@@ -71,7 +94,7 @@ export async function state(page: Page): Promise<ParkState> {
   }
 }
 
-export type CameraView = { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number };
+export type CameraView = { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number; port: { x: number; y: number; w: number; h: number } };
 
 export async function cameraView(page: Page): Promise<CameraView> {
   const cam = await page.evaluate(() => window.owlPark.camera());
@@ -135,6 +158,30 @@ export async function walkAndStop(page: Page, x: number, y: number): Promise<{ x
   await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x, y });
   await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
   return (await state(page)).pos;
+}
+
+/**
+ * The highest a page draws an owl (its own, or the first other owl's) during the next hop, sampled
+ * every frame: a hop lasts under half a second, too quick for polling. Done once the owl is back on
+ * the floor after a hop, or after `ms` with none.
+ */
+export function peakHeight(page: Page, whose: 'own' | 'peer', ms = 6000): Promise<number> {
+  return page.evaluate(
+    ({ whose, ms }) =>
+      new Promise<number>((resolve) => {
+        let max = 0;
+        const start = performance.now();
+        const tick = () => {
+          const s = window.owlPark.state();
+          const h = (whose === 'own' ? s?.height : s?.peers[0]?.height) ?? 0;
+          max = Math.max(max, h);
+          if ((max > 0 && h === 0) || performance.now() - start >= ms) resolve(max);
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    { whose, ms },
+  );
 }
 
 /** Wait for an action button where the owl stands, then press it. */

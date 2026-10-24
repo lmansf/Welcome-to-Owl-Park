@@ -49,6 +49,18 @@ describe('LocalTransport', () => {
     expect(ha.onPeerMove).not.toHaveBeenCalled();
   });
 
+  it('relays a phrase as its number, and drops a number the list does not have', async () => {
+    const t = new LocalTransport();
+    const ha = mkHandlers();
+    const hb = { ...mkHandlers(), onPeerSay: vi.fn() };
+    const a = await t.join('hub', state('a'), ha);
+    await t.join('hub', state('b'), hb);
+    a.send({ t: 'say', id: 'a', n: 13 });
+    expect(hb.onPeerSay).toHaveBeenCalledWith('a', 13);
+    a.send({ t: 'say', id: 'a', n: 99 });
+    expect(hb.onPeerSay).toHaveBeenCalledTimes(1);
+  });
+
   it('does not hear other rooms', async () => {
     const t = new LocalTransport();
     const ha = mkHandlers();

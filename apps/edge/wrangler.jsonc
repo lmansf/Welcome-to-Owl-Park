@@ -20,13 +20,17 @@
       { "name": "ROOMS", "class_name": "RoomObject" },
       { "name": "VOTES", "class_name": "VoteLedger" },
       // Every collector's collectibles (finds, feathers, home time zone): one object for the park.
-      { "name": "COLLECTIONS", "class_name": "Collections" }
+      { "name": "COLLECTIONS", "class_name": "Collections" },
+      // Busy nights (OP-075): the line in front of the park, the busy ribbon and copies of rooms, with
+      // their settings: one object for the park (src/Overflow.ts).
+      { "name": "OVERFLOW", "class_name": "Overflow" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomObject"] },
     { "tag": "v2", "new_sqlite_classes": ["VoteLedger"] },
-    { "tag": "v3", "new_sqlite_classes": ["Collections"] }
+    { "tag": "v3", "new_sqlite_classes": ["Collections"] },
+    { "tag": "v4", "new_sqlite_classes": ["Overflow"] }
   ],
   // The park's domain, attached to this Worker as Custom Domains on every deploy, so nothing else can
   // stand in front of it (Cloudflare keeps the DNS records and the certificates). A hostname that
@@ -59,9 +63,11 @@
   // Secrets (PASS_SIGNING_KEY, ADMIN_KEY) are set with `wrangler secret put`, never written here,
   // and are deliberately not declared as `secrets.required`: that would refuse the first deploy of
   // a new Worker until both exist, while the Worker runs with a development key (and a logged
-  // warning) until they are set. The store's (SHOPIFY_SHOP, SHOPIFY_ADMIN_TOKEN,
-  // SHOPIFY_WEBHOOK_SECRET) are set the same way once the store's custom app exists; until then
-  // the ticket webhooks are refused. All are typed as optional in src/env.ts.
+  // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
+  // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
+  // the same way once the store's app exists; until then the ticket webhooks are refused. So is
+  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062). All are typed as optional
+  // in src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {
     "enabled": true,

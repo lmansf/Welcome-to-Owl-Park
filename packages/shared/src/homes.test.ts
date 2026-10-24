@@ -352,8 +352,10 @@ describe('the words visitors see', () => {
   it('are the defaults awaiting the owner, all in one place', () => {
     expect(NEST_WORDS).toEqual({
       toNests: 'To the nests',
+      toPark: 'To the park',
       yourNest: 'Your nest',
       decorate: 'Decorate',
+      mirror: 'Look in the mirror',
       done: 'Done',
       takeAway: 'Take away',
       openToVisitors: 'Open to visitors',
@@ -367,6 +369,8 @@ describe('the words visitors see', () => {
       onTheWall: 'On the wall',
       noPieces: "No pieces for this spot yet. Each day's furniture gift brings a new one.",
       notAnswering: 'The nests are not answering just now. Try again in a moment.',
+      welcome: 'Welcome to your nest',
+      welcomeLine: 'The park is out the door.',
     });
   });
 });

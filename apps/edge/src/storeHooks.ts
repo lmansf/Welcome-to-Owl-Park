@@ -5,9 +5,15 @@
  * `owl-park-release`) or a later rating comes back low; a refund switches off that many tickets of
  * a line and a cancellation all of them. The store may send any webhook more than once, and
  * retries one that failed: every step here is safe to repeat.
+ *
+ * Opening night (C42): a free order has nothing to rate, so its tickets go out at once (it is taken
+ * from orders/create too, should the store not send orders/paid for it); a pass order from the
+ * park's pass link (half price, OP-062: a paid order, rated like any other) keeps the link to the
+ * Opening Night Ticket it names and what its passes sold for, and a pass bought with the night's
+ * code but without the link is counted apart.
  */
 import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
-import { gidTail, lowRisk, ORDER_QUERY, ticketLines, type AdminOrder } from './shopify';
+import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, usedCode, type AdminOrder } from './shopify';
 
 /** The order tag that releases a held order: the owner's fraud check passed it. */
 export const RELEASE_TAG = 'owl-park-release';
@@ -21,8 +27,10 @@ export interface HookDeps {
   /** The claim link for a secret, on the park's own address. */
   claimUrl: (secret: string) => string;
   fetchFn?: typeof fetch;
-  /** Waits before the paid order's second look at a rating still in progress (tests skip it). */
+  /** Waits: before a paid order's second look at a rating still in progress, and between looks at an order another webhook is working on (tests skip it). */
   wait?: (ms: number) => Promise<void>;
+  /** Opening night's discount code for the annual pass (C42), to count passes bought with it. */
+  openingCode?: string;
 }
 
 export interface HookResult {
@@ -98,18 +106,24 @@ async function sendLink(deps: HookDeps, id: string, lines: string[], tickets: st
   await deskOk(deps, '/tickets/sent', { order: id });
 }
 
-async function paid(deps: HookDeps, id: string): Promise<HookResult> {
+/** Whether an order's tickets go out at once: the store rated it low risk, or it is free (C42: nothing to rate). */
+const clears = (order: AdminOrder) => lowRisk(order) || freeOrder(order);
+
+async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookResult> {
   let order = await loadOrder(deps, id);
-  if (!order || order.cancelledAt) return { status: 200, body: { tickets: 0 } };
+  if (!order || order.cancelledAt || (onlyFree && !freeOrder(order))) return { status: 200, body: { tickets: 0 } };
   const lines = ticketLines(order);
   if (!lines.length) return { status: 200, body: { tickets: 0 } };
   // The store rates an order a few seconds after it is placed: one more look before holding it.
-  if (!lowRisk(order) && ratingPending(order)) {
+  if (!clears(order) && ratingPending(order)) {
     await (deps.wait ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(2000);
     order = (await loadOrder(deps, id)) ?? order;
   }
-  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !lowRisk(order) });
+  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !clears(order) });
   const tickets = issued['tickets'] as string[];
+  // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one, with what it sold for.
+  const from = fromTicketOf(order);
+  if (lines.some((l) => l.kind === 'annual') && (from || usedCode(order, deps.openingCode))) await deskOk(deps, '/tickets/link-pass', { order: id, from, cents: paidFor(order, lines, 'annual') });
   if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
   return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id };
@@ -148,6 +162,29 @@ async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
   return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
 }
 
+/** How long a webhook waits for another one working on the same order: well inside the store's 5 seconds. */
+const LEASE_WAIT_MS = 3_000;
+const LEASE_POLL_MS = 250;
+
+/**
+ * One webhook at a time per order. The store sends a free order's orders/create and orders/paid
+ * together (C42), and may send any webhook twice: without this the second could replace the claim
+ * link the first is emailing. The second waits for the first and then finds its work done; one that
+ * waits too long fails, and the store sends it again later.
+ */
+async function oneAtATime(deps: HookDeps, id: string, work: () => Promise<HookResult>): Promise<HookResult> {
+  const pause = deps.wait ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let waited = 0; (await deskOk(deps, '/tickets/lease', { order: id }))['ok'] !== true; waited += LEASE_POLL_MS) {
+    if (waited >= LEASE_WAIT_MS) throw new StoreError(`order ${id} is busy with another webhook`);
+    await pause(LEASE_POLL_MS);
+  }
+  try {
+    return await work();
+  } finally {
+    await deps.desk('/tickets/unlease', { order: id }).catch(() => undefined);
+  }
+}
+
 /**
  * One webhook. A store or desk failure throws, so the Worker answers with an error and the store
  * sends the webhook again later.
@@ -155,9 +192,16 @@ async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
 export async function storeWebhook(topic: string, payload: Record<string, unknown>, deps: HookDeps): Promise<HookResult> {
   const id = orderIdOf(payload, topic);
   if (!id) return { status: 200, body: { ignored: 'no order' } };
+  return oneAtATime(deps, id, () => orderWebhook(topic, id, payload, deps));
+}
+
+function orderWebhook(topic: string, id: string, payload: Record<string, unknown>, deps: HookDeps): Promise<HookResult> {
   switch (topic) {
     case 'orders/paid':
       return paid(deps, id);
+    case 'orders/create':
+      // Only a free order: should the store not send orders/paid for one, its tickets still go out.
+      return paid(deps, id, true);
     case 'orders/updated':
     case 'orders/risk_assessment_changed':
       return recheck(deps, id, payload);
@@ -166,7 +210,7 @@ export async function storeWebhook(topic: string, payload: Record<string, unknow
     case 'orders/cancelled':
       return cancelled(deps, id);
     default:
-      return { status: 200, body: { ignored: topic } };
+      return Promise.resolve({ status: 200, body: { ignored: topic } });
   }
 }
 

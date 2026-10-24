@@ -47,11 +47,11 @@ import {
   type ShopView,
   type Vec2,
 } from '@owl-park/shared';
+import { LOCAL_COLLECTOR_KEY } from '../identity';
 import type { RoomConnection } from '../net/transport';
 import { ROOMS } from '../rooms';
 import type { ActivityLink, ActivityPushes, CollectionService, FurnitureGiftReply, HandInReply, NestEditReply, NestLink, NestPushes, NoteReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
 
-const COLLECTOR_KEY = 'owl-park:local-collector';
 const STORE_PREFIX = 'owl-park:collection:';
 /** Every nest in this browser, whichever collector's: the street shows the other ones that are open. */
 const NESTS_KEY = 'owl-park:nests';
@@ -120,7 +120,7 @@ export class LocalCollections implements CollectionService {
     let cid = opts.collector && /^[A-Za-z0-9_-]{1,32}$/.test(opts.collector) ? opts.collector : null;
     if (!cid) {
       try {
-        cid = storage?.getItem(COLLECTOR_KEY) ?? null;
+        cid = storage?.getItem(LOCAL_COLLECTOR_KEY) ?? null;
       } catch {
         cid = null;
       }
@@ -128,7 +128,7 @@ export class LocalCollections implements CollectionService {
     if (!cid) {
       cid = randomCid();
       try {
-        storage?.setItem(COLLECTOR_KEY, cid);
+        storage?.setItem(LOCAL_COLLECTOR_KEY, cid);
       } catch {
         /* private mode: this page keeps its own collection */
       }
@@ -212,6 +212,10 @@ export class LocalCollections implements CollectionService {
 
   async claimFurnitureGift(): Promise<FurnitureGiftReply> {
     return this.nests((nests) => nests.claimGift(this.cid, this.now()));
+  }
+
+  async homeNest(): Promise<string | null> {
+    return this.nests((nests) => nests.mine(this.cid, null, this.now()).nest.nestId);
   }
 
   /**

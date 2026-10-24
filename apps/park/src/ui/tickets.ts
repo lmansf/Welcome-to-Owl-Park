@@ -6,7 +6,21 @@
 import type { ScanRefusal, ScanReply, WalletEntry } from '../net';
 import type { TicketLink } from '../net/ticketLinks';
 
-export const KIND_LABEL: Readonly<Record<WalletEntry['kind'], string>> = { day: 'Day ticket', night: 'Night ticket', annual: 'Annual pass', event: 'Event ticket' };
+export const KIND_LABEL: Readonly<Record<WalletEntry['kind'], string>> = { day: 'Day ticket', night: 'Night ticket', annual: 'Annual pass', event: 'Event ticket', 'opening-night': 'Opening Night Ticket' };
+
+/**
+ * Opening night's words (C42, the owner's): the booth's line, the pass offer and its button, and the
+ * pass come. The pass is half price on the night (OP-062; it was free at first).
+ */
+export const OPENING_WORDS = {
+  booth: 'Opening night: every pass is half price',
+  offer: 'Your pass is half price tonight.',
+  claim: 'Claim it',
+  claimed: 'Your annual pass is in your wallet',
+} as const;
+
+/** Kinds with a night of their own rather than a length from the first scan. */
+const windowed = (kind: WalletEntry['kind']) => kind === 'event' || kind === 'opening-night';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -28,29 +42,32 @@ export interface WalletLine {
   vote: string | null;
   /** It can be passed on with a share link (unused tickets). */
   share: boolean;
+  /** An Opening Night Ticket's pass offer (C42): to claim tonight, or claimed. */
+  freePass: 'ready' | 'claimed' | null;
 }
 
 /** One ticket in the booth's wallet: what it is, what it can do now, and today's vote. */
 export function walletLine(t: WalletEntry, now: number, date: (ms: number) => string = shortDate): WalletLine {
   const title = KIND_LABEL[t.kind];
   const vote = t.status !== 'active' ? null : t.voteToday === 'used' ? "Today's vote: cast" : "Today's vote: ready at a realm's idol";
+  const freePass = t.freePass ?? null;
   switch (t.status) {
     case 'held':
-      return { title, status: 'Waiting on a quick check from the store; it works as soon as that is done', vote, share: false };
+      return { title, status: 'Waiting on a quick check from the store; it works as soon as that is done', vote, share: false, freePass };
     case 'unused':
-      if (t.kind === 'event') {
+      if (windowed(t.kind)) {
         const status = t.validFrom !== null && t.validFrom > now ? `For ${date(t.validFrom)}` : 'Its night is on: walk through the turnstiles';
-        return { title, status, vote, share: true };
+        return { title, status, vote, share: true, freePass };
       }
-      return { title, status: 'Ready: its time starts when the turnstiles scan it', vote, share: true };
+      return { title, status: 'Ready: its time starts when the turnstiles scan it', vote, share: true, freePass };
     case 'active':
-      return { title, status: t.msLeft === null ? 'Running' : `Running: ${timeLeft(t.msLeft)} left`, vote, share: false };
+      return { title, status: t.msLeft === null ? 'Running' : `Running: ${timeLeft(t.msLeft)} left`, vote, share: false, freePass };
     case 'used':
-      return { title, status: 'Used', vote, share: false };
+      return { title, status: 'Used', vote, share: false, freePass };
     case 'expired':
-      return { title, status: t.kind === 'event' ? 'Its night has passed' : 'Expired unused', vote, share: false };
+      return { title, status: windowed(t.kind) ? 'Its night has passed' : 'Expired unused', vote, share: false, freePass };
     case 'revoked':
-      return { title, status: 'Refunded', vote, share: false };
+      return { title, status: 'Refunded', vote, share: false, freePass: null };
   }
 }
 
@@ -64,14 +81,14 @@ export interface GateCard {
 export function gateCard(scan: Extract<ScanReply, { ok: true }>, now: number): GateCard {
   const left = scan.validUntil === null ? null : Math.max(0, scan.validUntil - now);
   let line: string;
-  if (scan.kind === 'event') line = scan.started ? 'Your night starts now' : 'Welcome back';
+  if (windowed(scan.kind)) line = scan.started ? 'Your night starts now' : 'Welcome back';
   else if (scan.started) line = left === null ? 'Your visit starts now' : `Your visit starts now: ${timeLeft(left)}`;
   else line = left === null ? 'Welcome back' : `Welcome back: ${timeLeft(left)} left`;
   return { kind: KIND_LABEL[scan.kind], id: scan.id, line };
 }
 
-/** What the turnstiles say when a ticket does not go through. */
-export function gateRefusal(reason: ScanRefusal): string {
+/** What the turnstiles say when a ticket does not go through (`kind`: the ticket's, when it is this device's). */
+export function gateRefusal(reason: ScanRefusal, kind?: WalletEntry['kind']): string {
   switch (reason) {
     case 'none':
     case 'unknown':
@@ -86,7 +103,7 @@ export function gateRefusal(reason: ScanRefusal): string {
     case 'revoked':
       return 'This ticket was refunded, so the turnstiles cannot take it.';
     case 'not-yet':
-      return 'Your event ticket opens the turnstiles on its night. See you then!';
+      return kind === 'opening-night' ? 'Your Opening Night Ticket opens the turnstiles on opening night. See you then!' : 'Your event ticket opens the turnstiles on its night. See you then!';
     case 'no-length':
       return 'This ticket is not set up yet. Please ask the park for help.';
     case 'offline':
@@ -146,5 +163,98 @@ export function createTicketCard(root: HTMLElement): { show(card: GateCard, ms?:
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => el.classList.remove('up'), ms);
     },
+  };
+}
+
+const PASS_CSS = `
+#hud .free-pass{position:absolute;z-index:11;left:50%;top:20%;transform:translateX(-50%);width:min(340px,90vw);display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 18px;border-radius:16px;text-align:center;pointer-events:auto;
+  background:linear-gradient(160deg,#F6F1E3,#EADFC3);color:#0C1E36;box-shadow:0 0 0 2px #C9A227,0 0 30px rgba(201,162,39,.7),0 10px 30px rgba(0,0,0,.45)}
+#hud .free-pass.open{display:flex}
+#hud .free-pass p{margin:0;font-size:16px;font-weight:700}
+#hud .free-pass .row{display:flex;gap:10px}
+#hud .free-pass a{display:inline-flex;align-items:center;min-height:44px;padding:8px 22px;border-radius:999px;background:#C9A227;color:#0C1E36;font-weight:800;text-decoration:none}
+#hud .free-pass button{min-height:44px;color:#0C1E36;border-color:rgba(12,30,54,.3)}
+`;
+
+/** How often, and how long, the page looks for the pass once the owl has gone to claim it. */
+const PASS_LOOK_MS = 4_000;
+const PASS_LOOK_FOR_MS = 20 * 60_000;
+
+export interface FreePassOffer {
+  /** The store's cart link with the pass and the night's code. */
+  link: string;
+  /** Whether the pass has come (the wallet's Opening Night Ticket says so). */
+  claimed(): Promise<boolean>;
+}
+
+export interface FreePassCard {
+  show(offer: FreePassOffer): void;
+  hide(): void;
+  /** Look for the pass for a while (the owl went to claim it from here or from the booth), and say when it has come. */
+  watch(claimed: () => Promise<boolean>): void;
+}
+
+/**
+ * Opening night's pass offer (C42): after the ticket card, "Your pass is half price tonight." and
+ * Claim it, which opens the store's checkout in a new tab with the pass, its code and the ticket. The
+ * page then looks for the pass in the wallet for a while, and says when it has come.
+ */
+export function createFreePassCard(root: HTMLElement, toast: (message: string) => void): FreePassCard {
+  const style = document.createElement('style');
+  style.textContent = PASS_CSS;
+  document.head.appendChild(style);
+  const el = document.createElement('div');
+  el.className = 'free-pass';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', 'Opening night');
+  el.dataset['freePass'] = '';
+  const p = document.createElement('p');
+  p.textContent = OPENING_WORDS.offer;
+  const row = document.createElement('div');
+  row.className = 'row';
+  const claim = document.createElement('a');
+  claim.textContent = OPENING_WORDS.claim;
+  claim.target = '_blank';
+  claim.rel = 'noopener noreferrer';
+  const close = document.createElement('button');
+  close.className = 'ghost';
+  close.textContent = 'Close';
+  row.append(claim, close);
+  el.append(p, row);
+  root.appendChild(el);
+  let offer: FreePassOffer | null = null;
+  let looking: ReturnType<typeof setInterval> | null = null;
+  const stop = () => {
+    if (looking) clearInterval(looking);
+    looking = null;
+  };
+  const watch = (claimed: () => Promise<boolean>) => {
+    stop();
+    const until = Date.now() + PASS_LOOK_FOR_MS;
+    const id = setInterval(() => {
+      if (Date.now() > until) return stop();
+      void claimed().then((yes) => {
+        if (!yes || looking !== id) return;
+        stop();
+        el.classList.remove('open');
+        toast(OPENING_WORDS.claimed);
+      }, () => undefined);
+    }, PASS_LOOK_MS);
+    looking = id;
+  };
+  close.addEventListener('click', () => el.classList.remove('open'));
+  claim.addEventListener('click', () => {
+    if (offer) watch(offer.claimed);
+  });
+  return {
+    show(o) {
+      offer = o;
+      claim.href = o.link;
+      el.classList.add('open');
+    },
+    hide() {
+      el.classList.remove('open');
+    },
+    watch,
   };
 }

@@ -93,6 +93,11 @@ export class Collections extends DurableObject<Env> {
     this.feedbackBox = new FeedbackBox(ctx.storage.sql);
   }
 
+  /** The health check's question (OP-068): the object is up and answering. */
+  async ping(): Promise<true> {
+    return true;
+  }
+
   async owned(cid: string, tzHint?: string): Promise<string[]> {
     return this.book.owned(cid, tzHint, Date.now());
   }

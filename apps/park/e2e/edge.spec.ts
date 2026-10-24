@@ -1,6 +1,6 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, openPark, peakHeight, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -140,7 +140,7 @@ test.describe('room server', () => {
 
     // The emailed link opens the park; its secret leaves the address bar at once.
     const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
-    await a.goto(`/?transport=edge#claim=${secret}`);
+    await a.goto(`/?transport=edge&home=0#claim=${secret}`);
     await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     expect(a.url()).not.toContain('claim=');
     await expect(a.getByText('Your tickets are in your wallet')).toBeVisible({ timeout: 10_000 });
@@ -188,6 +188,77 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
+  test('leaving the park keeps a ticket running, the turnstiles let the owl back in, and Go home finds its nest', async ({ browser, request }) => {
+    const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
+    expect(issued.status()).toBe(200);
+    const { link } = (await issued.json()) as { link: string };
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    await a.goto(`/?transport=edge&home=0#claim=${link.split('#claim=')[1] ?? ''}`);
+    await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(a.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 10_000 });
+    await walkToDoor(a, 'gate');
+    await expect(a.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    const started = (await a.evaluate(() => window.owlPark.wallet()))[0]!;
+    expect(started.status).toBe('active');
+
+    // Out of the park from the Menu: the card asks, and the owl stands outside the gate.
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="leave"]').click();
+    await a.getByRole('dialog', { name: 'Leave the park' }).locator('[data-leave="leave"]').click();
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
+    // Leaving changed nothing on the ticket: its time runs from the same first scan.
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ id: started.id, status: 'active', firstScan: started.firstScan });
+
+    // Back in through the turnstiles: the quick scan.
+    await walkToDoor(a, 'gate');
+    await expect(a.locator('[data-ticket-card]')).toContainText('Welcome back', { timeout: 15_000 });
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ status: 'active', firstScan: started.firstScan });
+
+    // Go home: straight to the owl's own nest, which the room server makes on first sight.
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').click();
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+    await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
+    await a.context().close();
+  });
+
+  for (const [name, device] of [
+    ['a computer', { viewport: { width: 1280, height: 800 } }],
+    ['a phone', { ...devices['Pixel 7'] }],
+  ] as const) {
+    test(`on ${name}: a ticket link lands on the home screen logged in, with the ticket; Play puts the owl in its own nest, and the room server counts it there`, async ({ browser, request }) => {
+      const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
+      expect(issued.status()).toBe(200);
+      const { link } = (await issued.json()) as { link: string };
+      // Owls in the nests as the room server counts them now (all nests under one key, so no count names a nest).
+      const inNests = async () => ((await (await request.get('/api/counts')).json()) as Record<string, number>)['nests'] ?? 0;
+      const before = await inNests();
+
+      // A new device opens the link from the store's email: the owl is made here, and the ticket is in its wallet.
+      const a = await (await browser.newContext(device)).newPage();
+      await a.goto(`/?transport=edge${new URL(link).hash}`);
+      await expect(a.locator('[data-home-btn="play"]')).toBeVisible({ timeout: 20_000 });
+      expect(await a.evaluate(() => window.owlPark.home())).toEqual({ shown: true, loggedIn: true });
+      await expect(a.locator('[data-home-note]')).toHaveText('Ticket added');
+      await expect(a.locator('[data-home-wallet]')).toHaveText('Day ticket: ready at the turnstiles');
+      await a.screenshot({ path: `e2e-screenshots/edge-home-ticket-link-${name === 'a phone' ? 'phone' : 'desktop'}.png` });
+
+      // Play (OP-105): the owl's own nest, which the room server makes on first sight.
+      await a.locator('[data-home-btn="play"]').click();
+      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+      await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
+      await expect.poll(inNests, { timeout: 15_000 }).toBe(before + 1);
+      // The Menu's Home screen frees the owl's place in the room at once.
+      await a.locator('[data-menu-btn]').click();
+      await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="title"]').click();
+      await expect(a.locator('[data-home-btn="play"]')).toBeVisible({ timeout: 20_000 });
+      await expect.poll(inNests, { timeout: 15_000 }).toBe(before);
+      await a.context().close();
+    });
+  }
+
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
     await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
@@ -216,6 +287,65 @@ test.describe('room server', () => {
     const c = await visitor(browser, { room: 'grove' });
     await expect.poll(async () => (await state(c)).objects.find((o) => o.id === pile.id)?.here, { timeout: 10_000 }).toBe(false);
     for (const p of [a, b, c]) await p.context().close();
+  });
+
+  test('a phrase through the room server: only its number travels, and the other owls in the room see it over the owl', async ({ browser }) => {
+    const a = await visitor(browser);
+    // The other owl on a phone-sized screen, where the words must still be readable.
+    const b = await (await browser.newContext({ viewport: { width: 412, height: 839 } })).newPage();
+    const heard: unknown[] = [];
+    b.on('websocket', (ws) =>
+      ws.on('framereceived', (f) => {
+        if (typeof f.payload !== 'string' || !f.payload.startsWith('{')) return;
+        const frame = JSON.parse(f.payload) as { t?: string };
+        if (frame.t === 'say') heard.push(frame);
+      }),
+    );
+    await openPark(b, { transport: 'edge' });
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
+    const aId = (await state(b)).peers[0]!.id;
+    const bId = (await state(a)).peers[0]!.id;
+
+    expect(await a.evaluate(() => window.owlPark.say(13))).toBe(true);
+    expect((await state(a)).bubbles.map((s) => s.n)).toEqual([13]);
+    // One phrase every 3 s.
+    expect(await a.evaluate(() => window.owlPark.say(14))).toBe(false);
+    await expect.poll(async () => (await state(b)).bubbles, { timeout: 10_000 }).toEqual([{ id: aId, n: 13 }]);
+    // On the wire, the owl's id and the phrase's number: never words.
+    await expect.poll(() => heard).toEqual([{ t: 'say', id: aId, n: 13 }]);
+
+    // The other owl answers, and its bubble shows over it on its own screen too.
+    expect(await b.evaluate(() => window.owlPark.say(9))).toBe(true);
+    await expect.poll(async () => (await state(a)).bubbles, { timeout: 10_000 }).toContainEqual({ id: bId, n: 9 });
+    await b.screenshot({ path: 'e2e-screenshots/edge-say-phone.png' });
+
+    // The first owl's turn comes again.
+    await expect.poll(() => a.evaluate(() => window.owlPark.say(14)), { timeout: 5_000 }).toBe(true);
+    await expect.poll(async () => (await state(b)).bubbles, { timeout: 10_000 }).toContainEqual({ id: aId, n: 14 });
+    await expect.poll(() => heard).toEqual([
+      { t: 'say', id: aId, n: 13 },
+      { t: 'say', id: aId, n: 14 },
+    ]);
+    await a.context().close();
+    await b.context().close();
+  });
+
+  test('a hop through the room server: the other owls see it, and the owl stays where it stood', async ({ browser }) => {
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    const where = (await state(a)).peers[0]!.pos;
+    const seen = peakHeight(a, 'peer');
+    expect(await b.evaluate(() => window.owlPark.jump())).toBe(true);
+    expect(await seen).toBeGreaterThan(8);
+    await expect.poll(async () => (await state(a)).peers[0]?.emote, { timeout: 5_000 }).toBe('jump');
+    // Only a look: the owl is in the same place for everyone, and no quest or collection was asked.
+    expect((await state(a)).peers[0]!.pos).toEqual(where);
+    expect((await state(b)).pos).toEqual(where);
+    await a.context().close();
+    await b.context().close();
   });
 
   test('the shop and the collection live on the server, for this collector only', async ({ browser, request }) => {
@@ -256,6 +386,9 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     // A beam still glowing from an earlier run goes dark first.
     await expect.poll(async () => (await state(a)).play?.glowing, { timeout: 50_000 }).toBe(false);
+    // The second owl in is placed around the first, perhaps up in the bay between the two blockades,
+    // where a straight walk west meets the bay's wall: both step down onto the open floor first.
+    await Promise.all([walkAndStop(a, 2330, 760), walkAndStop(b, 2470, 760)]);
     // A from the west end of the beam, B from the east: four rounds, a lantern each.
     const plan: Array<[number, number | null]> = [
       [800, 1125],

@@ -22,7 +22,7 @@ export const OWL_H = 240;
  * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
  * the screen), and never given a placeholder: the arcade draws its neon stand-in for anything missing.
  */
-export type ArtKind = 'room' | 'piece' | 'owl' | 'sign' | 'arcade';
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade';
 
 export interface ArtSpec {
   w: number;
@@ -68,10 +68,9 @@ export const ART: Record<string, ArtSpec> = {
   'decor-moss-rug': { w: 220, h: 100, kind: 'piece' },
   'decor-stump-table': { w: 160, h: 120, kind: 'piece' },
   'decor-feather-mobile': { w: 110, h: 160, kind: 'piece' },
-  'sign-not-yet-fledged': { w: 420, h: 520, kind: 'sign' },
-  'sign-closed-for-molting': { w: 420, h: 520, kind: 'sign' },
-  'sign-pardon-our-feathers': { w: 420, h: 520, kind: 'sign' },
-  'sign-hatching-soon': { w: 420, h: 520, kind: 'sign' },
+  // Construction blockades in the hub's two closed arches, each carrying its doorway's phrase.
+  'blockade-not-yet-fledged': { w: 300, h: 300, kind: 'piece' },
+  'blockade-hatching-soon': { w: 300, h: 300, kind: 'piece' },
   'owl-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
@@ -108,12 +107,18 @@ for (const room of Object.values(ROOMS)) {
 }
 
 /** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up. */
-export const GLOBAL_ART = Object.keys(ART).filter((k) => (ART[k]!.kind === 'owl' && !isSpeciesLayer(k)) || ART[k]!.kind === 'sign');
+export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k));
+
+/** The blockade standing in a closed doorway that shows `phrase` ("Not Yet Fledged" -> blockade-not-yet-fledged). */
+export function blockadeKey(phrase: string): string {
+  return `blockade-${phrase.toLowerCase().replace(/\s+/g, '-')}`;
+}
 
 /** Art that belongs to one room (loaded when the room opens, released when it closes). */
 export function roomArtKeys(roomId: string): string[] {
   const room = roomFor(roomId);
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
+  for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
   if (roomId === ARCADE_ROOM) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
@@ -123,14 +128,14 @@ export function roomArtKeys(roomId: string): string[] {
 }
 
 /**
- * How many texture pixels per room pixel to rasterize at. Owls and signs are small, and the arcade's
- * games fill the screen, so they get the full device ratio (up to 2); rooms and big set pieces are
- * capped to keep GPU memory bounded
+ * How many texture pixels per room pixel to rasterize at. Owls are small, and the arcade's games
+ * fill the screen, so they get the full device ratio (up to 2); rooms and big set pieces are capped
+ * to keep GPU memory bounded
  * (a 1600 x 900 room tile costs about 5.8 MB per unit of scale squared; see roomScaleCap for rooms
  * of several tiles).
  */
 export function artScale(kind: ArtKind, pixelRatio: number, roomMax: number): number {
-  const target = kind === 'owl' || kind === 'sign' || kind === 'arcade' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
+  const target = kind === 'owl' || kind === 'arcade' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
   return Math.max(1, Math.round(target * 4) / 4);
 }
 
@@ -159,6 +164,23 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
     const img = await loadImage(c);
     if (img) {
       if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Load a piece of art at 1x under a texture key of its own (`as`): the home screen's backdrop is
+ * the lobby's painting, kept apart from the lobby's own texture so each is freed on its own.
+ */
+export async function loadArtCopy(scene: Phaser.Scene, key: string, as: string): Promise<boolean> {
+  if (scene.textures.exists(as)) return true;
+  if (!ART[key]) return false;
+  for (const c of rasterCandidates(baseUrl(), key, 1)) {
+    const img = await loadImage(c);
+    if (img) {
+      if (!scene.textures.exists(as)) scene.textures.addImage(as, img);
       return true;
     }
   }
@@ -233,14 +255,6 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
       g.fillRect(0, 460, w, h - 460);
       break;
     }
-    case 'sign':
-      g.fillStyle(0x5c4033, 1);
-      g.fillRect(w / 2 - 10, h - 150, 20, 150);
-      g.fillStyle(0x8b5a2b, 1);
-      g.fillRoundedRect(w / 2 - 110, h - 230, 220, 100, 14);
-      g.fillStyle(0xf6f1e3, 1);
-      g.fillEllipse(w / 2, h - 180, 70, 60);
-      break;
     case 'piece':
       g.fillStyle(0xc9a227, 0.18);
       g.fillEllipse(w / 2, h / 2, w * 0.6, h * 0.8);

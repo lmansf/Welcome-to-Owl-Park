@@ -1,8 +1,9 @@
 /**
  * Wire protocol shared by every transport (local tabs, Supabase Realtime,
  * or a future dedicated room server). Version 1 is presence: owls appear,
- * walk, change their look (colours and collectible wear), play emotes and
- * leave. Nothing here carries text written by visitors.
+ * walk, change their look (colours and collectible wear), play emotes, say
+ * a prewritten phrase (by its number, phrases.ts) and leave. Nothing here
+ * carries text written by visitors.
  */
 import type { Wear } from './collectibles';
 import type { SpeciesId } from './species';
@@ -74,11 +75,18 @@ export interface ByeMessage {
   id: string;
 }
 
-/** A player played one of its emotes (an emote id from the collectibles catalogue). */
+/** A player played one of its emotes (an emote id from the collectibles catalogue), or hopped (JUMP_EMOTE). */
 export interface EmoteMessage {
   t: 'emote';
   id: string;
   e: string;
 }
 
-export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage;
+/** A player said a prewritten phrase: its number in the phrase list, never words. */
+export interface SayMessage {
+  t: 'say';
+  id: string;
+  n: number;
+}
+
+export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SayMessage;

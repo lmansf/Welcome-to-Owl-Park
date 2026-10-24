@@ -2,8 +2,9 @@
  * Structural validation for anything that arrives from another visitor. Peers share public
  * channels, so every field is untrusted until it has the expected shape and range.
  */
-import { EMOTE_IDS, isWear } from './collectibles';
+import { EMOTE_IDS, JUMP_EMOTE, isWear } from './collectibles';
 import { isHexColour, isPledge } from './look';
+import { isPhrase } from './phrases';
 import { isSpecies } from './species';
 import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from './protocol';
 import { ROOM_MAX_H, ROOM_MAX_W } from './room';
@@ -49,6 +50,11 @@ export function isEmoteId(v: unknown): v is string {
   return typeof v === 'string' && EMOTE_IDS.includes(v);
 }
 
+/** What an emote frame may carry: an emote from the catalogue, or the hop every owl has (JUMP_EMOTE). */
+export function isPlayableEmote(v: unknown): v is string {
+  return v === JUMP_EMOTE || isEmoteId(v);
+}
+
 export function isWalk(v: unknown): v is Walk {
   return isObj(v) && isVec2(v['from']) && isVec2(v['to']) && typeof v['startedAt'] === 'number' && Number.isFinite(v['startedAt']);
 }
@@ -68,7 +74,10 @@ export function isParkMessage(value: unknown): value is ParkMessage {
     case 'bye':
       return isId(value['id']);
     case 'emote':
-      return isId(value['id']) && isEmoteId(value['e']);
+      return isId(value['id']) && isPlayableEmote(value['e']);
+    case 'say':
+      // A phrase this page does not know is dropped: there is nothing to show for it.
+      return isId(value['id']) && isPhrase(value['n']);
     default:
       return false;
   }

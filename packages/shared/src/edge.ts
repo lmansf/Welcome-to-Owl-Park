@@ -9,10 +9,12 @@
  * tasks, and the `lanterns`, `quiz`, `paid` and `tasks` frames the room sends. v7 adds the nests
  * (homes.ts, nestbook.ts): `street` asks for the street's nest doors and `nest` carries an owner's
  * change to its nest; the room answers with `street` and `nest`, sends `nest` to everyone in a nest
- * when it changes, and `closed` before closing a socket a nest turns away (4011). v8 adds the arcade
- * (arcade.ts, arcadebook.ts): the `act` frames `run` (start a run at a cabinet; answered with the
- * run's seed) and `score` (its result; answered with what it paid), and the `wall` frame the room
- * sends a newcomer in the arcade and everyone there whenever a run changes today's best five.
+ * when it changes, and `closed` before closing a socket a nest turns away (4011). v8 adds prewritten
+ * chat (phrases.ts): `say` carries a phrase's number, and the room relays it with the owl's id to
+ * everyone else in the room (never words). v9 adds the arcade (arcade.ts, arcadebook.ts): the `act`
+ * frames `run` (start a run at a cabinet; answered with the run's seed) and `score` (its result;
+ * answered with what it paid), and the `wall` frame the room sends a newcomer in the arcade and
+ * everyone there whenever a run changes today's best five.
  */
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
@@ -20,12 +22,13 @@ import type { Award } from './book';
 import { parseNestEdit, type NestEdit, type NestRefusal, type NestView } from './homes';
 import { cleanLook } from './look';
 import type { NestGiftState, StreetDoor } from './nestbook';
+import { PHRASE_NUMBER_MAX } from './phrases';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
-import { isEmoteId, isLook, isObj, isVec2 } from './validate';
+import { isEmoteId, isLook, isObj, isPlayableEmote, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: the arcade), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 8;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 9;
 export const MAX_FRAME_BYTES = 1024;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -43,6 +46,8 @@ export const CLOSE = {
   ROOM_FULL: 4010,
   /** A nest turned the visitor away (closed to visitors, or no such nest), or closed while it was inside. */
   NEST_CLOSED: 4011,
+  /** The park has a line (OP-075) and this visitor has not come through it: wait on the home screen. */
+  QUEUED: 4012,
   TOO_LARGE: 1009,
 } as const;
 
@@ -81,10 +86,15 @@ export interface ClientLook {
 export interface ClientBye {
   t: 'bye';
 }
-/** Play an owned emote for everyone in the room. */
+/** Play an owned emote for everyone in the room, or the hop every owl has (JUMP_EMOTE). */
 export interface ClientEmote {
   t: 'emote';
   e: string;
+}
+/** Say a prewritten phrase to everyone in the room: its number in the phrase list (phrases.ts). */
+export interface ClientSay {
+  t: 'say';
+  n: number;
 }
 /** Ask for this collector's quest board (answered with `quests`). */
 export interface ClientQuests {
@@ -141,7 +151,7 @@ export interface ClientStreet {
 }
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -154,6 +164,12 @@ export interface ServerWelcome {
   you: { pos: Vec2 };
   owls: OwlSnapshot[];
   counts: Record<string, number>;
+  /** Which copy of the room this is (OP-075): 1 is the room itself; copies open only on busy nights. */
+  copy?: number;
+  /** Lets this visitor back in while the park has a line (OP-075): sent with the next room's socket. */
+  entry?: string;
+  /** The busy ribbon's words while it is on (OP-075); null or absent while it is off. */
+  notice?: string | null;
 }
 export interface ServerEnter {
   t: 'enter';
@@ -190,6 +206,12 @@ export interface ServerEmote {
   t: 'emote';
   id: string;
   e: string;
+}
+/** An owl said a prewritten phrase (its number; the page shows the phrase in a bubble above the owl). */
+export interface ServerSay {
+  t: 'say';
+  id: string;
+  n: number;
 }
 /**
  * The collector's quest board: the answer to `quests`, `talk`, `accept`, `abandon` and `gather`
@@ -323,6 +345,11 @@ export interface ServerStreet {
   own: { nestId: string; open: boolean } | null;
   doors: Array<StreetDoor | null>;
 }
+/** The busy ribbon (OP-075) came on, changed its words or went off (null). */
+export interface ServerNotice {
+  t: 'notice';
+  words: string | null;
+}
 /** A nest turned this visitor away (closed to visitors, or no such nest) or closed while it was inside; the socket closes with 4011 next. */
 export interface ServerClosed {
   t: 'closed';
@@ -338,6 +365,7 @@ export type ServerFrame =
   | ServerCounts
   | ServerFull
   | ServerEmote
+  | ServerSay
   | ServerQuests
   | ServerHandIn
   | ServerObjects
@@ -352,7 +380,8 @@ export type ServerFrame =
   | ServerNest
   | ServerStreet
   | ServerWall
-  | ServerClosed;
+  | ServerClosed
+  | ServerNotice;
 
 // ---- validation (server side, strict) ----
 
@@ -398,7 +427,12 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     case 'bye':
       return { t: 'bye' };
     case 'emote':
-      return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
+      return isPlayableEmote(v['e']) ? { t: 'emote', e: v['e'] } : null;
+    case 'say': {
+      // A whole number in range; whether the phrase list has it is the room's to decide.
+      const n = v['n'];
+      return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= PHRASE_NUMBER_MAX ? { t: 'say', n } : null;
+    }
     case 'quests':
       return isRequest(v['r']) ? { t: 'quests', r: v['r'] } : null;
     case 'talk':
@@ -438,7 +472,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

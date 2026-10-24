@@ -5,6 +5,7 @@ import {
   CollectionBook,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
+  JUMP_EMOTE,
   MemoryCollectionStore,
   MemoryNestStore,
   MemoryScoreStore,
@@ -350,6 +351,26 @@ describe('a nest in the room object', () => {
   });
 });
 
+describe("a nest's mirror in the room object (OP-077)", () => {
+  it("changes only the owl looking into it: a visitor's new look in another owl's nest leaves the owner and the nest as they were", async () => {
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    const obj = roomObject();
+    const owner = await join(obj, `nest-${nestId}`, 'v_owner', OWNER);
+    const guest = await join(obj, `nest-${nestId}`, 'v_guest', GUEST);
+    // The mirror is the client's: what reaches the room is the owl's own look, as from anywhere.
+    const mirrored: OwlLook = { body: '#3E6B48', belly: '#F2E6C9', accent: '#C9A227', species: 'snowy' };
+    await send(obj, guest, { t: 'look', look: mirrored });
+    await settle();
+    expect(owner.last('look')).toEqual({ t: 'look', id: 'v_guest', look: mirrored });
+    expect(guest.of('look')).toEqual([]);
+    // A newcomer finds the guest changed, the owner as it was, and the nest as it was.
+    const late = await join(obj, `nest-${nestId}`, 'v_other', OTHER);
+    const looks = Object.fromEntries(late.last('welcome')!.owls.map((o) => [o.id, o.look]));
+    expect(looks).toEqual({ v_owner: LOOK, v_guest: mirrored });
+    expect(late.last('nest')?.nest).toEqual({ nestId, open: true, layout: STARTER_LAYOUT, look: COLOURS });
+  });
+});
+
 describe('the street in the room object', () => {
   it("answers with the visitor's own nest and five doors of other owls' open nests", async () => {
     collections.nests.mine(OWNER, COLOURS, clock);
@@ -502,3 +523,84 @@ describe('the arcade in the room object', () => {
   });
 });
 
+describe('prewritten chat in the room object', () => {
+  it('relays a phrase’s number to the other owls in the room, and nothing for a number the list lacks', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b');
+    await send(obj, a, { t: 'say', n: 5 });
+    expect(b.last('say')).toEqual({ t: 'say', id: 'v_a', n: 5 });
+    expect(a.of('say')).toEqual([]);
+    // A page without a collection may speak too: every phrase is everyone's.
+    clock += 3_000;
+    await send(obj, b, { t: 'say', n: 24 });
+    expect(a.last('say')).toEqual({ t: 'say', id: 'v_b', n: 24 });
+    // A number in range the list does not have is dropped; the socket stays open.
+    clock += 3_000;
+    await send(obj, a, { t: 'say', n: 777 });
+    expect(b.of('say')).toHaveLength(1);
+    expect(a.closed).toBeNull();
+    // Words never travel: a frame that carries them is malformed.
+    const words: Record<string, unknown> = { t: 'say', n: 'Hi!' };
+    await send(obj, a, words);
+    expect(a.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
+  });
+});
+
+
+describe('busy nights in the room object (OP-075)', () => {
+  /** A socket as the Worker sends it: with the copy it chose and the entry it made. */
+  function connectWith(room: string, id: string, headers: { copy?: number; entry?: string }): FakeSocket {
+    const ws = connect(room, id);
+    const att = ws.deserializeAttachment() as Record<string, unknown>;
+    ws.serializeAttachment({ ...att, ...(headers.copy ? { copy: headers.copy } : {}), ...(headers.entry ? { entry: headers.entry } : {}) });
+    return ws;
+  }
+
+  it('welcomes an owl with its copy, its entry (then let go) and the ribbon as it stands', async () => {
+    const obj = roomObject();
+    const ws = connectWith('hub', 'v_copied', { copy: 2, entry: 'entry-token' });
+    await hello(obj, ws);
+    expect(ws.last('welcome')).toMatchObject({ room: 'hub', copy: 2, entry: 'entry-token', notice: null });
+    expect((ws.deserializeAttachment() as Record<string, unknown>)['entry']).toBeUndefined();
+    // The room itself says no copy.
+    const plain = await join(obj, 'hub', 'v_plain');
+    expect(plain.last('welcome')?.copy).toBeUndefined();
+  });
+
+  it('shows the ribbon to everyone inside when the overflow object says it changed, woken from hibernation or not', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_one');
+    const b = await join(obj, 'grove', 'v_two');
+    const tell = (o: Obj, words: string | null) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words }) }));
+    await tell(obj, "It's busy tonight; things may be slow");
+    expect(a.last('notice')).toEqual({ t: 'notice', words: "It's busy tonight; things may be slow" });
+    expect(b.last('notice')).toEqual({ t: 'notice', words: "It's busy tonight; things may be slow" });
+    // A newcomer gets it in its welcome.
+    const c = await join(obj, 'hub', 'v_three');
+    expect(c.last('welcome')?.notice).toBe("It's busy tonight; things may be slow");
+    // Woken from hibernation, the object holds no words while its owls still show them: off reaches them all the same.
+    const woken = roomObject();
+    await tell(woken, null);
+    expect(a.last('notice')).toEqual({ t: 'notice', words: null });
+    expect(b.last('notice')).toEqual({ t: 'notice', words: null });
+    expect(c.last('notice')).toEqual({ t: 'notice', words: null });
+  });
+});
+
+describe('the hop in the room object', () => {
+  it('goes to the other owls without asking for a collection, and moves no quest', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b');
+    const questEvent = vi.spyOn(collections, 'questEvent');
+    await send(obj, a, { t: 'emote', e: JUMP_EMOTE });
+    await settle();
+    expect(b.last('emote')).toEqual({ t: 'emote', id: 'v_a', e: JUMP_EMOTE });
+    expect(a.of('emote')).toEqual([]);
+    expect(questEvent).not.toHaveBeenCalled();
+    // A page without a collection hops too: every owl has it.
+    await send(obj, b, { t: 'emote', e: JUMP_EMOTE });
+    expect(a.last('emote')).toEqual({ t: 'emote', id: 'v_b', e: JUMP_EMOTE });
+  });
+});

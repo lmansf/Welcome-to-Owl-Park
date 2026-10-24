@@ -85,7 +85,8 @@ check the first response.
 screenshots each affected room on a desktop and a phone screen with a few visitor owls walking
 about, next to the same room with the current art. It writes
 `work/art/preview/<room>-<view>-compare.png` (plus the two halves) and changes nothing under
-`apps/park`. Options: `--rooms hub,grove`, `--views desktop`, `--owls 1..8`, `--finals <dir>`,
+`apps/park`. Options: `--rooms hub,grove`, `--views desktop`, `--owls 1..8`, `--focus <room x>` (where the
+visitors gather, e.g. `2400` for the middle of a three-screen room), `--finals <dir>`,
 `--out <dir>`. It renders the game in a headless browser, which takes about two minutes per room
 and screen on a small machine without a GPU (all three rooms on both screens took 13 minutes).
 

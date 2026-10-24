@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
-import { nestDoorIndex } from '../src/homes';
+import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
-import { ANCHORS, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
+import { ANCHORS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -96,7 +96,9 @@ describe('doors and spawns', () => {
     });
 
     it(`${room.id}: no spawn stands in a doorway, where an owl would walk straight back out`, () => {
-      for (const [name, p] of Object.entries(room.spawns)) for (const d of room.doors) expect(pointInRect(p, d.rect), `${room.id} spawn ${name} in ${d.id}`).toBe(false);
+      // A spot to stand at (a door with nowhere to go, such as the nest's mirror) may have one.
+      const ways = room.doors.filter((d) => d.to);
+      for (const [name, p] of Object.entries(room.spawns)) for (const d of ways) expect(pointInRect(p, d.rect), `${room.id} spawn ${name} in ${d.id}`).toBe(false);
     });
   }
 });
@@ -163,11 +165,11 @@ describe('the street and the nests', () => {
     expect(pointInRect(resolveTarget(NEST_ROOM.spawns['default']!, rectCenter(out.rect), NEST_ROOM.walkable), out.rect)).toBe(true);
   });
 
-  it('a nest is one screen painted as nest, with a spawn inside and the door out to the street', () => {
+  it('a nest is one screen painted as nest, with a spawn inside, the door out to the street and the mirror', () => {
     expect(NEST_ROOM.size).toEqual({ w: ROOM_W, h: ROOM_H });
     expect(backgroundTiles(NEST_ROOM)).toEqual([{ key: 'nest', x: 0, y: 0 }]);
     expect(NEST_ROOM.spawns['default']).toBeDefined();
-    expect(NEST_ROOM.doors.map((d) => d.id)).toEqual(['to-street']);
+    expect(NEST_ROOM.doors.map((d) => d.id)).toEqual(['to-street', 'mirror']);
     expect(door(NEST_ROOM, 'to-street').to?.room).toBe(STREET_ROOM);
     // A template, not a room of the registry: each nest is this room under its own id.
     expect(Object.hasOwn(ROOMS, NEST_ROOM.id)).toBe(false);
@@ -204,6 +206,70 @@ describe('the arcade', () => {
     const arrive = findSpawn(arcade, 'from-market');
     expect(arrive.x).toBeLessThan(ROOM_W / 4);
     expect(distanceToRect(arrive, door.rect)).toBeGreaterThan(60);
+  });
+});
+
+describe("a nest's mirror (OP-077)", () => {
+  const mirror = NEST_ROOM.doors.find((d) => d.id === 'mirror')!;
+
+  it('is a spot to stand at, not a way out, on the floor in front of the mirror', () => {
+    expect(mirror.to).toBeUndefined();
+    expect(isWalkable(NEST_MIRROR, NEST_ROOM.walkable)).toBe(true);
+    for (const corner of [
+      { x: mirror.rect.x, y: mirror.rect.y },
+      { x: mirror.rect.x + mirror.rect.w, y: mirror.rect.y },
+      { x: mirror.rect.x, y: mirror.rect.y + mirror.rect.h },
+      { x: mirror.rect.x + mirror.rect.w, y: mirror.rect.y + mirror.rect.h },
+    ])
+      expect(isWalkable(corner, NEST_ROOM.walkable), JSON.stringify(corner)).toBe(true);
+    // In front of the mirror's foot, so an owl standing there is drawn before it.
+    expect(mirror.rect.y).toBeGreaterThan(NEST_MIRROR.y);
+    expect(distanceToRect(NEST_MIRROR, mirror.rect)).toBeLessThan(60);
+  });
+
+  it('stands clear of the doorway and of the furniture spots, so it is the same in every nest', () => {
+    const out = NEST_ROOM.doors.find((d) => d.id === 'to-street')!;
+    expect(distanceToRect(NEST_MIRROR, out.rect)).toBeGreaterThan(200);
+    expect(distanceToRect(rectCenter(mirror.rect), out.rect)).toBeGreaterThan(200);
+    // Its frame (84 px wide) clear of the pieces on the floor beside it, and below the wall's.
+    for (const spot of NEST_SPOTS.filter((s) => s.place === 'floor')) {
+      expect(distance(spot, NEST_MIRROR), spot.id).toBeGreaterThan(100);
+      expect(pointInRect(spot, mirror.rect), spot.id).toBe(false);
+    }
+    for (const spot of NEST_SPOTS.filter((s) => s.place === 'wall')) expect(NEST_MIRROR.y - 150, spot.id).toBeGreaterThan(spot.y + 60);
+  });
+
+  it('stands high on the floor, where a phone shows it above the pad and the stick in the front corners', () => {
+    const front = Math.max(...NEST_ROOM.walkable[0]!.map((p) => p.y));
+    expect(front - NEST_MIRROR.y).toBeGreaterThan(200);
+  });
+
+  it('has a spawn before it, facing it, where Play puts the owl (OP-105)', () => {
+    const at = NEST_ROOM.spawns['mirror']!;
+    expect(pointInRect(at, mirror.rect)).toBe(true);
+    expect(findSpawn(NEST_ROOM, 'mirror')).toEqual(at);
+    // The way out is one walk away from it.
+    const out = NEST_ROOM.doors.find((d) => d.id === 'to-street')!;
+    expect(pointInRect(resolveTarget(at, rectCenter(out.rect), NEST_ROOM.walkable), out.rect)).toBe(true);
+  });
+});
+
+describe("the nest's way to the park (OP-105)", () => {
+  it('has its sign on the round door, clear of every wall piece in every wall spot and of the mirror', () => {
+    const out = NEST_ROOM.doors.find((d) => d.id === 'to-street')!;
+    // On the doorway, above the door's glow, and well above any owl standing in it.
+    expect(Math.abs(NEST_PARK_SIGN.x - rectCenter(out.rect).x)).toBeLessThan(40);
+    expect(NEST_PARK_SIGN.y).toBeLessThan(out.marker!.y - 150);
+    // The words (about 160 x 32 room pixels) never meet a wall piece, however wide or tall, in any wall spot.
+    const sign = { x: NEST_PARK_SIGN.x - 80, y: NEST_PARK_SIGN.y - 32, w: 160, h: 32 };
+    for (const spot of NEST_SPOTS.filter((s) => s.place === 'wall')) {
+      for (const piece of FURNITURE.filter((f) => f.place === 'wall')) {
+        const box = { x: spot.x - piece.size.w / 2, y: spot.y - piece.size.h, w: piece.size.w, h: piece.size.h };
+        const apart = box.x + box.w <= sign.x || sign.x + sign.w <= box.x || box.y + box.h <= sign.y || sign.y + sign.h <= box.y;
+        expect(apart, `${piece.id} in ${spot.id}`).toBe(true);
+      }
+    }
+    expect(distance(NEST_PARK_SIGN, NEST_MIRROR)).toBeGreaterThan(250);
   });
 });
 

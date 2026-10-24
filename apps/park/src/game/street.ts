@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { NEST_WORDS, STREET_ROOM, isNestRoom, nestDoorIndex, type NestLook, type RoomDef } from '@owl-park/shared';
+import { LOBBY_ROOM, NEST_WORDS, STREET_ROOM, isNestRoom, nestDoorIndex, parkwardDoor, type DoorDef, type NestLook, type RoomDef } from '@owl-park/shared';
+import { NEST_PARK_SIGN } from '../rooms';
 import type { StreetDoor } from './nestPlan';
 
 const INK = 0x0c1e36;
@@ -91,24 +92,38 @@ export class StreetDoors {
   }
 }
 
+/** Words on a sign in a room: cream, edged in the night's blue, as "Your nest" is. */
+const SIGN_STYLE = { fontSize: '24px', fontStyle: 'bold', color: '#F6F1E3', fontFamily: 'system-ui, sans-serif', stroke: '#0C1E36', strokeThickness: 6 } as const;
+
+/**
+ * A sign at a doorway on a room's west or east edge, by the lane where it leaves the room, its arrow
+ * pointing the way out of the picture.
+ */
+function edgeSign(scene: Phaser.Scene, room: RoomDef, d: DoorDef, words: string): void {
+  const m = d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y };
+  const west = m.x < room.size.w / 2;
+  scene.add
+    .text(west ? Math.max(16, d.rect.x + 16) : Math.min(room.size.w - 16, d.rect.x + d.rect.w - 16), m.y - 12, west ? `← ${words}` : `${words} →`, SIGN_STYLE)
+    .setOrigin(west ? 0 : 1, 1)
+    .setDepth(m.y);
+}
+
 /** "To the nests" by each door from the park's rooms to the street (the lobby's west end), pointing the way. */
 export function addNestsSign(scene: Phaser.Scene, room: RoomDef): void {
   // A nest's own door leads back to the street too, but there the way is plain.
   if (isNestRoom(room.id)) return;
-  for (const d of room.doors) {
-    if (d.to?.room !== STREET_ROOM) continue;
-    const m = d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y };
-    const west = m.x < room.size.w / 2;
-    scene.add
-      .text(west ? Math.max(16, d.rect.x + 16) : Math.min(room.size.w - 16, d.rect.x + d.rect.w - 16), m.y - 12, west ? `← ${NEST_WORDS.toNests}` : `${NEST_WORDS.toNests} →`, {
-        fontSize: '24px',
-        fontStyle: 'bold',
-        color: '#F6F1E3',
-        fontFamily: 'system-ui, sans-serif',
-        stroke: '#0C1E36',
-        strokeThickness: 6,
-      })
-      .setOrigin(west ? 0 : 1, 1)
-      .setDepth(m.y);
-  }
+  for (const d of room.doors) if (d.to?.room === STREET_ROOM) edgeSign(scene, room, d, NEST_WORDS.toNests);
+}
+
+/**
+ * "To the park" on the way there from the free rooms (OP-105), now that every visit starts in the
+ * owl's own nest: on the nest's round door, and where the street's lane leaves for the lobby. The
+ * lobby's turnstiles, under the carved owls' wings, need none.
+ */
+export function addParkSign(scene: Phaser.Scene, room: RoomDef): void {
+  const d = room.doors.find((door) => door.id === parkwardDoor(room.id));
+  if (!d || room.id === LOBBY_ROOM) return;
+  // On the door, above its little window: behind any owl in the doorway, in front of the wall pieces.
+  if (isNestRoom(room.id)) scene.add.text(NEST_PARK_SIGN.x, NEST_PARK_SIGN.y, NEST_WORDS.toPark, SIGN_STYLE).setOrigin(0.5, 1).setDepth(NEST_PARK_SIGN.y);
+  else edgeSign(scene, room, d, NEST_WORDS.toPark);
 }

@@ -2,6 +2,24 @@ import { DEFAULT_LOOK, isHexColour, isSpecies, lookFromSeed, sanitizeLook, type 
 import type { ParkConfig } from './config';
 
 const LOOK_KEY = 'owl-park:look';
+/**
+ * The token of this device's collection on the park's server (one collection per device until
+ * email linking exists), and of one kept in this browser (local mode).
+ */
+export const COLLECTOR_KEY = 'owl-park:collector';
+export const LOCAL_COLLECTOR_KEY = 'owl-park:local-collector';
+
+/**
+ * Whether this device already holds an owl: a look it kept, or a collection. That is all "logged
+ * in" means on the home screen (OP-065): the park has no accounts and nobody types a name.
+ */
+export function holdsOwl(storage: Pick<Storage, 'getItem'> | null): boolean {
+  try {
+    return [LOOK_KEY, COLLECTOR_KEY, LOCAL_COLLECTOR_KEY].some((k) => storage?.getItem(k) != null);
+  } catch {
+    return false;
+  }
+}
 
 function randomId(): string {
   const c = globalThis.crypto;

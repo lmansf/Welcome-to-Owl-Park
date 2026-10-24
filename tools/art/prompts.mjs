@@ -234,6 +234,8 @@ export const JOBS = [
     variants: 4,
     key_colour: '#00FF00',
     refs: [published('grove')],
+    // PNG: the edit endpoint otherwise answers in JPEG, whose ringing leaves a halo once keyed.
+    providers: { fal: { output_format: 'png' } },
     prompt: PROMPTS.guardian,
   },
   {
@@ -771,6 +773,31 @@ PROMPTS['lobby-west'] = LOBBY_WING_PROMPT;
 JOBS.push(LOBBY_WING_JOB);
 
 // ---------------------------------------------------------------------------------------------
+// Construction blockades across the hub's two closed doorways (the owner, 2026-10-21): each one a
+// keyed set piece standing on the floor in front of its sealed arch, carrying that doorway's
+// approved sign phrase, in place of the old drawn sign-and-egg placeholders. The painting's arches
+// stay as painted around them.
+const BLOCKADE_FRAME = `A single free-standing prop, seen straight on at eye level, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the prop, with no gradient, no vignette, no floor and no cast shadow on the backdrop. Square proportions 300x300, generated at 1280x1280: the prop is centred, stands with its feet on the bottom edge of the frame, bottom-centre anchored, and fills about four fifths of the width and two thirds of the height, with the green showing above it.`;
+const BLOCKADE_STYLE = `STYLE: hand-painted 2D game prop matching the reference painting of the inside of a great tree at night: clean cel-shaded shapes with soft painted gradients, cream moonlight from above and warm gold lantern light, slightly stylised chunky proportions, no outlines, no photorealism, no film grain, a crisp clean opaque silhouette against the green with no glow bleeding onto the backdrop. PALETTE: warm bark browns #4A3322 and #6E4E36, gold #C9A227 and warm light #FFD36A, cream #F6F1E3, navy #0C1E36, muted brick red #B5523B for the safety stripes. No watermark. AVOID: any other text, letters, numbers or symbols anywhere, only the words on the sign; any owls, birds, animals, people, faces or characters; any doorway, arch, wall, floor or background scenery; the prop cut off by any edge except the feet at the bottom; green tint on the wood; photographic textures; lens flare.`;
+const BLOCKADE_PROMPTS = {
+  'blockade-not-yet-fledged': `A cosy storybook construction blockade that a park puts across a closed doorway. ${BLOCKADE_FRAME} It is built from two sturdy wooden sawhorses joined by two long horizontal planks painted with diagonal stripes of muted brick red and cream, with two rough unpainted boards nailed across them in a big X. On two short posts above the top plank sits a wide hand-carved wooden sign of warm brown wood with a thin gold trim and little brass nail heads, and painted on it in large, friendly storybook serif letters in cream with a thin navy outline are exactly the words "Not Yet Fledged" on two lines, "Not Yet" above "Fledged", spelled exactly so, with nothing else written anywhere. A small brass lantern glowing warm gold hangs from one post, two little cream-and-orange striped traffic cones and a coil of rope stand at the feet, and a few dry gold leaves rest on the planks. ${BLOCKADE_STYLE}`,
+  'blockade-hatching-soon': `A cosy storybook construction blockade that a park puts across a closed doorway. ${BLOCKADE_FRAME} It is a low wooden barrier of three slatted boards painted with diagonal stripes of muted brick red and cream between two sturdy striped posts with round gold caps, with a rope strung between the post tops hung with little triangular pennants in gold, cream and navy. From a crossbar above it, on two short ropes, hangs a wide hand-carved wooden sign of warm brown wood with a thin gold trim and little brass nail heads, and painted on it in large, friendly storybook serif letters in cream with a thin navy outline are exactly the words "Hatching Soon" on two lines, "Hatching" above "Soon", spelled exactly so, with nothing else written anywhere. A small brass lantern glowing warm gold hangs from the crossbar, a short stack of planks with a wooden mallet leans against one post, and two little cream-and-orange striped traffic cones stand at the feet. ${BLOCKADE_STYLE}`,
+};
+Object.assign(PROMPTS, BLOCKADE_PROMPTS);
+JOBS.push(
+  ...Object.entries(BLOCKADE_PROMPTS).map(([key, prompt], i) => ({
+    key,
+    kind: 'piece',
+    realm: 'hub',
+    size: '1280x1280',
+    seed: 1801 + 10 * i,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('hub')],
+    prompt,
+  })),
+);
+
 // The street of nests and the nests, a free area beside the lobby. The street is two screens: its
 // painting (`homes`, the east screen, nearest the lobby) is a lane of tree houses at dusk in the
 // storybook style of the published grove, with three of the six round nest doors, and its west
@@ -1043,10 +1070,15 @@ const ARCADE_BAYS_JOBS = [
   })),
 ];
 
-/** The bays round's helper keys: the first screen, each hall's second and third, and the titles. */
+// Hall 3 was picked (2026-10-23): its second and third screens became the arcade's own.
+for (const [key, own] of [['arcade-bays-b3', 'arcade-mid'], ['arcade-bays-c3', 'arcade-end']]) ARCADE_BAYS_JOBS.find((j) => j.key === key).derives = [own];
+
+/** The bays round's keys: the first screen, each hall's second and third, and the titles. */
 export const ARCADE_BAYS_KEYS = ARCADE_BAYS_JOBS.map((j) => j.key);
+/** The title signs, picked and finished, are the arcade's own keys; the rest stay helpers. */
+export const ARCADE_TITLE_KEYS = TITLES.map(([key]) => key);
 for (const j of ARCADE_BAYS_JOBS) PROMPTS[j.key] = j.prompt;
-HELPER_KEYS.push(...ARCADE_BAYS_KEYS);
+HELPER_KEYS.push(...ARCADE_BAYS_KEYS.filter((k) => !ARCADE_TITLE_KEYS.includes(k)));
 JOBS.push(...ARCADE_BAYS_JOBS);
 
 // ---------------------------------------------------------------------------------------------
@@ -1055,8 +1087,8 @@ JOBS.push(...ARCADE_BAYS_JOBS);
 // over a flat guide of the field drawn from the games' geometry (`pnpm art:finish field`, written to
 // work/art/canvas/arcade-<game>-bg.png), and each piece is painted alone on a chroma backdrop, bold
 // enough to read at play size on a phone, for the code to move, flip, stretch or tile. The visitor's
-// own owl is the player, so no owl or other character is in any of it. Three variants each; every
-// key is a helper until the picks are finished into the arcade's own keys.
+// own owl is the player, so no owl or other character is in any of it. Three variants each; each key
+// is the arcade's own, its pick finished at the size the game draws it (2026-10-24).
 
 const gameStyle = (neon) => `STYLE: hand-painted 2D game art in the park's neon storybook style: crisp, friendly, rounded graphic shapes, cel shading with glowing neon gradients, slightly chunky proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. PALETTE: Night Asphalt #0B0B16 and deep navy night; ${neon}; Chrome #C7CEDA; small touches of gold #C9A227 and cream #F6F1E3.`;
 const GAME_AVOID = 'any text, letters, numbers, glyphs, signage lettering, logos or watermarks; any owls, birds, animals, people, robots, faces or characters; photographic textures; busy noisy detail; lens flare; daylight';
@@ -1110,5 +1142,4 @@ const GAME_ART_JOBS = GAME_ART.map(([key, kind, size, backdrop, prompt], i) => (
 /** The games' art keys: each game's background and pieces. */
 export const ARCADE_GAME_KEYS = GAME_ART_JOBS.map((j) => j.key);
 for (const j of GAME_ART_JOBS) PROMPTS[j.key] = j.prompt;
-HELPER_KEYS.push(...ARCADE_GAME_KEYS);
 JOBS.push(...GAME_ART_JOBS);

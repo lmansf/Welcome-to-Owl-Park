@@ -13,9 +13,10 @@ jobs:
   check:
     name: Typecheck, unit tests, build, end-to-end
     runs-on: ubuntu-latest
-    # The browser suite (computer, phone and the room server, one test at a time) takes a little
-    # over 20 minutes on a hosted runner; this limit only stops a run that hangs.
-    timeout-minutes: 45
+    # The browser suite (computer, phone and the room server, one test at a time) takes 35 to 50
+    # minutes on a hosted runner, and installing the browser sometimes takes six more; this limit
+    # only stops a run that hangs.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

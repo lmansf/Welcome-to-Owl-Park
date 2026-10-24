@@ -28,12 +28,12 @@ from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, OWL_SPECIES, ArtError, load_as
                     species_layers)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
-from artlib.chroma import ChromaError, ChromaParams, key_out, solidify  # noqa: E402
+from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib import fields  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
 from artlib.guide import render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
-from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
+from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards, sign_board_rect  # noqa: E402
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
                           synth_overlay, synth_owl_master, synth_room)
@@ -471,6 +471,28 @@ class TestResize(unittest.TestCase):
         self.assertGreaterEqual(cols[0], 14)
         self.assertLessEqual(cols[-1], 705)
 
+    def test_a_glow_painted_over_the_key_is_cleared_inside_its_box_only(self):
+        green = (5, 240, 67)
+        src = np.zeros((100, 200, 3), np.uint8)
+        src[:] = green
+        src[40:60, 40:60] = (230, 180, 60)    # a gold lantern
+        src[30:70, 30:40] = (150, 255, 90)    # its light on the green, beside it
+        src[40:60, 140:160] = (150, 255, 90)  # the same colour outside the box
+        src[80:90, 40:60] = (30, 40, 90)      # a navy pennant inside the box
+        out, n = clear_glow(Image.fromarray(src, "RGB"), [(20, 20, 100, 95)], "#05F043")
+        a = np.asarray(out)
+        self.assertEqual(n, 40 * 10)
+        self.assertEqual(tuple(a[50, 35]), green, "the light inside the box becomes backdrop")
+        self.assertEqual(tuple(a[50, 50]), (230, 180, 60), "the lantern stays")
+        self.assertEqual(tuple(a[85, 50]), (30, 40, 90), "navy never leans green")
+        self.assertEqual(tuple(a[50, 150]), (150, 255, 90), "outside the box nothing changes")
+        rgba, _ = key_out(out, ChromaParams(key="#00FF00"))
+        self.assertEqual(np.asarray(rgba)[50, 35, 3], 0, "the cleared light keys out")
+        with self.assertRaises(ArtError):
+            clear_glow(Image.fromarray(src, "RGB"), [(50, 20, 40, 95)], "#05F043")
+        with self.assertRaises(ArtError):
+            clear_glow(Image.fromarray(src, "RGB"), [(20, 20, 100, 95)], "#FFFFFF")
+
     def test_piece_fit_can_centre_vertically_for_items_worn_at_a_point(self):
         img, _ = synth_keyed_subject(300, 300, "#FF00FF", radius_frac=0.3)
         rgba, _ = key_out(img, ChromaParams(key="#FF00FF"))
@@ -580,9 +602,10 @@ class TestGuideOverlay(unittest.TestCase):
         self.assertTrue(check_overlay(good, geom, "hub", key_colour="#FF00FF")["ok"])
         # A root dangling over a closed sign's board hides the phrase, even if the footprint is mostly clear.
         door = next(d for d in room_of(geom, "hub")["doors"] if d.get("closedSign"))
-        mx, my = door["marker"]["x"], door["marker"]["y"]
+        bx0, by0, bx1, by1 = sign_board_rect(door["marker"]["x"], door["marker"]["y"])
+        cx = (bx0 + bx1) // 2
         hidden = good.copy()
-        ImageDraw.Draw(hidden).rectangle((mx - 30, my - 500, mx + 30, my - 400), fill=(60, 40, 20, 255))
+        ImageDraw.Draw(hidden).rectangle((cx - 30, by0 + 10, cx + 30, by1 - 10), fill=(60, 40, 20, 255))
         rep = check_overlay(hidden, geom, "hub")
         self.assertFalse(rep["ok"])
         self.assertTrue(any("sign board" in v for v in rep["violations"]), rep["violations"])

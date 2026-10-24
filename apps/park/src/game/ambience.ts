@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { ROOM_W, type RoomDef } from '@owl-park/shared';
+import { ROOM_W, WAY_OUT_DOOR, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
-import { ART } from './art';
+import { ART, blockadeKey } from './art';
 
 /** Generated helper textures shared by every room. */
 export function ensureFxTextures(scene: Phaser.Scene): void {
@@ -67,7 +67,7 @@ export interface SetPieces {
   gate?: { react(): void };
 }
 
-/** Large set pieces (guardian, giant robot owl, signs) sorted into the owl depth range. */
+/** Large set pieces (guardian, giant robot owl, blockades) sorted into the owl depth range. */
 export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData) => void): SetPieces {
   const anchors = ANCHORS[room.id] ?? {};
   const pieces: SetPieces = {};
@@ -143,8 +143,13 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     const m = door.marker;
     if (!m) continue;
     if (door.closedSign) {
-      const key = `sign-${door.closedSign.toLowerCase().replace(/\s+/g, '-')}`;
-      piece(scene, m.x, m.y, scene.textures.exists(key) ? key : 'sign-hatching-soon').setDepth(m.y);
+      // A construction blockade stands in the closed arch, its phrase on its board.
+      const key = blockadeKey(door.closedSign);
+      if (scene.textures.exists(key)) piece(scene, m.x, m.y, key).setDepth(m.y);
+    } else if (room.id === 'hub' && door.id === WAY_OUT_DOOR) {
+      // The way out of the park (C43): a soft gold ring on the floor where the owls came in.
+      const ring = scene.add.image(m.x, m.y, 'fx-glow').setTint(0xc9a227).setAlpha(0.18).setScale(2.2, 0.42).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({ targets: ring, alpha: 0.34, scaleX: 2.5, scaleY: 0.48, duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.to) {
       const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'arcade' ? 0x00e5ff : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
       const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(tint).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
