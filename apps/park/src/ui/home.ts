@@ -125,7 +125,6 @@ function css(): string {
 #hud .home .h-small{min-height:40px;font-size:14px}
 #hud .home .h-wallet{margin:-4px 0 0;font-size:14px;line-height:1.35;text-align:center;opacity:.92}
 #hud .home .h-note{margin:0;align-self:flex-start;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;background:rgba(123,201,80,.2);border:1px solid rgba(123,201,80,.65)}
-#hud .home [hidden]{display:none}
 #hud .home .h-line{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.45)}
 #hud .home .h-line h2{margin:0;font-size:clamp(16px,2.4vh,19px);color:#FFD36A}
 #hud .home .h-line .h-place{margin:0;font-size:15px;opacity:1}
@@ -134,6 +133,8 @@ function css(): string {
 #hud .home .h-line p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-line .h-small-note{font-size:13px;opacity:.75}
 #hud .home .h-stage{min-width:0;min-height:0}
+/* After every rule that sets a display, so a hidden part (the line, its message, the note) stays hidden. */
+#hud .home [hidden]{display:none}
 @media (max-width:520px){
   #hud .home{grid-template-columns:minmax(0,50vw) minmax(0,1fr)}
   /* Make your owl on one line on a phone (a very narrow one may still wrap it). */
