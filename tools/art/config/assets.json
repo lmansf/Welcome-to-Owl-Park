@@ -163,6 +163,7 @@
       "w": 480,
       "h": 640,
       "kind": "arcade",
+      "format": "webp",
       "with_2x": true
     },
     "arcade-hop-drone": {
@@ -183,6 +184,7 @@
       "w": 480,
       "h": 640,
       "kind": "arcade",
+      "format": "webp",
       "with_2x": true
     },
     "arcade-flap-branch": {
@@ -203,6 +205,7 @@
       "w": 480,
       "h": 640,
       "kind": "arcade",
+      "format": "webp",
       "with_2x": true
     },
     "arcade-knock-sling": {

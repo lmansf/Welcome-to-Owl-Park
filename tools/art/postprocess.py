@@ -60,7 +60,7 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
 
 from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
-                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, load_key_colours, logical_size, now_iso, owl_layer_base,
+                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size, now_iso, owl_layer_base,
                     owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
@@ -956,8 +956,8 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
         formats = [ext for ext in RASTER_EXTS if f"{key}.{ext}" in rasters or f"{key}@2x.{ext}" in rasters]
         if len(formats) > 1:
             problems.append(f"{key}: both PNG and WebP files are published; the loader uses the WebP, so the PNG is stale (republish {key})")
-        if "webp" in formats and not is_room_background(key, ctx.assets):
-            problems.append(f"{key}: published as WebP, but only room backgrounds ship as WebP")
+        if "webp" in formats and not ships_as_webp(key, ctx.assets):
+            problems.append(f"{key}: published as WebP, but only room backgrounds and the paintings marked webp ship as WebP")
         for ext in RASTER_EXTS:
             one_name, two_name = f"{key}.{ext}", f"{key}@2x.{ext}"
             if two_name in rasters and one_name not in rasters:

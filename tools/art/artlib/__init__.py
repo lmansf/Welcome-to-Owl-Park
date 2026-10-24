@@ -110,6 +110,12 @@ def is_room_background(key: str, assets: dict) -> bool:
     return assets.get(key, {}).get("kind") == "room" and not key.endswith("-fg")
 
 
+def ships_as_webp(key: str, assets: dict) -> bool:
+    """Art published as WebP: a room's painted screen, or another opaque painting the table marks
+    ``"format": "webp"`` (the arcade's game fields); everything cut out ships as PNG."""
+    return is_room_background(key, assets) or assets.get(key, {}).get("format") == "webp"
+
+
 #: Which realm's palette grades which key.
 REALM_OF_KEY = {
     "hub": "hub", "hub-fg": "hub",

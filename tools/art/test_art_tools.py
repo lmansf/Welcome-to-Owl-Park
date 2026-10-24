@@ -1021,7 +1021,21 @@ class TestCli(unittest.TestCase):
             with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
                 self.assertEqual(postprocess.main(["check", "hub", "guardian"] + common), 1)
             self.assertIn("hub.webp: disallowed WebP chunks: EXIF", out.getvalue())
-            self.assertIn("guardian: published as WebP, but only room backgrounds ship as WebP", out.getvalue())
+            self.assertIn("guardian: published as WebP, but only room backgrounds and the paintings marked webp ship as WebP", out.getvalue())
+
+    def test_check_takes_webp_for_a_painting_the_table_marks_webp(self):
+        # The arcade's game fields are opaque paintings, not rooms: the table marks them "format": "webp".
+        self.assertEqual(load_assets()["arcade-hop-bg"].get("format"), "webp")
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            (work / "final").mkdir(parents=True)
+            public.mkdir()
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--provenance", str(provp), "--now", "2026-10-18T09:00:00Z"]
+            (public / "arcade-hop-bg.webp").write_bytes(webpmeta.encode(Image.new("RGB", (480, 640), (9, 9, 9)), 80))
+            with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
+                postprocess.main(["check", "arcade-hop-bg"] + common)
+            self.assertNotIn("published as WebP", out.getvalue())
 
     def test_demo_runs_the_whole_chain(self):
         with tempfile.TemporaryDirectory() as tmp:
