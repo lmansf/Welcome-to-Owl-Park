@@ -34,7 +34,7 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['M'], 'Menu'],
   [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],
-  [['Q'], 'Your owl'],
+  [['Q'], 'Your owl: to the mirror in your nest'],
   [['J'], 'Quests'],
   [['Esc'], 'Close'],
 ];

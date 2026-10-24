@@ -37,6 +37,8 @@ export interface ParkState {
   } | null;
   street: Array<{ kind: 'own'; nestId: string | null } | { kind: 'nest'; nestId: string; look: { body: string; belly: string; accent: string } | null } | { kind: 'empty' }> | null;
   nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
+  /** In a nest, its mirror: where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
+  mirror: { x: number; y: number; stage: { x: number; y: number; w: number; h: number } | null } | null;
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */
@@ -90,7 +92,7 @@ export async function state(page: Page): Promise<ParkState> {
   }
 }
 
-export type CameraView = { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number };
+export type CameraView = { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number; port: { x: number; y: number; w: number; h: number } };
 
 export async function cameraView(page: Page): Promise<CameraView> {
   const cam = await page.evaluate(() => window.owlPark.camera());

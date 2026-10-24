@@ -64,6 +64,14 @@ keeps them out: closing sends any visitors inside back to the street. **Done** (
 
 Everyone inside sees each change as it happens. Only the owner can change its nest.
 
+## The mirror
+
+Every nest has a standing mirror against the back wall, beside the round window, part of the room
+rather than a piece of furniture, where an owl changes how it looks: **Look in the mirror** opens Your owl, with the
+owl in the room as the preview (OP-077, `docs/ACTIVITIES.md`). Any owl may use any nest's mirror;
+it changes only that owl. Standing before it in its own nest, Look in the mirror comes before
+Decorate, so E and the pad's Interact look in the mirror there and decorate anywhere else.
+
 ## Furniture and the day's gift
 
 Furniture is a kind of thing an owl owns that is used only in nests. The first set has sixteen

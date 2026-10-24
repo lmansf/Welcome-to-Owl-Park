@@ -19,8 +19,9 @@ zero-backend local mode run the same ones and Node tests them:
 ## Controls
 
 - **Keyboard**: WASD or the arrow keys walk, E does what the owl stands at, the space bar hops, M
-  opens the Menu, T the Say wheel, 1 to 8 play an emote, Q your owl, J the quests, Escape closes
-  (`apps/park/src/ui/keyboard.ts`). A space bar on a focused button presses the button instead.
+  opens the Menu, T the Say wheel, 1 to 8 play an emote, Q goes to the mirror in the owl's nest
+  (where Your owl is), J the quests, Escape closes (`apps/park/src/ui/keyboard.ts`). A space bar on
+  a focused button presses the button instead.
 - **Touch screens**: a pad like a handheld's (OP-082, `apps/park/src/ui/hud.ts`). The thumbstick
   walks from the bottom-right corner; on the left, **Interact** (the hand, nearer the middle) does
   what E does and lights up gold where there is something to do, **Jump** (the arrow, nearer the
@@ -99,6 +100,27 @@ with three game cabinets along its back wall under a blank score board (`package
 Each cabinet is a spot in the room data and will play one game, as the visitor's own owl. Until a
 cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
 at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
+
+## The mirror (in every nest)
+
+Your owl, the editor for an owl's kind, colours, wear, pets and effects, is at a standing mirror in
+every nest, against the back wall between the lamp's spot and the round window (OP-077). Standing on the floor in front of it, the button
+**Look in the mirror** (E, or the pad's Interact) turns the owl to it and opens Your owl, every
+tab, and the owl in the room is the preview: the room's own camera draws the owl and its mirror in
+the editor's stage, and each choice shows on it at once. A mirror changes only the owl looking in,
+so a visitor can use the mirror in someone else's nest, and nothing of the host's changes. The
+mirror is part of the room, not a piece of furniture, so an unfurnished nest has it too.
+
+The ways to it: **Go to your nest** on the home screen puts the owl inside its nest, before the
+mirror and facing it; the Menu's **Go home** goes to the nest too; and **Q** goes to the mirror from
+anywhere (home to stand before it from outside, walking up to it in a nest, and from in front of
+it, into Your owl). The Menu no longer has a Your owl tile. The first visit's **Make your owl**
+still opens the editor in place, on the home screen. The first time a device's owl is home, the
+mirror glints once, with no words.
+
+The mirror is drawn in code (`apps/park/src/game/mirror.ts`): a dark wooden oval on a stand with a
+gold line inside and silvery glass, in the nest painting's warm wood and gold. Its place and the
+floor in front of it are room data (`NEST_MIRROR`, the `mirror` spot and spawn in `NEST_ROOM`).
 
 ## Three small tasks a day
 

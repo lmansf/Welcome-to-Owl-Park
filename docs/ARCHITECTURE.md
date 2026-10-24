@@ -266,9 +266,9 @@ owl's copy game and three small tasks a day), which pay feathers under their own
 Before the lobby comes the home screen (OP-065: `apps/park/src/ui/home.ts`, `game/HomeScene.ts`):
 the park's name and mascot over the lobby's painting, dimmed. A device with no owl yet (no kept
 look and no collection) offers Make your owl, which keeps the owl on the device and opens the owl builder
-on it. A device that holds one offers Play (into the lobby), a line about its tickets, Your owl
-and Settings (the park's own, one store), with the owl drawn big beside them by the builder's
-preview scene. There are no accounts and nothing is typed. A ticket link lands there logged in,
+on it. A device that holds one offers Play (into the lobby), a line about its tickets, Go to your
+nest (Your owl is at the mirror inside it, OP-077) and Settings (the park's own, one store), with
+the owl drawn big beside them by the builder's preview scene. There are no accounts and nothing is typed. A ticket link lands there logged in,
 with a note that the ticket came. The Menu's Home screen leaves the room as a door does (the
 owl's place frees at once, and a ticket keeps running) and comes back to it. An address that
 names a room (`?room=`: tests, the art preview) or says `home=0` goes straight into the park.

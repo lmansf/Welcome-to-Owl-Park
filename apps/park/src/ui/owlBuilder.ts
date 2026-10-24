@@ -39,13 +39,13 @@ export interface OwlBuilderActions {
   wear(): Wear | undefined;
   /** The owl's kind and colours changed. */
   changeLook(look: OwlLook): void;
-  /** Where to draw the owl while the builder is open; null when it closes. */
-  preview(frame: PreviewFrame | null): void;
+  /** Where to draw the owl while the builder is open, and whether it is open at a mirror (the room's own owl is the preview); null when it closes. */
+  preview(frame: PreviewFrame | null, mirror: boolean): void;
 }
 
 export interface OwlBuilder {
-  /** `fromMenu` adds the way back to the Menu. */
-  open(fromMenu: boolean, tab?: BuilderTab, opener?: HTMLElement | null): void;
+  /** `fromMenu` adds the way back to the Menu; `mirror`: opened at a nest's mirror (OP-077), the room showing round the owl. */
+  open(fromMenu: boolean, tab?: BuilderTab, opener?: HTMLElement | null, mirror?: boolean): void;
   close(): void;
   isOpen(): boolean;
   /** Called after it closes, whichever way. */
@@ -352,20 +352,24 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     if (focused >= 0) buttons()[focused]?.focus({ preventScroll: true });
   };
 
+  /** Opened at a nest's mirror: the room's own owl is the preview, drawn in the stage by the room's camera. */
+  let atMirror = false;
   const frame = () => {
     if (!modal.isOpen()) return;
     const r = stage.getBoundingClientRect();
-    actions.preview({ x: r.left, y: r.top, w: r.width, h: r.height });
+    actions.preview({ x: r.left, y: r.top, w: r.width, h: r.height }, atMirror);
   };
   const watcher = typeof ResizeObserver === 'function' ? new ResizeObserver(frame) : null;
   watcher?.observe(stage);
   window.addEventListener('resize', frame);
-  modal.onClose(() => actions.preview(null));
+  modal.onClose(() => actions.preview(null, atMirror));
   state.onChange(render);
 
   return {
-    open(menu, t, opener) {
+    open(menu, t, opener, mirror = false) {
       fromMenu = menu;
+      atMirror = mirror;
+      box.classList.toggle('at-mirror', mirror);
       if (t) tab = t;
       selected = null;
       modal.open(opener);

@@ -97,14 +97,18 @@ export interface Hud {
    * while the Say wheel is open, 1 to 4 say a phrase of its group.
    */
   emoteKey(n: number): void;
-  /** Q: open or close the owl builder. */
+  /** Close the owl builder, or open it (the first run's Make your owl; the mirror opens it with openMirror). */
   toggleOwl(): void;
+  /** The owl builder is open. */
+  isOwlOpen(): boolean;
+  /** Your owl at a nest's mirror (OP-077): the room shows round the owl, which is the preview. */
+  openMirror(opener?: HTMLElement | null): void;
   /** J: open or close the quests screen. */
   toggleJournal(): void;
   /** A screen that takes the keys and the taps is open (the Menu or one of its screens): the owl stays put. */
   isBlocking(): boolean;
-  /** Where the owl builder shows the owl, while it is open (CSS pixels); null when it closes. */
-  onOwlPreview(cb: (frame: PreviewFrame | null) => void): void;
+  /** Where the owl builder shows the owl, while it is open (CSS pixels), and whether at a mirror; null when it closes. */
+  onOwlPreview(cb: (frame: PreviewFrame | null, mirror: boolean) => void): void;
   /** The home screen is up (OP-065): the park's bar, buttons, cards and thumbstick are not shown. */
   setHome(on: boolean): void;
   /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
@@ -310,7 +314,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let collectionActions: CollectionActions | null = null;
   let wayOut: WayOutActions | null = null;
   let waysOut = { leave: false, home: false };
-  let previewCb: ((frame: PreviewFrame | null) => void) | null = null;
+  let previewCb: ((frame: PreviewFrame | null, mirror: boolean) => void) | null = null;
   let decorate: DecorateSheet | null = null;
   /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
   let decorateActions: DecorateActions | null = null;
@@ -357,12 +361,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     root,
     [
       { id: 'say', title: 'Say', key: 'T', sub: () => '' },
-      {
-        id: 'owl',
-        title: 'Your owl',
-        key: 'Q',
-        sub: () => (collectionState?.inv ? `Kind, colours, wear, pets · ${collectionState.count} of ${collectionState.total} collected` : 'Kind, colours, wear, pets, effects'),
-      },
+      // Your owl is at the mirror in the owl's nest now (OP-077): Go home, then Look in the mirror.
       {
         id: 'quests',
         title: 'Quests',
@@ -414,8 +413,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     closeScreens();
   };
 
-  /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button). */
-  function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn) {
+  /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button); `mirror`: Your owl opened at a mirror. */
+  function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn, mirror = false) {
     makeRoom();
     if (id === 'menu') {
       menu.open(menuBtn);
@@ -429,7 +428,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       builder.setLook(collectionActions?.look() ?? look);
       // The builder covers the whole screen: the bar, the cards and the buttons hide under it.
       root.classList.add('covered');
-      builder.open(fromMenu, undefined, opener);
+      builder.open(fromMenu, undefined, opener, mirror);
     } else if (id === 'quests') {
       setQuestNews(false);
       questUi?.openJournal(fromMenu, opener);
@@ -510,7 +509,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
             look = { ...l };
             lookCb?.(look);
           },
-          preview: (frame) => previewCb?.(frame),
+          preview: (frame, mirror) => previewCb?.(frame, mirror),
         },
         look,
         () => openScreen('menu'),
@@ -571,6 +570,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       }
     },
     toggleOwl: () => toggle('owl', () => !!builder?.isOpen()),
+    isOwlOpen: () => !!builder?.isOpen(),
+    openMirror: (opener) => openScreen('owl', false, opener ?? menuBtn, true),
     toggleJournal: () => toggle('quests', () => !!questUi?.isJournalOpen()),
     questNews(kind, title) {
       notice(kind === 'new' ? `New quest: ${title}` : `Quest complete: ${title}`);

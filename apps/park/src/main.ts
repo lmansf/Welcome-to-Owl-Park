@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LOBBY_ROOM, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LOBBY_ROOM, NEST_WORDS, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -8,6 +8,7 @@ import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
+import { mirrorKey } from './game/nestPlan';
 import { RoomScene, type RoomStart } from './game/RoomScene';
 import { holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
@@ -97,9 +98,10 @@ game.registry.set('tasks', tasks);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
 // touch screens; E interacts and the space bar hops (the pad's Interact and Jump on touch screens), M
-// opens the Menu, T the Say wheel (1 to 8 play an emote at once), Q the owl builder and J the quests.
-// While the Menu or one of its screens is open, the owl stays put. On the home screen only Q (the
-// owl, once there is one) and Escape do anything.
+// opens the Menu, T the Say wheel (1 to 8 play an emote at once), Q goes to the mirror in the owl's
+// nest, where Your owl is (OP-077), and J the quests. While the Menu or one of its screens is open,
+// the owl stays put. On the home screen only Q (to the nest, once there is an owl) and Escape do
+// anything.
 const interact = () => {
   if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
 };
@@ -121,7 +123,10 @@ const keyboard = attachKeyboard(window, {
     if (!atHome) hud.emoteKey(n);
   },
   owl: () => {
-    if (!atHome || loggedIn) hud.toggleOwl();
+    const go = mirrorKey({ owlOpen: hud.isOwlOpen(), blocking: hud.isBlocking(), atHome, loggedIn });
+    if (go === 'close') hud.toggleOwl();
+    else if (go === 'nest') void goToNest();
+    else if (go === 'mirror') roomScene()?.toMirror();
   },
   journal: () => {
     if (!atHome) hud.toggleJournal();
@@ -148,7 +153,8 @@ declare global {
       transport: string;
       state(): ReturnType<RoomScene['debugState']> | null;
       walkTo(x: number, y: number): void;
-      camera(): { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number } | null;
+      /** The room camera: what of the room it shows, and where on the canvas it draws it (`port`, game pixels). */
+      camera(): { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number; port: { x: number; y: number; w: number; h: number } } | null;
       /** Texture resolution actually loaded for an art key (tests check per-device rasterization). */
       textureSize(key: string): { w: number; h: number } | null;
       /** The visitor's collection as this page knows it (null until loaded). */
@@ -162,6 +168,10 @@ declare global {
       use(target: string): boolean;
       /** Hop, as the Jump button and the space bar do (false: too soon after the last one). */
       jump(): boolean;
+      /** As Q does: to the mirror (walking up to it in a nest, else home to it); false where it cannot. */
+      mirror(): boolean;
+      /** Open Your owl over the room, as the first run does (tests of the builder itself). */
+      openBuilder(): void;
       /** Collect a finished quest as the quests screen does: at its giver, walking up first. */
       collect(quest: string): Promise<boolean>;
       /** Take on, drop or hand in a quest (taking and handing in mean standing by its giver). */
@@ -230,12 +240,34 @@ const drawOwl = (frame: PreviewFrame | null, plain: boolean) => {
   if (!game.scene.isActive('builder')) game.scene.run('builder');
   (game.scene.getScene('builder') as BuilderScene).frame(frame, plain);
 };
-hud.onOwlPreview((frame) => {
+hud.onOwlPreview((frame, mirror) => {
+  // At a mirror, the room's own owl is the preview (OP-077): its camera draws it in the builder's stage.
+  if (mirror) {
+    roomScene()?.mirrorView(frame);
+    return;
+  }
   if (frame) drawOwl(frame, true);
   else drawOwl(atHome && loggedIn ? home.frame() : null, false);
 });
 
 // ---- the home screen (OP-065) ----
+/** From the home screen into the park: Play to the lobby, or Go to your nest to stand before its mirror. */
+function leaveHome(start: RoomStart): void {
+  if (!atHome) return;
+  atHome = false;
+  home.hide();
+  home.note(null);
+  hud.setHome(false);
+  drawOwl(null, false);
+  game.scene.getScene('home').scene.start('room', start satisfies RoomStart);
+}
+/** Go to your nest (OP-077): straight into the owl's own nest, standing before its mirror, where Your owl is. */
+async function goToNest(): Promise<void> {
+  const nest = await collection.service.homeNest();
+  const room = nest ? nestRoomId(nest) : null;
+  if (!room) return hud.toast(NEST_WORDS.notAnswering, 3500);
+  leaveHome({ room, spawn: 'mirror' });
+}
 let collecting = false;
 /** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */
 const startCollection = () => {
@@ -269,16 +301,8 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
     void refreshWallet();
     hud.openOwl(opener);
   },
-  play: () => {
-    if (!atHome) return;
-    atHome = false;
-    home.hide();
-    home.note(null);
-    hud.setHome(false);
-    drawOwl(null, false);
-    game.scene.getScene('home').scene.start('room', { room: LOBBY_ROOM, spawn: undefined } satisfies RoomStart);
-  },
-  owl: (opener) => hud.openOwl(opener),
+  play: () => leaveHome({ room: LOBBY_ROOM, spawn: undefined }),
+  owl: () => void goToNest(),
   settings: (opener) => hud.openSettings(opener),
   stage: (frame) => {
     if (atHome && loggedIn && !hud.isBlocking()) drawOwl(frame, false);
@@ -323,7 +347,7 @@ window.owlPark = {
     if (!s) return null;
     const c = s.cameras.main;
     const v = c.worldView;
-    return { viewX: v.x, viewY: v.y, viewW: v.width, viewH: v.height, zoom: c.zoom, dpr };
+    return { viewX: v.x, viewY: v.y, viewW: v.width, viewH: v.height, zoom: c.zoom, dpr, port: { x: c.x, y: c.y, w: c.width, h: c.height } };
   },
   textureSize: (key) => {
     if (!game.textures.exists(key)) return null;
@@ -335,6 +359,8 @@ window.owlPark = {
   tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
   jump: () => roomScene()?.jump() ?? false,
+  mirror: () => roomScene()?.toMirror() ?? false,
+  openBuilder: () => hud.openOwl(document.body),
   collect: (quest) => roomScene()?.collectQuest(quest) ?? Promise.resolve(false),
   use: (target) => roomScene()?.goDo({ kind: 'use', id: target }) ?? false,
   accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),

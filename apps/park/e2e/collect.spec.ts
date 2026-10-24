@@ -184,8 +184,8 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect.poll(() => owns(page, 'witch-hat~3')).toBe(true);
     expect(await page.evaluate(() => window.owlPark.equip('witch-hat~3'))).toBe(true);
 
-    await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="owl"]').click();
+    // Your owl as the first run opens it, over the room (mirror.spec.ts opens it at the nest's mirror).
+    await page.evaluate(() => window.owlPark.openBuilder());
     const builder = page.getByRole('dialog', { name: 'Your owl' });
     await expect(builder.getByText(/of 1180 collected · \d+ feathers/)).toBeVisible();
     // The owl is drawn big while the builder is open, over the room.
@@ -252,8 +252,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     const other = await context.newPage();
     await openPark(page, { id: 'owl-a', collector: 'e2e-species', tz: 'UTC' });
     await openPark(other, { id: 'owl-b', collector: 'e2e-species-b', tz: 'UTC' });
-    await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="owl"]').click();
+    await page.evaluate(() => window.owlPark.openBuilder());
     // A barn owl wears its own painted layers, loaded when it first shows up.
     await page.getByRole('button', { name: 'Barn owl' }).click();
     await expect.poll(async () => (await state(page)).owlArt, { timeout: 15_000 }).toBe('owl-barn-body');

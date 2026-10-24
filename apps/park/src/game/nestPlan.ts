@@ -2,8 +2,8 @@ import { FURNITURE, NEST_SPOTS, STREET_DOORS, STREET_ROOM, getNestSpot, isNestId
 
 /**
  * The nests' plain rules on this side, kept apart from Phaser so they can be tested: how furniture
- * sorts in depth, what the Decorate sheet offers for a spot, who lives behind each street door, and
- * where an owl comes back out of a nest.
+ * sorts in depth, what the Decorate sheet offers for a spot, who lives behind each street door,
+ * where an owl comes back out of a nest, and the mirror's (OP-077): its one glint, and where Q goes.
  */
 
 /** Wall pieces hang in front of the painted wall and behind everything on the floor. */
@@ -76,4 +76,46 @@ const FROM_NEST = /^from-nest-([0-9])$/;
 export function streetSpawnBack(cameFrom: { room: string; spawn?: string | undefined } | undefined): string {
   const m = cameFrom?.room === STREET_ROOM ? FROM_NEST.exec(cameFrom.spawn ?? '') : null;
   return m && Number(m[1]) < STREET_DOORS ? `from-nest-${m[1]}` : 'from-nest-0';
+}
+
+/** Whether this device has seen its nest's mirror glint (OP-077). */
+export const MIRROR_GLINT_KEY = 'owl-park:mirror-glint';
+
+/**
+ * The mirror glints the first time a device's owl is home (OP-077), with no words: true that once,
+ * and false ever after. A browser that keeps nothing gets no glint, rather than one every visit.
+ */
+export function firstGlint(storage: Pick<Storage, 'getItem' | 'setItem'> | null): boolean {
+  if (!storage) return false;
+  try {
+    if (storage.getItem(MIRROR_GLINT_KEY)) return false;
+    storage.setItem(MIRROR_GLINT_KEY, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Where the page stands when Q is pressed. */
+export interface MirrorKeyState {
+  /** Your owl is open. */
+  owlOpen: boolean;
+  /** Another screen that takes the keys is open (the Menu, Settings, the quests...). */
+  blocking: boolean;
+  /** The home screen is up, and whether this device holds an owl yet. */
+  atHome: boolean;
+  loggedIn: boolean;
+}
+
+/**
+ * What Q does now that Your owl is at the mirror in the owl's nest (OP-077): it closes Your owl if
+ * open; on the home screen it goes into the nest, once there is an owl; in the park it goes to the
+ * mirror (RoomScene.toMirror: walking up to it in a nest, else home to stand before it). Nothing
+ * while another screen is open.
+ */
+export function mirrorKey(s: MirrorKeyState): 'close' | 'nest' | 'mirror' | null {
+  if (s.owlOpen) return 'close';
+  if (s.blocking) return null;
+  if (s.atHome) return s.loggedIn ? 'nest' : null;
+  return 'mirror';
 }

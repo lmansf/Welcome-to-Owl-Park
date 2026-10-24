@@ -556,14 +556,29 @@ export const NEST_ROOM: RoomDef = {
       { x: 1320, y: 888 },
     ],
   ],
-  spawns: { 'default': { x: 340, y: 740 } },
+  spawns: {
+    'default': { x: 340, y: 740 },
+    // In front of the mirror, facing it: where Go to your nest puts the owl (OP-077).
+    mirror: { x: 650, y: 720 },
+  },
   doors: [
     // The round door in the west wall, out to the street: its rect is the doorway's floor. The owl
     // comes out by the nest door it went in by (`from-nest-<n>`, which only the visit knows), else
     // by door 0, its own nest's.
     { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, marker: { x: 290, y: 580 } },
+    // The floor in front of the mirror (NEST_MIRROR): standing here, Look in the mirror opens Your owl.
+    { id: 'mirror', rect: { x: 560, y: 686, w: 140, h: 64 } },
   ],
 };
+
+/**
+ * Where a nest's standing mirror stands (OP-077): the middle of its foot, against the back wall
+ * between the lamp's spot (f1) and the round window, clear of the furniture spots either side. High
+ * on the floor, so on a phone it shows above the pad and the stick, which cover the front corners.
+ * It is part of the room, not a furnishing, so every nest has it, furnished or not, and any owl may
+ * look into it: it shows that owl, and changes only that owl.
+ */
+export const NEST_MIRROR: Vec2 = { x: 590, y: 660 };
 
 /** Named anchors for large set pieces drawn by the scene (depth-sorted with the owls). */
 export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> = {

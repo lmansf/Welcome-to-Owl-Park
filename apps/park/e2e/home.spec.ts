@@ -57,7 +57,7 @@ test.describe('the home screen (OP-065)', () => {
     expect(await home(page)).toEqual({ shown: true, loggedIn: true });
     await expect(button(page, 'login')).toBeHidden();
     await expect(button(page, 'play')).toBeVisible();
-    await expect(button(page, 'owl')).toBeVisible();
+    await expect(button(page, 'owl')).toHaveText('Go to your nest');
     expect(JSON.parse((await page.evaluate(() => localStorage.getItem('owl-park:look'))) ?? '{}')).toMatchObject({ body: '#3E6B48' });
     // The owl is drawn beside the buttons.
     expect(await page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
