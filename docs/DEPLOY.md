@@ -43,10 +43,45 @@ pinned Wrangler. Local development needs no account:
 pnpm dev:edge         # builds the client, then wrangler dev on http://localhost:8787
 ```
 
-Run the commands in this section from the repository's root folder (the one with
-`pnpm-workspace.yaml`), after `pnpm install`; they run the same in PowerShell or the Command Prompt
-on Windows. If pnpm asks you to approve build scripts for esbuild and workerd, `pnpm approve-builds`
-(approve both) is safe.
+### Where to run the commands (read first)
+
+The repository is a pnpm monorepo: `apps/` (the client `apps/park` and the Cloudflare project
+`apps/edge`), `packages/` (the shared rules) and `tools/`. Three things follow from that:
+
+- `pnpm install` runs once, at the repository's root (the folder with `pnpm-workspace.yaml`), and
+  installs every package. If pnpm asks you to approve build scripts for esbuild and workerd,
+  `pnpm approve-builds` (approve both) is safe and needed once.
+- Wrangler lives in `apps/edge`, not at the root. Run it either from the root as
+  `pnpm --filter @owl-park/edge exec wrangler <command>` (the form this file uses) or from inside
+  `apps/edge` as `pnpm wrangler <command>` (what the owner ran on 2026-10-23). Both use the pinned
+  version. A bare `wrangler` or `npx wrangler` from the root or your user folder finds nothing or
+  the wrong version.
+- The root scripts `pnpm build:edge` and `pnpm deploy:edge` run on any shell since main 67ca3ab
+  (`tools/build-edge.mjs` sets `VITE_TRANSPORT=edge` without shell syntax); before that they were
+  bash-only. The client's build lives in `apps/park`; `pnpm vite build` inside `apps/edge` finds no
+  `index.html`, which is expected, so always build through the root script.
+
+Every command below runs from the root folder unless it says otherwise, the same in bash,
+PowerShell or the Command Prompt. The two things that differ on Windows are environment variables
+and the shell you are in:
+
+| Task | bash (macOS, Linux, Git Bash) | PowerShell |
+| --- | --- | --- |
+| Install | `pnpm install` | `pnpm install` |
+| Approve build scripts (once) | `pnpm approve-builds` | `pnpm approve-builds` |
+| Sign in to Cloudflare | `pnpm --filter @owl-park/edge exec wrangler login` | same |
+| See which account you are in | `pnpm --filter @owl-park/edge exec wrangler whoami` | same |
+| Pin the account for this shell | `export CLOUDFLARE_ACCOUNT_ID=<id>` | `$env:CLOUDFLARE_ACCOUNT_ID = "<id>"` |
+| Set a secret | `pnpm --filter @owl-park/edge exec wrangler secret put PASS_SIGNING_KEY` | same (or `cd apps/edge` then `pnpm wrangler secret put PASS_SIGNING_KEY`) |
+| Build the client for the room server | `pnpm build:edge` | `pnpm build:edge` |
+| Build and deploy from this machine | `pnpm deploy:edge` | `pnpm deploy:edge` |
+| Dry run (build, deploy nothing) | `pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy --dry-run` | `pnpm build:edge; pnpm --filter @owl-park/edge exec wrangler deploy --dry-run` |
+| Watch the live log | `pnpm --filter @owl-park/edge exec wrangler tail` | same |
+| Local development | `pnpm dev:edge` | `pnpm dev:edge` |
+
+Prefer deploying from GitHub (below) over `pnpm deploy:edge`: the workflow's build carries the
+repository variables that a build on your own machine leaves out, and its secrets go to the account
+the deploys use.
 
 ### First deploy, from your own machine
 
@@ -69,6 +104,21 @@ on Windows. If pnpm asks you to approve build scripts for esbuild and workerd, `
    development key.
 4. Watch it: `pnpm --filter @owl-park/edge exec wrangler tail`, or the Workers Logs and Traces pages
    in the dashboard (both are switched on in `wrangler.jsonc`).
+
+### If you see this error
+
+What the owner hit setting the secrets on Windows on 2026-10-23 (OP-001), and what each one means.
+
+| You see | It means | Do this |
+| --- | --- | --- |
+| `wrangler` is not recognized, or `pnpm wrangler` says there is no such script, from the root or your user folder | Wrangler is a dependency of `apps/edge`, not of the root | Run `pnpm --filter @owl-park/edge exec wrangler ...` from the root, or `cd apps/edge` and `pnpm wrangler ...` |
+| pnpm says build scripts for `esbuild` and `workerd` were ignored, or `workerd` fails to start | pnpm 10 does not run dependency build scripts until you approve them | `pnpm approve-builds` at the root, approve both, then `pnpm install` again if asked |
+| Wrangler says there is no Worker called `owl-park` in your account and offers to create one | Your sign-in reaches a different account from the one the park deploys to (`CLOUDFLARE_ACCOUNT_ID` in the repository's secrets) | Answer **no**. Run `wrangler whoami`, set `CLOUDFLARE_ACCOUNT_ID` to the account that holds `owl-park` (table above), and try again. A secret put into a new, empty `owl-park` elsewhere does nothing for the live park. Verify after any deploy that the printed workers.dev URL and the park's domain are the same site |
+| `wrangler deploy` from `apps/edge`: the assets directory `../park/dist` does not exist | Nothing has been built on this machine; the Worker serves the client from `apps/park/dist` | `pnpm build:edge` at the root first, or just `pnpm deploy:edge`, which builds then deploys |
+| `vite build` inside `apps/edge`: cannot resolve entry module `index.html` | The client is `apps/park`; `apps/edge` has no site of its own | Do not build there. `pnpm build:edge` at the root |
+| `'..' is not recognized as an internal or external command` from `pnpm deploy:edge` | Before main 67ca3ab the script used bash syntax (`VITE_TRANSPORT=edge pnpm build`), which the Command Prompt and PowerShell cannot run | Pull `main` (the script now runs through `tools/build-edge.mjs` on any shell). If it persists on a current `main`, say so on the board: the exact `'..'` message could not be traced to anything in the repository |
+| The deploy workflow's "Upload PASS_SIGNING_KEY" or "Upload ADMIN_KEY" step is marked skipped | GitHub has no Actions secret by that name (one under Variables, Codespaces or Dependabot does not count) | Settings → Secrets and variables → Actions → New repository secret, then Actions → Deploy to Cloudflare → Run workflow; the step then lists the Worker's secret names |
+| `/api/health` is fine but the Worker still logs the development-key warning, or `/admin/*` refuses with the right key | The secrets are not on the Worker that serves the park (see the account row) | Check the upload steps of the latest deploy run; `/api/health` never reports the keys by design |
 
 ### Deploys from GitHub (every push to `main`)
 

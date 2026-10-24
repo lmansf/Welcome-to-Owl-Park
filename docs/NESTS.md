@@ -30,6 +30,9 @@ the two posts at the east end.
   behind it stays dark and says **Closed for now**.
 - No names anywhere: a nest is known by its id alone, and the flag is the only thing of its owner
   anyone sees. Nobody types anything, and a nest holds nothing but approved pieces in its spots.
+  There is no nest label, title or sign a visitor could write: the words over a door are the
+  park's own (**Your nest**, **Closed for now**). QA's free-text check (OP-093) confirms none
+  exists; a nest's room never carries its owner's collector id either (`homes.ts`).
 
 Out of a nest, an owl comes back to the street in front of the door it went in by.
 
@@ -63,6 +66,19 @@ spot's piece back with the owl. **Open to visitors** / **Closed to visitors** le
 keeps them out: closing sends any visitors inside back to the street. **Done** (or Escape) ends it.
 
 Everyone inside sees each change as it happens. Only the owner can change its nest.
+
+## The mirror (planned, OP-077, In progress)
+
+Not built yet. Once it lands, customising an owl happens in its own nest, at a mirror: one
+interactable in the nest's inside, with one action, **Look in the mirror**, shown only where the
+owl stands at it (OP-040's rule). It opens the Your owl editor as it is, every tab, and edits only
+the owl looking into it, so a visitor in someone else's nest can use it too and changes nothing of
+the host's. While the editor is open the owl in the room updates live. With it the Menu's Your owl
+tile goes, and the home screen's builder button becomes **Go to your nest**, which puts the owl
+inside its nest facing the mirror. The one exception stays: **Make it yours** at the end of the
+first-run quiz (OP-076, not built) opens the editor in place. Art: the mirror painted into the
+nest's painting as one edit, or drawn in code. Until OP-077 merges, the owl builder opens from
+the Menu (Your owl) and from the home screen as `docs/ARCHITECTURE.md`, section 9, says.
 
 ## Furniture and the day's gift
 

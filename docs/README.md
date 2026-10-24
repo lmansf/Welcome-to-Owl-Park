@@ -1,0 +1,117 @@
+# The docs: a map
+
+One line per file under `docs/`, what it is for and who keeps it; then how the Ticket Board works,
+so a new agent can find any doc and file a ticket correctly from this page alone. A map, not a
+manual. The roster of agents and their rules is `agents.md`; read it first if you are new.
+
+Who updates what: the doc agent keeps every file under `docs/` and is the only writer here
+(OP-081; `agents.md`). Claude Code leaves a `TODO-DOCS` comment in code when a change needs a doc
+change, and appends one line to `CHANGELOG.md` when a ticket goes Done (OP-103). Claude reviews
+doc tickets. The owner approves every visitor-facing word the docs quote. Anything outside `docs/`
+(the root `README.md`, `CLAUDE.md`, `tools/art/README.md`, code comments) is Claude Code's.
+
+## The files
+
+| File | What it is for | Read it when |
+| --- | --- | --- |
+| `agents.md` | Who does what: the owner, Claude, Claude Code, Crow, the QA agent, the doc agent, Red Team and the Shopify agent; what each may write to and never does; how work moves; the board's columns and statuses | You are new, or handing work to another agent |
+| `ARCHITECTURE.md` | The system: the repository's packages, the room server and its Durable Objects, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, a diagram from purchase to the hub, open questions | Before any ticket that touches code |
+| `DEPLOY.md` | Cloudflare, GitHub and Supabase setup; where to run commands (bash and PowerShell); the error table; deploys from GitHub; selling tickets (the store's app, secrets, webhooks, products, opening night) | Deploying, setting a secret, setting up the store |
+| `PLAYBOOK.md` | When the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits, words for visitors; the controls and the Menu as a visitor has them | Something is wrong, or a visitor asks how to do something |
+| `CAPACITY.md` | Room caps, what happens at the cap, what the park holds (measured), the planned queue and ribbon (OP-075), what QA tests (OP-088) | A busy night is coming, or a cap question |
+| `CHANGELOG.md` | One line per Done ticket, newest first, by week; the rule for appending | What shipped when |
+| `COLLECTIBLES.md` | Wearables, pets, effects and emotes: the catalogue, the numbers, identity (collector token and pass), the server, the client, adding a drop | Anything an owl owns or wears |
+| `QUESTS.md` | Quests, NPC owls, leaf piles, feathers, the feather shop, owl species, the Quest Log sheet | Anything an owl does for feathers |
+| `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade (and its planned games), three tasks a day, quests on screen, emotes, seasons (planned) | Anything to do in a room |
+| `NESTS.md` | The street of nests, a nest, decorating, furniture and the day's gift, the mirror (planned), the room server and the local mode | The nests |
+| `FEEDBACK.md` | Feedback in the Menu, where notes are kept, reading and triaging them, candidates raised by tickets | Reading visitors' notes |
+| `ART-PIPELINE.md` | How art is made and replaced: Seedream through `tools/art`, sizes, the owl's layers, provenance | Any art change; the owner picks every image |
+
+Not under `docs/` but read with them: the root `README.md` (how to run and check the park; note
+that its Docs list predates `agents.md`, `CAPACITY.md`, `CHANGELOG.md` and this file), `CLAUDE.md`
+(the rules for coding agents, including what stays out of this public repository) and
+`tools/art/README.md`.
+
+## The Ticket Board
+
+The Google Sheet **Owl Park — Ticket Board** in the project's Drive folder (Projects/Owl Park).
+Everything is a ticket; if it is not on the board, it is not work.
+
+- **Tabs**: Read me, **Board** (the queue, one row per ticket), Activity Log (one row per event),
+  Dashboard (formulas only; the next free ID, counts, each agent's queue), Agents, Lists (the
+  dropdown options; add a row to add an option, never rename a header).
+- **IDs**: `OP-###`. On the Board tab a ticket's row is its number plus one (OP-101 is row 102).
+  The Dashboard shows the next free ID.
+- **Columns A to Q**: A Ticket ID · B Title · C Status · D Owner (exactly one agent) · E Priority
+  (P0 Urgent, P1 High, P2 Normal, P3 Low) · F Type (Build, Art, Content, Store, Data, Research,
+  Decision, Bug, Canon, Admin, QA, Finding; the doc tickets use Docs) · G Area (Park app, Art,
+  Social, Store, Pipeline, Canon, Ops, Drive; the doc tickets use Docs) · H Requested by ·
+  I Reviewer · J Flags · K Created · L Due · M Last update · N Description and acceptance criteria
+  (the goal, the inputs as links, and a "Done when" line someone else could check) · O Deliverable
+  link · P Blocked by (ticket IDs) · Q Notes (the current state, dated lines appended).
+- **Statuses**, exactly as the board uses them: **Backlog** (not fully specified) · **Ready**
+  (someone could start now; set by the requester or a hand-off) · **In progress** (set by the
+  ticket's owner on pick-up) · **In review** (waiting for the reviewer; the ticket's owner sets it,
+  the reviewer logs Approved or Changes requested) · **Blocked** (Blocked by filled in; the owner of
+  the ticket) · **Needs Logan** (a decision or approval; Owner becomes Logan and only the owner moves
+  it on) · **Done** (finished, with a link; the ticket's owner, or QA on acceptance) · **Dropped**
+  (closed without doing it; say why in Notes; never delete a row). The Lists tab's Status column is
+  the source of this list.
+- **Flags** that send a ticket to the owner first: Money, Account, Price, Public-facing, Legal or
+  naming, Deletion, Customer data.
+- **Filing a ticket**: take the next free ID from the Dashboard, fill every column (Requested by =
+  you), leave it in Backlog if it is not Ready, and add an Activity Log row with Action = Created.
+- **Filing a Finding** (OP-080's format, used by QA and Red Team): a NEW ticket for Claude Code,
+  Type = Finding, the check or question it came from and the exact path in the description, and a
+  flag of To-do (something must change) or Informational (worth knowing, no action). One Finding per
+  problem. The doc agent files a Finding when the code and a Done ticket disagree.
+- **Every session**: read your queue on the Dashboard and the Activity Log rows since you last
+  worked; take the highest-priority Ready ticket; set In progress and Last update, log Picked up;
+  before stopping, update Status, Last update and Notes on every ticket you touched and log what
+  happened. The full rules: the Agent Operating Protocol (a Google Doc in the Drive's Agent
+  Operations folder) and `agents.md`.
+
+## The Creative Bible
+
+The Google Doc **Owl Park — Creative Bible (shared canon)**: canon, PROPOSALS (numbered C1, C2,
+...), the MERGE LOG and the AGENT DISCUSSION. Append-only; a proposal becomes canon when the owner
+approves it and Crow merges it from a fresh re-read. The doc agent reads it and never writes it.
+
+Bible items that are load-bearing in code:
+
+| Item | What it fixes in the code | Where |
+| --- | --- | --- |
+| C35 (tickets, passes, the gate and the lobby) | Identity: a ticket on one device at a time, moved by its claim link; the time starts at the first scan; a visual ticket ID; order and line numbers only, no names | `ARCHITECTURE.md` section 9; `apps/edge/src/TicketBook.ts`, `pass.ts`, `gate.ts` |
+| C45 (the fraud link) | Every paid ticket order scored before release: a 2-second budget, fail open, a 24-hour fail-open on reviews, hashed identifiers only | `ARCHITECTURE.md` section 12 (planned, OP-052, OP-053, OP-072) |
+| C42 (opening night) and OP-062 | Free tickets mint at once; the pass at half price through the in-park link; votes one per wallet per park day | `ARCHITECTURE.md` section 9; `DEPLOY.md` step 10 |
+| C44 (prewritten chat) | Only a phrase's number travels; 24 phrases in `packages/shared/src/phrases.ts`; one per 3 s | `ARCHITECTURE.md` section 11 |
+| C31 (quests, feathers, the shop) and C36 (activities) | The feather economy and every number in `QUESTS.md` and `ACTIVITIES.md` | those files |
+| C39 (the nests) and C43 (leaving the park) | A free area outside the turnstiles; the ways out | `NESTS.md`; `ARCHITECTURE.md` section 9 |
+| C15 and `CLOSED_SIGNS` | The only words a closed realm's blockade may show | `packages/shared/rooms/index.ts` |
+| The Legal rules | Realm names stay internal (screening is OP-069); no other game is named; the owner's details stay out | `CLAUDE.md` |
+
+## Dates and decisions to know
+
+- The preview opens on 2026-12-01 (the owner's target, OP-066); opening night (C42) follows on a
+  date still to be announced, by the owner alone. The go/no-go checklist is OP-066.
+- The live Worker still signs passes with its development key until the owner adds the two GitHub
+  secrets (OP-001). Every owl's collection starts over once when the signing key goes up.
+
+## Not yet documented
+
+Product decisions in Done or Ready tickets that have no home under `docs/` yet (OP-102). Each
+gets a file or a section when it is built or when its proposal is approved.
+
+- OP-050: friends (a share code, what friends get, bring-a-friend, identity across devices). The
+  proposal is Claude's; nothing is built.
+- OP-060: the park map (the shape of the park, how rooms attach, reserved slots for the closed
+  realms). A proposal, not built.
+- OP-061: taller rooms (gathering rooms that grow up and down). A proposal, not built.
+- OP-057 and OP-058: the design proposals for the two closed realms. Internal; their names stay out
+  of this repository until OP-069 clears them.
+- OP-070: the privacy and terms words for the park's site and the store, before the preview.
+- OP-063's build tickets (the Preview Ticket's kind, the nudge and its setting, the admin counts):
+  summarised in `ARCHITECTURE.md` section 9 until they exist.
+- OP-078's `QA.md`, OP-080's `REDTEAM.md` and OP-081's `DOCS.md`, `SYSTEM.md`, `GLOSSARY.md` and the
+  per-area files (`worker.md`, `rooms.md`, `client.md`, `store.md`, `art.md`): named in their
+  tickets, not written yet.

@@ -185,3 +185,6 @@ they load, and for any species added later until its art is approved, a species 
 great horned owl's layers at its own size. Hats, glasses and scarves sit where each
 species' crown, eyes and chest are, measured from the layers it wears. The screech owl is meant for
 founders only; until founder status exists it is open to everyone (`FOUNDER_SPECIES_OPEN`).
+**Planned (OP-049, C42)**: a Drop-1 pin order marks its wallet as a Founding Nester, the screech owl
+becomes founders-only when the owner flips it, and the wallet receives a Founder's pin wearable
+that matches the physical pin (the great horned owl mascot).

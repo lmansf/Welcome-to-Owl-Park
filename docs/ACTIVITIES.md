@@ -80,6 +80,20 @@ Each cabinet is a spot in the room data and will play one game, as the visitor's
 cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
 at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
 
+**Planned (C40, amended C46; OP-059 the hall and its art, OP-038 the games)**: the arcade becomes
+a hall about three screens wide with a bay per game, each with its title as a neon sign and a
+cabinet of its own, and the score wall in the middle. The three games, all in one wave and played
+as the visitor's own owl: **Hoot & Hop** (hop across lanes of drones and noodle carts; each crossing
+banks a tier; a hit ends the run), **Moon Flap** (tap to flap through gaps on a night flight; the
+score is gaps passed) and **Nest Knockdown** (pull back and launch at stacked neon crates; ten
+levels, fewer shots scores higher). The names were knockout-screened (OP-036); the arcade is
+"Neon Roost" and "the Owl Park arcade" in public. The room server starts each run, pays 0 to 6
+feathers a run by score band plus 3 the first time a day's best is beaten per game, inside the
+shared 25-a-day games cap, and keeps a score-against-time check; the score wall shows today's top
+five per game as owl portraits, no names, reset at the park's midnight. A daily task "Play a round
+in the arcade" joins the rotation. Painted art, three candidates per piece, the owner picks; the
+arcade goes live only with the new look.
+
 ## Three small tasks a day
 
 The same three for everyone each park day (`dailyTasks`), one from each slot and never the same
@@ -93,6 +107,41 @@ kind twice:
 Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J), on its
 Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
 park's midnight.
+
+## Quests on screen (how they show today, and what is coming)
+
+Today a quest's steps show in the tracker under the top bar and in Quests (the Menu, or J); a new
+offer, a finished step and a hand-in show as toasts and cards (`docs/QUESTS.md`). **Coming
+(OP-083, In progress)**: the pop-ups go. A new quest or a finished one shows a badge dot on the
+Menu button and a short toast ("New quest", "Quest complete") and then goes quiet; the Quests tab
+lists each active quest with its one-line goal and progress (2/5), and the reward is collected
+there (tap the quest, tap Collect). Quest state and rewards do not change; only the surface does.
+Open on the ticket: the badge dot on the desktop Menu, how many quests show before the tab scrolls
+(5 suggested), and whether the preview's feedback nudge (OP-063) moves into the Menu too.
+
+## Emotes
+
+The emotes an owl can play are collectibles (`docs/COLLECTIBLES.md`): 24 in the catalogue, every
+owl starts with Hoot and Wing Flap (plus the Sparkle effect), and the rest come from quests and the
+shop. The emote wheel (the Emotes button; 1 to 8 on a keyboard) plays one; the room server relays
+the emote's id to everyone else in the room, checks that the owl owns it, and allows one per 1.5 s
+per owl. **Coming (OP-082)**: a **hop**, the Jump button's short wing-flap, sent as a `hop` emote
+so others see it, at most one per 600 ms on the page, purely visual (`docs/PLAYBOOK.md`, section
+7). The hop is a candidate for flight later (OP-084); do not document it as final.
+
+## Seasons (planned, OP-074)
+
+The owner's decisions of 2026-10-23: a seasonal switch first (a Worker setting with start and end
+dates that turns an event's layer, actions and tasks on and off with no deploy; the base paintings
+never change, an event is an overlay plus room data), then snow and snowballs for everyone,
+everywhere outdoors (the lobby, the street of nests, the hub, every open realm and the arcade; no
+snow indoors, not even through a nest's window; the neon market realm gets its own neon-palette
+reskin), from mid-December after the preview. A snowball is thrown at an owl you tap, arcs, lands
+with a puff and plays a shiver emote on the target: no feathers lost, no words, no opt-out. One
+throw every 2 seconds, held by the room server; a daily task "Throw 5 snowballs". Later in the
+calendar: a Superb Owl Sunday tie-in (2027-02-14), spring and summer events to be designed, and a
+hay maze for Halloween 2027, seasonal only. Each event's art spend is approved by the owner before
+anything generates.
 
 ## Feathers
 

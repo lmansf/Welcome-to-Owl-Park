@@ -38,3 +38,17 @@ curl -X POST -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
 ```
 
 `status` is `open` (the default), `done`, `dropped` or `all`; `limit` is at most 500.
+
+## Candidates from the tickets
+
+Things visitors may feel, raised in tickets and left for feedback to decide. None is built or
+promised; each names the ticket that raised it.
+
+| Candidate | Why it is here | Source |
+| --- | --- | --- |
+| A mirrored pad for left-handed play (joystick left, buttons right) | The phone pad puts the joystick on the right; the ticket's default is no mirroring, noted here as a candidate | OP-082 |
+| Hop spam (the Jump button's hop, once built) | One hop per 600 ms is the client-side limit; QA checks that the server, not only the client, holds the room's rate | OP-082, OP-089 |
+| New-quest toast noise | Quests move into the Menu with a badge dot and a 2-second toast; the owner decides after trying it whether the new-quest toast stays | OP-083 |
+
+Where a note points at one of these, add the ticket ID to the keepers' triage so the count is
+easy to find later.
