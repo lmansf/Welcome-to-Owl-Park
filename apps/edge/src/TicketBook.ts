@@ -13,9 +13,10 @@
  *   device at a time: a holder can pass one on with a share link before its first scan, and
  *   opening a link moves it.
  * - The gate scans a ticket held on this device; the first scan starts its time.
- * - Opening night (C42): a pass order from the park's free-pass link keeps the link to the Opening
- *   Night Ticket it came from, and goes with that ticket if the ticket is switched off. The book
- *   counts the night: tickets issued and scanned, passes claimed through the link and without it.
+ * - Opening night (C42): a pass order from the park's pass link (half price, OP-062) keeps the link
+ *   to the Opening Night Ticket it came from, and goes with that ticket if the ticket is switched
+ *   off. The book counts the night: tickets issued and scanned, passes claimed through the link and
+ *   without it, and what the passes sold for.
  */
 import { isTicketId, scan, statusOf, timeLeft, visualId, type ScanResult, type Ticket, type TicketKind, type TicketStatus } from './tickets';
 import type { Decision, Outcome } from './fraudLink';
@@ -44,6 +45,8 @@ export interface PassLink {
   /** The ticket, when the park's link named one that went through the gate; null: a pass without a link. */
   fromTicket: string | null;
   at: number;
+  /** What the order's passes sold for, in cents before tax (OP-062: half price); null where it was not kept. */
+  cents: number | null;
 }
 
 /**
@@ -113,8 +116,9 @@ export interface WalletTicket {
   validFrom: number | null;
   validUntil: number | null;
   /**
-   * An Opening Night Ticket's free pass (C42): `ready` once the ticket has gone through the gate
-   * and while its night runs, `claimed` once a pass came from it through the link.
+   * An Opening Night Ticket's pass offer (C42; free at first, half price since OP-062): `ready` once
+   * the ticket has gone through the gate and while its night runs, `claimed` once a pass came from
+   * it through the link.
    */
   freePass?: 'ready' | 'claimed';
 }
@@ -130,6 +134,8 @@ export interface OpeningCounts {
   /** Tickets that turned into a pass, as a share of the tickets scanned (null before any scan). */
   converted: number;
   conversion: number | null;
+  /** What the night's passes sold for, in cents before tax (OP-062), with and without the link. */
+  passRevenue: number;
   /** Opening Night Tickets and opening passes switched off (refunded, cancelled or declined). */
   revoked: number;
 }
@@ -143,6 +149,8 @@ export interface OpeningRow {
   firstScan: number | null;
   /** A pass: the Opening Night Ticket it came from (empty without a link). */
   fromTicket: string | null;
+  /** A pass: its part of what its order's passes sold for, in cents before tax (null where not kept). */
+  paid: number | null;
 }
 
 export type Random = (n: number) => Uint8Array;
@@ -288,15 +296,16 @@ export class TicketBook {
    * A pass order from opening night's offer (C42), kept once: the Opening Night Ticket the park's
    * link named, when that ticket went through the gate and still works; otherwise it counts as a
    * pass without a link (the code used some other way). A linked pass that is on no device yet goes
-   * onto the ticket's, so the owl finds it in the wallet it claimed it from.
+   * onto the ticket's, so the owl finds it in the wallet it claimed it from. `cents`: what the
+   * order's passes sold for (OP-062).
    */
-  linkPass(order: string, fromTicket: string | null, now: number): PassLink | null {
+  linkPass(order: string, fromTicket: string | null, now: number, cents: number | null = null): PassLink | null {
     if (!this.store.order(order)) return null;
     const known = this.store.passLink(order);
     if (known) return known;
     const from = fromTicket ? this.get(fromTicket) : null;
     const linked = from !== null && from.kind === 'opening-night' && from.firstScan !== null && from.revoked === null ? from : null;
-    const link: PassLink = { order, fromTicket: linked?.id ?? null, at: now };
+    const link: PassLink = { order, fromTicket: linked?.id ?? null, at: now, cents };
     this.store.putPassLink(link);
     if (linked?.device) {
       for (const p of this.store.ticketsOf(order)) if (p.device === null && p.revoked === null) this.store.putTicket({ ...p, device: linked.device });
@@ -304,14 +313,14 @@ export class TicketBook {
     return link;
   }
 
-  /** The free pass of an Opening Night Ticket, as its wallet line shows it (undefined for other tickets). */
+  /** The pass offer of an Opening Night Ticket, as its wallet line shows it (undefined for other tickets). */
   private freePass(t: TicketRecord, status: TicketStatus): WalletTicket['freePass'] {
     if (t.kind !== 'opening-night') return undefined;
     if (this.store.passLinksFrom(t.id).length) return 'claimed';
     return status === 'active' ? 'ready' : undefined;
   }
 
-  /** Whether an Opening Night Ticket on this device may claim its free pass now (C42). */
+  /** Whether an Opening Night Ticket on this device may claim its pass now (C42). */
   passOffer(id: string, device: string, now: number): { ok: true } | { ok: false; reason: 'unknown' | 'not-yours' | 'not-ready' | 'claimed' } {
     const t = this.get(id);
     if (!t || t.kind !== 'opening-night') return { ok: false, reason: 'unknown' };
@@ -320,13 +329,20 @@ export class TicketBook {
     return pass === 'ready' ? { ok: true } : { ok: false, reason: pass === 'claimed' ? 'claimed' : 'not-ready' };
   }
 
-  /** Opening night's count and its tickets (C42): order numbers and ticket IDs only. */
+  /**
+   * Opening night's count and its tickets (C42): order numbers and ticket IDs only. An order's
+   * amount is shared out over its passes to the cent, so a pass switched off takes its part out
+   * of the night's revenue.
+   */
   opening(now: number): { counts: OpeningCounts; rows: OpeningRow[] } {
     const tickets = this.store.ofKind('opening-night');
     const links = this.store.passLinks();
-    const rows: OpeningRow[] = tickets.map((t) => ({ kind: 'opening-night', ticket: t.id, order: t.order, status: statusOf(t, now), firstScan: t.firstScan, fromTicket: null }));
+    const rows: OpeningRow[] = tickets.map((t) => ({ kind: 'opening-night', ticket: t.id, order: t.order, status: statusOf(t, now), firstScan: t.firstScan, fromTicket: null, paid: null }));
     for (const l of links) {
-      for (const p of this.store.ticketsOf(l.order)) rows.push({ kind: 'pass', ticket: p.id, order: p.order, status: statusOf(p, now), firstScan: p.firstScan, fromTicket: l.fromTicket });
+      // Only the order's passes: another ticket in the same cart is no part of the night.
+      const own = this.store.ticketsOf(l.order).filter((p) => p.kind === 'annual');
+      const part = (i: number) => (l.cents === null ? null : Math.floor(l.cents / own.length) + (i < l.cents % own.length ? 1 : 0));
+      own.forEach((p, i) => rows.push({ kind: 'pass', ticket: p.id, order: p.order, status: statusOf(p, now), firstScan: p.firstScan, fromTicket: l.fromTicket, paid: part(i) }));
     }
     const live = rows.filter((r) => r.status !== 'revoked');
     const nights = live.filter((r) => r.kind === 'opening-night');
@@ -342,6 +358,7 @@ export class TicketBook {
         unlinkedPasses: passes.filter((r) => r.fromTicket === null).length,
         converted,
         conversion: scanned > 0 ? converted / scanned : null,
+        passRevenue: passes.reduce((n, r) => n + (r.paid ?? 0), 0),
         revoked: rows.length - live.length,
       },
       rows,

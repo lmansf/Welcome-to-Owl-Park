@@ -37,9 +37,9 @@ describe('tickets in words', () => {
     expect(walletLine({ ...night, status: 'revoked', freePass: 'claimed' }, T0).freePass).toBeNull();
     expect(gateCard({ ok: true, id: 'OWL-7K3Q-PX9M', kind: 'opening-night', started: true, validUntil: T0 + 4 * H }, T0)).toEqual({ kind: 'Opening Night Ticket', id: 'OWL-7K3Q-PX9M', line: 'Your night starts now' });
     expect(gateRefusal('not-yet', 'opening-night')).toBe('Your Opening Night Ticket opens the turnstiles on opening night. See you then!');
-    // The owner's words, as approved.
-    expect(`${OPENING_WORDS.offer} ${OPENING_WORDS.claim}`).toBe('Your pass is free tonight. Claim it');
-    expect(OPENING_WORDS.booth).toBe('Opening night: every pass is free');
+    // The owner's words (the pass at half price since OP-062).
+    expect(`${OPENING_WORDS.offer} ${OPENING_WORDS.claim}`).toBe('Your pass is half price tonight. Claim it');
+    expect(OPENING_WORDS.booth).toBe('Opening night: every pass is half price');
     expect(OPENING_WORDS.claimed).toBe('Your annual pass is in your wallet');
   });
 

@@ -3,9 +3,12 @@ import { shareLink } from '../net/ticketLinks';
 import { OPENING_WORDS, walletLine } from './tickets';
 
 export interface BoothInfo {
-  /** Where tickets are sold (the store's ticket page); null until tickets go on sale. */
+  /** The store's ticket page, once the park has one; the booth sells only while the gate takes tickets. */
   ticketsUrl: string | null;
-  /** `ticket` once the park admits ticket-holders only; `open` lets everyone through the turnstiles. */
+  /**
+   * `ticket` once the park admits ticket-holders only; `open` lets everyone through the turnstiles.
+   * The keepers flip it with the opening switch (OP-067), and the booth starts or stops selling with it.
+   */
   gate: 'open' | 'ticket';
   /** This visitor's pass lets them through the turnstiles. */
   admitted: boolean;
@@ -13,11 +16,11 @@ export interface BoothInfo {
   wallet?: WalletEntry[] | null;
   /** Makes a share link's secret for one ticket on this device. */
   share?: (id: string) => Promise<string | null>;
-  /** Opening night is on (C42): the booth says every pass is free. */
+  /** Opening night is on (C42): the booth says every pass is half price. */
   openingNight?: boolean;
-  /** Opening night's free pass: the store's cart link for each Opening Night Ticket that may claim one now. */
+  /** Opening night's pass offer: the store's cart link for each Opening Night Ticket that may claim one now. */
   passLinks?: Record<string, string>;
-  /** The owl went to claim the free pass of this ticket: the page looks for the pass and says when it comes. */
+  /** The owl went to claim the pass of this ticket: the page looks for the pass and says when it comes. */
   watchPass?: (id: string) => void;
 }
 
@@ -27,18 +30,20 @@ export interface BoothPanel {
   isOpen(): boolean;
 }
 
-/** What the booth window says, from what the visitor can do at the gate and whether tickets sell yet. */
+/**
+ * What the booth window says, from what the visitor can do at the gate and whether tickets sell yet.
+ * Tickets sell while the gate takes them, so the one switch opens the sale and closes the gate.
+ */
 export function boothText(info: BoothInfo): { say: string; buy: boolean } {
   const holds = info.wallet?.some((t) => t.status === 'unused' || t.status === 'active') ?? false;
-  if (holds || (info.gate === 'ticket' && info.admitted)) return { say: 'Your ticket is ready. Walk through the turnstiles to enter the park.', buy: info.ticketsUrl !== null };
+  const selling = info.gate === 'ticket' && info.ticketsUrl !== null;
+  if (holds || (info.gate === 'ticket' && info.admitted)) return { say: 'Your ticket is ready. Walk through the turnstiles to enter the park.', buy: selling };
   if (info.gate === 'ticket') {
-    return info.ticketsUrl
+    return selling
       ? { say: 'The park is open to ticket-holders. Get your ticket here, then walk through the turnstiles.', buy: true }
       : { say: 'The park is open to ticket-holders. Tickets will be back on sale soon.', buy: false };
   }
-  return info.ticketsUrl
-    ? { say: 'Tickets and passes are on sale here. Until the park needs them, the turnstiles let everyone through.', buy: true }
-    : { say: 'Tickets and passes are coming soon. Until then the turnstiles let everyone through, so go on in and explore.', buy: false };
+  return { say: 'Tickets and passes are coming soon. Until then the turnstiles let everyone through, so go on in and explore.', buy: false };
 }
 
 const CSS = `
@@ -90,7 +95,7 @@ function walletList(info: BoothInfo): HTMLElement {
     st.className = 'st';
     st.textContent = line.status;
     li.append(kind, id, st);
-    // Opening night (C42): the free pass, to claim tonight, or come.
+    // Opening night (C42): the pass offer, to claim tonight, or come.
     const link = info.passLinks?.[t.id];
     if ((line.freePass === 'ready' && link) || line.freePass === 'claimed') {
       const pass = document.createElement('span');

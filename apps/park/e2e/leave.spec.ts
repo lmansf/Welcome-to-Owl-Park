@@ -40,7 +40,7 @@ test.describe('leaving the park (this device)', () => {
   test('Leave the park asks first: Stay keeps the owl where it is, Leave takes it to the lobby', async ({ page }) => {
     await openPark(page, { room: 'grove', collector: 'e2e-leave-menu' });
     let menu = await openMenu(page);
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Your owl/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/]);
+    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/, /^Home screen/]);
     await menu.locator('[data-screen="leave"]').click();
     const card = page.getByRole('dialog', { name: 'Leave the park' });
     await expect(card).toContainText('Leave the park? Your ticket keeps running.');

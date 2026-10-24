@@ -1,0 +1,121 @@
+/**
+ * Busy nights (OP-075): the line in front of the park, the busy ribbon, and copies of a room. The
+ * keepers change all three with the admin key and no deploy (the capacity page, /admin/capacity);
+ * the room server keeps them in its overflow object. Shared so the pages, the Worker and the tests
+ * agree on the settings, their limits and what a visitor in the line is told.
+ */
+
+/**
+ * off: never a line. auto: a line once the park holds `threshold` owls, kept until it has emptied.
+ * on: every new arrival goes through the line, which lets owls in while the park holds fewer than
+ * `threshold`.
+ */
+export type LineMode = 'off' | 'auto' | 'on';
+export const LINE_MODES: readonly LineMode[] = ['off', 'auto', 'on'];
+
+export interface LineSettings {
+  mode: LineMode;
+  /** Owls in the park at once before new arrivals wait (auto), and the most the line lets in. */
+  threshold: number;
+  /** Minutes a called owl's place is kept for it. */
+  holdMin: number;
+}
+
+/**
+ * Off until the keepers turn it on. 80: one room object holds about 80 owls walking at once
+ * (OP-068's load test), and the deployed park keeps every room in one object.
+ */
+export const LINE_DEFAULTS: LineSettings = { mode: 'off', threshold: 80, holdMin: 3 };
+export const THRESHOLD_MAX = 5000;
+export const HOLD_MIN_MAX = 15;
+
+export interface RibbonSettings {
+  on: boolean;
+  /** The keepers' own words; null shows RIBBON_WORDS. */
+  words: string | null;
+}
+
+export const RIBBON_DEFAULTS: RibbonSettings = { on: false, words: null };
+/** The ribbon's words unless the keepers write their own (for the owner's approval). */
+export const RIBBON_WORDS = "It's busy tonight; things may be slow";
+export const RIBBON_MAX_CHARS = 90;
+
+/** A copy of a room beside the room itself (copy 1): taking new owls, or draining (no new owls, then closed). */
+export type CopyState = 'open' | 'draining';
+/** Room id -> copy number ("2" to COPY_MAX) -> its state. A room with no entry is just itself. */
+export type Copies = Record<string, Record<string, CopyState>>;
+export const COPY_MAX = 9;
+
+/** The line's settings with the given changes, or null when a change is out of bounds. */
+export function withLineChanges(base: LineSettings, v: unknown): LineSettings | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const out = { ...base };
+  if (o['mode'] !== undefined) {
+    if (!LINE_MODES.includes(o['mode'] as LineMode)) return null;
+    out.mode = o['mode'] as LineMode;
+  }
+  if (o['threshold'] !== undefined) {
+    const t = o['threshold'];
+    if (typeof t !== 'number' || !Number.isInteger(t) || t < 0 || t > THRESHOLD_MAX) return null;
+    out.threshold = t;
+  }
+  if (o['holdMin'] !== undefined) {
+    const h = o['holdMin'];
+    if (typeof h !== 'number' || !Number.isInteger(h) || h < 1 || h > HOLD_MIN_MAX) return null;
+    out.holdMin = h;
+  }
+  return out;
+}
+
+/** The ribbon's settings with the given changes (words trimmed; empty means the ribbon's own), or null when out of bounds. */
+export function withRibbonChanges(base: RibbonSettings, v: unknown): RibbonSettings | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const out = { ...base };
+  if (o['on'] !== undefined) {
+    if (typeof o['on'] !== 'boolean') return null;
+    out.on = o['on'];
+  }
+  if (o['words'] !== undefined) {
+    const w = o['words'];
+    if (w === null) out.words = null;
+    else {
+      if (typeof w !== 'string') return null;
+      // One line of plain words: no line breaks or control characters.
+      const t = w.replace(/\s+/g, ' ').trim();
+      if (t.length > RIBBON_MAX_CHARS || /[\u0000-\u001f\u007f]/.test(t)) return null;
+      out.words = t || null;
+    }
+  }
+  return out;
+}
+
+/** What the ribbon says now: its words while it is on, and while the line is (it comes on by itself); null when off. */
+export function ribbonNow(r: RibbonSettings, lineActive: boolean): string | null {
+  return r.on || lineActive ? (r.words ?? RIBBON_WORDS) : null;
+}
+
+/**
+ * What a visitor asking about the line is told. `go`: there is no line for it (none on, or it was
+ * in the park lately), so in it goes; `waiting`: its place, and a rough wait in minutes (null
+ * while the line has not moved yet); `called`: its turn, the place held until `holdUntil`, and the
+ * entry its socket shows; `expired`: its turn passed while it was away, so it joins again.
+ */
+export type LineStatus =
+  | { state: 'go'; entry?: string }
+  | { state: 'waiting'; n: number; place: number; waitMin: number | null }
+  | { state: 'called'; n: number; holdUntil: number; entry: string }
+  | { state: 'expired' };
+
+/** Owls called per minute over the last ten minutes, from the times they were called. */
+export function lineRate(calledAt: readonly number[], now: number): number {
+  const recent = calledAt.filter((t) => now - t <= 10 * 60_000 && t <= now).length;
+  return recent / 10;
+}
+
+/** A rough wait in whole minutes for this place, at this rate; null while the line has not moved. */
+export function waitMinutes(place: number, perMinute: number): number | null {
+  if (!(perMinute > 0)) return null;
+  return Math.max(1, Math.ceil(place / perMinute));
+}

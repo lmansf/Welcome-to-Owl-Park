@@ -75,7 +75,7 @@ export interface ByeMessage {
   id: string;
 }
 
-/** A player played one of its emotes (an emote id from the collectibles catalogue). */
+/** A player played one of its emotes (an emote id from the collectibles catalogue), or hopped (JUMP_EMOTE). */
 export interface EmoteMessage {
   t: 'emote';
   id: string;

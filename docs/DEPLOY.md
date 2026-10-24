@@ -1,5 +1,11 @@
 # Deploying Owl Park (free tiers only)
 
+- Status: BUILT; the store's setup (Selling tickets) is the owner's, PLANNED (OP-024)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: apps/edge/wrangler.jsonc, tools/build-edge.mjs, .github/workflows/deploy-worker.yml, apps/edge/src/env.ts
+- Tickets: OP-001, OP-002, OP-020, OP-024, OP-062, OP-067, OP-071, OP-097
+- Related: docs/PLAYBOOK.md, docs/ARCHITECTURE.md section 13
+
 The park is a static site plus a multiplayer backend. There are three ways to run it, all
 free at a small scale. The code is the same; only configuration differs.
 
@@ -43,6 +49,46 @@ pinned Wrangler. Local development needs no account:
 pnpm dev:edge         # builds the client, then wrangler dev on http://localhost:8787
 ```
 
+### Where to run the commands (read first)
+
+The repository is a pnpm monorepo: `apps/` (the client `apps/park` and the Cloudflare project
+`apps/edge`), `packages/` (the shared rules) and `tools/`. Three things follow from that:
+
+- `pnpm install` runs once, at the repository's root (the folder with `pnpm-workspace.yaml`), and
+  installs every package. If pnpm asks you to approve build scripts for esbuild and workerd,
+  `pnpm approve-builds` (approve both) is safe and needed once.
+- Wrangler lives in `apps/edge`, not at the root. Run it either from the root as
+  `pnpm --filter @owl-park/edge exec wrangler <command>` (the form this file uses) or from inside
+  `apps/edge` as `pnpm wrangler <command>` (what the owner ran on 2026-10-23). Both use the pinned
+  version. A bare `wrangler` or `npx wrangler` from the root or your user folder finds nothing or
+  the wrong version.
+- The root scripts `pnpm build:edge` and `pnpm deploy:edge` run on any shell since main 67ca3ab
+  (`tools/build-edge.mjs` sets `VITE_TRANSPORT=edge` without shell syntax); before that they were
+  bash-only. The client's build lives in `apps/park`; `pnpm vite build` inside `apps/edge` finds no
+  `index.html`, which is expected, so always build through the root script.
+
+Every command below runs from the root folder unless it says otherwise, the same in bash,
+PowerShell or the Command Prompt. The two things that differ on Windows are environment variables
+and the shell you are in:
+
+| Task | bash (macOS, Linux, Git Bash) | PowerShell |
+| --- | --- | --- |
+| Install | `pnpm install` | `pnpm install` |
+| Approve build scripts (once) | `pnpm approve-builds` | `pnpm approve-builds` |
+| Sign in to Cloudflare | `pnpm --filter @owl-park/edge exec wrangler login` | same |
+| See which account you are in | `pnpm --filter @owl-park/edge exec wrangler whoami` | same |
+| Pin the account for this shell | `export CLOUDFLARE_ACCOUNT_ID=<id>` | `$env:CLOUDFLARE_ACCOUNT_ID = "<id>"` |
+| Set a secret | `pnpm --filter @owl-park/edge exec wrangler secret put PASS_SIGNING_KEY` | same (or `cd apps/edge` then `pnpm wrangler secret put PASS_SIGNING_KEY`) |
+| Build the client for the room server | `pnpm build:edge` | `pnpm build:edge` |
+| Build and deploy from this machine | `pnpm deploy:edge` | `pnpm deploy:edge` |
+| Dry run (build, deploy nothing) | `pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy --dry-run` | `pnpm build:edge; pnpm --filter @owl-park/edge exec wrangler deploy --dry-run` |
+| Watch the live log | `pnpm --filter @owl-park/edge exec wrangler tail` | same |
+| Local development | `pnpm dev:edge` | `pnpm dev:edge` |
+
+Prefer deploying from GitHub (below) over `pnpm deploy:edge`: the workflow's build carries the
+repository variables that a build on your own machine leaves out, and its secrets go to the account
+the deploys use.
+
 ### First deploy, from your own machine
 
 1. Sign in once: `pnpm --filter @owl-park/edge exec wrangler login` opens the browser. Create the
@@ -55,9 +101,30 @@ pnpm dev:edge         # builds the client, then wrangler dev on http://localhost
 3. Set the two secrets (each `secret put` deploys a new version immediately):
    `pnpm --filter @owl-park/edge exec wrangler secret put PASS_SIGNING_KEY` (32+ random characters)
    and `... secret put ADMIN_KEY` (16+ random characters). Until then the Worker uses a development
-   signing key and logs a warning, and the admin routes stay closed.
+   signing key and logs a warning, and the admin routes stay closed. If your sign-in reaches more
+   than one Cloudflare account (`... wrangler whoami` lists them), first set `CLOUDFLARE_ACCOUNT_ID`
+   to the Account ID of the one that holds `owl-park` (on its Workers overview page): in PowerShell
+   `$env:CLOUDFLARE_ACCOUNT_ID = "<id>"`, in bash `export CLOUDFLARE_ACCOUNT_ID=<id>`. If Wrangler
+   says there is no Worker called `owl-park` and offers to create one, answer no: it is looking in
+   another account, and the keys would go to a new, empty Worker there while the park kept its
+   development key.
 4. Watch it: `pnpm --filter @owl-park/edge exec wrangler tail`, or the Workers Logs and Traces pages
    in the dashboard (both are switched on in `wrangler.jsonc`).
+
+### If you see this error
+
+What the owner hit setting the secrets on Windows on 2026-10-23 (OP-001), and what each one means.
+
+| You see | It means | Do this |
+| --- | --- | --- |
+| `wrangler` is not recognized, or `pnpm wrangler` says there is no such script, from the root or your user folder | Wrangler is a dependency of `apps/edge`, not of the root | Run `pnpm --filter @owl-park/edge exec wrangler ...` from the root, or `cd apps/edge` and `pnpm wrangler ...` |
+| pnpm says build scripts for `esbuild` and `workerd` were ignored, or `workerd` fails to start | pnpm 10 does not run dependency build scripts until you approve them | `pnpm approve-builds` at the root, approve both, then `pnpm install` again if asked |
+| Wrangler says there is no Worker called `owl-park` in your account and offers to create one | Your sign-in reaches a different account from the one the park deploys to (`CLOUDFLARE_ACCOUNT_ID` in the repository's secrets) | Answer **no**. Run `wrangler whoami`, set `CLOUDFLARE_ACCOUNT_ID` to the account that holds `owl-park` (table above), and try again. A secret put into a new, empty `owl-park` elsewhere does nothing for the live park. Verify after any deploy that the printed workers.dev URL and the park's domain are the same site |
+| `wrangler deploy` from `apps/edge`: the assets directory `../park/dist` does not exist | Nothing has been built on this machine; the Worker serves the client from `apps/park/dist` | `pnpm build:edge` at the root first, or just `pnpm deploy:edge`, which builds then deploys |
+| `vite build` inside `apps/edge`: cannot resolve entry module `index.html` | The client is `apps/park`; `apps/edge` has no site of its own | Do not build there. `pnpm build:edge` at the root |
+| `'..' is not recognized as an internal or external command` from `pnpm deploy:edge` | Before main 67ca3ab the script used bash syntax (`VITE_TRANSPORT=edge pnpm build`), which the Command Prompt and PowerShell cannot run | Pull `main` (the script now runs through `tools/build-edge.mjs` on any shell). If it persists on a current `main`, say so on the board: the exact `'..'` message could not be traced to anything in the repository |
+| The deploy workflow's "Upload PASS_SIGNING_KEY" or "Upload ADMIN_KEY" step is marked skipped | GitHub has no Actions secret by that name (one under Variables, Codespaces or Dependabot does not count) | Settings → Secrets and variables → Actions → New repository secret, then Actions → Deploy to Cloudflare → Run workflow; the step then lists the Worker's secret names |
+| `/api/health` is fine but the Worker still logs the development-key warning, or `/admin/*` refuses with the right key | The secrets are not on the Worker that serves the park (see the account row) | Check the upload steps of the latest deploy run; `/api/health` never reports the keys by design |
 
 ### Deploys from GitHub (every push to `main`)
 
@@ -71,9 +138,17 @@ pnpm dev:edge         # builds the client, then wrangler dev on http://localhost
      wrangler prints). Link previews on some sites need the share image's absolute URL; without
      it the image URL stays relative to the page.
    - optional secrets `PASS_SIGNING_KEY` and `ADMIN_KEY`: the workflow uploads each one it finds to
-     the Worker after the deploy, so step 3 above is not needed when they are set here.
+     the Worker after the deploy, so step 3 above is not needed when they are set here. This is the
+     simplest way to set them: nothing to install, and they go to the account the deploys use. To
+     send them up without a push, run the workflow by hand (**Actions → Deploy to Cloudflare → Run
+     workflow**, branch `main`); its upload steps then list the Worker's secret names. A step marked
+     skipped found no Actions secret by that name (one saved under Variables, Codespaces or
+     Dependabot does not count).
 3. Merge to `main`. The workflow builds and deploys. Worker secrets set either way are kept across
-   deploys. The park's own domain (`routes` in `apps/edge/wrangler.jsonc`, both hostnames as Custom
+   deploys. From then on deploy from GitHub (a push to `main`, or Run workflow) rather than with
+   `pnpm deploy:edge`: the workflow's build adds the repository variables (`VITE_SITE_URL`,
+   `VITE_SHOP_URL`, `VITE_TICKETS_URL`), which a build on your own machine leaves out. The park's
+   own domain (`routes` in `apps/edge/wrangler.jsonc`, both hostnames as Custom
    Domains) is attached to the Worker by every deploy, and Cloudflare keeps its DNS records and
    certificates; the workers.dev address stays on beside it (`workers_dev`). A hostname that still
    has DNS records of its own (A, AAAA or CNAME, from an earlier setup) cannot be attached: the
@@ -138,46 +213,35 @@ turnstiles let everyone through. The steps, in order:
    Notifications → Shipping confirmation).
 7. **Fraud check**: an order the store rates low risk gets its link at once. Any other order waits
    (its tickets show as waiting in the buyer's wallet); a later low rating releases it, or the
-   owner adds the order tag `owl-park-release` after checking it, or refunds it. Once the fraud
-   link below is on, the fraud pipeline decides instead.
+   owner adds the order tag `owl-park-release` after checking it, or refunds it.
 8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, for the booth's button; a
-   repository variable for deploys) and switch `GATE` to `ticket` in `wrangler.jsonc` at the same
-   time. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
+   repository variable for deploys) any time before: the booth offers it only while the gate takes
+   tickets. On the day, open `/admin/gate` with the admin key and press **Take tickets now**: the
+   turnstiles take tickets only and the booth sells, within ten seconds and with no deploy. Owls
+   already inside stay in; **Open to everyone** flips it back, and **As deployed** hands it back to
+   `GATE` in `wrangler.jsonc`. The same from a terminal: `POST /api/admin/gate` with the
+   `X-Admin-Key` header and `{"mode": "ticket"}` (or `"open"`, or `"deployed"`); a `GET` says how it
+   is set. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
    first scan starts its time.
 9. **Tickets without a store order** (giveaways and tests): `POST /api/admin/tickets` with the
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
    `"from"` and `"until"`, or an `opening-night` with `"from"`) answers with the claim link. Nothing
    is copied to the store for these.
-10. **Opening night** (C42): the annual pass's 100% discount code goes on the Worker as
-    `OPENING_PASS_CODE` (`wrangler secret put`, or a repository secret the deploy uploads), never
-    in a file. The Opening Night Ticket needs no code: a free order gets its ticket at once. During
-    the ticket's window the booth says every pass is free; once an owl's Opening Night Ticket has
-    gone through the gate, the park offers "Your pass is free tonight. Claim it", a cart link with
+10. **Opening night** (C42): the annual pass's 50% discount code (OP-062; an "amount off
+    products" code for the annual pass) goes on the Worker as `OPENING_PASS_CODE`
+    (`wrangler secret put`, or a repository secret the deploy uploads), never in a file. The
+    Opening Night Ticket needs no code: a free order gets its ticket at once. During the ticket's
+    window the booth says every pass is half price; once an owl's Opening Night Ticket has gone
+    through the gate, the park offers "Your pass is half price tonight. Claim it", a cart link with
     the annual pass, the code and the cart attribute `from_ticket` (the ticket's ID). The pass order
-    comes back through `orders/paid`, and the pass goes straight into that owl's wallet. The count
-    is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned, passes
-    claimed through the link and passes without one (the code used some other way), the conversion
-    rate and a CSV, with order numbers and ticket IDs only. It also shows the night's window as the
-    park reads it from the store and whether the free-pass link is ready (the code set, an annual
-    pass on sale). Votes count one per wallet per park day, however many tickets or passes it holds.
-11. **The fraud link** (C45; the contract is in `docs/ARCHITECTURE.md`): three Worker secrets
-    switch it on, each with `wrangler secret put` or as a repository secret the deploy uploads:
-    `FRAUD_SCORE_URL` (the pipeline's scoring endpoint, `https://` only), `FRAUD_SCORE_KEY` (the key
-    the Worker sends it as a bearer token) and `FRAUD_HASH_SALT` (16+ random characters; it salts
-    the hashes of the guest, the device and the card, so keep it the same or the pipeline's counts
-    start again). Without all three the store's rating decides, as in step 7. With them, every paid
-    ticket order is scored before its tickets go out: approved orders get their link, declined
-    orders are cancelled and refunded through the store at once, and orders sent to review wait on
-    `/admin/holds` (the admin key) with their score and reasons, for Release or Refund; they carry
-    the order tag `owl:held` in the store meanwhile. One left 24 hours is released (fail open), and
-    so is any order the pipeline does not answer within 2 seconds. The page says whether the fraud
-    link is on. It uses the scopes the app already has (`write_orders` for the refund and the
-    tag). The guest's hash needs the order's customer: a store that keeps it from the app (it may
-    want `read_customers` for it) gets its orders scored without the guest, with a line in the
-    Worker's logs, and the tickets go on as before. The pipeline's endpoint is
-    `apps/score-endpoint`, a Supabase Edge Function in the owner's pipeline project that keeps the
-    park's orders in that project's `game` schema: its README says how it is deployed there and
-    where its key goes (the same value as `FRAUD_SCORE_KEY`).
+    is a paid order: it comes back through `orders/paid`, the store rates it like any other (step 7),
+    and the pass goes straight into that owl's wallet, working at once when the store rates it low.
+    The count is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned,
+    passes claimed through the link and passes without one (the code used some other way), the
+    conversion rate, the passes' revenue before tax and a CSV, with order numbers, ticket IDs and
+    each pass's amount only. It also shows the night's window as the park reads it from the store
+    and whether the pass link is ready (the code set, an annual pass on sale). Votes count one per
+    wallet per park day, however many tickets or passes it holds.
 
 ### Coding agents
 
@@ -188,17 +252,23 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (`open` now: everyone walks through the lobby's turnstiles; `ticket` once tickets sell: visitors without a ticket stay in the lobby), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
+`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
-to close a month by hand, to issue tickets without a store order and to read visitors' feedback on
-`/admin/feedback`, opening night's count on `/admin/opening` and the fraud check's holds on
-`/admin/holds`), and the store's secrets (above). Cron triggers close the Realm Vote month and, every
-hour, release orders the fraud check held past their 24 hours.
+to close a month by hand, to issue tickets without a store order, to read visitors' feedback on
+`/admin/feedback` and opening night's count on `/admin/opening`, and to flip the gate on
+`/admin/gate`), and the store's
+secrets (above). A cron trigger closes the Realm Vote month automatically.
 
 ## Checking a deployment
 
+- `/api/health` answers `"ok": true` when the Worker and the park's three objects (the rooms, the
+  ticket book, the collections) answer; a 503 names the part that did not. When something is wrong,
+  `docs/PLAYBOOK.md` says what to check, how to roll back and how to pause ticket sales.
 - Open the site in two browsers (or a phone and a laptop) and watch the owls see each other.
 - `?debug=1` draws the walkable areas and doors. `?transport=local|supabase|edge` forces a transport.
 - The status dot in the top-right pill is gold when connected, grey when the park is offline.
 - `node tools/load/swarm.mjs --url https://<host> --bots 20 --seconds 30` runs a small bot swarm and reports echo latency.
+  The full load test runs on GitHub: Actions → Load test → Run workflow. It deploys a throwaway copy
+  under its own name, never the live park, loads it step by step and deletes it; what it found is in
+  `docs/ARCHITECTURE.md`, section 6.

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { OwlLook } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
+import { ensureFxTextures } from './ambience';
 import { Owl } from './Owl';
 
 /** Where the owl builder leaves room for the owl, in CSS pixels. */
@@ -20,18 +21,23 @@ const MAX_ZOOM = 5;
  * The owl builder's preview: the visitor's own owl drawn big over a plain dusk backdrop, breathing
  * and blinking, wearing what it wears, its pet beside it and its effect around it. It follows the
  * look as the builder changes it (the game registry's `look`). It covers the room, which keeps
- * running underneath; the builder's panel is drawn over it by the HUD.
+ * running underneath; the builder's panel is drawn over it by the HUD. The home screen (OP-065)
+ * draws the same owl beside its buttons, without the backdrop, over the lobby's painting.
  */
 export class BuilderScene extends Phaser.Scene {
   private owl: Owl | null = null;
   private rect: PreviewRect = { x: 0, y: 0, w: 1, h: 1 };
   private backdrop: Phaser.GameObjects.Rectangle | null = null;
+  /** Whether the plain dusk backdrop fills the screen (the builder), or the scene beneath shows (the home screen). */
+  private plain = true;
 
   constructor() {
     super({ key: 'builder' });
   }
 
   create(): void {
+    // The glow and the owl's effects are drawn with the park's own textures; on the home screen no room has made them yet.
+    ensureFxTextures(this);
     this.backdrop = this.add.rectangle(0, 0, 10, 10, 0x0c1e36).setDepth(-10);
     this.add.image(-10, -70, 'fx-glow').setTint(0xffd36a).setAlpha(0.16).setScale(1.6, 1.4).setBlendMode(Phaser.BlendModes.ADD).setDepth(-5);
     this.add.ellipse(-10, 6, 236, 44, 0xf6f1e3, 0.07).setDepth(-4);
@@ -51,9 +57,10 @@ export class BuilderScene extends Phaser.Scene {
     this.layout();
   }
 
-  /** The builder's frame for the owl (it opened, or its layout changed). */
-  frame(rect: PreviewRect): void {
+  /** The frame for the owl (the builder opened, or its layout changed); `plain` false lets the scene beneath show around it. */
+  frame(rect: PreviewRect, plain = true): void {
     this.rect = rect;
+    this.plain = plain;
     if (this.owl) this.layout();
   }
 
@@ -69,7 +76,7 @@ export class BuilderScene extends Phaser.Scene {
     const x = (VIEW.left + VIEW.right) / 2 + (width / 2 - (r.x + r.w / 2) * k) / zoom;
     const y = (VIEW.top + VIEW.bottom) / 2 + (height / 2 - (r.y + r.h / 2) * k) / zoom;
     cam.centerOn(x, y);
-    this.backdrop?.setPosition(x, y).setSize(width / zoom + 64, height / zoom + 64);
+    this.backdrop?.setPosition(x, y).setSize(width / zoom + 64, height / zoom + 64).setVisible(this.plain);
   }
 
   override update(): void {

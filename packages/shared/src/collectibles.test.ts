@@ -12,6 +12,7 @@ import {
   isWear,
   normalizeTimeZone,
   parseVariant,
+  putOn,
   sanitizeWear,
   variantName,
   variantsByRarity,
@@ -129,6 +130,16 @@ describe('wear on a look', () => {
     expect(filterOwnedWear({ head: 'crown~0', pet: 'mouse~2', fx: 'aura~0' }, owned)).toEqual({ head: 'crown~0' });
     expect(filterOwnedWear({ pet: 'mouse~2' }, owned)).toBeUndefined();
     expect(filterOwnedWear(undefined, owned)).toBeUndefined();
+  });
+
+  it('puts a variant on in its slot, or takes the slot off', () => {
+    const on = putOn(DEFAULT_LOOK, 'head', 'crown~0');
+    expect(on).toEqual({ ...DEFAULT_LOOK, wear: { head: 'crown~0' } });
+    expect(putOn(on, 'pet', 'mouse~1').wear).toEqual({ head: 'crown~0', pet: 'mouse~1' });
+    expect(putOn(on, 'head', 'crown~2').wear).toEqual({ head: 'crown~2' });
+    // The last thing off leaves no wear at all.
+    expect(putOn(on, 'head', null)).toEqual(DEFAULT_LOOK);
+    expect(putOn(on, 'head', null)).not.toHaveProperty('wear');
   });
 
   it('relays emotes between peers only for catalogue emotes', () => {

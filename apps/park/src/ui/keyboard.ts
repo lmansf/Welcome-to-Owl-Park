@@ -2,10 +2,10 @@ import type { Vec2 } from '@owl-park/shared';
 
 /**
  * Keyboard controls: WASD and the arrow keys walk the owl while held, E interacts with what the
- * owl stands at, M opens and closes the Menu, T the Say wheel, 1 to 8 play an emote, Q the owl
- * builder, J the quests, and Escape closes whatever is open. Keys are matched
- * by place (`KeyboardEvent.code`), so ZQSD walks on an AZERTY keyboard. Typing in a text field,
- * and shortcuts with Ctrl, Alt or Cmd, are left alone.
+ * owl stands at, the space bar hops, M opens and closes the Menu, T the Say wheel, 1 to 8 play an
+ * emote, Q goes to the mirror in the owl's nest where Your owl is (OP-077), J the quests, and
+ * Escape closes whatever is open. Keys are matched by place (`KeyboardEvent.code`), so ZQSD walks
+ * on an AZERTY keyboard. Typing in a text field, and shortcuts with Ctrl, Alt or Cmd, are left alone.
  */
 
 type Way = 'up' | 'down' | 'left' | 'right';
@@ -38,13 +38,15 @@ export function heldDirection(codes: Iterable<string>): Vec2 | null {
 export interface KeyActions {
   /** E: use whatever the owl is standing at. */
   interact(): void;
+  /** The space bar: hop (the Jump button on a phone). */
+  jump(): void;
   /** M: open or close the Menu. */
   menu(): void;
   /** T: open or close the Say wheel. */
   say(): void;
   /** 1 to 8 (the number row or the keypad): play an emote, as numbered on the wheel. */
   emoteKey(n: number): void;
-  /** Q: open or close the owl builder. */
+  /** Q: to the mirror in the owl's nest, where Your owl is (OP-077), or close Your owl. */
   owl(): void;
   /** J: open or close the quests. */
   journal(): void;
@@ -65,6 +67,12 @@ function ignored(e: KeyboardEvent): boolean {
   return !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
 }
 
+/** The space bar on a focused button or link presses it: that press is the button's, not a hop. */
+function pressesControl(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement | null;
+  return !!t && (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'SUMMARY' || t.getAttribute?.('role') === 'button');
+}
+
 export function attachKeyboard(win: Window, actions: KeyActions): Keys {
   const held = new Set<string>();
   const onDown = (e: KeyboardEvent) => {
@@ -72,6 +80,12 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
     if (e.code in WALK_KEYS) {
       held.add(e.code);
       e.preventDefault(); // arrow keys would otherwise scroll whatever has focus
+      return;
+    }
+    if (e.code === 'Space') {
+      if (pressesControl(e)) return;
+      e.preventDefault(); // the space bar would otherwise scroll the page
+      if (!e.repeat) actions.jump();
       return;
     }
     if (e.repeat) return;

@@ -29,12 +29,12 @@ export default defineConfig({
   },
   projects: [
     // Collectibles run on the desktop project only: the phone project repeats the park suite's layout checks.
-    { name: 'desktop', testMatch: /(park|collect|lobby|activities|nests|arcade|chat|leave)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    { name: 'phone', testMatch: /(park|lobby|nests|arcade|chat|leave)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
+    { name: 'desktop', testMatch: /(park|collect|lobby|activities|nests|arcade|chat|leave|home|pad|mirror)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    { name: 'phone', testMatch: /(park|lobby|nests|arcade|chat|leave|home|pad|mirror)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
-    { name: 'edge', testMatch: /(edge|opening|fraud)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    { name: 'edge', testMatch: /(edge|opening|gate|overflow|fraud)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {
@@ -52,8 +52,9 @@ export default defineConfig({
     },
     {
       // The admin key lets the ticket tests issue tickets without a store, and the store is the
-      // stand-in above; these settings exist only on this test server.
-      command: `pnpm build && pnpm --filter @owl-park/edge dev ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
+      // stand-in above; these settings exist only on this test server. The client is built with the
+      // store's ticket page, which the booth offers while the gate takes tickets.
+      command: `VITE_TICKETS_URL=${E2E_STORE.ticketsUrl} pnpm build && pnpm --filter @owl-park/edge dev ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
       url: 'http://localhost:8787/api/counts',
       reuseExistingServer: true,
       timeout: 180_000,

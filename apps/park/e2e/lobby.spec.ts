@@ -3,8 +3,8 @@ import { state } from './helpers';
 
 test.describe('the lobby (this device)', () => {
   test('every visit starts in the lobby: the booth window, then the turnstiles into the hub', async ({ page }) => {
-    // No room asked for: the park's front entrance.
-    await page.goto('/?transport=local');
+    // Past the home screen (home=0) with no room asked for: the park's front entrance.
+    await page.goto('/?transport=local&home=0');
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     const s = await state(page);
     expect(s.room).toBe('lobby');

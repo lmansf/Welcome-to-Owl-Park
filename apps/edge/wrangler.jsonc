@@ -20,13 +20,17 @@
       { "name": "ROOMS", "class_name": "RoomObject" },
       { "name": "VOTES", "class_name": "VoteLedger" },
       // Every collector's collectibles (finds, feathers, home time zone): one object for the park.
-      { "name": "COLLECTIONS", "class_name": "Collections" }
+      { "name": "COLLECTIONS", "class_name": "Collections" },
+      // Busy nights (OP-075): the line in front of the park, the busy ribbon and copies of rooms, with
+      // their settings: one object for the park (src/Overflow.ts).
+      { "name": "OVERFLOW", "class_name": "Overflow" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomObject"] },
     { "tag": "v2", "new_sqlite_classes": ["VoteLedger"] },
-    { "tag": "v3", "new_sqlite_classes": ["Collections"] }
+    { "tag": "v3", "new_sqlite_classes": ["Collections"] },
+    { "tag": "v4", "new_sqlite_classes": ["Overflow"] }
   ],
   // The park's domain, attached to this Worker as Custom Domains on every deploy, so nothing else can
   // stand in front of it (Cloudflare keeps the DNS records and the certificates). A hostname that
@@ -64,9 +68,9 @@
   // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
   // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
   // the same way once the store's app exists; until then the ticket webhooks are refused. So is
-  // OPENING_PASS_CODE, opening night's code for a free annual pass (C42), and the fraud link's
-  // FRAUD_SCORE_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT (C45). All are typed as optional in
-  // src/env.ts.
+  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062), and the
+  // fraud link's FRAUD_SCORE_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT (C45). All are typed as
+  // optional in src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {
     "enabled": true,

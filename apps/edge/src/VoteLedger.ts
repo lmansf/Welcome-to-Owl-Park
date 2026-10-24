@@ -4,6 +4,7 @@
  * admission and the store's signatures before calling in; this object only applies the rules.
  */
 import { DurableObject } from 'cloudflare:workers';
+import { GateSetting } from './gateSwitch';
 import { Ledger, parkDay, parkMonth, previousMonth, walletVoter } from './Ledger';
 import { SqlTicketStore } from './sqlTicketStore';
 import { SqlVoteStore } from './sqlVoteStore';
@@ -17,6 +18,7 @@ export const VOTABLE_REALMS = ['grove', 'market'];
 export class VoteLedger extends DurableObject<Env> {
   private readonly ledger: Ledger;
   private readonly tickets: TicketBook;
+  private readonly gate: GateSetting;
   private readonly tz: string;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -24,6 +26,7 @@ export class VoteLedger extends DurableObject<Env> {
     this.tz = env.PARK_TZ || 'America/New_York';
     this.ledger = new Ledger(new SqlVoteStore(ctx.storage.sql), VOTABLE_REALMS);
     this.tickets = new TicketBook(new SqlTicketStore(ctx.storage.sql));
+    this.gate = new GateSetting(ctx.storage.sql);
   }
 
   /** Internal API, called by the Worker with the visitor already authenticated and admitted. */
@@ -37,6 +40,14 @@ export class VoteLedger extends DurableObject<Env> {
         cast: this.ledger.castBy(t.id),
         today: this.ledger.status(t.device ? walletVoter(t.device) : '', day, t.id).votedFor !== null,
       }));
+    }
+    if (url.pathname === '/gate') {
+      // The opening switch (OP-067): read it, or set it ({"mode": "open" | "ticket"}, or null to clear it).
+      if (request.method !== 'POST') return Response.json({ gate: this.gate.get() });
+      const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
+      const mode = body?.mode;
+      if (mode !== null && mode !== 'open' && mode !== 'ticket') return Response.json({ error: 'bad request' }, { status: 400 });
+      return Response.json({ gate: this.gate.set(mode, now.getTime()) });
     }
     if (url.pathname === '/vote' && request.method === 'POST') {
       const body = (await request.json()) as { visitor?: string; realm?: string; ticket?: string | null };

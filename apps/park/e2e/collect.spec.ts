@@ -34,7 +34,11 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     const params = { collector: 'e2e-welcome', tz: 'UTC' };
     await openPark(page, params);
     await expect.poll(async () => (await state(page)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
-    await expect(page.locator('.tracker')).toContainText('Talk to Elder Bramble');
+    // Quests live in the Menu (OP-083): nothing about them over the room; the quests screen says where to start.
+    await expect(page.locator('#hud .welcome')).toBeHidden();
+    await page.keyboard.press('KeyJ');
+    await expect(page.locator('.journal')).toContainText('Start with Elder Bramble');
+    await page.keyboard.press('Escape');
 
     // Walk up to Elder Bramble and take the quest from the dialogue.
     expect(await page.evaluate(() => window.owlPark.talk('bramble'))).toBe(true);
@@ -42,12 +46,22 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect(dialogue).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-dialogue.png` });
     await dialogue.locator('[data-offer="story-welcome"]').getByRole('button', { name: 'Take it on' }).click();
-    await expect(page.getByText(/^New quest:/)).toBeVisible();
-    await expect(page.locator('.tracker')).toContainText('Talk to Pip');
+    // A new quest is a short line at the top and a dot on the Menu button, nothing more.
+    await expect(page.locator('.notice').filter({ hasText: /^New quest:/ })).toBeVisible();
+    await expect(page.locator('[data-quest-dot]')).toBeVisible();
+    // The quests screen lists it with its progress, and opening it clears the dot.
+    await page.keyboard.press('KeyJ');
+    const card = page.locator('.journal [data-quest="story-welcome"]');
+    await expect(card.locator('[data-progress]')).toHaveText('0/5');
+    await expect(card.locator('li.now')).toContainText('Pip');
+    await expect(page.locator('[data-quest-dot]')).toBeHidden();
+    await page.keyboard.press('Escape');
 
-    // Step 1: Pip, in the same room.
+    // Step 1: Pip, in the same room. A step done says nothing over the room.
     expect(await page.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
     await expect.poll(() => questStep(page, 'story-welcome'), { timeout: 15_000 }).toBe(1);
+    await page.waitForTimeout(500);
+    await expect(page.locator('.toast').filter({ hasText: /step done|\d of \d/ })).toHaveCount(0);
 
     // Step 2 and 3: arriving in the clearing counts; then a flop into the leaves.
     await openPark(page, { ...params, room: 'grove' });
@@ -69,7 +83,12 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     expect(await page.evaluate(() => window.owlPark.emote('hoot'))).toBe(true);
     await expect.poll(async () => (await page.evaluate(() => window.owlPark.quests()?.active[0]?.ready)) ?? false).toBe(true);
     await expect.poll(async () => (await state(page)).npcs.find((n) => n.id === 'bramble')?.mark).toBe('ready');
-    await dialogue.locator('[data-quest="story-welcome"]').getByRole('button', { name: 'Hand it in' }).click();
+    await expect(page.locator('.notice').filter({ hasText: /^Quest complete:/ })).toBeVisible();
+    await expect(page.locator('[data-quest-dot]')).toBeVisible();
+    // Collected from the quests screen: Elder Bramble stands right here, so the reward comes at once.
+    await page.keyboard.press('KeyJ');
+    await expect(card.locator('[data-progress]')).toHaveText('Done');
+    await card.getByRole('button', { name: 'Collect' }).click();
     await expect(page.getByText(/^Reward: Leaf Crown/)).toBeVisible();
     await expect.poll(() => owns(page, 'leaf-crown~0')).toBe(true);
     expect((await page.evaluate(() => window.owlPark.collection()))?.feathers).toBeGreaterThanOrEqual(50);
@@ -165,8 +184,8 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await expect.poll(() => owns(page, 'witch-hat~3')).toBe(true);
     expect(await page.evaluate(() => window.owlPark.equip('witch-hat~3'))).toBe(true);
 
-    await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="owl"]').click();
+    // Your owl as the first run opens it, over the room (mirror.spec.ts opens it at the nest's mirror).
+    await page.evaluate(() => window.owlPark.openBuilder());
     const builder = page.getByRole('dialog', { name: 'Your owl' });
     await expect(builder.getByText(/of 1180 collected · \d+ feathers/)).toBeVisible();
     // The owl is drawn big while the builder is open, over the room.
@@ -233,8 +252,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     const other = await context.newPage();
     await openPark(page, { id: 'owl-a', collector: 'e2e-species', tz: 'UTC' });
     await openPark(other, { id: 'owl-b', collector: 'e2e-species-b', tz: 'UTC' });
-    await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="owl"]').click();
+    await page.evaluate(() => window.owlPark.openBuilder());
     // A barn owl wears its own painted layers, loaded when it first shows up.
     await page.getByRole('button', { name: 'Barn owl' }).click();
     await expect.poll(async () => (await state(page)).owlArt, { timeout: 15_000 }).toBe('owl-barn-body');

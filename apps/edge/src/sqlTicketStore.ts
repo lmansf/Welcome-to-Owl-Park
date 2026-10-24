@@ -32,7 +32,7 @@ type TicketRow = {
   share_hash: string | null;
 };
 
-type LinkRow = { order_id: string; from_ticket: string | null; at: number };
+type LinkRow = { order_id: string; from_ticket: string | null; at: number; cents: number | null };
 
 type CheckRow = {
   order_id: string;
@@ -74,7 +74,7 @@ const check = (r: CheckRow): OrderCheck => ({
   responded: r.responded === 1,
 });
 
-const link = (r: LinkRow): PassLink => ({ order: r.order_id, fromTicket: r.from_ticket, at: r.at });
+const link = (r: LinkRow): PassLink => ({ order: r.order_id, fromTicket: r.from_ticket, at: r.at, cents: r.cents ?? null });
 
 const order = (r: OrderRow): OrderRecord => ({ order: r.order_id, claimHash: r.claim_hash, held: r.held === 1, created: r.created, sent: r.sent === 1 });
 
@@ -106,8 +106,14 @@ export class SqlTicketStore implements TicketStore {
     sql.exec(`CREATE INDEX IF NOT EXISTS tickets_device ON tickets (device)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS tickets_share ON tickets (share_hash)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS tickets_kind ON tickets (kind)`);
-    // Opening night's pass orders (C42): the Opening Night Ticket each came from, or none.
-    sql.exec(`CREATE TABLE IF NOT EXISTS opening_passes (order_id TEXT PRIMARY KEY, from_ticket TEXT, at INTEGER NOT NULL)`);
+    // Opening night's pass orders (C42): the Opening Night Ticket each came from, or none, and what its passes sold for.
+    sql.exec(`CREATE TABLE IF NOT EXISTS opening_passes (order_id TEXT PRIMARY KEY, from_ticket TEXT, at INTEGER NOT NULL, cents INTEGER)`);
+    // A table kept before the pass had a price (OP-062) has no cents column: add it (once there, SQLite refuses a second one).
+    try {
+      sql.exec(`ALTER TABLE opening_passes ADD COLUMN cents INTEGER`);
+    } catch {
+      // Already there.
+    }
     sql.exec(`CREATE INDEX IF NOT EXISTS opening_passes_from ON opening_passes (from_ticket)`);
     // The fraud check of each ticket order (C45): the verdict and what became of the order.
     sql.exec(
@@ -156,7 +162,7 @@ export class SqlTicketStore implements TicketStore {
     return this.sql.exec<LinkRow>(`SELECT * FROM opening_passes ORDER BY at, order_id`).toArray().map(link);
   }
   putPassLink(l: PassLink) {
-    this.sql.exec(`INSERT OR IGNORE INTO opening_passes (order_id, from_ticket, at) VALUES (?, ?, ?)`, l.order, l.fromTicket, l.at);
+    this.sql.exec(`INSERT OR IGNORE INTO opening_passes (order_id, from_ticket, at, cents) VALUES (?, ?, ?, ?)`, l.order, l.fromTicket, l.at, l.cents);
   }
   check(order: string) {
     const r = this.sql.exec<CheckRow>(`SELECT * FROM order_checks WHERE order_id = ?`, order).toArray()[0];

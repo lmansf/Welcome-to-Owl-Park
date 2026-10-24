@@ -4,7 +4,13 @@
  * raw transaction shape and waits up to 2 seconds for a verdict: approve, review or decline, with a
  * score and reason codes. No email, name, address, IP or card digits leave the store: the guest,
  * the device and the card go as salted hashes. What the buyer got back is posted afterwards in the
- * shape of the pipeline's checkout responses. The contract is in docs/ARCHITECTURE.md.
+ * shape of the pipeline's checkout responses.
+ *
+ * TODO-DOCS (OP-053): docs/ARCHITECTURE.md section 12 has the fraud link as PLANNED. Its built
+ * contract (the request and response shapes, the hashes, the outcomes, the 24-hour release, the
+ * owner's holds page at /admin/holds) is written up in docs/ARCHITECTURE.md, and the endpoint's and
+ * the three secrets' deploy steps in docs/DEPLOY.md, at commit ebfbe9f on claude/fraud-link; docs/
+ * on this branch is main's. To fold in when the branch merges.
  *
  * Settings, all Worker secrets: FRAUD_SCORE_URL (https), FRAUD_SCORE_KEY (sent as a bearer token)
  * and FRAUD_HASH_SALT. Without the URL the fraud link is off and the store's own rating decides,

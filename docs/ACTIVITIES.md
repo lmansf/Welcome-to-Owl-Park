@@ -1,5 +1,11 @@
 # Things to do in the park
 
+- Status: the first wave BUILT (C36); quests in the Menu and the hop BUILT (OP-082, OP-083); the arcade's games and seasons PLANNED
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
+- Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, book.ts; apps/park/src/game/activities.ts; apps/park/src/ui/activities.ts
+- Tickets: OP-004, OP-026, OP-037, OP-082, OP-083; planned OP-038, OP-059, OP-074, OP-084
+- Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7
+
 The first wave of activities (C30): lanterns that a room lights together under the great tree, a
 quiz on the stump stage answered by standing in a zone, fishing from the jetty in the treehouse
 clearing, the neon street's robot owl and its copy game, and three small tasks a day. Every number
@@ -72,13 +78,27 @@ wrong note or a slow one ends the game. The robot uses the starter pair (Hoot an
 to two more emotes the owl owns, so every owl can play. The right notes are danced for everyone in
 the street.
 
-## The arcade (off the neon street's east end)
+## The arcade (off the neon street's east end) [BUILT room; games PLANNED (OP-038, OP-059)]
 
 A doorway under a joystick sign where the neon street bends away leads into the arcade: a hall
 with three game cabinets along its back wall under a blank score board (`packages/shared/src/arcade.ts`).
 Each cabinet is a spot in the room data and will play one game, as the visitor's own owl. Until a
 cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
 at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
+
+PLANNED (C40, amended C46; OP-059 the hall and its art, OP-038 the games): the arcade becomes
+a hall about three screens wide with a bay per game, each with its title as a neon sign and a
+cabinet of its own, and the score wall in the middle. The three games, all in one wave and played
+as the visitor's own owl: **Hoot & Hop** (hop across lanes of drones and noodle carts; each crossing
+banks a tier; a hit ends the run), **Moon Flap** (tap to flap through gaps on a night flight; the
+score is gaps passed) and **Nest Knockdown** (pull back and launch at stacked neon crates; ten
+levels, fewer shots scores higher). The names were knockout-screened (OP-036); the arcade is
+"Neon Roost" and "the Owl Park arcade" in public. The room server starts each run, pays 0 to 6
+feathers a run by score band plus 3 the first time a day's best is beaten per game, inside the
+shared 25-a-day games cap, and keeps a score-against-time check; the score wall shows today's top
+five per game as owl portraits, no names, reset at the park's midnight. A daily task "Play a round
+in the arcade" joins the rotation. Painted art, three candidates per piece, the owner picks; the
+arcade goes live only with the new look.
 
 ## Three small tasks a day
 
@@ -90,9 +110,51 @@ kind twice:
 3. around the park: flop into 2 leaf piles, or browse 2 stalls, or answer a quiz question right,
    or copy 2 tunes.
 
-Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J), on its
-Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
-park's midnight.
+Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J) on its
+Today tab, with their progress; a finished task says so; they change at the park's midnight. The
+on-screen tracker and the per-step progress toast went with OP-083.
+
+## Quests on screen [BUILT (OP-083)]
+
+Quests live in the Menu, not on the screen (OP-083; `apps/park/src/ui/quests.ts`, `hud.ts`
+`questNews`). No pop-ups during play: a new or finished quest shows a 2 s line at the top edge
+("New quest: its name", "Quest complete: its name") and a gold dot on the Menu button and the
+Menu's Quests tile, cleared when Quests opens; the dot shows on a computer's Menu too. Quests lists
+every quest carried with its title, its next step and its progress (2/5), finished ones first;
+there is no cap, the screen scrolls. Collect on a finished quest walks the owl to its giver and
+hands it in there (the owner's call, 2026-10-23). The quest state and reward rules are unchanged
+(`docs/QUESTS.md`). The on-screen tracker and the daily tasks' progress toast are gone; the lobby's
+welcome line stays. The owner kept the New quest line for now. The preview's feedback nudge
+(PLANNED, OP-063) should use the same line and dot when it is built.
+
+## Emotes and the hop [BUILT (OP-082)]
+
+The emotes an owl can play are collectibles (`docs/COLLECTIBLES.md`): 24 in the catalogue, every
+owl starts with Hoot and Wing Flap (plus the Sparkle effect), and the rest come from quests and the
+shop. The emote wheel (the Emotes button; 1 to 8 on a keyboard) plays one; the room server relays
+the emote's id to everyone else in the room, checks that the owl owns it, and allows one per 1.5 s
+per owl. The **hop** (OP-082) is a move every owl has, not a collectible: the Jump button on the
+pad or the space bar on a computer plays a 0.4 s jump with a two-frame wing flap that lifts only the
+drawing of the owl, never its place (`apps/park/src/game/hop.ts`). It travels as the emote `jump`
+(`JUMP_EMOTE`; `hop` is a collectible emote's id), at most one per 600 ms from a page
+(`JUMP_EVERY_MS`) and one per 480 ms per owl through the room server (`jumpEveryMs`), apart from the
+emotes' limit; no collection is asked and no quest counts it. The controls: `docs/PLAYBOOK.md`,
+section 7. LATER (OP-084): flight may grow out of the hop; it is built as its own height offset so
+that can happen without changing how a hop is asked for.
+
+## Seasons [PLANNED (OP-074)]
+
+The owner's decisions of 2026-10-23: a seasonal switch first (a Worker setting with start and end
+dates that turns an event's layer, actions and tasks on and off with no deploy; the base paintings
+never change, an event is an overlay plus room data), then snow and snowballs for everyone,
+everywhere outdoors (the lobby, the street of nests, the hub, every open realm and the arcade; no
+snow indoors, not even through a nest's window; the neon market realm gets its own neon-palette
+reskin), from mid-December after the preview. A snowball is thrown at an owl you tap, arcs, lands
+with a puff and plays a shiver emote on the target: no feathers lost, no words, no opt-out. One
+throw every 2 seconds, held by the room server; a daily task "Throw 5 snowballs". Later in the
+calendar: a Superb Owl Sunday tie-in (2027-02-14), spring and summer events to be designed, and a
+hay maze for Halloween 2027, seasonal only. Each event's art spend is approved by the owner before
+anything generates.
 
 ## Feathers
 
@@ -120,8 +182,8 @@ to its own clock, and runs the quiz card on the server's clock.
   answers and pushes, and the cards; `game/Lanterns.ts`, `game/QuizStage.ts` and
   `game/Fishing.ts` draw the glows, the zones and the line.
 - `ui/activities.ts`: the quiz and copy cards (top right on wide screens, under the top bar on
-  phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the quests screen and
-  the tracker; `collect/tasks.ts` keeps them.
+  phones); `ui/quests.ts`: today's tasks in the quests screen (the tracker is gone, OP-083);
+  `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
 

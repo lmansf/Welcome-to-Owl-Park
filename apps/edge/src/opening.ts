@@ -1,10 +1,11 @@
 /**
  * Opening night in the Worker (C42). The store sells the Opening Night Ticket (its window is a field
- * on the product, so a moved date is a store edit) and makes the annual pass free with a code it
- * never advertises (`OPENING_PASS_CODE`, a Worker secret). Once an owl's Opening Night Ticket has
- * gone through the gate, the park gives it a cart link with the pass, the code and the ticket's ID
- * (`from_ticket`); the pass order comes back through the usual webhook and the ticket book keeps the
- * link (storeHooks.ts, TicketBook.ts). The booth says passes are free while the night runs.
+ * on the product, so a moved date is a store edit) and takes half off the annual pass with a code
+ * it never advertises (`OPENING_PASS_CODE`, a Worker secret; the pass was free until OP-062). Once
+ * an owl's Opening Night Ticket has gone through the gate, the park gives it a cart link with the
+ * pass, the code and the ticket's ID (`from_ticket`); the pass order comes back through the usual
+ * webhook and the ticket book keeps the link and what the pass sold for (storeHooks.ts,
+ * TicketBook.ts). The booth says passes are half price while the night runs.
  *
  * The store's ticket products are asked for at most every few minutes and kept in this isolate.
  */
@@ -49,7 +50,7 @@ export function openingOn(catalogue: Catalogue | null, now: number): boolean {
   return !!w && now >= w.from && now < w.until;
 }
 
-/** What the free-pass link needs, for the keepers' page: the code, and the annual pass on sale. */
+/** What the pass link needs, for the keepers' page: the code, and the annual pass on sale. */
 export function passLinkReady(env: OpeningEnv, catalogue: Catalogue | null): { code: boolean; pass: boolean } {
   return { code: !!env.OPENING_PASS_CODE?.trim(), pass: !!catalogue?.passVariant };
 }

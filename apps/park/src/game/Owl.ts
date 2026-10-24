@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { DEFAULT_SPECIES, facing, hexToInt, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { DEFAULT_SPECIES, JUMP_EMOTE, facing, hexToInt, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_LAYERS, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
+import { HOP_HEIGHT, HOP_MS, hopFlap, hopLift } from './hop';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { ITEM_SIZES } from './itemArt';
 import { ensureVariantTexture, owlAnchors } from './items';
@@ -89,6 +90,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private nextBlinkAt = 0;
   private eyesClosedUntil = 0;
   private jitter = 0;
+  /** When the last hop began (ms): a hop lifts the drawn owl, never its place in the room. */
+  private hopAt = Number.NEGATIVE_INFINITY;
+  /** How high the owl is drawn above its feet right now (owl canvas units). */
+  private lift = 0;
   private fx: FxHandle | null = null;
   private fxVariant: string | undefined;
   private pet: Pet | null = null;
@@ -215,9 +220,27 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     }
   }
 
-  /** Play an emote on this owl (everyone in the room plays it on their copy). */
+  /** Play an emote on this owl (everyone in the room plays it on their copy); the hop is one too. */
   playEmote(emote: string): boolean {
+    if (emote === JUMP_EMOTE) {
+      this.hop();
+      return true;
+    }
     return playEmote(this, emote);
+  }
+
+  /**
+   * A hop with a flap of the wings: only the drawing goes up, so the owl's place, its walk and what
+   * it stands at stay as they are (a hop crosses nothing). Its own state beside emotes, so one can
+   * play during the other.
+   */
+  hop(now = Date.now()): void {
+    this.hopAt = now;
+  }
+
+  /** How high the owl is drawn above the floor right now, in room pixels (0 on the ground). */
+  hopHeight(): number {
+    return this.lift * OWL_SCALE * this.size;
   }
 
   /** Flop into a leaf pile. */
@@ -332,23 +355,40 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.setDepth(this.pos.y);
 
     // Facing: the art is painted in a slight 3/4 turn to one side; mirroring it reads as turning around.
-    this.art.setScale(this.dir * this.drawnFacing, 1);
+    let sx = 1;
+    let sy = 1;
+    let y = 0;
+    let shadow = 1;
     this.art.x = this.jitter;
 
     // Walk cycle: a gentle bob and squash while moving.
     if (this.walk) {
       const phase = (now / 140) % (Math.PI * 2);
       const bob = Math.abs(Math.sin(phase));
-      this.art.y = -bob * 10;
-      this.art.scaleY = 1 - bob * 0.04;
-      this.shadow.setScale(1 - bob * 0.08, 1 - bob * 0.08);
+      y = -bob * 10;
+      sy = 1 - bob * 0.04;
+      shadow = 1 - bob * 0.08;
     } else {
       // Idle breathing.
-      const breathe = Math.sin(now / 900) * 0.012;
-      this.art.y = 0;
-      this.art.scaleY = 1 + breathe;
-      this.shadow.setScale(1, 1);
+      sy = 1 + Math.sin(now / 900) * 0.012;
     }
+
+    // A hop: the drawing rises and falls with the wings flapping; the shadow stays on the floor and shrinks.
+    const t = (now - this.hopAt) / HOP_MS;
+    const up = hopLift(t);
+    this.lift = up * HOP_HEIGHT;
+    const wings = hopFlap(t);
+    if (wings === 'spread') {
+      sx *= 1.12;
+      sy *= 0.94;
+    } else if (wings === 'tucked') {
+      sx *= 0.95;
+      sy *= 1.05;
+    }
+    this.art.setScale(this.dir * this.drawnFacing * sx, sy);
+    this.art.y = y - this.lift;
+    this.shadow.setScale(shadow * (1 - up * 0.35), shadow * (1 - up * 0.35));
+    this.shadow.setAlpha(1 - up * 0.4);
 
     if (this.look.pledge) this.pledgeMark.setAlpha(0.6 + Math.sin(now / 500) * 0.15);
 

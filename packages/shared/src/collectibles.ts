@@ -282,6 +282,16 @@ export const ITEMS: Readonly<Record<string, ItemDef>> = Object.freeze(Object.fro
 
 export const EMOTE_IDS: readonly string[] = CATALOGUE.filter((i) => i.kind === 'emote').map((i) => i.id);
 
+/**
+ * The Jump button's hop (OP-082): a move every owl has, not a collectible, so it is in neither the
+ * catalogue nor the emote wheel, and no quest counts it. It travels as an emote frame with this id
+ * (`jump`, since `hop` is a collectible emote's), and changes only how the owl looks for a moment:
+ * never where it stands.
+ */
+export const JUMP_EMOTE = 'jump';
+/** A page sends at most one hop this often. */
+export const JUMP_EVERY_MS = 600;
+
 /** The variant id for an item and colourway number. Emotes have no colourways. */
 export function variantId(itemId: string, n = 0): string {
   const item = ITEMS[itemId];
@@ -400,6 +410,15 @@ export function filterOwnedWear(wear: Wear | undefined, owned: ReadonlySet<strin
     if (id !== undefined && owned.has(id)) out[slot] = id;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** A look with `variant` worn in its slot, or that slot taken off (null); no `wear` once nothing is on. */
+export function putOn<L extends { wear?: Wear }>(look: L, slot: EquipSlot, variant: string | null): L {
+  const wear: Wear = { ...(look.wear ?? {}) };
+  if (variant === null) delete wear[slot];
+  else wear[slot] = variant;
+  const { wear: _old, ...rest } = look;
+  return (Object.keys(wear).length ? { ...rest, wear } : rest) as L;
 }
 
 /** The variants a wear uses (for loading their art or checking ownership). */

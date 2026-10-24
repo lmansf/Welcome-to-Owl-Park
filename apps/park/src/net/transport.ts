@@ -1,4 +1,4 @@
-import type { FeedbackDraft, OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
+import type { FeedbackDraft, LineStatus, OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -26,6 +26,10 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onPeerEmote?(id: string, emote: string): void;
   /** A peer said a prewritten phrase (its number in the phrase list). */
   onPeerSay?(id: string, phrase: number): void;
+  /** The park has a line (OP-075) and this owl has not come through it: it waits on the home screen. */
+  onQueued?(): void;
+  /** The busy ribbon's words (OP-075), or null when it goes off. */
+  onNotice?(words: string | null): void;
 }
 
 export interface RoomConnection {
@@ -62,6 +66,18 @@ export interface ParkTransport {
   entry?(): Promise<Entry>;
   /** The ticket wallet on this device (C35); only the room server keeps tickets. */
   readonly tickets?: TicketWallet;
+  /** The line in front of the park on busy nights (OP-075); only the room server has one. */
+  readonly line?: LineLink;
+}
+
+/** The line in front of the park (OP-075), as the home screen uses it. */
+export interface LineLink {
+  /** A place in the line, or go straight in (no line, or this browser was in the park lately). */
+  join(): Promise<LineStatus>;
+  /** Where this browser's number stands; a called number takes its turn. */
+  poll(n: number): Promise<LineStatus>;
+  /** The busy ribbon's words now, null while it is off. */
+  notice(): Promise<string | null>;
 }
 
 /** A ticket in this device's wallet, as the server shows it. */
@@ -78,7 +94,7 @@ export interface WalletEntry {
   validUntil: number | null;
   /** Today's Realm Vote: free, spent, or none while the ticket is not running. */
   voteToday: 'ready' | 'used' | 'none';
-  /** An Opening Night Ticket's free pass (C42): ready to claim tonight, or claimed. */
+  /** An Opening Night Ticket's half-price pass (C42, OP-062): ready to claim tonight, or claimed. */
   freePass?: 'ready' | 'claimed';
 }
 
@@ -97,7 +113,7 @@ export interface TicketWallet {
   scan(id?: string): Promise<ScanReply>;
   /** Whether opening night is on (C42), as the last look at the wallet said. */
   openingNight(): boolean;
-  /** Opening night's free pass for an Opening Night Ticket on this device: the store's cart link; null when there is none to have. */
+  /** Opening night's half-price pass for an Opening Night Ticket on this device: the store's cart link; null when there is none to have. */
   freePass(id: string): Promise<string | null>;
 }
 

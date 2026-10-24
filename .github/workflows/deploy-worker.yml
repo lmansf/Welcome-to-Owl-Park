@@ -12,8 +12,8 @@
 #      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
 #      The store's go up the same way: SHOPIFY_SHOP with the app's SHOPIFY_CLIENT_ID and
 #      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
-#      and for opening night, OPENING_PASS_CODE (the code that makes the annual pass free); and the
-#      fraud link's FRAUD_SCORE_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT.
+#      and for opening night, OPENING_PASS_CODE (the code that takes half off the annual pass); and
+#      the fraud link's FRAUD_SCORE_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT.
 #      See docs/DEPLOY.md for the first deploy and for selling tickets.
 name: Deploy to Cloudflare
 
