@@ -1,5 +1,11 @@
 # Art pipeline: replacing the placeholder art
 
+- Status: BUILT; the owner picks every image before anything is published or committed
+- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the content is Claude Code's as written
+- Code: tools/art (generate.mjs, prompts.mjs, postprocess.py, preview.mjs, provenance.jsonl), apps/park/public/art, apps/park/src/game/artFiles.ts
+- Tickets: OP-003, OP-019, OP-027, OP-031, OP-033, OP-037
+- Related: tools/art/README.md, CLAUDE.md (art rules)
+
 Every image in the park lives under `apps/park/public/art/` and is referenced by key. For each
 key the game tries, in order: `<key>.svg`, then (on dense screens) `<key>@2x.webp` and
 `<key>@2x.png`, then `<key>.webp` and `<key>.png`. Swap a file and the park picks it up; the code

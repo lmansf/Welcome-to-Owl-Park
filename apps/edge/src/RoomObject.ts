@@ -11,6 +11,7 @@ import {
   CLOSE,
   COPY_BASE_EMOTES,
   HEARTBEAT_FRAME,
+  JUMP_EMOTE,
   KIND_RULES,
   LANTERN_ROOM,
   QUIZ_FEATHERS,
@@ -349,6 +350,8 @@ export class RoomObject extends DurableObject<Env> {
         return;
       case 'emote':
         if (!room.admit(att.id)) return;
+        // The hop is every owl's: no collection is asked, and no quest counts it.
+        if (frame.e === JUMP_EMOTE) return void room.jump(att.id);
         return this.emote(ws, att, room, frame.e);
       case 'say':
         // Every phrase is everyone's: no collection is needed to say one.

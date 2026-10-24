@@ -354,6 +354,7 @@ describe('the words visitors see', () => {
       toNests: 'To the nests',
       yourNest: 'Your nest',
       decorate: 'Decorate',
+      mirror: 'Look in the mirror',
       done: 'Done',
       takeAway: 'Take away',
       openToVisitors: 'Open to visitors',

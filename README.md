@@ -75,19 +75,28 @@ apps/edge/            the room server: Cloudflare Worker + Durable Object (hiber
   src/Collections.ts  every collection, quest and feather (Durable Object, SQLite; tables in src/sqlStore.ts)
 packages/shared/      protocol v1 + v4, geometry and walk maths, target resolution, room data, collectibles, quests, the shop
 tools/                render-svg.mjs (rasterize art exactly as the game will), load/swarm.mjs (bot swarm)
-docs/                 architecture, art pipeline, deployment
+docs/                 the docs: start at docs/README.md (the map), docs/agents.md (who does what)
 ```
 
 ## Docs
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the original tap-to-move room games worked, what we replicate, and the architecture decision for v1 and beyond.
-- [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
+Start with [docs/README.md](docs/README.md): the map of every file below, a start-here-by-task
+table, and the Ticket Board conventions. Agents new to the project read
+[docs/agents.md](docs/agents.md) first, then [docs/GLOSSARY.md](docs/GLOSSARY.md).
+
+- [docs/agents.md](docs/agents.md): who does what: every agent and human, what each may write to and never does, how work moves.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the system as built, section by section, each tagged BUILT or PLANNED: the repository, the room server, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, and a diagram from a ticket purchase to the hub.
+- [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers; where to run commands (bash and PowerShell); the error table; selling tickets through the store.
+- [docs/PLAYBOOK.md](docs/PLAYBOOK.md): when the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits; the controls and the Menu as a visitor has them.
+- [docs/CAPACITY.md](docs/CAPACITY.md): room caps, what happens at the cap, what the park holds (measured), and the planned queue and ribbon for busy nights.
+- [docs/CHANGELOG.md](docs/CHANGELOG.md): one line per ticket that reached Done, newest first.
+- [docs/GLOSSARY.md](docs/GLOSSARY.md): every term the code, the Ticket Board and the Creative Bible use, one line each, with the file that defines it.
 - [docs/COLLECTIBLES.md](docs/COLLECTIBLES.md): wearables, pets, effects and emotes: the catalogue, the numbers and the server.
 - [docs/QUESTS.md](docs/QUESTS.md): quests, NPC owls, leaf piles, feathers, the feather shop and owl species.
-- [docs/ACTIVITIES.md](docs/ACTIVITIES.md): things to do in the park: the lantern beam, the stage quiz, fishing, the robot owl's copy game and three small tasks a day.
+- [docs/ACTIVITIES.md](docs/ACTIVITIES.md): things to do in the park: the lantern beam, the stage quiz, fishing, the robot owl's copy game, the arcade, three small tasks a day; quests on screen, emotes and seasons.
 - [docs/NESTS.md](docs/NESTS.md): every owl's own nest on the street outside the turnstiles: decorating it, the day's furniture gift, and visiting other owls' nests.
 - [docs/FEEDBACK.md](docs/FEEDBACK.md): Feedback in the Menu, where notes are kept, and the keepers' page that reads them.
-- [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers.
+- [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
 
 ## Ground rules baked into the code
 

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import {
   CABINET_OFF,
   EMOTE_IDS,
+  JUMP_EMOTE,
+  JUMP_EVERY_MS,
   LEFT_PARK_SPAWN,
   LOBBY_ROOM,
   KIND_RULES,
@@ -27,7 +29,6 @@ import {
   foregroundTiles,
   getFurniture,
   getInteractable,
-  getNpc,
   getQuest,
   insidePark,
   interactablesIn,
@@ -68,11 +69,12 @@ import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
 import { castVote } from '../net/vote';
-import { getRoom } from '../rooms';
+import { NEST_MIRROR, getRoom } from '../rooms';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
 import type { Keys } from '../ui/keyboard';
+import type { PreviewFrame } from '../ui/owlBuilder';
 import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
@@ -84,8 +86,9 @@ import { takesDoorway } from './doors';
 import { placeHints } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
+import { NestMirror } from './mirror';
 import { NestDecor, pieceThumb } from './nest';
-import { streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
+import { firstGlint, streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
 import { NpcOwl } from './Npc';
 import { Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
@@ -118,11 +121,11 @@ const USE_LINES: Record<string, readonly string[]> = {
   moonbeam: ['The moonbeam is warm. You feel a little shinier.', 'You bask. The moonlight hums softly.', 'Silver light settles on your feathers.'],
 };
 
-/** Something the owl was walking up to do: talk to an NPC or use an interactable on arrival. */
-interface Errand {
-  kind: 'talk' | 'use';
-  id: string;
-}
+/**
+ * Something the owl was walking up to do on arrival: talk to an NPC, use an interactable, hand a
+ * finished quest to the NPC that gave it (Collect in the quests screen), or look in a nest's mirror.
+ */
+type Errand = { kind: 'talk' | 'use' | 'mirror'; id: string } | { kind: 'handin'; id: string; quest: string };
 
 /** Something to do where the owl stands: a button each, and E runs the first. */
 interface Action {
@@ -205,6 +208,8 @@ export class RoomScene extends Phaser.Scene {
   /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
   private bubbles: SpeechBubbles | null = null;
   private saidAt = Number.NEGATIVE_INFINITY;
+  /** When this owl last hopped (the Jump button). */
+  private jumpedAt = Number.NEGATIVE_INFINITY;
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
@@ -216,6 +221,9 @@ export class RoomScene extends Phaser.Scene {
   private askingStreet = false;
   private streetSigns: StreetDoors | null = null;
   private decor: NestDecor | null = null;
+  /** In a nest, its mirror (OP-077); and while Your owl is open at it, the builder's stage, where the camera frames the owl. */
+  private mirror: NestMirror | null = null;
+  private mirrorFrame: PreviewFrame | null = null;
   private nestView: NestView | null = null;
   /** This nest is the visitor's own: it may decorate it. */
   private nestMine = false;
@@ -341,13 +349,18 @@ export class RoomScene extends Phaser.Scene {
       this.streetSigns = new StreetDoors(this, room);
       this.streetSigns.show(this.street, nestLook(this.look));
     }
-    if (isNestRoom(room.id)) this.decor = new NestDecor(this);
+    if (isNestRoom(room.id)) {
+      this.decor = new NestDecor(this);
+      this.mirror = new NestMirror(this, NEST_MIRROR);
+    }
     for (const t of foregroundTiles(room)) {
       if (this.textures.exists(t.key)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100);
     }
 
     const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
+    // Come in to stand before the mirror (Go to your nest), the owl faces it.
+    if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
     this.addResidents();
     this.play = new ActivityLayer({
       scene: this,
@@ -665,7 +678,7 @@ export class RoomScene extends Phaser.Scene {
    * "Go home": straight to the owl's own nest, from anywhere. Out of it again, the owl is on the street
    * in front of its own door, as if it had come in that way.
    */
-  async goHome(): Promise<boolean> {
+  async goHome(spawn = 'default'): Promise<boolean> {
     if (!this.built || this.leaving) return false;
     const nestId = await this.collection.service.homeNest();
     if (!this.built || this.leaving) return false;
@@ -675,8 +688,56 @@ export class RoomScene extends Phaser.Scene {
       return false;
     }
     if (home === this.room.id) return false;
-    void this.goTo(home, 'default', { room: STREET_ROOM, spawn: 'from-nest-0' });
+    void this.goTo(home, spawn, { room: STREET_ROOM, spawn: 'from-nest-0' });
     return true;
+  }
+
+  /**
+   * At a nest's mirror (OP-077): the owl turns to it and Your owl opens, the room showing round the
+   * owl as it changes. Any owl may look into any nest's mirror: it changes only that owl.
+   */
+  lookInMirror(): boolean {
+    // Not over the Decorate sheet, nor over a screen opened while the owl walked up.
+    if (!this.built || this.leaving || !this.mirror || this.decorating || this.hud.isBlocking()) return false;
+    if (this.me.walking) this.stop();
+    this.errand = null;
+    this.me.face(NEST_MIRROR.x < this.me.pos.x ? -1 : 1);
+    this.hud.openMirror();
+    return true;
+  }
+
+  /** Q (OP-077): to the mirror. In a nest the owl walks up to it and looks in; anywhere else it goes home, landing before its own mirror. */
+  toMirror(): boolean {
+    if (!this.built || this.leaving || this.decorating) return false;
+    if (this.mirror) return this.goDo({ kind: 'mirror', id: 'mirror' });
+    void this.goHome('mirror');
+    return true;
+  }
+
+  /**
+   * While Your owl is open at the mirror, the room's own camera draws the owl and its mirror close
+   * up in the builder's stage (CSS pixels): the owl in the room is the preview, changing as the
+   * choices do. Null puts the camera back on the owl.
+   */
+  mirrorView(frame: PreviewFrame | null): void {
+    this.mirrorFrame = frame;
+    if (!this.built) return;
+    const cam = this.cameras.main;
+    if (frame) cam.stopFollow();
+    this.fitCamera();
+    if (!frame) cam.startFollow(this.me, true, 0.12, 0.12);
+  }
+
+  /** The mirror catches the light the first time this device's owl is home (no words); never again after. */
+  private glintOnce(): void {
+    if (!this.mirror) return;
+    let storage: Storage | null = null;
+    try {
+      storage = localStorage;
+    } catch {
+      // A browser that keeps nothing: no glint (firstGlint).
+    }
+    if (firstGlint(storage)) this.time.delayedCall(700, () => this.mirror?.glint());
   }
 
   /**
@@ -709,6 +770,7 @@ export class RoomScene extends Phaser.Scene {
     shop: { label: 'Gift shop', run: () => this.openShop() },
     idol: { label: 'Vote for this realm', run: () => void this.vote() },
     booth: { label: 'Ticket booth', run: () => void this.openBooth() },
+    mirror: { label: NEST_WORDS.mirror, run: () => this.lookInMirror() },
   };
 
   /**
@@ -741,7 +803,9 @@ export class RoomScene extends Phaser.Scene {
     pos: Vec2;
     walking: boolean;
     look: OwlLook;
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null }>;
+    /** How high the owl is drawn above the floor (a hop), in room pixels; its place stays at `pos`. */
+    height: number;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number }>;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
     bubbles: Array<{ id: string; n: number }>;
     connected: boolean;
@@ -766,6 +830,8 @@ export class RoomScene extends Phaser.Scene {
     street: StreetDoor[] | null;
     /** In a nest: which, whether it is this visitor's, how it stands, and Decorate mode. */
     nest: { id: string; mine: boolean; open: boolean; layout: NestLayout; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: NestSpotId } | null;
+    /** In a nest, its mirror (OP-077): where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
+    mirror: { x: number; y: number; stage: PreviewFrame | null } | null;
   } | null {
     if (!this.built) return null;
     return {
@@ -774,7 +840,8 @@ export class RoomScene extends Phaser.Scene {
       pos: { ...this.me.pos },
       walking: this.me.walking,
       look: this.look,
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
+      height: this.me.hopHeight(),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.hopHeight() })),
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
@@ -789,6 +856,7 @@ export class RoomScene extends Phaser.Scene {
       nest: this.nestView
         ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
         : null,
+      mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
     };
   }
 
@@ -815,9 +883,13 @@ export class RoomScene extends Phaser.Scene {
 
   /** Where an errand happens and how close the owl must stand for it. */
   private errandSpot(e: Errand): { pos: Vec2; reach: number } | null {
-    if (e.kind === 'talk') {
+    if (e.kind === 'talk' || e.kind === 'handin') {
       const npc = this.npcs.get(e.id);
       return npc ? { pos: npc.def.pos, reach: NPC_TALK_RADIUS } : null;
+    }
+    if (e.kind === 'mirror') {
+      const at = this.mirror ? this.room.spawns['mirror'] : undefined;
+      return at ? { pos: at, reach: 40 } : null;
     }
     const def = getInteractable(e.id);
     return def && def.room === this.room.id ? { pos: def.pos, reach: KIND_RULES[def.kind].reach } : null;
@@ -825,6 +897,8 @@ export class RoomScene extends Phaser.Scene {
 
   private runErrand(e: Errand): void {
     if (e.kind === 'talk') void this.talk(e.id);
+    else if (e.kind === 'handin') void this.handInQuest(e.quest);
+    else if (e.kind === 'mirror') this.lookInMirror();
     else void this.use(e.id);
   }
 
@@ -840,7 +914,7 @@ export class RoomScene extends Phaser.Scene {
     }
     // Stand beside an NPC (on the visitor's side), or right on a leaf pile or at a stall.
     const side = this.me.pos.x < spot.pos.x ? -1 : 1;
-    const target = e.kind === 'talk' ? { x: spot.pos.x + side * 70, y: spot.pos.y + 24 } : spot.pos;
+    const target = e.kind === 'use' || e.kind === 'mirror' ? spot.pos : { x: spot.pos.x + side * 70, y: spot.pos.y + 24 };
     if (!this.walkTo(target)) {
       // Already as close as the floor allows.
       if (distance(this.me.pos, spot.pos) <= spot.reach + REACH_SLACK / 2) this.runErrand(e);
@@ -850,10 +924,13 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
-  /** What the owl can do here, recomputed every frame: spots first, then the nearest NPC, then interactables. */
+  /**
+   * What the owl can do here, recomputed every frame: spots first (such as a nest's mirror), then
+   * Decorate in the owl's own nest, then the nearest NPC, then interactables.
+   */
   private actionsHere(spots: string[]): Action[] {
     const out: Action[] = spots.map((id) => ({ id, label: this.interactions[id]!.label, run: () => this.interactions[id]?.run() }));
-    if (this.nestMine && this.decor && !this.decorating) out.unshift({ id: 'decorate', label: NEST_WORDS.decorate, run: () => this.startDecorating() });
+    if (this.nestMine && this.decor && !this.decorating) out.push({ id: 'decorate', label: NEST_WORDS.decorate, run: () => this.startDecorating() });
     const pos = this.me.pos;
     let nearest: NpcOwl | null = null;
     let best = Number.POSITIVE_INFINITY;
@@ -921,14 +998,12 @@ export class RoomScene extends Phaser.Scene {
     for (const [key, it] of wanted) if (!this.items.has(key)) this.items.set(key, new QuestItemMarker(this, it.quest, it.n, it.kind, { x: it.x, y: it.y }));
   }
 
-  /** Toasts for quest steps that moved. */
+  /**
+   * Quest steps that moved (OP-083): only a quest finished is news, a short line at the top and the
+   * dot on the Menu button. Each step's progress shows in the quests screen, not over the room.
+   */
   private showUpdates(updates: QuestUpdate[]): void {
-    for (const u of updates) {
-      const giver = getNpc(getQuest(u.quest)?.giver ?? '')?.name ?? 'its giver';
-      if (u.ready) this.hud.toast(`${u.title}: all done! Take it back to ${giver}.`, 4200, '#FFD36A');
-      else if (u.count >= u.need) this.hud.toast(`${u.title}: step done.`, 2800, '#FFD36A');
-      else this.hud.toast(`${u.title}: ${u.count} of ${u.need}`, 2200);
-    }
+    for (const u of updates) if (u.ready) this.hud.questNews('done', u.title);
   }
 
   /** Talk to an NPC owl standing close: it counts for quests, and its dialogue opens. */
@@ -1039,7 +1114,7 @@ export class RoomScene extends Phaser.Scene {
     if (gen !== this.gen) return false;
     this.applyReply(res);
     const title = getQuest(quest)?.title ?? 'Quest';
-    if (res.ok) this.hud.toast(`New quest: ${title}`, 3000, '#FFD36A');
+    if (res.ok) this.hud.questNews('new', title);
     else if (res.reason === 'full') this.hud.toast(`You can carry ${MAX_ACTIVE_QUESTS} quests at once. Finish or drop one first.`, 3800);
     else if (res.reason === 'far') this.hud.toast('Walk a little closer first.', 2600);
     else if (res.reason === 'done') this.hud.toast('You have done that one already.', 2600);
@@ -1055,6 +1130,20 @@ export class RoomScene extends Phaser.Scene {
     this.applyReply(res);
     if (res.ok) this.hud.toast(`Dropped: ${getQuest(quest)?.title ?? 'the quest'}`, 2600);
     return res.ok;
+  }
+
+  /**
+   * Collect from the quests screen (OP-083): a finished quest goes to the NPC that gave it, as from its
+   * dialogue. Standing close, at once; elsewhere in this room, the quests screen closes and the owl
+   * walks up and hands it in on arrival. Its giver in another room: false (the screen says where).
+   */
+  async collectQuest(quest: string): Promise<boolean> {
+    const giver = getQuest(quest)?.giver;
+    const npc = giver ? this.npcs.get(giver) : undefined;
+    if (!npc || !this.built || this.leaving) return false;
+    if (distance(this.me.pos, npc.def.pos) <= NPC_TALK_RADIUS) return this.handInQuest(quest);
+    this.hud.closePanels();
+    return this.goDo({ kind: 'handin', id: npc.id, quest });
   }
 
   /** Hand a finished quest back to the NPC whose dialogue is open: feathers, and maybe a collectible. */
@@ -1097,6 +1186,21 @@ export class RoomScene extends Phaser.Scene {
     this.conn?.send({ t: 'emote', id: this.playerId, e });
     const near = [...this.npcs.values()].filter((n) => distance(n.def.pos, this.me.pos) <= NPC_EMOTE_RADIUS).map((n) => n.id);
     this.link?.note({ kind: 'emote', emote: e, room: this.room.id, near });
+    return true;
+  }
+
+  /**
+   * The Jump button or the space bar (OP-082): a hop with a flap, here and for everyone in the room.
+   * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
+   * One every JUMP_EVERY_MS, so a held thumb cannot flood the room.
+   */
+  jump(): boolean {
+    if (!this.built || this.leaving) return false;
+    const now = Date.now();
+    if (now - this.jumpedAt < JUMP_EVERY_MS) return false;
+    this.jumpedAt = now;
+    this.me.hop(now);
+    this.conn?.send({ t: 'emote', id: this.playerId, e: JUMP_EMOTE });
     return true;
   }
 
@@ -1363,6 +1467,11 @@ export class RoomScene extends Phaser.Scene {
     this.endDecorating(false);
     this.decor?.destroy();
     this.decor = null;
+    // Out of the nest with Your owl open at its mirror (its owner closed it, say): it closes with the room.
+    if (this.mirrorFrame && this.hud.isOwlOpen()) this.hud.toggleOwl();
+    this.mirror?.destroy();
+    this.mirror = null;
+    this.mirrorFrame = null;
     this.streetSigns?.destroy();
     this.streetSigns = null;
     this.nests?.close();
@@ -1434,6 +1543,8 @@ export class RoomScene extends Phaser.Scene {
     if (seen.mine !== undefined) {
       this.nestMine = seen.mine;
       this.showWaysOut();
+      // The first time this device's owl is home, the mirror catches the light once.
+      if (seen.mine) this.glintOnce();
     }
     if (seen.owned) this.owned = seen.owned;
     if (seen.gift) this.nestGift = { taken: seen.gift.taken };
@@ -1570,6 +1681,16 @@ export class RoomScene extends Phaser.Scene {
   private fitCamera(): void {
     const cam = this.cameras.main;
     const { width, height } = this.scale.gameSize;
+    const f = this.mirrorFrame;
+    if (f) {
+      // The stage's rectangle, zoomed in on the owl (and its mirror, in a nest), from a hat's height to the floor.
+      const k = this.cfg.pixelRatio;
+      cam.setViewport(Math.round(f.x * k), Math.round(f.y * k), Math.max(1, Math.round(f.w * k)), Math.max(1, Math.round(f.h * k)));
+      cam.setZoom(Math.max(0.1, Math.min((f.w * k) / 340, (f.h * k) / 280, 4)));
+      const x = this.mirror ? (this.me.pos.x + NEST_MIRROR.x) / 2 : this.me.pos.x;
+      cam.centerOn(x, this.me.pos.y - 90);
+      return;
+    }
     const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
     cam.setViewport(0, 0, width, h);
     cam.setZoom(Math.max(width / this.room.size.w, h / this.room.size.h));

@@ -3,8 +3,6 @@
  * of the park moves on its own. Nothing here goes to the park's server.
  */
 export interface Settings {
-  /** The quest cards under the top bar (quests under way, today's tasks). */
-  questCards: boolean;
   /** The thumbstick on touch screens; without it the owl walks where the floor is tapped. */
   thumbstick: boolean;
   /** Calm motion: no drifting fireflies, gold dust or neon rain. On by default when the device asks for less motion. */
@@ -16,7 +14,7 @@ export interface Settings {
 export const SETTINGS_KEY = 'owl-park:settings';
 
 export function defaultSettings(reducedMotion: boolean): Settings {
-  return { questCards: true, thumbstick: true, calm: reducedMotion, bubbles: true };
+  return { thumbstick: true, calm: reducedMotion, bubbles: true };
 }
 
 /** Settings from what storage holds: each one a boolean, else its default. Anything else is dropped. */

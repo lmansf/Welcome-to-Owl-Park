@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CLOSE, EDGE_PROTOCOL_VERSION, STREET_DOORS, STREET_ROOM, WALK_SPEED, isWalkable, nestDoorIndex, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { CLOSE, EDGE_PROTOCOL_VERSION, JUMP_EMOTE, JUMP_EVERY_MS, STREET_DOORS, STREET_ROOM, WALK_SPEED, isWalkable, nestDoorIndex, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
 
@@ -264,6 +264,28 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     now += LIMITS.emoteEveryMs;
     expect(room.emote('a', 'flap')).toBe(true);
     expect(b.count('emote')).toBe(2);
+  });
+
+  it('relays a hop to the others on its own clock: a hop leaves room for an emote, and too many are dropped', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const at = room.positionOf('a');
+    expect(room.jump('a')).toBe(true);
+    expect(b.last('emote')).toEqual({ t: 'emote', id: 'a', e: JUMP_EMOTE });
+    expect(a.count('emote')).toBe(0); // the hopper hops on its own page at once
+    // An emote straight after a hop still goes out: they do not share a limit.
+    expect(room.emote('a', 'hoot')).toBe(true);
+    // A hop sooner than the room's limit is dropped; the page sends one at most every JUMP_EVERY_MS.
+    expect(room.jump('a')).toBe(false);
+    expect(LIMITS.jumpEveryMs).toBeLessThan(JUMP_EVERY_MS);
+    now += LIMITS.jumpEveryMs;
+    expect(room.jump('a')).toBe(true);
+    expect(b.count('emote')).toBe(3);
+    // A hop is a look only: the owl stays where it stood.
+    expect(room.positionOf('a')).toEqual(at);
+    expect(room.jump('nobody')).toBe(false);
   });
 
   it('relays a phrase’s number to the others, one phrase every three seconds per owl', () => {

@@ -4,6 +4,7 @@ import {
   CollectionBook,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
+  JUMP_EMOTE,
   MemoryCollectionStore,
   MemoryNestStore,
   NEST_SPOTS,
@@ -336,6 +337,26 @@ describe('a nest in the room object', () => {
   });
 });
 
+describe("a nest's mirror in the room object (OP-077)", () => {
+  it("changes only the owl looking into it: a visitor's new look in another owl's nest leaves the owner and the nest as they were", async () => {
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    const obj = roomObject();
+    const owner = await join(obj, `nest-${nestId}`, 'v_owner', OWNER);
+    const guest = await join(obj, `nest-${nestId}`, 'v_guest', GUEST);
+    // The mirror is the client's: what reaches the room is the owl's own look, as from anywhere.
+    const mirrored: OwlLook = { body: '#3E6B48', belly: '#F2E6C9', accent: '#C9A227', species: 'snowy' };
+    await send(obj, guest, { t: 'look', look: mirrored });
+    await settle();
+    expect(owner.last('look')).toEqual({ t: 'look', id: 'v_guest', look: mirrored });
+    expect(guest.of('look')).toEqual([]);
+    // A newcomer finds the guest changed, the owner as it was, and the nest as it was.
+    const late = await join(obj, `nest-${nestId}`, 'v_other', OTHER);
+    const looks = Object.fromEntries(late.last('welcome')!.owls.map((o) => [o.id, o.look]));
+    expect(looks).toEqual({ v_owner: LOOK, v_guest: mirrored });
+    expect(late.last('nest')?.nest).toEqual({ nestId, open: true, layout: STARTER_LAYOUT, look: COLOURS });
+  });
+});
+
 describe('the street in the room object', () => {
   it("answers with the visitor's own nest and five doors of other owls' open nests", async () => {
     collections.nests.mine(OWNER, COLOURS, clock);
@@ -447,5 +468,22 @@ describe('busy nights in the room object (OP-075)', () => {
     expect(c.last('welcome')?.notice).toBe("It's busy tonight; things may be slow");
     await tell(null);
     expect(a.last('notice')).toEqual({ t: 'notice', words: null });
+  });
+});
+
+describe('the hop in the room object', () => {
+  it('goes to the other owls without asking for a collection, and moves no quest', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b');
+    const questEvent = vi.spyOn(collections, 'questEvent');
+    await send(obj, a, { t: 'emote', e: JUMP_EMOTE });
+    await settle();
+    expect(b.last('emote')).toEqual({ t: 'emote', id: 'v_a', e: JUMP_EMOTE });
+    expect(a.of('emote')).toEqual([]);
+    expect(questEvent).not.toHaveBeenCalled();
+    // A page without a collection hops too: every owl has it.
+    await send(obj, b, { t: 'emote', e: JUMP_EMOTE });
+    expect(a.last('emote')).toEqual({ t: 'emote', id: 'v_b', e: JUMP_EMOTE });
   });
 });

@@ -10,6 +10,8 @@ import {
   USE_COOLDOWN_MS,
   REACH_SLACK,
   SAY_EVERY_MS,
+  JUMP_EMOTE,
+  JUMP_EVERY_MS,
   isPhrase,
   findSpawn,
   isWalkable,
@@ -56,6 +58,8 @@ interface Visitor {
   strikes: number[];
   frames: number[];
   emotedAt: number;
+  /** When this visitor last hopped. */
+  jumpedAt: number;
   /** When this visitor last said a phrase. */
   saidAt: number;
   /** When this visitor last used an interactable (leaf piles, stalls). */
@@ -89,6 +93,8 @@ export const LIMITS = {
   leaverMemoryMs: 120_000,
   /** One emote per visitor this often; faster ones are dropped quietly. */
   emoteEveryMs: 1_500,
+  /** One hop (the Jump button) per visitor this often, a little under the page's own limit to allow for the network; faster ones are dropped quietly. */
+  jumpEveryMs: Math.round(JUMP_EVERY_MS * 0.8),
   /** One prewritten phrase per visitor this often; faster ones are dropped quietly. */
   sayEveryMs: SAY_EVERY_MS,
   /** One use of an interactable per visitor this often. */
@@ -244,7 +250,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, jumpedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -269,7 +275,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, jumpedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -389,6 +395,17 @@ export class Room {
     if (now - v.emotedAt < LIMITS.emoteEveryMs) return false;
     v.emotedAt = now;
     this.broadcast({ t: 'emote', id, e }, id);
+    return true;
+  }
+
+  /** A hop for everyone else in the room: every owl has it, so no collection is asked. Rate limited apart from emotes. */
+  jump(id: string): boolean {
+    const v = this.visitors.get(id);
+    if (!v) return false;
+    const now = this.now();
+    if (now - v.jumpedAt < LIMITS.jumpEveryMs) return false;
+    v.jumpedAt = now;
+    this.broadcast({ t: 'emote', id, e: JUMP_EMOTE }, id);
     return true;
   }
 

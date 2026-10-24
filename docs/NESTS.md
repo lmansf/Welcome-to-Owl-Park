@@ -1,5 +1,11 @@
 # Nests
 
+- Status: BUILT (C39); the mirror BUILT (OP-077)
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
+- Code: packages/shared/src/homes.ts, nestbook.ts, rooms/index.ts (NEST_ROOM, NEST_MIRROR); apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, game/nest.ts, game/street.ts, game/mirror.ts, game/nestPlan.ts
+- Tickets: OP-029, OP-032, OP-033, OP-077, OP-093
+- Related: docs/ARCHITECTURE.md section 4 (protocol) and section 9 (Go home)
+
 Every owl has a nest of its own: a cosy round room inside a tree, on a street of tree houses outside
 the turnstiles (proposal C39). It is all free and needs no ticket, also once the park takes tickets
 (the opening switch on `/admin/gate`, or `GATE=ticket`): the lobby, the street and the nests are open to every visitor. Every number and
@@ -30,6 +36,9 @@ the two posts at the east end.
   behind it stays dark and says **Closed for now**.
 - No names anywhere: a nest is known by its id alone, and the flag is the only thing of its owner
   anyone sees. Nobody types anything, and a nest holds nothing but approved pieces in its spots.
+  There is no nest label, title or sign a visitor could write: the words over a door are the
+  park's own (**Your nest**, **Closed for now**). QA's free-text check (OP-093) confirms none
+  exists; a nest's room never carries its owner's collector id either (`homes.ts`).
 
 Out of a nest, an owl comes back to the street in front of the door it went in by.
 
@@ -63,6 +72,34 @@ spot's piece back with the owl. **Open to visitors** / **Closed to visitors** le
 keeps them out: closing sends any visitors inside back to the street. **Done** (or Escape) ends it.
 
 Everyone inside sees each change as it happens. Only the owner can change its nest.
+
+## The mirror [BUILT (OP-077)]
+
+An owl changes how it looks at the mirror in a nest (OP-077, live on main 8a1bbb9). Every nest
+has one, furnished or not: a standing oval mirror against the back wall between the lamp's spot and
+the round window, drawn in code (`apps/park/src/game/mirror.ts`, $0 of art; the owner kept the
+drawn one), placed high on the floor so a phone shows it above the pad. Its place is `NEST_MIRROR`
+and the `mirror` spot and spawn in `NEST_ROOM` (`packages/shared/rooms/index.ts`); the word is
+`NEST_WORDS.mirror`, **Look in the mirror** (`homes.ts`).
+
+- Standing on the floor before it, **Look in the mirror** (E, or the pad's Interact; it comes before
+  Decorate there) opens Your owl, every tab, and the room's camera draws the owl and its mirror as
+  the editor's stage, so each choice shows on the owl at once (`RoomScene.mirrorView`).
+- Any owl may use any nest's mirror. A look changed in someone else's nest changes only that owl,
+  never the host's (room server test).
+- The Menu has no Your owl tile. The home screen's button is **Go to your nest**, which lands the
+  owl before its mirror, facing it (`apps/park/src/ui/home.ts`). On a keyboard Q goes to the mirror
+  from anywhere: home to the nest, then up to the mirror and into Your owl; Q again closes it
+  (`nestPlan.mirrorKey`).
+- A brand-new owl's first time home: the mirror glints once, with no words
+  (`nestPlan.firstGlint`, kept on the device).
+- The one exception stays: **Make your owl** on a device's first visit opens the editor in place,
+  and so will **Make it yours** at the end of the first-run quiz (PLANNED, OP-076).
+
+Tests: unit tests for the mirror spot, the glint, where Q goes and the edit scope; browser tests
+on a phone and a computer open Your owl from the mirror and watch the owl's colour change
+(`apps/park/e2e/mirror.spec.ts`). The Quest Log's Interactables tab lists the mirror
+(`nest-mirror`).
 
 ## Furniture and the day's gift
 

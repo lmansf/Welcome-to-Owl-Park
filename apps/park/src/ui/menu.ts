@@ -14,6 +14,8 @@ export interface MenuEntry {
   highlight?: boolean;
   /** Whether it is offered where the owl is (always, without this). */
   shown?(): boolean;
+  /** A dot on the tile: news there not seen yet (quests). */
+  badge?(): boolean;
 }
 
 export interface Menu {
@@ -53,6 +55,7 @@ const CSS = `
 #hud .menu .tile b{font-size:16px}
 #hud .menu .tile small{font-size:12.5px;opacity:.82;line-height:1.3}
 #hud .menu .tile kbd{position:absolute;top:12px;right:12px;margin:0}
+#hud .menu .tile .badge{top:10px;right:auto;left:46px}
 #hud .menu .tile[hidden]{display:none}
 #hud .menu .tile.hi{background:linear-gradient(135deg,rgba(201,162,39,.32),rgba(201,162,39,.1));border-color:rgba(255,211,106,.75);box-shadow:0 0 18px rgba(255,211,106,.2)}
 #hud .menu .tile.hi:focus-visible{background:rgba(201,162,39,.38);border-color:#FFD36A}
@@ -78,6 +81,7 @@ export function createMenu(root: HTMLElement, entries: readonly MenuEntry[], cho
   modal.box.appendChild(tiles);
   const subs = new Map<MenuScreenId, HTMLElement>();
   const tilesById = new Map<MenuScreenId, HTMLButtonElement>();
+  const dots = new Map<MenuScreenId, HTMLElement>();
   for (const e of entries) {
     const b = document.createElement('button');
     b.className = e.highlight ? 'tile hi' : 'tile';
@@ -93,6 +97,14 @@ export function createMenu(root: HTMLElement, entries: readonly MenuEntry[], cho
     }
     subs.set(e.id, b.querySelector('small')!);
     tilesById.set(e.id, b);
+    if (e.badge) {
+      const dot = document.createElement('span');
+      dot.className = 'badge';
+      dot.dataset['dot'] = e.id;
+      dot.hidden = true;
+      b.appendChild(dot);
+      dots.set(e.id, dot);
+    }
     b.addEventListener('click', () => choose(e.id));
     tiles.appendChild(b);
   }
@@ -100,6 +112,8 @@ export function createMenu(root: HTMLElement, entries: readonly MenuEntry[], cho
     for (const e of entries) {
       subs.get(e.id)!.textContent = e.sub();
       tilesById.get(e.id)!.hidden = e.shown ? !e.shown() : false;
+      const dot = dots.get(e.id);
+      if (dot) dot.hidden = !e.badge?.();
     }
   };
 

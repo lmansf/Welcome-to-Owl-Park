@@ -30,18 +30,18 @@ const CSS = `
 export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
   [['E'], 'Do what you are standing at'],
+  [['Space'], 'Hop'],
   [['M'], 'Menu'],
   [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],
-  [['Q'], 'Your owl'],
+  [['Q'], 'Your owl: to the mirror in your nest'],
   [['J'], 'Quests'],
   [['Esc'], 'Close'],
 ];
 
 /**
- * Settings, on this device: the quest cards on screen, the thumbstick (touch screens), the bubbles
- * of what owls say, calm motion, full screen where the browser allows it, and which keys and touches
- * do what.
+ * Settings, on this device: the thumbstick (touch screens), the bubbles of what owls say, calm
+ * motion, full screen where the browser allows it, and which keys and touches do what.
  */
 export function createSettingsScreen(root: HTMLElement, store: SettingsStore, back: () => void): SettingsScreen {
   const style = document.createElement('style');
@@ -81,7 +81,6 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     };
     box.append(
       h('On screen'),
-      toggle('questCards', 'Quest cards', 'Your quests and today’s tasks under the top bar.'),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
       toggle('bubbles', 'Show what owls say', ''),
       h('Motion'),
@@ -122,7 +121,8 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     }
     const tips = document.createElement('p');
     tips.className = 'tips';
-    tips.textContent = 'Tap the floor to walk there, or hold the thumbstick. The smile beside Menu opens your emotes. Tap an owl with a gold “!” to talk, and the gold buttons to do things where you stand.';
+    tips.textContent =
+      'Tap the floor to walk there, or hold the thumbstick. On a phone, the hand does what you are standing at, the arrow hops, the small button in the corner opens the Menu and the smile above them your emotes. Tap an owl with a gold “!” to talk. Your quests are in the Menu.';
     box.append(keys, tips);
     sync(store.get());
   };

@@ -1,5 +1,11 @@
 # Feedback from visitors
 
+- Status: BUILT (OP-028); the preview nudge and the feedback reward PLANNED (OP-063, OP-064)
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
+- Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts; apps/park/src/ui/feedback.ts
+- Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089
+- Related: docs/ARCHITECTURE.md section 10
+
 **Feedback** in the Menu (its tile picked out in gold) opens a short form: what kind of note it is
 (Bug, Idea, Praise, Other) and a few words, up to 1,000 characters. The form asks visitors to leave
 out names, emails and other personal details. On a phone it sits at the top of the screen, so the
@@ -38,3 +44,17 @@ curl -X POST -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
 ```
 
 `status` is `open` (the default), `done`, `dropped` or `all`; `limit` is at most 500.
+
+## Candidates from the tickets
+
+Things visitors may feel, raised in tickets and left for feedback to decide. None is built or
+promised; each names the ticket that raised it.
+
+| Candidate | Why it is here | Source |
+| --- | --- | --- |
+| A mirrored pad for left-handed play (joystick left, buttons right) | The phone pad puts the joystick on the right; the ticket's default is no mirroring, noted here as a candidate | OP-082 |
+| Hop spam (the Jump button's hop) | One hop per 600 ms from a page and one per 480 ms per owl through the room server; QA checks the server holds it | OP-082, OP-089 |
+| New-quest line noise | Quests live in the Menu with a dot and a 2-second line at the top; the owner kept the New quest line for now (2026-10-23) and may drop it | OP-083 |
+
+Where a note points at one of these, add the ticket ID to the keepers' triage so the count is
+easy to find later.

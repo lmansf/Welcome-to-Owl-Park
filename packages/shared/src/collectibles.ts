@@ -282,6 +282,19 @@ export const ITEMS: Readonly<Record<string, ItemDef>> = Object.freeze(Object.fro
 
 export const EMOTE_IDS: readonly string[] = CATALOGUE.filter((i) => i.kind === 'emote').map((i) => i.id);
 
+/**
+ * The Jump button's hop (OP-082): a move every owl has, not a collectible, so it is in neither the
+ * catalogue nor the emote wheel, and no quest counts it. It travels as an emote frame with this id,
+ * and changes only how the owl looks for a moment: never where it stands.
+ * TODO-DOCS (OP-082): built. docs/ACTIVITIES.md (Emotes) still says PLANNED and calls the frame
+ * `hop`: its id is `jump`, since `hop` is a collectible emote's. A page sends one at most every
+ * JUMP_EVERY_MS; the room server passes one per owl every jumpEveryMs (80 % of it), apart from
+ * the emotes' own limit.
+ */
+export const JUMP_EMOTE = 'jump';
+/** A page sends at most one hop this often. */
+export const JUMP_EVERY_MS = 600;
+
 /** The variant id for an item and colourway number. Emotes have no colourways. */
 export function variantId(itemId: string, n = 0): string {
   const item = ITEMS[itemId];

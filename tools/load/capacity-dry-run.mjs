@@ -10,6 +10,10 @@
  *
  * The hub's cap on the copy is --cap (30 by default, set by tools/load/throwaway-config.mjs), small
  * enough that a few dozen bots fill a copy.
+ *
+ * TODO-DOCS (OP-075): the first run (Load test run 4, 2026-10-23) is written up in section 9 of
+ * docs/CAPACITY.md at commit 9f7326a, with how to run it again; the note in apps/edge/src/Overflow.ts
+ * says what else that commit's write-up holds.
  */
 import { appendFileSync, readFileSync } from 'node:fs';
 import WebSocket from 'ws';

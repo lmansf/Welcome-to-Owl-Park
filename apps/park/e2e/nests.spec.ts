@@ -53,9 +53,8 @@ test.describe('the nests (this device)', () => {
     await expect.poll(async () => (await state(page)).nest?.decorating).toBe(true);
     await expect(sheet(page).locator('[data-where]')).toHaveText('1 / 12 · On the floor');
     await expect(sheet(page).locator('[data-piece="lamp"]')).toHaveAttribute('aria-pressed', 'true');
-    // The bottom bar and the quest cards give way to the sheet and the room.
+    // The bottom bar gives way to the sheet and the room.
     await expect(page.locator('[data-menu-btn]')).toBeHidden();
-    await expect(page.locator('.tracker')).toBeHidden();
 
     // Spot 2: the rug moves there from its own spot; then Take away puts it back with the owl.
     await sheet(page).getByRole('button', { name: 'Next spot' }).click();

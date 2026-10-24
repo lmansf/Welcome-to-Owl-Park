@@ -57,7 +57,7 @@ test.describe('the home screen (OP-065)', () => {
     expect(await home(page)).toEqual({ shown: true, loggedIn: true });
     await expect(button(page, 'login')).toBeHidden();
     await expect(button(page, 'play')).toBeVisible();
-    await expect(button(page, 'owl')).toBeVisible();
+    await expect(button(page, 'owl')).toHaveText('Go to your nest');
     expect(JSON.parse((await page.evaluate(() => localStorage.getItem('owl-park:look'))) ?? '{}')).toMatchObject({ body: '#3E6B48' });
     // The owl is drawn beside the buttons.
     expect(await page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
@@ -94,13 +94,16 @@ test.describe('the home screen (OP-065)', () => {
     await expect(settings).toBeVisible();
     // Opened from the home screen, Settings has no way back to the Menu.
     await expect(settings.getByRole('button', { name: /Back/ })).toHaveCount(0);
-    await settings.locator('[data-setting="questCards"]').click();
-    await expect(settings.locator('[data-setting="questCards"]')).toHaveAttribute('aria-checked', 'false');
+    await settings.locator('[data-setting="bubbles"]').click();
+    await expect(settings.locator('[data-setting="bubbles"]')).toHaveAttribute('aria-checked', 'false');
     await page.keyboard.press('Escape');
     await expect(settings).toBeHidden();
     await logIn(page);
     await play(page);
-    await expect(page.locator('#hud')).toHaveClass(/no-quest-cards/);
+    // Inside, the Menu's Settings show the same choice.
+    await page.locator('[data-menu-btn]').click();
+    await page.locator('[data-screen="settings"]').click();
+    await expect(page.getByRole('dialog', { name: 'Settings' }).locator('[data-setting="bubbles"]')).toHaveAttribute('aria-checked', 'false');
   });
 
   test("the Menu's Home screen comes back here, and Play goes back in", async ({ page }) => {
