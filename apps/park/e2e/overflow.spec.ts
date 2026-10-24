@@ -42,6 +42,29 @@ const inPark = (page: Page, timeout = 30_000) =>
 const ribbon = (page: Page) => page.locator('[data-ribbon]');
 const line = (page: Page) => page.locator('[data-home-line]');
 
+/** A 2 s line at the top, as the HUD shows one for a new quest (the same element in the same place). */
+const showNotice = (page: Page) =>
+  page.evaluate(() => {
+    const el = document.createElement('div');
+    el.className = 'notice';
+    el.dataset['testNotice'] = '';
+    el.textContent = 'New quest: Welcome to Owl Park';
+    document.querySelector('[data-notices]')?.append(el);
+  });
+const dropNotice = (page: Page) => page.evaluate(() => document.querySelector('[data-test-notice]')?.remove());
+
+/** The ribbon overlaps none of these (each on screen): the top notices, the buttons, the pad and the stick. */
+async function ribbonClear(page: Page, others: string[]): Promise<void> {
+  const r = await ribbon(page).boundingBox();
+  expect(r, 'the ribbon is on screen').not.toBeNull();
+  for (const sel of others) {
+    const b = await page.locator(sel).first().boundingBox();
+    expect(b, `${sel} is on screen`).not.toBeNull();
+    const apart = r!.x + r!.width <= b!.x || b!.x + b!.width <= r!.x || r!.y + r!.height <= b!.y || b!.y + b!.height <= r!.y;
+    expect(apart, `the ribbon is clear of ${sel}`).toBe(true);
+  }
+}
+
 test.describe('busy nights (OP-075)', () => {
   // As deployed before and after each test: no line (which also takes down any line left over), no ribbon.
   const asDeployed = async ({ request }: { request: APIRequestContext }) => {
@@ -88,7 +111,11 @@ test.describe('busy nights (OP-075)', () => {
     await phone.reload();
     await expect(ribbon(phone)).toContainText(RIBBON);
     await phone.screenshot({ path: 'e2e-screenshots/ribbon-phone.png' });
+    // In a room it stays clear of a line at the top (a new quest, say) and the buttons.
+    await showNotice(inside);
+    await ribbonClear(inside, ['[data-test-notice]', '[data-menu-btn]', '[data-emotes-btn]']);
     await inside.screenshot({ path: 'e2e-screenshots/ribbon-computer.png' });
+    await dropNotice(inside);
     // Hidden for the visit: a reload keeps it hidden, until the words change.
     await phone.getByRole('button', { name: 'Hide this note' }).click();
     await expect(ribbon(phone)).toBeHidden();
@@ -99,9 +126,18 @@ test.describe('busy nights (OP-075)', () => {
     await expect(ribbon(inside)).toContainText('The market is packed tonight');
     await phone.reload();
     await expect(ribbon(phone)).toContainText('The market is packed tonight');
+    // On a phone in a room, it keeps clear of the top line, the pad (Interact, Jump, the Menu, Emotes) and the stick.
+    await phone.locator('[data-home-btn="play"]').click();
+    await inPark(phone);
+    await expect(ribbon(phone)).toContainText('The market is packed tonight');
+    await showNotice(phone);
+    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-interact]', '[data-pad-jump]', '[data-menu-btn]', '[data-emotes-btn]', '#hud .stick']);
+    await phone.screenshot({ path: 'e2e-screenshots/ribbon-phone-room.png' });
+    await dropNotice(phone);
     // Off: gone for everyone inside.
     await capacity(request, { ribbon: { on: false } });
     await expect(ribbon(inside)).toBeHidden();
+    await expect(ribbon(phone)).toBeHidden();
     await inside.context().close();
     await phone.context().close();
   });
@@ -126,7 +162,9 @@ test.describe('busy nights (OP-075)', () => {
     await expect(line(phone)).toContainText("You're in line");
     await expect(line(phone)).toContainText('Your place in line: 1');
     await expect(line(phone)).toContainText('This page updates on its own.');
+    // The ways into the park (Play, Go to your nest) give way to its place while it waits.
     await expect(phone.locator('[data-home-btn="play"]')).toBeHidden();
+    await expect(phone.locator('[data-home-btn="owl"]')).toBeHidden();
     await expect(ribbon(phone)).toContainText(RIBBON);
     await phone.screenshot({ path: 'e2e-screenshots/line-phone.png' });
     // A computer behind it.

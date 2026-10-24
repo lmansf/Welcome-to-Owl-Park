@@ -20,8 +20,10 @@ export interface Ribbon {
   shown(): string | null;
 }
 
-// In the HUD's flow right under the top bar, so what follows (the quest tracker) moves down for it and
-// a wrapped bar on a phone is never covered; over the home screen it is the first thing at the top.
+// In the HUD's flow right under the top bar, so what follows (the welcome card, the activity cards on a
+// phone) moves down for it and a wrapped bar on a phone is never covered; over the home screen it is the
+// first thing at the top. The 2 s notices at the top move below it while it shows (--ribbon-bottom). On
+// a wide screen, where the activity cards stand at the top right, it keeps to the left of them.
 const CSS = `
 #hud .ribbon{position:relative;z-index:6;margin:8px auto 0;width:max-content;max-width:min(92vw,560px);display:flex;align-items:center;gap:8px;
   padding:5px 5px 5px 14px;border-radius:999px;background:rgba(255,211,106,.95);color:#0C1E36;font-size:14px;font-weight:700;line-height:1.3;
@@ -29,8 +31,10 @@ const CSS = `
 #hud .ribbon[hidden]{display:none}
 #hud .ribbon span{overflow-wrap:anywhere}
 #hud .ribbon button{flex:none;min-height:32px;width:32px;padding:0;border-radius:50%;background:rgba(12,30,54,.12);color:#0C1E36;box-shadow:none;font-size:18px;line-height:1}
-#hud.at-home .ribbon{margin-top:0}
+@media (min-width:761px){#hud .ribbon{margin:8px 0 0;max-width:min(560px,calc(100vw - 452px))}}
+#hud.at-home .ribbon{margin:0 auto;max-width:min(92vw,560px)}
 #hud.covered .ribbon{visibility:hidden}
+#hud.ribbon-on .notices{top:calc(var(--ribbon-bottom) + 6px)}
 `;
 
 function readHidden(): string | null {
@@ -68,12 +72,25 @@ export function createRibbon(root: HTMLElement): Ribbon {
   if (bar) bar.after(el);
   else root.prepend(el);
 
+  // Where the ribbon ends, for the notices to start below it: again whenever it or the bar changes size
+  // (the bar comes and goes with the home screen, and wraps on a narrow phone), and once it has slid in.
+  const place = () => {
+    root.classList.toggle('ribbon-on', !el.hidden);
+    if (!el.hidden) root.style.setProperty('--ribbon-bottom', `${Math.round(el.getBoundingClientRect().bottom)}px`);
+  };
+  const watch = new ResizeObserver(place);
+  watch.observe(el);
+  if (bar) watch.observe(bar);
+  window.addEventListener('resize', place);
+  el.addEventListener('animationend', place);
+
   let words: string | null = null;
   let hidden = readHidden();
   const draw = () => {
     const show = words !== null && words !== hidden;
     text.textContent = show ? words : '';
     el.hidden = !show;
+    place();
   };
   hide.addEventListener('click', () => {
     if (words === null) return;
