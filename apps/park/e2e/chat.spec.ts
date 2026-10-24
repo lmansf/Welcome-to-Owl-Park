@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openPark, state } from './helpers';
 
 /**
- * Prewritten chat (C44): Say in the Menu (T on a keyboard), a wheel of six groups of four phrases;
+ * Prewritten chat (C44): Say on the bar (T on a keyboard), a wheel of six groups of four phrases;
  * the phrase shows in a bubble over the owl for everyone in the room. These run on the local
  * transport, tab to tab; the room server's side is in edge.spec.ts.
  */
@@ -10,17 +10,16 @@ import { openPark, state } from './helpers';
 /** The phrases in bubbles on this page right now: whose, and which. */
 const bubbles = async (page: Page) => (await state(page)).bubbles;
 
-/** Say from the Menu, as on a phone. */
+/** Say from its button on the bar, as on a phone. */
 async function openSay(page: Page): Promise<Locator> {
-  await page.locator('[data-menu-btn]').click();
-  await page.locator('[data-screen="say"]').click();
+  await page.locator('[data-say-btn]').click();
   const wheel = page.getByRole('dialog', { name: 'Say' });
   await expect(wheel).toBeVisible();
   return wheel;
 }
 
 test.describe('prewritten chat', () => {
-  test('Say from the Menu: a phrase picked on the wheel shows over the owl, in the other tab too, and the next waits its turn', async ({ context }) => {
+  test('Say from its button: a phrase picked on the wheel shows over the owl, in the other tab too, and the next waits its turn', async ({ context }) => {
     test.slow(); // two live parks in one browser
     const a = await context.newPage();
     const b = await context.newPage();
@@ -37,8 +36,8 @@ test.describe('prewritten chat', () => {
     await expect(wheel.locator('[data-group="cheers"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(wheel.locator('[data-phrase]')).toHaveText([/^Thank you!/, /^Great job!/, /^Nice owl!/, /^Well played!/]);
     await a.screenshot({ path: `e2e-screenshots/${test.info().project.name}-say-wheel.png` });
-    // One phrase every 3 s. The phrase, another tried at once and the wheel opened again from the
-    // Menu happen in one step in the page, so a slow machine cannot run past the wait between them:
+    // One phrase every 3 s. The phrase, another tried at once and the wheel opened again from its
+    // button happen in one step in the page, so a slow machine cannot run past the wait between them:
     // the phrase closes the wheel, the second is not said, and the wheel opened again greys its phrases.
     const tooSoon = await a.evaluate(() => {
       const tap = (sel: string) => (document.querySelector(sel) as HTMLElement).click();
@@ -46,8 +45,7 @@ test.describe('prewritten chat', () => {
       tap('[data-phrase="6"]');
       const closed = !phrases()[0]?.checkVisibility();
       const second = window.owlPark.say(7);
-      tap('[data-menu-btn]');
-      tap('[data-screen="say"]');
+      tap('[data-say-btn]');
       return { closed, second, greyed: [...phrases()].map((b) => b.disabled) };
     });
     expect(tooSoon).toEqual({ closed: true, second: false, greyed: [true, true, true, true] });
@@ -132,7 +130,7 @@ test.describe('prewritten chat', () => {
     await expect.poll(() => bubbles(b), { timeout: 10_000 }).toEqual([{ id: 'owl-a', n: 1 }]);
 
     await b.locator('[data-menu-btn]').click();
-    await b.locator('[data-screen="settings"]').click();
+    await b.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
     const setting = b.locator('[data-setting="bubbles"]');
     await expect(setting).toHaveAttribute('aria-checked', 'true');
     await setting.click();

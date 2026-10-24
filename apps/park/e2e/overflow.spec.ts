@@ -114,7 +114,7 @@ test.describe('busy nights (OP-075)', () => {
     await phone.screenshot({ path: 'e2e-screenshots/ribbon-phone.png' });
     // In a room it stays clear of a line at the top (a new quest, say) and the buttons.
     await showNotice(inside);
-    await ribbonClear(inside, ['[data-test-notice]', '[data-menu-btn]', '[data-emotes-btn]']);
+    await ribbonClear(inside, ['[data-test-notice]', '[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]']);
     await inside.screenshot({ path: 'e2e-screenshots/ribbon-computer.png' });
     await dropNotice(inside);
     // Hidden for the visit: a reload keeps it hidden, until the words change.
@@ -127,12 +127,12 @@ test.describe('busy nights (OP-075)', () => {
     await expect(ribbon(inside)).toContainText('The market is packed tonight');
     await phone.reload();
     await expect(ribbon(phone)).toContainText('The market is packed tonight');
-    // On a phone in a room, it keeps clear of the top line, the pad (Interact, Jump, the Menu, Emotes) and the stick.
+    // On a phone in a room, it keeps clear of the top line, the pad (Interact, Jump, the Menu, Emotes, Say) and the stick.
     await phone.locator('[data-home-btn="play"]').click();
     await inPark(phone);
     await expect(ribbon(phone)).toContainText('The market is packed tonight');
     await showNotice(phone);
-    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-interact]', '[data-pad-jump]', '[data-menu-btn]', '[data-emotes-btn]', '#hud .stick']);
+    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-interact]', '[data-pad-jump]', '[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]', '#hud .stick']);
     await phone.screenshot({ path: 'e2e-screenshots/ribbon-phone-room.png' });
     await dropNotice(phone);
     // Off: gone for everyone inside.

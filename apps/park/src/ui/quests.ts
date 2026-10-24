@@ -1,7 +1,6 @@
 import { MAX_ACTIVE_QUESTS, TASKS_BONUS, TASK_FEATHERS, getNpc, placeName, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
-import { createModal, modalHeader } from './modal';
 
 export interface QuestActions {
   accept(quest: string): Promise<unknown>;
@@ -18,10 +17,13 @@ export interface QuestUi {
   closeDialogue(): void;
   /** The NPC whose dialogue is open, if any. */
   dialogueNpc(): string | null;
-  /** The quests screen; `fromMenu` adds the way back to the Menu. */
-  openJournal(fromMenu: boolean, opener?: HTMLElement | null): void;
-  closeJournal(): void;
-  isJournalOpen(): boolean;
+  /**
+   * The quests journal, drawn into the Menu's Quests tab (OP-108): `host` is the tab's panel and
+   * `shown` says whether it still shows the Quests tab, so a quest that changes redraws it only then.
+   */
+  mountJournal(host: HTMLElement, shown: () => boolean): void;
+  /** Back to its first tab (Under way), for the J key and the Menu's Quests tab opened afresh. */
+  resetJournal(): void;
   /** The room the owl is in: the lobby shows its welcome, and a finished quest can be collected where its giver stands. */
   setRoom(room: string): void;
 }
@@ -135,14 +137,14 @@ function steps(texts: string[], current: number | null, progress?: { count: numb
 type JournalTab = 'underway' | 'today' | 'more';
 
 /**
- * The quest HUD. Quests live in the Menu (OP-083): the quests screen (from the Menu or J) lists every
+ * The quest HUD. Quests live in the Menu (OP-083): the Quests tab (from the Menu or J) lists every
  * quest carried with its progress, and a finished one is collected there; today's tasks and who has
  * more are its other tabs. Nothing about quests stays on the play screen, where the lobby keeps only
  * its welcome. Talking to an NPC owl opens its dialogue (hand in, take on, or open Nova's shop).
  * `onOpen` makes room before a screen or the dialogue opens; `back` returns from the quests screen to
  * the Menu.
  */
-export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState, back: () => void): QuestUi {
+export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState): QuestUi {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -151,10 +153,10 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   welcome.append(el('b', '', 'Welcome to Owl Park'), document.createTextNode('Walk through the turnstiles to enter the park.'));
   bar.insertAdjacentElement('afterend', welcome);
 
-  const journal = createModal(root, { name: 'quests', label: 'Quests', layout: 'card' });
-  journal.box.classList.add('journal');
+  /** The Menu's Quests tab, while it shows: the journal draws itself there. */
+  let host: HTMLElement | null = null;
+  let hostShown: () => boolean = () => false;
   let tab: JournalTab = 'underway';
-  let fromMenu = false;
   const dialogue = el('section', 'sheet dialogue');
   dialogue.setAttribute('aria-label', 'Talking');
   root.append(dialogue);
@@ -232,19 +234,15 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   };
 
   const renderJournal = () => {
-    if (!journal.isOpen()) return;
+    if (!host || !host.isConnected || !hostShown()) return;
     const board = state.board;
-    const box = journal.box;
+    host.innerHTML = '';
+    const box = el('div', 'quests journal');
+    host.appendChild(box);
     const focused = (document.activeElement as HTMLElement | null)?.dataset?.['tab'] ?? null;
-    box.innerHTML = '';
-    box.appendChild(
-      modalHeader('Quests', {
-        sub: board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…',
-        onBack: fromMenu ? back : null,
-        onClose: () => journal.close(),
-        closeLabel: 'Close quests',
-      }),
-    );
+    const sum = el('p', 'qsum', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…');
+    sum.dataset['sub'] = '';
+    box.appendChild(sum);
     const today = tasks.view;
     const tabs: Array<[JournalTab, string]> = [
       ['underway', board ? `Under way (${board.active.length})` : 'Under way'],
@@ -353,13 +351,6 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     delete dialogue.dataset['npc'];
   };
 
-  function openJournal(menu: boolean, opener?: HTMLElement | null) {
-    onOpen();
-    fromMenu = menu;
-    tab = 'underway';
-    journal.open(opener);
-    renderJournal();
-  }
   state.onChange(render);
   tasks.onChange(renderJournal);
   render();
@@ -379,8 +370,13 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     },
     closeDialogue,
     dialogueNpc: () => (dialogue.classList.contains('open') ? (talking?.id ?? null) : null),
-    openJournal,
-    closeJournal: () => journal.close(),
-    isJournalOpen: () => journal.isOpen(),
+    mountJournal(el, shown) {
+      host = el;
+      hostShown = shown;
+      renderJournal();
+    },
+    resetJournal() {
+      tab = 'underway';
+    },
   };
 }

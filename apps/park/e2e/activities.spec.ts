@@ -32,7 +32,7 @@ test.describe('activities (this device)', () => {
     expect((await state(page)).actions).not.toContain('act:light');
     // Today's tasks are in Quests.
     await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="quests"]').click();
+    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="quests"]').click();
     await page.locator('.journal [data-tab="today"]').click();
     await expect(page.locator('.journal .today .task')).toHaveCount(3);
   });

@@ -97,31 +97,35 @@ test.describe('a touch never zooms the page (OP-104)', () => {
     expect(await scale(page)).toBe(1);
   });
 
-  test('the Menu and its screens, the wheels and Your owl scroll but never zoom, and take quick taps', async ({ page }) => {
-    test.slow(); // seven screens, each opened and closed by touch
-    // The Menu, each screen it leads to, and the emote wheel.
+  test('the Menu and its tabs, Feedback, the wheels and Your owl scroll but never zoom, and take quick taps', async ({ page }) => {
+    test.slow(); // the Menu's five tabs and four screens, each opened and closed by touch
+    // The Menu on each of its tabs, Feedback from its Settings, Say and the emote wheel.
     await openPark(page);
     const menu = page.getByRole('dialog', { name: 'Menu' });
     await page.locator('[data-menu-btn]').tap();
     await expect(menu).toBeVisible();
-    expect(await zoomable(page), 'the Menu').toEqual([]);
-    for (const [screen, label] of [['say', 'Say'], ['quests', 'Quests'], ['settings', 'Settings'], ['feedback', 'Feedback']] as const) {
-      if (!(await menu.isVisible())) await page.locator('[data-menu-btn]').tap();
-      await menu.locator(`[data-screen="${screen}"]`).tap();
-      const dialog = page.getByRole('dialog', { name: label });
-      await expect(dialog).toBeVisible();
-      expect(await zoomable(page), label).toEqual([]);
-      if (screen === 'say') {
-        // Two groups tapped in quick succession: both taps land, and the second group is the one shown.
-        await dialog.locator('[data-group="cheers"]').tap();
-        await dialog.locator('[data-group="together"]').tap();
-        await expect(dialog.locator('[data-group="together"]')).toHaveAttribute('aria-pressed', 'true');
-        await expect(dialog.locator('[data-group="cheers"]')).toHaveAttribute('aria-pressed', 'false');
-      }
-      await page.keyboard.press('Escape');
-      await expect(dialog).toBeHidden();
+    for (const tab of ['quests', 'collection', 'nest', 'map', 'settings'] as const) {
+      await menu.locator(`[data-tab="${tab}"]`).tap();
+      await expect(menu.locator(`[data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
+      expect(await zoomable(page), `the Menu: ${tab}`).toEqual([]);
     }
-    if (await menu.isVisible()) await page.keyboard.press('Escape');
+    await menu.locator('[data-screen="feedback"]').tap();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    expect(await zoomable(page), 'Feedback').toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(feedback).toBeHidden();
+    await page.locator('[data-say-btn]').tap();
+    const say = page.getByRole('dialog', { name: 'Say' });
+    await expect(say).toBeVisible();
+    expect(await zoomable(page), 'Say').toEqual([]);
+    // Two groups tapped in quick succession: both taps land, and the second group is the one shown.
+    await say.locator('[data-group="cheers"]').tap();
+    await say.locator('[data-group="together"]').tap();
+    await expect(say.locator('[data-group="together"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(say.locator('[data-group="cheers"]')).toHaveAttribute('aria-pressed', 'false');
+    await page.keyboard.press('Escape');
+    await expect(say).toBeHidden();
     await page.locator('[data-emotes-btn]').tap();
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
     await expect(wheel).toBeVisible();
