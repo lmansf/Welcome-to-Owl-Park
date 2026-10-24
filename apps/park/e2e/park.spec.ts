@@ -26,10 +26,16 @@ test.describe('single visitor', () => {
     const before = await state(page);
     const view = await settleCamera(page);
     // A point beside the owl that is on screen even on a narrow portrait phone, and not under a button.
+    // On a phone the pad and the stick stand low on either side of the owl (it stands low on the
+    // screen at the hub's spawn), so beside it at its own height, or a little behind, does too.
     const step = Math.min(220, view.viewW * 0.3);
     const target = await openGround(page, [
       { x: before.pos.x + step, y: before.pos.y + 40 },
       { x: before.pos.x - step, y: before.pos.y + 40 },
+      { x: before.pos.x + step, y: before.pos.y },
+      { x: before.pos.x - step, y: before.pos.y },
+      { x: before.pos.x + step, y: before.pos.y - 30 },
+      { x: before.pos.x - step, y: before.pos.y - 30 },
     ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
@@ -183,16 +189,13 @@ test.describe('single visitor', () => {
     }
   });
 
-  test('settings hide the quest cards and the thumbstick, and stay on this device', async ({ page, isMobile }) => {
+  test('settings hide the thumbstick, and stay on this device', async ({ page, isMobile }) => {
     await openPark(page);
-    await expect(page.locator('#hud .tracker')).toBeVisible();
+    // Quests live in the Menu (OP-083): nothing of them on the play screen, and no setting for it.
+    await expect(page.locator('#hud .welcome')).toBeHidden();
     await page.locator('[data-menu-btn]').click();
     await page.locator('[data-screen="settings"]').click();
-    const cards = page.locator('[data-setting="questCards"]');
-    await expect(cards).toHaveAttribute('aria-checked', 'true');
-    await cards.click();
-    await expect(cards).toHaveAttribute('aria-checked', 'false');
-    await expect(page.locator('#hud .tracker')).toBeHidden();
+    await expect(page.locator('[data-setting="questCards"]')).toHaveCount(0);
     if (isMobile) {
       await expect(page.locator('#hud .stick')).toBeVisible();
       await page.locator('[data-setting="thumbstick"]').click();
@@ -202,8 +205,7 @@ test.describe('single visitor', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-settings.png` });
     await page.reload();
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
-    await expect(page.locator('#hud .tracker')).toBeHidden();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ questCards: false, thumbstick: !isMobile, calm: true, bubbles: true });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true });
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {

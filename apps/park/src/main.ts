@@ -96,13 +96,21 @@ game.registry.set('quests', quests);
 game.registry.set('tasks', tasks);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
-// touch screens; E interacts, M opens the Menu, T the emote wheel (1 to 8 play an emote at once), Q
-// the owl builder and J the quests. While the Menu or one of its screens is open, the owl stays put.
-// On the home screen only Q (the owl, once there is one) and Escape do anything.
+// touch screens; E interacts and the space bar hops (the pad's Interact and Jump on touch screens), M
+// opens the Menu, T the Say wheel (1 to 8 play an emote at once), Q the owl builder and J the quests.
+// While the Menu or one of its screens is open, the owl stays put. On the home screen only Q (the
+// owl, once there is one) and Escape do anything.
+const interact = () => {
+  if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
+};
+const jump = () => {
+  if (!atHome && !hud.isBlocking()) roomScene()?.jump();
+};
+hud.onInteract(interact);
+hud.onJump(jump);
 const keyboard = attachKeyboard(window, {
-  interact: () => {
-    if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
-  },
+  interact,
+  jump,
   menu: () => {
     if (!atHome) hud.toggleMenu();
   },
@@ -152,6 +160,10 @@ declare global {
       /** Talk to an NPC owl or use an interactable in this room, walking up first if need be. */
       talk(npc: string): boolean;
       use(target: string): boolean;
+      /** Hop, as the Jump button and the space bar do (false: too soon after the last one). */
+      jump(): boolean;
+      /** Collect a finished quest as the quests screen does: at its giver, walking up first. */
+      collect(quest: string): Promise<boolean>;
       /** Take on, drop or hand in a quest (taking and handing in mean standing by its giver). */
       accept(quest: string): Promise<boolean>;
       abandon(quest: string): Promise<boolean>;
@@ -292,6 +304,7 @@ hud.attachQuests(quests, {
   accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
+  collect: (quest) => roomScene()?.collectQuest(quest) ?? Promise.resolve(false),
   openShop: () => hud.openShop(),
 }, tasks);
 // Feedback goes to the park's keepers through the room server (kept in this browser without one).
@@ -321,6 +334,8 @@ window.owlPark = {
   quests: () => quests.board,
   tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
+  jump: () => roomScene()?.jump() ?? false,
+  collect: (quest) => roomScene()?.collectQuest(quest) ?? Promise.resolve(false),
   use: (target) => roomScene()?.goDo({ kind: 'use', id: target }) ?? false,
   accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),

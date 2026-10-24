@@ -4,6 +4,7 @@ import {
   CollectionBook,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
+  JUMP_EMOTE,
   MemoryCollectionStore,
   MemoryNestStore,
   NEST_SPOTS,
@@ -411,3 +412,20 @@ describe('prewritten chat in the room object', () => {
   });
 });
 
+
+describe('the hop in the room object', () => {
+  it('goes to the other owls without asking for a collection, and moves no quest', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b');
+    const questEvent = vi.spyOn(collections, 'questEvent');
+    await send(obj, a, { t: 'emote', e: JUMP_EMOTE });
+    await settle();
+    expect(b.last('emote')).toEqual({ t: 'emote', id: 'v_a', e: JUMP_EMOTE });
+    expect(a.of('emote')).toEqual([]);
+    expect(questEvent).not.toHaveBeenCalled();
+    // A page without a collection hops too: every owl has it.
+    await send(obj, b, { t: 'emote', e: JUMP_EMOTE });
+    expect(a.last('emote')).toEqual({ t: 'emote', id: 'v_b', e: JUMP_EMOTE });
+  });
+});
