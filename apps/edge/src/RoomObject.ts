@@ -17,6 +17,7 @@ import {
   QUIZ_ROOM,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
+  RIBBON_MAX_CHARS,
   STREET_DOORS,
   STREET_ROOM,
   distance,
@@ -70,6 +71,10 @@ interface Attachment {
   tz?: string;
   /** In a nest: this owl is its owner (the collections object said so at its hello). Only the owner changes a nest. */
   owner?: boolean;
+  /** Which copy of its room this object is (OP-075), when it is not the room itself. */
+  copy?: number;
+  /** The entry the Worker gave this socket, handed over in the welcome and then let go (OP-075). */
+  entry?: string;
 }
 
 /** What a collector owns, as last read from the collections object. */
@@ -93,6 +98,8 @@ const OBJECTS_KEY = 'objects';
 /** Storage keys for the hub's lantern beam and the last stage quiz round settled. */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+/** The busy ribbon (OP-075) is asked of the overflow object at most this often; it also tells the rooms when it changes. */
+const NOTICE_FRESH_MS = 60_000;
 
 function withoutWear(look: OwlLook): OwlLook {
   const { wear: _wear, ...rest } = look;
@@ -154,6 +161,9 @@ export class RoomObject extends DurableObject<Env> {
   private readonly admitting = new Map<string, { room: string; done: Promise<void> }>();
   /** The latest view of each nest with owls in it or at its door, by nest id: the owner's changes land here first. */
   private readonly nestViews = new Map<string, NestView>();
+  /** The busy ribbon's words (OP-075), null while it is off, and when they were last asked for. */
+  private notice: string | null = null;
+  private noticeAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -214,10 +224,40 @@ export class RoomObject extends DurableObject<Env> {
     return a;
   }
 
+  /** The busy ribbon now: asked of the overflow object when last asked more than a minute ago. */
+  private async freshNotice(): Promise<void> {
+    if (Date.now() - this.noticeAt < NOTICE_FRESH_MS) return;
+    this.noticeAt = Date.now();
+    // A room object without the overflow object (a test's stand-in env) simply shows no ribbon.
+    const ns = this.env.OVERFLOW as Env['OVERFLOW'] | undefined;
+    if (!ns) return;
+    try {
+      const r = await ns.get(ns.idFromName('park')).fetch('https://park/notice');
+      if (r.ok) this.setNotice(((await r.json()) as { words?: unknown }).words);
+    } catch {
+      /* the ribbon stays as it was until the next ask */
+    }
+  }
+
+  /** The ribbon changed: everyone in this object's rooms sees it (or sees it go). */
+  private setNotice(words: unknown): void {
+    const w = typeof words === 'string' && words ? words.slice(0, RIBBON_MAX_CHARS) : null;
+    if (w === this.notice) return;
+    this.notice = w;
+    for (const room of this.rooms.values()) room.broadcast({ t: 'notice', words: w });
+  }
+
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/counts') {
       return Response.json(this.counts());
+    }
+    if (url.pathname === '/notice' && request.method === 'POST') {
+      // The overflow object's word that the ribbon changed.
+      const body = (await request.json().catch(() => null)) as { words?: unknown } | null;
+      this.noticeAt = Date.now();
+      this.setNotice(body?.words);
+      return Response.json({ ok: true });
     }
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
     const roomId = request.headers.get('X-Room') ?? '';
@@ -235,7 +275,13 @@ export class RoomObject extends DurableObject<Env> {
     const att: Attachment = { room: roomId, id, sid: randomSid(), ip, joinedAt: Date.now(), state: null };
     if (isCollectorId(cid)) att.cid = cid;
     if (isTimeZone(tz)) att.tz = tz;
+    // Which copy of the room this is, and the entry for the welcome (OP-075): the Worker's word only.
+    const copy = Number(request.headers.get('X-Room-Copy'));
+    if (Number.isInteger(copy) && copy > 1) att.copy = copy;
+    const entry = request.headers.get('X-Entry');
+    if (entry && entry.length <= 512) att.entry = entry;
     server.serializeAttachment(att);
+    await this.freshNotice();
     await this.ensureAlarm();
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -335,11 +381,18 @@ export class RoomObject extends DurableObject<Env> {
     const room = this.room(att.room);
     // Wear the collector does not own (or is not yet known to own) is left off until checked.
     const { look, recheck } = this.vetLook(att, hello.look);
-    const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, opts);
+    const welcome = { ...(att.copy ? { copy: att.copy } : {}), ...(att.entry ? { entry: att.entry } : {}), notice: this.notice };
+    const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome });
     if (result === 'full') {
       this.send(ws, { t: 'full', room: att.room, cap: room.cap });
       closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
       return false;
+    }
+    // The entry went out with the welcome: the socket need not keep it.
+    const kept = ws.deserializeAttachment() as Attachment | null;
+    if (kept?.entry) {
+      delete kept.entry;
+      ws.serializeAttachment(kept);
     }
     this.emitCounts();
     if (recheck) void this.recheckLook(att, hello.look);
@@ -859,6 +912,7 @@ export class RoomObject extends DurableObject<Env> {
   /** Every minute while anyone is connected: close silent sockets and refresh counts; and when a hub quiz question closes. */
   override async alarm(): Promise<void> {
     await this.settleQuiz();
+    await this.freshNotice();
     const now = Date.now();
     const sockets = this.ctx.getWebSockets();
     for (const ws of sockets) {

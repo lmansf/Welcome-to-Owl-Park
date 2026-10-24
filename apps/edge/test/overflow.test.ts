@@ -1,0 +1,273 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LINE_DEFAULTS, RIBBON_WORDS, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges } from '@owl-park/shared';
+import { CLAIM_GRACE_MS, Line } from '../src/line';
+import { ENTRY_TTL_S, mintEntry, mintPass, verifyEntry, verifyPass } from '../src/pass';
+import type { Env } from '../src/env';
+import type { LineAnswer, OverflowState } from '../src/Overflow';
+import { sqlStorage } from './sqlite';
+
+// The Workers runtime is not here: its Durable Object base class stands in.
+vi.mock('cloudflare:workers', () => ({
+  DurableObject: class {
+    ctx: unknown;
+    env: unknown;
+    constructor(ctx: unknown, env: unknown) {
+      this.ctx = ctx;
+      this.env = env;
+    }
+  },
+}));
+const { Overflow, TICK_MS } = await import('../src/Overflow');
+
+const T0 = Date.UTC(2026, 11, 1, 23, 0);
+const MIN = 60_000;
+const HOLD = 3 * MIN;
+
+describe('the line (OP-075)', () => {
+  it('hands out numbers in order and calls them in order; a browser keeps the number it holds', () => {
+    const line = new Line(sqlStorage());
+    const a = line.join('c_aaaaaaaa', T0, HOLD);
+    const b = line.join('c_bbbbbbbb', T0 + 1, HOLD);
+    const c = line.join('c_cccccccc', T0 + 2, HOLD);
+    expect([a, b, c]).toEqual([1, 2, 3]);
+    expect(line.join('c_bbbbbbbb', T0 + 3, HOLD)).toBe(b);
+    expect(line.waiting()).toBe(3);
+    expect(line.status(c, 'c_cccccccc', T0 + 3, HOLD)).toEqual({ state: 'waiting', place: 3 });
+    expect(line.tick(T0 + 5, HOLD, 2)).toBe(2);
+    expect(line.lastCalled()).toBe(b);
+    expect(line.status(a, 'c_aaaaaaaa', T0 + 5, HOLD)).toEqual({ state: 'called', holdUntil: T0 + 5 + HOLD });
+    expect(line.status(c, 'c_cccccccc', T0 + 5, HOLD)).toEqual({ state: 'waiting', place: 1 });
+    // Nobody else takes a number's turn.
+    expect(line.status(a, 'c_bbbbbbbb', T0 + 6, HOLD)).toEqual({ state: 'unknown' });
+    expect(line.claim(a, 'c_bbbbbbbb', T0 + 6, HOLD)).toBe(false);
+    expect(line.claim(a, 'c_aaaaaaaa', T0 + 6, HOLD)).toBe(true);
+    expect(line.status(a, 'c_aaaaaaaa', T0 + 7, HOLD)).toEqual({ state: 'claimed' });
+  });
+
+  it('holds a called place for its minutes, then gives it up; the owl takes a new number at the back', () => {
+    const line = new Line(sqlStorage());
+    const a = line.join('c_aaaaaaaa', T0, HOLD);
+    const b = line.join('c_bbbbbbbb', T0, HOLD);
+    line.tick(T0, HOLD, 1);
+    // Called and still held: it counts against the free places.
+    expect(line.outstanding(T0 + HOLD - 1, HOLD)).toBe(1);
+    expect(line.claim(a, 'c_aaaaaaaa', T0 + HOLD, HOLD)).toBe(false);
+    expect(line.tick(T0 + HOLD, HOLD, 1)).toBe(1);
+    expect(line.status(a, 'c_aaaaaaaa', T0 + HOLD, HOLD)).toEqual({ state: 'expired' });
+    expect(line.status(b, 'c_bbbbbbbb', T0 + HOLD, HOLD)).toEqual({ state: 'called', holdUntil: T0 + 2 * HOLD });
+    const again = line.join('c_aaaaaaaa', T0 + HOLD + 1, HOLD);
+    expect(again).toBe(3);
+    expect(line.status(again, 'c_aaaaaaaa', T0 + HOLD + 1, HOLD)).toEqual({ state: 'waiting', place: 1 });
+  });
+
+  it('counts an owl let in for a minute more, until it is in a room', () => {
+    const line = new Line(sqlStorage());
+    const a = line.join('c_aaaaaaaa', T0, HOLD);
+    line.tick(T0, HOLD, 1);
+    line.claim(a, 'c_aaaaaaaa', T0 + 1_000, HOLD);
+    expect(line.outstanding(T0 + 1_000 + CLAIM_GRACE_MS - 1, HOLD)).toBe(1);
+    expect(line.outstanding(T0 + 1_000 + CLAIM_GRACE_MS, HOLD)).toBe(0);
+  });
+
+  it('measures its pace over ten minutes, for a rough wait', () => {
+    expect(lineRate([T0 - 11 * MIN, T0 - 9 * MIN, T0 - MIN, T0], T0)).toBe(0.3);
+    expect(waitMinutes(12, 0)).toBeNull();
+    expect(waitMinutes(1, 6)).toBe(1);
+    expect(waitMinutes(12, 2.5)).toBe(5);
+  });
+});
+
+describe('the busy-night settings (OP-075)', () => {
+  it('takes changes within bounds and refuses the rest', () => {
+    expect(withLineChanges(LINE_DEFAULTS, { mode: 'auto', threshold: 120 })).toEqual({ mode: 'auto', threshold: 120, holdMin: 3 });
+    expect(withLineChanges(LINE_DEFAULTS, { mode: 'maybe' })).toBeNull();
+    expect(withLineChanges(LINE_DEFAULTS, { threshold: -1 })).toBeNull();
+    expect(withLineChanges(LINE_DEFAULTS, { threshold: 2.5 })).toBeNull();
+    expect(withLineChanges(LINE_DEFAULTS, { holdMin: 0 })).toBeNull();
+    expect(withLineChanges(LINE_DEFAULTS, { holdMin: 16 })).toBeNull();
+    const ribbon = { on: false, words: null };
+    expect(withRibbonChanges(ribbon, { on: true, words: '  The hub is   packed tonight  ' })).toEqual({ on: true, words: 'The hub is packed tonight' });
+    expect(withRibbonChanges(ribbon, { words: '' })).toEqual({ on: false, words: null });
+    expect(withRibbonChanges(ribbon, { words: 'x'.repeat(91) })).toBeNull();
+    expect(withRibbonChanges(ribbon, { on: 'yes' })).toBeNull();
+  });
+
+  it('shows the ribbon while it is on, and by itself while the line is', () => {
+    expect(ribbonNow({ on: false, words: null }, false)).toBeNull();
+    expect(ribbonNow({ on: true, words: null }, false)).toBe(RIBBON_WORDS);
+    expect(ribbonNow({ on: false, words: 'Busy!' }, true)).toBe('Busy!');
+  });
+});
+
+describe('entries (OP-075)', () => {
+  const KEY = 'test-signing-key-0123456789abcdef';
+  it('let their own browser in until they run out, and are never a pass', async () => {
+    const nowS = Math.floor(T0 / 1000);
+    const e = await mintEntry(KEY, 'c_aaaaaaaa', nowS + ENTRY_TTL_S);
+    expect(await verifyEntry(KEY, e, 'c_aaaaaaaa', nowS)).toBe(true);
+    expect(await verifyEntry(KEY, e, 'c_bbbbbbbb', nowS)).toBe(false);
+    expect(await verifyEntry(KEY, e, 'c_aaaaaaaa', nowS + ENTRY_TTL_S + 1)).toBe(false);
+    expect(await verifyEntry('another-key-0123456789abcdefgh', e, 'c_aaaaaaaa', nowS)).toBe(false);
+    expect(await verifyEntry(KEY, null, 'c_aaaaaaaa', nowS)).toBe(false);
+    expect(await verifyPass(KEY, e, nowS)).toBeNull();
+    const pass = await mintPass(KEY, { id: 'v_abcdefgh', exp: nowS + 600, adm: false, cid: 'c_aaaaaaaa' });
+    expect(await verifyEntry(KEY, pass, 'c_aaaaaaaa', nowS)).toBe(false);
+  });
+});
+
+/** The park's room objects as the overflow object sees them: counts per object, and the ribbon they were told. */
+class FakeRooms {
+  counts = new Map<string, Record<string, number>>();
+  asked: string[] = [];
+  told: Array<{ name: string; words: string | null }> = [];
+  idFromName(name: string) {
+    return name;
+  }
+  get(name: string) {
+    return {
+      fetch: async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/counts')) {
+          this.asked.push(name);
+          return Response.json(this.counts.get(name) ?? {});
+        }
+        if (url.endsWith('/notice')) {
+          this.told.push({ name, words: (JSON.parse(String(init?.body)) as { words: string | null }).words });
+          return Response.json({ ok: true });
+        }
+        return new Response('not found', { status: 404 });
+      },
+    };
+  }
+}
+
+class FakeState {
+  alarm: number | null = null;
+  readonly storage = {
+    sql: sqlStorage(),
+    getAlarm: async () => this.alarm,
+    setAlarm: async (at: number) => {
+      this.alarm = at;
+    },
+  };
+}
+
+describe('the overflow object (OP-075)', () => {
+  let rooms: FakeRooms;
+  let state: FakeState;
+  let obj: InstanceType<typeof Overflow>;
+  const make = (sharding: 'single' | 'room' = 'single') => {
+    rooms = new FakeRooms();
+    state = new FakeState();
+    obj = new Overflow(state as unknown as DurableObjectState, { ROOMS: rooms, ROOM_SHARDING: sharding } as unknown as Env);
+  };
+  const post = async <T>(path: string, body: unknown): Promise<{ status: number; body: T }> => {
+    const r = await obj.fetch(new Request(`https://park${path}`, { method: 'POST', body: JSON.stringify(body) }));
+    return { status: r.status, body: (await r.json()) as T };
+  };
+  const st = async () => (await (await obj.fetch(new Request('https://park/state'))).json()) as OverflowState;
+  const join = (who: string) => post<LineAnswer>('/line/join', { who });
+  const look = (n: number, who: string) => post<LineAnswer>('/line/status', { n, who });
+  const at = (ms: number) => vi.setSystemTime(ms);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    at(T0);
+    make();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('is quiet while off: no line, and the rooms are never asked', async () => {
+    rooms.counts.set('park', { hub: 500 });
+    expect(await st()).toMatchObject({ active: false, line: LINE_DEFAULTS, notice: null, count: null });
+    expect((await join('c_aaaaaaaa')).body).toEqual({ state: 'go' });
+    expect(rooms.asked).toEqual([]);
+  });
+
+  it('on by itself: a line from the threshold, places called in order as owls leave, and it ends once empty', async () => {
+    rooms.counts.set('park', { lobby: 1, hub: 2 });
+    await post('/settings', { line: { mode: 'auto', threshold: 3, holdMin: 3 } });
+    expect((await st()).active).toBe(true);
+    const a = (await join('c_aaaaaaaa')).body;
+    const b = (await join('c_bbbbbbbb')).body;
+    expect(a).toMatchObject({ state: 'waiting', n: 1, place: 1, waitMin: null });
+    expect(b).toMatchObject({ state: 'waiting', n: 2, place: 2 });
+    expect(state.alarm).toBe(T0 + TICK_MS);
+    // An owl leaves: one place frees, and the next tick calls the first in line.
+    rooms.counts.set('park', { lobby: 0, hub: 2 });
+    at(T0 + TICK_MS);
+    await obj.alarm();
+    const turn = (await look(1, 'c_aaaaaaaa')).body;
+    expect(turn).toEqual({ state: 'called', n: 1, holdUntil: T0 + TICK_MS + 3 * MIN });
+    // Let in, it still counts until it is in a room: no place for the next yet.
+    at(T0 + 2 * TICK_MS);
+    await obj.alarm();
+    expect((await look(2, 'c_bbbbbbbb')).body).toMatchObject({ state: 'waiting', place: 1, waitMin: 10 });
+    // It reached the lobby, and two owls left: room for the next.
+    rooms.counts.set('park', { lobby: 1, hub: 0 });
+    at(T0 + 3 * TICK_MS);
+    await obj.alarm();
+    expect((await look(2, 'c_bbbbbbbb')).body).toMatchObject({ state: 'called', n: 2 });
+    // Both in, the park below the threshold and the line empty: no line once the grace runs out.
+    rooms.counts.set('park', { lobby: 2, hub: 0 });
+    at(T0 + 3 * TICK_MS + CLAIM_GRACE_MS + 1);
+    expect((await st()).active).toBe(false);
+    expect((await join('c_cccccccc')).body).toEqual({ state: 'go' });
+  });
+
+  it('gives up a place held too long, calling the next, and the late owl joins again at the back', async () => {
+    rooms.counts.set('park', { hub: 1 });
+    await post('/settings', { line: { mode: 'on', threshold: 2, holdMin: 1 } });
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'called', n: 1 });
+    expect((await join('c_bbbbbbbb')).body).toMatchObject({ state: 'waiting', n: 2, place: 1 });
+    at(T0 + MIN + 1);
+    await obj.alarm();
+    expect((await look(1, 'c_aaaaaaaa')).body).toEqual({ state: 'expired' });
+    expect((await look(2, 'c_bbbbbbbb')).body).toMatchObject({ state: 'called', n: 2 });
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'waiting', n: 3, place: 1 });
+  });
+
+  it('on: every newcomer takes a number, called at once while the park has room; a claimed number goes in', async () => {
+    rooms.counts.set('park', {});
+    await post('/settings', { line: { mode: 'on', threshold: 10 } });
+    const a = (await join('c_aaaaaaaa')).body;
+    expect(a).toEqual({ state: 'called', n: 1, holdUntil: T0 + 3 * MIN });
+    expect((await look(1, 'c_aaaaaaaa')).body).toMatchObject({ state: 'called', n: 1 });
+    expect((await look(1, 'c_aaaaaaaa')).body).toEqual({ state: 'go' });
+    // Someone else's number tells them nothing.
+    expect((await look(1, 'c_bbbbbbbb')).body).toEqual({ state: 'expired' });
+  });
+
+  it('tells the rooms the ribbon: on, its own words, on by itself with the line, and off', async () => {
+    await post('/settings', { ribbon: { on: true } });
+    expect(rooms.told.at(-1)).toEqual({ name: 'park', words: RIBBON_WORDS });
+    await post('/settings', { ribbon: { words: 'The market is packed tonight' } });
+    expect(rooms.told.at(-1)).toEqual({ name: 'park', words: 'The market is packed tonight' });
+    await post('/settings', { ribbon: { on: false } });
+    expect(rooms.told.at(-1)).toEqual({ name: 'park', words: null });
+    rooms.counts.set('park', { hub: 1 });
+    await post('/settings', { line: { mode: 'on', threshold: 1 } });
+    expect(rooms.told.at(-1)).toEqual({ name: 'park', words: 'The market is packed tonight' });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: 'The market is packed tonight' });
+  });
+
+  it('refuses settings out of bounds, and copies while the park runs in one object', async () => {
+    expect((await post('/settings', { line: { threshold: -5 } })).status).toBe(400);
+    expect((await post('/settings', { ribbon: { words: 'x'.repeat(200) } })).status).toBe(400);
+    expect((await post('/settings', { copy: { room: 'hub', n: 2, state: 'open' } })).status).toBe(409);
+    expect((await post('/settings', { copy: { room: 'nowhere', n: 2, state: 'open' } })).status).toBe(400);
+    expect((await post('/settings', { copy: { room: 'hub', n: 1, state: 'open' } })).status).toBe(400);
+  });
+
+  it('with one object per room: opens, drains and closes copies, and counts every room and copy', async () => {
+    make('room');
+    rooms.counts.set('room:hub', { hub: 70 });
+    rooms.counts.set('room:hub~2', { hub: 12 });
+    rooms.counts.set('room:lobby', { lobby: 5 });
+    expect((await post<OverflowState>('/settings', { copy: { room: 'hub', n: 2, state: 'open' } })).body.copies).toEqual({ hub: { '2': 'open' } });
+    expect((await post<OverflowState>('/settings', { copy: { room: 'hub', n: 2, state: 'draining' } })).body.copies).toEqual({ hub: { '2': 'draining' } });
+    await post('/settings', { line: { mode: 'auto', threshold: 100 } });
+    expect(await st()).toMatchObject({ count: 87, active: false });
+    expect(rooms.asked).toContain('room:hub~2');
+    expect((await post<OverflowState>('/settings', { copy: { room: 'hub', n: 2, state: 'closed' } })).body.copies).toEqual({});
+  });
+});

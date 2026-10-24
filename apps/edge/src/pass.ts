@@ -145,3 +145,30 @@ export async function verifyCollector(secret: string, token: string | null): Pro
   if (!p || p['k'] !== 'col' || !isCollectorId(p['cid']) || typeof p['iat'] !== 'number') return null;
   return p['cid'];
 }
+
+/**
+ * An entry (OP-075): proof that a visitor was in the park lately, or came through the line. While
+ * the park has a line, a room socket opens only with one; every room gives a fresh one in its
+ * welcome, so owls already inside go on from room to room. It names the collector (several tabs of
+ * one browser share it), or the pass's visitor where there is none.
+ */
+export interface EntryPayload {
+  k: 'ent';
+  who: string;
+  /** Expiry, Unix seconds. */
+  exp: number;
+}
+
+/** How long an entry lets its owl back in: a long visit, with every room it walks into renewing it. */
+export const ENTRY_TTL_S = 3 * 60 * 60;
+
+export async function mintEntry(secret: string, who: string, exp = Math.floor(Date.now() / 1000) + ENTRY_TTL_S): Promise<string> {
+  return sign(secret, { k: 'ent', who, exp } satisfies EntryPayload);
+}
+
+/** Whether this entry is good for `who` now (a pass or a collector token never is). */
+export async function verifyEntry(secret: string, token: unknown, who: string, nowS = Math.floor(Date.now() / 1000)): Promise<boolean> {
+  if (typeof token !== 'string') return false;
+  const p = await verified(secret, token);
+  return !!p && p['k'] === 'ent' && p['who'] === who && typeof p['exp'] === 'number' && p['exp'] >= nowS;
+}
