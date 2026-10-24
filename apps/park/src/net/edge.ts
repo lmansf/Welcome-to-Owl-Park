@@ -8,6 +8,7 @@ import {
   type ActKind,
   type ClientFrame,
   type FeedbackDraft,
+  type LineStatus,
   type OwlSnapshot,
   type ParkMessage,
   type PlayerState,
@@ -22,7 +23,7 @@ import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, Qu
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { MoveBudget } from './budget';
-import { OPEN_ENTRY, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
+import { OPEN_ENTRY, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -34,6 +35,8 @@ const ECHO_TIMEOUT_MS = 1_500;
 const DEAD_AFTER_MS = HEARTBEAT_INTERVAL_MS * 2 + 10_000;
 const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const RELOAD_GUARD_KEY = 'owl-park:reloaded';
+/** This tab's entry (OP-075): it lets the owl back into the park while there is a line, for a reload too. */
+const ENTRY_KEY = 'owl-park:entry';
 /** How long a quest request waits for the server's answer. */
 const REPLY_TIMEOUT_MS = 6_000;
 
@@ -57,6 +60,22 @@ function readCollector(): string | null {
     return localStorage.getItem(COLLECTOR_KEY);
   } catch {
     return null;
+  }
+}
+
+function readEntry(): string | null {
+  try {
+    return sessionStorage.getItem(ENTRY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveEntry(token: string): void {
+  try {
+    sessionStorage.setItem(ENTRY_KEY, token);
+  } catch {
+    /* kept in memory only */
   }
 }
 
@@ -89,6 +108,36 @@ export class EdgeTransport implements ParkTransport {
   private ticketId: string | null = null;
   /** Opening night is on (C42), as the last look at the wallet said. */
   private opening = false;
+  /** The latest entry (OP-075): every room's welcome renews it, and the line gives one to an owl it calls. */
+  private entryToken: string | null = readEntry();
+
+  private keepEntry(token: unknown): void {
+    if (typeof token !== 'string' || !token) return;
+    this.entryToken = token;
+    saveEntry(token);
+  }
+
+  /** The line in front of the park on busy nights (OP-075). */
+  readonly line: LineLink = {
+    join: async () => this.lineAnswer(await this.api('/api/line', { method: 'POST', body: JSON.stringify(this.entryToken ? { entry: this.entryToken } : {}) })),
+    poll: async (n) => this.lineAnswer(await this.api(`/api/line?n=${encodeURIComponent(String(n))}`)),
+    notice: async () => {
+      try {
+        const res = await fetch(`${this.base}/api/notice`, { cache: 'no-store' });
+        const words = res.ok ? ((await res.json()) as { words?: unknown }).words : null;
+        return typeof words === 'string' && words ? words : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+
+  private async lineAnswer(res: Response): Promise<LineStatus> {
+    if (!res.ok) throw new Error(`the line answered ${res.status}`);
+    const s = (await res.json()) as LineStatus;
+    if (s.state === 'go' || s.state === 'called') this.keepEntry(s.entry);
+    return s;
+  }
 
   private getPass(force = false): Promise<Pass> {
     if (!force && this.pass && this.pass.exp * 1000 > Date.now() + 60_000) return Promise.resolve(this.pass);
@@ -227,6 +276,8 @@ export class EdgeTransport implements ParkTransport {
     let welcomed = false;
     let opened = false;
     let lastRx = Date.now();
+    /** Which copy of the room the server put this owl in (OP-075): a dropped socket asks for the same one. */
+    let copy = 1;
     /** Our id as the server knows it (from the pass), which differs from the scene's local id. */
     let selfId: string | null = null;
     const knownPeers = new Set<string>();
@@ -337,6 +388,9 @@ export class EdgeTransport implements ParkTransport {
             }
           }
           handlers.onCounts?.(f.counts);
+          copy = f.copy ?? 1;
+          this.keepEntry(f.entry);
+          if (f.notice !== undefined) handlers.onNotice?.(f.notice);
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
           // This page speaks the room's protocol: a later version change may reload it again.
@@ -384,6 +438,9 @@ export class EdgeTransport implements ParkTransport {
           break;
         case 'full':
           handlers.onFull?.(f.room);
+          break;
+        case 'notice':
+          handlers.onNotice?.(f.words);
           break;
         case 'quests':
           // An answer to one of our requests, or a push after an arrival or an emote moved a quest.
@@ -599,7 +656,9 @@ export class EdgeTransport implements ParkTransport {
       if (closed) return;
       welcomed = false;
       opened = false;
-      const socket = new WebSocket(`${wsBase}/ws/${encodeURIComponent(roomId)}?pass=${encodeURIComponent(pass.pass)}`);
+      // The entry lets an owl that was inside back in while the park has a line; a dropped socket asks for its own copy.
+      const extra = `${this.entryToken ? `&entry=${encodeURIComponent(this.entryToken)}` : ''}${copy > 1 ? `&copy=${copy}` : ''}`;
+      const socket = new WebSocket(`${wsBase}/ws/${encodeURIComponent(roomId)}?pass=${encodeURIComponent(pass.pass)}${extra}`);
       ws = socket;
       socket.onopen = () => {
         opened = true;
@@ -631,6 +690,12 @@ export class EdgeTransport implements ParkTransport {
         if (ws === socket) ws = null;
         failWaiters();
         if (closed) return;
+        if (ev.code === CLOSE.QUEUED) {
+          // The scene leaves for the line first, so going offline here tells nobody the park could not connect.
+          handlers.onQueued?.();
+          handlers.onStatus('offline');
+          return; // it waits in the line on the home screen
+        }
         if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED) {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop

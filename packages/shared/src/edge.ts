@@ -42,6 +42,8 @@ export const CLOSE = {
   ROOM_FULL: 4010,
   /** A nest turned the visitor away (closed to visitors, or no such nest), or closed while it was inside. */
   NEST_CLOSED: 4011,
+  /** The park has a line (OP-075) and this visitor has not come through it: wait on the home screen. */
+  QUEUED: 4012,
   TOO_LARGE: 1009,
 } as const;
 
@@ -152,6 +154,12 @@ export interface ServerWelcome {
   you: { pos: Vec2 };
   owls: OwlSnapshot[];
   counts: Record<string, number>;
+  /** Which copy of the room this is (OP-075): 1 is the room itself; copies open only on busy nights. */
+  copy?: number;
+  /** Lets this visitor back in while the park has a line (OP-075): sent with the next room's socket. */
+  entry?: string;
+  /** The busy ribbon's words while it is on (OP-075); null or absent while it is off. */
+  notice?: string | null;
 }
 export interface ServerEnter {
   t: 'enter';
@@ -315,6 +323,11 @@ export interface ServerStreet {
   own: { nestId: string; open: boolean } | null;
   doors: Array<StreetDoor | null>;
 }
+/** The busy ribbon (OP-075) came on, changed its words or went off (null). */
+export interface ServerNotice {
+  t: 'notice';
+  words: string | null;
+}
 /** A nest turned this visitor away (closed to visitors, or no such nest) or closed while it was inside; the socket closes with 4011 next. */
 export interface ServerClosed {
   t: 'closed';
@@ -344,7 +357,8 @@ export type ServerFrame =
   | ServerAct
   | ServerNest
   | ServerStreet
-  | ServerClosed;
+  | ServerClosed
+  | ServerNotice;
 
 // ---- validation (server side, strict) ----
 
@@ -427,7 +441,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'closed']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'closed', 'notice']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

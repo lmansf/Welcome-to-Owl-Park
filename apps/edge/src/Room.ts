@@ -28,6 +28,7 @@ import {
   type RoomDef,
   type ServerFrame,
   type ServerWalk,
+  type ServerWelcome,
   type Vec2,
 } from '@owl-park/shared';
 
@@ -221,7 +222,11 @@ export class Room {
    * the welcome and enter frames have been sent. A second session for the same id
    * replaces the first (closed 4005). `overCap` lets a nest's owner into its own nest however full.
    */
-  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean } = {}): 'ok' | 'full' {
+  /**
+   * Put a visitor in the room and send its welcome. `welcome` adds what the room object knows beyond
+   * the room: which copy it is, the visitor's entry, and the busy ribbon (OP-075).
+   */
+  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean; welcome?: Pick<ServerWelcome, 'copy' | 'entry' | 'notice'> } = {}): 'ok' | 'full' {
     const existing = this.visitors.get(id);
     if (existing) {
       // The newer session wins; remember where the old one stood so the newcomer can resume there.
@@ -260,6 +265,7 @@ export class Room {
       you: { pos },
       owls: this.snapshot(id),
       counts: this.opts.counts?.() ?? { [this.def.id]: this.visitors.size },
+      ...opts.welcome,
     });
     this.send(v, { t: 'objects', until: this.objectStates() });
     this.broadcast({ t: 'enter', owl: { id, look: v.st.look, pos, walk: null } }, id);

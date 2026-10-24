@@ -433,6 +433,46 @@ describe('prewritten chat in the room object', () => {
 });
 
 
+describe('busy nights in the room object (OP-075)', () => {
+  /** A socket as the Worker sends it: with the copy it chose and the entry it made. */
+  function connectWith(room: string, id: string, headers: { copy?: number; entry?: string }): FakeSocket {
+    const ws = connect(room, id);
+    const att = ws.deserializeAttachment() as Record<string, unknown>;
+    ws.serializeAttachment({ ...att, ...(headers.copy ? { copy: headers.copy } : {}), ...(headers.entry ? { entry: headers.entry } : {}) });
+    return ws;
+  }
+
+  it('welcomes an owl with its copy, its entry (then let go) and the ribbon as it stands', async () => {
+    const obj = roomObject();
+    const ws = connectWith('hub', 'v_copied', { copy: 2, entry: 'entry-token' });
+    await hello(obj, ws);
+    expect(ws.last('welcome')).toMatchObject({ room: 'hub', copy: 2, entry: 'entry-token', notice: null });
+    expect((ws.deserializeAttachment() as Record<string, unknown>)['entry']).toBeUndefined();
+    // The room itself says no copy.
+    const plain = await join(obj, 'hub', 'v_plain');
+    expect(plain.last('welcome')?.copy).toBeUndefined();
+  });
+
+  it('shows the ribbon to everyone inside when the overflow object says it changed, woken from hibernation or not', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_one');
+    const b = await join(obj, 'grove', 'v_two');
+    const tell = (o: Obj, words: string | null) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words }) }));
+    await tell(obj, "It's busy tonight; things may be slow");
+    expect(a.last('notice')).toEqual({ t: 'notice', words: "It's busy tonight; things may be slow" });
+    expect(b.last('notice')).toEqual({ t: 'notice', words: "It's busy tonight; things may be slow" });
+    // A newcomer gets it in its welcome.
+    const c = await join(obj, 'hub', 'v_three');
+    expect(c.last('welcome')?.notice).toBe("It's busy tonight; things may be slow");
+    // Woken from hibernation, the object holds no words while its owls still show them: off reaches them all the same.
+    const woken = roomObject();
+    await tell(woken, null);
+    expect(a.last('notice')).toEqual({ t: 'notice', words: null });
+    expect(b.last('notice')).toEqual({ t: 'notice', words: null });
+    expect(c.last('notice')).toEqual({ t: 'notice', words: null });
+  });
+});
+
 describe('the hop in the room object', () => {
   it('goes to the other owls without asking for a collection, and moves no quest', async () => {
     const obj = roomObject();

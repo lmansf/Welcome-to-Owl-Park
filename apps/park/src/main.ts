@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LOBBY_ROOM, NEST_WORDS, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LOBBY_ROOM, NEST_WORDS, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -20,6 +20,7 @@ import { attachKeyboard, type Keys } from './ui/keyboard';
 import { announcePresents } from './ui/presents';
 import type { PreviewFrame } from './ui/owlBuilder';
 import { linkToast } from './ui/tickets';
+import { createRibbon } from './ui/ribbon';
 import { deviceSettings } from './settings';
 
 const cfg = readConfig();
@@ -28,6 +29,8 @@ const look = loadLook(cfg, playerId);
 const parent = document.getElementById('game') as HTMLElement;
 const settings = deviceSettings();
 const hud = createHud(document.body, look, settings);
+// The busy ribbon (OP-075) across the top of the home screen and every room.
+const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);
 let storage: Storage | null = null;
 try {
   storage = localStorage;
@@ -95,6 +98,7 @@ game.registry.set('transport', transport);
 game.registry.set('collection', collection);
 game.registry.set('quests', quests);
 game.registry.set('tasks', tasks);
+game.registry.set('ribbon', ribbon);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
 // touch screens; E interacts and the space bar hops (the pad's Interact and Jump on touch screens), M
@@ -194,6 +198,8 @@ declare global {
       home(): { shown: boolean; loggedIn: boolean };
       /** The tickets on this device (empty without the park's server). */
       wallet(): Promise<WalletEntry[]>;
+      /** The busy ribbon's words as shown (null while it is off or hidden), OP-075. */
+      ribbon(): string | null;
       /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
       scan(id?: string): Promise<ScanReply>;
     };
@@ -251,9 +257,15 @@ hud.onOwlPreview((frame, mirror) => {
 });
 
 // ---- the home screen (OP-065) ----
-/** From the home screen into the park: Play to the lobby, or Go to your nest to stand before its mirror. */
+/**
+ * From the home screen into the park: Play to the lobby, or Go to your nest to stand before its mirror
+ * (through the line first while the park has one, OP-075). A line this owl stood in is done, and a
+ * screen left open over the home screen (the owl, Settings) closes first.
+ */
 function leaveHome(start: RoomStart): void {
   if (!atHome) return;
+  stopLine();
+  hud.closePanels();
   atHome = false;
   home.hide();
   home.note(null);
@@ -266,7 +278,7 @@ async function goToNest(): Promise<void> {
   const nest = await collection.service.homeNest();
   const room = nest ? nestRoomId(nest) : null;
   if (!room) return hud.toast(NEST_WORDS.notAnswering, 3500);
-  leaveHome({ room, spawn: 'mirror' });
+  startPlay({ room, spawn: 'mirror' });
 }
 let collecting = false;
 /** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */
@@ -279,17 +291,92 @@ const startCollection = () => {
     announcePresents(collection.inv.owned, (message, ms, accent) => hud.toast(message, ms, accent), storage);
   });
 };
+/** Whether this device holds a ticket that has not run out (the line says its clock waits for the gate). */
+let holdsTicket = false;
 /** The line under Play: the tickets on this device, and the gate (the room server only). */
 async function refreshWallet(): Promise<void> {
   const tickets = transport.tickets;
   if (!tickets || !loggedIn) return home.setWallet(null);
   try {
     const [list, entry] = await Promise.all([tickets.wallet(), transport.entry?.() ?? Promise.resolve(OPEN_ENTRY)]);
+    holdsTicket = list.some((t) => t.status === 'unused' || t.status === 'active');
     if (atHome) home.setWallet(walletSummary(list, entry.gate, Date.now()));
   } catch {
     home.setWallet(null);
   }
 }
+
+// ---- the line (OP-075): on a busy night a new owl waits on the home screen for its turn ----
+let lineTimer: ReturnType<typeof setTimeout> | null = null;
+/** The number this owl holds in the line, while it waits. */
+let lineNumber: number | null = null;
+const lineSoon = (fn: () => void, ms: number) => {
+  if (lineTimer) clearTimeout(lineTimer);
+  lineTimer = setTimeout(() => {
+    lineTimer = null;
+    fn();
+  }, ms);
+};
+const stopLine = () => {
+  if (lineTimer) clearTimeout(lineTimer);
+  lineTimer = null;
+  lineNumber = null;
+  home.line(null);
+};
+/** Where this owl goes once the line lets it in: the lobby (Play), or its nest's mirror (Go to your nest). */
+let lineGoal: RoomStart = { room: LOBBY_ROOM, spawn: undefined };
+const enterPark = () => leaveHome(lineGoal);
+/** What the line said: in the park, its turn, a turn that passed, or its place (and when to look again). */
+const onLine = (s: LineStatus) => {
+  if (!atHome) return;
+  if (s.state === 'go') return enterPark();
+  if (s.state === 'called') {
+    home.line({ message: 'turn' });
+    lineSoon(enterPark, 900); // a moment to read it
+    return;
+  }
+  if (s.state === 'expired') {
+    lineNumber = null;
+    home.line({ message: 'passed' });
+    lineSoon(() => void askLine(true), 2_500);
+    return;
+  }
+  lineNumber = s.n;
+  home.line({ place: s.place, waitMin: s.waitMin, ticket: holdsTicket });
+  // Near the front it looks often; further back, every so often.
+  lineSoon(() => void askLine(false), s.place <= 10 ? 5_000 : 15_000);
+};
+/** Ask the line: for a place (or straight in), or where this owl's number stands. */
+async function askLine(join: boolean): Promise<void> {
+  const line = transport.line;
+  if (!line || !atHome) return;
+  try {
+    onLine(join || lineNumber === null ? await line.join() : await line.poll(lineNumber));
+  } catch {
+    if (!atHome) return;
+    home.line({ message: 'offline' });
+    lineSoon(() => void askLine(lineNumber === null), 10_000);
+  }
+}
+// Back on the page after a while away: look at once, since its turn may have come.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && atHome && lineNumber !== null) lineSoon(() => void askLine(false), 0);
+});
+/** Into the park (the lobby unless told where): through the line when the park has one (the server says), else straight in. */
+const startPlay = (goal: RoomStart = { room: LOBBY_ROOM, spawn: undefined }) => {
+  if (!atHome || home.inLine() || lineTimer) return;
+  lineGoal = goal;
+  if (!transport.line) return leaveHome(goal);
+  void askLine(true);
+};
+/** The ribbon on the home screen, asked of the park (in a room, the room tells it). */
+const refreshNotice = async () => {
+  const words = (await transport.line?.notice()) ?? null;
+  if (atHome) ribbon.set(words);
+};
+setInterval(() => {
+  if (atHome) void refreshNotice();
+}, 60_000);
 const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   logIn: (opener) => {
     // The owl is made on this device, and the builder opens on it before anything else.
@@ -301,7 +388,7 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
     void refreshWallet();
     hud.openOwl(opener);
   },
-  play: () => leaveHome({ room: LOBBY_ROOM, spawn: undefined }),
+  play: () => startPlay(),
   owl: () => void goToNest(),
   settings: (opener) => hud.openSettings(opener),
   stage: (frame) => {
@@ -314,6 +401,15 @@ game.events.on(HOME_SHOWN, () => {
   atHome = true;
   hud.setHome(true);
   hud.closePanels();
+  // Turned away by the line from a room: the owl is this device's, and it takes its place in the line.
+  const queued = game.registry.get('queued') === true;
+  if (queued) {
+    game.registry.set('queued', false);
+    if (!loggedIn) {
+      loggedIn = true;
+      keepLook(lookNow());
+    }
+  }
   // The room that last answered for the builder is gone: look changes are kept from here.
   hud.onLookChange((l) => keepLook({ ...lookNow(), body: l.body, belly: l.belly, accent: l.accent, ...(l.species ? { species: l.species } : {}) }));
   home.show(loggedIn);
@@ -321,6 +417,8 @@ game.events.on(HOME_SHOWN, () => {
     drawOwl(home.frame(), false);
     void refreshWallet();
   }
+  void refreshNotice();
+  if (queued) startPlay();
 });
 // The Say wheel says a phrase here and for everyone in the room.
 hud.onSay((n) => roomScene()?.say(n) ?? false);
@@ -380,5 +478,6 @@ window.owlPark = {
   say: (n) => roomScene()?.say(n) ?? false,
   home: () => ({ shown: home.isShown(), loggedIn }),
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
+  ribbon: () => ribbon.shown(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };

@@ -67,6 +67,7 @@ import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
+import type { Ribbon } from '../ui/ribbon';
 import { castVote } from '../net/vote';
 import { NEST_MIRROR, getRoom } from '../rooms';
 import type { DecorateView } from '../ui/decorate';
@@ -460,6 +461,8 @@ export class RoomScene extends Phaser.Scene {
         this.hud.setParkCount(Object.values(rooms).reduce((a, b) => a + b, 0));
       },
       onFull: (roomId) => live() && void this.roomFull(roomId),
+      onQueued: () => live() && this.queued(),
+      onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -501,6 +504,15 @@ export class RoomScene extends Phaser.Scene {
     const back = this.cameFrom ?? { room: 'hub', spawn: undefined };
     if (back.room === roomId) return;
     await this.goTo(back.room, back.spawn ?? 'default', undefined);
+  }
+
+  /** The park has a line (OP-075) and this owl has not come through it: back to the home screen, where it waits its turn. */
+  private queued(): void {
+    if (this.leaving) return;
+    this.registry.set('queued', true);
+    void this.leaveRoom().then((left) => {
+      if (left) this.scene.start('home');
+    });
   }
 
   private onPeerState(s: PlayerState): void {
