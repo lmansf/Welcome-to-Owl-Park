@@ -38,3 +38,10 @@ curl -X POST -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
 ```
 
 `status` is `open` (the default), `done`, `dropped` or `all`; `limit` is at most 500.
+
+## Candidates
+
+Ideas waiting for visitors to ask for them, each with where it came from:
+
+- **A left-handed pad** (OP-082): the stick on the left and Interact, Jump and the Menu on the
+  right, as a setting. Not built; the pad keeps the stick on the right.

@@ -11,7 +11,11 @@ export interface ParkState {
     walking: boolean;
     look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
     emote: string | null;
+    /** How high this owl is drawn above the floor (a hop), in room pixels. */
+    height: number;
   }>;
+  /** How high this visitor's owl is drawn above the floor (a hop), in room pixels; `pos` stays on the floor. */
+  height: number;
   /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
   bubbles: Array<{ id: string; n: number }>;
   connected: boolean;
@@ -150,6 +154,30 @@ export async function walkAndStop(page: Page, x: number, y: number): Promise<{ x
   await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x, y });
   await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
   return (await state(page)).pos;
+}
+
+/**
+ * The highest a page draws an owl (its own, or the first other owl's) during the next hop, sampled
+ * every frame: a hop lasts under half a second, too quick for polling. Done once the owl is back on
+ * the floor after a hop, or after `ms` with none.
+ */
+export function peakHeight(page: Page, whose: 'own' | 'peer', ms = 6000): Promise<number> {
+  return page.evaluate(
+    ({ whose, ms }) =>
+      new Promise<number>((resolve) => {
+        let max = 0;
+        const start = performance.now();
+        const tick = () => {
+          const s = window.owlPark.state();
+          const h = (whose === 'own' ? s?.height : s?.peers[0]?.height) ?? 0;
+          max = Math.max(max, h);
+          if ((max > 0 && h === 0) || performance.now() - start >= ms) resolve(max);
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    { whose, ms },
+  );
 }
 
 /** Wait for an action button where the owl stands, then press it. */

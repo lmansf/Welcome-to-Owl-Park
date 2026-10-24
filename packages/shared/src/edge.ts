@@ -21,7 +21,7 @@ import type { NestGiftState, StreetDoor } from './nestbook';
 import { PHRASE_NUMBER_MAX } from './phrases';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
-import { isEmoteId, isLook, isObj, isVec2 } from './validate';
+import { isEmoteId, isLook, isObj, isPlayableEmote, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat), so a stale page reloads. */
 export const EDGE_PROTOCOL_VERSION = 8;
@@ -80,7 +80,7 @@ export interface ClientLook {
 export interface ClientBye {
   t: 'bye';
 }
-/** Play an owned emote for everyone in the room. */
+/** Play an owned emote for everyone in the room, or the hop every owl has (JUMP_EMOTE). */
 export interface ClientEmote {
   t: 'emote';
   e: string;
@@ -388,7 +388,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     case 'bye':
       return { t: 'bye' };
     case 'emote':
-      return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
+      return isPlayableEmote(v['e']) ? { t: 'emote', e: v['e'] } : null;
     case 'say': {
       // A whole number in range; whether the phrase list has it is the room's to decide.
       const n = v['n'];

@@ -49,6 +49,7 @@ describe('attachKeyboard', () => {
     const fake = fakeWindow();
     const keys = attachKeyboard(fake.win, {
       interact: () => calls.push('interact'),
+      jump: () => calls.push('jump'),
       menu: () => calls.push('menu'),
       say: () => calls.push('say'),
       emoteKey: (n) => calls.push(`emote ${n}`),
@@ -89,6 +90,21 @@ describe('attachKeyboard', () => {
     key('keydown', 'Digit0');
     key('keydown', 'Digit3', { target: { tagName: 'TEXTAREA', isContentEditable: false } });
     expect(calls).toEqual(['emote 1', 'emote 8']);
+  });
+
+  it('hops on the space bar once per press, and keeps the page from scrolling', () => {
+    const { key, calls } = setup();
+    expect(key('keydown', 'Space')).toBe(true);
+    expect(key('keydown', 'Space', { repeat: true })).toBe(true);
+    expect(calls).toEqual(['jump']);
+  });
+
+  it('leaves the space bar to a focused button, which it presses', () => {
+    const { key, calls } = setup();
+    expect(key('keydown', 'Space', { target: { tagName: 'BUTTON', isContentEditable: false, getAttribute: () => null } })).toBe(false);
+    expect(key('keydown', 'Space', { target: { tagName: 'DIV', isContentEditable: false, getAttribute: () => 'button' } })).toBe(false);
+    expect(key('keydown', 'Space', { target: { tagName: 'TEXTAREA', isContentEditable: false } })).toBe(false);
+    expect(calls).toEqual([]);
   });
 
   it('leaves typing and browser shortcuts alone', () => {

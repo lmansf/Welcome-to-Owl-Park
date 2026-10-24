@@ -16,6 +16,26 @@ zero-backend local mode run the same ones and Node tests them:
   everyone in a room and by the local mode for the one owl on the device;
 - `book.ts`: `play()` pays an activity under its daily cap and counts it toward the day's tasks.
 
+## Controls
+
+- **Keyboard**: WASD or the arrow keys walk, E does what the owl stands at, the space bar hops, M
+  opens the Menu, T the Say wheel, 1 to 8 play an emote, Q your owl, J the quests, Escape closes
+  (`apps/park/src/ui/keyboard.ts`). A space bar on a focused button presses the button instead.
+- **Touch screens**: a pad like a handheld's (OP-082, `apps/park/src/ui/hud.ts`). The thumbstick
+  walks from the bottom-right corner; on the left, **Interact** (the hand, nearer the middle) does
+  what E does and lights up gold where there is something to do, **Jump** (the arrow, nearer the
+  corner) hops, and the **Menu** is the small dark button in the corner, with **Emotes** (the
+  smile) above them. All see-through like the stick, each at least 44 px and none overlapping.
+  Tapping the floor still walks there, and the gold buttons over the stick still say what can be
+  done where the owl stands.
+- **The hop** is a look, not a move: the owl's drawing goes up and comes down in 0.4 s with a
+  two-frame flap while its place, its walk and what it stands at stay as they are, so a hop can
+  cross nothing. It is its own state beside emotes (`game/hop.ts`), so flight (OP-084) can later
+  turn its lift into a real height. It travels as an emote frame (`JUMP_EMOTE`, `jump`) that every
+  owl has without collecting it: no quest counts it, no collection is asked. A page sends one at
+  most every 0.6 s (`JUMP_EVERY_MS`); the room server passes one every 0.48 s and drops the rest,
+  apart from emotes' own limit. No sound.
+
 ## The lantern beam (the hub's west bay)
 
 Seven paper lanterns hang from the beam in the painting (`LANTERNS`). Standing on the floor under
@@ -91,8 +111,8 @@ kind twice:
    or copy 2 tunes.
 
 Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J), on its
-Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
-park's midnight.
+Today tab; a task done says so with its feathers, a step along one says nothing over the room
+(OP-083). They change at the park's midnight.
 
 ## Feathers
 
@@ -120,8 +140,7 @@ to its own clock, and runs the quiz card on the server's clock.
   answers and pushes, and the cards; `game/Lanterns.ts`, `game/QuizStage.ts` and
   `game/Fishing.ts` draw the glows, the zones and the line.
 - `ui/activities.ts`: the quiz and copy cards (top right on wide screens, under the top bar on
-  phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the quests screen and
-  the tracker; `collect/tasks.ts` keeps them.
+  phones); `ui/quests.ts`: today's tasks in the quests screen; `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
 

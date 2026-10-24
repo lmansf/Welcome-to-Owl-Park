@@ -7,6 +7,8 @@ export interface QuestActions {
   accept(quest: string): Promise<unknown>;
   abandon(quest: string): Promise<unknown>;
   handIn(quest: string): Promise<unknown>;
+  /** Collect a finished quest from the quests screen: handed in at its giver, who stands in this room (the owl walks up first). */
+  collect(quest: string): Promise<unknown>;
   /** Nova's shop (from her dialogue). */
   openShop(): void;
 }
@@ -20,16 +22,14 @@ export interface QuestUi {
   openJournal(fromMenu: boolean, opener?: HTMLElement | null): void;
   closeJournal(): void;
   isJournalOpen(): boolean;
-  /** The room the owl is in: the lobby shows its welcome instead of the quests. */
+  /** The room the owl is in: the lobby shows its welcome, and a finished quest can be collected where its giver stands. */
   setRoom(room: string): void;
 }
 
 const CSS = `
-#hud .tracker{margin-top:8px;display:none;flex-direction:column;gap:6px;width:min(330px,calc(100vw - 24px));pointer-events:auto;cursor:pointer}
-#hud .tracker.show{display:flex}
-#hud .tracker .tq{background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;padding:7px 11px;font-size:13px;line-height:1.3;backdrop-filter:blur(6px)}
-#hud .tracker .tq b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
-#hud .tracker .tq.ready b{color:#9FE8FF}
+#hud .welcome{margin-top:8px;display:none;width:min(330px,calc(100vw - 24px));background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;padding:7px 11px;font-size:13px;line-height:1.3;backdrop-filter:blur(6px)}
+#hud .welcome.show{display:block}
+#hud .welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
 #hud .sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 62px);width:min(520px,calc(100vw - 20px));max-height:min(72vh,640px);display:none;flex-direction:column;gap:10px;pointer-events:auto;background:rgba(12,30,54,.95);border:1px solid rgba(246,241,227,.18);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.55);overflow:auto}
 #hud .sheet.open{display:flex}
 #hud .sheet header{display:flex;align-items:center;gap:10px}
@@ -42,6 +42,9 @@ const CSS = `
 #hud .qcard.ready{border-color:#9FE8FF}
 #hud .qcard .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 #hud .qcard .top b{font-size:14px;flex:1;min-width:140px}
+#hud .qcard .prog{font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(255,211,106,.16);color:#FFD36A;border:1px solid rgba(255,211,106,.35)}
+#hud .qcard.ready .prog{background:rgba(159,232,255,.14);color:#9FE8FF;border-color:rgba(159,232,255,.4)}
+#hud .qcard .collect{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px}
 #hud .chips{display:flex;gap:4px;flex-wrap:wrap}
 #hud .chip{font-size:11px;padding:2px 7px;border-radius:999px;background:rgba(246,241,227,.1);border:1px solid rgba(246,241,227,.15)}
 #hud .chip.easy{color:#8FE3A8}#hud .chip.medium{color:#FFD36A}#hud .chip.hard{color:#FF8C8C}
@@ -90,6 +93,11 @@ export function rewardText(r: QuestReward): string {
 const npcName = (id: string) => getNpc(id)?.name ?? 'a friend';
 const npcPlace = (id: string) => placeName(getNpc(id)?.room ?? '');
 
+/** A quest's progress in the quests screen: its steps done of all of them ("2/5"), or Done once it is ready to hand in. */
+export function progressText(q: Pick<ActiveQuestView, 'ready' | 'step' | 'steps'>): string {
+  return q.ready ? 'Done' : `${q.step}/${q.steps.length}`;
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -127,21 +135,21 @@ function steps(texts: string[], current: number | null, progress?: { count: numb
 type JournalTab = 'underway' | 'today' | 'more';
 
 /**
- * The quest HUD: a tracker under the top bar (the quests under way, or where to start), the
- * quests screen (from the Menu, J, or a tap on the tracker) with every quest carried, today's tasks
- * and who has more, and the dialogue that opens when talking to an NPC owl (hand in, take on, or
- * open Nova's shop). `onOpen` makes room before a screen or the dialogue opens; `back` returns from
- * the quests screen to the Menu.
+ * The quest HUD. Quests live in the Menu (OP-083): the quests screen (from the Menu or J) lists every
+ * quest carried with its progress, and a finished one is collected there; today's tasks and who has
+ * more are its other tabs. Nothing about quests stays on the play screen, where the lobby keeps only
+ * its welcome. Talking to an NPC owl opens its dialogue (hand in, take on, or open Nova's shop).
+ * `onOpen` makes room before a screen or the dialogue opens; `back` returns from the quests screen to
+ * the Menu.
  */
 export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState, back: () => void): QuestUi {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  const tracker = el('div', 'tracker');
-  tracker.setAttribute('role', 'button');
-  tracker.setAttribute('aria-label', 'Quests under way: open Quests');
-  bar.insertAdjacentElement('afterend', tracker);
+  const welcome = el('div', 'welcome');
+  welcome.append(el('b', '', 'Welcome to Owl Park'), document.createTextNode('Walk through the turnstiles to enter the park.'));
+  bar.insertAdjacentElement('afterend', welcome);
 
   const journal = createModal(root, { name: 'quests', label: 'Quests', layout: 'card' });
   journal.box.classList.add('journal');
@@ -169,19 +177,33 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     }
   };
 
-  const activeCard = (q: ActiveQuestView, withDrop: boolean): HTMLElement => {
+  /** A quest carried: in the quests screen (`inJournal`, with its progress, Collect and Drop) or in its giver's dialogue. */
+  const activeCard = (q: ActiveQuestView, inJournal: boolean): HTMLElement => {
     const card = el('div', `qcard${q.ready ? ' ready' : ''}`);
     card.dataset['quest'] = q.id;
     const top = el('div', 'top');
-    top.append(el('b', '', q.title), chips(q));
+    top.append(el('b', '', q.title));
+    if (inJournal) {
+      const prog = el('span', 'prog', progressText(q));
+      prog.dataset['progress'] = '';
+      top.append(prog);
+    }
+    top.append(chips(q));
     card.appendChild(top);
     card.appendChild(steps([...q.steps, `Take it back to ${npcName(q.giver)}`], q.ready ? q.steps.length : q.step, q.current));
+    if (inJournal && q.ready) {
+      const row = el('div', 'collect');
+      // The giver hands the reward over: from here when it stands in this room, otherwise it says where.
+      if (getNpc(q.giver)?.room === room) row.append(el('span', '', `Done! ${npcName(q.giver)} has your reward.`), button('Collect', '', () => void run(() => actions.collect(q.id)), pending));
+      else row.append(el('span', '', `Done! Take it back to ${npcName(q.giver)} at ${npcPlace(q.giver)} to collect.`));
+      card.appendChild(row);
+    }
     const row = el('div', 'row2');
     const meta = el('div', 'meta');
     meta.append(el('span', '', `Reward: ${rewardText(q.reward)}`));
     if (q.endsAt) meta.append(el('span', '', `ends in ${timeLeft(q.endsAt)}`));
     row.appendChild(meta);
-    if (withDrop && !q.ready) row.appendChild(button('Drop', 'ghost', () => void run(() => actions.abandon(q.id)), pending));
+    if (inJournal && !q.ready) row.appendChild(button('Drop', 'ghost', () => void run(() => actions.abandon(q.id)), pending));
     card.appendChild(row);
     return card;
   };
@@ -199,39 +221,8 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     return card;
   };
 
-  const renderTracker = () => {
-    const board = state.board;
-    tracker.innerHTML = '';
-    if (room === 'lobby') {
-      // Quests happen inside the park: at the front gate, the way in.
-      const line = el('div', 'tq');
-      line.append(el('b', '', 'Welcome to Owl Park'), document.createTextNode('Walk through the turnstiles to enter the park.'));
-      tracker.appendChild(line);
-      return void tracker.classList.add('show');
-    }
-    if (!board) return void tracker.classList.remove('show');
-    const active = [...board.active].sort((a, b) => Number(b.ready) - Number(a.ready)).slice(0, 2);
-    for (const q of active) {
-      const line = el('div', `tq${q.ready ? ' ready' : ''}`);
-      line.append(el('b', '', q.title));
-      line.append(document.createTextNode(q.ready ? `Done! Take it back to ${npcName(q.giver)} at ${npcPlace(q.giver)}.` : q.current ? `${q.current.text}${q.current.need > 1 ? ` · ${q.current.count} of ${q.current.need}` : ''}` : ''));
-      tracker.appendChild(line);
-    }
-    if (!active.length && !board.storyDone.includes('story-welcome')) {
-      const line = el('div', 'tq');
-      line.append(el('b', '', 'New here?'), document.createTextNode(`Talk to ${npcName('bramble')} at ${npcPlace('bramble')}.`));
-      tracker.appendChild(line);
-    }
-    if (board.active.length > active.length) tracker.appendChild(el('div', 'tq', `+${board.active.length - active.length} more in Quests`));
-    const today = tasks.view;
-    if (today) {
-      const line = el('div', 'tq');
-      line.dataset['today'] = String(tasks.done);
-      line.append(el('b', '', 'Today'), document.createTextNode(tasks.done === today.tasks.length ? 'All three tasks done!' : `${tasks.done} of ${today.tasks.length} tasks done`));
-      tracker.appendChild(line);
-    }
-    tracker.classList.toggle('show', tracker.childElementCount > 0);
-  };
+  /** At the front gate, the way in: the lobby's welcome, the one line the play screen keeps. */
+  const renderWelcome = () => welcome.classList.toggle('show', room === 'lobby');
 
   const header = (title: string, sub: string, onClose: () => void, closeLabel: string) => {
     const h = el('header');
@@ -301,9 +292,10 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       panel.append(who, el('p', 'empty', `Daily quests change in ${timeLeft(board.nextDay)}; weekly ones in ${timeLeft(board.nextWeek)}.`));
       return;
     }
-    if (board.active.length) for (const q of board.active) panel.appendChild(activeCard(q, true));
+    if (board.active.length) for (const q of [...board.active].sort((a, b) => Number(b.ready) - Number(a.ready))) panel.appendChild(activeCard(q, true));
     else {
-      panel.appendChild(el('p', 'empty', 'No quests under way. Owls with a gold "!" over their heads have something for you.'));
+      const newcomer = !board.storyDone.includes('story-welcome') ? ` New here? Start with ${npcName('bramble')} at ${npcPlace('bramble')}.` : '';
+      panel.appendChild(el('p', 'empty', `No quests under way. Owls with a gold "!" over their heads have something for you.${newcomer}`));
       panel.appendChild(
         button('See who has quests', 'ghost', () => {
           tab = 'more';
@@ -351,7 +343,6 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   };
 
   const render = () => {
-    renderTracker();
     renderJournal();
     renderDialogue();
   };
@@ -369,18 +360,15 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     journal.open(opener);
     renderJournal();
   }
-  tracker.addEventListener('click', () => openJournal(false, tracker));
   state.onChange(render);
-  tasks.onChange(() => {
-    renderTracker();
-    renderJournal();
-  });
+  tasks.onChange(renderJournal);
   render();
 
   return {
     setRoom(r) {
       room = r;
-      renderTracker();
+      renderWelcome();
+      renderJournal();
     },
     openDialogue(npc) {
       onOpen();

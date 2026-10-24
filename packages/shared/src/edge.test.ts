@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { EMOTE_IDS, JUMP_EMOTE } from './collectibles';
 import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, type ServerFrame } from './edge';
+import { isEmoteId, isParkMessage } from './validate';
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 
@@ -78,6 +80,16 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1, y: 2 }, seq: 3 }))).toEqual({ t: 'move', to: { x: 1, y: 2 }, seq: 3 });
     expect(parseClientFrame(JSON.stringify({ t: 'look', look, extra: 1 }))).toEqual({ t: 'look', look });
     expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
+  });
+
+  it('accepts an emote from the catalogue and the hop every owl has, and nothing else', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'hoot' }))).toEqual({ t: 'emote', e: 'hoot' });
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: JUMP_EMOTE }))).toEqual({ t: 'emote', e: JUMP_EMOTE });
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'fly' }))).toBeNull();
+    // The hop is not a collectible: no catalogue emote, so a quest, the wheel or the shop never meet it.
+    expect(EMOTE_IDS).not.toContain(JUMP_EMOTE);
+    expect(isEmoteId(JUMP_EMOTE)).toBe(false);
+    expect(isParkMessage({ t: 'emote', id: 'p1', e: JUMP_EMOTE })).toBe(true);
   });
 
   it('accepts positions anywhere in a room wider than one screen', () => {

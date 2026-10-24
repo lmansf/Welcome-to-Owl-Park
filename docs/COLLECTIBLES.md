@@ -106,8 +106,12 @@ to one per 1.5 s per owl.
   colours, wear, pets and effects, a card per item with its colourway dots; a tap puts it on or
   takes it off, and what is not owned yet shows greyed with where to find it). The **emote wheel**
   (`ui/emoteWheel.ts`: the owned emotes round a ring, eight a page) has its own button beside the
-  Menu, and on a keyboard 1 to 8 play the emotes as the wheel numbers them, without opening it.
-  The quest tracker, the quests screen, dialogue and shop are in [QUESTS.md](QUESTS.md).
+  Menu (above the pad on touch screens), and on a keyboard 1 to 8 play the emotes as the wheel
+  numbers them, without opening it. The quests screen, dialogue and shop are in
+  [QUESTS.md](QUESTS.md).
+- The hop (the Jump button, the space bar) rides the emote frame as `jump` (`JUMP_EMOTE`), but it
+  is no collectible: not in the catalogue or the wheel, owned by every owl, counted by no quest
+  (see Controls in [ACTIVITIES.md](ACTIVITIES.md)).
 - Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
   shop hooks.
 

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import {
   CABINET_OFF,
   EMOTE_IDS,
+  JUMP_EMOTE,
+  JUMP_EVERY_MS,
   LEFT_PARK_SPAWN,
   LOBBY_ROOM,
   KIND_RULES,
@@ -27,7 +29,6 @@ import {
   foregroundTiles,
   getFurniture,
   getInteractable,
-  getNpc,
   getQuest,
   insidePark,
   interactablesIn,
@@ -117,11 +118,11 @@ const USE_LINES: Record<string, readonly string[]> = {
   moonbeam: ['The moonbeam is warm. You feel a little shinier.', 'You bask. The moonlight hums softly.', 'Silver light settles on your feathers.'],
 };
 
-/** Something the owl was walking up to do: talk to an NPC or use an interactable on arrival. */
-interface Errand {
-  kind: 'talk' | 'use';
-  id: string;
-}
+/**
+ * Something the owl was walking up to do on arrival: talk to an NPC, use an interactable, or hand a
+ * finished quest to the NPC that gave it (Collect in the quests screen).
+ */
+type Errand = { kind: 'talk' | 'use'; id: string } | { kind: 'handin'; id: string; quest: string };
 
 /** Something to do where the owl stands: a button each, and E runs the first. */
 interface Action {
@@ -204,6 +205,8 @@ export class RoomScene extends Phaser.Scene {
   /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
   private bubbles: SpeechBubbles | null = null;
   private saidAt = Number.NEGATIVE_INFINITY;
+  /** When this owl last hopped (the Jump button). */
+  private jumpedAt = Number.NEGATIVE_INFINITY;
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
@@ -729,7 +732,9 @@ export class RoomScene extends Phaser.Scene {
     pos: Vec2;
     walking: boolean;
     look: OwlLook;
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null }>;
+    /** How high the owl is drawn above the floor (a hop), in room pixels; its place stays at `pos`. */
+    height: number;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number }>;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
     bubbles: Array<{ id: string; n: number }>;
     connected: boolean;
@@ -762,7 +767,8 @@ export class RoomScene extends Phaser.Scene {
       pos: { ...this.me.pos },
       walking: this.me.walking,
       look: this.look,
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null })),
+      height: this.me.hopHeight(),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.hopHeight() })),
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
@@ -803,7 +809,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Where an errand happens and how close the owl must stand for it. */
   private errandSpot(e: Errand): { pos: Vec2; reach: number } | null {
-    if (e.kind === 'talk') {
+    if (e.kind === 'talk' || e.kind === 'handin') {
       const npc = this.npcs.get(e.id);
       return npc ? { pos: npc.def.pos, reach: NPC_TALK_RADIUS } : null;
     }
@@ -813,6 +819,7 @@ export class RoomScene extends Phaser.Scene {
 
   private runErrand(e: Errand): void {
     if (e.kind === 'talk') void this.talk(e.id);
+    else if (e.kind === 'handin') void this.handInQuest(e.quest);
     else void this.use(e.id);
   }
 
@@ -828,7 +835,7 @@ export class RoomScene extends Phaser.Scene {
     }
     // Stand beside an NPC (on the visitor's side), or right on a leaf pile or at a stall.
     const side = this.me.pos.x < spot.pos.x ? -1 : 1;
-    const target = e.kind === 'talk' ? { x: spot.pos.x + side * 70, y: spot.pos.y + 24 } : spot.pos;
+    const target = e.kind === 'use' ? spot.pos : { x: spot.pos.x + side * 70, y: spot.pos.y + 24 };
     if (!this.walkTo(target)) {
       // Already as close as the floor allows.
       if (distance(this.me.pos, spot.pos) <= spot.reach + REACH_SLACK / 2) this.runErrand(e);
@@ -909,14 +916,12 @@ export class RoomScene extends Phaser.Scene {
     for (const [key, it] of wanted) if (!this.items.has(key)) this.items.set(key, new QuestItemMarker(this, it.quest, it.n, it.kind, { x: it.x, y: it.y }));
   }
 
-  /** Toasts for quest steps that moved. */
+  /**
+   * Quest steps that moved (OP-083): only a quest finished is news, a short line at the top and the
+   * dot on the Menu button. Each step's progress shows in the quests screen, not over the room.
+   */
   private showUpdates(updates: QuestUpdate[]): void {
-    for (const u of updates) {
-      const giver = getNpc(getQuest(u.quest)?.giver ?? '')?.name ?? 'its giver';
-      if (u.ready) this.hud.toast(`${u.title}: all done! Take it back to ${giver}.`, 4200, '#FFD36A');
-      else if (u.count >= u.need) this.hud.toast(`${u.title}: step done.`, 2800, '#FFD36A');
-      else this.hud.toast(`${u.title}: ${u.count} of ${u.need}`, 2200);
-    }
+    for (const u of updates) if (u.ready) this.hud.questNews('done', u.title);
   }
 
   /** Talk to an NPC owl standing close: it counts for quests, and its dialogue opens. */
@@ -1027,7 +1032,7 @@ export class RoomScene extends Phaser.Scene {
     if (gen !== this.gen) return false;
     this.applyReply(res);
     const title = getQuest(quest)?.title ?? 'Quest';
-    if (res.ok) this.hud.toast(`New quest: ${title}`, 3000, '#FFD36A');
+    if (res.ok) this.hud.questNews('new', title);
     else if (res.reason === 'full') this.hud.toast(`You can carry ${MAX_ACTIVE_QUESTS} quests at once. Finish or drop one first.`, 3800);
     else if (res.reason === 'far') this.hud.toast('Walk a little closer first.', 2600);
     else if (res.reason === 'done') this.hud.toast('You have done that one already.', 2600);
@@ -1043,6 +1048,20 @@ export class RoomScene extends Phaser.Scene {
     this.applyReply(res);
     if (res.ok) this.hud.toast(`Dropped: ${getQuest(quest)?.title ?? 'the quest'}`, 2600);
     return res.ok;
+  }
+
+  /**
+   * Collect from the quests screen (OP-083): a finished quest goes to the NPC that gave it, as from its
+   * dialogue. Standing close, at once; elsewhere in this room, the quests screen closes and the owl
+   * walks up and hands it in on arrival. Its giver in another room: false (the screen says where).
+   */
+  async collectQuest(quest: string): Promise<boolean> {
+    const giver = getQuest(quest)?.giver;
+    const npc = giver ? this.npcs.get(giver) : undefined;
+    if (!npc || !this.built || this.leaving) return false;
+    if (distance(this.me.pos, npc.def.pos) <= NPC_TALK_RADIUS) return this.handInQuest(quest);
+    this.hud.closePanels();
+    return this.goDo({ kind: 'handin', id: npc.id, quest });
   }
 
   /** Hand a finished quest back to the NPC whose dialogue is open: feathers, and maybe a collectible. */
@@ -1085,6 +1104,21 @@ export class RoomScene extends Phaser.Scene {
     this.conn?.send({ t: 'emote', id: this.playerId, e });
     const near = [...this.npcs.values()].filter((n) => distance(n.def.pos, this.me.pos) <= NPC_EMOTE_RADIUS).map((n) => n.id);
     this.link?.note({ kind: 'emote', emote: e, room: this.room.id, near });
+    return true;
+  }
+
+  /**
+   * The Jump button or the space bar (OP-082): a hop with a flap, here and for everyone in the room.
+   * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
+   * One every JUMP_EVERY_MS, so a held thumb cannot flood the room.
+   */
+  jump(): boolean {
+    if (!this.built || this.leaving) return false;
+    const now = Date.now();
+    if (now - this.jumpedAt < JUMP_EVERY_MS) return false;
+    this.jumpedAt = now;
+    this.me.hop(now);
+    this.conn?.send({ t: 'emote', id: this.playerId, e: JUMP_EMOTE });
     return true;
   }
 
