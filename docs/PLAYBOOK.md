@@ -63,7 +63,9 @@ A busy day is a different limit. With the room server in one object, as today, t
 about 80 owls walking at once (`docs/ARCHITECTURE.md`, section 6); past that, moves lag and then
 every owl is dropped at once and reconnects. Before a day that may bring more, such as opening
 night, set `ROOM_SHARDING` to `room` in `apps/edge/wrangler.jsonc` and deploy: each room then holds
-its own cap of 80.
+its own cap of 80. For a night busier still, the keepers' capacity page (`/admin/capacity`, no
+deploy) puts a line in front of the park, turns on the busy ribbon and opens copies of a busy room:
+when and how in `docs/CAPACITY.md`.
 
 ## 6. Words for when the park is down (drafts, for the owner's approval)
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COLLECTOR_KEY, LOCAL_COLLECTOR_KEY, holdsOwl } from '../identity';
 import type { WalletEntry } from '../net';
-import { HOME_WORDS, walletSummary } from './home';
+import { HOME_WORDS, LINE_WORDS, walletSummary } from './home';
 
 const T0 = Date.UTC(2026, 11, 1, 18, 0, 0);
 const H = 3_600_000;
@@ -47,5 +47,14 @@ describe('the home screen (OP-065)', () => {
     expect(walletSummary([], 'ticket', T0)).toBe(HOME_WORDS.none);
     expect(walletSummary([ticket({ status: 'used' })], 'ticket', T0)).toBe(HOME_WORDS.none);
     expect(walletSummary([], 'open', T0)).toBeNull();
+  });
+});
+
+describe('the line on the home screen (OP-075)', () => {
+  it('tells an owl its place and a rough wait in plain words', () => {
+    expect(LINE_WORDS.place(7)).toBe('Your place in line: 7');
+    expect(LINE_WORDS.wait(1)).toBe('About a minute');
+    expect(LINE_WORDS.wait(12)).toBe('About 12 minutes');
+    expect(LINE_WORDS.wait(61)).toBe('More than an hour');
   });
 });

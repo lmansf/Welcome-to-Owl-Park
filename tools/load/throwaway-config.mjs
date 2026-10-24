@@ -43,6 +43,9 @@ delete config.routes;
 delete config.route;
 config.workers_dev = true;
 config.triggers = { crons: [] };
+// LOAD_MODE=capacity is the busy-night rehearsal (OP-075, tools/load/capacity-dry-run.mjs): a small
+// hub, so a few dozen bots fill a copy of it, and the admin key the rehearsal changes settings with.
+const capacity = process.env.LOAD_MODE === 'capacity';
 config.vars = {
   ...config.vars,
   // LOAD_SHARDING=room tries each room on its own object (ROOM_SHARDING); otherwise as the park has it.
@@ -50,10 +53,12 @@ config.vars = {
   TRUST_FORWARDED_FOR: 'true',
   MAX_SOCKETS_PER_IP: '64',
   // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
-  ROOM_CAPS: JSON.stringify({ lobby: 120, hub: 120, grove: 120, market: 120 }),
+  ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120 }),
+  // A throwaway key made for this one run (the workflow masks it); the copy is deleted after.
+  ...(capacity && process.env.LOAD_ADMIN_KEY ? { ADMIN_KEY: process.env.LOAD_ADMIN_KEY } : {}),
 };
 if (config.name !== LOAD_NAME || 'routes' in config || 'route' in config || config.env) {
   throw new Error('the throwaway copy must have its own name, no domain and no environments');
 }
 writeFileSync(OUT, `${JSON.stringify(config, null, 2)}\n`);
-console.log(`wrote apps/edge/wrangler.load.jsonc: ${LOAD_NAME}, its workers.dev address only, no cron, ROOM_SHARDING ${config.vars.ROOM_SHARDING}`);
+console.log(`wrote apps/edge/wrangler.load.jsonc: ${LOAD_NAME}, its workers.dev address only, no cron, ROOM_SHARDING ${config.vars.ROOM_SHARDING}${capacity ? ', the busy-night rehearsal' : ''}`);

@@ -5,8 +5,8 @@
  * number belongs to the browser that took it (its collector), so nobody else can take its turn.
  */
 
-/** An owl let in may take a minute to reach its room: until then it still counts against the free places. */
-export const CLAIM_GRACE_MS = 60_000;
+/** An owl let in takes a few seconds to reach its room: until then it still counts against the free places. */
+export const CLAIM_GRACE_MS = 20_000;
 /** Numbers older than this are forgotten. */
 const KEEP_MS = 6 * 60 * 60_000;
 /** The line's pace is measured over this long. */

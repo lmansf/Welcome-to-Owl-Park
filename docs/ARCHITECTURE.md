@@ -166,7 +166,11 @@ variable (defaults: lobby and hub 80; grove, market, arcade and the street 40; a
    time billed. The park-wide count in the HUD then covers only the owl's own room (the
    `/api/counts` route still adds up every room), and the lanterns and the quiz start afresh in the
    hub's own object.
-3. Instances (`hub-1`, `hub-2`): not built yet; the protocol and ids leave room for it.
+3. Copies of a room (OP-075, `apps/edge/src/copies.ts`): with one object per room, the keepers open
+   a second copy of a busy room from `/admin/capacity`, no deploy; each copy is a room object of
+   its own (`room:hub~2`), and the Worker sends a newcomer to the copy with the most free places.
+   The line in front of the park and the busy ribbon live beside the copies' settings in the
+   overflow object (`apps/edge/src/Overflow.ts`). When to use which: `docs/CAPACITY.md`.
 4. The `Room` class in `apps/edge/src/Room.ts` has no platform dependency. Porting to a plain
    Node WebSocket process is a small adapter, which is the exit from the hosted platform.
 

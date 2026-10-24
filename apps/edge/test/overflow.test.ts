@@ -60,7 +60,7 @@ describe('the line (OP-075)', () => {
     expect(line.status(again, 'c_aaaaaaaa', T0 + HOLD + 1, HOLD)).toEqual({ state: 'waiting', place: 1 });
   });
 
-  it('counts an owl let in for a minute more, until it is in a room', () => {
+  it('counts an owl let in a little longer, until it is in a room', () => {
     const line = new Line(sqlStorage());
     const a = line.join('c_aaaaaaaa', T0, HOLD);
     line.tick(T0, HOLD, 1);

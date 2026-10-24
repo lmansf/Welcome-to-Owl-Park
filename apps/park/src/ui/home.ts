@@ -25,6 +25,27 @@ export const HOME_WORDS = {
   menu: 'Home screen',
 } as const;
 
+/** Every word the line shows on the home screen while an owl waits to get in (OP-075), for the owner's approval. */
+export const LINE_WORDS = {
+  heading: "You're in line",
+  /** Shown as a label over the number, big. */
+  placeLabel: 'Your place in line:',
+  place: (n: number) => `Your place in line: ${n}`,
+  /** A rough wait, from how fast the line has moved lately. */
+  wait: (min: number) => (min <= 1 ? 'About a minute' : min > 60 ? 'More than an hour' : `About ${min} minutes`),
+  /** Before the line has moved at all. */
+  waitUnknown: 'Your wait shows here once the line starts moving',
+  auto: 'This page updates on its own.',
+  /** Only for an owl holding a ticket: its clock starts at the gate's first scan (C35). */
+  ticket: "Your ticket's time starts at the turnstiles, not here.",
+  turn: "It's your turn!",
+  passed: "Your turn came while you were away, so you're back in line.",
+  offline: "We can't reach the park just now. Trying again…",
+} as const;
+
+/** What the home screen shows of the line: the owl's place, or a short message. */
+export type LineView = { place: number; waitMin: number | null; ticket: boolean } | { message: 'turn' | 'passed' | 'offline' };
+
 const shortDate = (ms: number) => new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 /** Running, then ready, then waiting on the store: the ticket the line under Play is about. */
@@ -69,6 +90,10 @@ export interface HomeScreen {
   note(text: string | null): void;
   /** The frame the owl is drawn in, in CSS pixels. */
   frame(): PreviewFrame;
+  /** The line (OP-075): the owl's place while it waits, in place of Play; null puts Play back. */
+  line(view: LineView | null): void;
+  /** Whether the owl is waiting in the line. */
+  inLine(): boolean;
 }
 
 /** Width over height of what the builder's preview keeps in view around the owl, a hat above and a pet behind (VIEW in game/BuilderScene.ts). */
@@ -98,6 +123,13 @@ function css(): string {
 #hud .home .h-wallet{margin:-4px 0 0;font-size:14px;line-height:1.35;text-align:center;opacity:.92}
 #hud .home .h-note{margin:0;align-self:flex-start;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;background:rgba(123,201,80,.2);border:1px solid rgba(123,201,80,.65)}
 #hud .home [hidden]{display:none}
+#hud .home .h-line{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.45)}
+#hud .home .h-line h2{margin:0;font-size:clamp(16px,2.4vh,19px);color:#FFD36A}
+#hud .home .h-line .h-place{margin:0;font-size:15px;opacity:1}
+#hud .home .h-line .h-place strong{display:block;font-size:clamp(34px,6vh,48px);line-height:1.05;color:#F6F1E3}
+#hud .home .h-line .h-message{margin:0;font-size:clamp(18px,2.8vh,22px);font-weight:700;opacity:1}
+#hud .home .h-line p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
+#hud .home .h-line .h-small-note{font-size:13px;opacity:.75}
 #hud .home .h-stage{min-width:0;min-height:0}
 @media (max-width:520px){
   #hud .home{grid-template-columns:minmax(0,50vw) minmax(0,1fr)}
@@ -130,6 +162,14 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       <p class="h-note" data-home-note hidden></p>
       <button class="h-main" data-home-btn="login"></button>
       <button class="h-main" data-home-btn="play"></button>
+      <div class="h-line" data-home-line role="status" aria-live="polite" hidden>
+        <h2 data-line-heading></h2>
+        <p class="h-place" data-line-place><span data-line-label></span> <strong data-line-number></strong></p>
+        <p class="h-message" data-line-message hidden></p>
+        <p data-line-wait></p>
+        <p class="h-small-note" data-line-ticket hidden></p>
+        <p class="h-small-note" data-line-auto></p>
+      </div>
       <p class="h-wallet" data-home-wallet hidden></p>
       <button class="ghost" data-home-btn="owl"></button>
       <button class="ghost h-small" data-home-btn="settings"></button>
@@ -145,6 +185,16 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   const wallet = $<HTMLElement>('[data-home-wallet]');
   const noteEl = $<HTMLElement>('[data-home-note]');
   const stage = $<HTMLElement>('[data-home-stage]');
+  const lineEl = $<HTMLElement>('[data-home-line]');
+  const linePlace = $<HTMLElement>('[data-line-place]');
+  const lineNumber = $<HTMLElement>('[data-line-number]');
+  const lineMessage = $<HTMLElement>('[data-line-message]');
+  $<HTMLElement>('[data-line-label]').textContent = LINE_WORDS.placeLabel;
+  const lineWait = $<HTMLElement>('[data-line-wait]');
+  const lineTicket = $<HTMLElement>('[data-line-ticket]');
+  const lineAuto = $<HTMLElement>('[data-line-auto]');
+  $<HTMLElement>('[data-line-heading]').textContent = LINE_WORDS.heading;
+  lineTicket.textContent = LINE_WORDS.ticket;
   login.textContent = HOME_WORDS.logIn;
   play.textContent = HOME_WORDS.play;
   owl.textContent = HOME_WORDS.owl;
@@ -157,6 +207,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
 
   let shown = false;
   let loggedIn = false;
+  let waiting = false;
   const frame = (): PreviewFrame => {
     // The owl stands low in the space beside the buttons. On a narrow phone its frame reaches a little
     // under the buttons' side, where only a pet would stand, so the owl itself can fill the space.
@@ -170,7 +221,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   }).observe(stage);
   // On a computer, Enter plays; a focused button takes Enter itself.
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || actions.blocked()) return;
+    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || actions.blocked()) return;
     const t = e.target;
     if (t instanceof HTMLElement && t !== document.body && (!el.contains(t) || t instanceof HTMLButtonElement)) return;
     e.preventDefault();
@@ -183,7 +234,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       shown = true;
       el.hidden = false;
       login.hidden = isIn;
-      play.hidden = !isIn;
+      play.hidden = !isIn || waiting;
       owl.hidden = !isIn;
       if (!isIn) {
         wallet.hidden = true;
@@ -199,12 +250,42 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     isShown: () => shown,
     setWallet(line) {
       wallet.textContent = line ?? '';
-      wallet.hidden = !line || !loggedIn;
+      wallet.hidden = !line || !loggedIn || waiting;
     },
     note(text) {
       noteEl.textContent = text ?? '';
       noteEl.hidden = !text;
     },
     frame,
+    line(view) {
+      waiting = view !== null;
+      lineEl.hidden = !waiting;
+      play.hidden = !loggedIn || waiting;
+      if (waiting) wallet.hidden = true;
+      else wallet.hidden = !wallet.textContent || !loggedIn;
+      if (!view) return;
+      if ('message' in view) {
+        // A short message in the place's spot: the turn, a turn that passed, or the park out of reach.
+        linePlace.hidden = true;
+        lineMessage.hidden = false;
+        lineMessage.textContent = LINE_WORDS[view.message];
+        lineWait.textContent = '';
+        lineWait.hidden = true;
+        lineTicket.hidden = true;
+        lineAuto.hidden = view.message === 'turn';
+        lineAuto.textContent = LINE_WORDS.auto;
+        return;
+      }
+      linePlace.hidden = false;
+      lineMessage.hidden = true;
+      lineNumber.textContent = String(view.place);
+      linePlace.setAttribute('aria-label', LINE_WORDS.place(view.place));
+      lineWait.hidden = false;
+      lineWait.textContent = view.waitMin === null ? LINE_WORDS.waitUnknown : LINE_WORDS.wait(view.waitMin);
+      lineTicket.hidden = !view.ticket;
+      lineAuto.hidden = false;
+      lineAuto.textContent = LINE_WORDS.auto;
+    },
+    inLine: () => waiting,
   };
 }
