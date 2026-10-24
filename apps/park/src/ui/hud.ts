@@ -198,9 +198,9 @@ const CSS = `
 #hud .badge{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#FF6B81;box-shadow:0 0 0 2px #0C1E36,0 0 8px rgba(255,107,129,.8)}
 #hud .badge[hidden]{display:none}
 #hud .pad{display:none}
-#hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
+#hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .nest-welcome,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
 #hud.no-stick .stick{display:none}
-#hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
+#hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
 #hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
@@ -245,11 +245,12 @@ const CSS = `
 #hud .hint.say.flip{flex-direction:row-reverse;padding:0 11px 0 14px}
 #hud .hint.say i{border-left-width:18px;border-top-width:7px;border-bottom-width:7px}
 #hud .hint.say span{color:#F6F1E3;font-size:14px;font-weight:700;white-space:nowrap}
-/* The nest's welcome (OP-105) looks as the lobby's does (.welcome, ui/quests.ts), and closes at a tap. */
-#hud .nest-welcome{display:none}
+/* The nest's welcome (OP-105) looks as the lobby's card does (.welcome, ui/quests.ts), and closes at a tap. */
+#hud .nest-welcome{display:none;position:relative;margin-top:8px;width:min(330px,calc(100vw - 24px));min-height:0;padding:7px 32px 7px 11px;text-align:left;color:#F6F1E3;
+  background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;font-size:13px;font-weight:400;line-height:1.3;box-shadow:none;backdrop-filter:blur(6px)}
 #hud .nest-welcome.show{display:block}
-#hud button.welcome{position:relative;color:#F6F1E3;font-weight:400;text-align:left;min-height:0;padding-right:32px;box-shadow:none}
-#hud button.welcome i{position:absolute;top:6px;right:11px;font-style:normal;font-size:16px;line-height:1;opacity:.7}
+#hud .nest-welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
+#hud .nest-welcome i{position:absolute;top:6px;right:11px;font-style:normal;font-size:16px;line-height:1;opacity:.7}
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
 `;
 
@@ -281,7 +282,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       <div class="feathers" role="status" aria-label="Feathers" data-feathers><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 28C6 16 15 6 28 3C27 15 18 24 7 27Z" fill="#FFD36A"/><path d="M4 30Q15 18 28 3" stroke="#0C1E36" stroke-width="1.6" fill="none"/></svg><span data-feathers-text>0</span></div>
       <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
     </div>
-    <button class="welcome nest-welcome" data-nest-welcome><b></b><span></span><i aria-hidden="true">×</i></button>
+    <button class="nest-welcome" data-nest-welcome><b></b><span></span><i aria-hidden="true">×</i></button>
     <div class="hints" data-hints></div>
     <div class="notices" aria-live="polite" data-notices></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
