@@ -1,4 +1,4 @@
-import { MAX_ACTIVE_QUESTS, WAY_OUT_WORDS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { MAX_ACTIVE_QUESTS, NEST_WORDS, WAY_OUT_WORDS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -60,6 +60,8 @@ export interface HudHint {
   /** CSS colour of the ring and arrow. */
   tint: string;
   label: string;
+  /** Words shown beside the arrow, toward the middle of the screen ("To the park", OP-105); none on the rest. */
+  text?: string;
 }
 
 export interface Hud {
@@ -143,6 +145,11 @@ export interface Hud {
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
   onHint(cb: (id: string) => void): void;
+  /**
+   * The nest's welcome (OP-105): a card under the top bar the first time this device's owl is in its
+   * own nest, saying the park is out of the door. A tap on it closes it, and so does leaving the nest.
+   */
+  setNestWelcome(shown: boolean): void;
   setLook(look: OwlLook): void;
   onLookChange(cb: (look: OwlLook) => void): void;
   /** The stage quiz's card while the owl is by the stage; null hides it. */
@@ -191,9 +198,9 @@ const CSS = `
 #hud .badge{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#FF6B81;box-shadow:0 0 0 2px #0C1E36,0 0 8px rgba(255,107,129,.8)}
 #hud .badge[hidden]{display:none}
 #hud .pad{display:none}
-#hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
+#hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .nest-welcome,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
 #hud.no-stick .stick{display:none}
-#hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
+#hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
 #hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
@@ -233,6 +240,17 @@ const CSS = `
 #hud .hints{position:absolute;inset:0;pointer-events:none}
 #hud .hint{position:absolute;width:44px;height:44px;min-height:0;margin:-22px 0 0 -22px;padding:0;border-radius:50%;background:rgba(12,30,54,.8);border:2px solid var(--tint);box-shadow:0 0 12px var(--tint);display:flex;align-items:center;justify-content:center;animation:hud-in .25s ease-out}
 #hud .hint i{display:block;width:0;height:0;border-left:14px solid var(--tint);border-top:9px solid transparent;border-bottom:9px solid transparent;transform-origin:50% 50%}
+/* A chip with words (the way to the park, OP-105): the arrow where the plain chip's would be, the words toward the middle. */
+#hud .hint.say{width:auto;margin:-22px 0 0;padding:0 14px 0 11px;gap:8px;border-radius:22px;justify-content:flex-start}
+#hud .hint.say.flip{flex-direction:row-reverse;padding:0 11px 0 14px}
+#hud .hint.say i{border-left-width:18px;border-top-width:7px;border-bottom-width:7px}
+#hud .hint.say span{color:#F6F1E3;font-size:14px;font-weight:700;white-space:nowrap}
+/* The nest's welcome (OP-105) looks as the lobby's card does (.welcome, ui/quests.ts), and closes at a tap. */
+#hud .nest-welcome{display:none;position:relative;margin-top:8px;width:min(330px,calc(100vw - 24px));min-height:0;padding:7px 32px 7px 11px;text-align:left;color:#F6F1E3;
+  background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;font-size:13px;font-weight:400;line-height:1.3;box-shadow:none;backdrop-filter:blur(6px)}
+#hud .nest-welcome.show{display:block}
+#hud .nest-welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
+#hud .nest-welcome i{position:absolute;top:6px;right:11px;font-style:normal;font-size:16px;line-height:1;opacity:.7}
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
 `;
 
@@ -264,6 +282,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       <div class="feathers" role="status" aria-label="Feathers" data-feathers><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 28C6 16 15 6 28 3C27 15 18 24 7 27Z" fill="#FFD36A"/><path d="M4 30Q15 18 28 3" stroke="#0C1E36" stroke-width="1.6" fill="none"/></svg><span data-feathers-text>0</span></div>
       <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
     </div>
+    <button class="nest-welcome" data-nest-welcome><b></b><span></span><i aria-hidden="true">×</i></button>
     <div class="hints" data-hints></div>
     <div class="notices" aria-live="polite" data-notices></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
@@ -294,6 +313,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const hintsEl = $<HTMLElement>('[data-hints]');
   const hintEls = new Map<string, HTMLButtonElement>();
   let hintCb: ((id: string) => void) | null = null;
+  const nestWelcome = $<HTMLButtonElement>('[data-nest-welcome]');
+  nestWelcome.querySelector('b')!.textContent = NEST_WORDS.welcome;
+  nestWelcome.querySelector('span')!.textContent = NEST_WORDS.welcomeLine;
+  nestWelcome.addEventListener('click', () => nestWelcome.classList.remove('show'));
   const feathersPill = $<HTMLElement>('[data-feathers]');
   const feathersText = $<HTMLElement>('[data-feathers-text]');
   const bar = $<HTMLElement>('.bar');
@@ -438,7 +461,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     else if (id === 'leave') leaveCard.open(opener);
     // Going home asks nothing: the owl's nest is a tap away from anywhere, and the park a tap back.
     else if (id === 'home') wayOut?.home();
-    // Nor does the home screen: Play is a tap back into the lobby.
+    // Nor does the home screen: Play is a tap back in, to the owl's nest.
     else if (id === 'title') wayOut?.title();
   }
   const toggle = (id: ScreenId, isOpen: () => boolean) => {
@@ -658,11 +681,26 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
           hintsEl.appendChild(b);
           hintEls.set(h.id, b);
         }
-        b.style.left = `${h.x.toFixed(1)}px`;
         b.style.top = `${h.y.toFixed(1)}px`;
         b.style.setProperty('--tint', h.tint);
         b.setAttribute('aria-label', h.label);
         (b.firstChild as HTMLElement).style.transform = `rotate(${h.angle.toFixed(3)}rad)`;
+        let words = b.querySelector('span');
+        if (!h.text) {
+          words?.remove();
+          b.classList.remove('say', 'flip');
+          b.style.left = `${h.x.toFixed(1)}px`;
+          continue;
+        }
+        // Words beside the arrow, toward the middle of the screen, and the whole chip kept on it.
+        if (!words) words = b.appendChild(document.createElement('span'));
+        words.textContent = h.text;
+        const flip = h.x > window.innerWidth / 2;
+        b.classList.add('say');
+        b.classList.toggle('flip', flip);
+        const w = b.offsetWidth;
+        const left = flip ? h.x + 22 - w : h.x - 22;
+        b.style.left = `${Math.max(4, Math.min(window.innerWidth - w - 4, left)).toFixed(1)}px`;
       }
       for (const [id, b] of hintEls) {
         if (seen.has(id)) continue;
@@ -672,6 +710,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     onHint(cb) {
       hintCb = cb;
+    },
+    setNestWelcome(shown) {
+      nestWelcome.classList.toggle('show', shown);
     },
     closePanels() {
       closeSheets();

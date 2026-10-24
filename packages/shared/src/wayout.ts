@@ -9,7 +9,7 @@
  */
 import { STREET_ROOM, isNestRoom } from './homes';
 
-/** Every visitor arrives in the lobby, and an owl that leaves the park is back there. */
+/** The front gate, outside the turnstiles: an owl that leaves the park is back here (every visit starts in its own nest, OP-105). */
 export const LOBBY_ROOM = 'lobby';
 /** Where an owl that left the park stands in the lobby: in front of the turnstiles, outside the gate. */
 export const LEFT_PARK_SPAWN = 'from-hub';
@@ -34,4 +34,18 @@ export function isFreeRoom(roomId: string): boolean {
 /** Inside the park, past the turnstiles: where "Leave the park" is offered. */
 export function insidePark(roomId: string): boolean {
   return !isFreeRoom(roomId);
+}
+
+/**
+ * The way to the park from a room outside it (OP-105): out of a nest by its door, along the street
+ * to the lobby, and through the turnstiles. Every visit starts in the owl's own nest, so the way is
+ * marked "To the park" all along: by a sign on the nest's door and at the street's end (the
+ * turnstiles, under the carved owls' wings, are a sign of their own), and on the chip at the
+ * screen's edge while the doorway is off screen. Null inside the park.
+ */
+export function parkwardDoor(roomId: string): string | null {
+  if (isNestRoom(roomId)) return 'to-street';
+  if (roomId === STREET_ROOM) return 'to-lobby';
+  if (roomId === LOBBY_ROOM) return 'gate';
+  return null;
 }

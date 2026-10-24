@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LOBBY_ROOM, NEST_WORDS, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LOBBY_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -104,8 +104,8 @@ game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies Ro
 // touch screens; E interacts and the space bar hops (the pad's Interact and Jump on touch screens), M
 // opens the Menu, T the Say wheel (1 to 8 play an emote at once), Q goes to the mirror in the owl's
 // nest, where Your owl is (OP-077), and J the quests. While the Menu or one of its screens is open,
-// the owl stays put. On the home screen only Q (to the nest, once there is an owl) and Escape do
-// anything.
+// the owl stays put. On the home screen only Q (as Play does, once there is an owl: into the nest,
+// before its mirror) and Escape do anything; Enter plays too (ui/home.ts).
 const interact = () => {
   if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
 };
@@ -129,7 +129,7 @@ const keyboard = attachKeyboard(window, {
   owl: () => {
     const go = mirrorKey({ owlOpen: hud.isOwlOpen(), blocking: hud.isBlocking(), atHome, loggedIn });
     if (go === 'close') hud.toggleOwl();
-    else if (go === 'nest') void goToNest();
+    else if (go === 'nest') startPlay();
     else if (go === 'mirror') roomScene()?.toMirror();
   },
   journal: () => {
@@ -258,9 +258,8 @@ hud.onOwlPreview((frame, mirror) => {
 
 // ---- the home screen (OP-065) ----
 /**
- * From the home screen into the park: Play to the lobby, or Go to your nest to stand before its mirror
- * (through the line first while the park has one, OP-075). A line this owl stood in is done, and a
- * screen left open over the home screen (the owl, Settings) closes first.
+ * From the home screen into the park, landing where `start` says (the owl's own nest, OP-105). A line
+ * this owl stood in is done, and a screen left open over the home screen (the owl, Settings) closes first.
  */
 function leaveHome(start: RoomStart): void {
   if (!atHome) return;
@@ -273,12 +272,15 @@ function leaveHome(start: RoomStart): void {
   drawOwl(null, false);
   game.scene.getScene('home').scene.start('room', start satisfies RoomStart);
 }
-/** Go to your nest (OP-077): straight into the owl's own nest, standing before its mirror, where Your owl is. */
-async function goToNest(): Promise<void> {
-  const nest = await collection.service.homeNest();
+/**
+ * Where Play lands the owl (OP-105): in its own nest, standing before its mirror, where Your owl is
+ * (OP-077), every visit and on coming back alike. A first visit's nest is made as it is asked for.
+ * Should the nests not answer, the lobby, outside the turnstiles, so that Play always gets the owl in.
+ */
+async function playStart(): Promise<RoomStart> {
+  const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
-  if (!room) return hud.toast(NEST_WORDS.notAnswering, 3500);
-  startPlay({ room, spawn: 'mirror' });
+  return room ? { room, spawn: 'mirror' } : { room: LOBBY_ROOM, spawn: undefined };
 }
 let collecting = false;
 /** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */
@@ -323,13 +325,22 @@ const stopLine = () => {
   lineNumber = null;
   home.line(null);
 };
-/** Where this owl goes once the line lets it in: the lobby (Play), or its nest's mirror (Go to your nest). */
-let lineGoal: RoomStart = { room: LOBBY_ROOM, spawn: undefined };
-const enterPark = () => leaveHome(lineGoal);
+/** Play is asking for the owl's nest on its way in: another Play waits for it. */
+let entering = false;
+/** In at last (the line let this owl in, or there is none): into its own nest. */
+const enterPark = async () => {
+  if (entering) return;
+  entering = true;
+  try {
+    leaveHome(await playStart());
+  } finally {
+    entering = false;
+  }
+};
 /** What the line said: in the park, its turn, a turn that passed, or its place (and when to look again). */
 const onLine = (s: LineStatus) => {
   if (!atHome) return;
-  if (s.state === 'go') return enterPark();
+  if (s.state === 'go') return void enterPark();
   if (s.state === 'called') {
     home.line({ message: 'turn' });
     lineSoon(enterPark, 900); // a moment to read it
@@ -362,11 +373,10 @@ async function askLine(join: boolean): Promise<void> {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && atHome && lineNumber !== null) lineSoon(() => void askLine(false), 0);
 });
-/** Into the park (the lobby unless told where): through the line when the park has one (the server says), else straight in. */
-const startPlay = (goal: RoomStart = { room: LOBBY_ROOM, spawn: undefined }) => {
-  if (!atHome || home.inLine() || lineTimer) return;
-  lineGoal = goal;
-  if (!transport.line) return leaveHome(goal);
+/** Play: into the owl's own nest, through the line when the park has one (the server says), else straight in. */
+const startPlay = () => {
+  if (!atHome || home.inLine() || lineTimer || entering) return;
+  if (!transport.line) return void enterPark();
   void askLine(true);
 };
 /** The ribbon on the home screen, asked of the park (in a room, the room tells it). */
@@ -389,7 +399,6 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
     hud.openOwl(opener);
   },
   play: () => startPlay(),
-  owl: () => void goToNest(),
   settings: (opener) => hud.openSettings(opener),
   stage: (frame) => {
     if (atHome && loggedIn && !hud.isBlocking()) drawOwl(frame, false);

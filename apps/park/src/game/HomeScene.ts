@@ -12,8 +12,8 @@ const ARCH_X = 960;
 /**
  * The home screen's backdrop (OP-065): the lobby's painting, dimmed, behind the buttons and the
  * visitor's own owl, which the builder's preview scene draws over this one. Nothing of the park
- * runs while it is up: Play starts the room scene in the lobby, and the Menu's Home screen comes
- * back here.
+ * runs while it is up: Play starts the room scene in the owl's own nest, and the Menu's Home screen
+ * comes back here.
  */
 export class HomeScene extends Phaser.Scene {
   private art: Phaser.GameObjects.Image | null = null;
@@ -36,7 +36,7 @@ export class HomeScene extends Phaser.Scene {
       this.scale.off(Phaser.Scale.Events.RESIZE, onResize);
       this.art = null;
       this.veil = null;
-      // The room loads its own copy of the lobby at the size it wants.
+      // A room loads its own art (the lobby's too) at the size it wants.
       releaseArt(this, [BACKDROP]);
     });
     this.layout();

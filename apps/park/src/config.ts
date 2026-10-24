@@ -16,11 +16,11 @@ export interface ParkConfig {
   /** The store's ticket page; empty until tickets go on sale (the booth then says they are coming). */
   ticketsUrl: string;
   /**
-   * The home screen comes first (OP-065), and Play goes on to the lobby; an address that names a
-   * room (tests, the art preview) or says `home=0` goes straight into the park.
+   * The home screen comes first (OP-065), and Play goes on to the owl's own nest (OP-105); an
+   * address that names a room (tests, the art preview) or says `home=0` goes straight into the park.
    */
   home: boolean;
-  /** Starting room id and spawn, from the query string; every visit starts in the lobby. */
+  /** Where an address that goes straight in starts, from the query string: the lobby unless it names a room. */
   room: string;
   spawn: string | undefined;
   /** Fixed player id for tests; otherwise a fresh id is generated per page load. */

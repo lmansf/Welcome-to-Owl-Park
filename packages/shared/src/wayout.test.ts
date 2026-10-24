@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ROOMS } from '../rooms';
+import { ROOMS, roomFor } from '../rooms';
 import { isWalkable, pointInRect, rectCenter } from './geometry';
 import { STREET_ROOM } from './homes';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, WAY_OUT_DOOR, WAY_OUT_WORDS, insidePark, isFreeRoom } from './wayout';
+import { resolveTarget } from './resolveTarget';
+import { findSpawn } from './room';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, WAY_OUT_DOOR, WAY_OUT_WORDS, insidePark, isFreeRoom, parkwardDoor } from './wayout';
 
 describe('leaving the park', () => {
   const hub = ROOMS['hub']!;
@@ -45,5 +47,28 @@ describe('leaving the park', () => {
 
   it('says only Logan’s words', () => {
     expect(Object.values(WAY_OUT_WORDS)).toEqual(['Leave the park', 'Go home', 'Leave the park? Your ticket keeps running.', 'Leave', 'Stay']);
+  });
+});
+
+describe('the way to the park (OP-105)', () => {
+  it('leads from where Play puts the owl, out of its nest, along the street and through the lobby into the hub, one walk a room', () => {
+    let at = { room: 'nest-k3x9q2ab', spawn: 'mirror' };
+    const walked: string[] = [];
+    while (isFreeRoom(at.room)) {
+      const room = roomFor(at.room)!;
+      const door = room.doors.find((d) => d.id === parkwardDoor(at.room));
+      expect(door, at.room).toBeDefined();
+      // From where the owl comes in, one walk toward the doorway ends in it.
+      const end = resolveTarget(findSpawn(room, at.spawn), rectCenter(door!.rect), room.walkable);
+      expect(pointInRect(end, door!.rect), at.room).toBe(true);
+      walked.push(at.room);
+      at = { room: door!.to!.room, spawn: door!.to!.spawn };
+      expect(walked.length).toBeLessThan(6);
+    }
+    expect([...walked, at.room]).toEqual(['nest-k3x9q2ab', STREET_ROOM, LOBBY_ROOM, 'hub']);
+  });
+
+  it('is no door inside the park', () => {
+    for (const room of ['hub', 'grove', 'market', 'arcade']) expect(parkwardDoor(room), room).toBeNull();
   });
 });

@@ -101,6 +101,7 @@ test.describe('busy nights (OP-075)', () => {
   });
 
   test('the ribbon: on for everyone in a room and on the home screen, hidden for a visit, back with new words, then off', async ({ browser, request }) => {
+    test.slow(); // two live parks in one browser, both drawn with software WebGL on CI runners: 78 s here, past 90 s on a slow runner
     const inside = await straightIn(browser, COMPUTER);
     await inPark(inside);
     const phone = await visitor(browser, PHONE);
@@ -145,16 +146,17 @@ test.describe('busy nights (OP-075)', () => {
   test('the line: newcomers wait their turn on a phone and a computer, owls inside walk on, and turns come in order', async ({ browser, request }) => {
     test.slow();
     await capacity(request, { line: { mode: 'on', threshold: 1, holdMin: 2 } });
-    // A page that opens straight into a room is sent to the line first; the park is empty, so its turn comes at once.
+    // A page that opens straight into a room is sent to the line first; the park is empty, so its turn
+    // comes at once, and in it goes as Play takes it, to its own nest (OP-105).
     const first = await straightIn(browser, COMPUTER);
     await inPark(first);
-    expect((await state(first)).room).toBe('lobby');
+    expect((await state(first)).room).toMatch(/^nest-[a-z0-9]{8}$/);
     // Sent to the line, it was never told the park could not connect.
     expect(await first.getByText('the park could not connect').count()).toBe(0);
     await expect(ribbon(first)).toContainText(RIBBON);
     // An owl inside walks on from room to room while there is a line.
-    await walkToDoor(first, 'gate');
-    await first.waitForFunction(() => window.owlPark?.state()?.room === 'hub' && window.owlPark.state()?.connected === true, null, { timeout: 30_000 });
+    await walkToDoor(first, 'to-street');
+    await first.waitForFunction(() => window.owlPark?.state()?.room === 'homes' && window.owlPark.state()?.connected === true, null, { timeout: 30_000 });
 
     // The park holds its one owl: a phone waits, first in line, with the ribbon on by itself.
     const phone = await visitor(browser, PHONE);
@@ -162,9 +164,8 @@ test.describe('busy nights (OP-075)', () => {
     await expect(line(phone)).toContainText("You're in line");
     await expect(line(phone)).toContainText('Your place in line: 1');
     await expect(line(phone)).toContainText('This page updates on its own.');
-    // The ways into the park (Play, Go to your nest) give way to its place while it waits.
+    // Play gives way to its place while it waits.
     await expect(phone.locator('[data-home-btn="play"]')).toBeHidden();
-    await expect(phone.locator('[data-home-btn="owl"]')).toBeHidden();
     await expect(ribbon(phone)).toContainText(RIBBON);
     await phone.screenshot({ path: 'e2e-screenshots/line-phone.png' });
     // A computer behind it.
@@ -173,10 +174,10 @@ test.describe('busy nights (OP-075)', () => {
     await expect(line(second)).toContainText('Your place in line: 2');
     await second.screenshot({ path: 'e2e-screenshots/line-computer.png' });
 
-    // The first owl leaves the park: the phone's turn comes, and it walks into the lobby by itself.
+    // The first owl leaves the park: the phone's turn comes, and it goes into its own nest by itself (OP-105).
     await first.context().close();
     await inPark(phone, 60_000);
-    expect((await state(phone)).room).toBe('lobby');
+    expect((await state(phone)).room).toMatch(/^nest-[a-z0-9]{8}$/);
     // The computer moves up to the front.
     await expect(line(second)).toContainText('Your place in line: 1', { timeout: 30_000 });
     await phone.context().close();

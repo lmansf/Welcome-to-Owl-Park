@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
-import { NEST_SPOTS, nestDoorIndex } from '../src/homes';
+import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
-import { ANCHORS, NEST_MIRROR, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
+import { ANCHORS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -212,13 +212,32 @@ describe("a nest's mirror (OP-077)", () => {
     expect(front - NEST_MIRROR.y).toBeGreaterThan(200);
   });
 
-  it('has a spawn before it, facing it, where the owl lands from Go to your nest', () => {
+  it('has a spawn before it, facing it, where Play puts the owl (OP-105)', () => {
     const at = NEST_ROOM.spawns['mirror']!;
     expect(pointInRect(at, mirror.rect)).toBe(true);
     expect(findSpawn(NEST_ROOM, 'mirror')).toEqual(at);
     // The way out is one walk away from it.
     const out = NEST_ROOM.doors.find((d) => d.id === 'to-street')!;
     expect(pointInRect(resolveTarget(at, rectCenter(out.rect), NEST_ROOM.walkable), out.rect)).toBe(true);
+  });
+});
+
+describe("the nest's way to the park (OP-105)", () => {
+  it('has its sign on the round door, clear of every wall piece in every wall spot and of the mirror', () => {
+    const out = NEST_ROOM.doors.find((d) => d.id === 'to-street')!;
+    // On the doorway, above the door's glow, and well above any owl standing in it.
+    expect(Math.abs(NEST_PARK_SIGN.x - rectCenter(out.rect).x)).toBeLessThan(40);
+    expect(NEST_PARK_SIGN.y).toBeLessThan(out.marker!.y - 150);
+    // The words (about 160 x 32 room pixels) never meet a wall piece, however wide or tall, in any wall spot.
+    const sign = { x: NEST_PARK_SIGN.x - 80, y: NEST_PARK_SIGN.y - 32, w: 160, h: 32 };
+    for (const spot of NEST_SPOTS.filter((s) => s.place === 'wall')) {
+      for (const piece of FURNITURE.filter((f) => f.place === 'wall')) {
+        const box = { x: spot.x - piece.size.w / 2, y: spot.y - piece.size.h, w: piece.size.w, h: piece.size.h };
+        const apart = box.x + box.w <= sign.x || sign.x + sign.w <= box.x || box.y + box.h <= sign.y || sign.y + sign.h <= box.y;
+        expect(apart, `${piece.id} in ${spot.id}`).toBe(true);
+      }
+    }
+    expect(distance(NEST_PARK_SIGN, NEST_MIRROR)).toBeGreaterThan(250);
   });
 });
 
