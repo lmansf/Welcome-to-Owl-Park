@@ -158,13 +158,17 @@ export class Overflow extends DurableObject<Env> {
     return this.count.n;
   }
 
-  /** Whether new arrivals go through the line now (counting the park first when that matters). */
-  private async isActive(now: number): Promise<boolean> {
+  /**
+   * Whether new arrivals go through the line now: counting the park first when that matters, or, for
+   * the rooms' minute-by-minute look at the ribbon (`counted: false`), by the last count, so a park of
+   * many room objects never has each of them make the count again.
+   */
+  private async isActive(now: number, counted = true): Promise<boolean> {
     const s = this.settings.line();
     if (s.mode === 'off') return false;
     if (s.mode === 'on') return true;
     if (this.line.waiting() > 0 || this.line.outstanding(now, s.holdMin * 60_000) > 0) return true;
-    return (await this.freshCount(now)) >= s.threshold;
+    return (counted ? await this.freshCount(now) : (this.count?.n ?? 0)) >= s.threshold;
   }
 
   /** Let owls in as places free up: the threshold, less the owls in the park and those already called. */
@@ -230,7 +234,7 @@ export class Overflow extends DurableObject<Env> {
     const url = new URL(request.url);
     const now = Date.now();
     if (url.pathname === '/state') return Response.json(await this.state(now));
-    if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now)) });
+    if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)) });
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
     const body = (await request.json().catch(() => null)) as unknown;
     if (!isRecord(body)) return Response.json({ error: 'bad request' }, { status: 400 });

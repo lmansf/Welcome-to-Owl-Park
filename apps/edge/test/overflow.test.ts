@@ -296,3 +296,19 @@ describe('the Worker reading the overflow object (OP-075)', () => {
     forgetOverflow();
   });
 });
+
+describe('the rooms asking for the ribbon (OP-075)', () => {
+  it('answer from the last count, so a park of many room objects never makes each of them count it again', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const rooms = new FakeRooms();
+    const state = new FakeState();
+    const obj = new Overflow(state as unknown as DurableObjectState, { ROOMS: rooms, ROOM_SHARDING: 'room' } as unknown as Env);
+    await obj.fetch(new Request('https://park/settings', { method: 'POST', body: JSON.stringify({ line: { mode: 'auto', threshold: 10 } }) }));
+    rooms.asked.length = 0;
+    vi.setSystemTime(T0 + 60_000);
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null });
+    expect(rooms.asked).toEqual([]);
+    vi.useRealTimers();
+  });
+});

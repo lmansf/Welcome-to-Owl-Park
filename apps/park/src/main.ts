@@ -273,10 +273,11 @@ const stopLine = () => {
   lineNumber = null;
   home.line(null);
 };
-/** Into the park: the lobby, where every guest arrives. */
+/** Into the park: the lobby, where every guest arrives. A screen left open over the home screen (the owl, Settings) closes first. */
 const enterPark = () => {
   if (!atHome) return;
   stopLine();
+  hud.closePanels();
   atHome = false;
   home.hide();
   home.note(null);
