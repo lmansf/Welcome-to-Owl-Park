@@ -175,6 +175,38 @@ describe('the street and the nests', () => {
   });
 });
 
+describe('the arcade', () => {
+  const arcade = ROOMS['arcade']!;
+  const spot = (id: string) => arcade.doors.find((d) => d.id === id)!;
+
+  it('is a hall three screens long, painted as arcade, arcade-mid and arcade-end', () => {
+    expect(arcade.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+    expect(backgroundTiles(arcade).map((t) => [t.key, t.x, t.y])).toEqual([
+      ['arcade', 0, 0],
+      ['arcade-mid', ROOM_W, 0],
+      ['arcade-end', 2 * ROOM_W, 0],
+    ]);
+  });
+
+  it('has a bay for each cabinet, west to east, with its spot on the floor in front and its marker on the same screen', () => {
+    const cabinets = ['cabinet-crossing', 'cabinet-flight', 'cabinet-sling'];
+    expect(cabinets.map((id) => Math.floor(rectCenter(spot(id).rect).x / ROOM_W))).toEqual([0, 1, 2]);
+    for (const id of cabinets) {
+      expect(isWalkable(rectCenter(spot(id).rect), arcade.walkable), `${id} on the floor`).toBe(true);
+      expect(Math.floor(spot(id).marker!.x / ROOM_W), `${id} marker`).toBe(Math.floor(rectCenter(spot(id).rect).x / ROOM_W));
+    }
+  });
+
+  it('is entered from the street at its west end, where an owl arrives clear of the doorway', () => {
+    const door = spot('to-market');
+    expect(door.rect.x).toBe(0);
+    expect(door.to).toEqual({ room: 'market', spawn: 'from-arcade' });
+    const arrive = findSpawn(arcade, 'from-market');
+    expect(arrive.x).toBeLessThan(ROOM_W / 4);
+    expect(distanceToRect(arrive, door.rect)).toBeGreaterThan(60);
+  });
+});
+
 describe('finding a room by its id', () => {
   it('finds the rooms of the registry as they are', () => {
     for (const [id, room] of Object.entries(ROOMS)) {

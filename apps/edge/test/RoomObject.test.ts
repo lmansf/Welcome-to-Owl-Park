@@ -407,13 +407,14 @@ describe('the arcade in the room object', () => {
    * onto the open floor, since an owl appears anywhere near the entrance and a straight walk from
    * there may meet the floor's edge.
    */
-  async function toCabinet(obj: Obj, ws: FakeSocket, x: number) {
+  async function toCabinet(obj: Obj, ws: FakeSocket, to: { x: number; y: number }) {
     await send(obj, ws, { t: 'move', to: { x: 300, y: 850 }, seq: 1 });
     clock += 10_000;
-    await send(obj, ws, { t: 'move', to: { x, y: 780 }, seq: 2 });
+    await send(obj, ws, { t: 'move', to, seq: 2 });
     clock += 10_000;
   }
-  const FLIGHT_X = 803;
+  /** Moon Flap's cabinet, in the hall's second bay. */
+  const FLIGHT = { x: 1900, y: 820 };
 
   /** Start a run and play it for as long as a score of `score` takes; the run's seed. */
   async function run(obj: Obj, ws: FakeSocket, r: number, game: 'flight' | 'crossing', score: number) {
@@ -436,7 +437,7 @@ describe('the arcade in the room object', () => {
     const obj = roomObject();
     const a = await join(obj, 'arcade', 'v_a', OWNER);
     const b = await join(obj, 'arcade', 'v_b', GUEST);
-    await toCabinet(obj, a, FLIGHT_X);
+    await toCabinet(obj, a, FLIGHT);
     const seed = await run(obj, a, 1, 'flight', 12);
     await send(obj, a, { t: 'act', a: 'score', g: 'flight', s: 12, k: seed, r: 2 });
     await settle();
@@ -458,7 +459,7 @@ describe('the arcade in the room object', () => {
     await send(obj, a, { t: 'act', a: 'run', g: 'flight', r: 1 });
     await settle();
     expect(a.of('act').find((f) => f.r === 1)).toMatchObject({ ok: false, reason: 'far' });
-    await toCabinet(obj, a, FLIGHT_X);
+    await toCabinet(obj, a, FLIGHT);
     await send(obj, a, { t: 'act', a: 'run', g: 'flight', r: 2 });
     await settle();
     const seed = (a.of('act').find((f) => f.r === 2) as { seed: number }).seed;
@@ -476,7 +477,7 @@ describe('the arcade in the room object', () => {
   it('keeps a run on the socket through the object’s sleep', async () => {
     const obj = roomObject();
     const a = await join(obj, 'arcade', 'v_a', OWNER);
-    await toCabinet(obj, a, FLIGHT_X);
+    await toCabinet(obj, a, FLIGHT);
     const seed = await run(obj, a, 1, 'flight', 3);
     // The object sleeps and wakes as a new instance over the same sockets.
     const woken = roomObject();
@@ -488,7 +489,7 @@ describe('the arcade in the room object', () => {
   it('pays runs no more than the activities’ daily cap', async () => {
     const obj = roomObject();
     const a = await join(obj, 'arcade', 'v_a', OWNER);
-    await toCabinet(obj, a, FLIGHT_X);
+    await toCabinet(obj, a, FLIGHT);
     let paid = 0;
     for (let i = 0; i < 6; i++) {
       const seed = await run(obj, a, 10 + 2 * i, 'flight', 40);

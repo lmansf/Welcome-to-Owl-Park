@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import type { OwlLook } from '@owl-park/shared';
+import { FLAP_SPEED, type ArcadeGame, type OwlLook } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
 import { FIELD_H, FIELD_W, runRandom } from '../arcade/field';
-import { BRANCH_W, FLAP_R, FLAP_X, GROUND_Y as FLAP_GROUND, type FlapGame } from '../arcade/flap';
-import { HOP_ROWS, HOP_X, rowY, type HopGame } from '../arcade/hop';
-import { CRATE, GROUND_Y as KNOCK_GROUND, SLING, type KnockGame } from '../arcade/knock';
+import { BRANCH_W, FLAP_R, FLAP_X, GROUND_Y as FLAP_GROUND, type Branch, type FlapGame } from '../arcade/flap';
+import { HOP_ROWS, HOP_X, rowY, type HopGame, type Vehicle } from '../arcade/hop';
+import { CRATE, GROUND_Y as KNOCK_GROUND, SLING, type Crate, type KnockGame, type Stand } from '../arcade/knock';
+import { GAME_ART, GROUND_TILE_W, STAND_ART, branchHalves, groundTiles, paintable, standPieces } from '../arcade/paint';
 import type { PreviewRect } from './BuilderScene';
 import { Owl } from './Owl';
 
@@ -22,6 +23,40 @@ const NIGHT = 0x05060d;
 /** The owl is drawn at this share of its size in the rooms: the field is a small world. */
 const OWL_IN_FIELD = 0.5;
 
+/** Each game's painted field. */
+const FIELD_ART: Readonly<Record<ArcadeGame, string>> = { crossing: 'arcade-hop-bg', flight: 'arcade-flap-bg', sling: 'arcade-knock-bg' };
+/** The ground strip needs this many tiles to cover the field at any scroll. */
+const GROUND_TILES = Math.ceil(FIELD_W / GROUND_TILE_W) + 1;
+
+/** One image for each moving thing of a painted game (a vehicle, a half of a branch, a crate): made when it first shows, dropped once it is gone. */
+class Pieces<T extends object> {
+  private readonly images = new Map<T, Phaser.GameObjects.Image>();
+  private seen = new Set<T>();
+
+  constructor(private readonly make: (thing: T) => Phaser.GameObjects.Image) {}
+
+  /** The image for a thing in this frame. */
+  for(thing: T): Phaser.GameObjects.Image {
+    let image = this.images.get(thing);
+    if (!image) {
+      image = this.make(thing);
+      this.images.set(thing, image);
+    }
+    this.seen.add(thing);
+    return image;
+  }
+
+  /** After a frame: drop the images of the things that were not in it. */
+  sweep(): void {
+    for (const [thing, image] of this.images) {
+      if (this.seen.has(thing)) continue;
+      image.destroy();
+      this.images.delete(thing);
+    }
+    this.seen = new Set();
+  }
+}
+
 /** The visitor's own look without its pet or effect: the games are played by the owl alone. */
 function playingLook(look: OwlLook): OwlLook {
   const wear = look.wear ? { ...look.wear } : undefined;
@@ -33,10 +68,11 @@ function playingLook(look: OwlLook): OwlLook {
 }
 
 /**
- * A run of an arcade game drawn over the room (C40): the field in neon line-art, in the cabinet's
- * colours, and the visitor's own owl playing it. The scene steps the game every frame; the HUD's
- * arcade screen around it shows the score and takes the taps and keys. The room keeps running
- * underneath, like the owl builder's preview.
+ * A run of an arcade game drawn over the room (C40): the game's painted field and pieces (OP-059), or
+ * until every piece of them has loaded, the field in neon line-art in the cabinet's colours; and the
+ * visitor's own owl playing it. The scene steps the game every frame; the HUD's arcade screen around
+ * it shows the score and takes the taps and keys. The room keeps running underneath, like the owl
+ * builder's preview.
  */
 export class ArcadeScene extends Phaser.Scene {
   private sim: ArcadeSim | null = null;
@@ -47,6 +83,23 @@ export class ArcadeScene extends Phaser.Scene {
   private backdrop: Phaser.GameObjects.Rectangle | null = null;
   private rect: PreviewRect = { x: 0, y: 0, w: 1, h: 1 };
   private stars: Array<{ x: number; y: number; r: number }> = [];
+  /**
+   * The run's painting, clipped to the field like the lines: the field and what stands still on it,
+   * then what moves (vehicles, branches, stands and crates), then the flight's ground over the
+   * branches' feet. Empty while the run is drawn in neon.
+   */
+  private layers: { field: Phaser.GameObjects.Container; moving: Phaser.GameObjects.Container; front: Phaser.GameObjects.Container } | null = null;
+  /** The painting's root, hidden while the run is in neon (so its mask costs nothing). */
+  private art: Phaser.GameObjects.Container | null = null;
+  private painted = false;
+  private vehicles: Pieces<Vehicle> | null = null;
+  private branchTops: Pieces<Branch> | null = null;
+  private branchFeet: Pieces<Branch> | null = null;
+  private crates: Pieces<Crate> | null = null;
+  private ground: Phaser.GameObjects.Image[] = [];
+  /** The stands drawn, and the stack they were drawn for. */
+  private standImages: Phaser.GameObjects.Image[] = [];
+  private standsShown: Stand[] | null = null;
   /** Called every frame after the game stepped. */
   private onStep: ((sim: ArcadeSim) => void) | null = null;
   /** A run asked for before the scene had started: it begins once the scene is up. */
@@ -60,9 +113,15 @@ export class ArcadeScene extends Phaser.Scene {
     this.backdrop = this.add.rectangle(FIELD_W / 2, FIELD_H / 2, 10, 10, NIGHT).setDepth(-10);
     this.frameG = this.add.graphics().setDepth(0).setBlendMode(Phaser.BlendModes.ADD);
     this.g = this.add.graphics().setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+    const art = this.add.container(0, 0).setDepth(-5).setVisible(false);
+    this.art = art;
+    this.layers = { field: this.add.container(0, 0), moving: this.add.container(0, 0), front: this.add.container(0, 0) };
+    art.add([this.layers.field, this.layers.moving, this.layers.front]);
     // Traffic, branches and crates come and go at the field's edges, never beyond its frame.
     const field = this.make.graphics({}, false).fillStyle(0xffffff).fillRoundedRect(8, 8, FIELD_W - 16, FIELD_H - 16, 14);
-    this.g.setMask(field.createGeometryMask());
+    const mask = field.createGeometryMask();
+    this.g.setMask(mask);
+    art.setMask(mask);
     const onResize = () => this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -73,6 +132,9 @@ export class ArcadeScene extends Phaser.Scene {
       this.g = null;
       this.frameG = null;
       this.backdrop = null;
+      this.layers = null;
+      this.art = null;
+      this.painted = false;
     });
     this.layout();
     const p = this.pending;
@@ -94,6 +156,64 @@ export class ArcadeScene extends Phaser.Scene {
     this.owl = new Owl(this, 'arcade', playingLook(look), { x: 0, y: 0 }, 2);
     this.owl.setScale(this.owl.scaleX * OWL_IN_FIELD).setDepth(5);
     this.owl.showShadow(sim.game !== 'flight');
+    this.paint(sim.game);
+  }
+
+  /** Whether the run under way is drawn from its paintings (tests ask). */
+  isPainted(): boolean {
+    return this.painted;
+  }
+
+  /** A piece of a game's painting at the size the game draws it, whatever the art's resolution. */
+  private piece(key: string, x = 0, y = 0, frame?: string): Phaser.GameObjects.Image {
+    const size = GAME_ART.crossing[key] ?? GAME_ART.flight[key] ?? GAME_ART.sling[key]!;
+    return this.add.image(x, y, key, frame).setDisplaySize(size.w, size.h);
+  }
+
+  /** Lay out a run's painting when every piece of its game has loaded; otherwise it is drawn in neon. */
+  private paint(game: ArcadeGame): void {
+    const layers = this.layers;
+    if (!layers) return;
+    for (const layer of Object.values(layers)) layer.removeAll(true);
+    this.vehicles = this.branchTops = this.branchFeet = this.crates = null;
+    this.ground = [];
+    this.standImages = [];
+    this.standsShown = null;
+    this.painted = paintable(game, (key) => this.textures.exists(key));
+    this.art?.setVisible(this.painted);
+    if (!this.painted) return;
+    layers.field.add(this.piece(FIELD_ART[game]).setOrigin(0));
+    const moving = (key: string, flipY = false) => () => {
+      const image = this.piece(key).setOrigin(0).setFlip(true, flipY);
+      layers.moving.add(image);
+      return image;
+    };
+    if (game === 'crossing') {
+      this.vehicles = new Pieces((v) => {
+        const image = this.piece(v.kind === 'drone' ? 'arcade-hop-drone' : 'arcade-hop-cart');
+        layers.moving.add(image);
+        return image;
+      });
+    } else if (game === 'flight') {
+      // Both halves of a branch mirrored (paint.ts), the top half upside down too, its knobbly end at the gap.
+      this.branchTops = new Pieces(moving('arcade-flap-branch', true));
+      this.branchFeet = new Pieces(moving('arcade-flap-branch'));
+      this.ground = Array.from({ length: GROUND_TILES }, () => this.piece('arcade-flap-ground').setOrigin(0));
+      layers.front.add(this.ground);
+    } else {
+      layers.field.add(this.piece('arcade-knock-sling', SLING.x, KNOCK_GROUND).setOrigin(0.5, 1));
+      this.crates = new Pieces(() => {
+        const image = this.piece('arcade-knock-crate');
+        layers.front.add(image);
+        return image;
+      });
+      // The stand's painting cut in nine, as frames of its texture (a texture loaded again needs them again).
+      const texture = this.textures.get('arcade-knock-stand');
+      const scale = texture.getSourceImage().width / STAND_ART.w;
+      standPieces({ x: 0, y: 0, w: STAND_ART.w, h: STAND_ART.h }).forEach(({ src }, i) => {
+        if (!texture.has(`nine-${i}`)) texture.add(`nine-${i}`, 0, src.x * scale, src.y * scale, src.w * scale, src.h * scale);
+      });
+    }
   }
 
   /** Where the HUD leaves room for the field (CSS pixels). */
@@ -124,9 +244,18 @@ export class ArcadeScene extends Phaser.Scene {
     g.clear();
     this.frameG.clear();
     this.frameLines(this.frameG, sim.game);
-    if (sim.game === 'crossing') this.drawHop(g, sim);
-    else if (sim.game === 'flight') this.drawFlap(g, sim);
-    else this.drawKnock(g, sim);
+    if (sim.game === 'crossing') {
+      if (this.painted) this.paintHop(sim);
+      else this.drawHop(g, sim);
+      this.placeHopOwl(sim);
+    } else if (sim.game === 'flight') {
+      if (this.painted) this.paintFlap(sim);
+      else this.drawFlap(g, sim);
+      this.placeFlapOwl(sim);
+    } else {
+      if (this.painted) this.paintKnock(sim);
+      this.drawKnock(g, sim);
+    }
     this.owl?.tick(Date.now());
     this.onStep?.(sim);
   }
@@ -139,11 +268,77 @@ export class ArcadeScene extends Phaser.Scene {
     draw();
   }
 
+  /** The field's neon frame, and its stars while it is drawn in neon (a painted field has its own sky). */
   private frameLines(g: Phaser.GameObjects.Graphics, game: ArcadeSim['game']): void {
     const c = ARCADE_INK[game];
-    g.fillStyle(0xffffff, 0.5);
-    for (const s of this.stars) g.fillCircle(s.x, s.y, s.r);
+    if (!this.painted) {
+      g.fillStyle(0xffffff, 0.5);
+      for (const s of this.stars) g.fillCircle(s.x, s.y, s.r);
+    }
     this.neon(g, c.glow, () => g.strokeRoundedRect(4, 4, FIELD_W - 8, FIELD_H - 8, 18), 3);
+  }
+
+  /** Hoot & Hop in its painting: each vehicle in its lane, facing the way the lane goes. */
+  private paintHop(sim: HopGame): void {
+    const vehicles = this.vehicles;
+    if (!vehicles) return;
+    sim.lanes.forEach((lane, i) => {
+      const y = rowY(i + 1);
+      for (const v of lane.vehicles) {
+        vehicles
+          .for(v)
+          .setPosition(v.x, y)
+          .setFlipX(lane.dir < 0)
+          .setVisible(v.x + v.w / 2 >= -10 && v.x - v.w / 2 <= FIELD_W + 10);
+      }
+    });
+    vehicles.sweep();
+  }
+
+  /** Moon Flap in its painting: each branch's two halves at its gap, and the ground going by under the flight. */
+  private paintFlap(sim: FlapGame): void {
+    const tops = this.branchTops;
+    const feet = this.branchFeet;
+    if (!tops || !feet) return;
+    for (const b of sim.branches) {
+      const { left, topY, bottomY } = branchHalves(b.x, b.gapY, b.gap);
+      tops.for(b).setPosition(left, topY);
+      feet.for(b).setPosition(left, bottomY);
+    }
+    tops.sweep();
+    feet.sweep();
+    // The ground goes by as fast as the branches standing on it.
+    const tiles = groundTiles((sim.time / 1000) * FLAP_SPEED);
+    this.ground.forEach((tile, i) => {
+      const t = tiles[i];
+      tile.setVisible(Boolean(t));
+      if (t) tile.setPosition(t.x, FLAP_GROUND).setFlipX(t.flip);
+    });
+  }
+
+  /** Nest Knockdown in its painting: the stack's stands, each cut in nine to its size, and its crates as they stand or fly. */
+  private paintKnock(sim: KnockGame): void {
+    const crates = this.crates;
+    const layers = this.layers;
+    if (!crates || !layers) return;
+    if (sim.stands !== this.standsShown) {
+      for (const image of this.standImages) image.destroy();
+      this.standImages = sim.stands.flatMap((st) =>
+        standPieces({ x: st.x1, y: st.y, w: st.x2 - st.x1, h: KNOCK_GROUND - st.y }).map(({ dst }, i) =>
+          this.add.image(dst.x, dst.y, 'arcade-knock-stand', `nine-${i}`).setOrigin(0).setDisplaySize(dst.w, dst.h),
+        ),
+      );
+      layers.moving.add(this.standImages);
+      this.standsShown = sim.stands;
+    }
+    for (const crate of sim.crates) {
+      if (crate.gone) continue;
+      crates
+        .for(crate)
+        .setPosition(crate.x + CRATE / 2, crate.y + CRATE / 2)
+        .setRotation(crate.angle);
+    }
+    crates.sweep();
   }
 
   private drawHop(g: Phaser.GameObjects.Graphics, sim: HopGame): void {
@@ -182,7 +377,10 @@ export class ArcadeScene extends Phaser.Scene {
         }
       }
     });
-    // The owl, mid-hop on an arc between rows.
+  }
+
+  /** The hopping owl, mid-hop on an arc between rows. */
+  private placeHopOwl(sim: HopGame): void {
     const from = rowY(sim.row);
     const to = sim.hop ? rowY(sim.hop.to) : from;
     const t = sim.hop?.t ?? 0;
@@ -210,19 +408,26 @@ export class ArcadeScene extends Phaser.Scene {
         g.lineBetween(b.x + BRANCH_W / 2, bottom + 34, b.x + BRANCH_W / 2 + 14, bottom + 52);
       });
     }
+  }
+
+  /** The flying owl, leaning into its climb or its fall. */
+  private placeFlapOwl(sim: FlapGame): void {
     const tilt = Math.max(-0.5, Math.min(0.7, sim.vy / 700));
     this.placeOwl(FLAP_X, sim.y + FLAP_R + 6, tilt, 1);
   }
 
+  /** Nest Knockdown in neon, or over its painting just the band pulled back and the path it will fly; and the owl. */
   private drawKnock(g: Phaser.GameObjects.Graphics, sim: KnockGame): void {
     const c = ARCADE_INK.sling;
-    this.neon(g, c.ink, () => g.lineBetween(12, KNOCK_GROUND, FIELD_W - 12, KNOCK_GROUND), 3);
-    // The slingshot: its fork, and its band pulled back while aiming.
-    this.neon(g, AMBER, () => {
-      g.lineBetween(SLING.x, KNOCK_GROUND, SLING.x, SLING.y + 34);
-      g.lineBetween(SLING.x, SLING.y + 34, SLING.x - 22, SLING.y - 6);
-      g.lineBetween(SLING.x, SLING.y + 34, SLING.x + 22, SLING.y - 6);
-    });
+    if (!this.painted) {
+      this.neon(g, c.ink, () => g.lineBetween(12, KNOCK_GROUND, FIELD_W - 12, KNOCK_GROUND), 3);
+      // The slingshot's fork.
+      this.neon(g, AMBER, () => {
+        g.lineBetween(SLING.x, KNOCK_GROUND, SLING.x, SLING.y + 34);
+        g.lineBetween(SLING.x, SLING.y + 34, SLING.x - 22, SLING.y - 6);
+        g.lineBetween(SLING.x, SLING.y + 34, SLING.x + 22, SLING.y - 6);
+      });
+    }
     const aiming = sim.phase === 'aim';
     const pull = aiming ? { x: -Math.cos((sim.angle * Math.PI) / 180) * sim.power * 40, y: Math.sin((sim.angle * Math.PI) / 180) * sim.power * 40 } : { x: 0, y: 0 };
     const pocket = { x: SLING.x + pull.x, y: SLING.y + pull.y };
@@ -233,8 +438,8 @@ export class ArcadeScene extends Phaser.Scene {
       g.fillStyle(0xffffff, 0.8);
       for (const p of sim.path()) g.fillCircle(p.x, p.y, 2.5);
     }
-    for (const s of sim.stands) this.neon(g, c.glow, () => g.strokeRect(s.x1, s.y, s.x2 - s.x1, KNOCK_GROUND - s.y));
-    for (const crate of sim.crates) {
+    for (const s of this.painted ? [] : sim.stands) this.neon(g, c.glow, () => g.strokeRect(s.x1, s.y, s.x2 - s.x1, KNOCK_GROUND - s.y));
+    for (const crate of this.painted ? [] : sim.crates) {
       if (crate.gone) continue;
       const cx = crate.x + CRATE / 2;
       const cy = crate.y + CRATE / 2;

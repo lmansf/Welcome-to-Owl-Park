@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { crossOnce, flyThrough, getBumped, knockByKeys, knockByPull, playAt, run, untilOver, type Game } from './arcadePlay';
+import { alongTheHall, crossOnce, flyThrough, getBumped, knockByKeys, knockByPull, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
 import { openPark, state, walkToDoor } from './helpers';
 
 async function inRoom(page: Page, room: string): Promise<void> {
@@ -45,6 +45,7 @@ test.describe('the arcade (this device)', () => {
   test('Hoot & Hop: hop across the lanes and back, bumped at last, paid and on the score wall', async ({ page }) => {
     const before = await intoArcade(page, `e2e-hop-${test.info().project.name}`);
     await playAt(page, 'crossing');
+    await paintedAsShipped(page, 'crossing');
     await expect(page.locator('.arcade [data-hint]')).toHaveText('Tap to hop');
     // A page can stall for a moment mid-dash (a slow frame) and the owl is bumped before it gets
     // across: then Play again, as a visitor would, up to three runs.
@@ -63,6 +64,7 @@ test.describe('the arcade (this device)', () => {
   test('Moon Flap: through the gaps, down at last, paid; Play goes again at the same cabinet', async ({ page }) => {
     const before = await intoArcade(page, `e2e-flap-${test.info().project.name}`);
     await playAt(page, 'flight');
+    await paintedAsShipped(page, 'flight');
     await flyThrough(page, 2);
     await untilOver(page);
     await expect(page.locator('.arcade [data-result] [data-line]')).toHaveText(/^(Touched down|Clipped a branch) at \d+\.$/);
@@ -79,15 +81,15 @@ test.describe('the arcade (this device)', () => {
   test('Nest Knockdown: the first stack down in one shot, out of shots at the second, paid; and back out to the street', async ({ page }) => {
     const before = await intoArcade(page, `e2e-knock-${test.info().project.name}`);
     await playAt(page, 'sling');
+    await paintedAsShipped(page, 'sling');
     await expect(page.locator('.arcade [data-hint]')).toHaveText('Pull back and let go');
     // On a phone the owl is pulled back on the screen; on a computer it is aimed with the keys.
     if (test.info().project.name === 'phone') await knockByPull(page);
     else await knockByKeys(page);
     expect(await run(page)).toMatchObject({ score: 3, over: true });
     await paidAndOnTheWall(page, 'sling', /^Out of shots at stack 2\. 3 points\.$/, before);
-    // Back past the cabinets to the entrance, and out: on the pavement in front of the doorway.
-    await page.evaluate(() => window.owlPark.walkTo(300, 820));
-    await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
+    // Back along the hall past the other cabinets to the entrance, and out: on the pavement in front of the doorway.
+    await alongTheHall(page, 300, 820);
     await walkToDoor(page, 'to-market');
     await inRoom(page, 'market');
     expect((await state(page)).pos.x).toBeGreaterThan(3000);

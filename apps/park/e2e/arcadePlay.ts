@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { doAction, walkAndStop } from './helpers';
+import { doAction, state, walkAndStop } from './helpers';
 
 /**
  * Playing the arcade's games in a browser test. A run's game is the page's own (window.owlPark.arcade),
@@ -7,14 +7,43 @@ import { doAction, walkAndStop } from './helpers';
  * screen as a player would.
  */
 
-/** Where each cabinet's spot is in the arcade (room pixels). */
-export const CABINET_X = { crossing: 527, flight: 803, sling: 1086 } as const;
-export type Game = keyof typeof CABINET_X;
+/** Where each cabinet's spot is in the arcade (room pixels): one in each of the hall's three bays. */
+export const CABINET = { crossing: { x: 620, y: 842 }, flight: { x: 1900, y: 820 }, sling: { x: 3995, y: 810 } } as const;
+export type Game = keyof typeof CABINET;
 
-/** Onto the open floor, along to a cabinet, and Play. */
+/** A walk along the hall's open floor, in legs short enough for walkAndStop's wait (about 9 s each at the owl's pace). */
+export async function alongTheHall(page: Page, x: number, y: number): Promise<void> {
+  const LEG = 2400;
+  let at = await walkAndStop(page, (await state(page)).pos.x, 850);
+  while (Math.abs(x - at.x) > LEG) at = await walkAndStop(page, at.x + Math.sign(x - at.x) * LEG, 850);
+  await walkAndStop(page, x, y);
+}
+
+/** Each game's paintings (arcade/paint.ts): once all of them ship with the park, its runs are drawn from them. */
+const GAME_ART: Readonly<Record<Game, readonly string[]>> = {
+  crossing: ['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart'],
+  flight: ['arcade-flap-bg', 'arcade-flap-branch', 'arcade-flap-ground'],
+  sling: ['arcade-knock-bg', 'arcade-knock-sling', 'arcade-knock-crate', 'arcade-knock-stand'],
+};
+
+/** Whether the park serves this piece of art (a WebP or a PNG; a missing file comes back as the page, or not at all). */
+async function served(page: Page, key: string): Promise<boolean> {
+  for (const ext of ['webp', 'png']) {
+    const r = await page.request.get(`/art/${key}.${ext}`);
+    if (r.ok() && (r.headers()['content-type'] ?? '').startsWith('image/')) return true;
+  }
+  return false;
+}
+
+/** The run under way is drawn from its game's paintings when they ship with the park, and in neon until then. */
+export async function paintedAsShipped(page: Page, game: Game): Promise<void> {
+  const shipped = (await Promise.all(GAME_ART[game].map((k) => served(page, k)))).every(Boolean);
+  expect(await page.evaluate(() => window.owlPark.arcade()?.painted ?? null), `${game} painted`).toBe(shipped);
+}
+
+/** Onto the open floor, along the hall to a cabinet, and Play. */
 export async function playAt(page: Page, game: Game): Promise<void> {
-  await walkAndStop(page, 300, 850);
-  await walkAndStop(page, CABINET_X[game], 780);
+  await alongTheHall(page, CABINET[game].x, CABINET[game].y);
   await doAction(page, `cabinet-${game}`);
   await expect.poll(() => page.evaluate(() => window.owlPark.arcade()?.game ?? null), { timeout: 10_000 }).toBe(game);
 }

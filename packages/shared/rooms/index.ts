@@ -22,9 +22,10 @@ export { STREET_DOORS, STREET_ROOM } from '../src/homes';
  * from the lobby comes in. Six nest doors stand along it, each into one owl's nest: a room of its
  * own, made from NEST_ROOM. Neither has hiding spots.
  *
- * The arcade is one screen off the market street's east end, where the street bends away: a neon
- * hall with three game cabinets along its back wall under a blank score board. It is built to
- * widen east later, as the market was. It has no hiding spots.
+ * The arcade is a neon hall off the market street's east end, where the street bends away, three
+ * screens long: a bay for each game cabinet along its back wall, each under its game's sign, and the
+ * score board on the wall between the second and the third. Its entrance from the street is at its
+ * west end. It has no hiding spots.
  */
 export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Our Feathers', 'Hatching Soon'] as const;
 
@@ -310,36 +311,65 @@ export const ROOMS: Record<string, RoomDef> = {
   },
   arcade: {
     id: 'arcade',
-    size: { w: ROOM_W, h: ROOM_H },
+    size: { w: 3 * ROOM_W, h: ROOM_H },
     background: 'arcade',
+    backgrounds: [
+      { key: 'arcade', x: 0, y: 0 },
+      { key: 'arcade-mid', x: ROOM_W, y: 0 },
+      { key: 'arcade-end', x: 2 * ROOM_W, y: 0 },
+    ],
     mood: 'arcade',
     walkable: [
       [
-        // The wet tiled floor: out through the open entrance on the west onto the street beyond its
-        // threshold, along the foot of the back wall, in front of the three cabinets, and into the
-        // hall that carries on past the chrome pillar on the east.
-        { x: 0, y: 690 },
-        { x: 195, y: 690 },
-        { x: 205, y: 712 },
-        { x: 445, y: 714 },
-        { x: 445, y: 750 },
-        { x: 1170, y: 750 },
-        { x: 1170, y: 716 },
-        { x: 1320, y: 716 },
-        { x: 1330, y: 690 },
-        { x: 1600, y: 690 },
-        { x: 1600, y: 888 },
+        // The wet tiled floor: out through the open doorway on the west onto the street beyond its
+        // threshold, along the foot of the back wall and around the front of each cabinet (Hoot & Hop,
+        // then Moon Flap past the passage with the chrome pillar, then Nest Knockdown on its crate in
+        // the purple alcove's light), to the last chrome pillar at the east end.
+        { x: 0, y: 700 },
+        { x: 195, y: 700 },
+        { x: 200, y: 724 },
+        { x: 455, y: 724 },
+        { x: 458, y: 764 },
+        { x: 612, y: 808 },
+        { x: 758, y: 770 },
+        { x: 762, y: 708 },
+        { x: 1318, y: 708 },
+        { x: 1600, y: 714 },
+        { x: 1606, y: 722 },
+        { x: 1690, y: 758 },
+        { x: 1742, y: 774 },
+        { x: 1830, y: 786 },
+        { x: 1995, y: 774 },
+        { x: 2002, y: 748 },
+        { x: 2100, y: 744 },
+        { x: 2950, y: 714 },
+        { x: 3135, y: 718 },
+        { x: 3180, y: 682 },
+        { x: 3300, y: 672 },
+        { x: 3550, y: 690 },
+        { x: 3828, y: 720 },
+        { x: 3832, y: 756 },
+        { x: 3995, y: 774 },
+        { x: 4148, y: 766 },
+        { x: 4150, y: 752 },
+        { x: 4330, y: 770 },
+        { x: 4470, y: 810 },
+        { x: 4582, y: 798 },
+        { x: 4600, y: 790 },
+        { x: 4672, y: 802 },
+        { x: 4790, y: 804 },
+        { x: 4790, y: 888 },
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 300, y: 800 }, 'from-market': { x: 300, y: 800 } },
+    spawns: { 'default': { x: 300, y: 810 }, 'from-market': { x: 300, y: 810 } },
     doors: [
-      // The open entrance, out onto the street past its threshold.
-      { id: 'to-market', rect: { x: 0, y: 690, w: 150, h: 70 }, to: { room: 'market', spawn: 'from-arcade' }, marker: { x: 110, y: 650 } },
-      // The three cabinets along the back wall, each spot in front of its cabinet.
-      { id: 'cabinet-crossing', rect: { x: 457, y: 750, w: 140, h: 60 }, marker: { x: 527, y: 412 } },
-      { id: 'cabinet-flight', rect: { x: 733, y: 750, w: 140, h: 60 }, marker: { x: 803, y: 412 } },
-      { id: 'cabinet-sling', rect: { x: 1016, y: 750, w: 140, h: 60 }, marker: { x: 1086, y: 412 } },
+      // The open doorway, out onto the street past its threshold.
+      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, marker: { x: 100, y: 640 } },
+      // The three cabinets, each spot on the floor in front of its cabinet and each marker on its screen.
+      { id: 'cabinet-crossing', rect: { x: 540, y: 812, w: 160, h: 60 }, marker: { x: 652, y: 482 } },
+      { id: 'cabinet-flight', rect: { x: 1820, y: 790, w: 160, h: 60 }, marker: { x: 1862, y: 496 } },
+      { id: 'cabinet-sling', rect: { x: 3910, y: 780, w: 170, h: 60 }, marker: { x: 3975, y: 468 } },
     ],
   },
   lobby: {

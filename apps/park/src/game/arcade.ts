@@ -27,15 +27,26 @@ import type { Hud } from '../ui/hud';
 import { ARCADE_INK, type ArcadeScene, type ArcadeSim } from './ArcadeScene';
 import type { PreviewRect } from './BuilderScene';
 
-/** Each cabinet's screen and marquee on the arcade's painting (room pixels), and its neon colours. */
-const CABINET_ART: Readonly<Record<string, { x: number; y: number; w: number; h: number; marquee: { x: number; y: number }; ink: string; glow: string }>> = {
-  'cabinet-crossing': { x: 494, y: 497, w: 102, h: 73, marquee: { x: 538, y: 441 }, ink: '#FF8AD0', glow: '#FF2AA1' },
-  'cabinet-flight': { x: 758, y: 500, w: 97, h: 70, marquee: { x: 805, y: 441 }, ink: '#8AF4FF', glow: '#00E5FF' },
-  'cabinet-sling': { x: 1022, y: 497, w: 103, h: 73, marquee: { x: 1080, y: 441 }, ink: '#CDB0FF', glow: '#8A4DFF' },
+/** A box on the arcade's painting, in room pixels. */
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Each cabinet on the arcade's painting (room pixels): its screen, its game's title sign on the blank
+ * panel above it (the sign's art, and the box it is drawn in), and its neon colours.
+ */
+const CABINET_ART: Readonly<Record<string, { screen: Box; title: { key: string } & Box; ink: string; glow: string }>> = {
+  'cabinet-crossing': { screen: { x: 594, y: 428, w: 116, h: 106 }, title: { key: 'arcade-title-hoot-hop', x: 618, y: 176, w: 364, h: 114 }, ink: '#FF8AD0', glow: '#FF2AA1' },
+  'cabinet-flight': { screen: { x: 1798, y: 450, w: 128, h: 92 }, title: { key: 'arcade-title-moon-flap', x: 1813, y: 143, w: 251, h: 115 }, ink: '#8AF4FF', glow: '#00E5FF' },
+  'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-nest-knockdown', x: 3900, y: 146, w: 280, h: 110 }, ink: '#CDB0FF', glow: '#8A4DFF' },
 };
 
-/** The score wall's board on the painting (room pixels): one column per game. */
-const BOARD = { x: 505, y: 170, w: 585, h: 185 };
+/** The score wall: inside the frame of the board on the hall's middle wall (room pixels), one column per game. */
+const BOARD: Box = { x: 2322, y: 182, w: 466, h: 206 };
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 /** How to play, under each game's field. Visitor-facing. */
@@ -83,10 +94,17 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
 }
 
 /**
- * Neon Roost, the arcade (C40), in the room: each cabinet's name on its marquee (or, switched off, a
- * dark screen reading "Hatching Soon"), the score wall on the board above them, and a run of a game
- * from Play at a cabinet to what it paid. The game itself is drawn by ArcadeScene over the room, in
- * the HUD's arcade screen; the room server (or the local mode) starts each run and pays it.
+ * Neon Roost, the arcade (C40), in the room: each cabinet's title sign over its bay (or, switched off,
+ * a dark screen reading "Hatching Soon" and no sign), the score wall on the board in the middle of the
+ * hall, and a run of a game from Play at a cabinet to what it paid. The game itself is drawn by
+ * ArcadeScene over the room, in the HUD's arcade screen; the room server (or the local mode) starts
+ * each run and pays it.
+ *
+ * TODO-DOCS (OP-059): docs/ACTIVITIES.md (Neon Roost) has the arcade one screen wide, its cabinets
+ * under the score board, and the games drawn in neon lines. Now: the hall is three screens (arcade,
+ * arcade-mid, arcade-end) entered from the street at its west end, a bay per game with the game's
+ * title sign over its cabinet, the score wall on the board in the middle; each game is drawn from its
+ * painted field and pieces (arcade/paint.ts) once every piece has loaded, in neon lines until then.
  */
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();
@@ -103,17 +121,21 @@ export class Arcade {
       const art = CABINET_ART[cabinet.spot];
       if (!art) continue;
       const face = cabinetFace(cabinet);
+      const { title, screen } = art;
       if (!face.off) {
-        scene.add
-          .text(art.marquee.x, art.marquee.y, face.text, { fontFamily: FONT, fontSize: '15px', fontStyle: '800', color: art.glow, stroke: '#05060d', strokeThickness: 4, resolution: 2 })
-          .setOrigin(0.5)
-          .setShadow(0, 0, art.glow, 8, true, true)
-          .setDepth(3);
+        // The game's painted sign, or until it ships, its name in neon on the panel.
+        if (scene.textures.exists(title.key)) scene.add.image(title.x, title.y, title.key).setOrigin(0).setDisplaySize(title.w, title.h).setDepth(2);
+        else
+          scene.add
+            .text(title.x + title.w / 2, title.y + title.h / 2, face.text, { fontFamily: FONT, fontSize: '40px', fontStyle: '800', color: art.glow, stroke: '#05060d', strokeThickness: 6, resolution: 2 })
+            .setOrigin(0.5)
+            .setShadow(0, 0, art.glow, 14, true, true)
+            .setDepth(3);
         continue;
       }
-      scene.add.graphics().fillStyle(0x05060d, 0.88).fillRoundedRect(art.x, art.y, art.w, art.h, 10).setDepth(2);
+      scene.add.graphics().fillStyle(0x05060d, 0.88).fillRoundedRect(screen.x, screen.y, screen.w, screen.h, 10).setDepth(2);
       scene.add
-        .text(art.x + art.w / 2, art.y + art.h / 2, face.text, { fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: art.ink, align: 'center', lineSpacing: 2, resolution: 2 })
+        .text(screen.x + screen.w / 2, screen.y + screen.h / 2, face.text, { fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: art.ink, align: 'center', lineSpacing: 2, resolution: 2 })
         .setOrigin(0.5)
         .setShadow(0, 0, art.glow, 10, false, true)
         .setDepth(3);
@@ -138,26 +160,30 @@ export class Arcade {
     for (const child of [...this.wallLayer.list]) if (child !== this.portraits) child.destroy();
     this.portraits.clear();
     const col = BOARD.w / ARCADE_GAMES.length;
-    const text = (x: number, y: number, s: string, size: number, color: string, alpha = 1) =>
-      this.wallLayer.add(scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: '700', color, resolution: 2 }).setOrigin(0.5).setAlpha(alpha));
+    const text = (x: number, y: number, s: string, size: number, color: string, alpha = 1) => {
+      const t = scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: '700', color, resolution: 2 }).setOrigin(0.5).setAlpha(alpha);
+      this.wallLayer.add(t);
+      return t;
+    };
     ARCADE_GAMES.forEach((game, i) => {
       const cx = BOARD.x + col * i + col / 2;
       const art = CABINET_ART[cabinetOf(game).spot]!;
-      text(cx, BOARD.y + 16, GAMES[game].name, 13, art.glow);
-      text(cx, BOARD.y + 33, "Today's best", 10, '#F6F1E3', 0.7);
+      // Each column's game in its cabinet's light ink, glowing in its neon (the neon itself is too dark to read on the board).
+      text(cx, BOARD.y + 20, GAMES[game].name, 18, art.ink).setShadow(0, 0, art.glow, 8, false, true);
+      text(cx, BOARD.y + 42, "Today's best", 12, '#F6F1E3', 0.75);
       const top = this.walls.get(game)?.top ?? [];
       for (let k = 0; k < WALL_SIZE; k++) {
-        const y = BOARD.y + 54 + k * 22;
+        const y = BOARD.y + 68 + k * 26;
         const e = top[k];
         if (!e) {
-          text(cx, y, '·', 12, '#F6F1E3', 0.3);
+          text(cx, y, '·', 16, '#F6F1E3', 0.3);
           continue;
         }
-        drawPortrait(this.portraits, cx - 22, y, e.look, 8);
-        this.wallLayer.add(scene.add.text(cx - 8, y, String(e.score), { fontFamily: FONT, fontSize: '14px', fontStyle: '800', color: '#F6F1E3', resolution: 2 }).setOrigin(0, 0.5));
+        drawPortrait(this.portraits, cx - 26, y, e.look, 10);
+        this.wallLayer.add(scene.add.text(cx - 10, y, String(e.score), { fontFamily: FONT, fontSize: '18px', fontStyle: '800', color: '#F6F1E3', resolution: 2 }).setOrigin(0, 0.5));
       }
       const own = this.mine[game];
-      if (own !== undefined) text(cx, BOARD.y + BOARD.h - 12, `Your best ${own}`, 10, art.ink);
+      if (own !== undefined) text(cx, BOARD.y + BOARD.h - 10, `Your best ${own}`, 12, art.ink);
     });
   }
 
@@ -254,9 +280,10 @@ export class Arcade {
     });
   }
 
-  /** The run as tests see it (the game itself, to play it by its rules). */
-  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean } | null {
-    return this.run ? { ...this.run } : null;
+  /** The run as tests see it (the game itself, to play it by its rules), and whether it is drawn from its paintings. */
+  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; painted: boolean } | null {
+    const view = this.host.scene.scene.get('arcade') as ArcadeScene | null;
+    return this.run ? { ...this.run, painted: view?.isPainted() ?? false } : null;
   }
 
   /** The wall as it stands, for tests. */
