@@ -1,6 +1,6 @@
 # Changelog
 
-- Status: complete for every Done ticket as of 2026-10-23
+- Status: complete for every Done ticket as of 2026-10-23 22:10 ET
 - Verified against: the Ticket Board as read 2026-10-23; commits on main 67ca3ab
 - Code: none
 - Tickets: OP-103
@@ -22,6 +22,13 @@ names (C31, C35, ...), and the docs it touched.
 
 ## Week of 2026-10-19
 
+- OP-103 (2026-10-23): `docs/CHANGELOG.md` started from the Done tickets, with the appending rule (main 72e4eed).
+- OP-102 (2026-10-23): Bible-to-docs sync: C35, C41, C42, C45, C46 and the decisions from OP-060 onward added to the docs or listed under Not yet documented in `docs/README.md` (main 72e4eed).
+- OP-101 (2026-10-23): `docs/README.md`, the map of the docs, the Ticket Board conventions and the writing conventions; `docs/GLOSSARY.md` as a first pass; the root `README.md` Docs list updated (main 0b77cd2).
+- OP-100 (2026-10-23): `docs/CAPACITY.md` new; `docs/FEEDBACK.md` candidates; `docs/NESTS.md` no free text and the planned mirror (main 72e4eed).
+- OP-098 (2026-10-23): `docs/ARCHITECTURE.md` refreshed to main 67ca3ab: the repository, identity, the fraud link (planned), operations, a purchase-to-hub diagram, BUILT and PLANNED tags; two stale lines corrected (main 72e4eed).
+- OP-097 (2026-10-23): `docs/DEPLOY.md`: the monorepo layout, where to run commands in bash and PowerShell, the error table from OP-001 (main 72e4eed).
+- OP-096 (2026-10-23): `docs/agents.md`, the agent roster, with six open questions for the owner (main 72e4eed).
 - OP-071 (2026-10-23): the store's app the new way: the Worker signs in to Shopify with a Dev
   Dashboard app's client ID and secret, traded for a day-long token; `GET /api/admin/store` checks
   the setup (main fe8ffe8).
