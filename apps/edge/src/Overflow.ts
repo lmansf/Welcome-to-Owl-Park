@@ -43,8 +43,8 @@ export interface OverflowState {
   /** New arrivals go through the line now. */
   active: boolean;
   waiting: number;
-  /** The highest number called so far: a waiting number's place is how far above it it is. */
-  lastCalled: number;
+  /** The number just before the first owl waiting: a waiting number's place is how far above it it is. */
+  front: number;
   /** Owls called per minute, lately. */
   rate: number;
   ribbon: RibbonSettings;
@@ -195,7 +195,7 @@ export class Overflow extends DurableObject<Env> {
       line,
       active,
       waiting: this.line.waiting(),
-      lastCalled: this.line.lastCalled(),
+      front: this.line.front(),
       rate: lineRate(this.line.calledTimes(now), now),
       ribbon,
       notice: ribbonNow(ribbon, active),
@@ -265,8 +265,10 @@ export class Overflow extends DurableObject<Env> {
       this.settings.setLine(line);
       this.settings.setRibbon(ribbon);
       this.settings.setCopies(copies);
-      // Turned on: the line counts the park now; turned off, everyone waiting goes in on their next look.
+      // Turned on: the line counts the park now. Turned off: everyone waiting goes in on their next
+      // look, so the line is taken down, and a line started later begins afresh rather than calling them.
       this.count = null;
+      if (line.mode === 'off') this.line.clear(now);
       await this.step(now);
       const st = await this.state(now);
       await this.sendNotice(st.notice);

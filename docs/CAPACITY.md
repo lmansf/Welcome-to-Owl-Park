@@ -66,7 +66,8 @@ Verify: the page reads "On for everyone"; `/api/notice` answers the words; an ow
 Modes: **off** (no line), **on by itself** (a line forms once the park holds `threshold` owls, and
 stays until it has emptied), and **on** (every new owl goes through it, and it lets owls in while
 the park holds fewer than `threshold`). `holdMin` is how long a called owl's place is held: 3 minutes
-unless changed, up to 15.
+unless changed, up to 15. Turning it off takes the line down: everyone in it walks in on their next
+look, and a line started later begins afresh.
 
 - **Who waits**: a new arrival. The line sits in front of the whole park, the lobby, the street and
   the nests included, since the room objects are what overflow. An owl already inside walks on from

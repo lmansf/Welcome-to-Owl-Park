@@ -4,7 +4,7 @@ import { E2E_ADMIN_KEY, state, walkToDoor } from './helpers';
 /**
  * Busy nights (OP-075) through the room server: the keepers' settings with the admin key and no
  * deploy, the busy ribbon, and the line in front of the park, on a phone and a computer. Every test
- * puts the settings back as deployed (no line, no ribbon) when it ends, so the other suites find the
+ * starts and ends with the settings as deployed (no line, no ribbon), so the other suites find the
  * park as before.
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
@@ -36,14 +36,19 @@ async function straightIn(browser: Browser, device: BrowserContextOptions): Prom
   return page;
 }
 
-const inPark = (page: Page, timeout = 30_000) => page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout });
+/** In a room and welcomed by the room server: a socket the line turns away exists for a moment, but is never welcomed. */
+const inPark = (page: Page, timeout = 30_000) =>
+  page.waitForFunction(() => window.owlPark?.state()?.connected === true && document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout });
 const ribbon = (page: Page) => page.locator('[data-ribbon]');
 const line = (page: Page) => page.locator('[data-home-line]');
 
 test.describe('busy nights (OP-075)', () => {
-  test.afterEach(async ({ request }) => {
+  // As deployed before and after each test: no line (which also takes down any line left over), no ribbon.
+  const asDeployed = async ({ request }: { request: APIRequestContext }) => {
     await capacity(request, { line: { mode: 'off', threshold: 80, holdMin: 3 }, ribbon: { on: false, words: null } });
-  });
+  };
+  test.beforeEach(asDeployed);
+  test.afterEach(asDeployed);
 
   test('only the keepers change them, on their page or with the admin key', async ({ browser, request }) => {
     expect((await request.get('/api/admin/capacity')).status()).toBe(403);
@@ -108,6 +113,8 @@ test.describe('busy nights (OP-075)', () => {
     const first = await straightIn(browser, COMPUTER);
     await inPark(first);
     expect((await state(first)).room).toBe('lobby');
+    // Sent to the line, it was never told the park could not connect.
+    expect(await first.getByText('the park could not connect').count()).toBe(0);
     await expect(ribbon(first)).toContainText(RIBBON);
     // An owl inside walks on from room to room while there is a line.
     await walkToDoor(first, 'gate');

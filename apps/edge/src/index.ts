@@ -359,12 +359,11 @@ export default {
       if (request.method !== 'GET') return json({ error: 'not found' }, 404);
       const n = Number(url.searchParams.get('n'));
       if (!Number.isInteger(n) || n < 1) return json({ error: 'bad request' }, 400);
-      // Still waiting: its place is how far its number stands above the last one called, so the
-      // many polls of a long line are answered here without asking the line.
-      if (n > st.lastCalled) {
-        const place = n - st.lastCalled;
-        return json({ state: 'waiting', n, place, waitMin: waitMinutes(place, st.rate) } satisfies LineStatus);
-      }
+      // Still waiting when the line was last read: its place is how far its number stands above the
+      // line's front, so the many polls of a long line are answered here without asking the line.
+      // A number called since, or taken since (above every number waiting then), is asked about.
+      const place = n - st.front;
+      if (place >= 1 && place <= st.waiting) return json({ state: 'waiting', n, place, waitMin: waitMinutes(place, st.rate) } satisfies LineStatus);
       return answer(await ask('/line/status', { n }));
     }
     if (url.pathname === '/api/notice') {

@@ -97,7 +97,7 @@ class FakeRooms {
 }
 
 function overflowWith(state: Partial<OverflowState>) {
-  const full: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, lastCalled: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null, ...state };
+  const full: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null, ...state };
   return { idFromName: () => 'park', get: () => ({ fetch: async () => Response.json(full) }) };
 }
 
@@ -179,5 +179,35 @@ describe('the Worker sends owls across two copies of a room (OP-075)', () => {
     );
     await arrive(env({ active: true }));
     expect(opened[0]?.closed).toEqual({ code: CLOSE.QUEUED, reason: 'line' });
+  });
+});
+
+describe('the Worker answering looks at a long line (OP-075)', () => {
+  it('answers a number waiting when it last read the line itself, and asks the line about one called or taken since', async () => {
+    forgetOverflow();
+    const asked: number[] = [];
+    const read: OverflowState = { line: { mode: 'on', threshold: 1, holdMin: 3 }, active: true, waiting: 3, front: 40, rate: 2, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: 1, countedAt: 0 };
+    const OVERFLOW = {
+      idFromName: () => 'park',
+      get: () => ({
+        fetch: async (url: string, init?: RequestInit) => {
+          if (url.endsWith('/state')) return Response.json(read);
+          const n = (JSON.parse(String(init?.body)) as { n: number }).n;
+          asked.push(n);
+          return Response.json({ state: 'waiting', n, place: n - 40, waitMin: 2 });
+        },
+      }),
+    };
+    const e = { OVERFLOW, VOTES, ROOM_SHARDING: 'single', GATE: 'open', PASS_SIGNING_KEY: KEY } as unknown as Env;
+    const pass = await mintPass(KEY, { id: 'v_waiting1', exp: Math.floor(Date.now() / 1000) + 600, adm: false, cid: 'c_waiting1' });
+    const look = async (n: number) => (await worker.fetch(new Request(`https://park.example/api/line?n=${n}`, { headers: { Authorization: `Bearer ${pass}` } }), e, {} as ExecutionContext)).json();
+    expect(await look(42)).toEqual({ state: 'waiting', n: 42, place: 2, waitMin: 1 });
+    expect(await look(43)).toEqual({ state: 'waiting', n: 43, place: 3, waitMin: 2 });
+    expect(asked).toEqual([]);
+    // Taken since (above every number waiting then), or called since (at or below the front).
+    await look(44);
+    await look(40);
+    expect(asked).toEqual([44, 40]);
+    forgetOverflow();
   });
 });

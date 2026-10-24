@@ -15,7 +15,7 @@ export const OVERFLOW_QUIET_KEEP_MS = 30_000;
 const quiet = (s: OverflowState) => !s.active && s.line.mode === 'off' && !s.ribbon.on && Object.keys(s.copies).length === 0;
 
 /** No line, no ribbon, no copies: the park as deployed. */
-export const QUIET: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, lastCalled: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null };
+export const QUIET: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null };
 
 let kept: { state: OverflowState; until: number } | null = null;
 

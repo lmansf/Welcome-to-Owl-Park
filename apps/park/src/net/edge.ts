@@ -691,8 +691,9 @@ export class EdgeTransport implements ParkTransport {
         failWaiters();
         if (closed) return;
         if (ev.code === CLOSE.QUEUED) {
-          handlers.onStatus('offline');
+          // The scene leaves for the line first, so going offline here tells nobody the park could not connect.
           handlers.onQueued?.();
+          handlers.onStatus('offline');
           return; // it waits in the line on the home screen
         }
         if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED) {

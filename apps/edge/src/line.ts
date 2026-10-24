@@ -61,9 +61,20 @@ export class Line {
       .one().c;
   }
 
-  /** The highest number called so far (0 before any): every waiting number above it is still in line. */
-  lastCalled(): number {
-    return this.sql.exec<{ m: number | null }>(`SELECT MAX(n) AS m FROM line WHERE called IS NOT NULL`).one().m ?? 0;
+  /**
+   * The number just before the first owl still waiting. Numbers are called in order and every owl
+   * leaving the line leaves from below, so the owls waiting hold exactly the numbers above it, and a
+   * waiting number's place is how far above it it stands. With nobody waiting, the last number taken.
+   */
+  front(): number {
+    const first = this.sql.exec<{ m: number | null }>(`SELECT MIN(n) AS m FROM line WHERE called IS NULL AND gone IS NULL`).one().m;
+    if (first !== null) return first - 1;
+    return this.sql.exec<{ m: number | null }>(`SELECT MAX(n) AS m FROM line`).one().m ?? 0;
+  }
+
+  /** The line taken down: everyone waiting or called goes in on their next look, and their numbers are spent. */
+  clear(now: number): void {
+    this.sql.exec(`UPDATE line SET gone = ? WHERE gone IS NULL AND claimed IS NULL`, now);
   }
 
   /** When owls were called lately: the line's pace. */

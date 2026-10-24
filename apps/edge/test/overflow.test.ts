@@ -34,7 +34,7 @@ describe('the line (OP-075)', () => {
     expect(line.waiting()).toBe(3);
     expect(line.status(c, 'c_cccccccc', T0 + 3, HOLD)).toEqual({ state: 'waiting', place: 3 });
     expect(line.tick(T0 + 5, HOLD, 2)).toBe(2);
-    expect(line.lastCalled()).toBe(b);
+    expect(line.front()).toBe(b);
     expect(line.status(a, 'c_aaaaaaaa', T0 + 5, HOLD)).toEqual({ state: 'called', holdUntil: T0 + 5 + HOLD });
     expect(line.status(c, 'c_cccccccc', T0 + 5, HOLD)).toEqual({ state: 'waiting', place: 1 });
     // Nobody else takes a number's turn.
@@ -67,6 +67,27 @@ describe('the line (OP-075)', () => {
     line.claim(a, 'c_aaaaaaaa', T0 + 1_000, HOLD);
     expect(line.outstanding(T0 + 1_000 + CLAIM_GRACE_MS - 1, HOLD)).toBe(1);
     expect(line.outstanding(T0 + 1_000 + CLAIM_GRACE_MS, HOLD)).toBe(0);
+  });
+
+  it('taken down, spends every number in it; a later line starts at place 1, after old numbers are forgotten too', () => {
+    const line = new Line(sqlStorage());
+    const a = line.join('c_aaaaaaaa', T0, HOLD);
+    line.join('c_bbbbbbbb', T0, HOLD);
+    line.tick(T0, HOLD, 1);
+    line.clear(T0 + 1);
+    expect([line.waiting(), line.outstanding(T0 + 1, HOLD)]).toEqual([0, 0]);
+    expect(line.status(a, 'c_aaaaaaaa', T0 + 1, HOLD)).toEqual({ state: 'expired' });
+    expect(line.tick(T0 + 2, HOLD, 5)).toBe(0);
+    // A number taken now is first in line, though two numbers below it were never called.
+    const c = line.join('c_cccccccc', T0 + 3, HOLD);
+    expect(c - line.front()).toBe(1);
+    // Hours on, the old numbers are forgotten; numbers go on from where they were, places from 1.
+    const later = T0 + 7 * 60 * MIN;
+    const d = line.join('c_dddddddd', later, HOLD);
+    line.tick(later, HOLD, 0);
+    expect(d).toBe(4);
+    expect(d - line.front()).toBe(1);
+    expect(line.status(d, 'c_dddddddd', later, HOLD)).toEqual({ state: 'waiting', place: 1 });
   });
 
   it('measures its pace over ten minutes, for a rough wait', () => {
@@ -224,6 +245,23 @@ describe('the overflow object (OP-075)', () => {
     expect((await look(1, 'c_aaaaaaaa')).body).toEqual({ state: 'expired' });
     expect((await look(2, 'c_bbbbbbbb')).body).toMatchObject({ state: 'called', n: 2 });
     expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'waiting', n: 3, place: 1 });
+  });
+
+  it('turned off, takes the line down: everyone in it goes in, and a line started later calls none of them', async () => {
+    rooms.counts.set('park', { hub: 1 });
+    await post('/settings', { line: { mode: 'on', threshold: 1 } });
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'waiting', n: 1, place: 1 });
+    await post('/settings', { line: { mode: 'off' } });
+    expect((await look(1, 'c_aaaaaaaa')).body).toEqual({ state: 'go' });
+    // On by itself with room in the park: no line, and no old number holding a place.
+    rooms.counts.set('park', {});
+    expect((await post<OverflowState>('/settings', { line: { mode: 'auto' } })).body).toMatchObject({ active: false, waiting: 0 });
+    expect((await join('c_bbbbbbbb')).body).toEqual({ state: 'go' });
+    // On again, with the park full: the next number is first in line.
+    rooms.counts.set('park', { hub: 1 });
+    await post('/settings', { line: { mode: 'on' } });
+    expect((await join('c_cccccccc')).body).toMatchObject({ state: 'waiting', n: 2, place: 1 });
+    expect(await st()).toMatchObject({ waiting: 1, front: 1 });
   });
 
   it('on: every newcomer takes a number, called at once while the park has room; a claimed number goes in', async () => {
