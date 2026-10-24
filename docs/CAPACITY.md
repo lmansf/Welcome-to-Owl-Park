@@ -161,7 +161,7 @@ the Worker with one object per room and the hub's cap at 30 (`tools/load/throwaw
 rehearses with bots (`tools/load/capacity-dry-run.mjs`), and deletes the copy. The live park is never
 touched; a run spends a few hundred of the day's free requests.
 
-First run, 2026-10-24 (Load test run 4, from the branch that built this): 18 seconds of bots, about
+First run, 2026-10-23 (Load test run 4, from the branch that built this): 18 seconds of bots, about
 forty seconds with the deploy and the delete.
 
 | Step | What happened |
