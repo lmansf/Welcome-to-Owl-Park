@@ -573,14 +573,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     isOwlOpen: () => !!builder?.isOpen(),
     openMirror: (opener) => openScreen('owl', false, opener ?? menuBtn, true),
     toggleJournal: () => toggle('quests', () => !!questUi?.isJournalOpen()),
-    // TODO-DOCS (OP-082, OP-083): built. docs/ACTIVITIES.md and docs/QUESTS.md still describe the
-    // quest tracker and call these PLANNED. The phone pad: the stick on the right; Interact and Jump
-    // on a diagonal on the left, the Menu small in the corner and Emotes above; the space bar hops
-    // on a computer. Quests: no pop-ups during play; a new or finished quest shows a 2 s line at the
-    // top and a dot on the Menu button and its Quests tile until Quests opens; Quests shows each
-    // quest's progress (2/5), finished ones first, and Collect walks the owl to the quest's giver to
-    // hand it in (the owner's call of 2026-10-23, as is keeping the New quest line for now). The
-    // tracker and the daily tasks' progress toast are gone.
     questNews(kind, title) {
       notice(kind === 'new' ? `New quest: ${title}` : `Quest complete: ${title}`);
       if (!questUi?.isJournalOpen()) setQuestNews(true);

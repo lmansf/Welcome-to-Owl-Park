@@ -3,15 +3,6 @@
  * wall, its glass catching the lamplight, in the warm wood and gold of the nest's painting. No
  * painted art. It stands on the floor like a piece of furniture, so owls are drawn in front of it or
  * behind it by where they stand.
- *
- * TODO-DOCS (OP-077): docs/ACTIVITIES.md, docs/NESTS.md and docs/ARCHITECTURE.md (the home screen)
- * predate the mirror. Every nest has one, furnished or not (NEST_MIRROR, and the `mirror` spot and
- * spawn in NEST_ROOM): standing before it, Look in the mirror (E, or the pad's Interact) opens Your
- * owl with the owl in the room as the preview (RoomScene.mirrorView). Any owl may use any nest's
- * mirror; it changes only that owl. The Menu has no Your owl tile; the home screen's button is Go
- * to your nest, which lands the owl before its mirror; Q goes to the mirror (nestPlan.mirrorKey).
- * Make your owl still opens the editor in place on a first visit. The mirror glints once, with no
- * words, the first time a device's owl is home (nestPlan.firstGlint).
  */
 import Phaser from 'phaser';
 import type { Vec2 } from '@owl-park/shared';
