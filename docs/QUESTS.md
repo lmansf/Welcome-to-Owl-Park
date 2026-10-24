@@ -1,5 +1,11 @@
 # Quests, NPC owls, leaf piles and the feather shop
 
+- Status: BUILT; the founder perk PLANNED (OP-049)
+- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the numbers are Claude Code's as written
+- Code: packages/shared/src/quests.ts, questCatalog.ts, questbook.ts, npcs.ts, interactables.ts, shop.ts, species.ts; apps/edge/src/Collections.ts; apps/park/src/ui/quests.ts
+- Tickets: OP-013, OP-014, OP-015, OP-016, OP-018, OP-019
+- Related: docs/COLLECTIBLES.md, docs/ACTIVITIES.md; the Quest Log sheet in the Drive
+
 Collectibles are earned now, not found lying around: NPC owls give quests, quests pay feathers
 and collectibles, leaf piles turn up the odd feather, and Nova's feather shop sells a rotating
 shelf for feathers. This document is the design, the numbers and how to add more. The
@@ -12,17 +18,13 @@ server and the zero-backend local mode run the same rules and Node unit-tests th
 
 1. An owl with a gold **!** over its head has quests. Walk up (or tap it) and **talk**: the
    dialogue shows what it offers, what you are doing for it and what you can hand back.
-2. **Take on** a quest. It lives in **Quests** (from the Menu, or J), with its steps and its
-   progress (steps done of all of them); nothing about quests stays over the room (OP-083). A new
-   quest and a finished one are news: a short line at the top for two seconds, and a dot on the
-   Menu button and its Quests tile until Quests is opened. A step along the way says nothing.
+2. **Take on** a quest. Its steps show in the tracker under the top bar and in Quests (from the
+   Menu, or J).
 3. Do the steps in order: talk to someone, visit a place, flop into leaf piles, browse the
    market stalls, bask in the moonbeam, play an emote for someone, or find things a quest hides
    (acorns, lost gears, moonstones) that only you can see.
-4. When it is done the giver shows a gold **?**: **collect** it in Quests, or hand it in from the
-   giver's dialogue, for feathers and, usually, a collectible (a duplicate pays feathers instead).
-   The giver hands the reward over, so Collect works where the giver stands: in the same room the
-   owl walks up and collects on arrival; elsewhere the card says where to take it.
+4. When it is done the giver shows a gold **?**: go back and **hand it in** for feathers and,
+   usually, a collectible (a duplicate pays feathers instead).
 5. Spend feathers in **Nova's feather shop** on the neon street.
 
 The park clock is Eastern time (`PARK_TIME_ZONE` in `parktime.ts`): daily quests, the shop's daily
@@ -166,13 +168,11 @@ Old pages speaking v3 are refused and reload themselves.
   asks for them), leaf piles with the flop and poof, glows under the stalls and the moonbeam,
   quest-item markers, and the action buttons (E runs the first). Tapping an NPC or a pile walks
   up and does it on arrival.
-- HUD: feathers in the top bar; the quests screen (`ui/quests.ts`; from the Menu or J: tabs for
-  the quests under way with their progress, Collect and Drop, today's tasks, and who has more);
-  quest news as a line at the top and a dot on the Menu button (`questNews` in `ui/hud.ts`); the
-  NPC dialogue and the shop. The play screen keeps only the lobby's welcome.
+- HUD: feathers in the top bar, the quest tracker, the quests screen (`ui/quests.ts`; from the
+  Menu, J, or a tap on the tracker: tabs for the quests under way, today's tasks, and who has
+  more), the NPC dialogue and the shop.
 - Test hooks on `window.owlPark`: `quests()`, `talk(npc)`, `use(target)`, `accept(quest)`,
-  `abandon(quest)`, `handIn(quest)`, `collect(quest)`, `gather(quest, n)`, `shop()`,
-  `buy(variant)`, `gift()`.
+  `abandon(quest)`, `handIn(quest)`, `gather(quest, n)`, `shop()`, `buy(variant)`, `gift()`.
 
 ## The Quest Log sheet
 
@@ -191,3 +191,6 @@ they load, and for any species added later until its art is approved, a species 
 great horned owl's layers at its own size. Hats, glasses and scarves sit where each
 species' crown, eyes and chest are, measured from the layers it wears. The screech owl is meant for
 founders only; until founder status exists it is open to everyone (`FOUNDER_SPECIES_OPEN`).
+PLANNED (OP-049, C42): a Drop-1 pin order marks its wallet as a Founding Nester, the screech owl
+becomes founders-only when the owner flips it, and the wallet receives a Founder's pin wearable
+that matches the physical pin (the great horned owl mascot).

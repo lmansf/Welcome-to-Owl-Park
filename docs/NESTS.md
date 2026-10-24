@@ -1,5 +1,11 @@
 # Nests
 
+- Status: BUILT (C39); the mirror PLANNED (OP-077)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: packages/shared/src/homes.ts, nestbook.ts, rooms/index.ts; apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, game/nest.ts, game/street.ts
+- Tickets: OP-029, OP-032, OP-033, OP-077, OP-093
+- Related: docs/ARCHITECTURE.md section 4 (protocol) and section 9 (Go home)
+
 Every owl has a nest of its own: a cosy round room inside a tree, on a street of tree houses outside
 the turnstiles (proposal C39). It is all free and needs no ticket, also once the park takes tickets
 (the opening switch on `/admin/gate`, or `GATE=ticket`): the lobby, the street and the nests are open to every visitor. Every number and
@@ -30,6 +36,9 @@ the two posts at the east end.
   behind it stays dark and says **Closed for now**.
 - No names anywhere: a nest is known by its id alone, and the flag is the only thing of its owner
   anyone sees. Nobody types anything, and a nest holds nothing but approved pieces in its spots.
+  There is no nest label, title or sign a visitor could write: the words over a door are the
+  park's own (**Your nest**, **Closed for now**). QA's free-text check (OP-093) confirms none
+  exists; a nest's room never carries its owner's collector id either (`homes.ts`).
 
 Out of a nest, an owl comes back to the street in front of the door it went in by.
 
@@ -64,13 +73,18 @@ keeps them out: closing sends any visitors inside back to the street. **Done** (
 
 Everyone inside sees each change as it happens. Only the owner can change its nest.
 
-## The mirror
+## The mirror [PLANNED (OP-077, In progress)]
 
-Every nest has a standing mirror against the back wall, beside the round window, part of the room
-rather than a piece of furniture, where an owl changes how it looks: **Look in the mirror** opens Your owl, with the
-owl in the room as the preview (OP-077, `docs/ACTIVITIES.md`). Any owl may use any nest's mirror;
-it changes only that owl. Standing before it in its own nest, Look in the mirror comes before
-Decorate, so E and the pad's Interact look in the mirror there and decorate anywhere else.
+Not built yet. Once it lands, customising an owl happens in its own nest, at a mirror: one
+interactable in the nest's inside, with one action, **Look in the mirror**, shown only where the
+owl stands at it (OP-040's rule). It opens the Your owl editor as it is, every tab, and edits only
+the owl looking into it, so a visitor in someone else's nest can use it too and changes nothing of
+the host's. While the editor is open the owl in the room updates live. With it the Menu's Your owl
+tile goes, and the home screen's builder button becomes **Go to your nest**, which puts the owl
+inside its nest facing the mirror. The one exception stays: **Make it yours** at the end of the
+first-run quiz (OP-076, not built) opens the editor in place. Art: the mirror painted into the
+nest's painting as one edit, or drawn in code. Until OP-077 merges, the owl builder opens from
+the Menu (Your owl) and from the home screen as `docs/ARCHITECTURE.md`, section 9, says.
 
 ## Furniture and the day's gift
 

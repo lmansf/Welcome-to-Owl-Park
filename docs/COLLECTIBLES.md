@@ -1,5 +1,11 @@
 # Collectibles
 
+- Status: BUILT; Purchases is groundwork only, PLANNED (OP-049 for the founder perk)
+- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the numbers are Claude Code's as written
+- Code: packages/shared/src/collectibles.ts, book.ts, shop.ts; apps/edge/src/Collections.ts, sqlStore.ts; apps/park/src/collect, apps/park/src/game/itemArt.ts
+- Tickets: OP-013, OP-014, OP-015, OP-025, OP-029
+- Related: docs/QUESTS.md, docs/ARCHITECTURE.md section 8
+
 Visitors collect wearables (hats, glasses, collars), little pets that trot after their owl,
 effects (glows, sparkles, eyes on fire) and emotes. Everything that can ever be bought can also
 be earned in the park. This document is the catalogue, the numbers, and how the pieces fit.
@@ -106,12 +112,8 @@ to one per 1.5 s per owl.
   colours, wear, pets and effects, a card per item with its colourway dots; a tap puts it on or
   takes it off, and what is not owned yet shows greyed with where to find it). The **emote wheel**
   (`ui/emoteWheel.ts`: the owned emotes round a ring, eight a page) has its own button beside the
-  Menu (above the pad on touch screens), and on a keyboard 1 to 8 play the emotes as the wheel
-  numbers them, without opening it. The quests screen, dialogue and shop are in
-  [QUESTS.md](QUESTS.md).
-- The hop (the Jump button, the space bar) rides the emote frame as `jump` (`JUMP_EMOTE`), but it
-  is no collectible: not in the catalogue or the wheel, owned by every owl, counted by no quest
-  (see Controls in [ACTIVITIES.md](ACTIVITIES.md)).
+  Menu, and on a keyboard 1 to 8 play the emotes as the wheel numbers them, without opening it.
+  The quest tracker, the quests screen, dialogue and shop are in [QUESTS.md](QUESTS.md).
 - Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
   shop hooks.
 
@@ -142,7 +144,7 @@ stay neutral under a hue rotation); the other colourways are rotations of it. Th
 4. Optionally add a `FEATURED_SETS` entry in `shop.ts` with the drop's dates and items.
 5. Deploy: new variants enter quest rewards and the shop rotation at once.
 
-## Purchases (groundwork only)
+## Purchases [groundwork only; PLANNED (OP-049 founder perk, store link)]
 
 Everything purchasable can be earned in the park, and purchases sell a **specific** variant, never a random
 draw (paid random draws are restricted in several countries and cost collectors' trust). The

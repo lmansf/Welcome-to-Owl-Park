@@ -1,5 +1,11 @@
 # Things to do in the park
 
+- Status: the first wave BUILT (C36); the arcade's games, quests in the Menu, the hop and seasons PLANNED
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, book.ts; apps/park/src/game/activities.ts; apps/park/src/ui/activities.ts
+- Tickets: OP-004, OP-026, OP-037; planned OP-038, OP-059, OP-074, OP-082, OP-083, OP-084
+- Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7
+
 The first wave of activities (C30): lanterns that a room lights together under the great tree, a
 quiz on the stump stage answered by standing in a zone, fishing from the jetty in the treehouse
 clearing, the neon street's robot owl and its copy game, and three small tasks a day. Every number
@@ -15,27 +21,6 @@ zero-backend local mode run the same ones and Node tests them:
 - `roomActivities.ts`: the activities of one room (`Activities`), run by the room server for
   everyone in a room and by the local mode for the one owl on the device;
 - `book.ts`: `play()` pays an activity under its daily cap and counts it toward the day's tasks.
-
-## Controls
-
-- **Keyboard**: WASD or the arrow keys walk, E does what the owl stands at, the space bar hops, M
-  opens the Menu, T the Say wheel, 1 to 8 play an emote, Q goes to the mirror in the owl's nest
-  (where Your owl is), J the quests, Escape closes (`apps/park/src/ui/keyboard.ts`). A space bar on
-  a focused button presses the button instead.
-- **Touch screens**: a pad like a handheld's (OP-082, `apps/park/src/ui/hud.ts`). The thumbstick
-  walks from the bottom-right corner; on the left, **Interact** (the hand, nearer the middle) does
-  what E does and lights up gold where there is something to do, **Jump** (the arrow, nearer the
-  corner) hops, and the **Menu** is the small dark button in the corner, with **Emotes** (the
-  smile) above them. All see-through like the stick, each at least 44 px and none overlapping.
-  Tapping the floor still walks there, and the gold buttons over the stick still say what can be
-  done where the owl stands.
-- **The hop** is a look, not a move: the owl's drawing goes up and comes down in 0.4 s with a
-  two-frame flap while its place, its walk and what it stands at stay as they are, so a hop can
-  cross nothing. It is its own state beside emotes (`game/hop.ts`), so flight (OP-084) can later
-  turn its lift into a real height. It travels as an emote frame (`JUMP_EMOTE`, `jump`) that every
-  owl has without collecting it: no quest counts it, no collection is asked. A page sends one at
-  most every 0.6 s (`JUMP_EVERY_MS`); the room server passes one every 0.48 s and drops the rest,
-  apart from emotes' own limit. No sound.
 
 ## The lantern beam (the hub's west bay)
 
@@ -93,7 +78,7 @@ wrong note or a slow one ends the game. The robot uses the starter pair (Hoot an
 to two more emotes the owl owns, so every owl can play. The right notes are danced for everyone in
 the street.
 
-## The arcade (off the neon street's east end)
+## The arcade (off the neon street's east end) [BUILT room; games PLANNED (OP-038, OP-059)]
 
 A doorway under a joystick sign where the neon street bends away leads into the arcade: a hall
 with three game cabinets along its back wall under a blank score board (`packages/shared/src/arcade.ts`).
@@ -101,26 +86,19 @@ Each cabinet is a spot in the room data and will play one game, as the visitor's
 cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
 at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
 
-## The mirror (in every nest)
-
-Your owl, the editor for an owl's kind, colours, wear, pets and effects, is at a standing mirror in
-every nest, against the back wall between the lamp's spot and the round window (OP-077). Standing on the floor in front of it, the button
-**Look in the mirror** (E, or the pad's Interact) turns the owl to it and opens Your owl, every
-tab, and the owl in the room is the preview: the room's own camera draws the owl and its mirror in
-the editor's stage, and each choice shows on it at once. A mirror changes only the owl looking in,
-so a visitor can use the mirror in someone else's nest, and nothing of the host's changes. The
-mirror is part of the room, not a piece of furniture, so an unfurnished nest has it too.
-
-The ways to it: **Go to your nest** on the home screen puts the owl inside its nest, before the
-mirror and facing it; the Menu's **Go home** goes to the nest too; and **Q** goes to the mirror from
-anywhere (home to stand before it from outside, walking up to it in a nest, and from in front of
-it, into Your owl). The Menu no longer has a Your owl tile. The first visit's **Make your owl**
-still opens the editor in place, on the home screen. The first time a device's owl is home, the
-mirror glints once, with no words.
-
-The mirror is drawn in code (`apps/park/src/game/mirror.ts`): a dark wooden oval on a stand with a
-gold line inside and silvery glass, in the nest painting's warm wood and gold. Its place and the
-floor in front of it are room data (`NEST_MIRROR`, the `mirror` spot and spawn in `NEST_ROOM`).
+PLANNED (C40, amended C46; OP-059 the hall and its art, OP-038 the games): the arcade becomes
+a hall about three screens wide with a bay per game, each with its title as a neon sign and a
+cabinet of its own, and the score wall in the middle. The three games, all in one wave and played
+as the visitor's own owl: **Hoot & Hop** (hop across lanes of drones and noodle carts; each crossing
+banks a tier; a hit ends the run), **Moon Flap** (tap to flap through gaps on a night flight; the
+score is gaps passed) and **Nest Knockdown** (pull back and launch at stacked neon crates; ten
+levels, fewer shots scores higher). The names were knockout-screened (OP-036); the arcade is
+"Neon Roost" and "the Owl Park arcade" in public. The room server starts each run, pays 0 to 6
+feathers a run by score band plus 3 the first time a day's best is beaten per game, inside the
+shared 25-a-day games cap, and keeps a score-against-time check; the score wall shows today's top
+five per game as owl portraits, no names, reset at the park's midnight. A daily task "Play a round
+in the arcade" joins the rotation. Painted art, three candidates per piece, the owner picks; the
+arcade goes live only with the new look.
 
 ## Three small tasks a day
 
@@ -133,8 +111,42 @@ kind twice:
    or copy 2 tunes.
 
 Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J), on its
-Today tab; a task done says so with its feathers, a step along one says nothing over the room
-(OP-083). They change at the park's midnight.
+Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
+park's midnight.
+
+## Quests on screen [BUILT today; the Menu version PLANNED (OP-083)]
+
+Today a quest's steps show in the tracker under the top bar and in Quests (the Menu, or J); a new
+offer, a finished step and a hand-in show as toasts and cards (`docs/QUESTS.md`). PLANNED (OP-083, In progress): the pop-ups go. A new quest or a finished one shows a badge dot on the
+Menu button and a short toast ("New quest", "Quest complete") and then goes quiet; the Quests tab
+lists each active quest with its one-line goal and progress (2/5), and the reward is collected
+there (tap the quest, tap Collect). Quest state and rewards do not change; only the surface does.
+Open on the ticket: the badge dot on the desktop Menu, how many quests show before the tab scrolls
+(5 suggested), and whether the preview's feedback nudge (OP-063) moves into the Menu too.
+
+## Emotes [BUILT; the hop PLANNED (OP-082)]
+
+The emotes an owl can play are collectibles (`docs/COLLECTIBLES.md`): 24 in the catalogue, every
+owl starts with Hoot and Wing Flap (plus the Sparkle effect), and the rest come from quests and the
+shop. The emote wheel (the Emotes button; 1 to 8 on a keyboard) plays one; the room server relays
+the emote's id to everyone else in the room, checks that the owl owns it, and allows one per 1.5 s
+per owl. PLANNED (OP-082): a **hop**, the Jump button's short wing-flap, sent as a `hop` emote
+so others see it, at most one per 600 ms on the page, purely visual (`docs/PLAYBOOK.md`, section
+7). The hop is a candidate for flight later (OP-084); do not document it as final.
+
+## Seasons [PLANNED (OP-074)]
+
+The owner's decisions of 2026-10-23: a seasonal switch first (a Worker setting with start and end
+dates that turns an event's layer, actions and tasks on and off with no deploy; the base paintings
+never change, an event is an overlay plus room data), then snow and snowballs for everyone,
+everywhere outdoors (the lobby, the street of nests, the hub, every open realm and the arcade; no
+snow indoors, not even through a nest's window; the neon market realm gets its own neon-palette
+reskin), from mid-December after the preview. A snowball is thrown at an owl you tap, arcs, lands
+with a puff and plays a shiver emote on the target: no feathers lost, no words, no opt-out. One
+throw every 2 seconds, held by the room server; a daily task "Throw 5 snowballs". Later in the
+calendar: a Superb Owl Sunday tie-in (2027-02-14), spring and summer events to be designed, and a
+hay maze for Halloween 2027, seasonal only. Each event's art spend is approved by the owner before
+anything generates.
 
 ## Feathers
 
@@ -162,7 +174,8 @@ to its own clock, and runs the quiz card on the server's clock.
   answers and pushes, and the cards; `game/Lanterns.ts`, `game/QuizStage.ts` and
   `game/Fishing.ts` draw the glows, the zones and the line.
 - `ui/activities.ts`: the quiz and copy cards (top right on wide screens, under the top bar on
-  phones); `ui/quests.ts`: today's tasks in the quests screen; `collect/tasks.ts` keeps them.
+  phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the quests screen and
+  the tracker; `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
 

@@ -1,5 +1,11 @@
 # When the park is in trouble
 
+- Status: BUILT; section 7 marks the coming controls PLANNED (OP-082, OP-083)
+- Verified against: main 67ca3ab (2026-10-23)
+- Code: apps/edge/src/health.ts, .github/workflows/uptime.yml, apps/edge/src/gateSwitch.ts, apps/park/src/ui
+- Tickets: OP-067, OP-068, OP-099
+- Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/ARCHITECTURE.md section 13
+
 The incident playbook for the preview and after (OP-068). Who does what: the owner decides and holds
 the keys (Cloudflare, Shopify, GitHub, the admin key); Claude Code finds the cause and fixes it on a
 branch; Crow posts the words below once the owner approves them; Claude keeps the board.
@@ -73,6 +79,48 @@ its own cap of 80.
 
 Nothing more specific (no times, no refunds, no causes) without the owner's word.
 
-## 7. After
+## 7. Controls and the Menu [BUILT; the pad and quests-in-Menu PLANNED (OP-082, OP-083)]
+
+What a visitor has in hand today (main 67ca3ab), and what is coming. Nothing a visitor does needs
+typing.
+
+**Today, on a phone**: tap where you want to walk, or use the see-through thumbstick in the
+bottom-right corner (OP-026). Two buttons sit at the bottom: **Emotes** opens the emote wheel and
+**Menu** opens everything else (OP-034). Standing at something to do shows its own button (Light a
+lantern, Cast a line, Talk, Flop in, Decorate, Vote for this realm, the gift shop).
+
+**Today, on a computer**: WASD or the arrow keys walk while held; E uses whatever the owl stands at;
+T opens Say; 1 to 8 play an emote as the wheel numbers them; M opens the Menu; Q the owl builder;
+J the quests; Escape closes whatever is open.
+
+**The Menu** holds: Say (a prewritten phrase in a bubble, `docs/ARCHITECTURE.md` section 11), Your
+owl (the owl builder), Quests (the quests under way, today's tasks and who has more), Settings
+(quest cards, thumbstick, calm motion, full screen, the controls, Show what owls say; kept on the
+device and shared with the home screen), Feedback (in gold, `docs/FEEDBACK.md`), and the ways out:
+Go home (to the owl's own nest), Leave the park (inside the park, after "Leave the park? Your ticket
+keeps running.") and Home screen.
+
+PLANNED (OP-082, In progress; not live yet): a Game Boy Advance SP style pad on phones. The
+joystick stays on the right at its size and translucency. Two round buttons on the left on a
+diagonal: the inner one is **Interact** (what the on-screen action button does today), the outer
+one **Jump**, a short hop with a two-frame wing flap, about 400 ms, silent by default, purely visual
+(it never moves the owl or crosses a gap) and seen by the room as a `hop` emote, at most one per
+600 ms. A third, smaller, darker button tucked toward the bottom-left corner opens the **Menu**; the
+standalone Menu button then goes. Touch targets at least 44 px; the same translucency throughout.
+On a computer the space bar hops; nothing else changes. Open on the ticket: whether the Emotes
+button stays or joins the pad, and a mirrored pad for left-handed play (`docs/FEEDBACK.md`,
+candidates).
+
+PLANNED (OP-083, In progress; not live yet): quests leave the screen for the Menu. A new quest
+or a finished one shows a badge dot on the Menu button and a 2-second toast at the top edge ("New
+quest", "Quest complete"), then goes quiet; the Quests tab lists each active quest with its goal and
+progress, and the reward is collected there (tap the quest, tap Collect). The owner decides after
+trying it whether the new-quest toast stays.
+
+LATER (OP-084), not for the preview: the hop may grow into flight (double flap,
+hold-to-glide, upper levels). Do not describe the hop as final; it is built as a visual offset so
+flight can replace it.
+
+## 8. After
 
 A line on the board: what happened, how long, what changed, and the ticket for any follow-up.
