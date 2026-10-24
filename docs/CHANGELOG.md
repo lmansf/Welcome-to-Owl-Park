@@ -1,6 +1,6 @@
 # Changelog
 
-- Status: complete for every Done ticket as of 2026-10-23 22:10 ET
+- Status: complete for every Done ticket as of 2026-10-23 22:25 ET
 - Verified against: the Ticket Board as read 2026-10-23; commits on main 67ca3ab
 - Code: none
 - Tickets: OP-103
@@ -22,6 +22,7 @@ names (C31, C35, ...), and the docs it touched.
 
 ## Week of 2026-10-19
 
+- OP-099 (2026-10-23): the controls and the Menu as built in `docs/PLAYBOOK.md` section 7, quests on screen and emotes in `docs/ACTIVITIES.md`; the pad and the Menu quests marked PLANNED until OP-082 and OP-083 merge (main 72e4eed; closed as is).
 - OP-103 (2026-10-23): `docs/CHANGELOG.md` started from the Done tickets, with the appending rule (main 72e4eed).
 - OP-102 (2026-10-23): Bible-to-docs sync: C35, C41, C42, C45, C46 and the decisions from OP-060 onward added to the docs or listed under Not yet documented in `docs/README.md` (main 72e4eed).
 - OP-101 (2026-10-23): `docs/README.md`, the map of the docs, the Ticket Board conventions and the writing conventions; `docs/GLOSSARY.md` as a first pass; the root `README.md` Docs list updated (main 0b77cd2).
