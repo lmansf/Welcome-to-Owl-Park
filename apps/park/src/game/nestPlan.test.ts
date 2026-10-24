@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NEST_SPOTS, getFurniture, getNestSpot } from '@owl-park/shared';
-import { FLAT_DEPTH, MIRROR_GLINT_KEY, WALL_DEPTH, firstGlint, mirrorKey, pieceDepth, piecesFor, spotNumber, stepSpot, streetDoors, streetSpawnBack, type MirrorKeyState } from './nestPlan';
+import { FLAT_DEPTH, MIRROR_GLINT_KEY, NEST_WELCOME_KEY, WALL_DEPTH, firstGlint, firstNestWelcome, mirrorKey, pieceDepth, piecesFor, spotNumber, stepSpot, streetDoors, streetSpawnBack, type MirrorKeyState } from './nestPlan';
 
 const spot = (id: string) => getNestSpot(id)!;
 const piece = (id: string) => getFurniture(id)!;
@@ -127,6 +127,21 @@ describe("the nest's mirror (OP-077)", () => {
     expect(firstGlint(denied)).toBe(false);
     const full = { getItem: () => null, setItem: () => { throw new Error('quota'); } };
     expect(firstGlint(full)).toBe(false);
+  });
+
+  it('welcomes a device to its nest once, apart from the glint, and never where the browser keeps nothing (OP-105)', () => {
+    const device = storage({ [MIRROR_GLINT_KEY]: '1' });
+    // An owl already home before the welcome came still sees it, once.
+    expect(firstNestWelcome(device)).toBe(true);
+    expect(device.keys[NEST_WELCOME_KEY]).toBe('1');
+    expect(firstNestWelcome(device)).toBe(false);
+    expect(firstGlint(device)).toBe(false);
+    // The welcome does not use up the glint.
+    const fresh = storage();
+    expect(firstNestWelcome(fresh)).toBe(true);
+    expect(firstGlint(fresh)).toBe(true);
+    expect(firstNestWelcome(null)).toBe(false);
+    expect(firstNestWelcome({ getItem: () => null, setItem: () => { throw new Error('quota'); } })).toBe(false);
   });
 
   it('makes Q lead to the mirror: the nest from the home screen, the mirror in the park, and Q again closes Your owl', () => {

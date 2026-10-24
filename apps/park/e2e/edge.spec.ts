@@ -227,13 +227,16 @@ test.describe('room server', () => {
     ['a computer', { viewport: { width: 1280, height: 800 } }],
     ['a phone', { ...devices['Pixel 7'] }],
   ] as const) {
-    test(`on ${name}: a ticket link lands on the home screen logged in, with the ticket; Play puts the owl in the lobby, and the room count follows`, async ({ browser, request }) => {
+    test(`on ${name}: a ticket link lands on the home screen logged in, with the ticket; Play puts the owl in its own nest, and the park's count follows`, async ({ browser, request }) => {
       const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
       expect(issued.status()).toBe(200);
       const { link } = (await issued.json()) as { link: string };
-      // An owl already in the lobby counts the owls there.
+      // An owl already in the lobby counts the owls in the park ("1 owl here · 2 in the park"; just the room's while they are the same).
       const b = await visitor(browser, { room: 'lobby' });
-      const count = async () => Number(/^(\d+)/.exec((await b.locator('[data-count]').textContent()) ?? '')?.[1] ?? 0);
+      const count = async () => {
+        const words = (await b.locator('[data-count]').textContent()) ?? '';
+        return Number((/(\d+) in the park/.exec(words) ?? /^(\d+)/.exec(words))?.[1] ?? 0);
+      };
       const before = await count();
 
       // A new device opens the link from the store's email: the owl is made here, and the ticket is in its wallet.
@@ -245,8 +248,10 @@ test.describe('room server', () => {
       await expect(a.locator('[data-home-wallet]')).toHaveText('Day ticket: ready at the turnstiles');
       await a.screenshot({ path: `e2e-screenshots/edge-home-ticket-link-${name === 'a phone' ? 'phone' : 'desktop'}.png` });
 
+      // Play (OP-105): the owl's own nest, which the room server makes on first sight.
       await a.locator('[data-home-btn="play"]').click();
-      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
+      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+      await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
       await expect.poll(count, { timeout: 15_000 }).toBe(before + 1);
       // The Menu's Home screen frees the owl's place in the room at once.
       await a.locator('[data-menu-btn]').click();

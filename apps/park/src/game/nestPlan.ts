@@ -3,7 +3,8 @@ import { FURNITURE, NEST_SPOTS, STREET_DOORS, STREET_ROOM, getNestSpot, isNestId
 /**
  * The nests' plain rules on this side, kept apart from Phaser so they can be tested: how furniture
  * sorts in depth, what the Decorate sheet offers for a spot, who lives behind each street door,
- * where an owl comes back out of a nest, and the mirror's (OP-077): its one glint, and where Q goes.
+ * where an owl comes back out of a nest, and the mirror's (OP-077): its one glint, and where Q goes;
+ * and the nest's welcome, once (OP-105).
  */
 
 /** Wall pieces hang in front of the painted wall and behind everything on the floor. */
@@ -80,20 +81,34 @@ export function streetSpawnBack(cameFrom: { room: string; spawn?: string | undef
 
 /** Whether this device has seen its nest's mirror glint (OP-077). */
 export const MIRROR_GLINT_KEY = 'owl-park:mirror-glint';
+export const NEST_WELCOME_KEY = 'owl-park:nest-welcome';
+
+/** True the first time this device asks under `key`, and false ever after; false where the browser keeps nothing. */
+function firstTime(storage: Pick<Storage, 'getItem' | 'setItem'> | null, key: string): boolean {
+  if (!storage) return false;
+  try {
+    if (storage.getItem(key)) return false;
+    storage.setItem(key, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The mirror glints the first time a device's owl is home (OP-077), with no words: true that once,
  * and false ever after. A browser that keeps nothing gets no glint, rather than one every visit.
  */
 export function firstGlint(storage: Pick<Storage, 'getItem' | 'setItem'> | null): boolean {
-  if (!storage) return false;
-  try {
-    if (storage.getItem(MIRROR_GLINT_KEY)) return false;
-    storage.setItem(MIRROR_GLINT_KEY, '1');
-    return true;
-  } catch {
-    return false;
-  }
+  return firstTime(storage, MIRROR_GLINT_KEY);
+}
+
+/**
+ * The welcome card the first time a device's owl is in its own nest (OP-105), saying the park is out
+ * of the door: once, as the glint, and never in a browser that keeps nothing (rather than every visit).
+ */
+export function firstNestWelcome(storage: Pick<Storage, 'getItem' | 'setItem'> | null): boolean {
+  return firstTime(storage, NEST_WELCOME_KEY);
 }
 
 /** Where the page stands when Q is pressed. */
@@ -109,9 +124,9 @@ export interface MirrorKeyState {
 
 /**
  * What Q does now that Your owl is at the mirror in the owl's nest (OP-077): it closes Your owl if
- * open; on the home screen it goes into the nest, once there is an owl; in the park it goes to the
- * mirror (RoomScene.toMirror: walking up to it in a nest, else home to stand before it). Nothing
- * while another screen is open.
+ * open; on the home screen it goes into the nest, as Play does (OP-105), once there is an owl; in the
+ * park it goes to the mirror (RoomScene.toMirror: walking up to it in a nest, else home to stand
+ * before it). Nothing while another screen is open.
  */
 export function mirrorKey(s: MirrorKeyState): 'close' | 'nest' | 'mirror' | null {
   if (s.owlOpen) return 'close';

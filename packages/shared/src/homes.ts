@@ -21,6 +21,8 @@ import { isObj } from './validate';
 export const NEST_WORDS = {
   /** The way from the lobby's west end to the street. */
   toNests: 'To the nests',
+  /** The way back: over each free room's door toward the turnstiles, and on its chip at the screen's edge (OP-105). */
+  toPark: 'To the park',
   /** Door 0 on the street. */
   yourNest: 'Your nest',
   decorate: 'Decorate',
@@ -46,6 +48,9 @@ export const NEST_WORDS = {
   noPieces: "No pieces for this spot yet. Each day's furniture gift brings a new one.",
   /** The street or a nest did not answer. */
   notAnswering: 'The nests are not answering just now. Try again in a moment.',
+  /** The first time this device's owl is in its own nest (OP-105): a card under the top bar, gone at a tap. */
+  welcome: 'Welcome to your nest',
+  welcomeLine: 'The park is out the door.',
 } as const;
 
 // ---------- the street ----------

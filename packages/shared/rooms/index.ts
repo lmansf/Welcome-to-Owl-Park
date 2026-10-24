@@ -558,7 +558,7 @@ export const NEST_ROOM: RoomDef = {
   ],
   spawns: {
     'default': { x: 340, y: 740 },
-    // In front of the mirror, facing it: where Go to your nest puts the owl (OP-077).
+    // In front of the mirror (OP-077), facing it: where Play puts the owl, every visit (OP-105).
     mirror: { x: 650, y: 720 },
   },
   doors: [
@@ -579,6 +579,14 @@ export const NEST_ROOM: RoomDef = {
  * look into it: it shows that owl, and changes only that owl.
  */
 export const NEST_MIRROR: Vec2 = { x: 590, y: 660 };
+
+/**
+ * Where every nest's "To the park" sign stands (OP-105): the middle of its words' foot, on the round
+ * door itself, above its little window. Play lands every owl in its own nest, so the way out is
+ * marked on the door. The wall over the door is a furniture spot (w1), and no wall piece hung there
+ * reaches down this far.
+ */
+export const NEST_PARK_SIGN: Vec2 = { x: 287, y: 400 };
 
 /** Named anchors for large set pieces drawn by the scene (depth-sorted with the owls). */
 export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> = {

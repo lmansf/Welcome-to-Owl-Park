@@ -39,6 +39,7 @@ import {
   nestLook,
   nestRoomId,
   npcsIn,
+  parkwardDoor,
   parseVariant,
   pointInRect,
   positionAlongWalk,
@@ -88,11 +89,11 @@ import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
 import { NestMirror } from './mirror';
 import { NestDecor, pieceThumb } from './nest';
-import { firstGlint, streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
+import { firstGlint, firstNestWelcome, streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
 import { NpcOwl } from './Npc';
 import { Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
-import { StreetDoors, addNestsSign } from './street';
+import { StreetDoors, addNestsSign, addParkSign } from './street';
 
 export interface RoomStart {
   room: string;
@@ -345,6 +346,7 @@ export class RoomScene extends Phaser.Scene {
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, stop);
     }
     addNestsSign(this, room);
+    addParkSign(this, room);
     if (room.id === STREET_ROOM) {
       this.streetSigns = new StreetDoors(this, room);
       this.streetSigns.show(this.street, nestLook(this.look));
@@ -359,7 +361,7 @@ export class RoomScene extends Phaser.Scene {
 
     const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
-    // Come in to stand before the mirror (Go to your nest), the owl faces it.
+    // Come in to stand before the mirror (Play, OP-105), the owl faces it.
     if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
     this.addResidents();
     this.play = new ActivityLayer({
@@ -624,9 +626,13 @@ export class RoomScene extends Phaser.Scene {
     this.conn?.track(this.snapshot());
   }
 
-  /** Chips at the screen's edge for open doorways and interactive spots the camera cannot see. */
+  /**
+   * Chips at the screen's edge for open doorways and interactive spots the camera cannot see. Outside
+   * the park, the chip for the way there says so in words (OP-105).
+   */
   private updateHints(): void {
     const own = this.room.id === STREET_ROOM ? 'nest-door-0' : null;
+    const toPark = parkwardDoor(this.room.id);
     const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const v = this.cameras.main.worldView;
     const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: TOUCH_HINT_BOTTOM } : {}) });
@@ -640,10 +646,11 @@ export class RoomScene extends Phaser.Scene {
         return {
           ...p,
           tint: door.to ? (DOOR_TINTS[door.to.room] ?? '#C9A227') : '#FFD36A',
+          ...(door.id === toPark ? { text: NEST_WORDS.toPark } : {}),
           label: spot
             ? `${spot.label}, off screen: walk there`
-            : door.id === 'gate'
-              ? 'The turnstiles, off screen: walk there'
+            : door.id === toPark
+              ? `${NEST_WORDS.toPark}, off screen: walk there`
               : door.id === own
                 ? `${NEST_WORDS.yourNest}, off screen: walk there`
                 : door.to?.room === STREET_ROOM
@@ -728,21 +735,26 @@ export class RoomScene extends Phaser.Scene {
     if (!frame) cam.startFollow(this.me, true, 0.12, 0.12);
   }
 
-  /** The mirror catches the light the first time this device's owl is home (no words); never again after. */
-  private glintOnce(): void {
+  /**
+   * The first time this device's owl is home, the mirror catches the light (no words), and the
+   * welcome card says the park is out of the door (OP-105); each once, never again after.
+   */
+  private firstTimeHome(): void {
     if (!this.mirror) return;
     let storage: Storage | null = null;
     try {
       storage = localStorage;
     } catch {
-      // A browser that keeps nothing: no glint (firstGlint).
+      // A browser that keeps nothing: neither (firstGlint, firstNestWelcome).
     }
     if (firstGlint(storage)) this.time.delayedCall(700, () => this.mirror?.glint());
+    if (firstNestWelcome(storage)) this.hud.setNestWelcome(true);
   }
 
   /**
    * The Menu's "Home screen" (OP-065): out of the room as through a door (the room frees the owl's
-   * place at once; a ticket keeps running), and the home screen comes up. Play goes on to the lobby.
+   * place at once; a ticket keeps running), and the home screen comes up. Play goes back in, to the
+   * owl's own nest.
    */
   toHomeScreen(): boolean {
     if (!this.built || this.leaving) return false;
@@ -1474,6 +1486,8 @@ export class RoomScene extends Phaser.Scene {
     this.mirrorFrame = null;
     this.streetSigns?.destroy();
     this.streetSigns = null;
+    // The nest's welcome stays in the nest.
+    this.hud.setNestWelcome(false);
     this.nests?.close();
     this.nests = null;
     this.hud.setHints([]);
@@ -1543,8 +1557,8 @@ export class RoomScene extends Phaser.Scene {
     if (seen.mine !== undefined) {
       this.nestMine = seen.mine;
       this.showWaysOut();
-      // The first time this device's owl is home, the mirror catches the light once.
-      if (seen.mine) this.glintOnce();
+      // The first time this device's owl is home: the mirror's glint and the welcome, once each.
+      if (seen.mine) this.firstTimeHome();
     }
     if (seen.owned) this.owned = seen.owned;
     if (seen.gift) this.nestGift = { taken: seen.gift.taken };

@@ -1,8 +1,9 @@
 /**
- * The park's front gate. Every visitor arrives in the lobby, where the ticket booth and the
- * turnstiles are. Open, everyone may go on through; taking tickets, a pass that is not admitted (no
- * ticket) opens only the rooms outside the turnstiles: the lobby, so a visitor can still reach the
- * booth, and the street of nests with every owl's nest, which are free.
+ * The park's front gate: the lobby, where the ticket booth and the turnstiles are (every visit
+ * starts in the owl's own nest, outside them, OP-105). Open, everyone may go on through; taking
+ * tickets, a pass that is not admitted (no ticket) opens only the rooms outside the turnstiles: the
+ * lobby, so a visitor can still reach the booth, and the street of nests with every owl's nest,
+ * which are free.
  *
  * The keepers flip the gate with the opening switch (`gateSwitch.ts`, OP-067), no deploy needed;
  * GATE in wrangler.jsonc is only where it starts. An owl already in the park when the gate closes

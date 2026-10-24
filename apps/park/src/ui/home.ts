@@ -1,10 +1,18 @@
 /**
- * The home screen (OP-065): what the park opens on, before the lobby. Logged out (no owl on this
- * device yet): the park's name with its mascot, Make your owl and Settings. Logged in: Play, a line about
- * the tickets on this device, Go to your nest (where the mirror is, OP-077) and Settings, with the
- * visitor's own owl drawn big beside them (the builder's preview scene draws it in the frame this
- * screen leaves for it). "Logged in" means only that this device holds an owl: the park has no
- * accounts, and nobody types a thing.
+ * The home screen (OP-065): what the park opens on. Logged out (no owl on this device yet): the
+ * park's name with its mascot, Make your owl and Settings. Logged in: Play, a line about the tickets
+ * on this device, and Settings, with the visitor's own owl drawn big beside them (the builder's
+ * preview scene draws it in the frame this screen leaves for it). Play always lands the owl in its
+ * own nest, before its mirror (OP-105), and the park is out of the nest's door. "Logged in" means
+ * only that this device holds an owl: the park has no accounts, and nobody types a thing.
+ * TODO-DOCS (OP-105): docs/NESTS.md (the mirror section's "Go to your nest" line) and PLAYBOOK.md
+ * section 7 ("Your owl") still name the second button. Play is now the one way in: it lands every
+ * visit, a coming back after closing the tab too, in the owl's own nest before its mirror (made on
+ * first sight; the lobby only if the nests do not answer), through the line as before. The way to
+ * the park is marked "To the park": a sign on the nest's door and at the street's east end
+ * (game/street.ts), and labelled chips at the screen's edge (RoomScene.updateHints). The first time
+ * home, a card under the bar says "Welcome to your nest / The park is out the door." (once per
+ * device, gone at a tap).
  */
 import type { Entry, WalletEntry } from '../net';
 import type { PreviewFrame } from './owlBuilder';
@@ -15,9 +23,8 @@ export const HOME_WORDS = {
   name: 'Owl Park',
   /** The first visit's button: there is no account to log into yet, so it makes the owl on this device (Log in returns with OP-050's sign-in). */
   logIn: 'Make your owl',
+  /** Into the owl's own nest, before its mirror, where Your owl is (OP-077, OP-105). */
   play: 'Play',
-  /** Your owl is at the mirror in the owl's nest (OP-077): this goes there. */
-  owl: 'Go to your nest',
   settings: 'Settings',
   added: 'Ticket added',
   ready: 'ready at the turnstiles',
@@ -74,9 +81,8 @@ export function walletSummary(tickets: readonly WalletEntry[], gate: Entry['gate
 
 export interface HomeActions {
   logIn(button: HTMLElement): void;
+  /** Into the owl's own nest (OP-105), through the line while the park has one. */
   play(): void;
-  /** Go to your nest (OP-077): into the park, before the nest's mirror. */
-  owl(): void;
   settings(button: HTMLElement): void;
   /** Where the owl stands moved (the screen came up, or its size changed). */
   stage(frame: PreviewFrame): void;
@@ -175,7 +181,6 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
         <p class="h-small-note" data-line-auto></p>
       </div>
       <p class="h-wallet" data-home-wallet hidden></p>
-      <button class="ghost" data-home-btn="owl"></button>
       <button class="ghost h-small" data-home-btn="settings"></button>
     </div>
     <div class="h-stage" data-home-stage></div>`;
@@ -184,7 +189,6 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   $<HTMLElement>('h1').textContent = HOME_WORDS.name;
   const login = $<HTMLButtonElement>('[data-home-btn="login"]');
   const play = $<HTMLButtonElement>('[data-home-btn="play"]');
-  const owl = $<HTMLButtonElement>('[data-home-btn="owl"]');
   const settings = $<HTMLButtonElement>('[data-home-btn="settings"]');
   const wallet = $<HTMLElement>('[data-home-wallet]');
   const noteEl = $<HTMLElement>('[data-home-note]');
@@ -201,12 +205,10 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   lineTicket.textContent = LINE_WORDS.ticket;
   login.textContent = HOME_WORDS.logIn;
   play.textContent = HOME_WORDS.play;
-  owl.textContent = HOME_WORDS.owl;
   settings.textContent = HOME_WORDS.settings;
-  // Logged in, Make your owl goes: the builder hands the focus back to Go to your nest.
-  login.addEventListener('click', () => actions.logIn(owl));
+  // Logged in, Make your owl goes: the builder hands the focus back to Play.
+  login.addEventListener('click', () => actions.logIn(play));
   play.addEventListener('click', () => actions.play());
-  owl.addEventListener('click', () => actions.owl());
   settings.addEventListener('click', () => actions.settings(settings));
 
   let shown = false;
@@ -239,7 +241,6 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       el.hidden = false;
       login.hidden = isIn;
       play.hidden = !isIn || waiting;
-      owl.hidden = !isIn || waiting;
       if (!isIn) {
         wallet.hidden = true;
         noteEl.hidden = true;
@@ -262,11 +263,10 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     },
     frame,
     line(view) {
-      // While the owl waits, the ways into the park (Play, Go to your nest) give way to its place in line.
+      // While the owl waits, Play gives way to its place in line.
       waiting = view !== null;
       lineEl.hidden = !waiting;
       play.hidden = !loggedIn || waiting;
-      owl.hidden = !loggedIn || waiting;
       if (waiting) wallet.hidden = true;
       else wallet.hidden = !wallet.textContent || !loggedIn;
       if (!view) return;

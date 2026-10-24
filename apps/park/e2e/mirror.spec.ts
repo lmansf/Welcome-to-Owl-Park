@@ -3,7 +3,7 @@ import { cameraView, dist, openPark, state } from './helpers';
 
 /**
  * The mirror (OP-077), on this device (local mode): Your owl is at a mirror in the owl's own nest.
- * Go to your nest puts the owl before it; Look in the mirror opens Your owl with the room's own owl
+ * Play puts the owl before it (OP-105); Look in the mirror opens Your owl with the room's own owl
  * as the preview, changing as the choices do; and Q leads there from anywhere. (That a mirror in
  * another owl's nest changes only the owl looking in is the room server's: RoomObject.test.ts.)
  */
@@ -23,18 +23,18 @@ async function openAtMirror(page: Page): Promise<void> {
 }
 
 test.describe('the mirror in the nest (OP-077)', () => {
-  test('Go to your nest puts the owl before its mirror; Look in the mirror opens Your owl, and the owl in the room is the preview', async ({ page, isMobile }) => {
+  test('Play puts the owl before its mirror; Look in the mirror opens Your owl, and the owl in the room is the preview', async ({ page, isMobile }) => {
     await page.goto('/?transport=local');
     await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
-    // A first visit makes its owl (the builder opens on it in place); then the home screen's way to it is the nest.
+    // A first visit makes its owl (the builder opens on it in place); then Play goes into its nest (OP-105).
     await page.locator('[data-home-btn="login"]').click();
     await expect(builder(page)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(builder(page)).toBeHidden();
-    const goToNest = page.locator('[data-home-btn="owl"]');
-    await expect(goToNest).toHaveText('Go to your nest');
-    if (isMobile) await goToNest.tap();
-    else await goToNest.click();
+    const play = page.locator('[data-home-btn="play"]');
+    await expect(play).toHaveText('Play');
+    if (isMobile) await play.tap();
+    else await play.click();
 
     // Inside the nest, before the mirror, facing it.
     await inNest(page);
