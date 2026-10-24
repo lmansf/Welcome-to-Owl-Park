@@ -60,11 +60,22 @@ class WorkerResponse extends Response {
 vi.stubGlobal('Response', WorkerResponse);
 class FakeServerSocket {
   closed: { code: number; reason: string } | null = null;
+  readonly listeners = new Map<string, Array<() => void>>();
   accept() {}
+  addEventListener(type: string, fn: () => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
+  }
+  /** The page's end speaks (its hello). */
+  hello() {
+    for (const fn of this.listeners.get('message') ?? []) fn();
+  }
   close(code: number, reason: string) {
     this.closed = { code, reason };
   }
 }
+/** What the Worker leaves running after it answers (a turned-away socket waiting for its page). */
+const waits: Array<Promise<unknown>> = [];
+const CTX = { waitUntil: (p: Promise<unknown>) => void waits.push(p), passThroughOnException: () => {} } as unknown as ExecutionContext;
 vi.stubGlobal(
   'WebSocketPair',
   class {
@@ -110,7 +121,7 @@ describe('the Worker sends owls across two copies of a room (OP-075)', () => {
     ({ ROOMS: rooms, OVERFLOW: overflowWith(over), VOTES, ROOM_SHARDING: sharding, GATE: 'open', PASS_SIGNING_KEY: KEY, ROOM_CAPS: '{"hub":3}' }) as unknown as Env;
   const pass = async (cid: string) => mintPass(KEY, { id: `v_owl${String(++n).padStart(5, '0')}`, exp: Math.floor(Date.now() / 1000) + 600, adm: false, cid });
   const arrive = async (e: Env, query = '', cid = `c_owl${String(n + 1).padStart(5, '0')}`) =>
-    worker.fetch(new Request(`https://park.example/ws/hub?pass=${encodeURIComponent(await pass(cid))}${query}`, { headers: { Upgrade: 'websocket' } }), e, {} as ExecutionContext);
+    worker.fetch(new Request(`https://park.example/ws/hub?pass=${encodeURIComponent(await pass(cid))}${query}`, { headers: { Upgrade: 'websocket' } }), e, CTX);
 
   beforeEach(() => {
     rooms = new FakeRooms();
@@ -177,8 +188,13 @@ describe('the Worker sends owls across two copies of a room (OP-075)', () => {
         })();
       },
     );
+    const before = waits.length;
     await arrive(env({ active: true }));
+    // Not before the page holds its end of the socket (its hello says so): closed sooner, the connection is lost instead.
+    expect(opened[0]?.closed).toBeNull();
+    opened[0]?.hello();
     expect(opened[0]?.closed).toEqual({ code: CLOSE.QUEUED, reason: 'line' });
+    await Promise.all(waits.slice(before));
   });
 });
 

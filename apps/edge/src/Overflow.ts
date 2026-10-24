@@ -8,7 +8,7 @@
  * Internal routes, called by the Worker (which has checked the pass or the admin key already):
  *   GET  /state           the settings, whether the line is in front of the park, its pace, the count
  *   POST /settings        {line?, ribbon?, copy?: {room, n, state}}: the keepers' changes
- *   POST /line/join       {who}: a number in the line, or go when there is no line
+ *   POST /line/join       {who}: a number in the line (its turn at once while a place is free), or go when there is no line
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
  *   GET  /notice          the ribbon's words now (for the room objects)
  */
@@ -230,6 +230,19 @@ export class Overflow extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Where number `n` stands for `who`. A called number takes its turn with this answer (the page walks
+   * in on it, and the Worker hands it the entry), so its place stops being held for it: from then on
+   * it counts only until it is in a room. Asked again, a number that took its turn goes in.
+   */
+  private take(n: number, who: string, now: number): LineAnswer {
+    const hold = this.holdMs();
+    const e = this.line.status(n, who, now, hold);
+    if (e.state === 'called') return this.line.claim(n, who, now, hold) ? this.answer(n, e, now) : { state: 'expired' };
+    if (e.state === 'claimed') return { state: 'go' };
+    return this.answer(n, e, now);
+  }
+
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = Date.now();
@@ -280,22 +293,17 @@ export class Overflow extends DurableObject<Env> {
     if (url.pathname === '/line/join') {
       if (!(await this.isActive(now))) return Response.json({ state: 'go' } satisfies LineAnswer);
       const n = this.line.join(who, now, this.holdMs());
-      // A place may be free already: the line moves before answering.
+      // A place may be free already: the line moves before answering, and a newcomer called at once takes its turn now.
       await this.step(now);
       await this.sendNotice(ribbonNow(this.settings.ribbon(), true));
-      return Response.json(this.answer(n, this.line.status(n, who, now, this.holdMs()), now));
+      return Response.json(this.take(n, who, now));
     }
     if (url.pathname === '/line/status') {
       const n = body['n'];
       if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) return Response.json({ error: 'bad request' }, { status: 400 });
       if (!(await this.isActive(now))) return Response.json({ state: 'go' } satisfies LineAnswer);
       await this.step(now);
-      const hold = this.holdMs();
-      const e = this.line.status(n, who, now, hold);
-      // Its turn: it takes its place now (the Worker hands it the entry with this answer).
-      if (e.state === 'called' && !this.line.claim(n, who, now, hold)) return Response.json({ state: 'expired' } satisfies LineAnswer);
-      if (e.state === 'claimed') return Response.json({ state: 'go' } satisfies LineAnswer);
-      return Response.json(this.answer(n, e, now));
+      return Response.json(this.take(n, who, now));
     }
     return new Response('not found', { status: 404 });
   }

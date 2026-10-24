@@ -236,11 +236,16 @@ describe('the overflow object (OP-075)', () => {
   });
 
   it('gives up a place held too long, calling the next, and the late owl joins again at the back', async () => {
-    rooms.counts.set('park', { hub: 1 });
+    rooms.counts.set('park', { hub: 2 });
     await post('/settings', { line: { mode: 'on', threshold: 2, holdMin: 1 } });
-    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'called', n: 1 });
-    expect((await join('c_bbbbbbbb')).body).toMatchObject({ state: 'waiting', n: 2, place: 1 });
-    at(T0 + MIN + 1);
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'waiting', n: 1, place: 1 });
+    expect((await join('c_bbbbbbbb')).body).toMatchObject({ state: 'waiting', n: 2, place: 2 });
+    // An owl leaves: the next tick calls the first in line, whose page is away (a phone locked, say).
+    rooms.counts.set('park', { hub: 1 });
+    at(T0 + TICK_MS);
+    await obj.alarm();
+    // Its place is held for the minute, then given up to the next owl.
+    at(T0 + TICK_MS + MIN + 1);
     await obj.alarm();
     expect((await look(1, 'c_aaaaaaaa')).body).toEqual({ state: 'expired' });
     expect((await look(2, 'c_bbbbbbbb')).body).toMatchObject({ state: 'called', n: 2 });
@@ -269,10 +274,24 @@ describe('the overflow object (OP-075)', () => {
     await post('/settings', { line: { mode: 'on', threshold: 10 } });
     const a = (await join('c_aaaaaaaa')).body;
     expect(a).toEqual({ state: 'called', n: 1, holdUntil: T0 + 3 * MIN });
-    expect((await look(1, 'c_aaaaaaaa')).body).toMatchObject({ state: 'called', n: 1 });
+    // Called as it arrived, it took its turn then: asked again, it goes in.
     expect((await look(1, 'c_aaaaaaaa')).body).toEqual({ state: 'go' });
     // Someone else's number tells them nothing.
     expect((await look(1, 'c_bbbbbbbb')).body).toEqual({ state: 'expired' });
+  });
+
+  it('holds no place for an owl called as it arrived once it is in: when it leaves, the next is called', async () => {
+    rooms.counts.set('park', {});
+    await post('/settings', { line: { mode: 'on', threshold: 1, holdMin: 3 } });
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'called', n: 1 });
+    // In the lobby now; the next owl waits for its place.
+    rooms.counts.set('park', { lobby: 1 });
+    expect((await join('c_bbbbbbbb')).body).toMatchObject({ state: 'waiting', n: 2, place: 1 });
+    // A minute on, the first owl leaves: its place goes to the next at once, not when its hold would have run out.
+    rooms.counts.set('park', {});
+    at(T0 + MIN);
+    await obj.alarm();
+    expect((await look(2, 'c_bbbbbbbb')).body).toMatchObject({ state: 'called', n: 2 });
   });
 
   it('tells the rooms the ribbon: on, its own words, on by itself with the line, and off', async () => {

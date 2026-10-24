@@ -65,12 +65,36 @@ const overflowOf = (env: Env) => overflowNow(() => readOverflow(env));
 /** Who an entry or a place in the line belongs to: the browser's collector, or the pass's visitor. */
 const whoOf = (pass: PassPayload) => pass.cid ?? pass.id;
 
-/** A socket the line turns away (OP-075): opened and closed at once, so the page learns why (a refused handshake says nothing). */
-function turnedAway(code: number, reason: string): Response {
+/** How long a turned-away socket waits for the page's hello before it is closed anyway. */
+const TURN_AWAY_WAIT_MS = 5_000;
+
+/**
+ * A socket the line turns away (OP-075): opened, then closed with the line's code, so the page learns
+ * why (a refused handshake says nothing). It is closed once the page has spoken (its hello), when the
+ * page surely holds its end: closed before that, the connection is lost instead of closed, and the
+ * runtime reports an uncaught error for every owl turned away.
+ */
+function turnedAway(ctx: ExecutionContext, code: number, reason: string): Response {
   const pair = new WebSocketPair();
   const [client, server] = [pair[0], pair[1]];
   server.accept();
-  server.close(code, reason);
+  ctx.waitUntil(
+    new Promise<void>((done) => {
+      const timer = setTimeout(close, TURN_AWAY_WAIT_MS);
+      function close() {
+        clearTimeout(timer);
+        try {
+          server.close(code, reason);
+        } catch {
+          /* closed already */
+        }
+        done();
+      }
+      server.addEventListener('message', close);
+      server.addEventListener('close', close);
+      server.addEventListener('error', close);
+    }),
+  );
   return new Response(null, { status: 101, webSocket: client });
 }
 
@@ -598,7 +622,7 @@ export default {
       // through it, opens a room; a newcomer is sent to wait on the home screen.
       const busy = await overflowOf(env);
       const who = whoOf(pass);
-      if (busy.active && !(await verifyEntry(secret, url.searchParams.get('entry'), who))) return turnedAway(CLOSE.QUEUED, 'line');
+      if (busy.active && !(await verifyEntry(secret, url.searchParams.get('entry'), who))) return turnedAway(ctx, CLOSE.QUEUED, 'line');
       // Copies of the room (OP-075): to the one it was in, or the one with the most free places.
       const askedCopy = Number(url.searchParams.get('copy'));
       const copy = await copyFor(env, roomId, busy.copies, Number.isInteger(askedCopy) && askedCopy > 0 ? askedCopy : null);
