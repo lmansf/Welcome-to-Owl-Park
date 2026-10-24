@@ -38,6 +38,13 @@
     <style>
       html, body { margin: 0; padding: 0; height: 100%; background: #0C1E36; overflow: hidden; overscroll-behavior: none; }
       body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #F6F1E3; -webkit-user-select: none; user-select: none; touch-action: none; }
+      /* A touch never zooms the page (OP-104). Safari on an iPhone starts touch-action over in every box
+         that scrolls (the Menu, Your owl, the wheels, the sheets), where the body's none no longer holds:
+         a double tap there zoomed the page, and once the box closed nothing took a pinch back out. So
+         every element pans and never zooms: outside those boxes the body's none still wins, and they
+         still scroll. The viewport tag keeps zoom off in Chrome as well.
+         TODO-DOCS (OP-104): PLAYBOOK.md section 7 could say that on a phone no tap or pinch zooms the page. */
+      :where(body *) { touch-action: pan-x pan-y; }
       #game { position: fixed; inset: 0; }
       #game canvas { display: block; }
     </style>

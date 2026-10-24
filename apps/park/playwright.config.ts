@@ -27,7 +27,8 @@ export default defineConfig({
   projects: [
     // Collectibles run on the desktop project only: the phone project repeats the park suite's layout checks.
     { name: 'desktop', testMatch: /(park|collect|lobby|activities|nests|arcade|chat|leave|home|pad|mirror)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    { name: 'phone', testMatch: /(park|lobby|nests|arcade|chat|leave|home|pad|mirror)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
+    // Zooming by touch (OP-104) is checked on the phone only.
+    { name: 'phone', testMatch: /(park|lobby|nests|arcade|chat|leave|home|pad|mirror|zoom)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
