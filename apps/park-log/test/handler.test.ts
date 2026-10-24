@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MAX_ROWS, checkItem, checkRow, gameTables, handle, type CatalogueRow, type Db, type LogRow, type Tables } from '../src/handler.ts';
+import {
+  MAX_ROWS,
+  checkItem,
+  checkPlayer,
+  checkRow,
+  checkSession,
+  gameTables,
+  handle,
+  type CatalogueRow,
+  type Db,
+  type LogRow,
+  type PlayerRow,
+  type SessionRow,
+  type Tables,
+} from '../src/handler.ts';
 
 const KEY = 'k'.repeat(32);
 const A = 'a'.repeat(64);
@@ -21,13 +35,27 @@ const row = (i: number, extra: Record<string, unknown> = {}): Record<string, unk
 });
 
 /** The tables in memory, as the database keeps them: one row per event id, and per collector and collectible. */
-function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }> } {
+function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>; players: PlayerRow[]; sessions: SessionRow[] } {
   const rows: LogRow[] = [];
   const catalogue = new Map<string, CatalogueRow & { in_catalogue: boolean }>();
+  const players: PlayerRow[] = [];
+  const sessions: SessionRow[] = [];
   return {
     rows,
     catalogue,
+    players,
+    sessions,
     async check() {},
+    async addPlayers(batch) {
+      let kept = 0;
+      for (const p of batch) if (!players.some((x) => x.event_id === p.event_id) && players.push(p)) kept++;
+      return kept;
+    },
+    async addSessions(batch) {
+      let kept = 0;
+      for (const v of batch) if (!sessions.some((x) => x.session_id === v.session_id) && sessions.push(v)) kept++;
+      return kept;
+    },
     async addRows(batch) {
       let kept = 0;
       for (const r of batch) {
@@ -154,6 +182,51 @@ describe('the park log (OP-107)', () => {
   });
 });
 
+describe('the player stats (OP-111)', () => {
+  const version = (i: number, extra: Record<string, unknown> = {}) => ({
+    event_id: uuid(i),
+    collector_id: A,
+    owl_type: 'barn',
+    color: '#7a5c99',
+    changed_at: '2026-10-19T16:00:00.000Z',
+    change_reason: 'first',
+    ...extra,
+  });
+  const visit = (i: number, extra: Record<string, unknown> = {}) => ({
+    session_id: uuid(i),
+    collector_id: A,
+    started_at: '2026-10-19T16:00:00.000Z',
+    ended_at: '2026-10-19T16:25:00.000Z',
+    device_class: 'phone',
+    realms_entered: 3,
+    collectibles_gained: 2,
+    ...extra,
+  });
+
+  it('keeps versions of owls and visits, each once', async () => {
+    const tables = memoryTables();
+    expect(await (await post({ kind: 'player', rows: [version(1), version(2, { owl_type: 'snowy', change_reason: 'chosen' })] }, { tables })).json()).toEqual({ ok: true, kept: 2, duplicates: 0, skipped: 0 });
+    expect(await (await post({ kind: 'player', rows: [version(1)] }, { tables })).json()).toEqual({ ok: true, kept: 0, duplicates: 1, skipped: 0 });
+    expect(await (await post({ kind: 'session', rows: [visit(10), visit(10)] }, { tables })).json()).toEqual({ ok: true, kept: 1, duplicates: 1, skipped: 0 });
+    expect(tables.sessions[0]).toEqual(visit(10));
+  });
+
+  it('takes an owl kind only from the fixed list and a colour only as a hex value, and a visit only forwards in time', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(checkPlayer(version(1))).toMatchObject({ owl_type: 'barn', color: '#7a5c99' });
+    expect(checkPlayer(version(1, { owl_type: 'my favourite owl' }))).toBe('owl_type');
+    expect(checkPlayer(version(1, { color: 'purple' }))).toBe('color');
+    expect(checkPlayer(version(1, { change_reason: 'because' }))).toBe('change_reason');
+    expect(checkPlayer(version(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkSession(visit(1))).toEqual(visit(1));
+    expect(checkSession(visit(1, { ended_at: '2026-10-19T15:59:00.000Z' }))).toBe('ended_at');
+    expect(checkSession(visit(1, { realms_entered: -1 }))).toBe('realms_entered');
+    expect(checkSession(visit(1, { collectibles_gained: 2.5 }))).toBe('collectibles_gained');
+    expect(checkSession(visit(1, { device_class: 'Pixel 9' }))).toBe('device_class');
+    expect(Object.keys(checkSession({ ...visit(1), name: 'someone' }) as object)).not.toContain('name');
+  });
+});
+
 describe("the game schema's tables", () => {
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
@@ -180,5 +253,18 @@ describe("the game schema's tables", () => {
     expect(db.calls[0]!.query).toContain('insert into game.collectible_catalogue');
     expect(db.calls[0]!.query).toContain('set in_catalogue = false');
     expect(db.calls[0]!.params).toEqual([JSON.stringify([{ collectible_id: 'hoot', kind: 'emote', rarity: 'common', realm: null }])]);
+  });
+
+  it('applies versions through the database function, and ties each visit to the version it began in', async () => {
+    const db = recorder([{ kept: 2 }]);
+    const p = checkPlayer({ event_id: uuid(1), collector_id: A, owl_type: 'barn', color: '#7a5c99', changed_at: '2026-10-19T16:00:00Z', change_reason: 'first' }) as PlayerRow;
+    expect(await gameTables(db).addPlayers([p])).toBe(2);
+    expect(db.calls[0]!.query).toBe('select game.add_player_versions($1::text::jsonb) as kept');
+    expect(db.calls[0]!.params).toEqual([JSON.stringify([p])]);
+    const s2 = recorder([{ session_id: uuid(9) }]);
+    expect(await gameTables(s2).addSessions([checkSession({ session_id: uuid(9), collector_id: A, started_at: '2026-10-19T16:00:00Z', ended_at: '2026-10-19T16:01:00Z', device_class: null, realms_entered: 0, collectibles_gained: 0 }) as SessionRow])).toBe(1);
+    expect(s2.calls[0]!.query).toContain('insert into game.fact_session');
+    expect(s2.calls[0]!.query).toContain('d.valid_from <= s.started_at');
+    expect(s2.calls[0]!.query).toContain('on conflict (session_id) do nothing');
   });
 });

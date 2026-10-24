@@ -1,7 +1,9 @@
 /**
  * The collection log (OP-107): a row for every collectible an owl comes by (a wearable, pet, effect
  * or emote, or a piece of nest furniture), for the owner's analytics in the fraud pipeline's Supabase
- * project beside the park's orders: how much each owl collects and how fast. The collections object
+ * project beside the park's orders: how much each owl collects and how fast. The player stats
+ * (OP-111, parkStats.ts) send their rows the same way: a version of an owl's kind and colour
+ * whenever either changes, and a row for each visit once it is over. The collections object
  * writes each one into its own SQLite as the collectible is granted (the outbox here), in the same
  * step as the grant, and sends it on at once, a batch at a time with a 1 s limit. A send that fails
  * or is slow leaves the rows for the object's alarm to retry, so a pickup never waits on the log and
@@ -25,7 +27,7 @@
  * FRAUD_HASH_SALT turn it on (apps/park-log/README.md, steps 3 to 6), and the backfill
  * (`POST /api/admin/collect-log`).
  */
-import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FurnitureSource, type Source } from '@owl-park/shared';
+import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
 import { ROOMS } from './rooms';
 
 export interface LogConfig {
@@ -235,9 +237,82 @@ async function collectRow(salt: string, d: CollectData): Promise<LogRow> {
   };
 }
 
+// ---------- the player stats' rows (OP-111) ----------
+
+/** Why an owl has a new version: its first visit, or it chose another kind or colour (quests and seasons may change looks later). */
+export type PlayerReason = 'first' | 'chosen';
+
+/** A version of an owl as the outbox keeps it. */
+export interface PlayerData {
+  cid: string;
+  species: SpeciesId;
+  /** Its body colour, `#rrggbb`. */
+  color: string;
+  at: number;
+  reason: PlayerReason;
+}
+
+/** A version of an owl as the log takes it: its kind and colour from `changed_at` on, and nothing else about it. */
+export interface PlayerRow {
+  event_id: string;
+  collector_id: string;
+  owl_type: SpeciesId;
+  color: string;
+  changed_at: string;
+  change_reason: PlayerReason;
+}
+
+async function playerRow(salt: string, d: PlayerData): Promise<PlayerRow> {
+  return {
+    event_id: await saltedUuid(salt, 'player', `${d.cid}|${d.at}|${d.species}|${d.color}`),
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    owl_type: d.species,
+    color: d.color,
+    changed_at: iso(d.at),
+    change_reason: d.reason,
+  };
+}
+
+/** A visit that is over, as the outbox keeps it. */
+export interface SessionData {
+  cid: string;
+  pass: string;
+  started: number;
+  /** When the visit was last seen: its last socket's close, or its last heartbeat if the tab died. */
+  ended: number;
+  device: DeviceClass | null;
+  rooms: string[];
+  gained: number;
+}
+
+/** A visit as the log takes it: the same session id as its collection rows. */
+export interface SessionRow {
+  session_id: string;
+  collector_id: string;
+  started_at: string;
+  ended_at: string;
+  device_class: DeviceClass | null;
+  realms_entered: number;
+  collectibles_gained: number;
+}
+
+async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
+  return {
+    session_id: await saltedUuid(salt, 'session', d.pass),
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    started_at: iso(d.started),
+    ended_at: iso(Math.max(d.started, d.ended)),
+    device_class: d.device,
+    realms_entered: d.rooms.length,
+    collectibles_gained: d.gained,
+  };
+}
+
 /** Each kind of row the outbox holds, and how its data becomes the row the log takes. */
 const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   collect: collectRow,
+  player: playerRow,
+  session: sessionRow,
 };
 
 export class CollectLog {
@@ -292,6 +367,16 @@ export class CollectLog {
     const v = cleanVisit(a.visit);
     const data: CollectData = { cid: a.cid, collectible: a.collectible, type: a.type, at: a.at, first: this.firstSeen(a.cid), ...v, backfill: false };
     this.keep('collect', data);
+  }
+
+  /** Keep a version of an owl to send (OP-111). */
+  player(d: PlayerData): void {
+    if (this.config) this.keep('player', d);
+  }
+
+  /** Keep a visit that is over to send (OP-111). */
+  session(d: SessionData): void {
+    if (this.config) this.keep('session', d);
   }
 
   /**

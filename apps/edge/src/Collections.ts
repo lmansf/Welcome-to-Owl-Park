@@ -45,6 +45,7 @@ import {
 } from '@owl-park/shared';
 import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
+import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { ROOMS } from './rooms';
 import { SqlNestStore } from './sqlNestStore';
 import { SqlCollectionStore } from './sqlStore';
@@ -77,6 +78,7 @@ export class Collections extends DurableObject<Env> {
   private readonly nests: NestBook;
   private readonly feedbackBox: FeedbackBox;
   private readonly log: CollectLog;
+  private readonly stats: ParkStats;
   /** The visit the call in progress came in, as its caller said (`during`), for the log's rows. */
   private visit: Visit | null = null;
 
@@ -84,6 +86,7 @@ export class Collections extends DurableObject<Env> {
     super(ctx, env);
     const sql = ctx.storage.sql;
     this.log = new CollectLog(sql, logConfig(env), { fetch: (url, init) => fetch(url, init), now: () => Date.now(), wake: (at) => this.wake(at) });
+    this.stats = new ParkStats(sql, this.log);
     const store = new SqlCollectionStore(sql, (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at));
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
@@ -98,7 +101,32 @@ export class Collections extends DurableObject<Env> {
   private acquired(cid: string, collectible: string, type: CollectibleType, at: number): void {
     if (!this.log.on) return;
     this.log.record({ cid, collectible, type, at, visit: this.visit });
+    this.stats.gained(this.visit?.pass);
     this.ctx.waitUntil(this.log.flush());
+  }
+
+  /** An owl in a room, by the room object's word (a hello, a new look): its visit and its look, for the player stats (OP-111). */
+  async seen(sighting: Sighting, look: StatsLook): Promise<void> {
+    this.stats.seen(sighting, look, Date.now());
+    this.afterStats();
+  }
+
+  /** The room objects' minute heartbeat, and a socket's close: these visits are still going. */
+  async alive(sightings: Sighting[]): Promise<void> {
+    this.stats.alive(sightings, Date.now());
+    this.afterStats();
+  }
+
+  /** Visits that are over go to the log; the alarm wakes the object when the next could be over. */
+  private closeVisits(): void {
+    if (!this.log.on) return;
+    const next = this.stats.close(Date.now());
+    if (next !== null) this.wake(next);
+  }
+
+  private afterStats(): void {
+    this.closeVisits();
+    if (this.log.on && this.log.waiting() > 0) this.ctx.waitUntil(this.log.flush());
   }
 
   /** Run a call with the visit it came in (the Worker's or the room's word), for any row it grants. */
@@ -116,8 +144,9 @@ export class Collections extends DurableObject<Env> {
     this.ctx.waitUntil(this.ctx.storage.getAlarm().then((set) => (set === null || set > at ? this.ctx.storage.setAlarm(at) : undefined)));
   }
 
-  /** The log's retries: whatever is still waiting goes again. */
+  /** The log's retries, and visits that have gone quiet: whatever is waiting goes. */
   override async alarm(): Promise<void> {
+    this.closeVisits();
     await this.log.flush();
   }
 

@@ -1,14 +1,19 @@
 /**
- * The park's analytics log (OP-107): a Supabase Edge Function in the owner's fraud pipeline project,
- * beside the park's orders, so one project holds all of Owl Park's analytics. The park's collections
- * object posts a batch of rows whenever owls come by collectibles (`apps/edge/src/collectLog.ts`),
- * and the catalogue of every collectible whenever a deploy changes it:
+ * The park's analytics log (OP-107, OP-111): a Supabase Edge Function in the owner's fraud pipeline
+ * project, beside the park's orders, so one project holds all of Owl Park's analytics. The park's
+ * collections object posts a batch of rows whenever owls come by collectibles
+ * (`apps/edge/src/collectLog.ts`), the catalogue of every collectible whenever a deploy changes it,
+ * and the player stats' rows (`apps/edge/src/parkStats.ts`):
  *
  * - `kind: "collect"`: the rows into `game.collect_log`, one per collector and collectible; a row
  *   already there (by its event id, or for that collector and collectible) is skipped, so a batch sent
  *   twice lands once.
  * - `kind: "catalogue"`: every collectible there is, into `game.collectible_catalogue`, which the
  *   views count for "% collected"; one no longer listed stays, marked out of the catalogue.
+ * - `kind: "player"` (OP-111): versions of owls, into `game.dim_player` (a type 2 dimension): each
+ *   closes its owl's current version and opens its own, unless the owl already looks so.
+ * - `kind: "session"` (OP-111): visits that are over, into `game.fact_session`, each tied to the
+ *   owl's version as it was when the visit began.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * The rows are anonymous by construction, and checked again here before anything is kept: the
@@ -30,6 +35,9 @@ const MIN_KEY = 16;
 
 export const COLLECTIBLE_TYPES = ['quest', 'shop', 'gift', 'seasonal', 'starter', 'grant', 'purchase', 'find'] as const;
 export type CollectibleType = (typeof COLLECTIBLE_TYPES)[number];
+/** The park's owl kinds (its species list): a fixed list, never free text. */
+export const OWL_TYPES = ['great-horned', 'barn', 'burrowing', 'snowy', 'screech'] as const;
+export const CHANGE_REASONS = ['first', 'chosen', 'quest', 'seasonal'] as const;
 
 /** A row of `game.collect_log` as the park sends it, after the check. */
 export interface LogRow {
@@ -43,6 +51,27 @@ export interface LogRow {
   device_class: 'phone' | 'desktop' | null;
   first_entry_at: string | null;
   backfill: boolean;
+}
+
+/** A version of an owl, for `game.dim_player`. */
+export interface PlayerRow {
+  event_id: string;
+  collector_id: string;
+  owl_type: (typeof OWL_TYPES)[number];
+  color: string;
+  changed_at: string;
+  change_reason: (typeof CHANGE_REASONS)[number];
+}
+
+/** A visit that is over, for `game.fact_session`. */
+export interface SessionRow {
+  session_id: string;
+  collector_id: string;
+  started_at: string;
+  ended_at: string;
+  device_class: 'phone' | 'desktop' | null;
+  realms_entered: number;
+  collectibles_gained: number;
 }
 
 /** A row of `game.collectible_catalogue`. */
@@ -61,6 +90,10 @@ export interface Tables {
   addRows(rows: LogRow[]): Promise<number>;
   /** Makes the catalogue this list: each one in it, and every other one marked out of the catalogue. */
   setCatalogue(items: CatalogueRow[]): Promise<void>;
+  /** Applies the versions in order; returns how many were new versions. */
+  addPlayers(rows: PlayerRow[]): Promise<number>;
+  /** Keeps the visits not there yet; returns how many those were. */
+  addSessions(rows: SessionRow[]): Promise<number>;
 }
 
 export interface Deps {
@@ -139,6 +172,55 @@ export function checkRow(v: unknown): LogRow | string {
   };
 }
 
+const COLOUR = /^#[0-9a-f]{6}$/;
+const count = (v: unknown, max: number): number | null => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= max ? (v as number) : null);
+
+/** A version of an owl as the table takes it, or the reason it is left out. */
+export function checkPlayer(v: unknown): PlayerRow | string {
+  const r = obj(v);
+  if (typeof r['event_id'] !== 'string' || !UUID.test(r['event_id'])) return 'event_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  if (!OWL_TYPES.includes(r['owl_type'] as PlayerRow['owl_type'])) return 'owl_type';
+  if (typeof r['color'] !== 'string' || !COLOUR.test(r['color'])) return 'color';
+  const changed = iso(r['changed_at']);
+  if (!changed) return 'changed_at';
+  if (!CHANGE_REASONS.includes(r['change_reason'] as PlayerRow['change_reason'])) return 'change_reason';
+  return {
+    event_id: r['event_id'],
+    collector_id: r['collector_id'],
+    owl_type: r['owl_type'] as PlayerRow['owl_type'],
+    color: r['color'],
+    changed_at: changed,
+    change_reason: r['change_reason'] as PlayerRow['change_reason'],
+  };
+}
+
+/** A visit as the table takes it, or the reason it is left out. */
+export function checkSession(v: unknown): SessionRow | string {
+  const r = obj(v);
+  if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  const started = iso(r['started_at']);
+  if (!started) return 'started_at';
+  const ended = iso(r['ended_at']);
+  if (!ended || ended < started) return 'ended_at';
+  const device = r['device_class'] ?? null;
+  if (device !== null && device !== 'phone' && device !== 'desktop') return 'device_class';
+  const realms = count(r['realms_entered'], 100);
+  if (realms === null) return 'realms_entered';
+  const gained = count(r['collectibles_gained'], 10_000);
+  if (gained === null) return 'collectibles_gained';
+  return {
+    session_id: r['session_id'],
+    collector_id: r['collector_id'],
+    started_at: started,
+    ended_at: ended,
+    device_class: device as SessionRow['device_class'],
+    realms_entered: realms,
+    collectibles_gained: gained,
+  };
+}
+
 /** A catalogue entry as the table takes it (the park sends `id`), or null to leave it out. */
 export function checkItem(v: unknown): CatalogueRow | null {
   const i = obj(v);
@@ -150,21 +232,22 @@ export function checkItem(v: unknown): CatalogueRow | null {
   return { collectible_id: i['id'], kind: i['kind'], rarity, realm };
 }
 
-async function collect(body: Record<string, unknown>, tables: Tables): Promise<Response> {
+/** A batch of rows of one kind: each checked, the good ones kept, and what became of them. */
+async function keepRows<T>(kind: string, body: Record<string, unknown>, check: (v: unknown) => T | string, add: (rows: T[]) => Promise<number>): Promise<Response> {
   const sent = Array.isArray(body['rows']) ? body['rows'] : null;
   if (!sent) return json({ error: 'rows must be a list' }, 400);
   if (sent.length > MAX_ROWS) return json({ error: `at most ${MAX_ROWS} rows a batch` }, 413);
-  const rows: LogRow[] = [];
+  const rows: T[] = [];
   const skipped: Record<string, number> = {};
   for (const v of sent) {
-    const r = checkRow(v);
+    const r = check(v);
     if (typeof r === 'string') skipped[r] = (skipped[r] ?? 0) + 1;
     else rows.push(r);
   }
   const left = sent.length - rows.length;
   // Which field failed, never what was in it.
-  if (left) console.error(`[owl-park-log] ${left} of ${sent.length} rows left out:`, JSON.stringify(skipped));
-  const kept = rows.length ? await tables.addRows(rows) : 0;
+  if (left) console.error(`[owl-park-log] ${left} of ${sent.length} ${kind} rows left out:`, JSON.stringify(skipped));
+  const kept = rows.length ? await add(rows) : 0;
   return json({ ok: true, kept, duplicates: rows.length - kept, skipped: left });
 }
 
@@ -198,11 +281,22 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const tables = deps.tables ? await deps.tables.check().then(() => 'ok', (e) => `unreachable: ${message(e)}`) : 'not set up';
     return json({ ok: true, dry_run: true, tables });
   }
-  if (body['kind'] !== 'collect' && body['kind'] !== 'catalogue') return json({ error: 'kind must be collect or catalogue' }, 400);
+  const kind = body['kind'];
+  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session') return json({ error: 'kind must be collect, catalogue, player or session' }, 400);
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
-  if (!deps.tables) return json({ error: 'no tables' }, 503);
+  const tables = deps.tables;
+  if (!tables) return json({ error: 'no tables' }, 503);
   try {
-    return body['kind'] === 'collect' ? await collect(body, deps.tables) : await catalogue(body, deps.tables);
+    switch (kind) {
+      case 'collect':
+        return await keepRows(kind, body, checkRow, (rows) => tables.addRows(rows));
+      case 'player':
+        return await keepRows(kind, body, checkPlayer, (rows) => tables.addPlayers(rows));
+      case 'session':
+        return await keepRows(kind, body, checkSession, (rows) => tables.addSessions(rows));
+      case 'catalogue':
+        return await catalogue(body, tables);
+    }
   } catch (e) {
     console.error(`[owl-park-log] the ${String(body['kind'])} was not kept:`, message(e));
     return json({ error: 'not kept' }, 503);
@@ -219,6 +313,7 @@ export interface Db {
 
 const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, realm, acquired_at, session_id, device_class, first_entry_at, backfill';
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
+const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained';
 
 /**
  * The park's tables in the `game` schema, over a direct connection to the project's database (the
@@ -254,6 +349,28 @@ export function gameTables(db: Db): Tables {
         where c.in_catalogue and not exists (select 1 from items i where i.collectible_id = c.collectible_id)`,
         [JSON.stringify(items)],
       );
+    },
+    async addPlayers(rows) {
+      // The database applies them one by one, in order (sql/players.sql): close the current version, open the new.
+      const res = await db.unsafe(`select ${SCHEMA}.add_player_versions($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
+      const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
+      return Number.isFinite(kept) ? kept : 0;
+    },
+    async addSessions(rows) {
+      // Each visit tied to the owl's version as it was when the visit began (its first, if none was yet).
+      const kept = await db.unsafe(
+        `insert into ${SCHEMA}.fact_session (${SESSION_COLUMNS}, player_sk)
+        select ${SESSION_COLUMNS.split(', ').map((c) => `s.${c}`).join(', ')},
+          coalesce(
+            (select d.player_sk from ${SCHEMA}.dim_player d where d.collector_id = s.collector_id and d.valid_from <= s.started_at order by d.valid_from desc limit 1),
+            (select d.player_sk from ${SCHEMA}.dim_player d where d.collector_id = s.collector_id order by d.valid_from limit 1)
+          )
+        from jsonb_populate_recordset(null::${SCHEMA}.fact_session, $1::text::jsonb) s
+        on conflict (session_id) do nothing
+        returning session_id`,
+        [JSON.stringify(rows)],
+      );
+      return Array.isArray(kept) ? kept.length : 0;
     },
   };
 }
