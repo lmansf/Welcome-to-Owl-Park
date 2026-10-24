@@ -36,4 +36,14 @@ export interface Env extends Cloudflare.Env {
   OPENING_PASS_CODE?: string;
   /** Browser tests only: a stand-in store on this machine (http://localhost:<port>). Never set in production. */
   SHOPIFY_TEST_ORIGIN?: string;
+  /**
+   * The collection log (OP-107): the address of the `owl-park-log` function in the fraud pipeline's
+   * Supabase project (apps/park-log). With FRAUD_SCORE_KEY (the key it checks, sent as a bearer
+   * token) and FRAUD_HASH_SALT (which salts the collector and visit hashes), every collectible an owl
+   * comes by is logged there; without all three nothing is logged. FRAUD_SCORE_URL is not involved:
+   * the fraud link (OP-053) stays off without it.
+   */
+  PARK_LOG_URL?: string;
+  FRAUD_SCORE_KEY?: string;
+  FRAUD_HASH_SALT?: string;
 }

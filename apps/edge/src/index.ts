@@ -7,6 +7,7 @@
 import { CLOSE, RIBBON_WORDS, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { capacityPage } from './capacityPage';
+import { deviceClass, type Visit } from './collectLog';
 import { copiesIn, copyObjectName, pickCopy } from './copies';
 import type { LineAnswer, OverflowState } from './Overflow';
 import { countIn, countedOneMore, forgetOverflow, overflowNow } from './overflowState';
@@ -123,6 +124,11 @@ async function passFrom(request: Request, env: Env) {
   const auth = request.headers.get('Authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : new URL(request.url).searchParams.get('pass');
   return verifyPass(signingSecret(env), token);
+}
+
+/** The visit a call comes in, for the collection log (OP-107): its pass's id (one per page load) and the device's class. */
+function visitOf(pass: PassPayload, request: Request): Visit {
+  return { pass: pass.id, device: deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile')) };
 }
 
 /** The opening switch as the vote ledger keeps it (OP-067). */
@@ -264,6 +270,15 @@ export default {
       const source = (body?.['source'] ?? 'granted') as Source;
       if (!body || !isCollectorId(body['cid']) || !isVariantId(body['variant']) || !SOURCES.includes(source)) return json({ error: 'bad request' }, 400);
       return json(await collections(env).grant(body['cid'], body['variant'], source));
+    }
+    if (url.pathname === '/api/admin/collect-log') {
+      // The collection log (OP-107): GET says whether it is set up and how many rows wait to be sent;
+      // POST queues every collectible the collections hold now, once (the backfill).
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method === 'GET') return json(await collections(env).logState());
+      if (request.method === 'POST') return json(await collections(env).backfillLog());
+      return json({ error: 'not found' }, 404);
     }
     if (url.pathname === '/api/admin/store') {
       // The owner's check of the store setup: which of its secrets are set (never their values),
@@ -501,14 +516,15 @@ export default {
       // The collection shows anywhere; the shop is inside the park, past the turnstiles.
       if (url.pathname !== '/api/collection' && !admitted(await gateOf(env), pass)) return json({ error: 'tickets-required' }, 403);
       const stub = collections(env);
-      if (url.pathname === '/api/collection' && request.method === 'GET') return json(await stub.inventory(pass.cid, pass.tz));
+      const visit = visitOf(pass, request);
+      if (url.pathname === '/api/collection' && request.method === 'GET') return json(await stub.inventory(pass.cid, pass.tz, visit));
       if (url.pathname === '/api/shop' && request.method === 'GET') return json(await stub.shop(pass.cid));
       if (url.pathname === '/api/shop/buy' && request.method === 'POST') {
         const body = await readJson(request);
         if (!body || !isVariantId(body['variant'])) return json({ error: 'bad request' }, 400);
-        return json(await stub.buy(pass.cid, body['variant']));
+        return json(await stub.buy(pass.cid, body['variant'], visit));
       }
-      if (url.pathname === '/api/shop/gift' && request.method === 'POST') return json(await stub.claimGift(pass.cid));
+      if (url.pathname === '/api/shop/gift' && request.method === 'POST') return json(await stub.claimGift(pass.cid, visit));
       return json({ error: 'not found' }, 404);
     }
 
@@ -521,7 +537,7 @@ export default {
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       // Only the nest's id: whose it is never leaves the collections object.
-      return json({ nestId: (await collections(env).myNest(pass.cid, null)).nest.nestId });
+      return json({ nestId: (await collections(env).myNest(pass.cid, null, visitOf(pass, request))).nest.nestId });
     }
     if (url.pathname === '/api/nest/gift') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -529,7 +545,7 @@ export default {
       const pass = await passFrom(request, env);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
-      return json(await collections(env).claimFurnitureGift(pass.cid));
+      return json(await collections(env).claimFurnitureGift(pass.cid, visitOf(pass, request)));
     }
 
     // ---- Realm Vote ----

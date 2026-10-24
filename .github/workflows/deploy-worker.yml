@@ -13,6 +13,8 @@
 #      The store's go up the same way: SHOPIFY_SHOP with the app's SHOPIFY_CLIENT_ID and
 #      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
 #      and for opening night, OPENING_PASS_CODE (the code that takes half off the annual pass).
+#      The collection log (OP-107) goes up with PARK_LOG_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT
+#      (apps/park-log/README.md).
 #      See docs/DEPLOY.md for the first deploy and for selling tickets.
 name: Deploy to Cloudflare
 
@@ -42,6 +44,9 @@ jobs:
       SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
       SHOPIFY_WEBHOOK_SECRET: ${{ secrets.SHOPIFY_WEBHOOK_SECRET }}
       OPENING_PASS_CODE: ${{ secrets.OPENING_PASS_CODE }}
+      PARK_LOG_URL: ${{ secrets.PARK_LOG_URL }}
+      FRAUD_SCORE_KEY: ${{ secrets.FRAUD_SCORE_KEY }}
+      FRAUD_HASH_SALT: ${{ secrets.FRAUD_HASH_SALT }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -131,3 +136,15 @@ jobs:
           command: secret list
           secrets: |
             OPENING_PASS_CODE
+      - name: Upload the collection log's address, key and salt to the Worker
+        if: env.PARK_LOG_URL != '' && env.FRAUD_SCORE_KEY != '' && env.FRAUD_HASH_SALT != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            PARK_LOG_URL
+            FRAUD_SCORE_KEY
+            FRAUD_HASH_SALT

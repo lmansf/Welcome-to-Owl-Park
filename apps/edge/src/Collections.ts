@@ -5,7 +5,9 @@
  * object (quests, uses, ownership checks for wear and emotes, the nests). The rules live in the
  * portable `CollectionBook`, `QuestBook` and `NestBook` (packages/shared) over the SQL stores in
  * sqlStore.ts and sqlNestStore.ts. Rewards and nest ids draw from the platform's cryptographic
- * random source. Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts).
+ * random source. Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts). Every
+ * collectible granted goes to the collection log (collectLog.ts, OP-107) in the same step, and on to
+ * the owner's analytics once the call is done; the object's alarm retries what could not be sent.
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -41,6 +43,7 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
+import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ROOMS } from './rooms';
 import { SqlNestStore } from './sqlNestStore';
@@ -73,14 +76,61 @@ export class Collections extends DurableObject<Env> {
   private readonly quests: QuestBook;
   private readonly nests: NestBook;
   private readonly feedbackBox: FeedbackBox;
+  private readonly log: CollectLog;
+  /** The visit the call in progress came in, as its caller said (`during`), for the log's rows. */
+  private visit: Visit | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const store = new SqlCollectionStore(ctx.storage.sql);
+    const sql = ctx.storage.sql;
+    this.log = new CollectLog(sql, logConfig(env), { fetch: (url, init) => fetch(url, init), now: () => Date.now(), wake: (at) => this.wake(at) });
+    const store = new SqlCollectionStore(sql, (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at));
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
-    this.nests = new NestBook(new SqlNestStore(ctx.storage.sql), this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
-    this.feedbackBox = new FeedbackBox(ctx.storage.sql);
+    const nestStore = new SqlNestStore(sql, (cid, item, source, at) => this.acquired(cid, furnitureId(item), collectibleType(item, source), at));
+    this.nests = new NestBook(nestStore, this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
+    this.feedbackBox = new FeedbackBox(sql);
+  }
+
+  // ---------- the collection log (OP-107) ----------
+
+  /** A collectible granted: into the log's outbox in this same step, and sent as soon as the step is done. */
+  private acquired(cid: string, collectible: string, type: CollectibleType, at: number): void {
+    if (!this.log.on) return;
+    this.log.record({ cid, collectible, type, at, visit: this.visit });
+    this.ctx.waitUntil(this.log.flush());
+  }
+
+  /** Run a call with the visit it came in (the Worker's or the room's word), for any row it grants. */
+  private during<T>(visit: Visit | undefined, run: () => T): T {
+    this.visit = visit ?? null;
+    try {
+      return run();
+    } finally {
+      this.visit = null;
+    }
+  }
+
+  /** The log's next try, unless the alarm is set sooner. */
+  private wake(at: number): void {
+    this.ctx.waitUntil(this.ctx.storage.getAlarm().then((set) => (set === null || set > at ? this.ctx.storage.setAlarm(at) : undefined)));
+  }
+
+  /** The log's retries: whatever is still waiting goes again. */
+  override async alarm(): Promise<void> {
+    await this.log.flush();
+  }
+
+  /** The owner's backfill (OP-107): every collectible held now, queued for the log once (a row it has already lands once). */
+  async backfillLog(): Promise<{ on: boolean; queued: number; waiting: number }> {
+    const queued = this.log.backfill();
+    if (queued) this.ctx.waitUntil(this.log.flush());
+    return { on: this.log.on, queued, waiting: this.log.waiting() };
+  }
+
+  /** Whether the log is set up, and how many rows wait to be sent. */
+  async logState(): Promise<{ on: boolean; waiting: number }> {
+    return { on: this.log.on, waiting: this.log.waiting() };
   }
 
   /** The health check's question (OP-068): the object is up and answering. */
@@ -88,12 +138,15 @@ export class Collections extends DurableObject<Env> {
     return true;
   }
 
-  async owned(cid: string, tzHint?: string): Promise<string[]> {
-    return this.book.owned(cid, tzHint, Date.now());
+  // A call that may grant something (a new collector's starter pack and presents among them) takes
+  // the visit it came in, for the log.
+
+  async owned(cid: string, tzHint?: string, visit?: Visit): Promise<string[]> {
+    return this.during(visit, () => this.book.owned(cid, tzHint, Date.now()));
   }
 
-  async inventory(cid: string, tzHint?: string): Promise<Inventory> {
-    return this.book.inventory(cid, tzHint, Date.now());
+  async inventory(cid: string, tzHint?: string, visit?: Visit): Promise<Inventory> {
+    return this.during(visit, () => this.book.inventory(cid, tzHint, Date.now()));
   }
 
   async setEquipped(cid: string, tzHint: string | undefined, wear: Wear | null): Promise<Wear | null> {
@@ -108,12 +161,12 @@ export class Collections extends DurableObject<Env> {
     return this.book.shop(cid, Date.now());
   }
 
-  async buy(cid: string, variant: string): Promise<BuyResult> {
-    return this.book.buy(cid, variant, Date.now());
+  async buy(cid: string, variant: string, visit?: Visit): Promise<BuyResult> {
+    return this.during(visit, () => this.book.buy(cid, variant, Date.now()));
   }
 
-  async claimGift(cid: string): Promise<GiftResult> {
-    return this.book.claimGift(cid, Date.now());
+  async claimGift(cid: string, visit?: Visit): Promise<GiftResult> {
+    return this.during(visit, () => this.book.claimGift(cid, Date.now()));
   }
 
   async board(cid: string): Promise<QuestBoard> {
@@ -160,15 +213,15 @@ export class Collections extends DurableObject<Env> {
     return this.quests.gather(cid, quest, n, room, pos, Date.now());
   }
 
-  async handIn(cid: string, quest: string, npc: string): Promise<HandInResult> {
-    return this.quests.handIn(cid, quest, npc, Date.now(), secureRandom);
+  async handIn(cid: string, quest: string, npc: string, visit?: Visit): Promise<HandInResult> {
+    return this.during(visit, () => this.quests.handIn(cid, quest, npc, Date.now(), secureRandom));
   }
 
   // ---------- nests: none of these answers carries a collector id ----------
 
   /** The collector's own nest (made on first sight), keeping its colours for the flag on its street door. */
-  async myNest(cid: string, look: NestLook | null): Promise<MyNest> {
-    return this.nests.mine(cid, look, Date.now());
+  async myNest(cid: string, look: NestLook | null, visit?: Visit): Promise<MyNest> {
+    return this.during(visit, () => this.nests.mine(cid, look, Date.now()));
   }
 
   /** A nest by its id as this visitor finds it (null: no such nest): whether it is the visitor's own is decided here. */
@@ -192,8 +245,8 @@ export class Collections extends DurableObject<Env> {
   }
 
   /** Today's furniture gift, once a park day. */
-  async claimFurnitureGift(cid: string): Promise<FurnitureGiftResult> {
-    return this.nests.claimGift(cid, Date.now());
+  async claimFurnitureGift(cid: string, visit?: Visit): Promise<FurnitureGiftResult> {
+    return this.during(visit, () => this.nests.claimGift(cid, Date.now()));
   }
 
   // ---------- feedback ----------

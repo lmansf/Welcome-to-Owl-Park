@@ -42,8 +42,14 @@ const lookText = (look: NestLook | null) => {
   return colours ? JSON.stringify(colours) : null;
 };
 
+/** Told of each piece the moment a collector first owns it (the collection log, OP-107). */
+export type OnFurniture = (cid: string, item: string, source: FurnitureSource, at: number) => void;
+
 export class SqlNestStore implements NestStore {
-  constructor(private readonly sql: SqlStorage) {
+  constructor(
+    private readonly sql: SqlStorage,
+    private readonly onFurniture?: OnFurniture,
+  ) {
     // One nest per collector, under a random id of its own. `updated` is when its owner last arranged it.
     sql.exec(`CREATE TABLE IF NOT EXISTS nests (cid TEXT PRIMARY KEY, nest_id TEXT NOT NULL UNIQUE, open INTEGER NOT NULL, layout TEXT NOT NULL, look TEXT, gift_day TEXT, updated INTEGER NOT NULL)`);
     // The street's pick: open nests, the most recently arranged first, read from the index in order.
@@ -89,7 +95,9 @@ export class SqlNestStore implements NestStore {
     return this.sql.exec<{ item: string }>(`SELECT item FROM furniture WHERE cid = ? ORDER BY at, item`, cid).toArray().map((r) => r.item);
   }
   addFurniture(cid: string, item: string, source: FurnitureSource, at: number): boolean {
-    return this.sql.exec(`INSERT OR IGNORE INTO furniture (cid, item, source, at) VALUES (?, ?, ?, ?)`, cid, item, source, at).rowsWritten > 0;
+    const added = this.sql.exec(`INSERT OR IGNORE INTO furniture (cid, item, source, at) VALUES (?, ?, ?, ?)`, cid, item, source, at).rowsWritten > 0;
+    if (added) this.onFurniture?.(cid, item, source, at);
+    return added;
   }
   recentOpen(exceptCid: string, limit: number): StreetDoor[] {
     // Never ORDER BY random(): that reads every open nest. The book picks at random from these few.
