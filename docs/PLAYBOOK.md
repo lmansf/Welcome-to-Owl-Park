@@ -1,9 +1,9 @@
 # When the park is in trouble
 
-- Status: BUILT; section 7 marks the coming controls PLANNED (OP-082, OP-083)
-- Verified against: main 67ca3ab (2026-10-23)
-- Code: apps/edge/src/health.ts, .github/workflows/uptime.yml, apps/edge/src/gateSwitch.ts, apps/park/src/ui
-- Tickets: OP-067, OP-068, OP-099
+- Status: BUILT; section 7 has the pad, the hop, quests in the Menu and the mirror as merged 2026-10-23
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
+- Code: apps/edge/src/health.ts, .github/workflows/uptime.yml, apps/edge/src/gateSwitch.ts, apps/park/src/ui (hud.ts, joystick.ts, keyboard.ts, menu.ts, quests.ts), apps/park/src/game/hop.ts
+- Tickets: OP-067, OP-068, OP-077, OP-082, OP-083, OP-099
 - Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/ARCHITECTURE.md section 13
 
 The incident playbook for the preview and after (OP-068). Who does what: the owner decides and holds
@@ -79,47 +79,53 @@ its own cap of 80.
 
 Nothing more specific (no times, no refunds, no causes) without the owner's word.
 
-## 7. Controls and the Menu [BUILT; the pad and quests-in-Menu PLANNED (OP-082, OP-083)]
+## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077)]
 
-What a visitor has in hand today (main 67ca3ab), and what is coming. Nothing a visitor does needs
-typing.
+What a visitor has in hand on main 8a1bbb9. Nothing a visitor does needs typing.
 
-**Today, on a phone**: tap where you want to walk, or use the see-through thumbstick in the
-bottom-right corner (OP-026). Two buttons sit at the bottom: **Emotes** opens the emote wheel and
-**Menu** opens everything else (OP-034). Standing at something to do shows its own button (Light a
-lantern, Cast a line, Talk, Flop in, Decorate, Vote for this realm, the gift shop).
+**On a phone, the pad** (`apps/park/src/ui/hud.ts`, `joystick.ts`): tap where you want to walk, or
+hold the see-through thumbstick in the bottom-right corner. On the left, two round buttons on a
+diagonal: **Interact** (nearer the middle) does what the owl stands at, the same as E on a keyboard
+(talk to an NPC owl, flop in a leaf pile, browse a stall, the booth, Decorate, Look in the mirror),
+and rests dimmed where there is nothing; **Jump** (nearer the corner) hops. The **Menu** is a smaller,
+darker round button tucked in the bottom-left corner, and **Emotes** sits above the pad. All are
+see-through like the stick, each at least 44 px, none overlapping. Standing at something to do also
+shows its own labelled button (Light a lantern, Cast a line, Vote for this realm, the gift shop).
 
-**Today, on a computer**: WASD or the arrow keys walk while held; E uses whatever the owl stands at;
-T opens Say; 1 to 8 play an emote as the wheel numbers them; M opens the Menu; Q the owl builder;
-J the quests; Escape closes whatever is open.
+**On a computer**: WASD or the arrow keys walk while held; E uses whatever the owl stands at; the
+space bar hops; T opens Say; 1 to 8 play an emote as the wheel numbers them; M opens the Menu; Q
+goes to the mirror (from the home screen into the nest, then up to the mirror and into Your owl; Q
+again closes it); J the quests; Escape closes whatever is open (`apps/park/src/ui/keyboard.ts`).
 
-**The Menu** holds: Say (a prewritten phrase in a bubble, `docs/ARCHITECTURE.md` section 11), Your
-owl (the owl builder), Quests (the quests under way, today's tasks and who has more), Settings
-(quest cards, thumbstick, calm motion, full screen, the controls, Show what owls say; kept on the
-device and shared with the home screen), Feedback (in gold, `docs/FEEDBACK.md`), and the ways out:
-Go home (to the owl's own nest), Leave the park (inside the park, after "Leave the park? Your ticket
-keeps running.") and Home screen.
+**The hop** (`apps/park/src/game/hop.ts`): a 0.4 s jump with a two-frame wing flap, no sound, that
+lifts only the drawing of the owl (`HOP_MS`, `HOP_HEIGHT`); the owl's place in the room never
+changes, so it cannot cross a gap or reach a ledge. Everyone in the room sees it: it travels as the
+emote `jump` (`JUMP_EMOTE` in `packages/shared/src/collectibles.ts`; `hop` is a collectible emote's
+id). A page sends one at most every 600 ms (`JUMP_EVERY_MS`); the room server passes one per owl
+every 480 ms (`jumpEveryMs` in `apps/edge/src/Room.ts`) and drops faster ones quietly, apart from
+the emotes' own 1.5 s limit. No quest counts a hop. A long press on Jump does nothing. LATER
+(OP-084), not for the preview: the hop may grow into flight (double flap, hold-to-glide, upper
+levels); it is built as its own height offset so flight can replace it. A mirrored pad for
+left-handed play is a feedback candidate, not built (`docs/FEEDBACK.md`).
 
-PLANNED (OP-082, In progress; not live yet): a Game Boy Advance SP style pad on phones. The
-joystick stays on the right at its size and translucency. Two round buttons on the left on a
-diagonal: the inner one is **Interact** (what the on-screen action button does today), the outer
-one **Jump**, a short hop with a two-frame wing flap, about 400 ms, silent by default, purely visual
-(it never moves the owl or crosses a gap) and seen by the room as a `hop` emote, at most one per
-600 ms. A third, smaller, darker button tucked toward the bottom-left corner opens the **Menu**; the
-standalone Menu button then goes. Touch targets at least 44 px; the same translucency throughout.
-On a computer the space bar hops; nothing else changes. Open on the ticket: whether the Emotes
-button stays or joins the pad, and a mirrored pad for left-handed play (`docs/FEEDBACK.md`,
-candidates).
+**The Menu** holds: Say (a prewritten phrase in a bubble, `docs/ARCHITECTURE.md` section 11),
+Quests (every quest carried, finished ones first, each with its next step and progress such as 2/5;
+Collect on a finished one walks the owl to its giver to hand it in; today's tasks; who has more),
+Settings (quest cards, thumbstick, calm motion, full screen, the controls, Show what owls say; kept
+on the device and shared with the home screen), Feedback (in gold, `docs/FEEDBACK.md`), and the
+ways out: Go home (to the owl's own nest), Leave the park (inside the park, after "Leave the park?
+Your ticket keeps running.") and Home screen. There is no Your owl tile: the owl is changed at the
+mirror in a nest (`docs/NESTS.md`, The mirror), or by Make your owl on a device's first visit.
 
-PLANNED (OP-083, In progress; not live yet): quests leave the screen for the Menu. A new quest
-or a finished one shows a badge dot on the Menu button and a 2-second toast at the top edge ("New
-quest", "Quest complete"), then goes quiet; the Quests tab lists each active quest with its goal and
-progress, and the reward is collected there (tap the quest, tap Collect). The owner decides after
-trying it whether the new-quest toast stays.
+**Quest news**: no pop-ups during play. A new or finished quest shows a 2 s line at the top edge
+("New quest: its name", "Quest complete: its name") and a gold dot on the Menu button and on the
+Menu's Quests tile until Quests opens. The on-screen quest tracker and the daily tasks' progress
+toast are gone (a finished task still says so). The owner kept the New quest line for now
+(2026-10-23) and may drop it if it proves noisy.
 
-LATER (OP-084), not for the preview: the hop may grow into flight (double flap,
-hold-to-glide, upper levels). Do not describe the hop as final; it is built as a visual offset so
-flight can replace it.
+**Your owl**: Go to your nest on the home screen lands the owl in its own nest facing the mirror;
+Look in the mirror (Interact, or E) opens Your owl with the owl in the room as the live preview.
+Any nest's mirror works and changes only the owl looking into it.
 
 ## 8. After
 

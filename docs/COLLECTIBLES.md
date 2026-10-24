@@ -1,7 +1,7 @@
 # Collectibles
 
 - Status: BUILT; Purchases is groundwork only, PLANNED (OP-049 for the founder perk)
-- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the numbers are Claude Code's as written
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged); the numbers are Claude Code's as written
 - Code: packages/shared/src/collectibles.ts, book.ts, shop.ts; apps/edge/src/Collections.ts, sqlStore.ts; apps/park/src/collect, apps/park/src/game/itemArt.ts
 - Tickets: OP-013, OP-014, OP-015, OP-025, OP-029
 - Related: docs/QUESTS.md, docs/ARCHITECTURE.md section 8
@@ -107,13 +107,16 @@ to one per 1.5 s per owl.
 - **Colourways** of wearables and pets rotate the hue of the art by hand on a canvas (Safari's
   canvas has no `filter`); colourway 0 is the art as painted.
 - Until painted art ships every wearable and pet has a drawn placeholder (`itemArt.ts`).
-- HUD: feathers in the top bar; from the **Menu**, the **owl builder** (`ui/owlBuilder.ts`: the
+- HUD: feathers in the top bar; the **owl builder** (`ui/owlBuilder.ts`), opened at the mirror in
+  a nest (OP-077, `docs/NESTS.md`) or by Make your owl on a first visit, not from the Menu: the
   whole screen, the owl drawn big and alive by `game/BuilderScene.ts`, and tabs for its kind,
   colours, wear, pets and effects, a card per item with its colourway dots; a tap puts it on or
   takes it off, and what is not owned yet shows greyed with where to find it). The **emote wheel**
-  (`ui/emoteWheel.ts`: the owned emotes round a ring, eight a page) has its own button beside the
-  Menu, and on a keyboard 1 to 8 play the emotes as the wheel numbers them, without opening it.
-  The quest tracker, the quests screen, dialogue and shop are in [QUESTS.md](QUESTS.md).
+  (`ui/emoteWheel.ts`: the owned emotes round a ring, eight a page) has its own button (above the
+  pad on a phone), and on a keyboard 1 to 8 play the emotes as the wheel numbers them, without
+  opening it. The hop (`JUMP_EMOTE`, `jump`) is every owl's and not in the catalogue or the wheel
+  (OP-082, [ACTIVITIES.md](ACTIVITIES.md)). The quests screen, dialogue and shop are in
+  [QUESTS.md](QUESTS.md).
 - Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
   shop hooks.
 

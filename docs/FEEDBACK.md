@@ -1,7 +1,7 @@
 # Feedback from visitors
 
 - Status: BUILT (OP-028); the preview nudge and the feedback reward PLANNED (OP-063, OP-064)
-- Verified against: main 67ca3ab (2026-10-23)
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
 - Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts; apps/park/src/ui/feedback.ts
 - Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089
 - Related: docs/ARCHITECTURE.md section 10
@@ -53,8 +53,8 @@ promised; each names the ticket that raised it.
 | Candidate | Why it is here | Source |
 | --- | --- | --- |
 | A mirrored pad for left-handed play (joystick left, buttons right) | The phone pad puts the joystick on the right; the ticket's default is no mirroring, noted here as a candidate | OP-082 |
-| Hop spam (the Jump button's hop, once built) | One hop per 600 ms is the client-side limit; QA checks that the server, not only the client, holds the room's rate | OP-082, OP-089 |
-| New-quest toast noise | Quests move into the Menu with a badge dot and a 2-second toast; the owner decides after trying it whether the new-quest toast stays | OP-083 |
+| Hop spam (the Jump button's hop) | One hop per 600 ms from a page and one per 480 ms per owl through the room server; QA checks the server holds it | OP-082, OP-089 |
+| New-quest line noise | Quests live in the Menu with a dot and a 2-second line at the top; the owner kept the New quest line for now (2026-10-23) and may drop it | OP-083 |
 
 Where a note points at one of these, add the ticket ID to the keepers' triage so the count is
 easy to find later.

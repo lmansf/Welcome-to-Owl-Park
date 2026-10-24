@@ -1,8 +1,8 @@
 # Nests
 
-- Status: BUILT (C39); the mirror PLANNED (OP-077)
-- Verified against: main 67ca3ab (2026-10-23)
-- Code: packages/shared/src/homes.ts, nestbook.ts, rooms/index.ts; apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, game/nest.ts, game/street.ts
+- Status: BUILT (C39); the mirror BUILT (OP-077)
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
+- Code: packages/shared/src/homes.ts, nestbook.ts, rooms/index.ts (NEST_ROOM, NEST_MIRROR); apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, game/nest.ts, game/street.ts, game/mirror.ts, game/nestPlan.ts
 - Tickets: OP-029, OP-032, OP-033, OP-077, OP-093
 - Related: docs/ARCHITECTURE.md section 4 (protocol) and section 9 (Go home)
 
@@ -73,18 +73,33 @@ keeps them out: closing sends any visitors inside back to the street. **Done** (
 
 Everyone inside sees each change as it happens. Only the owner can change its nest.
 
-## The mirror [PLANNED (OP-077, In progress)]
+## The mirror [BUILT (OP-077)]
 
-Not built yet. Once it lands, customising an owl happens in its own nest, at a mirror: one
-interactable in the nest's inside, with one action, **Look in the mirror**, shown only where the
-owl stands at it (OP-040's rule). It opens the Your owl editor as it is, every tab, and edits only
-the owl looking into it, so a visitor in someone else's nest can use it too and changes nothing of
-the host's. While the editor is open the owl in the room updates live. With it the Menu's Your owl
-tile goes, and the home screen's builder button becomes **Go to your nest**, which puts the owl
-inside its nest facing the mirror. The one exception stays: **Make it yours** at the end of the
-first-run quiz (OP-076, not built) opens the editor in place. Art: the mirror painted into the
-nest's painting as one edit, or drawn in code. Until OP-077 merges, the owl builder opens from
-the Menu (Your owl) and from the home screen as `docs/ARCHITECTURE.md`, section 9, says.
+An owl changes how it looks at the mirror in a nest (OP-077, live on main 8a1bbb9). Every nest
+has one, furnished or not: a standing oval mirror against the back wall between the lamp's spot and
+the round window, drawn in code (`apps/park/src/game/mirror.ts`, $0 of art; the owner kept the
+drawn one), placed high on the floor so a phone shows it above the pad. Its place is `NEST_MIRROR`
+and the `mirror` spot and spawn in `NEST_ROOM` (`packages/shared/rooms/index.ts`); the word is
+`NEST_WORDS.mirror`, **Look in the mirror** (`homes.ts`).
+
+- Standing on the floor before it, **Look in the mirror** (E, or the pad's Interact; it comes before
+  Decorate there) opens Your owl, every tab, and the room's camera draws the owl and its mirror as
+  the editor's stage, so each choice shows on the owl at once (`RoomScene.mirrorView`).
+- Any owl may use any nest's mirror. A look changed in someone else's nest changes only that owl,
+  never the host's (room server test).
+- The Menu has no Your owl tile. The home screen's button is **Go to your nest**, which lands the
+  owl before its mirror, facing it (`apps/park/src/ui/home.ts`). On a keyboard Q goes to the mirror
+  from anywhere: home to the nest, then up to the mirror and into Your owl; Q again closes it
+  (`nestPlan.mirrorKey`).
+- A brand-new owl's first time home: the mirror glints once, with no words
+  (`nestPlan.firstGlint`, kept on the device).
+- The one exception stays: **Make your owl** on a device's first visit opens the editor in place,
+  and so will **Make it yours** at the end of the first-run quiz (PLANNED, OP-076).
+
+Tests: unit tests for the mirror spot, the glint, where Q goes and the edit scope; browser tests
+on a phone and a computer open Your owl from the mirror and watch the owl's colour change
+(`apps/park/e2e/mirror.spec.ts`). The Quest Log's Interactables tab lists the mirror
+(`nest-mirror`).
 
 ## Furniture and the day's gift
 

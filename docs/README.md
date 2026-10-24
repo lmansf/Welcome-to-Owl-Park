@@ -1,7 +1,7 @@
 # The docs: a map
 
 - Status: current
-- Verified against: main 67ca3ab (2026-10-23); the Ticket Board as read 2026-10-23
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged); the Ticket Board as read 2026-10-23
 - Code: none
 - Tickets: OP-101, OP-102
 - Related: docs/agents.md, docs/GLOSSARY.md
@@ -59,13 +59,13 @@ doc tickets. The owner approves every visitor-facing word the docs quote. Anythi
 | `agents.md` | Who does what: the owner, Claude, Claude Code, Crow, the QA agent, the doc agent, Red Team and the Shopify agent; what each may write to and never does; how work moves; the board's columns and statuses | You are new, or handing work to another agent |
 | `ARCHITECTURE.md` | The system: the repository's packages, the room server and its Durable Objects, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, a diagram from purchase to the hub, open questions | Before any ticket that touches code |
 | `DEPLOY.md` | Cloudflare, GitHub and Supabase setup; where to run commands (bash and PowerShell); the error table; deploys from GitHub; selling tickets (the store's app, secrets, webhooks, products, opening night) | Deploying, setting a secret, setting up the store |
-| `PLAYBOOK.md` | When the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits, words for visitors; the controls and the Menu as a visitor has them | Something is wrong, or a visitor asks how to do something |
+| `PLAYBOOK.md` | When the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits, words for visitors; the controls (the phone pad, the hop, the keys), the Menu and quest news as a visitor has them | Something is wrong, or a visitor asks how to do something |
 | `CAPACITY.md` | Room caps, what happens at the cap, what the park holds (measured), the planned queue and ribbon (OP-075), what QA tests (OP-088) | A busy night is coming, or a cap question |
 | `CHANGELOG.md` | One line per Done ticket, newest first, by week; the rule for appending | What shipped when |
 | `COLLECTIBLES.md` | Wearables, pets, effects and emotes: the catalogue, the numbers, identity (collector token and pass), the server, the client, adding a drop | Anything an owl owns or wears |
 | `QUESTS.md` | Quests, NPC owls, leaf piles, feathers, the feather shop, owl species, the Quest Log sheet | Anything an owl does for feathers |
-| `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade (and its planned games), three tasks a day, quests on screen, emotes, seasons (planned) | Anything to do in a room |
-| `NESTS.md` | The street of nests, a nest, decorating, furniture and the day's gift, the mirror (planned), the room server and the local mode | The nests |
+| `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade (and its planned games), three tasks a day, quests in the Menu, emotes and the hop, seasons (planned) | Anything to do in a room |
+| `NESTS.md` | The street of nests, a nest, decorating, furniture and the day's gift, the mirror (Your owl), the room server and the local mode | The nests |
 | `FEEDBACK.md` | Feedback in the Menu, where notes are kept, reading and triaging them, candidates raised by tickets | Reading visitors' notes |
 | `ART-PIPELINE.md` | How art is made and replaced: Seedream through `tools/art`, sizes, the owl's layers, provenance | Any art change; the owner picks every image |
 

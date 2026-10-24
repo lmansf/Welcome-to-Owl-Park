@@ -1,9 +1,9 @@
 # Things to do in the park
 
-- Status: the first wave BUILT (C36); the arcade's games, quests in the Menu, the hop and seasons PLANNED
-- Verified against: main 67ca3ab (2026-10-23)
+- Status: the first wave BUILT (C36); quests in the Menu and the hop BUILT (OP-082, OP-083); the arcade's games and seasons PLANNED
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
 - Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, book.ts; apps/park/src/game/activities.ts; apps/park/src/ui/activities.ts
-- Tickets: OP-004, OP-026, OP-037; planned OP-038, OP-059, OP-074, OP-082, OP-083, OP-084
+- Tickets: OP-004, OP-026, OP-037, OP-082, OP-083; planned OP-038, OP-059, OP-074, OP-084
 - Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7
 
 The first wave of activities (C30): lanterns that a room lights together under the great tree, a
@@ -110,29 +110,37 @@ kind twice:
 3. around the park: flop into 2 leaf piles, or browse 2 stalls, or answer a quiz question right,
    or copy 2 tunes.
 
-Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J), on its
-Today tab, and as a line in the tracker, with a toast as each moves along; they change at the
-park's midnight.
+Each task pays 4 feathers, and all three 8 more. They show in Quests (the Menu, or J) on its
+Today tab, with their progress; a finished task says so; they change at the park's midnight. The
+on-screen tracker and the per-step progress toast went with OP-083.
 
-## Quests on screen [BUILT today; the Menu version PLANNED (OP-083)]
+## Quests on screen [BUILT (OP-083)]
 
-Today a quest's steps show in the tracker under the top bar and in Quests (the Menu, or J); a new
-offer, a finished step and a hand-in show as toasts and cards (`docs/QUESTS.md`). PLANNED (OP-083, In progress): the pop-ups go. A new quest or a finished one shows a badge dot on the
-Menu button and a short toast ("New quest", "Quest complete") and then goes quiet; the Quests tab
-lists each active quest with its one-line goal and progress (2/5), and the reward is collected
-there (tap the quest, tap Collect). Quest state and rewards do not change; only the surface does.
-Open on the ticket: the badge dot on the desktop Menu, how many quests show before the tab scrolls
-(5 suggested), and whether the preview's feedback nudge (OP-063) moves into the Menu too.
+Quests live in the Menu, not on the screen (OP-083; `apps/park/src/ui/quests.ts`, `hud.ts`
+`questNews`). No pop-ups during play: a new or finished quest shows a 2 s line at the top edge
+("New quest: its name", "Quest complete: its name") and a gold dot on the Menu button and the
+Menu's Quests tile, cleared when Quests opens; the dot shows on a computer's Menu too. Quests lists
+every quest carried with its title, its next step and its progress (2/5), finished ones first;
+there is no cap, the screen scrolls. Collect on a finished quest walks the owl to its giver and
+hands it in there (the owner's call, 2026-10-23). The quest state and reward rules are unchanged
+(`docs/QUESTS.md`). The on-screen tracker and the daily tasks' progress toast are gone; the lobby's
+welcome line stays. The owner kept the New quest line for now. The preview's feedback nudge
+(PLANNED, OP-063) should use the same line and dot when it is built.
 
-## Emotes [BUILT; the hop PLANNED (OP-082)]
+## Emotes and the hop [BUILT (OP-082)]
 
 The emotes an owl can play are collectibles (`docs/COLLECTIBLES.md`): 24 in the catalogue, every
 owl starts with Hoot and Wing Flap (plus the Sparkle effect), and the rest come from quests and the
 shop. The emote wheel (the Emotes button; 1 to 8 on a keyboard) plays one; the room server relays
 the emote's id to everyone else in the room, checks that the owl owns it, and allows one per 1.5 s
-per owl. PLANNED (OP-082): a **hop**, the Jump button's short wing-flap, sent as a `hop` emote
-so others see it, at most one per 600 ms on the page, purely visual (`docs/PLAYBOOK.md`, section
-7). The hop is a candidate for flight later (OP-084); do not document it as final.
+per owl. The **hop** (OP-082) is a move every owl has, not a collectible: the Jump button on the
+pad or the space bar on a computer plays a 0.4 s jump with a two-frame wing flap that lifts only the
+drawing of the owl, never its place (`apps/park/src/game/hop.ts`). It travels as the emote `jump`
+(`JUMP_EMOTE`; `hop` is a collectible emote's id), at most one per 600 ms from a page
+(`JUMP_EVERY_MS`) and one per 480 ms per owl through the room server (`jumpEveryMs`), apart from the
+emotes' limit; no collection is asked and no quest counts it. The controls: `docs/PLAYBOOK.md`,
+section 7. LATER (OP-084): flight may grow out of the hop; it is built as its own height offset so
+that can happen without changing how a hop is asked for.
 
 ## Seasons [PLANNED (OP-074)]
 
@@ -174,8 +182,8 @@ to its own clock, and runs the quiz card on the server's clock.
   answers and pushes, and the cards; `game/Lanterns.ts`, `game/QuizStage.ts` and
   `game/Fishing.ts` draw the glows, the zones and the line.
 - `ui/activities.ts`: the quiz and copy cards (top right on wide screens, under the top bar on
-  phones, where the tracker steps aside); `ui/quests.ts`: today's tasks in the quests screen and
-  the tracker; `collect/tasks.ts` keeps them.
+  phones); `ui/quests.ts`: today's tasks in the quests screen (the tracker is gone, OP-083);
+  `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
 

@@ -1,9 +1,9 @@
 # Owl Park architecture
 
 - Status: mixed; each section is tagged BUILT or PLANNED (OP-xxx)
-- Verified against: main 67ca3ab (2026-10-23)
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
 - Code: apps/edge/src, packages/shared/src, apps/park/src, apps/edge/wrangler.jsonc, .github/workflows
-- Tickets: OP-002, OP-010, OP-022, OP-048, OP-051, OP-055, OP-065, OP-067, OP-068, OP-071, OP-098; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-075, OP-076, OP-077
+- Tickets: OP-002, OP-010, OP-022, OP-048, OP-051, OP-055, OP-065, OP-067, OP-068, OP-071, OP-077, OP-082, OP-083, OP-098; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-075, OP-076
 - Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/PLAYBOOK.md, docs/GLOSSARY.md
 
 How to read this file: headings carry [BUILT] or [PLANNED (OP-xxx)]; inside a section, `PLANNED (OP-xxx)` marks
@@ -117,7 +117,7 @@ are server milliseconds; clients never put their own clock on the wire.
 
 Client to server: `hello` (once, within 5 s; look, optional spawn name and resume position),
 `move` (target and a per-connection `seq`), `look` (new colours, species and worn items), `emote`
-(an emote id), `say` (a prewritten phrase's number), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
+(an owned emote's id, or `jump`, the hop every owl has, OP-082), `say` (a prewritten phrase's number), `bye`, and the quest requests, each with a request number `r`: `quests`, `talk`,
 `accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
 the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks); and for
 the nests `street` (on the street: the visitor's own nest and five other owls' open ones) and
@@ -145,7 +145,8 @@ client address per object (`MAX_SOCKETS_PER_IP` in `wrangler.jsonc`; the default
 of the owl's position on the server clock (plus 40 px of slack), a quest item only within 56 px,
 and one quest request runs at a time per visitor; one use per 1.2 s; worn items the visitor's
 collection does not hold are dropped from a look before it is broadcast; emotes must be owned and
-are limited to one per 1.5 s; a phrase must be one of the list's, one per 3 s per owl (any other
+are limited to one per 1.5 s, and the hop (`jump`, no collection asked) to one per 480 ms apart
+from them (`jumpEveryMs`); a phrase must be one of the list's, one per 3 s per owl (any other
 number is dropped, and a `say` frame with words in it closes the socket as malformed); quest,
 emote and phrase frames count toward the frame limit. Nests: a nest's
 room is `nest-<nestId>`, the id random and never taken from the collector; its hello waits for the
@@ -319,13 +320,14 @@ OP-062 (below).
 Before the lobby comes the home screen (OP-065: `apps/park/src/ui/home.ts`, `game/HomeScene.ts`):
 the park's name and mascot over the lobby's painting, dimmed. A device with no owl yet (no kept
 look and no collection) offers Make your owl, which keeps the owl on the device and opens the owl builder
-on it. A device that holds one offers Play (into the lobby), a line about its tickets, Your owl
-and Settings (the park's own, one store), with the owl drawn big beside them by the builder's
-preview scene. There are no accounts and nothing is typed. A ticket link lands there logged in,
+on it. A device that holds one offers Play (into the lobby), a line about its tickets, Go to your
+nest (OP-077: into the owl's own nest, before its mirror, where Your owl is changed from then on;
+`docs/NESTS.md`) and Settings (the park's own, one store), with the owl drawn big beside them by the
+builder's preview scene. There are no accounts and nothing is typed. A ticket link lands there logged in,
 with a note that the ticket came. PLANNED (OP-076): a short picture-answer quiz ("which owl
 are you") between the first sign-in and the builder, once per device, skippable, with a retake on
-the result screen and in Settings. PLANNED (OP-077): the owl builder moves to a mirror in the
-owl's own nest (`docs/NESTS.md`); the home screen's builder button becomes "Go to your nest". The Menu's Home screen leaves the room as a door does (the
+the result screen and in Settings; Make it yours at its end opens the editor in place, the one
+exception to the mirror. The Menu's Home screen leaves the room as a door does (the
 owl's place frees at once, and a ticket keeps running) and comes back to it. An address that
 names a room (`?room=`: tests, the art preview) or says `home=0` goes straight into the park.
 

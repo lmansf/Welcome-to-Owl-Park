@@ -1,7 +1,7 @@
 # Glossary
 
 - Status: first pass (OP-081 names this file; written by the doc agent 2026-10-23)
-- Verified against: main 67ca3ab (2026-10-23)
+- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
 - Code: the file named on each line
 - Tickets: OP-081
 - Related: docs/README.md (the map), docs/agents.md (the roster)
@@ -26,6 +26,7 @@ defines it. Alphabetical. Grep the term.
 - **Grove**: the room id of the storybook realm (public description: the treehouse clearing). Realm names stay out of this repository.
 - **Guardian**: the storybook realm's mythical owl, its idol for the Realm Vote; a different character from the mascot (C25).
 - **Homes**: the room id of the street of nests outside the turnstiles; `docs/NESTS.md`. Tickets call the area "the Village", a working name visitors never see.
+- **Hop** (Jump): the 0.4 s wing-flap jump every owl has, from the pad's Jump button or the space bar; lifts only the drawing, travels as the emote `jump` (`JUMP_EMOTE`); `apps/park/src/game/hop.ts` (OP-082).
 - **Hub**: the room id of the central room inside the great tree; the arrival spot after the turnstiles is also the way out (C43).
 - **Idol**: a realm's mythical owl, tapped to cast the Realm Vote; `docs/ARCHITECTURE.md` section 7.
 - **Interactable**: a leaf pile, stall or moonbeam an owl uses with one action; `packages/shared/src/interactables.ts`.
@@ -33,9 +34,11 @@ defines it. Alphabetical. Grep the term.
 - **Lobby**: the room id where every visitor arrives: the booth, the turnstiles, the lane to the nests.
 - **Market**: the room id of the neon market realm (public description: the neon street); holds Nova's shop and the robot owl.
 - **Mascot**: the great horned owl of the feed and the home screen; not the guardian (C25).
-- **Menu**: the one button that opens Say, Your owl, Quests, Settings, Feedback and the ways out; `apps/park/src/ui/menu.ts`.
+- **Menu**: the one button that opens Say, Quests, Settings, Feedback and the ways out; on a phone the small dark button in the pad's corner; `apps/park/src/ui/menu.ts`.
+- **Mirror**: the standing mirror in every nest where an owl changes how it looks (Look in the mirror opens Your owl); `NEST_MIRROR`, `apps/park/src/game/mirror.ts` (OP-077).
 - **Nest**: an owl's own round room on the street; room id `nest-<nestId>`; `packages/shared/src/homes.ts`.
 - **NPC owl**: one of six resident owls that give quests; `packages/shared/src/npcs.ts`.
+- **Pad**: the phone controls: the thumbstick on the right, Interact and Jump on a diagonal on the left, the Menu small in the corner, Emotes above; `apps/park/src/ui/hud.ts` (OP-082).
 - **Park day**: midnight to midnight in `PARK_TIME_ZONE` (America/New_York, `packages/shared/src/parktime.ts`); daily quests, the shop and the vote turn on it.
 - **Phrase** (Say): one of 24 prewritten lines an owl can say; only its number travels; `packages/shared/src/phrases.ts` (C44).
 - **Quest**: a giver, ordered steps and a reward; cadence story, daily or weekly; `packages/shared/src/quests.ts`, `questCatalog.ts`, `questbook.ts`.
