@@ -46,6 +46,8 @@ export interface MenuTokens {
   iconAccent: string;
   scrim: string;
   shadow: string;
+  /** A piece still hidden (a style set's capstone before it is earned): a filter that turns its art into one quiet tone. */
+  silhouette: string;
   /** Corner radii: the sheet, the cards, the tabs. */
   radius: number;
   cardRadius: number;
@@ -99,6 +101,7 @@ export const DAY: MenuTokens = {
   iconAccent: '#E0A030',
   scrim: 'rgba(20, 12, 6, 0.45)',
   shadow: '0 -10px 40px rgba(42, 27, 16, 0.35)',
+  silhouette: 'brightness(0) opacity(0.4)',
   radius: 22,
   cardRadius: 14,
   tabRadius: 12,
@@ -130,6 +133,7 @@ export const NIGHT: MenuTokens = {
   iconAccent: '#E7A93B',
   scrim: 'rgba(4, 3, 2, 0.55)',
   shadow: '0 -10px 40px rgba(0, 0, 0, 0.6)',
+  silhouette: 'brightness(0) invert(1) opacity(0.35)',
   tapHz: 440,
 };
 
@@ -160,6 +164,7 @@ export function tokenStyle(t: MenuTokens): string {
     'icon-accent': t.iconAccent,
     scrim: t.scrim,
     shadow: t.shadow,
+    silhouette: t.silhouette,
     radius: px(t.radius),
     'card-radius': px(t.cardRadius),
     'tab-radius': px(t.tabRadius),

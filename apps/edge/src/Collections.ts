@@ -184,8 +184,12 @@ export class Collections extends DurableObject<Env> {
     return this.during(visit, () => this.book.owned(cid, tzHint, Date.now()));
   }
 
+  /** The collection, with the furniture for the style sets (any capstone earned since is given first). */
   async inventory(cid: string, tzHint?: string, visit?: Visit): Promise<Inventory> {
-    return this.during(visit, () => this.book.inventory(cid, tzHint, Date.now()));
+    return this.during(visit, () => {
+      const now = Date.now();
+      return { ...this.book.inventory(cid, tzHint, now), furniture: this.nests.furniture(cid, now) };
+    });
   }
 
   async setEquipped(cid: string, tzHint: string | undefined, wear: Wear | null): Promise<Wear | null> {

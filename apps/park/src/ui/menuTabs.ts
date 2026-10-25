@@ -1,4 +1,4 @@
-import { ARCADE_NAME, NEST_WORDS, WAY_OUT_WORDS, allVariants, parseVariant, type ItemKind } from '@owl-park/shared';
+import { ARCADE_NAME, NEST_WORDS, WAY_OUT_WORDS, allVariants, parseVariant, setProgress, type ItemKind, type SetProgress } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
@@ -94,8 +94,39 @@ export function renderCollection(panel: HTMLElement, state: CollectionState | nu
   const kinds = card('By kind');
   for (const c of counts) kinds.appendChild(meter(c.have, c.of, c.name));
   panel.appendChild(kinds);
-  panel.appendChild(card('Sets', note('Each realm will bring its own set of things to collect and furnish your nest with. Your progress on each set will show here.')));
+  panel.appendChild(setsCard(setProgress(owned, state.inv.furniture ?? [])));
   panel.appendChild(note('Quests and the shop bring new things. Wear them at the mirror in your nest.'));
+}
+
+/** A piece of furniture's painted art as the page serves it (the game's loader, game/art.ts, reads the same files). */
+const pieceArt = (art: string, x2: boolean): string => `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}art/${art}${x2 ? '@2x' : ''}.png`;
+
+/**
+ * The style sets (OP-110): for each, how many of its pieces the owl has and which (a tick, not a
+ * colour, marks the ones it has), and its capstone, a silhouette without a name until the set is
+ * complete. While no set exists, a word about what is coming.
+ */
+export function setsCard(sets: readonly SetProgress[]): HTMLElement {
+  if (!sets.length) return card('Sets', note('Each realm will bring its own set of things to collect and furnish your nest with. Your progress on each set will show here.'));
+  const c = card('Sets');
+  for (const s of sets) {
+    const box = el('div', s.done ? 'mset done' : 'mset');
+    box.dataset['style'] = s.style;
+    box.appendChild(meter(s.have, s.of, s.name));
+    const list = el('ul', 'mpieces');
+    for (const p of s.pieces) list.appendChild(el('li', p.owned ? 'have' : '', p.owned ? `✓ ${p.name}` : p.name));
+    box.appendChild(list);
+    const cap = el('div', 'mcap');
+    const img = el('img');
+    img.src = pieceArt(s.capstone.art, false);
+    img.srcset = `${pieceArt(s.capstone.art, true)} 2x`;
+    img.alt = s.done ? s.capstone.name : 'A hidden piece';
+    img.addEventListener('error', () => img.remove()); // no art yet: the words alone
+    cap.append(img, note(s.done ? `Set complete! The ${s.capstone.name} is yours: find it in Decorate in your nest.` : 'Collect the whole set for a piece for your nest that only this set gives.'));
+    box.appendChild(cap);
+    c.appendChild(box);
+  }
+  return c;
 }
 
 // ---------- Nest ----------

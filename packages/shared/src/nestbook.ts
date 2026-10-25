@@ -26,13 +26,14 @@ import {
 } from './homes';
 import { isHexColour } from './look';
 import { nextParkDayAt, parkDay } from './parktime';
+import { STYLE_SETS, capstonesDue, type StyleSet } from './styles';
 import { isObj } from './validate';
 
 // ---------- what the book keeps ----------
 
-/** How an owl came by a piece of furniture. */
-export type FurnitureSource = 'starter' | 'gift';
-export const FURNITURE_SOURCES: readonly FurnitureSource[] = ['starter', 'gift'];
+/** How an owl came by a piece of furniture: `set` is a style set's capstone (OP-110). */
+export type FurnitureSource = 'starter' | 'gift' | 'set';
+export const FURNITURE_SOURCES: readonly FurnitureSource[] = ['starter', 'gift', 'set'];
 
 /** One collector's nest as stored. Only the book and its store ever see `cid`. */
 export interface NestRow {
@@ -151,6 +152,8 @@ export interface NestBookOptions {
   newId(): string;
   /** Uniform in [0, 1): the day's gift and the street's mix. */
   random(): number;
+  /** The style sets whose capstones the book gives (STYLE_SETS; the tests bring their own). */
+  sets?: readonly StyleSet[];
 }
 
 export class NestBook {
@@ -173,10 +176,21 @@ export class NestBook {
     throw new Error('no free nest id');
   }
 
-  /** The furniture a collector owns, in catalogue order. */
-  private owned(cid: string): string[] {
+  /**
+   * The furniture a collector owns, in catalogue order, with the capstone of any style set it has
+   * completed given first (OP-110): whenever the park reads an owl's furniture, a set completed since
+   * (by a quest, the shop, a gift) has its capstone waiting.
+   */
+  private owned(cid: string, now: number): string[] {
+    const sets = this.opts.sets ?? STYLE_SETS;
+    if (sets.length) for (const id of capstonesDue(this.book.owned(cid, undefined, now), this.store.furniture(cid), sets)) this.store.addFurniture(cid, id, 'set', now);
     const have = new Set(this.store.furniture(cid));
     return FURNITURE.filter((f) => have.has(f.id)).map((f) => f.id);
+  }
+
+  /** The furniture the collector owns, for its collection (the Collection tab counts it toward the sets). */
+  furniture(cid: string, now: number): string[] {
+    return this.owned(cid, now);
   }
 
   /** A nest as visitors see it: its id, open or closed, what stands where, and its owner's colours. */
@@ -199,7 +213,7 @@ export class NestBook {
       this.store.setLook(cid, colours);
       row = { ...row, look: colours };
     }
-    return { nest: this.view(row), owned: this.owned(cid), gift: this.gift(row, now) };
+    return { nest: this.view(row), owned: this.owned(cid, now), gift: this.gift(row, now) };
   }
 
   /**
@@ -211,14 +225,14 @@ export class NestBook {
     if (!row) return null;
     const nest = this.view(row);
     if (!visitorCid || row.cid !== visitorCid) return { nest, mine: false };
-    return { nest, mine: true, owned: this.owned(row.cid), gift: this.gift(row, now) };
+    return { nest, mine: true, owned: this.owned(row.cid, now), gift: this.gift(row, now) };
   }
 
   /** The owner puts a piece it owns in a spot of its nest (moving it if it stands elsewhere), or with `item` null takes the spot's piece away. */
   setSpot(cid: string, spot: string, item: string | null, now: number): NestEditResult {
     const row = this.ensure(cid, null, now);
     const layout = sanitizeLayout(row.layout);
-    const res = placeFurniture(layout, spot, item, this.owned(cid));
+    const res = placeFurniture(layout, spot, item, this.owned(cid, now));
     if (!res.ok) return res;
     if (JSON.stringify(res.layout) === JSON.stringify(layout)) return { ok: true, nest: this.view(row) };
     this.store.setLayout(cid, res.layout, now);
@@ -251,12 +265,12 @@ export class NestBook {
   claimGift(cid: string, now: number): FurnitureGiftResult {
     const row = this.ensure(cid, null, now);
     const next = nextParkDayAt(now);
-    if (!furnitureGiftReady(row.giftDay, now)) return { ok: false, reason: 'taken', owned: this.owned(cid), next };
+    if (!furnitureGiftReady(row.giftDay, now)) return { ok: false, reason: 'taken', owned: this.owned(cid, now), next };
     this.store.setGiftDay(cid, parkDay(now));
-    const gift = furnitureGift(this.owned(cid), this.opts.random);
+    const gift = furnitureGift(this.owned(cid, now), this.opts.random);
     if (gift.item !== null) this.store.addFurniture(cid, gift.item, 'gift', now);
     const total = gift.feathers > 0 ? this.book.addFeathers(cid, gift.feathers, now) : this.book.feathers(cid, now);
-    return { ok: true, ...gift, total, owned: this.owned(cid), next };
+    return { ok: true, ...gift, total, owned: this.owned(cid, now), next };
   }
 }
 

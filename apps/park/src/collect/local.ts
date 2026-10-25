@@ -157,7 +157,7 @@ export class LocalCollections implements CollectionService {
   }
 
   /** Run against the latest stored nests and this collector's collection (the gift may pay feathers), then store both again. */
-  private nests<T>(fn: (nests: NestBook) => T): T {
+  private nests<T>(fn: (nests: NestBook, book: CollectionBook) => T): T {
     let store: MemoryNestStore;
     try {
       const raw = this.storage?.getItem(NESTS_KEY) ?? null;
@@ -165,7 +165,7 @@ export class LocalCollections implements CollectionService {
     } catch {
       store = this.nestMemory ?? new MemoryNestStore();
     }
-    const out = this.use(({ book }) => fn(new NestBook(store, book, { newId: localNestId, random: this.random })));
+    const out = this.use(({ book }) => fn(new NestBook(store, book, { newId: localNestId, random: this.random }), book));
     this.nestMemory = store;
     try {
       this.storage?.setItem(NESTS_KEY, JSON.stringify(store.snapshot()));
@@ -194,8 +194,12 @@ export class LocalCollections implements CollectionService {
     return out;
   }
 
+  /** The collection, with the furniture for the style sets (any capstone earned since is given first), as the room server answers. */
   async inventory(): Promise<Inventory> {
-    return this.use(({ book }) => book.inventory(this.cid, this.tz, this.now()));
+    return this.nests((nests, book) => {
+      const now = this.now();
+      return { ...book.inventory(this.cid, this.tz, now), furniture: nests.furniture(this.cid, now) };
+    });
   }
 
   async shop(): Promise<ShopView> {

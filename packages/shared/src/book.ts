@@ -86,6 +86,11 @@ export interface Inventory {
   owned: string[];
   feathers: number;
   equipped: Wear | null;
+  /**
+   * The furniture the owl owns, any capstone it has earned included: the collections object and the
+   * local mode add it (the nests' book keeps furniture), for the style sets in the Collection tab (OP-110).
+   */
+  furniture?: string[];
 }
 
 export type GrantResult = { ok: true; variant: string; added: boolean } | { ok: false; reason: 'unknown' };

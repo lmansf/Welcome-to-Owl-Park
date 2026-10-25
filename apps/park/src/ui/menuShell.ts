@@ -98,6 +98,14 @@ const CSS = `
 #hud .menu-shell .mmeter .bar{grid-column:1 / -1;display:block;height:12px;border-radius:6px;background:color-mix(in srgb,var(--m-frame) 22%,transparent);overflow:hidden}
 #hud .menu-shell .mmeter .bar i{display:block;height:100%;background:var(--m-accent);border-radius:6px}
 #hud .menu-shell .mlines{display:flex;flex-direction:column;gap:6px}
+#hud .menu-shell .mset{display:flex;flex-direction:column;gap:8px}
+#hud .menu-shell .mset+.mset{border-top:1px solid color-mix(in srgb,var(--m-frame) 35%,transparent);padding-top:10px}
+#hud .menu-shell .mpieces{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+#hud .menu-shell .mpieces li{padding:4px 10px;border-radius:999px;border:2px dashed color-mix(in srgb,var(--m-frame) 55%,transparent);color:var(--m-muted)}
+#hud .menu-shell .mpieces li.have{border-style:solid;color:var(--m-text);font-weight:700}
+#hud .menu-shell .mcap{display:flex;align-items:center;gap:10px}
+#hud .menu-shell .mcap img{flex:none;width:48px;height:48px;object-fit:contain;filter:var(--m-silhouette)}
+#hud .menu-shell .mset.done .mcap img{filter:none}
 #hud .menu-shell .mmap{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(5,minmax(72px,auto));gap:8px}
 #hud .menu-shell .mmap .paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #hud .menu-shell .mmap .paths line{stroke:var(--m-frame);stroke-width:3;vector-effect:non-scaling-stroke;stroke-linecap:round}
