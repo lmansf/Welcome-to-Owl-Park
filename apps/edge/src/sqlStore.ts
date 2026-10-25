@@ -24,8 +24,14 @@ function json<T>(text: string | null, fallback: T): T {
   }
 }
 
+/** Told of each variant the moment a collector first owns it (the collection log, OP-107). */
+export type OnOwned = (cid: string, variant: string, source: Source, at: number) => void;
+
 export class SqlCollectionStore implements CollectionStore {
-  constructor(private readonly sql: SqlStorage) {
+  constructor(
+    private readonly sql: SqlStorage,
+    private readonly onOwned?: OnOwned,
+  ) {
     sql.exec(`CREATE TABLE IF NOT EXISTS collectors (cid TEXT PRIMARY KEY, tz TEXT NOT NULL, tz_set_at INTEGER NOT NULL, feathers INTEGER NOT NULL DEFAULT 0, equipped TEXT, created_at INTEGER NOT NULL)`);
     sql.exec(`CREATE TABLE IF NOT EXISTS owned (cid TEXT NOT NULL, variant TEXT NOT NULL, source TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (cid, variant))`);
     // Feathers from capped sources (leaf piles), per collector and park day.
@@ -79,7 +85,9 @@ export class SqlCollectionStore implements CollectionStore {
     return this.sql.exec(`SELECT 1 FROM owned WHERE cid = ? AND variant = ?`, cid, variant).toArray().length > 0;
   }
   addOwned(cid: string, variant: string, source: Source, at: number): boolean {
-    return this.sql.exec(`INSERT OR IGNORE INTO owned (cid, variant, source, at) VALUES (?, ?, ?, ?)`, cid, variant, source, at).rowsWritten > 0;
+    const added = this.sql.exec(`INSERT OR IGNORE INTO owned (cid, variant, source, at) VALUES (?, ?, ?, ?)`, cid, variant, source, at).rowsWritten > 0;
+    if (added) this.onOwned?.(cid, variant, source, at);
+    return added;
   }
   earned(cid: string, day: string, source: EarnSource): number {
     return this.sql.exec<{ n: number }>(`SELECT n FROM earned WHERE cid = ? AND day = ? AND source = ?`, cid, day, source).toArray()[0]?.n ?? 0;

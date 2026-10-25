@@ -92,6 +92,9 @@ class FakeState {
   blockConcurrencyWhile<T>(fn: () => Promise<T>) {
     return fn();
   }
+  getWebSocketAutoResponseTimestamp() {
+    return null;
+  }
   waitUntil(p: Promise<unknown>) {
     void p.catch(() => undefined);
   }
@@ -142,6 +145,17 @@ class FakeCollections {
   }
   arcadeWalls(cid: string | null) {
     return this.answer({ walls: this.arcade.walls(Date.now()), mine: cid ? this.arcade.mine(cid, Date.now()) : {} });
+  }
+  /** The player stats' calls (OP-111), as they came. */
+  readonly seenCalls: unknown[][] = [];
+  readonly aliveCalls: unknown[] = [];
+  seen(sighting: unknown, look: unknown) {
+    this.seenCalls.push([sighting, look]);
+    return this.answer(undefined);
+  }
+  alive(sightings: unknown) {
+    this.aliveCalls.push(sightings);
+    return this.answer(undefined);
   }
 }
 
@@ -602,5 +616,39 @@ describe('the hop in the room object', () => {
     // A page without a collection hops too: every owl has it.
     await send(obj, b, { t: 'emote', e: JUMP_EMOTE });
     expect(a.last('emote')).toEqual({ t: 'emote', id: 'v_b', e: JUMP_EMOTE });
+  });
+});
+
+describe('the player stats from the room object (OP-111)', () => {
+  const LOGGED = { PARK_LOG_URL: 'https://log.example/functions/v1/owl-park-log', FRAUD_SCORE_KEY: 'k'.repeat(32), FRAUD_HASH_SALT: 's'.repeat(24) };
+  const PASS = 'v_visitAAAA1';
+
+  it('tells the collections object of each owl that comes in, changes its look, is still here, and leaves', async () => {
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    const ws = await join(obj, 'hub', PASS, OWNER);
+    await settle();
+    const me = { cid: OWNER, pass: PASS, device: null, room: 'hub' };
+    expect(collections.seenCalls).toEqual([[me, { body: LOOK.body, species: 'barn' }]]);
+    await send(obj, ws, { t: 'look', look: { ...LOOK, species: 'snowy' } });
+    await settle();
+    expect(collections.seenCalls.at(-1)).toEqual([me, { body: LOOK.body, species: 'snowy' }]);
+    // The minute heartbeat: every owl still here, at once.
+    await obj.alarm();
+    expect(collections.aliveCalls).toEqual([[me]]);
+    // Its socket closes: the visit was here until now.
+    await obj.webSocketClose(ws as unknown as WebSocket);
+    await settle();
+    expect(collections.aliveCalls).toEqual([[me], [me]]);
+  });
+
+  it('asks nothing of the collections object for them while the log is off', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', PASS, OWNER);
+    await obj.alarm();
+    await obj.webSocketClose(ws as unknown as WebSocket);
+    await settle();
+    expect(collections.seenCalls).toEqual([]);
+    expect(collections.aliveCalls).toEqual([]);
   });
 });

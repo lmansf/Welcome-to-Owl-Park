@@ -62,6 +62,8 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import type { Collections } from './Collections';
+import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectLog';
+import type { Sighting } from './parkStats';
 import { Room, type Peer, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
 import { isCollectorId } from './pass';
@@ -86,6 +88,18 @@ interface Attachment {
   copy?: number;
   /** The entry the Worker gave this socket, handed over in the welcome and then let go (OP-075). */
   entry?: string;
+  /** Phone or desktop, from the browser's own words at the upgrade: for the collection log (OP-107), nothing else. */
+  device?: DeviceClass;
+}
+
+/** The visit a socket's owl is on, as the collection log takes it: its pass's id, its device and its room. */
+function visitOf(att: Attachment): Visit {
+  return { pass: att.id, device: att.device ?? null, room: att.room };
+}
+
+/** A socket's owl as the player stats see it (OP-111): its collector and its visit. Null without a collector. */
+function sightingOf(att: Attachment | null): Sighting | null {
+  return att?.cid ? { cid: att.cid, ...visitOf(att) } : null;
 }
 
 /** What a collector owns, as last read from the collections object. */
@@ -174,10 +188,13 @@ export class RoomObject extends DurableObject<Env> {
   private readonly nestViews = new Map<string, NestView>();
   /** The busy ribbon's words (OP-075), null while it is off, and when they were last asked for. */
   private notice: string | null = null;
+  /** The player stats are kept only while the analytics log is set up (OP-111): without it, no calls for them. */
+  private readonly statsOn: boolean;
   private noticeAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.statsOn = logConfig(env) !== null;
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_FRAME, HEARTBEAT_FRAME));
     // Wake-up: rebuild rooms from the hibernated sockets' attachments. A socket whose
     // attachment no longer makes sense (room removed, corrupt data) is closed, not fatal.
@@ -295,6 +312,8 @@ export class RoomObject extends DurableObject<Env> {
     if (Number.isInteger(copy) && copy > 1) att.copy = copy;
     const entry = request.headers.get('X-Entry');
     if (entry && entry.length <= 512) att.entry = entry;
+    const device = deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile'));
+    if (device) att.device = device;
     server.serializeAttachment(att);
     await this.freshNotice();
     await this.ensureAlarm();
@@ -350,6 +369,7 @@ export class RoomObject extends DurableObject<Env> {
       case 'look': {
         const { look, recheck } = this.vetLook(att, frame.look);
         room.look(att.id, look);
+        this.statsSeen(att, look);
         if (recheck) void this.recheckLook(att, frame.look);
         else this.rememberEquipped(att, look.wear);
         return;
@@ -412,6 +432,7 @@ export class RoomObject extends DurableObject<Env> {
       ws.serializeAttachment(kept);
     }
     this.emitCounts();
+    this.statsSeen(att, look);
     if (recheck) void this.recheckLook(att, hello.look);
     // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
     if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
@@ -510,7 +531,7 @@ export class RoomObject extends DurableObject<Env> {
     const stub = this.collections();
     try {
       // The owner's colours go on its own door's flag, as it comes by.
-      const [own, others] = await Promise.all([stub.myNest(att.cid, look ? nestLook(look) : null), stub.streetNests(att.cid, STREET_DOORS - 1)]);
+      const [own, others] = await Promise.all([stub.myNest(att.cid, look ? nestLook(look) : null, visitOf(att)), stub.streetNests(att.cid, STREET_DOORS - 1)]);
       const doors = Array.from({ length: STREET_DOORS - 1 }, (_, i) => others[i] ?? null);
       this.send(ws, { t: 'street', r, own: { nestId: own.nest.nestId, open: own.nest.open }, doors });
     } catch {
@@ -583,7 +604,7 @@ export class RoomObject extends DurableObject<Env> {
             const res = await stub.accept(cid, q.id, att.room);
             return this.sendBoard(ws, res.board, [], { r, ok: res.ok, ...(res.ok ? {} : { reason: res.reason }) });
           }
-          const res = await stub.handIn(cid, q.id, giver.id);
+          const res = await stub.handIn(cid, q.id, giver.id, visitOf(att));
           if (res.ok && res.award && !res.award.dup) this.owned.get(cid)?.set.add(res.award.variant);
           return this.send(ws, { t: 'handin', r, ...res });
         }
@@ -666,7 +687,7 @@ export class RoomObject extends DurableObject<Env> {
         }
         case 'copy': {
           // The robot plays tunes of the emotes this owl owns (the starter pair at least).
-          const owned = await this.loadOwned(cid, att.tz);
+          const owned = await this.loadOwned(cid, att.tz, false, visitOf(att));
           const emotes = owned ? [...owned.set].filter((v) => isEmoteId(v)) : [...COPY_BASE_EMOTES];
           const res = acts.startCopy(att.id, emotes);
           if (!res.ok) return no(res.reason);
@@ -832,6 +853,21 @@ export class RoomObject extends DurableObject<Env> {
     return this.env.COLLECTIONS.getByName('park');
   }
 
+  /** An owl in a room, for the player stats (OP-111): its visit goes on, and its kind and colour as it shows them. */
+  private statsSeen(att: Attachment, look: OwlLook): void {
+    const s = sightingOf(att);
+    if (!this.statsOn || !s) return;
+    this.ctx.waitUntil(this.collections().seen(s, { body: look.body, ...(look.species ? { species: look.species } : {}) }).catch(() => undefined));
+  }
+
+  /** These owls' visits are still going (the minute heartbeat, a socket's close), for the player stats. */
+  private statsAlive(sightings: Sighting[]): Promise<void> {
+    if (!this.statsOn || !sightings.length) return Promise.resolve();
+    return this.collections()
+      .alive(sightings)
+      .catch(() => undefined);
+  }
+
   private send(ws: WebSocket, frame: ServerFrame): void {
     try {
       ws.send(JSON.stringify(frame));
@@ -840,14 +876,14 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  /** What a collector owns, read through a small cache (one read in flight per collector). */
-  private async loadOwned(cid: string, tz: string | undefined, fresh = false): Promise<OwnedEntry | null> {
+  /** What a collector owns, read through a small cache (one read in flight per collector). `visit`: for anything the read grants (a present). */
+  private async loadOwned(cid: string, tz: string | undefined, fresh = false, visit?: Visit): Promise<OwnedEntry | null> {
     const cached = this.owned.get(cid);
     if (cached && (!fresh || Date.now() - cached.at < OWNED_REFRESH_MS)) return cached;
     let load = this.ownedLoads.get(cid);
     if (!load) {
       load = this.collections()
-        .owned(cid, tz)
+        .owned(cid, tz, visit)
         .then((list) => {
           const entry: OwnedEntry = { set: new Set(list), at: Date.now() };
           this.owned.delete(cid);
@@ -881,7 +917,7 @@ export class RoomObject extends DurableObject<Env> {
   /** Re-read the collection, then apply the requested look (owned wear only) if the visitor is still here. */
   private async recheckLook(att: Attachment, requested: OwlLook): Promise<void> {
     if (!att.cid) return;
-    const entry = await this.loadOwned(att.cid, att.tz, true);
+    const entry = await this.loadOwned(att.cid, att.tz, true, visitOf(att));
     if (!entry) return;
     const room = this.rooms.get(att.room);
     if (!room || room.sessionOf(att.id) !== att.sid) return;
@@ -913,7 +949,7 @@ export class RoomObject extends DurableObject<Env> {
   private async emote(ws: WebSocket, att: Attachment, room: Room, e: string): Promise<void> {
     if (!att.cid) return;
     let entry: OwnedEntry | null | undefined = this.owned.get(att.cid);
-    if (!entry?.set.has(e)) entry = await this.loadOwned(att.cid, att.tz, true);
+    if (!entry?.set.has(e)) entry = await this.loadOwned(att.cid, att.tz, true, visitOf(att));
     if (!entry?.set.has(e) || room.sessionOf(att.id) !== att.sid) return;
     if (!room.emote(att.id, e)) return;
     // An emote counts for quests in this room, and "for" any NPC owl standing close enough.
@@ -923,7 +959,11 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   override async webSocketClose(ws: WebSocket): Promise<void> {
+    // The visit was here until now: it ends here unless the owl comes back in (another room, a dropped line).
+    const att = ws.deserializeAttachment() as Attachment | null;
+    const s = att?.state ? sightingOf(att) : null;
     this.drop(ws);
+    if (s) this.ctx.waitUntil(this.statsAlive([s]));
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
@@ -988,6 +1028,14 @@ export class RoomObject extends DurableObject<Env> {
       }
     }
     this.emitCounts(true);
+    // The player stats' heartbeat: every owl still here, at once (OP-111).
+    const here = this.ctx
+      .getWebSockets()
+      .map((ws) => ws.deserializeAttachment() as Attachment | null)
+      .filter((att) => !!att?.state)
+      .map(sightingOf)
+      .filter((s): s is Sighting => s !== null);
+    await this.statsAlive(here);
     if (this.ctx.getWebSockets().length > 0) await this.ctx.storage.setAlarm(this.nextWake(Date.now()));
   }
 }
