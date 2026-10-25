@@ -102,6 +102,8 @@ export class ArcadeScene extends Phaser.Scene {
   private standsShown: Stand[] | null = null;
   /** Called every frame after the game stepped. */
   private onStep: ((sim: ArcadeSim) => void) | null = null;
+  /** When the game last stepped (the page's clock), null before a run's first frame. */
+  private lastStep: number | null = null;
   /** A run asked for before the scene had started: it begins once the scene is up. */
   private pending: { sim: ArcadeSim; look: OwlLook; onStep: (sim: ArcadeSim) => void } | null = null;
 
@@ -150,6 +152,7 @@ export class ArcadeScene extends Phaser.Scene {
     }
     this.sim = sim;
     this.onStep = onStep;
+    this.lastStep = null;
     const rnd = runRandom(7);
     this.stars = Array.from({ length: 40 }, () => ({ x: rnd() * FIELD_W, y: rnd() * (FIELD_H - 120), r: 0.6 + rnd() * 1.4 }));
     this.owl?.destroy();
@@ -240,7 +243,12 @@ export class ArcadeScene extends Phaser.Scene {
     const sim = this.sim;
     const g = this.g;
     if (!sim || !g || !this.frameG) return;
-    sim.advance(delta);
+    // The game runs on the page's own clock, not Phaser's smoothed delta: when frames stay slower than
+    // Phaser's floor (200 ms, a slow device under load) it steps by an old, short delta and the game
+    // would crawl at a few percent of its speed. The game's clock lets a stall go (MAX_CATCH_UP_MS).
+    const now = performance.now();
+    sim.advance(this.lastStep === null ? delta : now - this.lastStep);
+    this.lastStep = now;
     g.clear();
     this.frameG.clear();
     this.frameLines(this.frameG, sim.game);
