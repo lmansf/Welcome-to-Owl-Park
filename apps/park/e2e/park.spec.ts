@@ -290,6 +290,7 @@ test.describe('single visitor', () => {
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
+    test.slow(); // a dozen taps and 36 keystrokes, each answered by a park drawn with software WebGL on CI runners
     await openPark(page);
     const before = (await state(page)).pos;
     const sheet = page.getByRole('dialog', { name: 'Feedback' });
