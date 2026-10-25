@@ -59,15 +59,24 @@ export async function run(page: Page): Promise<{ score: number; over: boolean; l
 }
 
 /**
- * Hoot & Hop: one crossing. At every chance to hop, look ahead on a copy of the game: hop when a dash
- * from here gets all the way across, even with the page several frames slow at each landing;
- * otherwise stay put while staying is safe. Says how it went: 'across', or how it ended.
+ * How late a test's tap can come, in frames: the page acts only between frames, and the game steps at
+ * most 100 ms at once however slow a frame is (MAX_CATCH_UP_MS in arcade/field.ts).
+ */
+const LATE_FRAMES = [0, 3, 6];
+
+/**
+ * Hoot & Hop: one crossing. Looks ahead on a copy of the game for the first moment a dash all the way
+ * across is sure: begun then or up to 100 ms after, with each hop after a landing coming up to 100 ms
+ * late, it gets across. Waits at the kerb for that moment and dashes. Looks up to 20 s of play ahead;
+ * a course with no such moment by then is 'no chance to cross'. Says how it went: 'across', or how it
+ * ended.
  */
 export async function crossOnce(page: Page): Promise<string> {
-  const outcome = await page.evaluate(async () => {
+  const outcome = await page.evaluate(async (late) => {
     interface Hop {
       score: number;
       over: boolean;
+      time: number;
       hop: unknown;
       tap(): void;
       advance(ms: number): void;
@@ -79,9 +88,9 @@ export async function crossOnce(page: Page): Promise<string> {
     const tap = () => stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
     const FRAME = 1000 / 60;
     const banked = g.score + 1;
-    /** A dash from now: a hop at once, then another `lag` frames after each landing. */
-    const dashes = (lag: number) => {
-      const c = g.clone();
+    /** A dash from `from`: a hop at once, then another `lag` frames after each landing. */
+    const dash = (from: Hop, lag: number) => {
+      const c = from.clone();
       c.tap();
       for (let i = 0; i < 3000 && !c.over && c.score < banked; i++) {
         c.advance(FRAME);
@@ -91,22 +100,46 @@ export async function crossOnce(page: Page): Promise<string> {
       }
       return !c.over;
     };
-    const stays = (ms: number) => {
-      const c = g.clone();
-      for (let t = 0; t < ms; t += FRAME) c.advance(FRAME);
-      return !c.over;
+    const later = (from: Hop, frames: number) => {
+      const c = from.clone();
+      for (let i = 0; i < frames; i++) c.advance(FRAME);
+      return c;
     };
+    const sure = (from: Hop) => late.every((s) => late.every((lag) => dash(later(from, s), lag)));
+    /** The game time of the first sure moment from here, within 20 s of play, or null. */
+    const find = (): number | null => {
+      const probe = g.clone();
+      for (let f = 0; f < 1200 && !probe.over; f++) {
+        if (dash(probe, 0) && sure(probe)) return probe.time;
+        probe.advance(FRAME);
+      }
+      return null;
+    };
+    let at = find();
+    if (at === null) return 'no chance to cross';
+    const latest = Math.max(...late) * FRAME;
+    let started = false;
     const t0 = performance.now();
     await new Promise<void>((done) => {
       const tick = () => {
-        if (g.over || g.score >= banked || performance.now() - t0 > 60_000) return done();
-        if (!g.hop && ((dashes(0) && dashes(3) && dashes(6) && dashes(9)) || (!stays(200) && dashes(0)))) tap();
+        if (g.over || g.score >= banked || at === null || performance.now() - t0 > 75_000) return done();
+        if (!g.hop) {
+          if (started) tap();
+          else if (g.time >= at) {
+            // Too late for that moment (the page stalled before it): look again from here.
+            if (g.time > at + latest) at = find();
+            else {
+              started = true;
+              tap();
+            }
+          }
+        }
         requestAnimationFrame(tick);
       };
       tick();
     });
     return g.over ? `bumped at ${g.score}` : g.score >= banked ? 'across' : 'no chance to cross';
-  });
+  }, LATE_FRAMES);
   return outcome;
 }
 
@@ -141,8 +174,9 @@ export async function getBumped(page: Page): Promise<void> {
 /**
  * Moon Flap: through `gaps` gaps, then let the owl fall. Each frame looks ahead on a copy of the
  * flight: flap when the owl has sunk below the next gap's middle and a flap is safe, or when not
- * flapping would end the run. A slow page cannot act between its frames, so a choice must hold
- * through a frame as slow as the slowest of late (a phone in a busy test run drops frames).
+ * flapping would end the run. A page cannot act between its frames, and the game steps up to 100 ms
+ * at once (MAX_CATCH_UP_MS in arcade/field.ts), so a choice must hold through 100 ms with no say;
+ * when none does, the one that holds frame by frame.
  */
 export async function flyThrough(page: Page, gaps: number): Promise<void> {
   const { score, slowest } = await page.evaluate(async (gaps) => {
@@ -161,6 +195,8 @@ export async function flyThrough(page: Page, gaps: number): Promise<void> {
     const stage = document.querySelector('.arcade [data-stage]') as HTMLElement;
     const tap = () => stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
     const FRAME = 1000 / 60;
+    /** The most the game steps at once, and a step more. */
+    const BLIND = 100 + 1000 / 120;
     const steady = (f: Flap) => f.y > (f.ahead()?.gapY ?? 320) + 18 && f.vy > 0;
     /** Whether the flight lasts the next second, flapping now or not, with no say for `blind` ms and steady flaps after. */
     const lasts = (flapNow: boolean, blind: number) => {
@@ -175,18 +211,14 @@ export async function flyThrough(page: Page, gaps: number): Promise<void> {
     tap();
     const t0 = performance.now();
     let last = t0;
-    let slow = 50;
     let slowest = 0;
     await new Promise<void>((done) => {
       const tick = () => {
         const now = performance.now();
         slowest = Math.max(slowest, now - last);
-        // The next frame may be as slow as the slowest of late (forgotten bit by bit).
-        slow = Math.min(150, Math.max(34, slow * 0.98, (now - last) * 1.5));
         last = now;
         if (g.over || g.score >= gaps || now - t0 > 60_000) return done();
-        // A choice that holds through a slow frame, or one that holds frame by frame when none does.
-        for (const blind of [slow, 0]) {
+        for (const blind of [BLIND, 0]) {
           const flap = lasts(true, blind);
           const wait = lasts(false, blind);
           if (!flap && !wait) continue;
