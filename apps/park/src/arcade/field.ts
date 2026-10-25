@@ -11,8 +11,12 @@ export const FIELD_H = 640;
 
 /** The games step in fixed slices of time, so a run plays the same on a slow phone and a fast computer. */
 export const STEP_MS = 1000 / 120;
-/** At most this much time is caught up at once (a tab that slept does not fast-forward the game). */
-const MAX_CATCH_UP_MS = 250;
+/**
+ * At most this much play is caught up at once. After a stall (a frame the page was slow to draw, a tab
+ * that slept) the game pauses rather than jumping ahead, so no one loses a run to time they could not
+ * see or answer: a slow phone plays a little slower, never blind.
+ */
+export const MAX_CATCH_UP_MS = 100;
 
 /** A run's own random numbers, from its seed. */
 export function runRandom(seed: number): () => number {

@@ -47,10 +47,11 @@ test.describe('the arcade (this device)', () => {
     await playAt(page, 'crossing');
     await paintedAsShipped(page, 'crossing');
     await expect(page.locator('.arcade [data-hint]')).toHaveText('Tap to hop');
-    // A page can stall for a moment mid-dash (a slow frame) and the owl is bumped before it gets
-    // across: then Play again, as a visitor would, up to three runs.
-    for (let attempt = 1; (await crossOnce(page)) !== 'across'; attempt++) {
-      expect(attempt, 'runs bumped before a crossing').toBeLessThan(3);
+    // A course can offer no sure dash for a long while, or the owl can be bumped before it gets
+    // across: then end that run and Play again, as a visitor would, up to three runs.
+    for (let attempt = 1, outcome = await crossOnce(page); outcome !== 'across'; attempt++, outcome = await crossOnce(page)) {
+      expect(attempt, `runs without a crossing (the last: ${outcome})`).toBeLessThan(3);
+      if (outcome === 'no chance to cross') await getBumped(page);
       await untilOver(page);
       const seed = await page.evaluate(() => window.owlPark.arcade()?.seed);
       await page.locator('.arcade [data-result] [data-again]').click();

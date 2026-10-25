@@ -4,6 +4,11 @@ import { HOP_ROWS, HopGame } from './hop';
 
 const FRAME = 1000 / 60;
 
+/** Plays on for `ms`, a frame at a time, as a page does. */
+const play = (g: HopGame, ms: number) => {
+  for (let t = 0; t < ms; t += FRAME) g.advance(FRAME);
+};
+
 /** Hops on at every chance, as fast as the hops allow, until the crossing is banked or the owl is bumped. */
 function dash(g: HopGame): void {
   const banked = g.score + 1;
@@ -57,11 +62,11 @@ describe('Hoot & Hop', () => {
     for (const l of g.lanes) l.vehicles = [];
     g.tap();
     g.tap();
-    g.advance(HOP_MS + 20);
+    play(g, HOP_MS + 20);
     expect(g.row).toBe(1);
     for (let i = 0; i < HOP_ROWS - 2; i++) {
       g.tap();
-      g.advance(HOP_MS + 20);
+      play(g, HOP_MS + 20);
     }
     expect(g.row).toBe(HOP_ROWS - 1);
     expect(g.score).toBe(1);
