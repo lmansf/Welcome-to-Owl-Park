@@ -38,8 +38,9 @@ async function paidAndOnTheWall(page: Page, game: Game, line: RegExp, before: nu
   expect(wall.walls.find((w) => w.game === game)!.top[0]!.score).toBe(score);
 }
 
-// Each test walks in and plays a whole run.
-test.describe.configure({ timeout: 150_000 });
+// Each test walks in and plays a whole run; on a slow runner a run plays at a third of its speed or
+// less (the games step at most 100 ms a frame), so a run can take a few minutes.
+test.describe.configure({ timeout: 240_000 });
 
 test.describe('the arcade (this device)', () => {
   test('Hoot & Hop: hop across the lanes and back, bumped at last, paid and on the score wall', async ({ page }) => {

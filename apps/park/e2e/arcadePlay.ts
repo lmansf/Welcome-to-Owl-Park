@@ -66,10 +66,10 @@ const LATE_FRAMES = [0, 3, 6];
 
 /**
  * Hoot & Hop: one crossing. Looks ahead on a copy of the game for the first moment a dash all the way
- * across is sure: begun then or up to 100 ms after, with each hop after a landing coming up to 100 ms
- * late, it gets across. Waits at the kerb for that moment and dashes. Looks up to 20 s of play ahead;
- * a course with no such moment by then is 'no chance to cross'. Says how it went: 'across', or how it
- * ended.
+ * across is sure, with each hop after a landing coming up to 100 ms late; waits at the kerb for that
+ * moment, checks the dash again on the spot (the tap itself can come a frame or two after it), and
+ * dashes, or looks again. Looks up to 20 s of play ahead; a course with no such moment by then is
+ * 'no chance to cross'. Says how it went: 'across', or how it ended.
  */
 export async function crossOnce(page: Page): Promise<string> {
   const outcome = await page.evaluate(async (late) => {
@@ -100,24 +100,19 @@ export async function crossOnce(page: Page): Promise<string> {
       }
       return !c.over;
     };
-    const later = (from: Hop, frames: number) => {
-      const c = from.clone();
-      for (let i = 0; i < frames; i++) c.advance(FRAME);
-      return c;
-    };
-    const sure = (from: Hop) => late.every((s) => late.every((lag) => dash(later(from, s), lag)));
+    /** A dash from `from` gets across however late each hop after a landing comes. */
+    const sure = (from: Hop) => late.every((lag) => dash(from, lag));
     /** The game time of the first sure moment from here, within 20 s of play, or null. */
     const find = (): number | null => {
       const probe = g.clone();
       for (let f = 0; f < 1200 && !probe.over; f++) {
-        if (dash(probe, 0) && sure(probe)) return probe.time;
+        if (sure(probe)) return probe.time;
         probe.advance(FRAME);
       }
       return null;
     };
     let at = find();
     if (at === null) return 'no chance to cross';
-    const latest = Math.max(...late) * FRAME;
     let started = false;
     const t0 = performance.now();
     await new Promise<void>((done) => {
@@ -126,12 +121,11 @@ export async function crossOnce(page: Page): Promise<string> {
         if (!g.hop) {
           if (started) tap();
           else if (g.time >= at) {
-            // Too late for that moment (the page stalled before it): look again from here.
-            if (g.time > at + latest) at = find();
-            else {
+            // The moment has come, or a frame or two ago: dash if it is still sure from here, else look again.
+            if (sure(g)) {
               started = true;
               tap();
-            }
+            } else at = find();
           }
         }
         requestAnimationFrame(tick);
