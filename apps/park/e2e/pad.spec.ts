@@ -5,7 +5,7 @@ type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 test.describe('the pad and the hop (OP-082)', () => {
-  test('a phone has a pad: the stick on the right; Interact and Jump on a diagonal on the left; the Menu small in the corner', async ({ page, isMobile }) => {
+  test('a phone has a pad: the stick on the right; Interact and Jump on a diagonal on the left; the Menu and Say small in the corner', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page);
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
@@ -14,10 +14,11 @@ test.describe('the pad and the hop (OP-082)', () => {
     const jump = await box('[data-pad-jump]');
     const menu = await box('[data-menu-btn]');
     const emotes = await box('[data-emotes-btn]');
+    const say = await box('[data-say-btn]');
     const width = page.viewportSize()!.width;
     // The stick keeps the bottom-right corner; the pad keeps to the left.
     expect(stick.x + stick.width).toBeGreaterThan(width - 40);
-    for (const b of [interact, jump, menu, emotes]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
+    for (const b of [interact, jump, menu, emotes, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
     // A diagonal like a handheld's: Interact nearer the middle and higher, Jump nearer the corner and
     // lower, and the Menu button, smaller, below and left of them in the corner.
     expect(interact.x).toBeGreaterThan(jump.x);
@@ -25,8 +26,12 @@ test.describe('the pad and the hop (OP-082)', () => {
     expect(menu.x).toBeLessThanOrEqual(jump.x);
     expect(menu.y).toBeGreaterThan(jump.y);
     expect(menu.width).toBeLessThan(jump.width);
+    // Say sits beside the Menu button in the corner, as small.
+    expect(say.x).toBeGreaterThan(menu.x);
+    expect(say.y).toBeGreaterThan(jump.y);
+    expect(say.width).toBeLessThan(jump.width);
     // Thumb-sized and apart: each at least 44 px, none over another.
-    const all = [interact, jump, menu, emotes, stick];
+    const all = [interact, jump, menu, emotes, say, stick];
     for (const b of all) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
     for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) expect(overlaps(all[i]!, all[j]!), `${i} and ${j}`).toBe(false);
     // The pad's Menu button is the only one, and it still opens the Menu.

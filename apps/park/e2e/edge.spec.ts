@@ -202,8 +202,9 @@ test.describe('room server', () => {
     const started = (await a.evaluate(() => window.owlPark.wallet()))[0]!;
     expect(started.status).toBe('active');
 
-    // Out of the park from the Menu: the card asks, and the owl stands outside the gate.
+    // Out of the park from the Menu's Settings: the card asks, and the owl stands outside the gate.
     await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="leave"]').click();
     await a.getByRole('dialog', { name: 'Leave the park' }).locator('[data-leave="leave"]').click();
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
@@ -216,8 +217,9 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
     expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ status: 'active', firstScan: started.firstScan });
 
-    // Go home: straight to the owl's own nest, which the room server makes on first sight.
+    // Go home (the Menu's Nest): straight to the owl's own nest, which the room server makes on first sight.
     await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="nest"]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').click();
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
     await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
@@ -250,8 +252,9 @@ test.describe('room server', () => {
       await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
       await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
       await expect.poll(inNests, { timeout: 15_000 }).toBe(before + 1);
-      // The Menu's Home screen frees the owl's place in the room at once.
+      // The Menu's Home screen (in its Settings) frees the owl's place in the room at once.
       await a.locator('[data-menu-btn]').click();
+      await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
       await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="title"]').click();
       await expect(a.locator('[data-home-btn="play"]')).toBeVisible({ timeout: 20_000 });
       await expect.poll(inNests, { timeout: 15_000 }).toBe(before);
@@ -523,6 +526,7 @@ test.describe('room server', () => {
     const sheet = a.getByRole('dialog', { name: 'Feedback' });
     const openFeedback = async () => {
       await a.locator('[data-menu-btn]').click();
+      await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
       await a.locator('[data-screen="feedback"]').click();
     };
     await openFeedback();

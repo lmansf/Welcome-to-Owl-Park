@@ -444,6 +444,8 @@ hud.attachQuests(quests, {
 }, tasks);
 // Feedback goes to the park's keepers through the room server (kept in this browser without one).
 hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
+// The Menu's Settings tab says which tickets this device holds (OP-108), where the park's server keeps them.
+hud.attachTickets(() => (transport.tickets ? transport.tickets.wallet() : Promise.resolve(null)));
 // The collection loads in the background, once there is an owl to collect for.
 if (!cfg.home || loggedIn) startCollection();
 collection.onChange(() => roomScene()?.pruneWear());

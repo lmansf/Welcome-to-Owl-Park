@@ -21,7 +21,14 @@ export interface ItemDef {
   rarity: Rarity;
   /** Art key for wearables and pets: `item-<id>` (see apps/park/src/game/items.ts). */
   art?: string;
+  /** The style of the place it comes from (styles.ts, OP-110); the park's own (`hub`) when absent. */
+  style?: string;
 }
+
+/** The park's own style: everything that names no other (styles.ts, OP-110). */
+export const HUB_STYLE = 'hub';
+/** A season's drop: Owlloween and the first frost. */
+export const SEASONAL_STYLE = 'seasonal';
 
 export interface Colourway {
   n: number;
@@ -125,6 +132,22 @@ const R: Rarity = 'rare';
 const E: Rarity = 'epic';
 
 const wear = (slot: WearSlot, list: Array<[string, string, Rarity]>): ItemDef[] => list.map(([id, name, rarity]) => ({ id, kind: 'wear', slot, name, rarity, art: `item-${id}` }));
+
+/** Drop 1 (Owlloween and the first frost): its eight wearables and four pets are the seasonal style. */
+const DROP_1: ReadonlySet<string> = new Set([
+  'bat-headband',
+  'candy-corn-cap',
+  'earmuffs',
+  'holly-crown',
+  'mummy-wrap',
+  'jack-o-lantern-shades',
+  'candy-necklace',
+  'vampire-collar',
+  'ghost',
+  'pumpkin-sprite',
+  'snow-bunny',
+  'black-kitten',
+]);
 
 export const CATALOGUE: readonly ItemDef[] = [
   ...wear('head', [
@@ -276,7 +299,7 @@ export const CATALOGUE: readonly ItemDef[] = [
       ['peek', 'Peek-a-boo', R],
     ] as Array<[string, string, Rarity]>
   ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'emote', name, rarity })),
-];
+].map((i) => (DROP_1.has(i.id) ? { ...i, style: SEASONAL_STYLE } : i));
 
 export const ITEMS: Readonly<Record<string, ItemDef>> = Object.freeze(Object.fromEntries(CATALOGUE.map((i) => [i.id, i])));
 

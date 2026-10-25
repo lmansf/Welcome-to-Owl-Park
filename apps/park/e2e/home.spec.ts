@@ -161,6 +161,7 @@ test.describe('the home screen (OP-065)', () => {
     }
     // Home again, the welcome does not come back: it was this device's first time.
     await page.locator('[data-menu-btn]').click();
+    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="nest"]').click();
     await page.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').click();
     await inOwnNest(page);
     await expect.poll(async () => (await state(page)).walking).toBe(false);
@@ -182,8 +183,9 @@ test.describe('the home screen (OP-065)', () => {
     await play(page);
     // Inside, the Menu's Settings show the same choice.
     await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="settings"]').click();
-    await expect(page.getByRole('dialog', { name: 'Settings' }).locator('[data-setting="bubbles"]')).toHaveAttribute('aria-checked', 'false');
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="settings"]').click();
+    await expect(menu.locator('[data-setting="bubbles"]')).toHaveAttribute('aria-checked', 'false');
   });
 
   test("the Menu's Home screen comes back here, and Play goes back in", async ({ page }) => {
@@ -192,6 +194,7 @@ test.describe('the home screen (OP-065)', () => {
     await play(page);
     await page.locator('[data-menu-btn]').click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="settings"]').click();
     await menu.locator('[data-screen="title"]').click();
     await page.waitForFunction(() => window.owlPark.home().shown, null, { timeout: 20_000 });
     await expect(button(page, 'play')).toBeVisible();

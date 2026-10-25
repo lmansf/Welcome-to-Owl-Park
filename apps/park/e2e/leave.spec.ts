@@ -5,10 +5,13 @@ async function inRoom(page: Page, room: string | RegExp): Promise<void> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(room);
 }
 
-async function openMenu(page: Page): Promise<Locator> {
+/** Opens the Menu on one of its tabs. */
+async function openMenu(page: Page, tab: 'quests' | 'nest' | 'settings' = 'quests'): Promise<Locator> {
   await page.locator('[data-menu-btn]').click();
   const menu = page.getByRole('dialog', { name: 'Menu' });
   await expect(menu).toBeVisible();
+  await menu.locator(`[data-tab="${tab}"]`).click();
+  await expect(menu.locator(`[data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
   return menu;
 }
 
@@ -32,15 +35,18 @@ test.describe('leaving the park (this device)', () => {
     await walkToDoor(page, 'to-lobby');
     await outsideTheGate(page);
     // Outside the park the Menu offers no way out of it; home is still a tap away.
-    const menu = await openMenu(page);
-    await expect(menu.locator('[data-screen="leave"]')).toBeHidden();
+    const menu = await openMenu(page, 'settings');
+    await expect(menu.locator('[data-screen="title"]')).toBeVisible();
+    await expect(menu.locator('[data-screen="leave"]')).toHaveCount(0);
+    await menu.locator('[data-tab="nest"]').click();
     await expect(menu.locator('[data-screen="home"]')).toBeVisible();
   });
 
   test('Leave the park asks first: Stay keeps the owl where it is, Leave takes it to the lobby', async ({ page }) => {
     await openPark(page, { room: 'grove', collector: 'e2e-leave-menu' });
     let menu = await openMenu(page);
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/, /^Home screen/]);
+    await expect(menu.getByRole('tablist', { name: 'Menu' }).getByRole('tab')).toHaveText(['Quests', 'Collection', 'Nest', 'Map', 'Settings']);
+    await menu.locator('[data-tab="settings"]').click();
     await menu.locator('[data-screen="leave"]').click();
     const card = page.getByRole('dialog', { name: 'Leave the park' });
     await expect(card).toContainText('Leave the park? Your ticket keeps running.');
@@ -51,7 +57,7 @@ test.describe('leaving the park (this device)', () => {
     await expect(card).toBeHidden();
     expect((await state(page)).room).toBe('grove');
 
-    menu = await openMenu(page);
+    menu = await openMenu(page, 'settings');
     await menu.locator('[data-screen="leave"]').click();
     await card.locator('[data-leave="leave"]').click();
     await outsideTheGate(page);
@@ -59,16 +65,19 @@ test.describe('leaving the park (this device)', () => {
 
   test('Go home goes straight to the owl’s own nest, from the park and from the lobby', async ({ page }) => {
     await openPark(page, { room: 'hub', collector: 'e2e-go-home' });
-    let menu = await openMenu(page);
+    let menu = await openMenu(page, 'nest');
     await menu.locator('[data-screen="home"]').click();
     await inRoom(page, /^nest-/);
     await expect.poll(async () => (await state(page)).nest?.mine, { timeout: 10_000 }).toBe(true);
     const home = (await state(page)).room;
     // At home neither way out is offered.
-    menu = await openMenu(page);
-    await expect(menu.locator('[data-screen="home"]')).toBeHidden();
-    await expect(menu.locator('[data-screen="leave"]')).toBeHidden();
+    menu = await openMenu(page, 'nest');
+    await expect(menu.locator('[data-screen="home"]')).toHaveCount(0);
+    await menu.locator('[data-tab="settings"]').click();
+    await expect(menu.locator('[data-screen="title"]')).toBeVisible();
+    await expect(menu.locator('[data-screen="leave"]')).toHaveCount(0);
     await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
     // Out of the nest, the owl is on the street in front of its own door.
     await walkToDoor(page, 'to-street');
     await inRoom(page, 'homes');
@@ -77,7 +86,7 @@ test.describe('leaving the park (this device)', () => {
 
     // And from the lobby, the same nest.
     await openPark(page, { room: 'lobby', collector: 'e2e-go-home' });
-    menu = await openMenu(page);
+    menu = await openMenu(page, 'nest');
     await menu.locator('[data-screen="home"]').click();
     await inRoom(page, home);
   });

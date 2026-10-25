@@ -3,6 +3,7 @@ import { CollectionBook, MemoryCollectionStore } from './book';
 import { FURNITURE, FURNITURE_GIFT_FEATHERS, NEST_SPOTS, STARTER_FURNITURE, isNestId, sanitizeLayout, type NestLayout, type NestLook } from './homes';
 import { MemoryNestStore, NestBook, STARTER_LAYOUT, STREET_POOL, sanitizeNestLook, secureNestId, type NestRow } from './nestbook';
 import { nextParkDayAt, parkDay, rotationRandom } from './parktime';
+import type { StyleSet } from './styles';
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
 const MON = Date.UTC(2026, 9, 19, 16, 0, 0);
@@ -18,12 +19,12 @@ const WALL = NEST_SPOTS.filter((s) => s.place === 'wall').map((s) => s.id);
 const cryptoBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 /** A nest book over memory stores; nest ids come from `ids` in turn, then from the cryptographic source. */
-function rig(ids: string[] = [], random: () => number = () => 0) {
+function rig(ids: string[] = [], random: () => number = () => 0, sets?: readonly StyleSet[]) {
   const store = new MemoryNestStore();
   const book = new CollectionBook(new MemoryCollectionStore());
   let n = 0;
   const newId = () => ids[n++] ?? secureNestId(cryptoBytes);
-  return { store, book, nests: new NestBook(store, book, { newId, random }) };
+  return { store, book, nests: new NestBook(store, book, { newId, random, ...(sets ? { sets } : {}) }) };
 }
 
 /** A stored nest, as a store would hold it. */
@@ -248,6 +249,41 @@ describe("the day's furniture gift", () => {
       if (res.ok && res.item) expect(before.has(res.item)).toBe(false);
     }
     expect(store.furniture(A).sort()).toEqual([...ALL].sort());
+  });
+});
+
+describe("a style set's capstone", () => {
+  // A made-up set of the park's own pieces: the real sets come with the realms.
+  const SET: StyleSet = { style: 'hub', name: 'Test set', collectibles: ['acorn-cap'], furniture: ['armchair'], capstone: 'bookshelf' };
+  const sources = (store: MemoryNestStore) => store.snapshot().furniture.filter(([cid]) => cid === A).map(([, item, source]) => `${item}:${source}`);
+
+  it('is given, once, when the park next reads the furniture of an owl that has the whole set', () => {
+    const { store, book, nests } = rig(['k3x9q2ab'], () => 0, [SET]);
+    expect(nests.mine(A, null, MON).owned).toEqual(STARTERS);
+    book.grant(A, 'acorn-cap~4', 'quest', MON);
+    expect(nests.furniture(A, MON)).toEqual(STARTERS); // the armchair is still missing
+    store.addFurniture(A, 'armchair', 'gift', MON);
+    expect(nests.mine(A, null, MON + 1).owned).toEqual(ALL.filter((id) => STARTER_FURNITURE.includes(id) || id === 'armchair' || id === 'bookshelf'));
+    expect(nests.furniture(A, MON + 2)).toContain('bookshelf');
+    expect(sources(store).filter((s) => s.startsWith('bookshelf'))).toEqual(['bookshelf:set']);
+    expect(store.snapshot().furniture.find(([, item]) => item === 'bookshelf')?.[3]).toBe(MON + 1);
+  });
+
+  it("comes with the day's gift that completes the set", () => {
+    const { store, book, nests } = rig([], () => 0, [SET]);
+    book.grant(A, 'acorn-cap~0', 'gift', MON);
+    expect(nests.furniture(A, MON)).toEqual([]); // no nest yet: no furniture, so nothing to give
+    const res = nests.claimGift(A, MON);
+    expect(res).toMatchObject({ ok: true, item: 'armchair' });
+    expect(res.owned).toContain('bookshelf');
+    expect(sources(store)).toContain('bookshelf:set');
+  });
+
+  it('is never given while no set exists', () => {
+    const { store, book, nests } = rig(['k3x9q2ab'], () => 0, []);
+    book.grant(A, 'acorn-cap~0', 'quest', MON);
+    store.addFurniture(A, 'armchair', 'gift', MON);
+    expect(nests.mine(A, null, MON).owned).not.toContain('bookshelf');
   });
 });
 

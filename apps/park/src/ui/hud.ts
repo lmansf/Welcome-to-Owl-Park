@@ -1,19 +1,20 @@
-import { MAX_ACTIVE_QUESTS, NEST_WORDS, WAY_OUT_WORDS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
 import type { ConnectionStatus } from '../net';
 import type { FeedbackOutcome } from '../net/feedback';
+import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
-import { HOME_WORDS } from './home';
 import { createJoystick } from './joystick';
 import { createLeaveCard } from './leaveCard';
-import { createMenu, type MenuScreenId } from './menu';
+import { createMenuShell } from './menuShell';
+import { mapPlaceOf, renderCollection, renderMap, renderNest, renderSettings } from './menuTabs';
 import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuilder';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createSayWheel } from './sayWheel';
@@ -78,6 +79,8 @@ export interface Hud {
   attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
   /** The Menu's ways out: what "Leave the park" and "Go home" do. */
   attachWayOut(actions: WayOutActions): void;
+  /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
+  attachTickets(load: () => Promise<WalletEntry[] | null>): void;
   /** Which ways out the Menu offers where the owl is: leaving inside the park, going home outside its own nest. */
   setWaysOut(ways: { leave: boolean; home: boolean }): void;
   /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests and today's tasks. */
@@ -106,7 +109,7 @@ export interface Hud {
   isOwlOpen(): boolean;
   /** Your owl at a nest's mirror (OP-077): the room shows round the owl, which is the preview. */
   openMirror(opener?: HTMLElement | null): void;
-  /** J: open or close the quests screen. */
+  /** J: open or close the Menu on its Quests tab. */
   toggleJournal(): void;
   /** A screen that takes the keys and the taps is open (the Menu or one of its screens): the owl stays put. */
   isBlocking(): boolean;
@@ -203,6 +206,10 @@ const CSS = `
 #hud .emote-btn svg{width:34px;height:34px}
 #hud .emote-btn[aria-expanded=true]{background:#C9A227}
 #hud .emote-btn kbd{position:absolute;top:-6px;right:-8px;margin:0;color:#F6F1E3;background:rgba(12,30,54,.92)}
+#hud .say-btn{position:relative;display:flex;align-items:center;justify-content:center;width:52px;min-height:52px;height:52px;padding:0;border-radius:50%;background:rgba(12,30,54,.86);border:1px solid rgba(255,211,106,.55);box-shadow:0 4px 14px rgba(0,0,0,.45)}
+#hud .say-btn svg{width:30px;height:30px}
+#hud .say-btn[aria-expanded=true]{background:#C9A227}
+#hud .say-btn kbd{position:absolute;top:-6px;right:-8px;margin:0;color:#F6F1E3;background:rgba(12,30,54,.92)}
 #hud .badge{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#FF6B81;box-shadow:0 0 0 2px #0C1E36,0 0 8px rgba(255,107,129,.8)}
 #hud .badge[hidden]{display:none}
 #hud .pad{display:none}
@@ -226,8 +233,9 @@ const CSS = `
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
  * Touch screens: a pad like a handheld's (OP-082). The thumbstick stays in the bottom-right corner;
- * on the left, Interact (nearer the middle) and Jump (nearer the corner) on a diagonal, the Menu
- * button as a smaller, darker button tucked in the corner, and Emotes above them. All see-through,
+ * on the left, Interact (nearer the middle) and Jump (nearer the corner) on a diagonal, the Menu and
+ * Say buttons as smaller, darker buttons along the corner (a handheld's Start and Select), and Emotes
+ * above them. All see-through,
  * like the stick; each at least 44 px, none overlapping another.
  */
 @media (pointer:coarse){
@@ -243,6 +251,8 @@ const CSS = `
   #hud .menu-btn i{width:18px;height:13px}
   #hud .emote-btn{position:absolute;left:10px;bottom:126px;width:48px;height:48px;min-height:48px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .emote-btn svg{width:30px;height:30px}
+  #hud .say-btn{position:absolute;left:54px;bottom:0;width:46px;height:46px;min-height:46px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .say-btn svg{width:26px;height:26px}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
 }
 #hud .hints{position:absolute;inset:0;pointer-events:none}
@@ -262,6 +272,10 @@ const CSS = `
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
 `;
 
+/** The Say button's face: a speech bubble with two lines of words, like the wheel of phrases it opens. */
+const SAY_ICON =
+  '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 11h30a5 5 0 0 1 5 5v13a5 5 0 0 1-5 5H22l-8 7v-7H9a5 5 0 0 1-5-5V16a5 5 0 0 1 5-5z" fill="#F6F1E3"/><path d="M12 19h22M12 25h15" stroke="#0C1E36" stroke-width="2.6" stroke-linecap="round" opacity=".75"/></svg>';
+
 /** The Emotes button's face: a smile in a dotted ring, like the wheel it opens. */
 const EMOTES_ICON =
   '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="17" fill="none" stroke="#FFD36A" stroke-width="3" stroke-dasharray="8 5.4"/><circle cx="24" cy="24" r="9" fill="#FFD36A"/><path d="M20 25.5q4 3.4 8 0" stroke="#0C1E36" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="21" cy="21.6" r="1.5" fill="#0C1E36"/><circle cx="27" cy="21.6" r="1.5" fill="#0C1E36"/></svg>';
@@ -274,8 +288,8 @@ const INTERACT_ICON =
 const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-/** The Menu, its screens, and the emote wheel (which has a button of its own). */
-type ScreenId = MenuScreenId | 'menu' | 'emotes';
+/** The Menu (on its Quests tab, for `quests`), the screens it leads to, and the wheels with buttons of their own. */
+type ScreenId = 'menu' | 'quests' | 'emotes' | 'say' | 'owl' | 'settings' | 'feedback' | 'home' | 'leave' | 'title';
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: SettingsStore): Hud {
   const style = document.createElement('style');
@@ -302,6 +316,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
         <button class="emote-btn" data-emotes-btn aria-label="Emotes" aria-haspopup="dialog" aria-expanded="false">${EMOTES_ICON}</button>
+        <button class="say-btn" data-say-btn aria-label="Say" aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="T">${SAY_ICON}<kbd aria-hidden="true">T</kbd></button>
       </div>
       <div class="actions" data-actions></div>
     </div>`;
@@ -313,6 +328,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const toasts = $<HTMLElement>('[data-toasts]');
   const menuBtn = $<HTMLButtonElement>('[data-menu-btn]');
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
+  const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
@@ -345,6 +361,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let collectionActions: CollectionActions | null = null;
   let wayOut: WayOutActions | null = null;
   let waysOut = { leave: false, home: false };
+  /** The tickets on this device for the Settings tab, read again at most every half minute. */
+  let ticketsLoad: (() => Promise<WalletEntry[] | null>) | null = null;
+  let tickets: { at: number; list: Promise<WalletEntry[] | null> } | null = null;
+  const ticketsNow = (): Promise<WalletEntry[] | null> => {
+    if (!ticketsLoad) return Promise.resolve(null);
+    if (!tickets || Date.now() - tickets.at > 30_000) tickets = { at: Date.now(), list: ticketsLoad().catch(() => null) };
+    return tickets.list;
+  };
   let previewCb: ((frame: PreviewFrame | null, mirror: boolean) => void) | null = null;
   let decorate: DecorateSheet | null = null;
   /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
@@ -368,7 +392,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let actionCb: ((id: string) => void) | null = null;
   let interactCb: (() => void) | null = null;
   let jumpCb: (() => void) | null = null;
-  /** Quest news not seen yet: the dot on the Menu button and its Quests tile. */
+  /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
   let shownActions = '';
   let here = 1;
@@ -388,34 +412,44 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   // ---- the Menu and its screens: one open at a time ----
   let sayCb: ((n: number) => boolean) | null = null;
   const sayWheel = createSayWheel(root, (n) => sayCb?.(n) ?? false);
-  const menu = createMenu(
+  // The Menu (OP-108): its tabs, each drawn as it is shown.
+  const menu = createMenuShell(
     root,
     [
-      { id: 'say', title: 'Say', key: 'T', sub: () => '' },
-      // Your owl is at the mirror in the owl's nest now (OP-077): Go home, then Look in the mirror.
       {
         id: 'quests',
-        title: 'Quests',
-        key: 'J',
+        label: 'Quests',
         badge: () => questNews,
-        sub: () => {
-          const board = questState?.board;
-          const today = taskState?.view;
-          const parts = [board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} under way` : 'Quests and today’s tasks'];
-          if (today && taskState) parts.push(`today ${taskState.done} of ${today.tasks.length}`);
-          return parts.join(' · ');
+        render: (panel) => {
+          // Looking at the tab is seeing the news.
+          if (questNews) {
+            questNews = false;
+            questDot.hidden = true;
+          }
+          if (!questUi) return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: 'Your quests show here once you are in the park.' }));
+          questUi.mountJournal(panel, () => menu.isOpen() && menu.tab() === 'quests');
         },
       },
-      { id: 'settings', title: 'Settings', key: '', sub: () => 'Quest cards, thumbstick, calm motion, controls' },
-      { id: 'feedback', title: 'Feedback', key: '', sub: () => 'Found a bug? Have an idea? Tell the keepers.', highlight: true },
-      { id: 'home', title: WAY_OUT_WORDS.home, key: '', sub: () => '', shown: () => waysOut.home },
-      { id: 'leave', title: WAY_OUT_WORDS.leave, key: '', sub: () => '', shown: () => waysOut.leave },
-      { id: 'title', title: HOME_WORDS.menu, key: '', sub: () => '' },
+      { id: 'collection', label: 'Collection', render: (panel) => renderCollection(panel, collectionState) },
+      { id: 'nest', label: 'Nest', render: (panel) => renderNest(panel, { canGoHome: waysOut.home }, () => openScreen('home')) },
+      // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
+      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home)) },
+      {
+        id: 'settings',
+        label: 'Settings',
+        render: (panel) =>
+          renderSettings(
+            panel,
+            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave') },
+            () => menu.refresh(),
+          ),
+      },
     ],
-    (id) => openScreen(id, true),
+    { sound: () => settings.get().sound, calm: () => settings.get().calm },
   );
+  settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
-  const settingsScreen = createSettingsScreen(root, settings, () => openScreen('menu'));
+  const settingsScreen = createSettingsScreen(root, settings);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
 
   /** The big sheets (dialogue, shop, booth, Decorate) share the bottom of the screen: one at a time. */
@@ -436,12 +470,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     wheel?.close();
     sayWheel.close();
     builder?.close();
-    questUi?.closeJournal();
     settingsScreen.close();
     feedback?.close();
     leaveCard.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || !!questUi?.isJournalOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || leaveCard.isOpen() || arcade.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || leaveCard.isOpen() || arcade.isOpen();
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
@@ -451,24 +484,24 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button); `mirror`: Your owl opened at a mirror. */
   function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn, mirror = false) {
     makeRoom();
-    if (id === 'menu') {
-      menu.open(menuBtn);
+    if (id === 'menu' || id === 'quests') {
+      if (id === 'quests') questUi?.resetJournal();
+      menu.open(id === 'quests' ? 'quests' : undefined, menuBtn);
       menuBtn.setAttribute('aria-expanded', 'true');
     } else if (id === 'emotes' && wheel) {
       wheel.open(emotesBtn);
       emotesBtn.setAttribute('aria-expanded', 'true');
     } else if (id === 'say') {
-      sayWheel.open(menuBtn);
+      sayWheel.open(sayBtn);
+      sayBtn.setAttribute('aria-expanded', 'true');
     } else if (id === 'owl' && builder) {
       builder.setLook(collectionActions?.look() ?? look);
       // The builder covers the whole screen: the bar, the cards and the buttons hide under it.
       root.classList.add('covered');
       builder.open(fromMenu, undefined, opener, mirror);
-    } else if (id === 'quests') {
-      setQuestNews(false);
-      questUi?.openJournal(fromMenu, opener);
     }
-    else if (id === 'settings') settingsScreen.open(fromMenu, opener);
+    // Settings before the park (the home screen's); in the park they are the Menu's Settings tab.
+    else if (id === 'settings') settingsScreen.open(opener);
     else if (id === 'feedback') feedback?.open(fromMenu, opener);
     else if (id === 'leave') leaveCard.open(opener);
     // Going home asks nothing: the owl's nest is a tap away from anywhere, and the park a tap back.
@@ -482,6 +515,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   };
   menuBtn.addEventListener('click', () => toggle('menu', () => menu.isOpen()));
   emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
+  sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
+  sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
   interactBtn.addEventListener('click', () => interactCb?.());
   jumpBtn.addEventListener('click', () => jumpCb?.());
   // A pressed look while the thumb is down (touch screens do not all show :active).
@@ -571,6 +606,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     attachWayOut(actions) {
       wayOut = actions;
     },
+    attachTickets(load) {
+      ticketsLoad = load;
+      tickets = null;
+    },
     setWaysOut(ways) {
       waysOut = { ...ways };
       menu.refresh();
@@ -578,7 +617,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     attachQuests(state, actions, tasks) {
       questState = state;
       taskState = tasks;
-      questUi = createQuestUi(root, bar, state, actions, makeRoom, tasks, () => openScreen('menu'));
+      questUi = createQuestUi(root, bar, state, actions, makeRoom, tasks);
       if (roomId) questUi.setRoom(roomId);
       state.onChange(() => menu.refresh());
       tasks.onChange(() => menu.refresh());
@@ -607,10 +646,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     toggleOwl: () => toggle('owl', () => !!builder?.isOpen()),
     isOwlOpen: () => !!builder?.isOpen(),
     openMirror: (opener) => openScreen('owl', false, opener ?? menuBtn, true),
-    toggleJournal: () => toggle('quests', () => !!questUi?.isJournalOpen()),
+    toggleJournal: () => toggle('quests', () => menu.isOpen() && menu.tab() === 'quests'),
     questNews(kind, title) {
       notice(kind === 'new' ? `New quest: ${title}` : `Quest complete: ${title}`);
-      if (!questUi?.isJournalOpen()) setQuestNews(true);
+      if (!(menu.isOpen() && menu.tab() === 'quests')) setQuestNews(true);
     },
     isBlocking,
     onOwlPreview(cb) {
@@ -651,6 +690,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setRoom(id) {
       roomId = id;
       questUi?.setRoom(id);
+      // The map's "You are here".
+      menu.refresh();
     },
     setActions(list) {
       const key = list.map((a) => `${a.id}:${a.label}`).join('|');

@@ -1,6 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 import { cameraView, dist, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
+/** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
+async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 4; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + (by * i) / 4 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
 /** Whether the park ships `<key>.svg` (the loader's first choice); a dev server may answer a miss with index.html. */
 async function hasSvg(page: Page, key: string): Promise<boolean> {
   return page.evaluate(async (k) => {
@@ -116,16 +125,17 @@ test.describe('single visitor', () => {
     await expect.poll(async () => (await state(page)).walking).toBe(false);
   });
 
-  test('M opens the Menu, T Say and J the quests; each key closes its screen again, and so does Escape (Q: mirror.spec.ts)', async ({ page }) => {
+  test('M opens the Menu, T Say and J the Menu on its quests; each key closes its screen again, and so does Escape (Q: mirror.spec.ts)', async ({ page }) => {
     await openPark(page);
     for (const [key, name, opener] of [
       ['KeyM', 'Menu', '[data-menu-btn]'],
-      ['KeyT', 'Say', '[data-menu-btn]'],
-      ['KeyJ', 'Quests', '[data-menu-btn]'],
+      ['KeyT', 'Say', '[data-say-btn]'],
+      ['KeyJ', 'Menu', '[data-menu-btn]'],
     ] as const) {
       const screen = page.getByRole('dialog', { name });
       await page.keyboard.press(key);
       await expect(screen, name).toBeVisible();
+      if (key === 'KeyJ') await expect(screen.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'true');
       await page.keyboard.press(key);
       await expect(screen, name).toBeHidden();
       await page.keyboard.press(key);
@@ -146,44 +156,117 @@ test.describe('single visitor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('the bottom bar is Menu and Emotes; the Menu leads to Say, the quests, the settings and Feedback (Your owl is at the mirror: mirror.spec.ts)', async ({ page }) => {
-    test.slow(); // the emotes, Say and three screens open and close in turn: 25 to 36 s here, more on a slow CI runner
+  test('the bottom bar is Menu, Emotes and Say; the Menu has five tabs, and its Settings lead to Feedback (Your owl is at the mirror: mirror.spec.ts)', async ({ page, isMobile }) => {
+    test.slow(); // the emotes, Say, the Menu's five tabs and Feedback open and close in turn
     await openPark(page);
-    await expect(page.locator('#hud .bottom .left button')).toHaveCount(2);
-    // Emotes are one tap away.
+    await expect(page.locator('#hud .bottom .left button')).toHaveCount(3);
+    // Emotes and Say are one tap away.
     await page.locator('[data-emotes-btn]').click();
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
     await expect(wheel).toBeVisible();
     await wheel.getByRole('button', { name: 'Close emotes' }).click();
     await expect(wheel).toBeHidden();
-    await page.locator('[data-menu-btn]').click();
-    const menu = page.getByRole('dialog', { name: 'Menu' });
-    // Inside the park the ways out follow Say and the three screens (leave.spec.ts tries them).
-    await expect(menu.locator('[data-screen]')).toHaveText([/^Say/, /^Quests/, /^Settings/, /^Feedback/, /^Go home/, /^Leave the park/, /^Home screen/]);
-    // Feedback is picked out in gold.
-    await expect(menu.locator('[data-screen="feedback"]')).toHaveClass(/\bhi\b/);
-    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
-    // Say opens its wheel in the menu's place; closing the wheel goes back to the room.
-    await menu.locator('[data-screen="say"]').click();
+    await page.locator('[data-say-btn]').click();
     const say = page.getByRole('dialog', { name: 'Say' });
     await expect(say).toBeVisible();
-    await expect(menu).toBeHidden();
     await say.getByRole('button', { name: 'Close Say' }).click();
     await expect(say).toBeHidden();
-    await expect(menu).toBeHidden();
+    await expect(page.locator('[data-say-btn]')).toBeFocused();
+
+    // The Menu: five tabs, each with its word, on the quests first.
     await page.locator('[data-menu-btn]').click();
-    for (const [id, name] of [
-      ['quests', 'Quests'],
-      ['settings', 'Settings'],
-      ['feedback', 'Feedback'],
-    ] as const) {
-      await menu.locator(`[data-screen="${id}"]`).click();
-      const screen = page.getByRole('dialog', { name });
-      await expect(screen, name).toBeVisible();
-      await expect(menu).toBeHidden();
-      await screen.getByRole('button', { name: 'Back to the menu' }).click();
-      await expect(screen, name).toBeHidden();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu.getByRole('tablist', { name: 'Menu' }).getByRole('tab')).toHaveText(['Quests', 'Collection', 'Nest', 'Map', 'Settings']);
+    await expect(menu.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(menu.locator('.journal')).toBeVisible();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
+    // Each tab draws its own panel: the collection by kind, the nest with the way home, the map with the owl on it.
+    await menu.locator('[data-tab="collection"]').click();
+    await expect(menu.locator('[data-tab="collection"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(menu.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'false');
+    await expect(menu.locator('[data-panel="collection"] [role="progressbar"]')).toHaveCount(5);
+    await menu.locator('[data-tab="nest"]').click();
+    await expect(menu.locator('[data-screen="home"]')).toBeVisible();
+    await menu.locator('[data-tab="map"]').click();
+    await expect(menu.locator('[data-place="hub"]')).toContainText('You are here');
+    await expect(menu.locator('[data-place].here')).toHaveCount(1);
+    // On a keyboard the arrows go from tab to tab.
+    if (!isMobile) {
+      await menu.locator('[data-tab="map"]').focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(menu.locator('[data-tab="settings"]')).toBeFocused();
+      await expect(menu.locator('[data-tab="settings"]')).toHaveAttribute('aria-selected', 'true');
+    } else await menu.locator('[data-tab="settings"]').click();
+    await expect(menu.locator('[data-setting="calm"]')).toBeVisible();
+    // Feedback opens in the Menu's place, and its way back is to the Menu, on the Settings it came from.
+    await menu.locator('[data-screen="feedback"]').click();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    await expect(menu).toBeHidden();
+    await feedback.getByRole('button', { name: 'Back to the menu' }).click();
+    await expect(feedback).toBeHidden();
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('[data-tab="settings"]')).toHaveAttribute('aria-selected', 'true');
+    await menu.getByRole('button', { name: 'Close the menu' }).click();
+    await expect(menu).toBeHidden();
+    await expect(page.locator('[data-menu-btn]')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('the Menu leaves the park in sight, and closes on Close, the dimmed park, Escape, the back button and (on a phone) a swipe down its top', async ({ page, isMobile }) => {
+    test.slow(); // opened and closed six times
+    await openPark(page);
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    const open = async () => {
+      await page.locator('[data-menu-btn]').click();
       await expect(menu).toBeVisible();
+      await expect(page.locator('[data-menu-btn]')).toHaveAttribute('aria-expanded', 'true');
+    };
+    const closed = async (how: string) => {
+      await expect(menu, how).toBeHidden();
+      await expect(page.locator('[data-menu-btn]'), how).toHaveAttribute('aria-expanded', 'false');
+    };
+    await open();
+    // At most 70% of the screen high, whichever tab is shown, so the park shows above it.
+    const sheet = page.locator('.menu-shell');
+    const box = (await sheet.boundingBox())!;
+    expect(box.height).toBeLessThanOrEqual(page.viewportSize()!.height * 0.7 + 1);
+    for (const tab of ['collection', 'map', 'settings'] as const) {
+      await menu.locator(`[data-tab="${tab}"]`).click();
+      expect((await sheet.boundingBox())!.height, tab).toBeCloseTo(box.height, 0);
+    }
+    await menu.getByRole('button', { name: 'Close the menu' }).click();
+    await closed('Close');
+    // A tap on the dimmed park above it.
+    await open();
+    await page.mouse.click(box.x + box.width / 2, box.y / 2);
+    await closed('the dimmed park');
+    await open();
+    await page.keyboard.press('Escape');
+    await closed('Escape');
+    // The back button closes it and leaves the page where it was.
+    await open();
+    await page.goBack();
+    await closed('back');
+    expect((await state(page)).room).toBe('hub');
+    if (isMobile) {
+      await open();
+      const top = (await menu.locator('.mhead h2').boundingBox())!;
+      await swipeDown(page, top.x + top.width / 2, top.y + top.height / 2, 140);
+      await closed('a swipe down');
+    }
+    // And it opens again as ever.
+    await open();
+    await expect(menu.locator('[data-tab="settings"]')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test("the Menu wears light wood by day and its night variant in the evening, by the visitor's clock", async ({ page }) => {
+    for (const [hour, theme] of [[11, 'day'], [21, 'night']] as const) {
+      await page.clock.setFixedTime(new Date(2026, 9, 24, hour, 15));
+      await openPark(page);
+      await page.locator('[data-menu-btn]').click();
+      await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
+      await expect(page.locator('.menu-layer'), `${hour}:15`).toHaveAttribute('data-theme', theme);
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu-${theme}.png` });
     }
   });
 
@@ -192,7 +275,7 @@ test.describe('single visitor', () => {
     // Quests live in the Menu (OP-083): nothing of them on the play screen, and no setting for it.
     await expect(page.locator('#hud .welcome')).toBeHidden();
     await page.locator('[data-menu-btn]').click();
-    await page.locator('[data-screen="settings"]').click();
+    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
     await expect(page.locator('[data-setting="questCards"]')).toHaveCount(0);
     if (isMobile) {
       await expect(page.locator('#hud .stick')).toBeVisible();
@@ -203,15 +286,17 @@ test.describe('single visitor', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-settings.png` });
     await page.reload();
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true, sound: true });
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
+    test.slow(); // a dozen taps and 36 keystrokes, each answered by a park drawn with software WebGL on CI runners
     await openPark(page);
     const before = (await state(page)).pos;
     const sheet = page.getByRole('dialog', { name: 'Feedback' });
     const openFeedback = async () => {
       await page.locator('[data-menu-btn]').click();
+      await page.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
       await page.locator('[data-screen="feedback"]').click();
     };
     await openFeedback();

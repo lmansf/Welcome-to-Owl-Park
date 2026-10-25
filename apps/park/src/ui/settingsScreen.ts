@@ -2,8 +2,7 @@ import type { Settings, SettingsStore } from '../settings';
 import { createModal, modalHeader } from './modal';
 
 export interface SettingsScreen {
-  /** `fromMenu` adds the way back to the Menu. */
-  open(fromMenu: boolean, opener?: HTMLElement | null): void;
+  open(opener?: HTMLElement | null): void;
   close(): void;
   isOpen(): boolean;
 }
@@ -39,18 +38,27 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['Esc'], 'Close'],
 ];
 
-/**
- * Settings, on this device: the thumbstick (touch screens), the bubbles of what owls say, calm
- * motion, full screen where the browser allows it, and which keys and touches do what.
- */
-export function createSettingsScreen(root: HTMLElement, store: SettingsStore, back: () => void): SettingsScreen {
-  const style = document.createElement('style');
-  style.textContent = CSS;
-  document.head.appendChild(style);
-  const modal = createModal(root, { name: 'settings', label: 'Settings', layout: 'card' });
-  const box = modal.box;
-  let fromMenu = false;
+let styled = false;
 
+/** Each switch's state, from the settings (after the rows are drawn, and whenever a setting changes). */
+export function syncSettings(root: ParentNode, s: Settings): void {
+  for (const sw of root.querySelectorAll<HTMLButtonElement>('[data-setting]')) sw.setAttribute('aria-checked', String(s[sw.dataset['setting'] as keyof Settings]));
+}
+
+/**
+ * The settings themselves, as rows, for the home screen's Settings and the Menu's Settings tab
+ * (OP-108): the thumbstick (touch screens), the bubbles of what owls say, the park's sounds, calm
+ * motion, full screen where the browser allows it, and which keys and touches do what. `redraw`
+ * draws them again (full screen changed).
+ */
+export function settingsRows(store: SettingsStore, redraw: () => void): HTMLElement[] {
+  if (!styled) {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.appendChild(style);
+    styled = true;
+  }
+  const rows: HTMLElement[] = [];
   const toggle = (key: keyof Settings, title: string, note: string, cls = ''): HTMLElement => {
     const row = document.createElement('label');
     row.className = `opt ${cls}`.trim();
@@ -64,6 +72,7 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     const sw = document.createElement('button');
     sw.className = 'switch';
     sw.dataset['setting'] = key;
+    sw.dataset['key'] = `setting-${key}`;
     sw.setAttribute('role', 'switch');
     sw.setAttribute('aria-label', title);
     sw.addEventListener('click', () => store.set({ [key]: !store.get()[key] }));
@@ -71,18 +80,18 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     return row;
   };
 
-  const render = () => {
-    box.innerHTML = '';
-    box.appendChild(modalHeader('Settings', { onBack: fromMenu ? back : null, onClose: () => modal.close(), closeLabel: 'Close settings' }));
+  {
     const h = (t: string) => {
       const e = document.createElement('h3');
       e.textContent = t;
       return e;
     };
-    box.append(
+    rows.push(
       h('On screen'),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
       toggle('bubbles', 'Show what owls say', ''),
+      h('Sound'),
+      toggle('sound', 'Sounds', 'A soft knock as the Menu opens.'),
       h('Motion'),
       toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
     );
@@ -98,14 +107,13 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
       b.dataset['fullscreen'] = '';
       b.textContent = document.fullscreenElement ? 'Leave' : 'Go full screen';
       b.addEventListener('click', () => {
-        const done = () => render();
-        if (document.fullscreenElement) void document.exitFullscreen().then(done, done);
-        else void document.documentElement.requestFullscreen().then(done, done);
+        if (document.fullscreenElement) void document.exitFullscreen().then(redraw, redraw);
+        else void document.documentElement.requestFullscreen().then(redraw, redraw);
       });
       row.append(text, b);
-      box.append(h('Screen'), row);
+      rows.push(h('Screen'), row);
     }
-    box.appendChild(h('Controls'));
+    rows.push(h('Controls'));
     const keys = document.createElement('div');
     keys.className = 'keys keys-only';
     for (const [ks, what] of KEY_HELP) {
@@ -122,22 +130,31 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, ba
     const tips = document.createElement('p');
     tips.className = 'tips';
     tips.textContent =
-      'Tap the floor to walk there, or hold the thumbstick. On a phone, the hand does what you are standing at, the arrow hops, the small button in the corner opens the Menu and the smile above them your emotes. Tap an owl with a gold “!” to talk. Your quests are in the Menu.';
-    box.append(keys, tips);
-    sync(store.get());
-  };
+      'Tap the floor to walk there, or hold the thumbstick. On a phone, the hand does what you are standing at, the arrow hops, the small buttons in the corner open the Menu and Say, and the smile above them your emotes. Tap an owl with a gold “!” to talk. Your quests are in the Menu.';
+    rows.push(keys, tips);
+  }
+  for (const r of rows) syncSettings(r, store.get());
+  return rows;
+}
 
-  const sync = (s: Settings) => {
-    for (const sw of box.querySelectorAll<HTMLButtonElement>('[data-setting]')) sw.setAttribute('aria-checked', String(s[sw.dataset['setting'] as keyof Settings]));
+/** Settings from the home screen, before the park (in the park they are the Menu's Settings tab). */
+export function createSettingsScreen(root: HTMLElement, store: SettingsStore): SettingsScreen {
+  const modal = createModal(root, { name: 'settings', label: 'Settings', layout: 'card' });
+  const box = modal.box;
+
+  const render = () => {
+    box.innerHTML = '';
+    box.appendChild(modalHeader('Settings', { onClose: () => modal.close(), closeLabel: 'Close settings' }));
+    box.append(...settingsRows(store, render));
+    syncSettings(box, store.get());
   };
-  store.onChange(sync);
+  store.onChange((s) => syncSettings(box, s));
   document.addEventListener('fullscreenchange', () => {
     if (modal.isOpen()) render();
   });
 
   return {
-    open(menu, opener) {
-      fromMenu = menu;
+    open(opener) {
       render();
       modal.open(opener);
     },

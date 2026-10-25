@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEAF_FEATHERS_PER_DAY, PRESENTS, STARTER_PACK, USE_COOLDOWN_MS, getNpc, shopRotation, type QuestBoard, type Vec2 } from '@owl-park/shared';
+import { FURNITURE, LEAF_FEATHERS_PER_DAY, PRESENTS, STARTER_FURNITURE, STARTER_PACK, USE_COOLDOWN_MS, getNpc, shopRotation, type QuestBoard, type Vec2 } from '@owl-park/shared';
 
 /** What every collector holds from the start: the starter pack and the park's presents. */
 const EVERYONES = [...STARTER_PACK, ...PRESENTS.map((p) => p.variant)];
@@ -111,6 +111,13 @@ describe('LocalCollections', () => {
       total += res.feathers;
     }
     expect(total).toBe(LEAF_FEATHERS_PER_DAY);
+  });
+
+  it("carries the owl's furniture with its collection (for the style sets), once its nest is made", async () => {
+    const { page } = rig();
+    expect((await page.inventory()).furniture).toEqual([]);
+    await page.homeNest();
+    expect((await page.inventory()).furniture).toEqual(FURNITURE.filter((f) => STARTER_FURNITURE.includes(f.id)).map((f) => f.id));
   });
 
   it('sells from the shop for feathers and gives the daily gift once', async () => {

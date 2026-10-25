@@ -85,6 +85,10 @@ export interface Furniture {
   size: { w: number; h: number };
   /** Lies flat on the floor, like a rug: owls are drawn on top of it rather than sorted in depth with it. */
   flat?: true;
+  /** The style of the place it comes from (styles.ts, OP-110); the park's own (`hub`) when absent. */
+  style?: string;
+  /** A style set's capstone: given only for completing its set, never as the day's gift. */
+  capstone?: true;
 }
 
 const piece = (id: string, name: string, place: FurniturePlace, w: number, h: number): Furniture => ({ id, name, place, art: `decor-${id}`, size: { w, h } });
@@ -305,10 +309,13 @@ export const FURNITURE_GIFT_FEATHERS = DUPLICATE_FEATHERS.common;
 
 export type FurnitureGift = { item: string; feathers: 0 } | { item: null; feathers: number };
 
-/** Today's free gift for an owl that owns `owned`: a piece it does not own yet, at random, or feathers once it owns them all. */
-export function furnitureGift(owned: readonly string[] | ReadonlySet<string>, random: () => number): FurnitureGift {
+/**
+ * Today's free gift for an owl that owns `owned`: a piece it does not own yet, at random, or feathers
+ * once it owns them all. A set's capstone is never the gift: only completing the set gives it.
+ */
+export function furnitureGift(owned: readonly string[] | ReadonlySet<string>, random: () => number, catalogue: readonly Furniture[] = FURNITURE): FurnitureGift {
   const have = new Set(owned);
-  const missing = FURNITURE.filter((f) => !have.has(f.id));
+  const missing = catalogue.filter((f) => !f.capstone && !have.has(f.id));
   if (!missing.length) return { item: null, feathers: FURNITURE_GIFT_FEATHERS };
   return { item: missing[pick(random, missing.length)]!.id, feathers: 0 };
 }

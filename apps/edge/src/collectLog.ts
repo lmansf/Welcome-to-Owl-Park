@@ -129,6 +129,8 @@ export function collectibleType(id: string, source: Source | FurnitureSource): C
     case 'granted':
       if (PRESENTS.some((p) => p.variant === id)) return 'seasonal';
       return (STARTER_PACK as readonly string[]).includes(id) ? 'starter' : 'grant';
+    case 'set':
+      return 'grant'; // a style set's capstone (OP-110), given by the park
   }
 }
 

@@ -100,6 +100,7 @@ describe('the collection log (OP-107)', () => {
     expect(collectibleType(STARTER_PACK[0], 'granted')).toBe('starter');
     expect(collectibleType('rug', 'starter')).toBe('starter');
     expect(collectibleType('armchair', 'gift')).toBe('gift');
+    expect(collectibleType('bookshelf', 'set')).toBe('grant'); // a style set's capstone
   });
 
   it('writes a row for each collectible as it is first owned, and sends rows that name no one', async () => {

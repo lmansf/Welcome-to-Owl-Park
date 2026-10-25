@@ -9,12 +9,14 @@ export interface Settings {
   calm: boolean;
   /** "Show what owls say": the bubbles of prewritten phrases over the owls. */
   bubbles: boolean;
+  /** The park's sounds (the Menu's knock on wood, OP-108). On by default; off mutes them all. */
+  sound: boolean;
 }
 
 export const SETTINGS_KEY = 'owl-park:settings';
 
 export function defaultSettings(reducedMotion: boolean): Settings {
-  return { thumbstick: true, calm: reducedMotion, bubbles: true };
+  return { thumbstick: true, calm: reducedMotion, bubbles: true, sound: true };
 }
 
 /** Settings from what storage holds: each one a boolean, else its default. Anything else is dropped. */
