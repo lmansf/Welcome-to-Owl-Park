@@ -215,11 +215,23 @@ export class Arcade {
     if (this.frameRect) view.frame(this.frameRect);
   }
 
-  /** The game's scene, started over the room if it is not running. */
+  /**
+   * The game's scene, started over the room if it is not running. Its field covers the whole screen,
+   * so the room stops drawing under it (it still runs: the owls, the doors, the wall): on a slow
+   * device that halves what each frame paints.
+   */
   private view(): ArcadeScene {
     const plugin = this.host.scene.scene;
     if (!plugin.isActive('arcade')) plugin.run('arcade');
+    plugin.setVisible(false);
     return plugin.get('arcade') as ArcadeScene;
+  }
+
+  /** The game's scene stopped, and the room drawn again. */
+  private stopView(): void {
+    const plugin = this.host.scene.scene;
+    if (plugin.isActive('arcade')) plugin.stop('arcade');
+    plugin.setVisible(true);
   }
 
   private frame(rect: PreviewRect | null): void {
@@ -227,7 +239,7 @@ export class Arcade {
     if (!rect) {
       // The screen closed: the run is left where it was (the room forgets it with the next one).
       this.run = null;
-      if (this.host.scene.scene.isActive('arcade')) this.host.scene.scene.stop('arcade');
+      this.stopView();
       return;
     }
     (this.host.scene.scene.get('arcade') as ArcadeScene | null)?.frame(rect);
@@ -294,7 +306,7 @@ export class Arcade {
   destroy(): void {
     this.destroyed = true;
     this.run = null;
-    if (this.host.scene.scene.isActive('arcade')) this.host.scene.scene.stop('arcade');
+    this.stopView();
   }
 }
 
