@@ -29,6 +29,11 @@ function parseArtTable() {
   const re = /^\s*'?([a-z][a-z0-9-]*)'?:\s*\{\s*w:\s*(\w+),\s*h:\s*(\w+),\s*kind:\s*'(\w+)'/gm;
   const table = {};
   for (let m; (m = re.exec(block));) table[m[1]] = { w: consts[m[2]] ?? Number(m[2]), h: consts[m[3]] ?? Number(m[3]), kind: m[4] };
+  // art.ts spreads in the arcade's game paintings from arcade/paint.ts, at the size each game draws them.
+  const fieldSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'apps/park/src/arcade/field.ts'), 'utf8');
+  for (const m of fieldSrc.matchAll(/export const (FIELD_[WH]) = (\d+);/g)) consts[m[1]] = Number(m[2]);
+  const paintSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'apps/park/src/arcade/paint.ts'), 'utf8');
+  for (const m of paintSrc.matchAll(/'(arcade-[a-z0-9-]+)':\s*\{\s*w:\s*(\w+),\s*h:\s*(\w+)\s*\}/g)) table[m[1]] = { w: consts[m[2]] ?? Number(m[2]), h: consts[m[3]] ?? Number(m[3]), kind: 'arcade' };
   // art.ts also registers the tiles of rooms bigger than one screen, from the room data, as room art of one screen.
   const roomsSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/rooms/index.ts'), 'utf8');
   for (const list of roomsSrc.matchAll(/(?:backgrounds|foregrounds):\s*\[([^\]]*)\]/g)) {
@@ -300,6 +305,67 @@ test("the arcade: its painting in the market's style, and an edit of the street'
   assert.deepEqual(door.refs.map((r) => [r.ref, r.optional]), [['@canvas:market-arcade-door', false]]);
   assert.match(door.prompt, /^Edit this painting/);
   assert.match(door.prompt, /no letters/);
+});
+
+test("the arcade's bays: an edit of the published hall, each hall candidate's two east wings, three titles; the picks are the arcade's own", () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  const halls = [1, 2, 3].flatMap((n) => [`arcade-bays-b${n}`, `arcade-bays-c${n}`]);
+  const titles = { 'arcade-title-hoot-hop': 'Hoot & Hop', 'arcade-title-moon-flap': 'Moon Flap', 'arcade-title-nest-knockdown': 'Nest Knockdown' };
+  assert.deepEqual(P.ARCADE_BAYS_KEYS, ['arcade-bays-a', ...halls, ...Object.keys(titles)]);
+  assert.deepEqual(P.ARCADE_TITLE_KEYS, Object.keys(titles));
+  for (const key of P.ARCADE_BAYS_KEYS) {
+    if (key in titles) assert.ok(key in ASSETS.keys && !P.HELPER_KEYS.includes(key), `${key}: the picked title sign is the arcade's own key`);
+    else assert.ok(P.HELPER_KEYS.includes(key) && !(key in ASSETS.keys), `${key} is a helper, never published`);
+    assert.equal(jobs.get(key).providers.fal.output_format, 'png', key);
+  }
+  // Hall 3 was picked: its second and third screens are the arcade's own.
+  assert.deepEqual(jobs.get('arcade-bays-b3').derives, ['arcade-mid']);
+  assert.deepEqual(jobs.get('arcade-bays-c3').derives, ['arcade-end']);
+  const a = jobs.get('arcade-bays-a');
+  assert.deepEqual([a.kind, a.size, a.variants], ['room', '3200x1800', 5]);
+  assert.deepEqual(a.refs.map((r) => [r.ref, r.optional]), [['@final:arcade', false]]);
+  assert.match(a.prompt, /^Edit this painting/);
+  for (const key of halls) {
+    const j = jobs.get(key);
+    assert.deepEqual([j.kind, j.size, j.optional], ['wing', '3040x1368', true], key);
+    assert.ok(j.variants >= 2, key);
+    assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [[`@canvas:${key}`, false]], key);
+    assert.ok(j.prompt.startsWith('Extend this painting into a wide panorama.'), key);
+  }
+  assert.match(jobs.get('arcade-bays-b1').prompt, /score board/);
+  assert.match(jobs.get('arcade-bays-c1').prompt, /the hall ends/);
+  for (const j of [a, jobs.get('arcade-bays-b1'), jobs.get('arcade-bays-c1')]) {
+    assert.match(j.prompt, /No text, letters or numbers anywhere/, j.key);
+    assert.ok(!j.prompt.includes('more or fewer than three cabinets'), `${j.key}: one cabinet per bay`);
+  }
+  for (const [key, title] of Object.entries(titles)) {
+    const j = jobs.get(key);
+    assert.deepEqual([j.kind, j.variants], ['piece', 3], key);
+    assert.ok(j.prompt.includes(`reads exactly "${title}"`), key);
+  }
+});
+
+test("the arcade's games: each background over its field guide at 2x, each piece alone on a chroma backdrop, each the arcade's own key", () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  const pieces = { hop: ['drone', 'cart'], flap: ['branch', 'ground'], knock: ['sling', 'crate', 'stand'] };
+  assert.deepEqual(P.ARCADE_GAME_KEYS, Object.entries(pieces).flatMap(([game, ps]) => [`arcade-${game}-bg`, ...ps.map((p) => `arcade-${game}-${p}`)]));
+  for (const key of P.ARCADE_GAME_KEYS) {
+    const j = jobs.get(key);
+    assert.ok(key in ASSETS.keys && !P.HELPER_KEYS.includes(key), `${key}: the pick is the arcade's own key`);
+    assert.ok(j.variants >= 3, key);
+    assert.equal(j.providers.fal.output_format, 'png', key);
+    assert.match(j.prompt, /owls, birds, animals, people, robots, faces or characters/, `${key}: no owl or character`);
+    if (key.endsWith('-bg')) {
+      assert.deepEqual([j.kind, j.size, j.key_colour], ['anchor', '960x1280', undefined], key);
+      assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [[`@canvas:${key}`, false]], `${key}: painted over its field guide`);
+    } else {
+      assert.equal(j.kind, 'piece', key);
+      assert.deepEqual(j.refs, [], `${key}: painted alone`);
+      assert.match(j.key_colour, /^#(00FF00|FF00FF)$/, key);
+    }
+  }
+  // The flight game's neon is cyan, so its pieces stand on magenta.
+  for (const key of ['arcade-flap-branch', 'arcade-flap-ground']) assert.equal(jobs.get(key).key_colour, '#FF00FF', key);
 });
 
 test('the street of nests, its west wing, the nest and the sixteen pieces of furniture', () => {
@@ -645,7 +711,8 @@ test('geometry exports the live room data with the assets table', () => {
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
   assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'grove', 'homes', 'hub', 'lobby', 'market', 'nest']);
-  assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 1600, h: 900 }, 'arcade']);
+  assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 4800, h: 900 }, 'arcade']);
+  assert.deepEqual(g.rooms.arcade.backgrounds.map((t) => [t.key, t.x]), [['arcade', 0], ['arcade-mid', 1600], ['arcade-end', 3200]]);
   assert.deepEqual(g.rooms.homes.backgrounds.map((t) => [t.key, t.x]), [['homes-west', 0], ['homes', 1600]]);
   // Every nest is one template, painted once.
   assert.deepEqual([g.rooms.nest.size, g.rooms.nest.background], [{ w: 1600, h: 900 }, 'nest']);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ArcadeBook,
   CLOSE,
   CollectionBook,
   EDGE_PROTOCOL_VERSION,
@@ -7,14 +8,20 @@ import {
   JUMP_EMOTE,
   MemoryCollectionStore,
   MemoryNestStore,
+  MemoryScoreStore,
   NEST_SPOTS,
+  PLAY_FEATHERS_PER_DAY,
   NestBook,
   STARTER_FURNITURE,
   STARTER_LAYOUT,
   STREET_DOORS,
+  leastRunMs,
+  runFeathers,
   type ClientFrame,
   type NestLook,
   type OwlLook,
+  type PortraitLook,
+  type RunResult,
   type ServerFrame,
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
@@ -96,6 +103,7 @@ class FakeCollections {
   readonly store = new MemoryNestStore();
   readonly book = new CollectionBook(new MemoryCollectionStore());
   readonly nests = new NestBook(this.store, this.book, { newId: () => `nest${String(++this.made).padStart(4, '0')}`, random: Math.random });
+  readonly arcade = new ArcadeBook(new MemoryScoreStore(), this.book);
   /** While set, nest lookups wait for it: the collections object is slow to answer. */
   hold: Promise<void> | null = null;
   down = false;
@@ -128,6 +136,12 @@ class FakeCollections {
   }
   setEquipped() {
     return this.answer(null);
+  }
+  arcadeRun(cid: string, run: RunResult, look: PortraitLook) {
+    return this.answer(this.arcade.finish(cid, run, look, Date.now()));
+  }
+  arcadeWalls(cid: string | null) {
+    return this.answer({ walls: this.arcade.walls(Date.now()), mine: cid ? this.arcade.mine(cid, Date.now()) : {} });
   }
 }
 
@@ -405,6 +419,107 @@ describe('the street in the room object', () => {
     expect(sent).not.toMatch(/c_[A-Za-z0-9]{8}/);
     for (const s of state.sockets) for (const f of [...s.ws.of('counts').map((c) => c.rooms), ...s.ws.of('welcome').map((w) => w.counts)]) expect(Object.keys(f).join()).not.toMatch(/nest-/);
     expect(owner.last('welcome')?.counts).toEqual({ homes: 1, nests: 1 });
+  });
+});
+
+describe('the arcade in the room object', () => {
+  /**
+   * Walk an owl in the arcade to a cabinet (the middle of its spot) and let the walk finish: first
+   * onto the open floor, since an owl appears anywhere near the entrance and a straight walk from
+   * there may meet the floor's edge.
+   */
+  async function toCabinet(obj: Obj, ws: FakeSocket, to: { x: number; y: number }) {
+    await send(obj, ws, { t: 'move', to: { x: 300, y: 850 }, seq: 1 });
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to, seq: 2 });
+    clock += 10_000;
+  }
+  /** Moon Flap's cabinet, in the hall's second bay. */
+  const FLIGHT = { x: 1900, y: 820 };
+
+  /** Start a run and play it for as long as a score of `score` takes; the run's seed. */
+  async function run(obj: Obj, ws: FakeSocket, r: number, game: 'flight' | 'crossing', score: number) {
+    await send(obj, ws, { t: 'act', a: 'run', g: game, r });
+    await settle();
+    const started = ws.of('act').find((f) => f.r === r);
+    expect(started).toMatchObject({ a: 'run', ok: true, game });
+    clock += leastRunMs({ game, score }) + 100;
+    return (started as { seed: number }).seed;
+  }
+
+  it('gives a newcomer the score wall and its own bests', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'arcade', 'v_a', OWNER);
+    await settle();
+    expect(ws.last('wall')).toEqual({ t: 'wall', walls: ['crossing', 'flight', 'sling'].map((game) => ({ game, top: [] })), mine: {} });
+  });
+
+  it('pays a run at its cabinet, and shows the new best to everyone in the arcade', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'arcade', 'v_a', OWNER);
+    const b = await join(obj, 'arcade', 'v_b', GUEST);
+    await toCabinet(obj, a, FLIGHT);
+    const seed = await run(obj, a, 1, 'flight', 12);
+    await send(obj, a, { t: 'act', a: 'score', g: 'flight', s: 12, k: seed, r: 2 });
+    await settle();
+    const paid = a.of('act').find((f) => f.r === 2) as Extract<ServerFrame, { t: 'act'; a: 'score'; ok: true }>;
+    expect(paid.paid).toMatchObject({ game: 'flight', score: 12, best: true, top: true, added: runFeathers('flight', 12) + 3, mine: { flight: 12 } });
+    expect(paid.paid.wall.top).toEqual([{ score: 12, look: { body: LOOK.body, belly: LOOK.belly, accent: LOOK.accent, species: 'barn' } }]);
+    // The other owl sees the wall change; the player has it in the answer.
+    expect(b.last('wall')?.walls).toEqual([paid.paid.wall]);
+    expect(a.of('wall').map((w) => w.walls.length)).toEqual([3]);
+    // One result per run: the same seed again is no run at all.
+    await send(obj, a, { t: 'act', a: 'score', g: 'flight', s: 12, k: seed, r: 3 });
+    await settle();
+    expect(a.of('act').find((f) => f.r === 3)).toMatchObject({ ok: false, reason: 'idle' });
+  });
+
+  it('starts no run away from the cabinet, and takes no score too quick for its run', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'arcade', 'v_a', OWNER);
+    await send(obj, a, { t: 'act', a: 'run', g: 'flight', r: 1 });
+    await settle();
+    expect(a.of('act').find((f) => f.r === 1)).toMatchObject({ ok: false, reason: 'far' });
+    await toCabinet(obj, a, FLIGHT);
+    await send(obj, a, { t: 'act', a: 'run', g: 'flight', r: 2 });
+    await settle();
+    const seed = (a.of('act').find((f) => f.r === 2) as { seed: number }).seed;
+    clock += 3_000;
+    await send(obj, a, { t: 'act', a: 'score', g: 'flight', s: 30, k: seed, r: 3 });
+    await settle();
+    expect(a.of('act').find((f) => f.r === 3)).toMatchObject({ ok: false, reason: 'unknown' });
+    // The run is over all the same, and nothing was paid.
+    await send(obj, a, { t: 'act', a: 'score', g: 'flight', s: 1, k: seed, r: 4 });
+    await settle();
+    expect(a.of('act').find((f) => f.r === 4)).toMatchObject({ ok: false, reason: 'idle' });
+    expect(collections.book.feathers(OWNER, clock)).toBe(0);
+  });
+
+  it('keeps a run on the socket through the object’s sleep', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'arcade', 'v_a', OWNER);
+    await toCabinet(obj, a, FLIGHT);
+    const seed = await run(obj, a, 1, 'flight', 3);
+    // The object sleeps and wakes as a new instance over the same sockets.
+    const woken = roomObject();
+    await send(woken, a, { t: 'act', a: 'score', g: 'flight', s: 3, k: seed, r: 2 });
+    await settle();
+    expect(a.of('act').find((f) => f.r === 2)).toMatchObject({ ok: true, paid: { score: 3 } });
+  });
+
+  it('pays runs no more than the activities’ daily cap', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'arcade', 'v_a', OWNER);
+    await toCabinet(obj, a, FLIGHT);
+    let paid = 0;
+    for (let i = 0; i < 6; i++) {
+      const seed = await run(obj, a, 10 + 2 * i, 'flight', 40);
+      await send(obj, a, { t: 'act', a: 'score', g: 'flight', s: 40, k: seed, r: 11 + 2 * i });
+      await settle();
+      paid += (a.of('act').find((f) => f.r === 11 + 2 * i) as { paid: { added: number } }).paid.added;
+    }
+    expect(paid).toBe(PLAY_FEATHERS_PER_DAY);
+    expect(collections.book.feathers(OWNER, clock)).toBeGreaterThanOrEqual(PLAY_FEATHERS_PER_DAY);
   });
 });
 

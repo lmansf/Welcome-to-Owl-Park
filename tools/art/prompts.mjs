@@ -8,8 +8,9 @@
  * the species masters `owl-<species>-master`) whose output is turned into shipped assets by the
  * post-processing stage.
  *
- * Rules for anything added here: no text in images except the four approved sign phrases, no
- * names of realms, people, companies or other games, no requests for another work's style.
+ * Rules for anything added here: no text in images except the four approved sign phrases and the
+ * arcade's three game titles, no names of realms, people, companies or other games, no requests
+ * for another work's style.
  */
 
 export const VERSION = 1;
@@ -971,3 +972,174 @@ export const MARKET_ARCADE_DOOR_JOB = {
 PROMPTS['market-arcade-door'] = MARKET_ARCADE_DOOR_PROMPT;
 HELPER_KEYS.push('market-arcade-door');
 JOBS.push(MARKET_ARCADE_DOOR_JOB);
+
+// ---------------------------------------------------------------------------------------------
+// The arcade's bays, a candidate round for the art director: the hall widens to three screens,
+// one bay per game, each with a cabinet built for its own game standing under a blank sign panel
+// for its title, and the score board moves to the middle screen.
+//   A, x 0..1600     an edit of the published painting: the entrance stays on the west edge and
+//                    the three alike cabinets and the board give way to the street-crossing game's
+//                    cabinet (`arcade-bays-a`; three of its five variants are carried on as halls 1-3).
+//   B, x 1600..3200  an east wing painted out from hall n's A like the rooms' wings (the east 800 px
+//                    of A's finish at 2x on grey, `outpaint_canvas` in artlib/wings.py, written to
+//                    work/art/canvas/arcade-bays-b<n>.png): the score board in the middle and the
+//                    night-flight game's bay (`arcade-bays-b<n>`).
+//   C, x 3200..4800  an east wing painted out the same way from hall n's B: the slingshot game's
+//                    bay, and the hall ends there (`arcade-bays-c<n>`).
+// The titles are neon sign logos painted alone on a chroma backdrop, their glow kept inside a
+// backing board so they key out cleanly (`arcade-title-<game>`, three variants each, generated
+// with --model seedream-v4.5; two of the first three slingshot titles came out with the backdrop
+// inside the board, so that job was run again with --model seedream-v5-pro). Every key here is a
+// helper: the picked hall and titles are finished into the arcade's own keys when the room is built.
+
+const BAYS_STYLE_EDITS = [
+  ['a small arcade hall', 'a long arcade hall'],
+  ['upright arcade cabinets with glowing screens', 'one-of-a-kind upright arcade cabinets with glowing screens, blank sign panels'],
+  ['the three cabinets standing on the far edge of the floor', 'each cabinet standing on the far edge of the floor with open floor in front of it'],
+  ['including on the cabinets, their screens and the board', 'including on the cabinets, their screens, the sign panels and the board'],
+];
+const BAYS_A_STYLE = [...BAYS_STYLE_EDITS, ['more or fewer than three cabinets', 'a second cabinet']].reduce((s, [a, b]) => s.replace(a, b), ARCADE_STYLE);
+const BAYS_WING_EDITS = [
+  ...BAYS_STYLE_EDITS,
+  ['; the entrance at floor level on the left edge', ''],
+  [', rain beyond the entrance', ''],
+  ['more or fewer than three cabinets', 'a second cabinet or a doorway in the new stretch'],
+];
+const BAYS_NONE = 'No text, letters or numbers anywhere, including on the cabinet, its screen and the panel. No owls, birds, animals, people, robots, faces or characters anywhere, including on the screen.';
+const bayPanel = (neon, where) => `blank sign panel for the game's title: a wide, dark rectangular panel in a riveted chrome frame traced by a ${neon} neon tube, ${where}, its face plain and empty`;
+const BAYS_HALL = 'under the same low dark ceiling with chrome beams, hanging cables and neon strips, and the dark back wall with its chrome rail carries on at the same depth';
+
+const ARCADE_BAYS_A_PROMPT = `Edit this painting, a hand-painted 2D game background of a neon arcade hall that opens off a rainy cyberpunk market street at night. Keep exactly as they are: the framing, camera height and perspective; the wide open entrance at the left edge with its magenta neon frame, the rainy street seen through it and the puddles just inside it; the wet dark tiled floor across the lower third with its long neon reflections; the low dark ceiling with its chrome beams, hanging cables and neon strips; the dark back wall with its chrome rail; and the chrome pillar and the dim hall carrying on out of the right edge. Change only the back wall between the entrance and the pillar. Remove all three arcade cabinets and the big board above them, leaving plain dark riveted wall where they stood. In their place, a little left of the centre of the frame, one tall upright arcade cabinet now stands against that wall, unlike any ordinary cabinet, built for a game of hopping across a busy neon street: a near-black case taller than the old cabinets with a squared-off top, edged with glowing magenta neon; bold pale crosswalk stripes across its side; a little traffic signal with three round lamps on a short chrome arm at its top corner; small chrome delivery drones with tiny rotors and a little noodle cart with a striped awning as raised motifs on its side and around its screen; a tilted screen glowing with soft abstract shapes of lanes and lights; and a control panel with round buttons and a short joystick. Above the cabinet on the wall hangs a big ${bayPanel('magenta', 'about a quarter of the frame wide, centred over the cabinet')}. The floor in front of the cabinet stays open and empty, and the back wall to its right is plain wall with its chrome rail. ${BAYS_NONE} ${BAYS_A_STYLE}`;
+
+const ARCADE_BAYS_B_PROMPT = `${wingIntro('arcade', 'east')} The hall continues to the right at the same height: its wet dark tiled floor with long neon reflections fills the lower third of the frame, open, empty and uncluttered, ${BAYS_HALL}. In the middle of the new stretch, high on the back wall, hangs the hall's one big blank score board: a wide, dark rectangular panel in a riveted chrome frame with a thin cyan neon edge, about a third of the new stretch wide, its face plain and empty. On the left of the new stretch, between the finished part and the board, stands one tall upright arcade cabinet against the wall, unlike any ordinary cabinet, built for a game of flying through a moonlit night: a near-black case with a rounded, arched top like a night window, edged with glowing cyan neon; a big pale crescent moon on its upper side; dark silhouette branches curling around its edges and over its top; a tilted screen glowing with a soft deep-blue night sky of abstract shapes; and a control panel with one big round button. Just above the cabinet hangs a ${bayPanel('cyan', 'smaller and lower than the score board, centred over the cabinet')}. The floor in front of the cabinet and the board stays open and empty. Toward the right edge the back wall carries on past a chrome pillar with neon strips, with nothing standing on its floor. The new stretch has no doorway, no second cabinet and no other board. ${BAYS_NONE} ${wingStyle('arcade', BAYS_WING_EDITS)}`;
+
+const ARCADE_BAYS_C_PROMPT = `${wingIntro('arcade', 'east')} The hall continues to the right at the same height: its wet dark tiled floor with long neon reflections fills the lower third of the frame, open, empty and uncluttered, ${BAYS_HALL}. In the middle of the new stretch stands one arcade cabinet against the wall, unlike any ordinary cabinet, built for a game of knocking down stacks of crates with a slingshot: a broad, sturdy near-black case edged with glowing violet neon; its base built like a stack of dark wooden crates with chrome corners; a big Y-shaped slingshot fork with a stretched band rising from its top corner; a tilted screen glowing with soft abstract shapes of tumbling blocks; and a control panel with round buttons and a short joystick. Above the cabinet on the wall hangs a ${bayPanel('violet', 'centred over the cabinet')}. The floor in front of the cabinet stays open and empty. At the far right edge the hall ends: the back wall turns forward into a closed end wall of dark riveted chrome plates with a vertical neon strip and a chrome pillar in the corner, with no doorway and no opening. The new stretch has no doorway, no second cabinet and no board. ${BAYS_NONE} ${wingStyle('arcade', BAYS_WING_EDITS)}`;
+
+const titlePrompt = (title, neon, backdrop, motif) => {
+  const green = backdrop === '#00FF00';
+  return `Title sign for a game in a neon arcade: a neon sign logo that reads exactly "${title}", the sign alone, seen straight from the front, centred, filling about 85 percent of the frame's width, isolated on a flat, solid, uniform pure chroma ${green ? 'green' : 'magenta'} ${backdrop} background that fills the entire canvas with no gradient, no vignette, no cast shadow and no wall, floor or scenery. The words "${title}" in bold, rounded, friendly display letters made of glowing ${neon} neon tubes with bright white-hot cores, every letter spelled correctly, evenly spaced and clearly readable, with ${motif} drawn in the same neon beside the words. Everything is mounted on a dark near-black #0B0B16 backing board with a thin riveted chrome #C7CEDA rim, a wide rounded shape that follows the logo; all the glow stays inside the board, so the board's outer edge is a crisp, clean, opaque silhouette against the backdrop. STYLE: cyberpunk neon arcade sign, hand-painted 2D game art with crisp graphic shapes, cel shading with glowing neon gradients, no photorealism, no film grain. No other text, no watermark. AVOID: any other words, letters, numbers or logos; misspelled, extra, missing or repeated letters; any owl, bird, animal, person, face or character; a room, wall or scenery around the sign; glow, haze or semi-transparent edges outside the board; ${green ? 'green parts or green tint on the sign' : 'magenta, pink or purple parts or tint on the sign'}.`;
+};
+
+// key, the title, its neon, the backdrop, the motif beside the words.
+const TITLES = [
+  ['arcade-title-hoot-hop', 'Hoot & Hop', 'magenta #FF2AA1', '#00FF00', 'a little traffic signal with three round lamps and a short row of crosswalk stripes'],
+  ['arcade-title-moon-flap', 'Moon Flap', 'cyan #00E5FF', '#FF00FF', 'a crescent moon and a curling branch'],
+  ['arcade-title-nest-knockdown', 'Nest Knockdown', 'violet #6E3AFF', '#00FF00', 'a Y-shaped slingshot and a small stack of crates'],
+];
+
+const bayWing = (key, seed, prompt, variants = 2) => ({
+  key,
+  kind: 'wing',
+  realm: 'market',
+  optional: true,
+  size: '3040x1368',
+  seed,
+  variants,
+  refs: [{ ref: `@canvas:${key}`, role: "the previous screen's edge on a grey canvas to paint over", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt,
+});
+
+const ARCADE_BAYS_JOBS = [
+  {
+    key: 'arcade-bays-a',
+    kind: 'room',
+    realm: 'market',
+    size: '3200x1800',
+    seed: 3501,
+    variants: 5,
+    refs: [{ ref: '@final:arcade', role: 'the published painting to edit', optional: false }],
+    providers: { fal: { output_format: 'png' } },
+    prompt: ARCADE_BAYS_A_PROMPT,
+  },
+  ...[1, 2, 3].flatMap((n) => [
+    bayWing(`arcade-bays-b${n}`, 9291 + 10 * n, ARCADE_BAYS_B_PROMPT),
+    // Hall 3's first two C variants came out with a doubled sign panel, so it took two more.
+    bayWing(`arcade-bays-c${n}`, 9321 + 10 * n, ARCADE_BAYS_C_PROMPT, n === 3 ? 4 : 2),
+  ]),
+  ...TITLES.map(([key, title, neon, backdrop, motif], i) => ({
+    key,
+    kind: 'piece',
+    realm: 'market',
+    size: '1600x800',
+    seed: 3601 + 10 * i,
+    variants: 3,
+    key_colour: backdrop,
+    providers: { fal: { output_format: 'png' } },
+    prompt: titlePrompt(title, neon, backdrop, motif),
+  })),
+];
+
+// Hall 3 was picked (2026-10-23): its second and third screens became the arcade's own.
+for (const [key, own] of [['arcade-bays-b3', 'arcade-mid'], ['arcade-bays-c3', 'arcade-end']]) ARCADE_BAYS_JOBS.find((j) => j.key === key).derives = [own];
+
+/** The bays round's keys: the first screen, each hall's second and third, and the titles. */
+export const ARCADE_BAYS_KEYS = ARCADE_BAYS_JOBS.map((j) => j.key);
+/** The title signs, picked and finished, are the arcade's own keys; the rest stay helpers. */
+export const ARCADE_TITLE_KEYS = TITLES.map(([key]) => key);
+for (const j of ARCADE_BAYS_JOBS) PROMPTS[j.key] = j.prompt;
+HELPER_KEYS.push(...ARCADE_BAYS_KEYS.filter((k) => !ARCADE_TITLE_KEYS.includes(k)));
+JOBS.push(...ARCADE_BAYS_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// The arcade's games, round 2 of the bays (the art director picked hall 3 and the titles HH3, MF1
+// and NK2). Each game is played on a 480 x 640 field, so its background is painted at 2x, 960 x 1280,
+// over a flat guide of the field drawn from the games' geometry (`pnpm art:finish field`, written to
+// work/art/canvas/arcade-<game>-bg.png), and each piece is painted alone on a chroma backdrop, bold
+// enough to read at play size on a phone, for the code to move, flip, stretch or tile. The visitor's
+// own owl is the player, so no owl or other character is in any of it. Three variants each; each key
+// is the arcade's own, its pick finished at the size the game draws it (2026-10-24).
+
+const gameStyle = (neon) => `STYLE: hand-painted 2D game art in the park's neon storybook style: crisp, friendly, rounded graphic shapes, cel shading with glowing neon gradients, slightly chunky proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. PALETTE: Night Asphalt #0B0B16 and deep navy night; ${neon}; Chrome #C7CEDA; small touches of gold #C9A227 and cream #F6F1E3.`;
+const GAME_AVOID = 'any text, letters, numbers, glyphs, signage lettering, logos or watermarks; any owls, birds, animals, people, robots, faces or characters; photographic textures; busy noisy detail; lens flare; daylight';
+const HOP_NEON = 'Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon, warm amber #FFC46A lantern light';
+const FLAP_NEON = 'Circuit Cyan #00E5FF neon and soft cream moonlight';
+const KNOCK_NEON = 'violet #8A4DFF neon and warm amber #FFC46A light';
+
+const fieldIntro = (scene) => `${scene}, portrait 3:4, a hand-painted 2D background for a small arcade game played on a phone. The reference is a flat layout guide of the game's field: keep every band and shape exactly where it is in the guide and paint over it as one finished picture, seen straight on with no perspective tilt.`;
+const FIELD_CALM = 'The game draws its own moving pieces and the player over this picture, so keep it calm, dark and low in contrast where they move, with soft glows and no busy detail.';
+const fieldPrompt = (scene, body, neon) => `${fieldIntro(scene)} ${body} ${FIELD_CALM} ${gameStyle(`${neon}; Violet Haze #6E3AFF mist`)} AVOID: ${GAME_AVOID}.`;
+
+const HOP_BG_PROMPT = fieldPrompt('A neon street crossing at night', 'From the bottom up: a strip of near pavement whose kerb runs straight across the frame; five lanes of wet dark asphalt, straight level bands of equal height, divided by faint dashed lane lines in pale magenta neon; a far kerb and pavement band; and along the top edge the glowing fronts of little shops and noodle stalls with striped awnings and lit windows. A faded pale crosswalk of short wide stripes runs up the middle of the road from kerb to kerb. Puddles on the road reflect magenta and cyan neon. The road is empty: no vehicles, drones, carts or traffic lights on it.', HOP_NEON);
+const FLAP_BG_PROMPT = fieldPrompt('A moonlit night sky over rooftops and treetops', "A big round pale moon glows soft cream high in the upper right, where the guide's disc is. The night sky fills most of the frame, deep navy fading to violet near the horizon, with soft drifting clouds and small stars, open and empty. Along the bottom, where the guide's dark band is, a low skyline of rooftops, chimneys, water towers and rounded treetops in dark silhouette, a few windows lit warm and thin cyan neon along some roof edges, and below it a plain dark strip. Nothing else in the sky: no branches, poles or wires.", FLAP_NEON);
+const KNOCK_BG_PROMPT = fieldPrompt('A city rooftop at night', "The flat rooftop's ledge runs straight and level across the whole frame where the guide's ground begins, its top edge traced by a thin violet neon line, with the building's dark wall below it. At the far left, where the guide's dark shapes are, rooftop clutter in silhouette: a water tank on legs, a vent box and a short chimney, with a small neon tube glowing on a pole. Above the ledge the right two thirds of the frame is open night sky, deep navy to violet with a few soft clouds and stars, and beyond the ledge only the dim tips of distant chrome towers rise a little above it. Nothing stands on the ledge: no slingshot, crates, boxes or stands.", KNOCK_NEON);
+
+const gamePiece = (subject, view, backdrop, neon) => {
+  const green = backdrop === '#00FF00';
+  return `Game piece for a small neon arcade game played on a phone: ${subject}. ${view}, isolated on a flat, solid, uniform pure chroma ${green ? 'green' : 'magenta'} ${backdrop} background that fills the entire canvas with no gradient, no vignette, no cast shadow and no floor, wall or ground plane. ${gameStyle(neon)} READABILITY: bold simple shapes and a thick clean glowing neon outline, so it reads at a small size; painted as a solid object, its glow kept inside its silhouette, with a crisp opaque edge against the backdrop and no haze or semi-transparent edges. No text, no watermark. AVOID: ${GAME_AVOID}; more than one piece; scenery around it; ${green ? 'green parts or green tint on the piece' : 'magenta, pink or purple parts or tint on the piece'}.`;
+};
+const ALONE = 'The piece alone, centred, filling about 85 percent of the frame';
+
+// key, kind, size, backdrop (pieces), neon, prompt or subject and view.
+const GAME_ART = [
+  ['arcade-hop-bg', 'anchor', '960x1280', null, HOP_BG_PROMPT],
+  ['arcade-hop-drone', 'piece', '960x768', '#00FF00', gamePiece('a small delivery drone flying to the right, seen exactly side-on: a rounded chrome body like a little capsule with a glowing magenta neon stripe along its side and a round cyan headlight at its front (the right end), two short rotor arms on top with flat spinning rotors drawn as thin pale discs, and a small plain parcel box, with no pictures, symbols or markings on it, hanging under it on two short cords', ALONE, '#00FF00', HOP_NEON)],
+  ['arcade-hop-cart', 'piece', '1152x768', '#00FF00', gamePiece('a little noodle cart rolling to the right, seen exactly side-on: a boxy cart body of dark night-blue wood with a warm amber neon trim and plain panels with no symbols, pictures or markings, a striped magenta and cream awning on two thin poles, a big bowl of noodles with chopsticks on its counter with no steam, a round red paper lantern hanging at its front corner (the right end), two round wheels with chrome hubs, and a push handle at its back (the left end)', ALONE, '#00FF00', HOP_NEON)],
+  ['arcade-flap-bg', 'anchor', '960x1280', null, FLAP_BG_PROMPT],
+  ['arcade-flap-branch', 'piece', '512x2048', '#FF00FF', gamePiece('one straight upright tree branch for the obstacles of a night-flight game, seen side-on: a thick branch of dark bark, the same width from top to bottom like a pillar, its bark edged on both sides by a glowing cyan neon line, with a few knots and grooves; its top end is a rounded, knobbly broken end with one short twig and two small leaves outlined in cyan neon', 'The branch alone, upright in the middle of the frame and filling the middle third of its width, its top end a little below the top edge and its body running straight out of the bottom edge', '#FF00FF', FLAP_NEON)],
+  ['arcade-flap-ground', 'piece', '2048x512', '#FF00FF', gamePiece('a long strip of ground for a side-scrolling night-flight game, seen straight from the front: the ridge of a long tiled roof, dark slate tiles in neat even rows, its top edge traced by a glowing cyan neon line, perfectly straight, level and the same all along so it repeats end to end', 'The strip alone, running straight and level across the whole frame and out of both side edges, filling the lower half of the frame', '#FF00FF', FLAP_NEON)],
+  ['arcade-knock-bg', 'anchor', '960x1280', null, KNOCK_BG_PROMPT],
+  ['arcade-knock-sling', 'piece', '640x1024', '#00FF00', gamePiece('a big sturdy Y-shaped slingshot standing upright, seen straight from the front: a thick forked trunk of dark polished wood wrapped with glowing violet neon tubing, its two arms rising into a wide Y with rounded tips and nothing between them (no band, ring or loop), standing on a small round chrome base', ALONE, '#00FF00', KNOCK_NEON)],
+  ['arcade-knock-crate', 'piece', '1024x1024', '#00FF00', gamePiece('one wooden crate seen straight from the front, a perfect square: dark planks with a thick glowing violet neon edge all round, a neon X brace across its face and small chrome corner plates', 'The crate alone, centred, filling about 80 percent of the frame', '#00FF00', KNOCK_NEON)],
+  ['arcade-knock-stand', 'piece', '1024x1024', '#00FF00', gamePiece('a sturdy stand for stacking crates on, seen straight from the front: one solid rectangular block with no legs and no gaps, its front faced with riveted dark steel panels from top to bottom under a thick top slab whose front edge glows with a violet neon line, the panels the same all over', ALONE, '#00FF00', KNOCK_NEON)],
+];
+
+// The rooftop's second variant put its ledge in the middle of the frame, so it took two more.
+const MORE_VARIANTS = { 'arcade-knock-bg': 5 };
+
+const GAME_ART_JOBS = GAME_ART.map(([key, kind, size, backdrop, prompt], i) => ({
+  key,
+  kind,
+  realm: 'market',
+  size,
+  seed: 3701 + 10 * i,
+  variants: MORE_VARIANTS[key] ?? 3,
+  ...(backdrop ? { key_colour: backdrop } : { refs: [{ ref: `@canvas:${key}`, role: "a flat layout guide of the game's field", optional: false }] }),
+  providers: { fal: { output_format: 'png' } },
+  prompt,
+}));
+
+/** The games' art keys: each game's background and pieces. */
+export const ARCADE_GAME_KEYS = GAME_ART_JOBS.map((j) => j.key);
+for (const j of GAME_ART_JOBS) PROMPTS[j.key] = j.prompt;
+JOBS.push(...GAME_ART_JOBS);

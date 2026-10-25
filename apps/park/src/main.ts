@@ -6,6 +6,7 @@ import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
+import { ArcadeScene } from './game/ArcadeScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
@@ -85,8 +86,9 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.NONE, zoom: 1 / dpr },
   input: { activePointers: 2 },
   render: { antialias: true, pixelArt: false, roundPixels: false },
-  // The owl builder's preview draws over the room (which keeps running underneath) or the home screen.
-  scene: [BootScene, RoomScene, HomeScene, BuilderScene],
+  // The owl builder's preview draws over the room (which keeps running underneath) or the home screen;
+  // the arcade's games draw over the room.
+  scene: [BootScene, RoomScene, HomeScene, BuilderScene, ArcadeScene],
 });
 
 game.registry.set('config', cfg);
@@ -198,6 +200,8 @@ declare global {
       home(): { shown: boolean; loggedIn: boolean };
       /** The tickets on this device (empty without the park's server). */
       wallet(): Promise<WalletEntry[]>;
+      /** The arcade's run under way: its game, its seed and the game itself (null when none). */
+      arcade(): ReturnType<RoomScene['arcadeRun']>;
       /** The busy ribbon's words as shown (null while it is off or hidden), OP-075. */
       ribbon(): string | null;
       /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
@@ -487,6 +491,7 @@ window.owlPark = {
   say: (n) => roomScene()?.say(n) ?? false,
   home: () => ({ shown: home.isShown(), loggedIn }),
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
+  arcade: () => roomScene()?.arcadeRun() ?? null,
   ribbon: () => ribbon.shown(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };

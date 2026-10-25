@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { BITE_AFTER_MS, BITE_WINDOW_MS, CAST_EVERY_MS, COPY_FIRST, COPY_SPOT, FISHING_SPOT, LANTERNS, LANTERN_BURN_MS, LANTERN_EVERY_MS, LANTERN_GLOW_MS, QUIZ_ZONES, quizRound } from './activities';
 import { rectCenter } from './geometry';
 import type { Vec2 } from './protocol';
-import { Activities, NOTE_EVERY_MS, REEL_SLACK_MS, type ActivityRoom } from './roomActivities';
+import { CABINETS, leastRunMs } from './arcade';
+import { Activities, ACT_SLACK, NOTE_EVERY_MS, REEL_SLACK_MS, endRun, startRun, type ActivityRoom } from './roomActivities';
+import { ROOMS } from '../rooms';
 
 /** A room as Activities sees it: an id, who is in it, and where each owl stands. */
 function roomOf(id: string, positions: Record<string, Vec2>): ActivityRoom {
@@ -135,3 +137,33 @@ describe('the stage quiz in a room', () => {
     expect(new Activities(roomOf('grove', pos), () => round.revealAt + 50).quizDue()).toBeNull();
   });
 });
+
+describe('a run in the arcade', () => {
+  const spot = (id: string) => ROOMS['arcade']!.doors.find((d) => d.id === id)!.rect;
+  const at = (id: string): Vec2 => rectCenter(spot(id));
+
+  it('starts only at its own cabinet, in the arcade, while the game is live', () => {
+    expect(startRun('arcade', at('cabinet-flight'), 'flight', 42, T0)).toEqual({ ok: true, run: { game: 'flight', seed: 42, startedAt: T0 } });
+    // Within reach of the cabinet's spot, with the activities' slack, but not beyond it.
+    const r = spot('cabinet-flight');
+    expect(startRun('arcade', { x: r.x - ACT_SLACK + 1, y: r.y + 10 }, 'flight', 1, T0).ok).toBe(true);
+    expect(startRun('arcade', { x: r.x - ACT_SLACK - 5, y: r.y + 10 }, 'flight', 1, T0)).toEqual({ ok: false, reason: 'far' });
+    expect(startRun('arcade', at('cabinet-sling'), 'flight', 1, T0)).toEqual({ ok: false, reason: 'far' });
+    expect(startRun('arcade', null, 'flight', 1, T0)).toEqual({ ok: false, reason: 'far' });
+    expect(startRun('market', at('cabinet-flight'), 'flight', 1, T0)).toEqual({ ok: false, reason: 'unknown' });
+    // A cabinet switched off (Hatching Soon) starts nothing.
+    const off = CABINETS.map((c) => (c.game === 'flight' ? { ...c, live: false } : c));
+    expect(startRun('arcade', at('cabinet-flight'), 'flight', 1, T0, off)).toEqual({ ok: false, reason: 'unknown' });
+  });
+
+  it('ends only the run it started, with a result that could be true for its time', () => {
+    const run = { game: 'crossing' as const, seed: 7, startedAt: T0 };
+    const result = { game: 'crossing' as const, score: 4 };
+    expect(endRun(run, result, 7, T0 + leastRunMs(result))).toBe('ok');
+    expect(endRun(run, result, 8, T0 + 60_000)).toBe('idle');
+    expect(endRun(run, { game: 'flight', score: 4 }, 7, T0 + 60_000)).toBe('idle');
+    expect(endRun(undefined, result, 7, T0 + 60_000)).toBe('idle');
+    expect(endRun(run, { game: 'crossing', score: 40 }, 7, T0 + 5_000)).toBe('unknown');
+  });
+});
+

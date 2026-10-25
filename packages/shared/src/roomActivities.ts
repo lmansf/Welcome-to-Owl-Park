@@ -2,7 +2,9 @@
  * The activities in one room (their rules are in activities.ts): the hub's lantern beam and stage
  * quiz, fishing from the grove's jetty, and the market robot owl's copy game. The room server
  * (RoomObject) routes `act` frames here, wakes the hub when a quiz question closes, and pays through
- * the ledger; the local mode runs the same class for the one owl on this device.
+ * the ledger; the local mode runs the same class for the one owl on this device. A run in the
+ * arcade (arcade.ts) is checked here too, by `startRun` and `endRun`; whoever runs them keeps the
+ * run (the room server on the visitor's socket, so it outlasts the object's sleep).
  */
 import {
   CAST_EVERY_MS,
@@ -31,9 +33,11 @@ import {
   type QuizRound,
   type QuizZone,
 } from './activities';
+import { ARCADE_ROOM, CABINETS, cabinetOf, plausibleRun, type ArcadeGame, type CabinetDef, type RunResult } from './arcade';
 import type { ServerLanterns } from './edge';
 import { distance, distanceToRect } from './geometry';
 import type { Vec2 } from './protocol';
+import { ROOMS } from '../rooms';
 
 /** What the activities need of a room: its id, who is in it and where each owl stands. */
 export interface ActivityRoom {
@@ -179,4 +183,36 @@ export class Activities {
     this.games.delete(id);
     this.noteAt.delete(id);
   }
+}
+
+// ---------- the arcade ----------
+
+/** A run of an arcade game as the room keeps it: its game, the seed of its course and when it started (ms). */
+export interface ArcadeRun {
+  game: ArcadeGame;
+  seed: number;
+  startedAt: number;
+}
+
+export type RunStart = { ok: true; run: ArcadeRun } | { ok: false; reason: 'far' | 'unknown' };
+
+/**
+ * A run starts at its game's cabinet: the owl stands at it (with ACT_SLACK) and the game is live.
+ * Starting again replaces the run before it, which is never paid.
+ */
+export function startRun(roomId: string, pos: Vec2 | null, game: ArcadeGame, seed: number, now: number, cabinets: readonly CabinetDef[] = CABINETS): RunStart {
+  const cabinet = cabinetOf(game, cabinets);
+  const spot = roomId === ARCADE_ROOM ? ROOMS[ARCADE_ROOM]?.doors.find((d) => d.id === cabinet.spot) : undefined;
+  if (!cabinet.live || !spot) return { ok: false, reason: 'unknown' };
+  if (!pos || distanceToRect(pos, spot.rect) > ACT_SLACK) return { ok: false, reason: 'far' };
+  return { ok: true, run: { game, seed, startedAt: now } };
+}
+
+/**
+ * A run ends with its result: `idle` when it is not the run the room keeps (another game, another
+ * seed, or none), `unknown` when the result could not be true for the time the run took.
+ */
+export function endRun(run: ArcadeRun | null | undefined, result: RunResult, seed: number, now: number): 'ok' | 'idle' | 'unknown' {
+  if (!run || run.game !== result.game || run.seed !== seed) return 'idle';
+  return plausibleRun(result, now - run.startedAt) ? 'ok' : 'unknown';
 }

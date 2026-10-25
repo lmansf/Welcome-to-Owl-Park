@@ -1,17 +1,23 @@
 import type {
+  ArcadeGame,
   Award,
   BuyResult,
   FurnitureGiftResult,
+  GameWall,
   GiftResult,
   Inventory,
   NestEditRefusal,
   NestLook,
   NestSpotId,
   NestView,
+  OwlLook,
+  OwnBests,
   QuestBoard,
   QuestEvent,
   QuestUpdate,
   QuizZone,
+  RunPaid,
+  RunResult,
   ShopView,
   TaskView,
   Vec2,
@@ -99,11 +105,16 @@ export type NoteReply =
   | { ok: true; step: 'won'; level: number; feathers: number; total: number }
   | { ok: true; step: 'wrong' | 'slow'; level: number; expected: string }
   | No;
+/** A run started at a cabinet: the seed of its course and when it started (this device's clock). */
+export type RunReply = { ok: true; game: ArcadeGame; seed: number; startedAt: number } | No;
+/** A run's result taken: what it paid, the wall it changed and the owl's own bests. */
+export type ScoreReply = { ok: true; paid: RunPaid } | No;
 
 /**
  * The park's activities in one room (activities.ts in @owl-park/shared): the hub's lanterns, the pond
- * in the grove, the market robot owl's copy game, and today's tasks. Times in answers and pushes are
- * on this device's clock; the stage quiz runs on the park clock, `parkNow()`.
+ * in the grove, the market robot owl's copy game, the arcade's runs (arcade.ts), and today's tasks.
+ * Times in answers and pushes are on this device's clock; the stage quiz runs on the park clock,
+ * `parkNow()`.
  */
 export interface ActivityLink {
   /** The room's clock: the stage quiz's schedule runs on it. */
@@ -119,6 +130,10 @@ export interface ActivityLink {
   note(e: string): Promise<NoteReply>;
   /** Today's three tasks (null when the room did not answer). */
   tasks(): Promise<TaskView | null>;
+  /** Start a run of an arcade game, standing at its cabinet. */
+  run(game: ArcadeGame): Promise<RunReply>;
+  /** End the run with this seed: its score (and for Nest Knockdown, its shots). */
+  score(result: RunResult, seed: number): Promise<ScoreReply>;
   /** The owl left the room. */
   close(): void;
 }
@@ -133,6 +148,8 @@ export interface ActivityPushes {
   onPaid?(what: 'beam' | 'quiz', feathers: number, total: number): void;
   /** Today's tasks moved: as they stand, the ones just finished, what they paid and the balance. */
   onTasks?(tasks: TaskView, finished: string[], paid: number, total: number): void;
+  /** The arcade's score wall: every column and the owl's own bests on arrival, then a column as it changes. */
+  onWall?(walls: GameWall[], mine: OwnBests | null): void;
 }
 
 /** A nest as the room shows it to this visitor; its owner also learns what it owns and today's gift. */
@@ -196,8 +213,11 @@ export interface CollectionService {
    * is missing).
    */
   questLink(room: string, conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink | null;
-  /** The activities in a room, the same way: the room server's over its socket, otherwise this browser's. */
-  activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2): ActivityLink | null;
+  /**
+   * The activities in a room, the same way: the room server's over its socket, otherwise this
+   * browser's (`look` gives the owl's colours for its portrait on the arcade's wall).
+   */
+  activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2, look: () => OwlLook): ActivityLink | null;
   /**
    * The nests, the same way, on the street and in a nest (null in any other room). `look` gives the
    * visitor's colours for the flag on its own door.

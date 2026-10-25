@@ -14,8 +14,9 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
   cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
   patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
+  field [game...]      the arcade games' field guides at 2x (the generator's @canvas:arcade-<game>-bg)
   canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
-  wing <room>          stitch the room's picked wings onto its painting; finish every screen and the end overlays
+  wing <room>         stitch the room's picked wings onto its painting; finish every screen and the end overlays
   owl                  split the owl master into the five layers at 200x240 and 400x480
   grade <in> <out>     the palette grade hook on its own
   ref <in> <out>       prepare a committed anchor reference (<= 1024 px, no metadata, under budget)
@@ -59,11 +60,12 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
 
 from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
-                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, load_key_colours, logical_size, now_iso, owl_layer_base,
+                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size, now_iso, owl_layer_base,
                     owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
-from artlib.chroma import ChromaParams, clear_glow, key_out  # noqa: E402
+from artlib.chroma import ChromaParams, clear_glow, key_out, solidify  # noqa: E402
+from artlib.fields import GAMES as FIELD_GAMES, render_field_guide  # noqa: E402
 from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
@@ -395,6 +397,9 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
         img, n = clear_glow(img, [parse_ints(b, 4, "--clear-glow") for b in a.clear_glow], cinfo["backdrop"], a.glow_margin)
         rgba, cinfo = key_out(img, chroma_params(a, kc))
         glow = f" clear_glow={';'.join(a.clear_glow)} margin={a.glow_margin} ({n} px)"
+    if a.solid:
+        rgba, sinfo = solidify(rgba, img, a.solid)
+        cinfo.update(sinfo)
     rgba = _floor_cut(rgba, a.floor_cut)
     if a.flip:
         rgba = ImageOps.mirror(rgba)
@@ -402,7 +407,7 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
     canvas2x = apply_grade(canvas2x, pal, strength)
     one = downsample(canvas2x, W, H)
-    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (" flip" if a.flip else "") + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "") + glow]
+    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (f" solid={a.solid}" if a.solid else "") + (" flip" if a.flip else "") + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "") + glow]
     if gline:
         tools.append(gline)
     outputs = {}
@@ -523,6 +528,19 @@ def open_painting(ctx: Ctx, room: str, flag: str | None) -> tuple[Path, Image.Im
 def wings_of(ctx: Ctx, room: str) -> list[tuple[str, str]]:
     """(side, key) of every wing config/assets.json lists for a room, west first."""
     return [(side, f"{room}-{side}") for side in SIDES if f"{room}-{side}" in ctx.assets]
+
+
+def cmd_field(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The flat guide of each arcade game's field at 2x (the generator's @canvas:arcade-<game>-bg)."""
+    games = a.games or list(FIELD_GAMES)
+    for game in games:
+        if game not in FIELD_GAMES:
+            raise ArtError(f"no arcade game {game!r} (have {', '.join(FIELD_GAMES)})")
+    for game in games:
+        out = ctx.work / "canvas" / f"arcade-{game}-bg.png"
+        n = pngmeta.save(render_field_guide(game), out)
+        note(f"field guide {game}: {rel_to_repo(out)} ({n} bytes)")
+    return 0
 
 
 def cmd_canvas(ctx: Ctx, a: argparse.Namespace) -> int:
@@ -938,8 +956,8 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
         formats = [ext for ext in RASTER_EXTS if f"{key}.{ext}" in rasters or f"{key}@2x.{ext}" in rasters]
         if len(formats) > 1:
             problems.append(f"{key}: both PNG and WebP files are published; the loader uses the WebP, so the PNG is stale (republish {key})")
-        if "webp" in formats and not is_room_background(key, ctx.assets):
-            problems.append(f"{key}: published as WebP, but only room backgrounds ship as WebP")
+        if "webp" in formats and not ships_as_webp(key, ctx.assets):
+            problems.append(f"{key}: published as WebP, but only room backgrounds and the paintings marked webp ship as WebP")
         for ext in RASTER_EXTS:
             one_name, two_name = f"{key}.{ext}", f"{key}@2x.{ext}"
             if two_name in rasters and one_name not in rasters:
@@ -1187,6 +1205,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--pad-bottom", type=int, default=0)
     sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom", help="centre for items worn at a point (glasses), top for items hanging from a line (neckwear)")
     sp.add_argument("--flip", action="store_true", help="mirror the subject (pets are drawn facing right in the game)")
+    sp.add_argument("--solid", type=int, default=0, metavar="PX", help="the subject is one opaque board (a sign): everything more than PX source px inside its outline is made fully opaque in its painted colour")
     sp.add_argument("--no-2x", action="store_true")
     add_grade_flags(sp)
     add_common(sp)
@@ -1229,6 +1248,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--feather", type=float, default=2.5, help="blur radius of the patch's edge")
     add_common(sp)
     sp.set_defaults(fn=cmd_patch)
+
+    sp = sub.add_parser("field", help="layout guides of the arcade games' fields (the generator's @canvas:arcade-<game>-bg)")
+    sp.add_argument("games", nargs="*", help=f"games (default: all of {', '.join(FIELD_GAMES)})")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_field)
 
     sp = sub.add_parser("canvas", help="a wing's outpaint canvas (the generator's @canvas:<key>)")
     sp.add_argument("keys", nargs="*", help="wing keys (default: every <room>-west / <room>-east in config/assets.json)")

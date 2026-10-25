@@ -28,7 +28,8 @@ from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, OWL_SPECIES, ArtError, load_as
                     species_layers)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
-from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out  # noqa: E402
+from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out, solidify  # noqa: E402
+from artlib import fields  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
 from artlib.guide import render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
@@ -173,6 +174,28 @@ class TestChroma(unittest.TestCase):
         self.assertIn("pass a smaller --min-area", err.getvalue())
         out3, info3 = key_out(Image.fromarray(arr, "RGB"), ChromaParams(key="#00FF00"))
         self.assertEqual(np.asarray(out3)[20, 20, 3], 255, "at the default threshold (0.2 % of the disc) a 400 px blob is detail")
+
+    def test_a_solid_board_keeps_no_holes_and_no_see_through_paint(self):
+        # A sign: a dark board with a chrome rim painted close to the green backdrop and a green
+        # lamp on it. The matte holes the lamp and leaves the rim see-through; solidify fills both.
+        img = Image.new("RGB", (200, 120), (0, 255, 0))
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle((20, 20, 180, 100), radius=18, fill=(55, 215, 75))
+        d.rounded_rectangle((30, 30, 170, 90), radius=12, fill=(20, 20, 40))
+        d.ellipse((140, 45, 160, 65), fill=(0, 255, 0))
+        rgba, _ = key_out(img, ChromaParams(key="#00FF00"))
+        a = np.asarray(rgba)[..., 3]
+        self.assertLess(a[55, 150], 255, "the matte holes the green lamp")
+        self.assertLess(a[25, 100], 255, "and leaves the green-tinted rim see-through")
+        solid, info = solidify(rgba, img, 4)
+        b = np.asarray(solid)
+        self.assertEqual(b[55, 150, 3], 255)
+        self.assertEqual(tuple(b[55, 150, :3]), (0, 255, 0), "the lamp keeps its painted colour")
+        self.assertEqual(b[25, 100, 3], 255)
+        self.assertEqual(tuple(b[25, 100, :3]), (55, 215, 75), "the rim keeps its painted colour")
+        self.assertEqual(b[5, 5, 3], 0, "the backdrop stays clear")
+        self.assertGreater(info["solid_px"], 0)
+        self.assertTrue(((b[..., 3] > 0) & (b[..., 3] < 255)).sum() <= ((a > 0) & (a < 255)).sum())
 
     def test_subject_touching_the_frame_keeps_the_key(self):
         img = synth_overlay(640, 360, "#FF00FF", good=True)
@@ -512,6 +535,43 @@ class TestGrade(unittest.TestCase):
         rgba = room.convert("RGBA")
         rgba.putalpha(Image.fromarray((np.indices((180, 320)).sum(0) % 256).astype(np.uint8)))
         self.assertTrue(np.array_equal(np.asarray(grade(rgba, pal, 0.7))[..., 3], np.asarray(rgba)[..., 3]))
+
+
+class TestFieldGuides(unittest.TestCase):
+    def test_each_guide_is_the_field_at_2x_drawn_from_the_games_geometry(self):
+        for game in fields.GAMES:
+            img = fields.render_field_guide(game)
+            self.assertEqual(img.size, (960, 1280), game)
+            self.assertEqual(img.tobytes(), fields.render_field_guide(game).tobytes(), f"{game}: deterministic")
+        with self.assertRaises(ValueError):
+            fields.render_field_guide("pinball")
+        hop = np.asarray(fields.render_field_guide("hop"))
+        # Every lane's middle is road and both kerb rows are pavement (x = 100 is clear of the crosswalk).
+        for row in range(1, fields.HOP_LANES + 1):
+            self.assertEqual(tuple(hop[2 * fields.hop_row_y(row), 100]), fields.ROAD, f"lane {row}")
+        for row in (0, fields.HOP_LANES + 1):
+            self.assertEqual(tuple(hop[2 * fields.hop_row_y(row), 100]), fields.PAVEMENT, f"kerb row {row}")
+        column = {tuple(px) for px in hop[2 * 140:2 * 540, 2 * fields.HOP_X]}
+        self.assertIn(fields.CROSSWALK, column, "the crosswalk is where the owl crosses")
+        self.assertNotIn(fields.CROSSWALK, {tuple(px) for px in hop[:, 100]})
+        flap = np.asarray(fields.render_field_guide("flap"))
+        x, y, _ = fields.FLAP_MOON
+        self.assertEqual(tuple(flap[2 * y, 2 * x]), fields.MOON)
+        self.assertEqual(tuple(flap[2 * fields.FLAP_GROUND_Y + 10, 100]), fields.GROUND)
+        self.assertEqual(tuple(flap[600, 100]), fields.SKY, "open sky where the branches stand")
+        knock = np.asarray(fields.render_field_guide("knock"))
+        self.assertEqual(tuple(knock[2 * fields.KNOCK_GROUND_Y + 20, 900]), fields.GROUND)
+        self.assertEqual(tuple(knock[600, 800]), fields.SKY, "open sky where the stacks stand")
+
+    def test_the_field_command_writes_the_generators_canvases(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out):
+                rc = postprocess.main(["field", "hop", "--work", td])
+            self.assertEqual(rc, 0)
+            self.assertEqual(Image.open(Path(td) / "canvas" / "arcade-hop-bg.png").size, (960, 1280))
+            with mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(postprocess.main(["field", "pinball", "--work", td]), 1)
 
 
 class TestGuideOverlay(unittest.TestCase):
@@ -961,7 +1021,21 @@ class TestCli(unittest.TestCase):
             with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
                 self.assertEqual(postprocess.main(["check", "hub", "guardian"] + common), 1)
             self.assertIn("hub.webp: disallowed WebP chunks: EXIF", out.getvalue())
-            self.assertIn("guardian: published as WebP, but only room backgrounds ship as WebP", out.getvalue())
+            self.assertIn("guardian: published as WebP, but only room backgrounds and the paintings marked webp ship as WebP", out.getvalue())
+
+    def test_check_takes_webp_for_a_painting_the_table_marks_webp(self):
+        # The arcade's game fields are opaque paintings, not rooms: the table marks them "format": "webp".
+        self.assertEqual(load_assets()["arcade-hop-bg"].get("format"), "webp")
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            (work / "final").mkdir(parents=True)
+            public.mkdir()
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--provenance", str(provp), "--now", "2026-10-18T09:00:00Z"]
+            (public / "arcade-hop-bg.webp").write_bytes(webpmeta.encode(Image.new("RGB", (480, 640), (9, 9, 9)), 80))
+            with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
+                postprocess.main(["check", "arcade-hop-bg"] + common)
+            self.assertNotIn("published as WebP", out.getvalue())
 
     def test_demo_runs_the_whole_chain(self):
         with tempfile.TemporaryDirectory() as tmp:
