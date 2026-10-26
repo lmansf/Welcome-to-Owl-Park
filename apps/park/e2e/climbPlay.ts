@@ -81,12 +81,17 @@ export async function climbTo(page: Page, band: number, timeout = 200_000): Prom
       // The jump planned at the last press, whether the owl has been seen in the air since, and how many frames it has waited to leave the ground.
       let plan: { kind: 'single' | 'double' | 'glide'; airborne: boolean; waited: number } | null = null;
       const begun = performance.now();
+      // On a slow runner a frame is long and the owl moves far between two looks: the press comes one frame early.
+      let lastTick = begun;
       const letGo = () => {
         hold(null);
         jumpUp();
       };
       return new Promise<string>((resolve) => {
         const tick = () => {
+          const now = performance.now();
+          const dt = Math.min(0.2, Math.max(0.016, (now - lastTick) / 1000));
+          lastTick = now;
           const r = window.owlPark.climb();
           const s = r?.state;
           if (!r || !s) {
@@ -116,22 +121,24 @@ export async function climbTo(page: Page, band: number, timeout = 200_000): Prom
             const kind = dy <= 140 ? 'single' : dy <= 190 ? 'double' : 'glide';
             const nextCx = next.x + next.w / 2;
             if (cur.w >= W) {
-              // A balcony spans the field: stand under the next ledge and jump straight up.
-              if (Math.abs(s.x - nextCx) > 10) hold(nextCx > s.x ? 'ArrowRight' : 'ArrowLeft');
+              // A balcony spans the field: get under the next ledge, let the run die down a little and jump straight up.
+              const under = s.x > next.x + 30 && s.x < next.x + next.w - 30;
+              if (!under) hold(nextCx > s.x ? 'ArrowRight' : 'ArrowLeft');
               else {
                 hold(null);
-                if (Math.abs(s.vx) < 60) {
+                if (Math.abs(s.vx) < 160) {
                   plan = { kind, airborne: false, waited: 0 };
                   jumpDown();
                 }
               }
             } else {
-              // A ledge: run toward the next one and jump at this one's end.
+              // A ledge: run toward the next one and jump at this one's end (a frame early, so a long frame cannot run the owl off it).
               const toward = nextCx > cur.x + cur.w / 2 ? 1 : -1;
               const end = toward > 0 ? cur.x + cur.w : cur.x;
               const edge = toward > 0 ? s.x + OWL_W / 2 : s.x - OWL_W / 2;
               hold(toward > 0 ? 'ArrowRight' : 'ArrowLeft');
-              if ((toward > 0 ? end - edge : edge - end) <= 10) {
+              const left = toward > 0 ? end - edge : edge - end;
+              if (left <= 10 + Math.abs(s.vx) * dt && Math.sign(s.vx) === toward) {
                 plan = { kind, airborne: false, waited: 0 };
                 jumpDown();
               }
