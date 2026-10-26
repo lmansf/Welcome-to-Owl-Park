@@ -1,20 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArcadeBook,
+  CLIMB_RUN_MAX_MS,
   CLOSE,
+  ClimbBook,
   CollectionBook,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
   JUMP_EMOTE,
+  MemoryClimbStore,
   MemoryCollectionStore,
   MemoryNestStore,
   MemoryScoreStore,
   NEST_SPOTS,
+  NIGHTS,
   PLAY_FEATHERS_PER_DAY,
   NestBook,
   STARTER_FURNITURE,
   STARTER_LAYOUT,
   STREET_DOORS,
+  climbRef,
+  leastClimbMs,
   leastRunMs,
   runFeathers,
   type ClientFrame,
@@ -81,7 +87,12 @@ class FakeSocket {
 /** Just enough of the Durable Object's state: the sockets with their tags, and a storage that keeps nothing. */
 class FakeState {
   readonly sockets: Array<{ ws: FakeSocket; tags: string[] }> = [];
-  readonly storage = { get: async () => undefined, put: async () => undefined, getAlarm: async () => null, setAlarm: async () => undefined };
+  readonly storage: { get(key: string): Promise<unknown>; put(key: string, value: unknown): Promise<void>; getAlarm(): Promise<number | null>; setAlarm(): Promise<void> } = {
+    get: async () => undefined,
+    put: async () => undefined,
+    getAlarm: async () => null,
+    setAlarm: async () => undefined,
+  };
   setWebSocketAutoResponse() {}
   acceptWebSocket(ws: FakeSocket, tags: string[]) {
     this.sockets.push({ ws, tags });
@@ -107,6 +118,8 @@ class FakeCollections {
   readonly book = new CollectionBook(new MemoryCollectionStore());
   readonly nests = new NestBook(this.store, this.book, { newId: () => `nest${String(++this.made).padStart(4, '0')}`, random: Math.random });
   readonly arcade = new ArcadeBook(new MemoryScoreStore(), this.book);
+  readonly climbStore = new MemoryClimbStore();
+  readonly climb = new ClimbBook(this.climbStore, this.book, () => 0x5eed);
   /** While set, nest lookups wait for it: the collections object is slow to answer. */
   hold: Promise<void> | null = null;
   down = false;
@@ -145,6 +158,18 @@ class FakeCollections {
   }
   arcadeWalls(cid: string | null) {
     return this.answer({ walls: this.arcade.walls(Date.now()), mine: cid ? this.arcade.mine(cid, Date.now()) : {} });
+  }
+  /** The climb's calls, with the flags the room object passed. */
+  readonly climbStarts: unknown[] = [];
+  climbStart(cid: string, flags: { atPortal: boolean; portalLive: boolean; special: string | null }) {
+    this.climbStarts.push(flags);
+    return this.answer(this.climb.start(cid, flags, Date.now()));
+  }
+  climbBand(cid: string, seed: number, band: number) {
+    return this.answer(this.climb.band(cid, seed, band, Date.now()));
+  }
+  climbLookup(ref: string) {
+    return this.answer(this.climb.lookup(ref));
   }
   /** The player stats' calls (OP-111), as they came. */
   readonly seenCalls: unknown[][] = [];
@@ -602,6 +627,63 @@ describe('busy nights in the room object (OP-075)', () => {
   });
 });
 
+/** A state whose storage keeps what is put in it, as the platform's does across a wake from hibernation. */
+class KeepingState extends FakeState {
+  readonly kept = new Map<string, unknown>();
+  override readonly storage = {
+    get: async (key: string) => this.kept.get(key),
+    put: async (key: string, value: unknown) => {
+      this.kept.set(key, value);
+    },
+    getAlarm: async () => null,
+    setAlarm: async () => undefined,
+  };
+}
+
+describe('the realms switch (the stained-glass climb)', () => {
+  const tell = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));
+
+  it('turns an owl away from a gated realm until the keepers open it, with the arch’s phrase, and lets everyone know the switch', async () => {
+    const obj = roomObject();
+    const hub = await join(obj, 'hub', 'v_hub');
+    expect(hub.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null });
+    const shut = await join(obj, 'glass', 'v_shut');
+    expect(shut.last('closed')).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    expect(shut.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    expect(shut.last('welcome')).toBeUndefined();
+    // An ungated room never consults the switch.
+    expect((await join(obj, 'grove', 'v_grove')).last('welcome')).toBeDefined();
+    await tell(obj, { open: ['glass'], portal: true, night: null });
+    expect(hub.last('realms')).toEqual({ t: 'realms', realms: { open: ['glass'], portal: true, night: null } });
+    const inside = await join(obj, 'glass', 'v_in');
+    expect(inside.last('welcome')?.realms?.open).toEqual(['glass']);
+    expect(inside.closed).toBeNull();
+  });
+
+  it('sends the owls out of a realm that closes, and keeps the switch in storage across a wake', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    await tell(obj, { open: ['glass'], portal: true, night: 'easy' });
+    const a = await join(obj, 'glass', 'v_a');
+    const b = await join(obj, 'glass', 'v_b');
+    expect(a.closed).toBeNull();
+    // Woken from hibernation on the same storage, the object still has the realm open.
+    const woken = roomObject();
+    await settle(); // the constructor reads its storage
+    const c = await join(woken, 'glass', 'v_c');
+    expect(c.last('welcome')?.realms).toEqual({ open: ['glass'], portal: true, night: 'easy' });
+    await tell(woken, { open: [], portal: true, night: 'easy' });
+    expect(c.last('closed')).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    expect(c.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    // The first object, told the same, sends its owls out too; a malformed switch is read as closed.
+    await tell(obj, { open: [], portal: true, night: 'easy' });
+    expect(a.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    expect(b.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    await tell(obj, 'nonsense');
+    expect((await join(obj, 'glass', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
+});
+
 describe('the hop in the room object', () => {
   it('goes to the other owls without asking for a collection, and moves no quest', async () => {
     const obj = roomObject();
@@ -650,5 +732,96 @@ describe('the player stats from the room object (OP-111)', () => {
     await settle();
     expect(collections.seenCalls).toEqual([]);
     expect(collections.aliveCalls).toEqual([]);
+  });
+});
+
+describe('the climb in the room object (the stained-glass realm)', () => {
+  const open = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));
+  const LIVE = { open: ['glass'], portal: true, night: 'easy' };
+  const EASY = NIGHTS['easy']!;
+  /** Walk an owl from the glass room's doorway to the portal at its far end and let the walk finish. */
+  async function toPortal(obj: Obj, ws: FakeSocket) {
+    await send(obj, ws, { t: 'move', to: { x: 1200, y: 780 }, seq: 1 });
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to: { x: 2700, y: 745 }, seq: 2 });
+    clock += 10_000;
+  }
+  const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
+
+  it('starts a run only at the portal while the switch has it live, with the night the keepers lit', async () => {
+    const obj = roomObject();
+    await open(obj, { ...LIVE, portal: false });
+    const ws = await join(obj, 'glass', 'v_climber', OWNER);
+    // Not a collector: unknown. Portal off: closed. Away from the portal: far.
+    const guest = await join(obj, 'glass', 'v_guest');
+    await send(obj, guest, { t: 'act', a: 'climb', r: 1 });
+    await settle();
+    expect(act(guest, 1)).toMatchObject({ a: 'climb', ok: false, reason: 'unknown' });
+    await send(obj, ws, { t: 'act', a: 'climb', r: 1 });
+    await settle();
+    expect(act(ws, 1)).toMatchObject({ a: 'climb', ok: false, reason: 'closed' });
+    await open(obj, LIVE);
+    await send(obj, ws, { t: 'act', a: 'climb', r: 2 });
+    await settle();
+    expect(act(ws, 2)).toMatchObject({ a: 'climb', ok: false, reason: 'far' });
+    expect(collections.climbStarts).toEqual([
+      { atPortal: false, portalLive: false, special: 'easy' },
+      { atPortal: false, portalLive: true, special: 'easy' },
+    ]);
+    await toPortal(obj, ws);
+    await send(obj, ws, { t: 'act', a: 'climb', r: 3 });
+    await settle();
+    expect(act(ws, 3)).toEqual({ t: 'act', a: 'climb', r: 3, ok: true, seed: 0x5eed, startedAt: clock, night: 'easy', tier: 'easy', banked: 0, remainingCap: PLAY_FEATHERS_PER_DAY, bestBandToday: 0, resumed: false, previousForgotten: false });
+    expect(JSON.stringify(ws.frames)).not.toContain(OWNER);
+  });
+
+  it('pays the bands reached, refuses one reached too fast, resumes the run on a new socket anywhere, and forgets it after an hour', async () => {
+    const obj = roomObject();
+    await open(obj, LIVE);
+    const ws = await join(obj, 'glass', 'v_climber', OWNER);
+    await toPortal(obj, ws);
+    await send(obj, ws, { t: 'act', a: 'climb', r: 1 });
+    await settle();
+    const started = act(ws, 1) as { seed: number; startedAt: number };
+    expect(started).toMatchObject({ ok: true, banked: 0 });
+    const seed = started.seed;
+    // Band 2 before its floor: refused, nothing banked.
+    clock = started.startedAt + leastClimbMs(EASY, 2) - 3_000;
+    await send(obj, ws, { t: 'act', a: 'ascent', k: seed, band: 2, r: 2 });
+    await settle();
+    expect(act(ws, 2)).toMatchObject({ a: 'ascent', ok: false, reason: 'too-fast' });
+    // Another seed: idle.
+    await send(obj, ws, { t: 'act', a: 'ascent', k: seed + 1, band: 1, r: 3 });
+    await settle();
+    expect(act(ws, 3)).toMatchObject({ a: 'ascent', ok: false, reason: 'idle' });
+    // Honest: bands 1 and 2 paid together.
+    clock = started.startedAt + leastClimbMs(EASY, 2) + 250;
+    await send(obj, ws, { t: 'act', a: 'ascent', k: seed, band: 2, r: 4 });
+    await settle();
+    expect(act(ws, 4)).toEqual({ t: 'act', a: 'ascent', r: 4, ok: true, banked: 2, added: 2, feathers: collections.book.feathers(OWNER, clock), total: 2, ref: climbRef(OWNER, seed) });
+    // The connection drops: a new socket in the hub, away from any portal, gets the run back.
+    ws.close(1001, 'gone');
+    const again = await join(obj, 'hub', 'v_climber2', OWNER);
+    await send(obj, again, { t: 'act', a: 'climb', r: 5 });
+    await settle();
+    expect(act(again, 5)).toMatchObject({ a: 'climb', ok: true, seed, banked: 2, resumed: true, previousForgotten: false, remainingCap: PLAY_FEATHERS_PER_DAY - 2 });
+    clock = started.startedAt + leastClimbMs(EASY, 3) + 250;
+    await send(obj, again, { t: 'act', a: 'ascent', k: seed, band: 3, r: 6 });
+    await settle();
+    expect(act(again, 6)).toMatchObject({ a: 'ascent', ok: true, banked: 3, added: 2, total: 4 });
+    // An hour on: the run is forgotten, and the next start from the hub is far from the portal.
+    clock = started.startedAt + CLIMB_RUN_MAX_MS + 1;
+    await send(obj, again, { t: 'act', a: 'ascent', k: seed, band: 4, r: 7 });
+    await settle();
+    expect(act(again, 7)).toMatchObject({ a: 'ascent', ok: false, reason: 'forgotten' });
+    await send(obj, again, { t: 'act', a: 'climb', r: 8 });
+    await settle();
+    expect(act(again, 8)).toMatchObject({ a: 'climb', ok: false, reason: 'far' });
+    expect(collections.climbStore.openRun(OWNER)?.banked).toBe(3);
+    // The collections object away: offline, as every activity answers.
+    collections.down = true;
+    await send(obj, again, { t: 'act', a: 'climb', r: 9 });
+    await settle();
+    expect(act(again, 9)).toMatchObject({ a: 'climb', ok: false, reason: 'offline' });
   });
 });

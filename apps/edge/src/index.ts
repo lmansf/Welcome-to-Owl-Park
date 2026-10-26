@@ -4,7 +4,7 @@
  * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { CLOSE, RIBBON_WORDS, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus } from '@owl-park/shared';
+import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
@@ -23,6 +23,8 @@ import { gatePage } from './gatePage';
 import { health } from './health';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId, roomCap } from './rooms';
+import { GATED_ROOMS } from '@owl-park/shared/rooms';
+import { NIGHTS } from '@owl-park/shared';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
@@ -271,6 +273,15 @@ export default {
       if (!body || !isCollectorId(body['cid']) || !isVariantId(body['variant']) || !SOURCES.includes(source)) return json({ error: 'bad request' }, 400);
       return json(await collections(env).grant(body['cid'], body['variant'], source));
     }
+    // ---- The stained-glass climb: a run by the reference a visitor quotes (never a collector id) ----
+    if (url.pathname === '/api/admin/climb') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      const ref = url.searchParams.get('ref');
+      if (!isClimbRef(ref)) return json({ error: 'bad request' }, 400);
+      const found = await collections(env).climbLookup(ref);
+      return found ? json(found) : json({ error: 'not found' }, 404);
+    }
     if (url.pathname === '/api/admin/collect-log') {
       // The collection log (OP-107): GET says whether it is set up and how many rows wait to be sent;
       // POST queues every collectible the collections hold now, once (the backfill).
@@ -422,11 +433,12 @@ export default {
         if (!r.ok) return json(await r.json().catch(() => ({ error: 'the change did not take' })), r.status);
         forgetOverflow();
         st = (await r.json()) as OverflowState;
-        console.log(`[owl-park] capacity: line ${st.line.mode} at ${st.line.threshold}, ribbon ${st.ribbon.on ? 'on' : 'off'}, copies ${JSON.stringify(st.copies)}`);
+        console.log(`[owl-park] capacity: line ${st.line.mode} at ${st.line.threshold}, ribbon ${st.ribbon.on ? 'on' : 'off'}, copies ${JSON.stringify(st.copies)}, realms ${JSON.stringify(st.realms)}`);
       } else if (request.method === 'GET') {
         st = await readOverflow(env);
       } else return json({ error: 'not found' }, 404);
-      return json({ ...st, sharding: env.ROOM_SHARDING === 'room' ? 'room' : 'single', rooms: await roomsNow(env, st.copies) });
+      // The realms switch's choices (the stained-glass climb): the gated rooms and the nights the keepers may name.
+      return json({ ...st, sharding: env.ROOM_SHARDING === 'room' ? 'room' : 'single', rooms: await roomsNow(env, st.copies), gated: GATED_ROOMS, nights: Object.keys(NIGHTS) });
     }
     if (url.pathname === '/admin/capacity') return capacityPage(RIBBON_WORDS);
 
