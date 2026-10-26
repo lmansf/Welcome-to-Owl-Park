@@ -65,6 +65,17 @@ export interface SetPieces {
   idol?: Idol;
   /** The lobby's turnstiles: a flash of gold as an owl goes through. */
   gate?: { react(): void };
+  /** The hub's arches into gated realms, by door id: the blockade while the realm is closed, the doorway's glow while it is open. */
+  arches?: Record<string, { blockade: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image }>;
+}
+
+const DOOR_GLOW: Record<string, number> = { market: 0xff2aa1, arcade: 0x00e5ff, grove: 0xffb347, glass: 0x9fd0ff };
+
+/** The soft glow that marks an open doorway, tinted for the realm beyond it. */
+function doorGlow(scene: Phaser.Scene, m: { x: number; y: number }, to: string): Phaser.GameObjects.Image {
+  const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(DOOR_GLOW[to] ?? 0xc9a227).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({ targets: glow, alpha: 0.5, scale: 1.9, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  return glow;
 }
 
 /** Large set pieces (guardian, giant robot owl, blockades) sorted into the owl depth range. */
@@ -143,17 +154,17 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     const m = door.marker;
     if (!m) continue;
     if (door.closedSign) {
-      // A construction blockade stands in the closed arch, its phrase on its board.
+      // A construction blockade stands in the closed arch, its phrase on its board. An arch into a
+      // gated realm also has a doorway's glow, shown instead of the blockade once the realm opens.
       const key = blockadeKey(door.closedSign);
-      if (scene.textures.exists(key)) piece(scene, m.x, m.y, key).setDepth(m.y);
+      const blockade = scene.textures.exists(key) ? piece(scene, m.x, m.y, key).setDepth(m.y) : null;
+      if (door.to) (pieces.arches ??= {})[door.id] = { blockade, glow: doorGlow(scene, m, door.to.room).setVisible(false) };
     } else if (room.id === 'hub' && door.id === WAY_OUT_DOOR) {
       // The way out of the park (C43): a soft gold ring on the floor where the owls came in.
       const ring = scene.add.image(m.x, m.y, 'fx-glow').setTint(0xc9a227).setAlpha(0.18).setScale(2.2, 0.42).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({ targets: ring, alpha: 0.34, scaleX: 2.5, scaleY: 0.48, duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.to) {
-      const tint = door.to.room === 'market' ? 0xff2aa1 : door.to.room === 'arcade' ? 0x00e5ff : door.to.room === 'grove' ? 0xffb347 : 0xc9a227;
-      const glow = scene.add.image(m.x, m.y, 'fx-glow').setTint(tint).setAlpha(0.28).setScale(1.6).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
-      scene.tweens.add({ targets: glow, alpha: 0.5, scale: 1.9, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      doorGlow(scene, m, door.to.room);
     } else if (door.id === 'shop' || door.id === 'booth') {
       const chevron = scene.add.image(m.x, m.y, 'fx-chevron').setTint(0xc9a227).setDepth(m.y + 1);
       scene.tweens.add({ targets: chevron, y: m.y + 14, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });

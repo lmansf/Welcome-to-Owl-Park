@@ -5,11 +5,27 @@ import { isEmoteId, isParkMessage } from './validate';
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 
+describe('protocol v10, the climb', () => {
+  it('starts or resumes a climb with nothing but a request id, and takes a band with the run’s seed', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'climb', r: 5 }))).toEqual({ t: 'act', a: 'climb', r: 5 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'ascent', k: 77, band: 3, r: 6 }))).toEqual({ t: 'act', a: 'ascent', k: 77, band: 3, r: 6 });
+    for (const bad of [{ band: 0 }, { band: 7 }, { band: 1.5 }, { band: '3' }, { band: undefined }, { k: undefined }, { k: -1 }, { k: 2 ** 32 }])
+      expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'ascent', k: 1, band: 3, r: 7, ...bad })), JSON.stringify(bad)).toBeNull();
+  });
+
+  it('passes the realms switch to the page in the welcome, as a frame of its own, and when a realm turns an owl away', () => {
+    const realms = { open: ['glass'], portal: true, night: null };
+    expect(parseServerFrame(JSON.stringify({ t: 'realms', realms }))).toEqual({ t: 'realms', realms });
+    expect(parseServerFrame(JSON.stringify({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' }))).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    expect(CLOSE.REALM_CLOSED).toBe(4013);
+  });
+});
+
 describe('protocol v9, the arcade', () => {
-  it('is version 9, and a page speaking 8 is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(9);
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 8, look }))).toBeNull();
-    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: 9, look }))).toEqual({ t: 'hello', v: 9, look });
+  it('is version 10, and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(10);
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
   });
 

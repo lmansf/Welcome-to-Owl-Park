@@ -187,6 +187,8 @@ export const CATALOGUE: readonly ItemDef[] = [
     ['earmuffs', 'Earmuffs', C],
     ['holly-crown', 'Holly Crown', U],
     ['mummy-wrap', 'Mummy Wrap', C],
+    // The stained-glass climb: given once, the first time an owl reaches the clouds (and in the shop pool like any item).
+    ['glass-circlet', 'Glass Circlet', C],
   ]),
   ...wear('face', [
     ['round-glasses', 'Round Glasses', C],

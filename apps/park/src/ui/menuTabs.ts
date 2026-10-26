@@ -165,7 +165,8 @@ interface Place {
 /** The park as it stands: inside the turnstiles the great tree and what leads off it, outside the gate the nests. */
 export const MAP_PLACES: readonly Place[] = [
   { id: 'closed-a', name: 'Coming soon', col: 0, row: 0, closed: true },
-  { id: 'closed-b', name: 'Coming soon', col: 2, row: 0, closed: true },
+  // The stained-glass realm: its arch is boarded until the keepers open it; its name waits on its screening.
+  { id: 'glass', name: 'Coming soon', col: 2, row: 0, closed: true },
   { id: 'grove', name: 'The treehouse clearing', col: 0, row: 1 },
   { id: 'hub', name: 'The great tree', col: 1, row: 1 },
   { id: 'market', name: 'The neon street', col: 2, row: 1 },
@@ -178,7 +179,7 @@ export const MAP_PLACES: readonly Place[] = [
 /** The paths between places, as the park's doorways join them. */
 export const MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['hub', 'closed-a'],
-  ['hub', 'closed-b'],
+  ['hub', 'glass'],
   ['hub', 'grove'],
   ['hub', 'market'],
   ['market', 'arcade'],
@@ -188,23 +189,24 @@ export const MAP_PATHS: ReadonlyArray<[string, string]> = [
 ];
 
 /** The map's place for a room the owl is in: any owl's nest is "a nest"; the owl's own is Your nest. */
-export function mapPlaceOf(room: string, ownNest: boolean): string | null {
+export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = []): string | null {
   if (room.startsWith('nest-') || room === 'nest') return ownNest ? 'nest' : 'homes';
-  return MAP_PLACES.some((p) => p.id === room && !p.closed) ? room : null;
+  return MAP_PLACES.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
 }
 
-export function renderMap(panel: HTMLElement, here: string | null): void {
+/** `open`: the gated realms the keepers have opened (the realms switch); their arches draw as doorways. */
+export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = []): void {
   const map = el('div', 'mmap');
   const cols = 3;
   const rows = 5;
-  const at = new Map(MAP_PLACES.map((p) => [p.id, p]));
+  const at = new Map(MAP_PLACES.map((p) => [p.id, { ...p, closed: p.closed && !open.includes(p.id) }]));
   const lines = MAP_PATHS.map(([a, b]) => {
     const p = at.get(a)!;
     const q = at.get(b)!;
     return `<line x1="${p.col + 0.5}" y1="${p.row + 0.5}" x2="${q.col + 0.5}" y2="${q.row + 0.5}"${q.closed ? ' class="closed"' : ''}/>`;
   }).join('');
   map.innerHTML = `<svg class="paths" viewBox="0 0 ${cols} ${rows}" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>`;
-  for (const p of MAP_PLACES) {
+  for (const p of at.values()) {
     const pin = el('div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}`);
     pin.dataset['place'] = p.id;
     pin.style.gridColumn = String(p.col + 1);

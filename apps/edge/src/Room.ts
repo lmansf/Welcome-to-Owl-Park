@@ -224,9 +224,9 @@ export class Room {
    */
   /**
    * Put a visitor in the room and send its welcome. `welcome` adds what the room object knows beyond
-   * the room: which copy it is, the visitor's entry, and the busy ribbon (OP-075).
+   * the room: which copy it is, the visitor's entry, the busy ribbon (OP-075) and the realms switch.
    */
-  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean; welcome?: Pick<ServerWelcome, 'copy' | 'entry' | 'notice'> } = {}): 'ok' | 'full' {
+  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean; welcome?: Pick<ServerWelcome, 'copy' | 'entry' | 'notice' | 'realms'> } = {}): 'ok' | 'full' {
     const existing = this.visitors.get(id);
     if (existing) {
       // The newer session wins; remember where the old one stood so the newcomer can resume there.

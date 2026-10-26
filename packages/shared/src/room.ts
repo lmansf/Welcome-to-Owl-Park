@@ -44,6 +44,11 @@ export interface RoomDef {
   spots?: Vec2[];
   /** Ambient mood used by the scene for lighting and particles (`arcade`: neon indoors, no rain). */
   mood: 'hub' | 'dusk' | 'neon' | 'arcade';
+  /**
+   * A realm the keepers open with the `realms` setting (the stained-glass climb): closed until its id
+   * is in that setting's `open`, whatever its doors say. Rooms without this never consult the setting.
+   */
+  gated?: boolean;
 }
 
 /** One ROOM_W x ROOM_H piece of a room's art, at its top-left corner in room pixels. */

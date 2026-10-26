@@ -75,6 +75,12 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 2400, y: 630 },
         { x: 2505, y: 620 },
         { x: 2515, y: 672 },
+        // The east arch is a doorway into the stained-glass realm; while the realm is closed the
+        // blockade stands in it and the door turns owls back at its threshold.
+        { x: 2560, y: 672 },
+        { x: 2560, y: 604 },
+        { x: 2770, y: 604 },
+        { x: 2770, y: 672 },
         { x: 2815, y: 672 },
         { x: 2830, y: 600 },
         { x: 2900, y: 566 },
@@ -96,13 +102,14 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 4720, y: 900 },
       ],
     ],
-    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 } },
+    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
     doors: [
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 } },
       { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 } },
       // The marker is the foot of each arch's blockade; the rect is the strip in front of it.
       { id: 'closed-a', rect: { x: 2040, y: 660, w: 210, h: 30 }, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } },
-      { id: 'closed-b', rect: { x: 2560, y: 660, w: 210, h: 30 }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
+      // The east arch leads to the stained-glass realm (gated: the realms setting opens it); its sign and blockade stay until then.
+      { id: 'to-glass', rect: { x: 2560, y: 610, w: 210, h: 90 }, to: { room: 'glass', spawn: 'from-hub' }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
       // The way out (C43): the floor's bottom edge below where owls arrive from the turnstiles, back
       // to the lobby outside the gate. A soft ring on the floor marks it.
       { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 } },
@@ -318,6 +325,61 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 2500, y: 860 },
       { x: 2700, y: 800 },
       { x: 2900, y: 860 },
+    ],
+  },
+  /**
+   * The stained-glass realm (designs/the-stained-glass-climb.md): two screens, the arch back to
+   * the hub and the idol on the west screen, the portal to the solo climb at the foot of a tall
+   * window on the east. Gated: closed until the keepers open it with the realms setting.
+   */
+  glass: {
+    id: 'glass',
+    gated: true,
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'glass',
+    backgrounds: [
+      { key: 'glass', x: 0, y: 0 },
+      { key: 'glass-east', x: ROOM_W, y: 0 },
+    ],
+    foregrounds: [],
+    mood: 'dusk',
+    walkable: [
+      [
+        { x: 0, y: 690 },
+        { x: 1500, y: 690 },
+        { x: 1520, y: 705 },
+        { x: 2400, y: 705 },
+        { x: 2420, y: 690 },
+        { x: 3200, y: 690 },
+        { x: 3200, y: 888 },
+        { x: 280, y: 888 },
+        { x: 250, y: 830 },
+        { x: 170, y: 760 },
+        { x: 0, y: 760 },
+      ],
+    ],
+    spawns: { 'default': { x: 330, y: 740 }, 'from-hub': { x: 330, y: 740 } },
+    doors: [
+      { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-glass' }, marker: { x: 70, y: 580 } },
+      { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
+      // The portal: standing here offers the climb (the client's `interactions` table).
+      { id: 'portal', rect: { x: 2600, y: 700, w: 200, h: 90 }, marker: { x: 2700, y: 640 } },
+    ],
+    spots: [
+      { x: 330, y: 860 },
+      { x: 480, y: 720 },
+      { x: 600, y: 850 },
+      { x: 760, y: 760 },
+      { x: 900, y: 860 },
+      { x: 1050, y: 730 },
+      { x: 1450, y: 860 },
+      { x: 1700, y: 800 },
+      { x: 1900, y: 860 },
+      { x: 2100, y: 790 },
+      { x: 2300, y: 860 },
+      { x: 2450, y: 740 },
+      { x: 2900, y: 860 },
+      { x: 3050, y: 780 },
     ],
   },
   arcade: {
@@ -623,7 +685,11 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   hub: { 'tree-base': { x: 2400, y: 628 } },
   grove: { guardian: { x: 2400, y: 430 }, gathering: { x: 2400, y: 612 } },
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
+  glass: { idol: { x: 1260, y: 520 }, portal: { x: 2700, y: 560 } },
 };
+
+/** The rooms the realms setting gates, as the keepers' page lists them. */
+export const GATED_ROOMS: readonly string[] = Object.values(ROOMS).filter((r) => r.gated).map((r) => r.id);
 
 /**
  * The rooms' layout. Positions saved under an older one (the quest items already handed out) move

@@ -62,6 +62,8 @@ import {
   type Vec2,
   type Walk,
   type Wear,
+  REALMS_DEFAULTS,
+  type RealmsSettings,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -72,7 +74,7 @@ import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
 import { castVote } from '../net/vote';
-import { NEST_MIRROR, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, getRoom } from '../rooms';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
@@ -142,7 +144,7 @@ const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
 const TOUCH_HINT_BOTTOM = 190;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
-const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347' };
+const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347', glass: '#9FD0FF' };
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
 const KEY_TURNS = 8;
 /** Never wait longer than this for the park day to turn (timers past ~24 days overflow). */
@@ -184,6 +186,8 @@ export class RoomScene extends Phaser.Scene {
   /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
   private pendingVote = false;
   private pieces: SetPieces = {};
+  /** The realms switch as the room server last said (the stained-glass climb); without a server, every gated realm is open. */
+  private realms: RealmsSettings = REALMS_DEFAULTS;
   /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
   private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
@@ -335,6 +339,7 @@ export class RoomScene extends Phaser.Scene {
     // hairline of the clear colour shows at a join while the camera scrolls.
     for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
+    this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
       scene: this,
       hud: this.hud,
@@ -477,6 +482,8 @@ export class RoomScene extends Phaser.Scene {
       onFull: (roomId) => live() && void this.roomFull(roomId),
       onQueued: () => live() && this.queued(),
       onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
+      onRealms: (realms) => live() && this.setRealms(realms),
+      onRealmClosed: (sign) => live() && this.onRealmClosed(sign),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -1329,6 +1336,11 @@ export class RoomScene extends Phaser.Scene {
         continue;
       }
       if (door.to) {
+        if (this.realmClosed(door.to.room)) {
+          // The arch into a gated realm the keepers have not opened: its blockade's phrase, and no way through.
+          if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
+          continue;
+        }
         if (!takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null)) continue;
         if (door.id === 'gate') {
           void this.throughGate(door);
@@ -1600,6 +1612,30 @@ export class RoomScene extends Phaser.Scene {
     if (this.leaving) return;
     this.hud.toast(NEST_WORDS.closedForNow, 3000);
     void this.goTo(STREET_ROOM, streetSpawnBack(this.cameFrom), undefined);
+  }
+
+  /** A gated realm the keepers have not opened (the realms switch). Rooms without `gated` are never closed this way. */
+  private realmClosed(roomId: string | undefined): boolean {
+    return !!roomId && ROOMS[roomId]?.gated === true && !this.realms.open.includes(roomId);
+  }
+
+  /** The realms switch, as the welcome or a later frame said it: the hub's arches draw open or closed, and the Menu map agrees. */
+  private setRealms(realms: RealmsSettings): void {
+    this.realms = realms;
+    this.hud.setOpenRealms(realms.open);
+    for (const [id, arch] of Object.entries(this.pieces.arches ?? {})) {
+      const closed = this.realmClosed(this.room.doors.find((d) => d.id === id)?.to?.room);
+      arch.blockade?.setVisible(closed);
+      arch.glow.setVisible(!closed);
+    }
+  }
+
+  /** The realm this owl is in (or was entering) is closed: back to the hub, by the arch it came through. */
+  private onRealmClosed(sign: string): void {
+    if (this.leaving) return;
+    this.hud.toast(sign || 'Pardon Our Feathers', 3000);
+    const back = `from-${this.room.id}`;
+    void this.goTo('hub', Object.hasOwn(ROOMS['hub']?.spawns ?? {}, back) ? back : 'default', undefined);
   }
 
   private decorateView(): DecorateView {

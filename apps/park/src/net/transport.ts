@@ -1,4 +1,4 @@
-import type { FeedbackDraft, LineStatus, OwlLook, ParkMessage, PlayerState, Vec2, Walk } from '@owl-park/shared';
+import type { FeedbackDraft, LineStatus, OwlLook, ParkMessage, PlayerState, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -30,6 +30,10 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onQueued?(): void;
   /** The busy ribbon's words (OP-075), or null when it goes off. */
   onNotice?(words: string | null): void;
+  /** The realms switch (the stained-glass climb): which gated realms are open, whether the portal is live, the night. */
+  onRealms?(realms: RealmsSettings): void;
+  /** The realm this owl is in (or was entering) is closed: the page walks it back to the hub and shows the phrase. */
+  onRealmClosed?(sign: string): void;
 }
 
 export interface RoomConnection {

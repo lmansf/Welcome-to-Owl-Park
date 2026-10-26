@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LINE_DEFAULTS, RIBBON_WORDS, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges } from '@owl-park/shared';
+import { LINE_DEFAULTS, RIBBON_WORDS, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS } from '@owl-park/shared';
 import { CLAIM_GRACE_MS, Line } from '../src/line';
 import { ENTRY_TTL_S, mintEntry, mintPass, verifyEntry, verifyPass } from '../src/pass';
 import type { Env } from '../src/env';
@@ -304,7 +304,21 @@ describe('the overflow object (OP-075)', () => {
     rooms.counts.set('park', { hub: 1 });
     await post('/settings', { line: { mode: 'on', threshold: 1 } });
     expect(rooms.told.at(-1)).toEqual({ name: 'park', words: 'The market is packed tonight' });
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: 'The market is packed tonight' });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: 'The market is packed tonight', realms: REALMS_DEFAULTS });
+  });
+
+  it('keeps the realms switch (the stained-glass climb), refuses a room that is not gated or a night it does not know, and tells the rooms', async () => {
+    expect((await post('/settings', { realms: { open: ['hub'] } })).status).toBe(400);
+    expect((await post('/settings', { realms: { night: 'never' } })).status).toBe(400);
+    expect((await post('/settings', { realms: { portal: 'yes' } })).status).toBe(400);
+    const r = await post<OverflowState>('/settings', { realms: { open: ['glass'], portal: true, night: 'hard' } });
+    expect(r.status).toBe(200);
+    const realms = { open: ['glass'], portal: true, night: 'hard' };
+    expect(r.body.realms).toEqual(realms);
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms });
+    // Closing it again reaches the rooms through the same notice.
+    await post('/settings', { realms: { open: [] } });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { ...realms, open: [] } });
   });
 
   it('refuses settings out of bounds, and copies while the park runs in one object', async () => {
@@ -364,7 +378,7 @@ describe('the rooms asking for the ribbon (OP-075)', () => {
     await obj.fetch(new Request('https://park/settings', { method: 'POST', body: JSON.stringify({ line: { mode: 'auto', threshold: 10 } }) }));
     rooms.asked.length = 0;
     vi.setSystemTime(T0 + 60_000);
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS });
     expect(rooms.asked).toEqual([]);
     vi.useRealTimers();
   });

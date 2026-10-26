@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CLOSE, LINE_DEFAULTS, RIBBON_DEFAULTS, type Copies } from '@owl-park/shared';
+import { CLOSE, LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, type Copies } from '@owl-park/shared';
 import { copiesIn, copyObjectName, pickCopy, withCopy } from '../src/copies';
 import type { Env } from '../src/env';
 import type { OverflowState } from '../src/Overflow';
@@ -108,7 +108,7 @@ class FakeRooms {
 }
 
 function overflowWith(state: Partial<OverflowState>) {
-  const full: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null, ...state };
+  const full: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null, realms: REALMS_DEFAULTS, ...state };
   return { idFromName: () => 'park', get: () => ({ fetch: async () => Response.json(full) }) };
 }
 
@@ -202,7 +202,7 @@ describe('the Worker answering looks at a long line (OP-075)', () => {
   it('answers a number waiting when it last read the line itself, and asks the line about one called or taken since', async () => {
     forgetOverflow();
     const asked: number[] = [];
-    const read: OverflowState = { line: { mode: 'on', threshold: 1, holdMin: 3 }, active: true, waiting: 3, front: 40, rate: 2, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: 1, countedAt: 0 };
+    const read: OverflowState = { line: { mode: 'on', threshold: 1, holdMin: 3 }, active: true, waiting: 3, front: 40, rate: 2, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: 1, countedAt: 0, realms: REALMS_DEFAULTS };
     const OVERFLOW = {
       idFromName: () => 'park',
       get: () => ({

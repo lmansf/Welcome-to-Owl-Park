@@ -187,7 +187,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     // Your owl as the first run opens it, over the room (mirror.spec.ts opens it at the nest's mirror).
     await page.evaluate(() => window.owlPark.openBuilder());
     const builder = page.getByRole('dialog', { name: 'Your owl' });
-    await expect(builder.getByText(/of 1180 collected · \d+ feathers/)).toBeVisible();
+    await expect(builder.getByText(/of 1190 collected · \d+ feathers/)).toBeVisible();
     // The owl is drawn big while the builder is open, over the room.
     await expect.poll(() => page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
     await builder.locator('[data-tab="wear"]').click();

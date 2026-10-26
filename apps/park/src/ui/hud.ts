@@ -155,6 +155,8 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /** The gated realms the keepers have opened (the realms switch): the Menu map draws their arches as doorways. */
+  setOpenRealms(open: readonly string[]): void;
   onHint(cb: (id: string) => void): void;
   /**
    * The nest's welcome (OP-105): a card under the top bar the first time this device's owl is in its
@@ -394,6 +396,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let jumpCb: (() => void) | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
+  /** The gated realms the keepers have opened (the realms switch), for the Menu map. */
+  let openRealms: string[] = [];
   let shownActions = '';
   let here = 1;
   let park: number | null = null;
@@ -433,7 +437,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       { id: 'collection', label: 'Collection', render: (panel) => renderCollection(panel, collectionState) },
       { id: 'nest', label: 'Nest', render: (panel) => renderNest(panel, { canGoHome: waysOut.home }, () => openScreen('home')) },
       // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
-      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home)) },
+      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms) },
       {
         id: 'settings',
         label: 'Settings',
@@ -726,6 +730,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     onJump(cb) {
       jumpCb = cb;
+    },
+    setOpenRealms(open) {
+      openRealms = [...open];
     },
     setHints(list) {
       const seen = new Set<string>();

@@ -82,7 +82,7 @@ export interface QuestPushes {
 }
 
 /** Why the room did not take an activity. */
-export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown';
+export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten';
 type No = { ok: false; reason: ActRefusal };
 
 /** The robot owl's tune to copy: played until `listenUntil`, then each note due by `deadline`. */
