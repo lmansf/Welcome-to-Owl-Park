@@ -116,7 +116,7 @@ export type ClimbReply =
   | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
   | No;
 /** A band line reached: what the room banked and paid, and the run's reference. */
-export type AscentReply = { ok: true; banked: number; added: number; feathers: number; total: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string } | No;
+export type AscentReply = { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string } | No;
 
 /**
  * The park's activities in one room (activities.ts in @owl-park/shared): the hub's lanterns, the pond

@@ -985,52 +985,79 @@ field, listed in `bandLines` and treated as ledges; the cloud line is `bandLines
 | `CLIMB_ROW_KEEP_DAYS` | 30 | band rows older than this are swept |
 | `BAND_COUNT` | 6 | bands; the sixth is the clouds |
 | `BAND_FEATHERS` | 1, 1, 2, 2, 2, 2 | per band, ten in total |
+| `BRISK_FEATHERS`, `CLIMB_BRISK_FACTOR` | 1, 1.2 | the brisk feather, and the window as a multiple of the high road's time |
 
-### The layout `city-1`
+### The layout `city-1` (second pass: two roads a storey)
 
-`bandLines` = 900, 1800, 2700, 3600, 4500, 5400; `start` = `{x: 0, y: 0, w: 480}`. Ledges are
-160 wide (`climb-ledge-a`) or 240 wide (`climb-ledge-b`); band lines are drawn as
-`climb-balcony` pieces across the field. `L` means `x: 0`, `R` means `x: 320` for a 160-wide ledge
-and `x: 240` for a 240-wide one.
+`bandLines` = 900, 1800, 2700, 3600, 4500, 5400; `start` = `{x: 0, y: 0, w: 480}`. From band 2 up
+each storey has two roads, so that the climb grows harder one idea at a time, offers a choice at
+every storey, and pays for a calculated risk:
 
-| Band | Vertical gap | Ledges (side, y, width) | Move between ledges |
+*   **The stairs** zigzag across the field on wide ledges in small steps, with a run between
+    jumps. They forgive a short jump; in bands 5 and 6 they are the glide across the open field.
+*   **The high road** goes straight up a column of narrow ledges (`road: 'high'`) in the gap the
+    stairs leave. No run between jumps, but the full height of each one (a double jump needs its
+    second press at the apex, a window of about ninety milliseconds either side) and a narrow
+    landing every time. It is the faster way up a storey: 5.4, 5.0, 3.8, 4.3 and 4.0 seconds for
+    bands 2 to 6 against the stairs' 8 to 9. Missing it lands on the stairs or the balcony below:
+    the price is time, never the run.
+
+The roads never share a column, so a jump straight up from the stairs never lands on the high
+road. Ledge widths: the stairs 160 (band 1), 140 and 120 (band 2), 160 (3), 140 (4), 140 (5), 130
+(6); the high road 100 (bands 2 and 3), 80 (4 and 5), 70 (6).
+
+| Band | Teaches | Stairs (side, y, width) | High road (x, y, width) |
 | --- | --- | --- | --- |
-| 1 | 128 | L 128, R 256, L 384, R 512, L 640, R 768; line 900 | run, one jump |
-| 2 | 128 | L 1028, R 1156, L 1284, R 1412, L 1540, R 1668; line 1800 | run, one jump |
-| 3 | 180 | L 1980, R 2160, L 2340, R 2520; line 2700 | run, double jump |
-| 4 | 180 | L 2880, R 3060, L 3240, R 3420; line 3600 | run, double jump |
-| 5 | 225 | L 3825 (240 wide), R 4050 (240 wide), L 4275 (240 wide); line 4500 | double jump, glide across |
-| 6 | 225 | L 4725 (240 wide), R 4950 (240 wide), L 5175 (240 wide); line 5400 | double jump, glide across |
+| 1 | the jump | L 128, R 256, L 384, R 512, L 640, R 768 (160 wide; 128 up, 80 across; single jumps) | none |
+| 2 | narrower ledges, a step straight up | L 1028 (140), R 1156 (140), L 1284 (120), R 1412 at x 220 (120), L 1540 (120), L 1680 at x 30 (120, straight up) | x 380: 1040, 1180, 1320, 1460, 1600, 1740 (100 wide; 140 up, single jumps) |
+| 3 | the double jump | L 1980, R 2160, L 2340, R 2520 (160 wide; 180 up, 160 across) | x 190: 2040, 2280, 2520 (100 wide; 240 up) |
+| 4 | the double jump, narrower | L 2880, R 3060 at x 300, L 3240, R 3420 at x 300 (140 wide; 180 up, 160 across) | x 200: 2940, 3180, 3420 (80 wide; 240 up) |
+| 5 | the glide | L 3800, R 4000 at x 340, L 4200, R 4400 at x 340 (140 wide; 200 up, 200 across; double jump and glide) | x 200: 3825, 4050, 4275 (80 wide; 225 up) |
+| 6 | the glide, narrower | L 4700, R 4900 at x 330, L 5100, R 5300 at x 330 (130 wide; 200 up, 200 across) | x 205: 4725, 4950, 5175 (70 wide; 225 up) |
 
-Thirty-two platforms: the start, twenty-six ledges and six lines. Bands 1 and 2 need one jump
-(rise about 150 px against a 128 px gap); bands 3 and 4 need the double jump (about 245 px against
-180); bands 5 and 6 need the double jump at the ledge's edge and a glide to cross the 240 px of
-open field to the other side.
+Fifty-nine platforms: the start, twenty-six stairs ledges, twenty-six high-road ledges and six
+lines. `roadPlatforms(layout, road)` lists one road's platforms (the stairs' where a band has no
+high road), and `routeOf` derives its moves: `U` (stand under the target and jump) when the target
+spans the field or overlaps the ledge below, else toward a side; a single jump for 140 px or less
+with at most 100 px across, a glide for more than 170 px across, a double jump otherwise.
 
-### The scripted route and the starting floors
+### The brisk feather
 
-`ROUTES['city-1']` is a list of moves, one per platform above the start, each `{toward: 'L' |
-'R'; jump: 'single' | 'double' | 'double-glide'}`. The test drives `stepClimb` through them: hold
-`toward` until the owl's box edge is within 8 px of the current ledge's end, press jump
-(`single`), press again at the apex (`double`), and hold jump from the second press until landing
-(`double-glide`). It records the step count at which `band` first reaches each value, converts to
-milliseconds, applies the margin and rounds down to 100 ms.
+`BRISK_FEATHERS` (1) more for a storey climbed within its brisk window: the high road's scripted
+time through the band times `CLIMB_BRISK_FACTOR` (1.2), per band in `CLIMB_BRISK` (derived and
+frozen by the test like the floors; 0 for band 1, which has no high road). The server judges it
+from what it already keeps: the band's arrival against the band below's arrival (the start for
+band 1), so a slow storey never costs the next one its bonus, and only the first band of an
+`ascent` frame can be brisk (bands caught up in one frame were not seen arriving). The row's `due`
+carries the brisk feather so the cap's `capped` reads right, the row records `brisk`, and the
+answer carries `brisk` (how many bands earned it this frame). The screen says "· brisk!" on the
+band line and "You reached the clouds, briskly!" on the card. Potential pay per run grows from ten
+to fifteen feathers, still under the activities' shared cap of twenty-five.
 
-Starting floors in milliseconds, from the route's estimated times (easy / medium / hard); Phase
-1's first task replaces them with the printed values:
+### The scripted routes and the floors
 
-| Band | Route time | Floor |
-| --- | --- | --- |
-| 1 | 7,000 / 7,000 / 7,000 | 5,600 / 5,600 / 5,600 |
-| 2 | 14,000 / 14,000 / 14,000 | 11,200 / 11,200 / 11,200 |
-| 3 | 20,500 / 20,500 / 20,500 | 16,400 / 16,400 / 16,400 |
-| 4 | 27,000 / 27,000 / 27,000 | 21,600 / 21,600 / 21,600 |
-| 5 | 34,500 / 34,000 / 33,500 | 27,600 / 27,200 / 26,800 |
-| 6 | 42,000 / 41,000 / 40,000 | 33,600 / 32,800 / 32,000 |
+`ROUTES['city-1']` holds both roads' moves. The test drives each through `stepClimb` under every
+tier: hold `toward` until the owl's box edge is within 8 px of the current ledge's end, or for `U`
+stand under the target (as near its middle as the ledge allows) and still; press jump (`single`),
+press again at the apex (`double`), and hold jump from the second press until landing
+(`double-glide`). It records the step at which `band` first reaches each value on each road. The
+floors are the faster road's cumulative times less the margin, rounded down to 100 ms; the brisk
+windows the high road's segment times, up to 100 ms.
 
-The glide crossing is the only move the tier changes, so bands 1 to 4 share one floor and bands 5
-and 6 fall faster on harder nights (a faster glide fall crosses sooner but lands lower, which the
-route absorbs on the next ledge).
+Frozen values (the high road has no glide, so the tiers agree):
+
+| Band | Stairs | High road | Floor | Brisk window |
+| --- | --- | --- | --- | --- |
+| 1 | 7,117 | 7,117 (the stairs) | 5,600 | none |
+| 2 | 15,175 | 12,508 | 10,000 | 6,500 |
+| 3 | 23,025 | 17,492 | 13,900 | 6,000 |
+| 4 | 32,000 | 21,325 | 17,000 | 4,600 |
+| 5 | 40,650 / 39,758 / 39,583 | 25,600 | 20,400 | 5,200 |
+| 6 | 49,442 / 47,633 / 47,267 | 29,600 | 23,600 | 4,900 |
+
+Times in ms (stairs by easy / medium / hard where the glide differs). Puzzles that need new rules
+(moving panes, wind, a ledge that gives way) are a later pass; this one works within the eight
+rules of the simulation.
 
 ### Art
 

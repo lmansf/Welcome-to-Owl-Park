@@ -21,6 +21,7 @@ const bandRow = (cid: string, seed: number, band: number, extra: Partial<BandRow
   elapsedMs: band * 10_000,
   due: 1,
   added: 1,
+  brisk: false,
   why: null,
   night: 'easy',
   ref: climbRef(cid, seed),
@@ -51,12 +52,12 @@ for (const [name, make] of STORES) {
       s.upsertBand(bandRow(CID, 7, 1));
       s.upsertBand(bandRow(CID, 7, 2, { verdict: 'paid-today', added: 0, why: 'paid-today' }));
       s.upsertBand(bandRow(CID, 7, 2, { verdict: 'paid-today', added: 0, why: 'paid-today', elapsedMs: 21_000 }));
-      s.upsertBand(bandRow(CID, 8, 3, { why: 'capped', added: 0, due: 2 }));
+      s.upsertBand(bandRow(CID, 8, 3, { why: 'capped', added: 0, due: 2, brisk: true }));
       s.upsertBand(bandRow('c_owlbbbbb', 7, 1));
       expect(s.bands(CID, 7)).toEqual([bandRow(CID, 7, 1), bandRow(CID, 7, 2, { verdict: 'paid-today', added: 0, why: 'paid-today', elapsedMs: 21_000 })]);
       expect(s.paidBands(CID, parkDay(MON))).toEqual([1, 3]);
       expect(s.paidBands(CID, '2026-10-20')).toEqual([]);
-      expect(s.byRef(climbRef(CID, 8))).toEqual([bandRow(CID, 8, 3, { why: 'capped', added: 0, due: 2 })]);
+      expect(s.byRef(climbRef(CID, 8))).toEqual([bandRow(CID, 8, 3, { why: 'capped', added: 0, due: 2, brisk: true })]);
       expect(s.byRef(climbRef('c_owlbbbbb', 7))).toHaveLength(1);
       expect(s.byRef('00000000')).toEqual([]);
       s.sweep(MON + 25_000);

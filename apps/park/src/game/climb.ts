@@ -207,7 +207,7 @@ export class Climb {
     if (run.banked >= BAND_COUNT) {
       run.over = true;
       this.host.hud.climbResult({
-        line: 'You reached the clouds!',
+        line: reply.brisk > 0 ? 'You reached the clouds, briskly!' : 'You reached the clouds!',
         feathers: run.added,
         ...(reply.item ? { item: 'The Glass Circlet is yours.' } : reply.why === 'item-already-given' ? { item: 'The Glass Circlet is already yours.' } : {}),
         ref: reply.ref,
@@ -215,7 +215,7 @@ export class Climb {
       });
       return;
     }
-    this.host.hud.climbBand({ band: reply.banked, added: reply.added, ...(reply.why ? { why: reply.why } : {}) });
+    this.host.hud.climbBand({ band: reply.banked, added: reply.added, ...(reply.brisk > 0 ? { brisk: true } : {}), ...(reply.why ? { why: reply.why } : {}) });
   }
 
   /** Back online after a drop while the screen is up: the run from the room, and any band it never answered. */

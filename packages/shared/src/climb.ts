@@ -42,6 +42,10 @@ export const CLIMB_FLOOR_MARGIN = 0.2;
 export const CLIMB_ROW_KEEP_DAYS = 30;
 /** Feathers per band, paid once a park day each: ten in all for the clouds. */
 export const BAND_FEATHERS: readonly number[] = [1, 1, 2, 2, 2, 2];
+/** One more feather for a storey climbed briskly: within the high road's time and a fifth (bands with a high road only). */
+export const BRISK_FEATHERS = 1;
+/** The brisk window is the high road's time through the band, times this. */
+export const CLIMB_BRISK_FACTOR = 1.2;
 /** Visitor-facing names (defaults for the owner's approval). */
 export const BAND_NAMES: readonly string[] = ['First storey', 'Second storey', 'Third storey', 'Fourth storey', 'Fifth storey', 'The clouds'];
 
@@ -52,6 +56,8 @@ export interface Ledge {
   x: number;
   y: number;
   w: number;
+  /** The high road: a narrow ledge at the limit of a move, skipping the stairs' steps. Absent on the stairs and the band lines. */
+  road?: 'high';
 }
 
 export interface Layout {
@@ -107,59 +113,109 @@ export function startState(layout: Layout): ClimbState {
 // ---------- the layout ----------
 
 const ledge = (x: number, y: number, w: number): Ledge => ({ x, y, w });
+const high = (x: number, y: number, w: number): Ledge => ({ x, y, w, road: 'high' });
 
 /**
- * `city-1`: six bands of 900 px. Bands 1 and 2 are single jumps between 160-wide ledges 80 px apart; 3 and 4 need the double jump; 5 and 6 cross open field on 140-wide ledges that only a glide
- * after the double jump reaches. Each band line is a full-width balcony.
+ * `city-1`: six bands of 900 px, each a storey of the tower with a balcony (the band line) at its top.
+ * From band 2 up every band has two roads. The stairs zigzag across the field on wide ledges in
+ * small steps, with a run between jumps; they forgive a short jump, and in bands 5 and 6 they are
+ * the glide across the open field. The high road goes straight up a column of narrow ledges in the
+ * gap the stairs leave, with no run between jumps but the full height of each one (a double jump
+ * needs its second press at the apex) and a narrow landing every time; it is the faster way up a
+ * storey, and a storey climbed within its time pays a brisk feather. Missing the high road lands on
+ * the stairs or the balcony below: the price is time, never the run. Each band teaches one thing:
+ * 1 single jumps; 2 narrower ledges and a step straight up; 3 the double jump; 4 the double jump on
+ * narrower ledges; 5 the glide across the field; 6 the same, narrower.
  */
 const CITY_1: Layout = {
   id: 'city-1',
   bandLines: [900, 1800, 2700, 3600, 4500, 5400],
   start: ledge(0, 0, CLIMB_FIELD_W),
   ledges: [
-    // Band 1: one jump, 128 px up and across.
+    // Band 1, the steps: single jumps, 128 px up, 80 px across. No high road: the band teaches the jump.
     ledge(0, 128, 160),
     ledge(240, 256, 160),
     ledge(0, 384, 160),
     ledge(240, 512, 160),
     ledge(0, 640, 160),
     ledge(240, 768, 160),
-    // Band 2.
-    ledge(0, 1028, 160),
-    ledge(240, 1156, 160),
-    ledge(0, 1284, 160),
-    ledge(240, 1412, 160),
-    ledge(0, 1540, 160),
-    ledge(240, 1668, 160),
-    // Band 3: the double jump, 180 px up.
+    // Band 2, narrowing: the ledges thin to 120, the gap grows to 100, and the last step is straight up.
+    ledge(0, 1028, 140),
+    ledge(240, 1156, 140),
+    ledge(0, 1284, 120),
+    ledge(220, 1412, 120),
+    ledge(0, 1540, 120),
+    ledge(30, 1680, 120),
+    // Its high road: a column of 100-wide ledges 140 px apart up the right-hand edge, single jumps.
+    high(380, 1040, 100),
+    high(380, 1180, 100),
+    high(380, 1320, 100),
+    high(380, 1460, 100),
+    high(380, 1600, 100),
+    high(380, 1740, 100),
+    // Band 3, the double jump: 180 px up, 160 across.
     ledge(0, 1980, 160),
     ledge(320, 2160, 160),
     ledge(0, 2340, 160),
     ledge(320, 2520, 160),
-    // Band 4.
-    ledge(0, 2880, 160),
-    ledge(320, 3060, 160),
-    ledge(0, 3240, 160),
-    ledge(320, 3420, 160),
-    // Band 5: the double jump then a glide across 200 px of open field, 200 px up.
+    // Its high road: 240 px straight up the middle, three times; the second press must come at the apex.
+    high(190, 2040, 100),
+    high(190, 2280, 100),
+    high(190, 2520, 100),
+    // Band 4, the double jump on narrower ledges: 180 px up, 160 across, 140 wide.
+    ledge(0, 2880, 140),
+    ledge(300, 3060, 140),
+    ledge(0, 3240, 140),
+    ledge(300, 3420, 140),
+    // Its high road: 240 px up on 80-wide ledges.
+    high(200, 2940, 80),
+    high(200, 3180, 80),
+    high(200, 3420, 80),
+    // Band 5, the glide: 200 px up and 200 across on 140-wide ledges, a double jump at the edge and a glide.
     ledge(0, 3800, 140),
     ledge(340, 4000, 140),
     ledge(0, 4200, 140),
     ledge(340, 4400, 140),
-    // Band 6.
-    ledge(0, 4700, 140),
-    ledge(340, 4900, 140),
-    ledge(0, 5100, 140),
-    ledge(340, 5300, 140),
+    // Its high road: 225 px up on 80-wide ledges, the double jump's whole height each time.
+    high(200, 3825, 80),
+    high(200, 4050, 80),
+    high(200, 4275, 80),
+    // Band 6, the clouds: the glide on 130-wide ledges, and the high road on 70-wide ones.
+    ledge(0, 4700, 130),
+    ledge(330, 4900, 130),
+    ledge(0, 5100, 130),
+    ledge(330, 5300, 130),
+    high(205, 4725, 70),
+    high(205, 4950, 70),
+    high(205, 5175, 70),
   ],
 };
 
 export const LAYOUTS: Readonly<Record<string, Layout>> = { 'city-1': CITY_1 };
 
-/** Every platform of a layout, lowest first: the start, the ledges and the band lines. */
+/** Every platform of a layout, lowest first: the start, the ledges of both roads and the band lines. */
 export function platforms(layout: Layout): Ledge[] {
   const lines = layout.bandLines.map((y) => ledge(0, y, CLIMB_FIELD_W));
   return [layout.start, ...layout.ledges, ...lines].sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+export type Road = 'stairs' | 'high';
+
+/**
+ * The platforms of one road, lowest first: the start, the band lines, and in each band the road's
+ * ledges (the stairs' where a band has no high road, such as band 1).
+ */
+export function roadPlatforms(layout: Layout, road: Road): Ledge[] {
+  const lines = layout.bandLines.map((y) => ledge(0, y, CLIMB_FIELD_W));
+  const out: Ledge[] = [layout.start];
+  let floor = layout.start.y;
+  for (const line of lines) {
+    const inBand = layout.ledges.filter((l) => l.y > floor && l.y < line.y);
+    const own = inBand.filter((l) => (l.road === 'high') === (road === 'high'));
+    out.push(...(own.length ? own : inBand.filter((l) => !l.road)), line);
+    floor = line.y;
+  }
+  return out.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 // ---------- nights ----------
@@ -244,39 +300,70 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
   return { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, gliding, band };
 }
 
-// ---------- the route and the floors ----------
+// ---------- the routes and the floors ----------
 
-/** One move of the scripted route: run toward a side and make this kind of jump to the next platform up. */
+/**
+ * One move of a scripted route: toward a side (run to the ledge's end and jump) or `U` (stand under
+ * the target and jump straight up), with the kind of jump, to the platform `to`.
+ */
 export interface RouteMove {
-  toward: 'L' | 'R';
+  toward: 'L' | 'R' | 'U';
   jump: 'single' | 'double' | 'double-glide';
+  to: Ledge;
 }
 
-/** The route the floor test drives through `city-1`: one move per platform above the start, lowest first. */
-export const ROUTES: Readonly<Record<string, readonly RouteMove[]>> = {
-  'city-1': platforms(CITY_1)
-    .slice(1)
-    .map((p, i, list) => {
-      const below = i === 0 ? CITY_1.start : list[i - 1]!;
-      const line = p.w === CLIMB_FIELD_W;
-      const toward: 'L' | 'R' = line ? (below.x === 0 ? 'R' : 'L') : p.x === 0 ? 'L' : 'R';
-      const gap = p.y - below.y;
-      const jump: RouteMove['jump'] = line ? (gap > 150 ? 'double' : 'single') : p.w === 140 ? 'double-glide' : gap > 150 ? 'double' : 'single';
-      return { toward, jump };
-    }),
+const overlapsX = (a: Ledge, b: Ledge) => a.x < b.x + b.w && a.x + a.w > b.x;
+
+/** The move from `from` to `to`, by the gap: a single jump rises 150 px, a double 245, a glide carries across the field. */
+export function moveBetween(from: Ledge, to: Ledge): RouteMove {
+  const gap = to.y - from.y;
+  if (to.w === CLIMB_FIELD_W || overlapsX(from, to)) return { toward: 'U', jump: gap <= 140 ? 'single' : 'double', to };
+  const toward: 'L' | 'R' = to.x + to.w / 2 > from.x + from.w / 2 ? 'R' : 'L';
+  const across = toward === 'R' ? to.x - (from.x + from.w) : from.x - (to.x + to.w);
+  const jump: RouteMove['jump'] = gap <= 140 && across <= 100 ? 'single' : across > 170 ? 'double-glide' : 'double';
+  return { toward, jump, to };
+}
+
+/** A road's route: the move onto each of its platforms above the start. */
+export function routeOf(layout: Layout, road: Road): RouteMove[] {
+  const list = roadPlatforms(layout, road);
+  return list.slice(1).map((p, i) => moveBetween(list[i]!, p));
+}
+
+/** The routes the floor test drives through each layout: the stairs, and the high road where a band has one. */
+export const ROUTES: Readonly<Record<string, Readonly<Record<Road, readonly RouteMove[]>>>> = {
+  'city-1': { stairs: routeOf(CITY_1, 'stairs'), high: routeOf(CITY_1, 'high') },
 };
 
 /**
- * The least time to each band, by tier, in ms: the scripted route's time less CLIMB_FLOOR_MARGIN,
+ * The least time to each band, by tier, in ms: the faster road's scripted time less CLIMB_FLOOR_MARGIN,
  * rounded down to 100 ms. climb.test.ts derives them and fails when a constant or the layout moves one.
  */
 export const CLIMB_FLOORS: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
   'city-1': {
-    easy: [5700, 11300, 17500, 23900, 30200, 36800],
-    medium: [5700, 11300, 17500, 23900, 29500, 35500],
-    hard: [5700, 11300, 17500, 23900, 29300, 35000],
+    easy: [5600, 10000, 13900, 17000, 20400, 23600],
+    medium: [5600, 10000, 13900, 17000, 20400, 23600],
+    hard: [5600, 10000, 13900, 17000, 20400, 23600],
   },
 };
+
+/**
+ * The brisk window of each band, by tier, in ms: the high road's scripted time through the band times
+ * CLIMB_BRISK_FACTOR, rounded up to 100 ms; 0 where a band has no high road (no bonus there).
+ * Derived and frozen by climb.test.ts like the floors.
+ */
+export const CLIMB_BRISK: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
+  'city-1': {
+    easy: [0, 6500, 6000, 4600, 5200, 4900],
+    medium: [0, 6500, 6000, 4600, 5200, 4900],
+    hard: [0, 6500, 6000, 4600, 5200, 4900],
+  },
+};
+
+/** The brisk window of `band` under this night (0: the band pays no brisk feather). */
+export function briskMs(night: Night, band: number): number {
+  return CLIMB_BRISK[night.layout]?.[night.tier]?.[band - 1] ?? 0;
+}
 
 /** The least time a run under this night can have reached `band` (1 to BAND_COUNT). */
 export function leastClimbMs(night: Night, band: number): number {

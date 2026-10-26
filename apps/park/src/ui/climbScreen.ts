@@ -28,6 +28,8 @@ export interface ClimbView {
 export interface ClimbBandView {
   band: number;
   added: number;
+  /** The storey was climbed within its brisk window (the high road's time): a feather more. */
+  brisk?: boolean;
   why?: 'capped' | 'paid-today' | 'item-already-given';
 }
 
@@ -112,7 +114,8 @@ export function climbSubline(banked: number, remainingCap: number, cap: number):
 /** The line for a band reached, as the screen shows it over the field for a moment. */
 export function bandLineFor(b: ClimbBandView): string {
   const name = BAND_NAMES[b.band - 1] ?? `Storey ${b.band}`;
-  if (b.added > 0) return `${name}: +${feathers(b.added)}`;
+  if (b.added > 0) return `${name}: +${feathers(b.added)}${b.brisk ? ' · brisk!' : ''}`;
+  if (b.brisk && b.why === 'paid-today') return `${name}: brisk, but paid today already`;
   if (b.why === 'paid-today') return `${name}: paid today already`;
   if (b.why === 'capped') return `${name}: no more feathers from games today`;
   return `${name}`;

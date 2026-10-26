@@ -51,13 +51,15 @@ export async function climbTo(page: Page, band: number, timeout = 200_000): Prom
         x: number;
         y: number;
         w: number;
+        road?: string;
       }
       const first = window.owlPark.climb();
       if (!first) return Promise.resolve('no run');
       const layout = first.layout as { start: P; ledges: readonly P[]; bandLines: readonly number[] };
       const W = 480;
       const OWL_W = 36;
-      const plats: P[] = [layout.start, ...layout.ledges, ...layout.bandLines.map((y) => ({ x: 0, y, w: W }))].sort((a, b) => a.y - b.y || a.x - b.x);
+      // The driver takes the stairs: the high road is the player's gamble, not the test's.
+      const plats: P[] = [layout.start, ...layout.ledges.filter((l) => l.road !== 'high'), ...layout.bandLines.map((y) => ({ x: 0, y, w: W }))].sort((a, b) => a.y - b.y || a.x - b.x);
       const key = (type: 'keydown' | 'keyup', code: string) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code === 'Space' ? ' ' : code, bubbles: true, cancelable: true }));
       let holding: string | null = null;
       const hold = (code: string | null) => {
@@ -120,10 +122,13 @@ export async function climbTo(page: Page, band: number, timeout = 200_000): Prom
             const dy = next.y - cur.y;
             const kind = dy <= 140 ? 'single' : dy <= 190 ? 'double' : 'glide';
             const nextCx = next.x + next.w / 2;
-            if (cur.w >= W) {
-              // A balcony spans the field: get under the next ledge, let the run die down a little and jump straight up.
-              const under = s.x > next.x + 30 && s.x < next.x + next.w - 30;
-              if (!under) hold(nextCx > s.x ? 'ArrowRight' : 'ArrowLeft');
+            const overlapping = next.x < cur.x + cur.w && next.x + next.w > cur.x;
+            if (cur.w >= W || overlapping) {
+              // A balcony spans the field, or the next ledge sits over this one: get under it (as near its
+              // middle as this ledge allows), let the run die down a little and jump straight up.
+              const aim = Math.max(cur.x + OWL_W / 2 + 6, Math.min(cur.x + cur.w - OWL_W / 2 - 6, nextCx));
+              const under = Math.abs(s.x - aim) <= (cur.w >= W ? next.w / 2 - 30 : 8);
+              if (!under) hold(aim > s.x ? 'ArrowRight' : 'ArrowLeft');
               else {
                 hold(null);
                 if (Math.abs(s.vx) < 160) {

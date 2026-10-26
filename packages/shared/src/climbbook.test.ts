@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionBook, MemoryCollectionStore } from './book';
-import { BAND_FEATHERS, CLIMB_RUN_MAX_MS, NIGHTS, leastClimbMs } from './climb';
+import { BAND_FEATHERS, BRISK_FEATHERS, CLIMB_RUN_MAX_MS, NIGHTS, briskMs, leastClimbMs } from './climb';
 import { CLOUDS_ITEM, ClimbBook, MemoryClimbStore, climbRef, isClimbRef, type ClimbFlags } from './climbbook';
 import { PLAY_FEATHERS_PER_DAY } from './activities';
 import { nextParkDayAt } from './parktime';
@@ -57,7 +57,7 @@ describe('the climb book: bands', () => {
   it('pays every band from the banked one up to the one reached, and the answer carries the reference', () => {
     const { climb, store, book } = setup();
     climb.start(CID, AT, MON);
-    expect(climb.band(CID, 7, 1, reach(1))).toEqual({ ok: true, banked: 1, added: 1, feathers: book.feathers(CID, MON), total: 1, ref: climbRef(CID, 7) });
+    expect(climb.band(CID, 7, 1, reach(1))).toEqual({ ok: true, banked: 1, added: 1, feathers: book.feathers(CID, MON), total: 1, brisk: 0, ref: climbRef(CID, 7) });
     const r = climb.band(CID, 7, 3, reach(3));
     expect(r).toMatchObject({ ok: true, banked: 3, added: BAND_FEATHERS[1]! + BAND_FEATHERS[2]!, total: 4 });
     expect(store.bands(CID, 7).map((b) => [b.band, b.verdict, b.due, b.added, b.why])).toEqual([
@@ -78,8 +78,9 @@ describe('the climb book: bands', () => {
     expect(climb.start(CID, AT, later)).toMatchObject({ ok: true, seed: 8, bestBandToday: 3, remainingCap: PLAY_FEATHERS_PER_DAY - 4 });
     const r = climb.band(CID, 8, 3, later + leastClimbMs(EASY, 3) + 250);
     expect(r).toMatchObject({ ok: true, banked: 3, added: 0, total: 4, why: 'paid-today' });
+    // Band 4 came within its brisk window of band 3's arrival: the table's two feathers and the brisk one.
     const r4 = climb.band(CID, 8, 4, later + leastClimbMs(EASY, 4) + 250);
-    expect(r4).toMatchObject({ ok: true, banked: 4, added: 2, total: 6 });
+    expect(r4).toMatchObject({ ok: true, banked: 4, added: 3, total: 7, brisk: 1 });
     expect(r4).not.toHaveProperty('why');
   });
 
@@ -107,6 +108,30 @@ describe('the climb book: bands', () => {
       [4, 2, 0, 'capped'],
     ]);
     expect(climb.start(CID, AT, MON + 1000)).toMatchObject({ ok: true, resumed: true, remainingCap: 0 });
+  });
+
+  it('pays a brisk feather for a storey climbed within the high road’s window, judged from the storey below', () => {
+    const { climb, store } = setup();
+    climb.start(CID, AT, MON);
+    // Band 1 has no high road: never brisk.
+    expect(briskMs(EASY, 1)).toBe(0);
+    expect(climb.band(CID, 7, 1, reach(1))).toMatchObject({ ok: true, added: 1, brisk: 0 });
+    // Band 2 within its window of band 1's arrival: a feather more, recorded on the row.
+    const quick = reach(1) + briskMs(EASY, 2) - 500;
+    expect(climb.band(CID, 7, 2, quick)).toMatchObject({ ok: true, banked: 2, added: BAND_FEATHERS[1]! + BRISK_FEATHERS, total: 3, brisk: 1 });
+    expect(store.bands(CID, 7)[1]).toMatchObject({ band: 2, brisk: true, due: BAND_FEATHERS[1]! + BRISK_FEATHERS, added: 2 });
+    // Band 3 dawdled: the table value alone.
+    const slow = quick + briskMs(EASY, 3) + 3000;
+    expect(climb.band(CID, 7, 3, slow)).toMatchObject({ ok: true, banked: 3, added: BAND_FEATHERS[2], brisk: 0 });
+    expect(store.bands(CID, 7)[2]).toMatchObject({ band: 3, brisk: false });
+    // Two bands in one frame: the first is timed from band 3's arrival (and was quick), the one caught
+    // up with it was not seen arriving and takes the table value alone.
+    const two = climb.band(CID, 7, 5, slow + 100);
+    expect(two).toMatchObject({ ok: true, banked: 5, added: BAND_FEATHERS[3]! + BRISK_FEATHERS + BAND_FEATHERS[4]!, brisk: 1 });
+    expect(store.bands(CID, 7).slice(3).map((r) => [r.band, r.brisk])).toEqual([
+      [4, true],
+      [5, false],
+    ]);
   });
 
   it('refuses a band reached too fast and writes nothing', () => {

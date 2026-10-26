@@ -7,13 +7,15 @@
  * A run is started or resumed by `climb`, survives any socket, and is forgotten an hour after it
  * started. An `ascent` names the band reached: every band above the run's banked band up to it is
  * checked against its floor, paid once a park day under the activities' shared cap, and recorded.
- * Reaching the clouds grants the realm's item the first time ever.
+ * A band climbed within its brisk window (the high road's time and a fifth, judged from the band
+ * below's arrival) pays a brisk feather on top. Reaching the clouds grants the realm's item the
+ * first time ever.
  */
 import { BAND_COUNT, type ClimbTier, type ClimbWhy } from './edge';
 import type { CollectionBook } from './book';
 import { hashSeed, moonTier, nightFor, parkDay, parkMoon } from './parktime';
 import { isObj } from './validate';
-import { BAND_FEATHERS, CLIMB_ROW_KEEP_DAYS, CLIMB_RUN_MAX_MS, NIGHTS, isNightKey, leastClimbMs, plausibleBand, type Night } from './climb';
+import { BAND_FEATHERS, BRISK_FEATHERS, CLIMB_ROW_KEEP_DAYS, CLIMB_RUN_MAX_MS, NIGHTS, briskMs, isNightKey, leastClimbMs, plausibleBand, type Night } from './climb';
 
 /** The item the clouds grant once (a common head wearable, its first colourway). */
 export const CLOUDS_ITEM = 'glass-circlet~0';
@@ -40,9 +42,11 @@ export interface BandRow {
   verdict: BandVerdict;
   floorMs: number;
   elapsedMs: number;
-  /** The band's table value, and what was added after the day's cap and the once-a-day rule. */
+  /** The band's table value (with the brisk feather when it was earned), and what was added after the day's cap and the once-a-day rule. */
   due: number;
   added: number;
+  /** The band was climbed within its brisk window. */
+  brisk: boolean;
   why: ClimbWhy | null;
   night: string;
   /** The run reference a visitor can quote: eight hex characters of a hash of the collector and the seed. */
@@ -77,7 +81,7 @@ export type ClimbStart =
   | { ok: false; reason: 'far' | 'closed' };
 
 export type AscentResult =
-  | { ok: true; banked: number; added: number; feathers: number; total: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
+  | { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
   | { ok: false; reason: 'idle' | 'too-fast' | 'forgotten' };
 
 /** What a keeper sees for a run reference: never the collector id. */
@@ -159,10 +163,11 @@ export class ClimbBook {
     const day = parkDay(now);
     const night = this.nightOf(run);
     const elapsed = now - run.startedAt;
+    const rows = this.store.bands(cid, seed);
     if (band <= run.banked) {
       // Already banked: the row as it stands, nothing paid again.
-      const row = this.store.bands(cid, seed).find((b) => b.band === band);
-      return { ok: true, banked: run.banked, added: 0, feathers: this.book.feathers(cid, now), total: this.cap(cid, now).total, why: 'paid-today', ref: row?.ref ?? ref };
+      const row = rows.find((b) => b.band === band);
+      return { ok: true, banked: run.banked, added: 0, feathers: this.book.feathers(cid, now), total: this.cap(cid, now).total, brisk: 0, why: 'paid-today', ref: row?.ref ?? ref };
     }
     // Every floor first: a frame that fails one writes nothing.
     for (let b = run.banked + 1; b <= band; b++) if (!plausibleBand(night, b, elapsed)) return { ok: false, reason: 'too-fast' };
@@ -171,8 +176,15 @@ export class ClimbBook {
     let feathers = this.book.feathers(cid, now);
     let why: ClimbWhy | undefined;
     let item: { variant: string; first: true } | undefined;
+    let briskBands = 0;
     for (let b = run.banked + 1; b <= band; b++) {
-      const due = BAND_FEATHERS[b - 1] ?? 0;
+      // Brisk: only the first band of this frame can be timed, from the band below's arrival (or the
+      // start); bands caught up in one frame were not seen arriving, so they take the table value alone.
+      const from = b === run.banked + 1 ? (b === 1 ? run.startedAt : (rows.find((r) => r.band === b - 1)?.arrivedAt ?? null)) : null;
+      const window = briskMs(night, b);
+      const brisk = from !== null && window > 0 && now - from <= window;
+      if (brisk) briskBands++;
+      const due = (BAND_FEATHERS[b - 1] ?? 0) + (brisk ? BRISK_FEATHERS : 0);
       let got = 0;
       let verdict: BandVerdict = 'ok';
       let w: ClimbWhy | null = null;
@@ -191,12 +203,12 @@ export class ClimbBook {
         if (grant.ok && grant.added) item = { variant: CLOUDS_ITEM, first: true };
         else if (!w) w = 'item-already-given';
       }
-      this.store.upsertBand({ cid, seed, band: b, day, arrivedAt: now, verdict, floorMs: leastFloor(night, b), elapsedMs: elapsed, due, added: got, why: w, night: run.night, ref });
+      this.store.upsertBand({ cid, seed, band: b, day, arrivedAt: now, verdict, floorMs: leastFloor(night, b), elapsedMs: elapsed, due, added: got, brisk, why: w, night: run.night, ref });
       why = w ?? undefined;
     }
     this.store.putRun({ ...run, banked: band });
     this.store.sweep(now - CLIMB_ROW_KEEP_DAYS * 24 * 60 * 60 * 1000);
-    return { ok: true, banked: band, added, feathers, total: this.cap(cid, now).total, ...(why ? { why } : {}), ...(item ? { item } : {}), ref };
+    return { ok: true, banked: band, added, feathers, total: this.cap(cid, now).total, brisk: briskBands, ...(why ? { why } : {}), ...(item ? { item } : {}), ref };
   }
 
   /** A run by its reference, for a keeper: its night, when it started, and its bands, without the collector id. */
@@ -241,7 +253,7 @@ function cleanBand(v: unknown): BandRow | null {
   const band = num(v['band']);
   if (!Number.isInteger(band) || band < 1 || band > BAND_COUNT) return null;
   const why = typeof v['why'] === 'string' && WHYS.has(v['why']) ? (v['why'] as ClimbWhy) : null;
-  return { cid: v['cid'], seed: num(v['seed']) >>> 0, band, day: v['day'], arrivedAt: num(v['arrivedAt']), verdict: v['verdict'] === 'paid-today' ? 'paid-today' : 'ok', floorMs: num(v['floorMs']), elapsedMs: num(v['elapsedMs']), due: num(v['due']), added: num(v['added']), why, night: v['night'], ref: v['ref'] };
+  return { cid: v['cid'], seed: num(v['seed']) >>> 0, band, day: v['day'], arrivedAt: num(v['arrivedAt']), verdict: v['verdict'] === 'paid-today' ? 'paid-today' : 'ok', floorMs: num(v['floorMs']), elapsedMs: num(v['elapsedMs']), due: num(v['due']), added: num(v['added']), brisk: v['brisk'] === true, why, night: v['night'], ref: v['ref'] };
 }
 
 /** In-memory store for tests and the local mode. */

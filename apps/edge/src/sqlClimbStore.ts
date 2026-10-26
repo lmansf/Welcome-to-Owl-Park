@@ -7,7 +7,7 @@
 import { BAND_COUNT, isClimbRef, type BandRow, type ClimbStore, type ClimbWhy, type RunRow } from '@owl-park/shared';
 
 type RunRec = { cid: string; seed: number; night: string; layout: string; started_at: number; banked: number };
-type BandRec = { cid: string; seed: number; band: number; day: string; arrived_at: number; verdict: string; floor_ms: number; elapsed_ms: number; due: number; added: number; why: string | null; night: string; ref: string };
+type BandRec = { cid: string; seed: number; band: number; day: string; arrived_at: number; verdict: string; floor_ms: number; elapsed_ms: number; due: number; added: number; brisk: number; why: string | null; night: string; ref: string };
 
 const WHYS: ReadonlySet<string> = new Set(['capped', 'paid-today', 'item-already-given']);
 
@@ -26,19 +26,20 @@ const band = (r: BandRec): BandRow | null =>
         elapsedMs: r.elapsed_ms,
         due: r.due,
         added: r.added,
+        brisk: r.brisk === 1,
         why: r.why !== null && WHYS.has(r.why) ? (r.why as ClimbWhy) : null,
         night: r.night,
         ref: r.ref,
       }
     : null;
 
-const BAND_COLUMNS = 'cid, seed, band, day, arrived_at, verdict, floor_ms, elapsed_ms, due, added, why, night, ref';
+const BAND_COLUMNS = 'cid, seed, band, day, arrived_at, verdict, floor_ms, elapsed_ms, due, added, brisk, why, night, ref';
 
 export class SqlClimbStore implements ClimbStore {
   constructor(private readonly sql: SqlStorage) {
     sql.exec(`CREATE TABLE IF NOT EXISTS climb_runs (cid TEXT PRIMARY KEY, seed INTEGER NOT NULL, night TEXT NOT NULL, layout TEXT NOT NULL, started_at INTEGER NOT NULL, banked INTEGER NOT NULL)`);
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS climb_bands (cid TEXT NOT NULL, seed INTEGER NOT NULL, band INTEGER NOT NULL, day TEXT NOT NULL, arrived_at INTEGER NOT NULL, verdict TEXT NOT NULL, floor_ms INTEGER NOT NULL, elapsed_ms INTEGER NOT NULL, due INTEGER NOT NULL, added INTEGER NOT NULL, why TEXT, night TEXT NOT NULL, ref TEXT NOT NULL, PRIMARY KEY (cid, seed, band))`,
+      `CREATE TABLE IF NOT EXISTS climb_bands (cid TEXT NOT NULL, seed INTEGER NOT NULL, band INTEGER NOT NULL, day TEXT NOT NULL, arrived_at INTEGER NOT NULL, verdict TEXT NOT NULL, floor_ms INTEGER NOT NULL, elapsed_ms INTEGER NOT NULL, due INTEGER NOT NULL, added INTEGER NOT NULL, brisk INTEGER NOT NULL DEFAULT 0, why TEXT, night TEXT NOT NULL, ref TEXT NOT NULL, PRIMARY KEY (cid, seed, band))`,
     );
     // A keeper's lookup by the reference a visitor quotes.
     sql.exec(`CREATE INDEX IF NOT EXISTS climb_bands_ref ON climb_bands (ref)`);
@@ -55,7 +56,7 @@ export class SqlClimbStore implements ClimbStore {
   }
   upsertBand(row: BandRow) {
     this.sql.exec(
-      `INSERT OR REPLACE INTO climb_bands (${BAND_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO climb_bands (${BAND_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       row.cid,
       row.seed >>> 0,
       row.band,
@@ -66,6 +67,7 @@ export class SqlClimbStore implements ClimbStore {
       row.elapsedMs,
       row.due,
       row.added,
+      row.brisk ? 1 : 0,
       row.why,
       row.night,
       row.ref,

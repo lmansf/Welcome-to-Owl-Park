@@ -798,7 +798,7 @@ describe('the climb in the room object (the stained-glass realm)', () => {
     clock = started.startedAt + leastClimbMs(EASY, 2) + 250;
     await send(obj, ws, { t: 'act', a: 'ascent', k: seed, band: 2, r: 4 });
     await settle();
-    expect(act(ws, 4)).toEqual({ t: 'act', a: 'ascent', r: 4, ok: true, banked: 2, added: 2, feathers: collections.book.feathers(OWNER, clock), total: 2, ref: climbRef(OWNER, seed) });
+    expect(act(ws, 4)).toEqual({ t: 'act', a: 'ascent', r: 4, ok: true, banked: 2, added: 2, feathers: collections.book.feathers(OWNER, clock), total: 2, brisk: 0, ref: climbRef(OWNER, seed) });
     // The connection drops: a new socket in the hub, away from any portal, gets the run back.
     ws.close(1001, 'gone');
     const again = await join(obj, 'hub', 'v_climber2', OWNER);
@@ -808,7 +808,8 @@ describe('the climb in the room object (the stained-glass realm)', () => {
     clock = started.startedAt + leastClimbMs(EASY, 3) + 250;
     await send(obj, again, { t: 'act', a: 'ascent', k: seed, band: 3, r: 6 });
     await settle();
-    expect(act(again, 6)).toMatchObject({ a: 'ascent', ok: true, banked: 3, added: 2, total: 4 });
+    // Within band 2's arrival and the brisk window: the table's two feathers and the brisk one.
+    expect(act(again, 6)).toMatchObject({ a: 'ascent', ok: true, banked: 3, added: 3, total: 5, brisk: 1 });
     // An hour on: the run is forgotten, and the next start from the hub is far from the portal.
     clock = started.startedAt + CLIMB_RUN_MAX_MS + 1;
     await send(obj, again, { t: 'act', a: 'ascent', k: seed, band: 4, r: 7 });

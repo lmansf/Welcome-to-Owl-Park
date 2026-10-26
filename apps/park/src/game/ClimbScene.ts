@@ -26,6 +26,8 @@ const VIEW_H_MIN = 640;
 /** The owl's size in the rooms, before the field shrinks it to its collision box. */
 const ROOM_OWL_H = 120;
 const GLASS = 0x9fd0ff;
+/** The high road's ledges are tinted lilac, so a climber can tell the two roads apart at a glance. */
+const HIGH_ROAD = 0xcdb0ff;
 const NIGHT_SKY = 0x0b1630;
 /** The band's tints, foot to clouds: the tower's glass warms as it rises. */
 const BAND_TINTS = [0x1a2d5a, 0x24366b, 0x3a3f78, 0x58437f, 0x7a4f85, 0x9c6a8f];
@@ -183,16 +185,19 @@ export class ClimbScene extends Phaser.Scene {
     for (const l of layout.ledges) {
       const key = l.w >= 240 ? 'climb-ledge-b' : 'climb-ledge-a';
       const h = ART[key]?.h ?? 40;
+      const tint = l.road === 'high' ? HIGH_ROAD : GLASS;
       const img = this.piece(key, l.x, -l.y + h, l.w, h);
-      if (img) tower.add(img);
-      else {
+      if (img) {
+        if (l.road === 'high') img.setTint(HIGH_ROAD);
+        tower.add(img);
+      } else {
         painted = false;
         const g = this.add.graphics();
-        g.fillStyle(GLASS, 0.9).fillRoundedRect(l.x, -l.y, l.w, 12, 5);
-        g.fillStyle(0x3a5c99, 0.9).fillRoundedRect(l.x + 6, -l.y + 10, l.w - 12, 14, 4);
+        g.fillStyle(tint, 0.9).fillRoundedRect(l.x, -l.y, l.w, 12, 5);
+        g.fillStyle(l.road === 'high' ? 0x4a3f78 : 0x3a5c99, 0.9).fillRoundedRect(l.x + 6, -l.y + 10, l.w - 12, 14, 4);
         tower.add(g);
       }
-      glow.fillStyle(GLASS, 0.18).fillRect(l.x, -l.y - 4, l.w, 6);
+      glow.fillStyle(tint, l.road === 'high' ? 0.26 : 0.18).fillRect(l.x, -l.y - 4, l.w, 6);
     }
     layout.bandLines.forEach((y, i) => {
       const last = i === BAND_COUNT - 1;

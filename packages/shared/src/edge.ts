@@ -321,7 +321,7 @@ export type ServerAct = { t: 'act'; r: number } & (
   /** A climb started or resumed (the stained-glass climb, designs/the-stained-glass-climb.md). */
   | { a: 'climb'; ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
   /** A band reached: the run's banked band after it, what this frame added and the balance, and the first-time item when the clouds grant it. */
-  | { a: 'ascent'; ok: true; banked: number; added: number; feathers: number; total: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
+  | { a: 'ascent'; ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
   | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' }
 );
 /**
