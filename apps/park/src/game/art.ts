@@ -58,6 +58,8 @@ export const ART: Record<string, ArtSpec> = {
   'climb-cloud-cap': { w: 480, h: 220, kind: 'climb' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
+  // The stained-glass realm's idol, on the plinth of its west screen.
+  'glass-idol': { w: 520, h: 416, kind: 'piece' },
   // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall
   // pieces are the clock, the framed leaf, the window box, the lanterns and the feather mobile.
   'decor-rug': { w: 240, h: 100, kind: 'piece' },
@@ -132,6 +134,7 @@ export function roomArtKeys(roomId: string): string[] {
   for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
+  if (roomId === 'glass') keys.push('glass-idol');
   if (roomId === ARCADE_ROOM) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));

@@ -31,6 +31,7 @@ export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nes
 const ROOM_OF = {
   hub: 'hub', 'hub-fg': 'hub', grove: 'grove', 'grove-fg': 'grove', guardian: 'grove',
   market: 'market', 'market-fg': 'market', 'robot-owl': 'market',
+  'glass-idol': 'glass',
   // The climb's tower pieces show in their own screen over the glass realm, not in a room; the realm stands in for them.
   'climb-sky': 'glass', 'climb-column': 'glass', 'climb-ledge-a': 'glass', 'climb-ledge-b': 'glass', 'climb-balcony': 'glass', 'climb-cloud-cap': 'glass',
 };

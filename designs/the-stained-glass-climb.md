@@ -202,10 +202,10 @@ the keeper's tools are the existing grant route plus a lookup, because the stake
 
 | Question | Default taken here | Who confirms |
 | --- | --- | --- |
-| Which arch opens | `closed-b` ("Hatching Soon", east); `closed-a` keeps its blockade | the owner |
-| The third realm's place in the Realm Vote's fixed tie-break order | third | the owner |
-| Does the realm take votes from the day the arch opens | yes; `VOTABLE_REALMS` changes in the opening deploy's switch-on, not before | the owner |
-| Does the idol's art ship in this wave | yes | the owner |
+| Which arch opens | `closed-b` ("Hatching Soon", east); `closed-a` keeps its blockade | decided: as the default (the owner delegated the call) |
+| The third realm's place in the Realm Vote's fixed tie-break order | third | decided: third, in `VOTABLE_REALMS` with the opening |
+| Does the realm take votes from the day the arch opens | yes; `VOTABLE_REALMS` changes in the opening deploy's switch-on, not before | decided: yes; the opening deploy carries it |
+| Does the idol's art ship in this wave | yes | decided: yes, `glass-idol` on the west screen's plinth |
 | The feathers per band and the visitor-facing band names | `BAND_FEATHERS` = 1, 1, 2, 2, 2, 2 (ten in total); "storey" one to five, then "the clouds" | the owner |
 | The first-time item | `glass-circlet`, a common head wearable; its variant `glass-circlet~0` also enters the shop pool like any item | the owner |
 | The moon's epoch | `MOON_EPOCH_DAY` = `2026-11-17`, a new moon, so the preview's opening on 2026-12-01 is day 14, a full moon | the owner |
@@ -1097,7 +1097,7 @@ spots: [
 ],
 ```
 
-`ANCHORS.glass` = `{ idol: { x: 1260, y: 520 }, portal: { x: 2885, y: 560 } }` (the portal moved east
+`ANCHORS.glass` = `{ idol: { x: 1260, y: 705 }, portal: { x: 2885, y: 560 } }` (the idol stands on the painted plinth's top) (the portal moved east
 to the foot of the window in the approved painting). The painting is
 two tiles: the west screen holds the arch back to the hub and the idol; the east screen holds the
 portal, a tall window of backlit glass whose foot is the spot.

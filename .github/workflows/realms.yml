@@ -1,0 +1,49 @@
+name: Realms
+
+# The keepers' realms switch from the Actions tab (designs/the-stained-glass-climb.md): which gated
+# realms are open, whether the climb's portal is live, and the night. It posts the change to the
+# park's capacity route with the admin key, as the keepers' page does. The park's address is the
+# repository variable PARK_URL and the key is the secret ADMIN_KEY, both already used by the
+# uptime check and the deploy. Realms not named in "open" close; an empty list closes every realm.
+on:
+  workflow_dispatch:
+    inputs:
+      open:
+        description: 'The gated realms to open, comma-separated (empty closes every realm)'
+        required: false
+        default: 'glass'
+        type: string
+      portal:
+        description: 'The climb portal is live'
+        required: true
+        default: true
+        type: boolean
+      night:
+        description: 'The night (moon: the moon decides)'
+        required: true
+        default: 'moon'
+        type: choice
+        options: ['moon', 'easy', 'medium', 'hard']
+
+permissions: {}
+
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post the realms switch
+        env:
+          PARK_URL: ${{ vars.PARK_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+          OPEN: ${{ inputs.open }}
+          PORTAL: ${{ inputs.portal }}
+          NIGHT: ${{ inputs.night }}
+        run: |
+          if [ -z "$PARK_URL" ] || [ -z "$ADMIN_KEY" ]; then echo "::error::PARK_URL (a variable) and ADMIN_KEY (a secret) must both be set."; exit 1; fi
+          body=$(jq -cn --arg open "$OPEN" --argjson portal "$PORTAL" --arg night "$NIGHT" \
+            '{realms: {open: ($open | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))), portal: $portal, night: (if $night == "moon" then null else $night end)}}')
+          echo "Posting $body"
+          code=$(curl -s -o answer.json -w '%{http_code}' --max-time 20 -X POST -H "X-Admin-Key: $ADMIN_KEY" -H 'Content-Type: application/json' --data "$body" "${PARK_URL%/}/api/admin/capacity" || true)
+          if [ "$code" != "200" ]; then echo "::error::The park answered $code: $(cat answer.json 2>/dev/null)"; exit 1; fi
+          echo "The realms switch now: $(jq -c '.realms' answer.json)"

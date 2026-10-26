@@ -150,6 +150,38 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
+  if (room.id === 'glass' && anchors['idol'] && scene.textures.exists('glass-idol')) {
+    // The stained-glass owl on its plinth: lit from within, it brightens when a visitor pledges.
+    const a = anchors['idol'];
+    const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
+    const idol = piece(scene, a.x, a.y, 'glass-idol').setDepth(a.y);
+    const ki = fitBelowTop('glass-idol', a.y);
+    idol.setScale(idol.scaleX * ki, idol.scaleY * ki);
+    tappable(idol);
+    pieces.idol = {
+      image: idol,
+      react: () => {
+        // The panes flare white-gold and a scatter of glass light rises from the owl.
+        idol.setTint(0xfff2c2);
+        scene.time.delayedCall(220, () => idol.clearTint());
+        scene.tweens.add({ targets: glow, alpha: 0.7, scaleX: 5, scaleY: 4, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        scene.add
+          .particles(a.x, a.y - 200, 'fx-dot', {
+            lifespan: { min: 900, max: 1800 },
+            speed: { min: 60, max: 180 },
+            angle: { min: 200, max: 340 },
+            scale: { start: 0.5, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [0x9fd0ff, 0xffd36a, 0xff8ad0, 0x7be0c8, 0xcdb0ff],
+            blendMode: Phaser.BlendModes.ADD,
+            emitting: false,
+          })
+          .setDepth(a.y + 1)
+          .explode(36);
+      },
+    };
+    scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
   for (const door of room.doors) {
     const m = door.marker;
     if (!m) continue;

@@ -243,6 +243,7 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "glass-idol": {"w": 520, "h": 416, "kind": "piece", "key_colour": "#00FF00", "with_2x": true},
     "blockade-not-yet-fledged": {
       "w": 300,
       "h": 300,

@@ -13,7 +13,7 @@ import { ticketDesk } from './ticketDesk';
 import type { Env } from './env';
 
 /** Realms with an idol to vote at, in the park's fixed order (neutral ids, never public names). */
-export const VOTABLE_REALMS = ['grove', 'market'];
+export const VOTABLE_REALMS = ['grove', 'market', 'glass'];
 
 export class VoteLedger extends DurableObject<Env> {
   private readonly ledger: Ledger;

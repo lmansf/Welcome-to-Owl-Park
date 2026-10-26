@@ -686,7 +686,7 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   hub: { 'tree-base': { x: 2400, y: 628 } },
   grove: { guardian: { x: 2400, y: 430 }, gathering: { x: 2400, y: 612 } },
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
-  glass: { idol: { x: 1260, y: 520 }, portal: { x: 2885, y: 560 } },
+  glass: { idol: { x: 1260, y: 705 }, portal: { x: 2885, y: 560 } },
 };
 
 /** The rooms the realms setting gates, as the keepers' page lists them. */
