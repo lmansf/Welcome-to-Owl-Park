@@ -106,9 +106,9 @@ test.describe('the stained-glass climb through the room server', () => {
     const seed = (await climbRun(page))!.seed;
     // The connection drops and comes back: the run is the same one, and the next storey pays.
     await page.context().setOffline(true);
-    await expect(page.locator('[data-dot]')).toHaveAttribute('data-status', 'offline', { timeout: 30_000 });
+    await expect(page.locator('[data-dot]').first()).toHaveAttribute('data-status', 'offline', { timeout: 30_000 });
     await page.context().setOffline(false);
-    await expect(page.locator('[data-dot]')).toHaveAttribute('data-status', 'online', { timeout: 30_000 });
+    await expect(page.locator('[data-dot]').first()).toHaveAttribute('data-status', 'online', { timeout: 30_000 });
     expect(await climbTo(page, 2)).toBe('reached');
     await expect(bandLine(page)).toHaveText('Second storey: +1 feather', { timeout: 15_000 });
     expect((await climbRun(page))!.seed).toBe(seed);
