@@ -9,7 +9,7 @@ import { doAction, state, walkAndStop } from './helpers';
  */
 
 /** The portal's spot at the east end of the glass realm (room pixels). */
-export const PORTAL = { x: 2700, y: 745 };
+export const PORTAL = { x: 2885, y: 745 };
 
 /** From the realm's doorway along the floor to the portal. */
 export async function toPortal(page: Page): Promise<void> {

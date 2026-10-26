@@ -1059,7 +1059,7 @@ doors: [
   { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 },
     to: { room: 'hub', spawn: 'from-glass' }, marker: { x: 70, y: 580 } },
   { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
-  { id: 'portal', rect: { x: 2600, y: 700, w: 200, h: 90 }, marker: { x: 2700, y: 640 } },
+  { id: 'portal', rect: { x: 2785, y: 700, w: 200, h: 90 }, marker: { x: 2885, y: 640 } },
 ],
 spots: [
   { x: 330, y: 860 }, { x: 560, y: 850 }, { x: 720, y: 760 }, { x: 880, y: 720 },
@@ -1067,7 +1067,8 @@ spots: [
 ],
 ```
 
-`ANCHORS.glass` = `{ idol: { x: 1260, y: 520 }, portal: { x: 2700, y: 560 } }`. The painting is
+`ANCHORS.glass` = `{ idol: { x: 1260, y: 520 }, portal: { x: 2885, y: 560 } }` (the portal moved east
+to the foot of the window in the approved painting). The painting is
 two tiles: the west screen holds the arch back to the hub and the idol; the east screen holds the
 portal, a tall window of backlit glass whose foot is the spot.
 

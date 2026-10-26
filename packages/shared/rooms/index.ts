@@ -363,7 +363,8 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-glass' }, marker: { x: 70, y: 580 } },
       { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
       // The portal: standing here offers the climb (the client's `interactions` table).
-      { id: 'portal', rect: { x: 2600, y: 700, w: 200, h: 90 }, marker: { x: 2700, y: 640 } },
+      // The foot of the tall window in the east screen's painting.
+      { id: 'portal', rect: { x: 2785, y: 700, w: 200, h: 90 }, marker: { x: 2885, y: 640 } },
     ],
     spots: [
       { x: 330, y: 860 },
@@ -685,7 +686,7 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   hub: { 'tree-base': { x: 2400, y: 628 } },
   grove: { guardian: { x: 2400, y: 430 }, gathering: { x: 2400, y: 612 } },
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
-  glass: { idol: { x: 1260, y: 520 }, portal: { x: 2700, y: 560 } },
+  glass: { idol: { x: 1260, y: 520 }, portal: { x: 2885, y: 560 } },
 };
 
 /** The rooms the realms setting gates, as the keepers' page lists them. */

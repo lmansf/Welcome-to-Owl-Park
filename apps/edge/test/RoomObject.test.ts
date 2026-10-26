@@ -743,7 +743,7 @@ describe('the climb in the room object (the stained-glass realm)', () => {
   async function toPortal(obj: Obj, ws: FakeSocket) {
     await send(obj, ws, { t: 'move', to: { x: 1200, y: 780 }, seq: 1 });
     clock += 10_000;
-    await send(obj, ws, { t: 'move', to: { x: 2700, y: 745 }, seq: 2 });
+    await send(obj, ws, { t: 'move', to: { x: 2885, y: 745 }, seq: 2 });
     clock += 10_000;
   }
   const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);

@@ -25,12 +25,14 @@ import { parseArgs } from 'node:util';
 
 export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
-export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest'];
+export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest', 'glass'];
 
 /** Which room shows each key. Owl layers and the blockades show in the hub (owls show everywhere). */
 const ROOM_OF = {
   hub: 'hub', 'hub-fg': 'hub', grove: 'grove', 'grove-fg': 'grove', guardian: 'grove',
   market: 'market', 'market-fg': 'market', 'robot-owl': 'market',
+  // The climb's tower pieces show in their own screen over the glass realm, not in a room; the realm stands in for them.
+  'climb-sky': 'glass', 'climb-column': 'glass', 'climb-ledge-a': 'glass', 'climb-ledge-b': 'glass', 'climb-balcony': 'glass', 'climb-cloud-cap': 'glass',
 };
 /** Furniture (`decor-<id>`) stands in a nest. */
 const roomOfKey = (k) => ROOM_OF[k] ?? (k.startsWith('decor-') ? 'nest' : ROOMS.find((r) => k === r || k.startsWith(`${r}-`)));
