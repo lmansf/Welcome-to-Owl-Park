@@ -6,6 +6,8 @@ Cloudflare MCP server they refer to is declared in the repository's `.mcp.json`.
 
 Refresh them with `tools/cloudflare-skills.sh` (edit its SKILLS list to add one).
 Do not edit the skill folders by hand; changes are overwritten on the next refresh.
+Other folders here (for example `owl-park-elephant/`, the project's EGM context loader) are
+the project's own; this script leaves them alone.
 
 - `wrangler/`
 - `workers-best-practices/`

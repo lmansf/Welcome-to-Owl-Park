@@ -16,3 +16,6 @@ apps/edge/wrangler.load.jsonc
 work/
 tools/art/.local/
 __pycache__/
+# EGM briefs, drafts and review reports (EGM/README.md); never committed
+EGM/*
+!EGM/README.md
