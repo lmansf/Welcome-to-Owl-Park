@@ -793,6 +793,10 @@ export class EdgeTransport implements ParkTransport {
         current = state;
         spawn = undefined;
       },
+      drop() {
+        // As a dead connection is closed: onclose schedules the reconnect.
+        ws?.close(4000, 'dropped');
+      },
       async leave() {
         closed = true;
         window.removeEventListener('pagehide', onPageHide);

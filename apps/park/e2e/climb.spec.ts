@@ -104,11 +104,17 @@ test.describe('the stained-glass climb through the room server', () => {
     await expect(bandLine(page)).toHaveText('First storey: +1 feather', { timeout: 15_000 });
     await expect.poll(() => feathers(page)).toBe(before + 1);
     const seed = (await climbRun(page))!.seed;
-    // The connection drops and comes back: the run is the same one, and the next storey pays.
-    await page.context().setOffline(true);
-    await expect(page.locator('[data-dot]').first()).toHaveAttribute('data-status', 'offline', { timeout: 30_000 });
-    await page.context().setOffline(false);
-    await expect(page.locator('[data-dot]').first()).toHaveAttribute('data-status', 'online', { timeout: 30_000 });
+    // The socket drops and comes back: the run is the same one, and the next storey pays.
+    // The reconnect is quick: the status dot's changes are collected as they happen rather than polled for.
+    await page.evaluate(() => {
+      const dot = document.querySelector('[data-dot]')!;
+      const seen: string[] = [];
+      new MutationObserver(() => seen.push(dot.getAttribute('data-status') ?? '')).observe(dot, { attributes: true, attributeFilter: ['data-status'] });
+      (window as unknown as { statusSeen: string[] }).statusSeen = seen;
+    });
+    expect(await page.evaluate(() => window.owlPark.drop())).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { statusSeen: string[] }).statusSeen), { timeout: 30_000 }).toEqual(expect.arrayContaining(['offline', 'online']));
+    await expect.poll(() => page.evaluate(() => document.querySelector('[data-dot]')?.getAttribute('data-status')), { timeout: 30_000 }).toBe('online');
     expect(await climbTo(page, 2)).toBe('reached');
     await expect(bandLine(page)).toHaveText('Second storey: +1 feather', { timeout: 15_000 });
     expect((await climbRun(page))!.seed).toBe(seed);
@@ -127,9 +133,11 @@ test.describe('the stained-glass climb through the room server', () => {
     expect(JSON.stringify(body)).not.toMatch(/"cid"/);
     await page.locator('.climb [data-stop]').click();
     await expect(page.locator('.climb-layer')).toBeHidden();
-    // The portal switched off: Climb shows the approved phrase and opens nothing.
+    // The portal switched off: Climb shows the approved phrase and opens nothing. (The room server may
+    // have placed the owl afresh when the socket came back, so it walks to the portal again first.)
     await realms(request, { open: ['glass'], portal: false, night: 'easy' });
-    await expect.poll(async () => (await state(page)).actions).toContain('portal');
+    await toPortal(page);
+    await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain('portal');
     await page.waitForTimeout(500);
     await page.locator('[data-action="portal"]').click();
     await expect(page.locator('[data-toasts]')).toContainText('Pardon Our Feathers');

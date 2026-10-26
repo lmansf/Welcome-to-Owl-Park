@@ -48,6 +48,8 @@ export interface RoomConnection {
   acts?: ActivityLink;
   /** The nests on the street and in a nest, kept by the same server. */
   nests?: NestLink;
+  /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */
+  drop?(): void;
 }
 
 /**

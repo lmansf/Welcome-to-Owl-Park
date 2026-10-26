@@ -175,6 +175,8 @@ declare global {
       use(target: string): boolean;
       /** Hop, as the Jump button and the space bar do (false: too soon after the last one). */
       jump(): boolean;
+      /** Drop the room server's socket as a bad network would; it reconnects on its own (false in the local mode). */
+      drop(): boolean;
       /** As Q does: to the mirror (walking up to it in a nest, else home to it); false where it cannot. */
       mirror(): boolean;
       /** Open Your owl over the room, as the first run does (tests of the builder itself). */
@@ -475,6 +477,7 @@ window.owlPark = {
   tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
   jump: () => roomScene()?.jump() ?? false,
+  drop: () => roomScene()?.dropConnection() ?? false,
   mirror: () => roomScene()?.toMirror() ?? false,
   openBuilder: () => hud.openOwl(document.body),
   collect: (quest) => roomScene()?.collectQuest(quest) ?? Promise.resolve(false),

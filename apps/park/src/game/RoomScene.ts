@@ -1260,6 +1260,13 @@ export class RoomScene extends Phaser.Scene {
    * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
    * One every JUMP_EVERY_MS, so a held thumb cannot flood the room.
    */
+  /** Drop the room's socket as a bad network would (tests): false without one, or in the local mode. */
+  dropConnection(): boolean {
+    if (!this.conn?.drop) return false;
+    this.conn.drop();
+    return true;
+  }
+
   jump(): boolean {
     if (!this.built || this.leaving) return false;
     const now = Date.now();
