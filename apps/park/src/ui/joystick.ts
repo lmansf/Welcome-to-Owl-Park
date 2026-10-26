@@ -41,31 +41,39 @@ export interface Joystick {
   detach(): void;
 }
 
-const CSS = `
-#hud .stick{position:absolute;right:0;bottom:0;width:128px;height:128px;border-radius:50%;display:none;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
-#hud .stick i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(246,241,227,.4);border:2px solid rgba(246,241,227,.5);box-shadow:0 2px 8px rgba(0,0,0,.3);transition:transform .12s ease-out}
-#hud .stick.on{background:rgba(12,30,54,.38);border-color:rgba(255,211,106,.55)}
-#hud .stick.on i{transition:none;background:rgba(255,211,106,.5)}
+const css = (prefix: string) => `
+#hud .${prefix}-stick{position:absolute;right:0;bottom:0;width:128px;height:128px;border-radius:50%;display:none;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
+#hud .${prefix}-stick i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(246,241,227,.4);border:2px solid rgba(246,241,227,.5);box-shadow:0 2px 8px rgba(0,0,0,.3);transition:transform .12s ease-out}
+#hud .${prefix}-stick.on{background:rgba(12,30,54,.38);border-color:rgba(255,211,106,.55)}
+#hud .${prefix}-stick.on i{transition:none;background:rgba(255,211,106,.5)}
 @media (pointer:coarse){
-  #hud .stick{display:block}
+  #hud .${prefix}-stick{display:block}
+}
+`;
+/** The HUD's own stick sits in the bottom bar's corner and makes room for the buttons beside it. */
+const HUD_CSS = `
+@media (pointer:coarse){
   #hud .bottom .left{max-width:calc(100% - 140px)}
   #hud .bottom .actions{position:absolute;right:0;bottom:140px;flex-direction:column;align-items:flex-end}
 }
 `;
 
-/** Put the thumbstick in the HUD's bottom bar (it shows on touch screens only). */
-export function createJoystick(bottom: HTMLElement): Joystick {
+/**
+ * Put a thumbstick in `parent` (it shows on touch screens only): the HUD's bottom bar, or the climb
+ * screen's own corner. `prefix` scopes its class (`hud-stick`, `climb-stick`) so each screen styles its own.
+ */
+export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = css(prefix) + (prefix === 'hud' ? HUD_CSS : '');
   document.head.appendChild(style);
 
   const stick = document.createElement('div');
-  stick.className = 'stick';
+  stick.className = `${prefix}-stick`;
   // Keyboards walk with WASD; the stick is for thumbs.
   stick.setAttribute('aria-hidden', 'true');
   const knob = document.createElement('i');
   stick.appendChild(knob);
-  bottom.appendChild(stick);
+  parent.appendChild(stick);
 
   let pointer: number | null = null;
   let way: number | null = null;

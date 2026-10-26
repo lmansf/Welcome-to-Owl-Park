@@ -84,6 +84,7 @@ import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
+import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomScaleCap } from './artFiles';
@@ -222,6 +223,8 @@ export class RoomScene extends Phaser.Scene {
   private play: ActivityLayer | null = null;
   /** The arcade's cabinets, score wall and runs, in the arcade only. */
   private arcade: Arcade | null = null;
+  /** The stained-glass climb from its portal, in the glass realm only. */
+  private climb: Climb | null = null;
   private acts: ActivityLink | null = null;
   /** The nests: on the street, who lives behind each door; in a nest, what stands where. */
   private nests: NestLink | null = null;
@@ -292,6 +295,7 @@ export class RoomScene extends Phaser.Scene {
     this.tasks = this.registry.get('tasks') as TaskState;
     this.play = null;
     this.arcade = null;
+    this.climb = null;
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -346,6 +350,16 @@ export class RoomScene extends Phaser.Scene {
       acts: () => this.acts,
       look: () => this.look,
       feathers: (total) => this.collection.setFeathers(total),
+    });
+    this.climb = climbFor(room, {
+      scene: this,
+      hud: this.hud,
+      acts: () => this.acts,
+      look: () => this.look,
+      portalLive: () => this.realms.portal,
+      calm: () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false,
+      feathers: (total) => this.collection.setFeathers(total),
+      awarded: () => void this.collection.refresh(),
     });
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
@@ -514,7 +528,11 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setStatus(s, this.transport.kind);
     const wentOffline = s === 'offline' && this.lastStatus !== 'offline';
     // Back online after a drop: the board may have moved meanwhile (a new park day, a push missed).
-    if (s === 'online' && this.lastStatus === 'offline' && this.conn) void this.refreshBoard();
+    if (s === 'online' && this.lastStatus === 'offline' && this.conn) {
+      void this.refreshBoard();
+      // A climb under way asks the room for its run again, with any band the room never answered.
+      void this.climb?.reconnected();
+    }
     this.lastStatus = s;
     if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
   }
@@ -803,6 +821,8 @@ export class RoomScene extends Phaser.Scene {
     booth: { label: 'Ticket booth', run: () => void this.openBooth() },
     // The arcade's cabinets whose games are live: Play starts a run (a cabinet switched off says Hatching Soon).
     ...Object.fromEntries(CABINETS.filter((c) => c.live).map((c) => [c.spot, { label: `Play ${GAMES[c.game].name}`, run: () => void this.arcade?.play(c.game) }])),
+    // The glass realm's portal: the climb, while the keepers' switch has the portal live.
+    portal: { label: 'Climb', run: () => (this.realms.portal ? void this.climb?.play() : this.hud.toast(PORTAL_OFF)) },
     mirror: { label: NEST_WORDS.mirror, run: () => this.lookInMirror() },
   };
 
@@ -833,6 +853,11 @@ export class RoomScene extends Phaser.Scene {
   /** The arcade's run under way, for tests: its game itself, to play it by its rules. */
   arcadeRun(): ReturnType<Arcade['debug']> {
     return this.arcade?.debug() ?? null;
+  }
+
+  /** The climb under way, for tests: its seed, what is banked, and the owl on the field. */
+  climbRun(): ReturnType<Climb['debug']> {
+    return this.climb?.debug() ?? null;
   }
 
   /** Read-only snapshot for tests and the console. */
@@ -1543,6 +1568,8 @@ export class RoomScene extends Phaser.Scene {
     this.play = null;
     this.arcade?.destroy();
     this.arcade = null;
+    this.climb?.destroy();
+    this.climb = null;
     this.bubbles?.clear();
     this.bubbles = null;
     this.acts?.close();

@@ -16,5 +16,5 @@ export function createCollections(cfg: ParkConfig, transport: ParkTransport): Co
   } catch {
     storage = null;
   }
-  return new LocalCollections(storage, { collector: cfg.collector, tz: cfg.tz ?? deviceTimeZone() });
+  return new LocalCollections(storage, { collector: cfg.collector, tz: cfg.tz ?? deviceTimeZone(), night: cfg.night });
 }

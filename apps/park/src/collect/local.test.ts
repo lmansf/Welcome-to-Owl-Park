@@ -154,3 +154,38 @@ describe('LocalCollections', () => {
     expect((await g.inventory()).owned.sort()).toEqual([...EVERYONES].sort());
   });
 });
+
+describe('the stained-glass climb in the local mode', () => {
+  const PORTAL = { x: 2700, y: 745 };
+  const FLOORS_EASY = [5700, 11300, 17500, 23900, 30200, 36800];
+
+  function climber(storage = new MemoryStorage(), clock = { now: at }) {
+    const page = new LocalCollections(storage, { collector: 'c_climber', tz: 'America/New_York', now: () => clock.now, random: () => 0.1, night: 'easy' });
+    const where = { ...PORTAL };
+    const link = page.activityLink('glass', null, {}, () => where, () => ({ body: '#2F3E5C', belly: '#E0D4F0', accent: '#FF2AA1' }));
+    return { storage, clock, page, link, where };
+  }
+
+  it('opens a run at the portal on the pinned night, pays the storeys reached, and keeps the run across pages', async () => {
+    const { storage, clock, page, link, where } = climber();
+    where.x = 1200;
+    expect(await link.climb()).toEqual({ ok: false, reason: 'far' });
+    where.x = PORTAL.x;
+    const started = await link.climb();
+    expect(started).toMatchObject({ ok: true, night: 'easy', tier: 'easy', banked: 0, remainingCap: 25, bestBandToday: 0, resumed: false, previousForgotten: false });
+    const seed = (started as { seed: number }).seed;
+    expect(await link.ascent(seed, 1)).toEqual({ ok: false, reason: 'too-fast' });
+    clock.now = at + FLOORS_EASY[1]! + 250;
+    const two = await link.ascent(seed, 2);
+    expect(two).toMatchObject({ ok: true, banked: 2, added: 2, total: 2 });
+    expect((await page.inventory()).feathers).toBe((await climber().page.inventory()).feathers + 2);
+    // Another page on the same browser finds the run where it was, wherever the owl stands.
+    const again = climber(storage, clock);
+    again.where.x = 100;
+    expect(await again.link.climb()).toMatchObject({ ok: true, seed, banked: 2, resumed: true, remainingCap: 23, bestBandToday: 2 });
+    clock.now = at + FLOORS_EASY[5]! + 250;
+    const clouds = await again.link.ascent(seed, 6);
+    expect(clouds).toMatchObject({ ok: true, banked: 6, added: 8, total: 10, item: { variant: 'glass-circlet~0', first: true } });
+    expect((await again.page.inventory()).owned).toContain('glass-circlet~0');
+  });
+});

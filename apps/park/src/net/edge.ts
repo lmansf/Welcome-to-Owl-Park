@@ -626,6 +626,20 @@ export class EdgeTransport implements ParkTransport {
         if (!f.ok) return f;
         return f.a === 'score' ? { ok: true, paid: f.paid } : unknown;
       },
+      climb: async () => {
+        const f = await act('climb');
+        if (!f.ok) return f;
+        if (f.a !== 'climb') return unknown;
+        const { a: _a, t: _t, r: _r, ok: _ok, startedAt, ...rest } = f;
+        return { ok: true, startedAt: startedAt - offset, ...rest };
+      },
+      ascent: async (k, band) => {
+        const f = await act('ascent', { k, band });
+        if (!f.ok) return f;
+        if (f.a !== 'ascent') return unknown;
+        const { a: _a, t: _t, r: _r, ok: _ok, ...rest } = f;
+        return { ok: true, ...rest };
+      },
       // The room forgets the owl's line and game when it leaves.
       close: () => undefined,
     };

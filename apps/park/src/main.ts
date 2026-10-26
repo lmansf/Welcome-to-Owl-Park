@@ -7,6 +7,7 @@ import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
 import { ArcadeScene } from './game/ArcadeScene';
+import { ClimbScene } from './game/ClimbScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
@@ -88,7 +89,7 @@ const game = new Phaser.Game({
   render: { antialias: true, pixelArt: false, roundPixels: false },
   // The owl builder's preview draws over the room (which keeps running underneath) or the home screen;
   // the arcade's games draw over the room.
-  scene: [BootScene, RoomScene, HomeScene, BuilderScene, ArcadeScene],
+  scene: [BootScene, RoomScene, HomeScene, BuilderScene, ArcadeScene, ClimbScene],
 });
 
 game.registry.set('config', cfg);
@@ -202,6 +203,8 @@ declare global {
       wallet(): Promise<WalletEntry[]>;
       /** The arcade's run under way: its game, its seed and the game itself (null when none). */
       arcade(): ReturnType<RoomScene['arcadeRun']>;
+      /** The stained-glass climb under way: its seed, what is banked, and the owl on the field (null when none). */
+      climb(): ReturnType<RoomScene['climbRun']>;
       /** The busy ribbon's words as shown (null while it is off or hidden), OP-075. */
       ribbon(): string | null;
       /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
@@ -494,6 +497,7 @@ window.owlPark = {
   home: () => ({ shown: home.isShown(), loggedIn }),
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
   arcade: () => roomScene()?.arcadeRun() ?? null,
+  climb: () => roomScene()?.climbRun() ?? null,
   ribbon: () => ribbon.shown(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };
