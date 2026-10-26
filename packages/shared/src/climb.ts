@@ -30,6 +30,20 @@ export const DOUBLE_JUMP_IMPULSE = 520;
 export const COYOTE_MS = 80;
 export const JUMP_BUFFER_MS = 80;
 export const GLIDE_SPEED = 180;
+// The obstacles (Appendix A of the design, second pass): swinging lanterns, gusts and frail glass.
+/** A lantern's glass is this wide across (its hit circle's radius, field px). */
+export const LANTERN_R = 18;
+/** The owl's box is this much smaller on every side when a lantern is tested against it: a graze is forgiven. */
+export const KNOCK_INSET = 4;
+/** A lantern's knock throws the owl aside at this speed, downward, with its controls dead for KNOCK_STUN_MS. */
+export const KNOCK_SPEED = 240;
+export const KNOCK_STUN_MS = 450;
+/** A gust blows for GUST_ON_MS, then the air is still for GUST_OFF_MS; every wind of a layout keeps the one phase, from the run's start. */
+export const GUST_ON_MS = 900;
+export const GUST_OFF_MS = 1700;
+export const GUST_PERIOD_MS = GUST_ON_MS + GUST_OFF_MS;
+/** Frail glass gives way this long after the owl lands on it; the owl keeps one flap (the double jump) on the way down. */
+export const FRAIL_MS = 600;
 /** The owl's height in the view, as a fraction of it. */
 export const CLIMB_CAMERA_ANCHOR = 0.58;
 /** Slack for the clocks, as the arcade's: the page starts after the server and the answer has a trip to make. */
@@ -62,6 +76,30 @@ export interface Ledge {
   w: number;
   /** The high road: a narrow ledge at the limit of a move, skipping the stairs' steps. Absent on the stairs and the band lines. */
   road?: 'high';
+  /** Frail glass: it gives way FRAIL_MS after the owl lands on it, and is whole again once the owl has gone. */
+  frail?: true;
+}
+
+/** A wind: the air between two field heights, where a gust carries anything airborne sideways. */
+export interface Wind {
+  y0: number;
+  y1: number;
+  /** The gust's carry, px/s, east when positive. */
+  drift: number;
+}
+
+/** A lantern on a chain, swinging across a gap: its knock throws the owl down. */
+export interface Lantern {
+  /** The chain's hook. */
+  x: number;
+  y: number;
+  /** The chain's length. */
+  len: number;
+  /** Half the swing, radians. */
+  amp: number;
+  periodMs: number;
+  /** Where in its swing it hangs at t = 0, as a fraction of a period. */
+  phase: number;
 }
 
 export interface Layout {
@@ -70,6 +108,8 @@ export interface Layout {
   /** The six band lines, lowest first; the last is the cloud line. Each is a ledge spanning the field. */
   bandLines: readonly number[];
   start: Ledge;
+  winds: readonly Wind[];
+  lanterns: readonly Lantern[];
 }
 
 export type Tier = 'easy' | 'medium' | 'hard';
@@ -105,19 +145,29 @@ export interface ClimbState {
   gliding: boolean;
   /** The highest band reached this run (0 before the first line). */
   band: number;
+  /** Time since this play of the run began, ms: the lanterns and the gusts keep to it. */
+  t: number;
+  /** How long the owl has stood on its platform, ms (frail glass counts it). */
+  stoodMs: number;
+  /** Time left with the controls dead after a lantern's knock. */
+  stunMs: number;
+  /** The frail ledge that gave way under the owl this step, for the page to show. */
+  crumbled: Ledge | null;
 }
 
 export const NO_INPUT: ClimbInput = { left: false, right: false, jumpPressed: false, jumpHeld: false };
 
 /** The owl on the start ledge, at its centre. */
 export function startState(layout: Layout): ClimbState {
-  return { x: layout.start.x + layout.start.w / 2, y: layout.start.y, vx: 0, vy: 0, grounded: true, coyoteMs: COYOTE_MS, bufferMs: 0, jumpsUsed: 0, rising: false, gliding: false, band: 0 };
+  return { x: layout.start.x + layout.start.w / 2, y: layout.start.y, vx: 0, vy: 0, grounded: true, coyoteMs: COYOTE_MS, bufferMs: 0, jumpsUsed: 0, rising: false, gliding: false, band: 0, t: 0, stoodMs: 0, stunMs: 0, crumbled: null };
 }
 
 // ---------- the layout ----------
 
 const ledge = (x: number, y: number, w: number): Ledge => ({ x, y, w });
 const high = (x: number, y: number, w: number): Ledge => ({ x, y, w, road: 'high' });
+const frail = (x: number, y: number, w: number): Ledge => ({ x, y, w, road: 'high', frail: true });
+const lantern = (x: number, y: number, len: number, amp: number, periodMs: number, phase = 0): Lantern => ({ x, y, len, amp, periodMs, phase });
 
 /**
  * `city-1`: six bands of 900 px, each a storey of the tower with a balcony (the band line) at its top.
@@ -130,6 +180,12 @@ const high = (x: number, y: number, w: number): Ledge => ({ x, y, w, road: 'high
  * the stairs or the balcony below: the price is time, never the run. Each band teaches one thing:
  * 1 single jumps; 2 narrower ledges and a step straight up; 3 the double jump; 4 the double jump on
  * narrower ledges; 5 the glide across the field; 6 the same, narrower.
+ *
+ * The obstacles come in from band 3, one kind a band, and stack: lanterns swing across the gaps
+ * from band 3 (a knock throws the owl down to whatever is below); gusts blow through bands 4 to 6,
+ * each band's wind from one side and a little stronger, with lulls to jump in; the high road's
+ * glass is frail from band 4 (land, and jump again within FRAIL_MS). Nothing hangs where an owl
+ * can stand: climb.test.ts checks every lantern's whole swing against every standing spot.
  */
 const CITY_1: Layout = {
   id: 'city-1',
@@ -174,7 +230,7 @@ const CITY_1: Layout = {
     // Its high road: 240 px up on 80-wide ledges.
     high(200, 2940, 80),
     high(200, 3180, 80),
-    high(200, 3420, 80),
+    frail(200, 3420, 80),
     // Band 5, the glide: 200 px up and 200 across on 140-wide ledges, a double jump at the edge and a glide.
     ledge(0, 3800, 140),
     ledge(340, 4000, 140),
@@ -182,18 +238,40 @@ const CITY_1: Layout = {
     ledge(340, 4400, 140),
     // Its high road: 225 px up on 80-wide ledges, the double jump's whole height each time.
     high(200, 3825, 80),
-    high(200, 4050, 80),
-    high(200, 4275, 80),
+    frail(200, 4050, 80),
+    frail(200, 4275, 80),
     // Band 6, the clouds: the glide on 130-wide ledges, and the high road on 70-wide ones.
     ledge(0, 4700, 130),
     ledge(330, 4900, 130),
     ledge(0, 5100, 130),
     ledge(330, 5300, 130),
-    high(205, 4725, 70),
-    high(205, 4950, 70),
-    high(205, 5175, 70),
+    frail(205, 4725, 70),
+    frail(205, 4950, 70),
+    frail(205, 5175, 70),
   ],
-};
+  winds: [
+    // Band 4 blows from the east, 5 from the west, 6 from the east again, each a little harder.
+    { y0: 2700, y1: 3600, drift: -40 },
+    { y0: 3600, y1: 4500, drift: 55 },
+    { y0: 4500, y1: 5400, drift: -70 },
+  ],
+  lanterns: [
+    // The gap lanterns hang under the high road's ledges and swing through the air both roads cross;
+    // the balcony lanterns hang under a balcony, over a road's last jump up to it.
+    // Band 3: one gap lantern.
+    lantern(240, 2505, 45, 1.0, 2400),
+    // Band 4: a gap lantern, and a balcony lantern over the stairs' last jump.
+    lantern(240, 3405, 45, 1.0, 2200),
+    lantern(330, 3516, 30, 0.9, 2200, 0.5),
+    // Band 5: a gap lantern, and a balcony lantern over the high road's last jump, swinging faster.
+    lantern(240, 4260, 45, 1.0, 2000),
+    lantern(240, 4416, 60, 0.9, 2000, 0.5),
+    // Band 6: two gap lanterns and a balcony lantern over the high road's last jump, the fastest.
+    lantern(240, 4921, 40, 1.0, 1800, 0.25),
+    lantern(240, 5160, 45, 1.0, 1800),
+    lantern(240, 5316, 60, 0.9, 1800, 0.5),
+  ],
+};;;
 
 export const LAYOUTS: Readonly<Record<string, Layout>> = { 'city-1': CITY_1 };
 
@@ -239,6 +317,49 @@ export function layoutOf(night: Night): Layout {
   return LAYOUTS[night.layout]!;
 }
 
+// ---------- the obstacles ----------
+
+/** Whether a gust blows at time `t` (ms since the run's play began). */
+export function gusting(t: number): boolean {
+  return ((t % GUST_PERIOD_MS) + GUST_PERIOD_MS) % GUST_PERIOD_MS < GUST_ON_MS;
+}
+
+/** How long until the air is still at `t` (0 in a lull), and how much of the lull is left then. */
+export function lullIn(t: number): { wait: number; left: number } {
+  const at = ((t % GUST_PERIOD_MS) + GUST_PERIOD_MS) % GUST_PERIOD_MS;
+  return at < GUST_ON_MS ? { wait: GUST_ON_MS - at, left: GUST_OFF_MS } : { wait: 0, left: GUST_PERIOD_MS - at };
+}
+
+/** The wind's carry at a field height, px/s east: the gust's drift while it blows, else 0. */
+export function windAt(layout: Layout, y: number, t: number): number {
+  if (!gusting(t)) return 0;
+  let drift = 0;
+  for (const w of layout.winds) if (y >= w.y0 && y < w.y1) drift += w.drift;
+  return drift;
+}
+
+/** The wind that covers a field height, whether or not it blows now. */
+export function windOver(layout: Layout, y: number): Wind | null {
+  return layout.winds.find((w) => y >= w.y0 && y < w.y1) ?? null;
+}
+
+/** Where a lantern's glass hangs at time `t`. */
+export function lanternBob(l: Lantern, t: number): { x: number; y: number } {
+  const a = l.amp * Math.sin(2 * Math.PI * (t / l.periodMs + l.phase));
+  return { x: l.x + l.len * Math.sin(a), y: l.y - l.len * Math.cos(a) };
+}
+
+/** Whether a lantern's glass, at (bx, by), touches the owl whose feet are at (x, y). */
+export function lanternTouches(bx: number, by: number, x: number, y: number): boolean {
+  const x0 = x - OWL_W / 2 + KNOCK_INSET;
+  const x1 = x + OWL_W / 2 - KNOCK_INSET;
+  const y0 = y + KNOCK_INSET;
+  const y1 = y + OWL_H - KNOCK_INSET;
+  const nx = Math.min(x1, Math.max(x0, bx));
+  const ny = Math.min(y1, Math.max(y0, by));
+  return (nx - bx) ** 2 + (ny - by) ** 2 < LANTERN_R ** 2;
+}
+
 // ---------- the simulation ----------
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -247,7 +368,13 @@ const overlaps = (x: number, p: Ledge) => x - OWL_W / 2 < p.x + p.w && x + OWL_W
 /** One fixed step, as designs/the-stained-glass-climb.md Appendix A orders it. A pure function of its inputs. */
 export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, night: Night, all: readonly Ledge[] = platforms(layout)): ClimbState {
   const dt = CLIMB_STEP_MS / 1000;
-  let { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, gliding, band } = s;
+  let { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, gliding, band, stoodMs, stunMs } = s;
+  const wasGrounded = grounded;
+  let crumbled: Ledge | null = null;
+  // 0. The clock, and the knock's stun: a stunned owl's controls are dead.
+  const t = s.t + CLIMB_STEP_MS;
+  stunMs = Math.max(0, stunMs - CLIMB_STEP_MS);
+  if (stunMs > 0) input = NO_INPUT;
   // 1. Timers.
   coyoteMs = grounded ? COYOTE_MS : Math.max(0, coyoteMs - CLIMB_STEP_MS);
   bufferMs = input.jumpPressed ? JUMP_BUFFER_MS : Math.max(0, bufferMs - CLIMB_STEP_MS);
@@ -277,8 +404,9 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
   if (gliding) vy = -night.glideFall;
   else vy = Math.max(-MAX_FALL, vy - GRAVITY * dt);
   if (vy <= 0) rising = false;
-  // 7. Move and collide.
-  x = clamp(x + vx * dt, OWL_W / 2, CLIMB_FIELD_W - OWL_W / 2);
+  // 7. Move and collide. A gust carries an airborne owl sideways.
+  const carry = grounded ? 0 : windAt(layout, y, t);
+  x = clamp(x + (vx + carry) * dt, OWL_W / 2, CLIMB_FIELD_W - OWL_W / 2);
   const oldY = y;
   y += vy * dt;
   if (vy < 0) {
@@ -294,14 +422,43 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
   } else if (grounded) {
     grounded = all.some((p) => Math.abs(p.y - y) < 0.5 && overlaps(x, p));
   }
-  // 8. Band.
+  stoodMs = grounded ? (wasGrounded ? stoodMs + CLIMB_STEP_MS : 0) : 0;
+  // 8. Frail glass: stood on too long, it gives way (unless sound glass also holds the owl); one flap is left.
+  if (grounded && stoodMs >= FRAIL_MS) {
+    const under = all.filter((p) => Math.abs(p.y - y) < 0.5 && overlaps(x, p));
+    const weak = under.find((p) => p.frail);
+    if (weak && under.every((p) => p.frail)) {
+      crumbled = weak;
+      grounded = false;
+      stoodMs = 0;
+      coyoteMs = 0;
+      jumpsUsed = 1;
+    }
+  }
+  // 9. A lantern's knock: thrown aside and down, controls dead for a moment, no jump left.
+  if (stunMs === 0) {
+    for (const l of layout.lanterns) {
+      const b = lanternBob(l, t);
+      if (!lanternTouches(b.x, b.y, x, y)) continue;
+      stunMs = KNOCK_STUN_MS;
+      vx = (x >= b.x ? 1 : -1) * KNOCK_SPEED;
+      vy = Math.min(vy, -60);
+      grounded = false;
+      gliding = false;
+      rising = false;
+      jumpsUsed = 2;
+      coyoteMs = 0;
+      break;
+    }
+  }
+  // 10. Band.
   for (let i = layout.bandLines.length; i > band; i--) {
     if (y >= layout.bandLines[i - 1]!) {
       band = i;
       break;
     }
   }
-  return { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, gliding, band };
+  return { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, gliding, band, t, stoodMs, stunMs, crumbled };
 }
 
 // ---------- the routes and the floors ----------
@@ -345,9 +502,9 @@ export const ROUTES: Readonly<Record<string, Readonly<Record<Road, readonly Rout
  */
 export const CLIMB_FLOORS: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
   'city-1': {
-    easy: [5600, 10000, 13900, 17000, 20400, 23600],
-    medium: [5600, 10000, 13900, 17000, 20400, 23600],
-    hard: [5600, 10000, 13900, 17000, 20400, 23600],
+    easy: [5600, 10000, 13500, 16900, 20600, 25100],
+    medium: [5600, 10000, 13500, 16800, 20600, 24400],
+    hard: [5600, 10000, 13500, 16800, 20600, 24400],
   },
 };
 
@@ -359,9 +516,9 @@ export const CLIMB_FLOORS: Readonly<Record<string, Readonly<Record<Tier, readonl
  */
 export const CLIMB_BRISK: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
   'city-1': {
-    easy: [0, 0, 5500, 4300, 4800, 4500],
-    medium: [0, 0, 5500, 4300, 4800, 4500],
-    hard: [0, 0, 5500, 4300, 4800, 4500],
+    easy: [0, 0, 4900, 4700, 5200, 6200],
+    medium: [0, 0, 4900, 4600, 5300, 5200],
+    hard: [0, 0, 4900, 4600, 5200, 5200],
   },
 };
 

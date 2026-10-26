@@ -29,3 +29,4 @@ export * from './wayout';
 export * from './overflow';
 export * from './climb';
 export * from './climbbook';
+export * from './climbPilot';

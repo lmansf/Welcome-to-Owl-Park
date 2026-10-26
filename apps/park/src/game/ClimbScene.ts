@@ -3,8 +3,12 @@ import {
   BAND_COUNT,
   CLIMB_CAMERA_ANCHOR,
   CLIMB_FIELD_W,
+  FRAIL_MS,
+  LANTERN_R,
   OWL_H as CLIMB_OWL_H,
   bandLine,
+  gusting,
+  lanternBob,
   platforms,
   startState,
   stepClimb,
@@ -28,6 +32,12 @@ const ROOM_OWL_H = 120;
 const GLASS = 0x9fd0ff;
 /** The high road's ledges are tinted lilac, so a climber can tell the two roads apart at a glance. */
 const HIGH_ROAD = 0xcdb0ff;
+/** Frail glass is tinted amber: it looks thin, and it is. */
+const FRAIL = 0xffc98a;
+const LANTERN_GOLD = 0xffd36a;
+const CHAIN = 0x2a3b63;
+/** A crumbled ledge is gone from view this long, then fades back. */
+const CRUMBLE_GONE_MS = 900;
 const NIGHT_SKY = 0x0b1630;
 /** Where each painted piece's standing surface lies, in logical px from its top edge (lanterns and clouds rise above it). */
 const SURFACE: Readonly<Record<string, number>> = { 'climb-ledge-a': 11, 'climb-ledge-b': 11, 'climb-balcony': 36, 'climb-cloud-cap': 135 };
@@ -81,6 +91,12 @@ export class ClimbScene extends Phaser.Scene {
   private painted = false;
   private pending: ClimbRun | null = null;
   private camY = 0;
+  /** The drawn ledges by their data, for the frail ones' shake and fall. */
+  private ledgeViews = new Map<Ledge, { view: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics; x: number; y: number }>();
+  private lanterns: Phaser.GameObjects.Graphics | null = null;
+  private lanternGlow: Phaser.GameObjects.Graphics | null = null;
+  private gusts: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
+  private lastStun = 0;
 
   constructor() {
     super({ key: 'climb' });
@@ -90,6 +106,8 @@ export class ClimbScene extends Phaser.Scene {
     this.backdrop = this.add.rectangle(CLIMB_FIELD_W / 2, 0, 10, 10, NIGHT_SKY).setDepth(-10);
     this.tower = this.add.container(0, 0).setDepth(0);
     this.glow = this.add.graphics().setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+    this.lanterns = this.add.graphics().setDepth(4);
+    this.lanternGlow = this.add.graphics().setDepth(3).setBlendMode(Phaser.BlendModes.ADD);
     const onResize = () => this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -102,6 +120,11 @@ export class ClimbScene extends Phaser.Scene {
       this.state = null;
       this.tower = null;
       this.glow = null;
+      this.lanterns = null;
+      this.lanternGlow = null;
+      for (const g of this.gusts) g.destroy();
+      this.gusts = [];
+      this.ledgeViews.clear();
       this.backdrop = null;
       this.painted = false;
       releaseArt(this, CLIMB_ART_KEYS);
@@ -135,7 +158,9 @@ export class ClimbScene extends Phaser.Scene {
     this.owl.setScale(this.owlBase).setDepth(5);
     this.owl.showShadow(true);
     this.camY = this.cameraTargetY(y);
+    this.lastStun = 0;
     this.paint(run.layout);
+    this.blow(run.layout);
     this.pulse?.destroy();
     this.pulse = null;
     if (!run.calm && this.glow) this.pulse = this.tweens.add({ targets: this.glow, alpha: { from: 0.55, to: 1 }, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -165,6 +190,7 @@ export class ClimbScene extends Phaser.Scene {
     if (!tower || !glow) return;
     tower.removeAll(true);
     glow.clear();
+    this.ledgeViews.clear();
     const bandH = layout.bandLines[0] ?? 900;
     let painted = true;
     const top = layout.bandLines[BAND_COUNT - 1] ?? bandH * BAND_COUNT;
@@ -187,18 +213,21 @@ export class ClimbScene extends Phaser.Scene {
     for (const l of layout.ledges) {
       const key = l.w >= 240 ? 'climb-ledge-b' : 'climb-ledge-a';
       const h = ART[key]?.h ?? 40;
-      const tint = l.road === 'high' ? HIGH_ROAD : GLASS;
+      const tint = l.frail ? FRAIL : l.road === 'high' ? HIGH_ROAD : GLASS;
       // The piece's standing surface sits SURFACE px under its top edge: that row goes on the ledge's line.
       const img = this.piece(key, l.x, -l.y + h - SURFACE[key]!, l.w, h);
       if (img) {
-        if (l.road === 'high') img.setTint(HIGH_ROAD);
+        if (l.road === 'high') img.setTint(tint);
+        if (l.frail) img.setAlpha(0.85);
         tower.add(img);
+        this.ledgeViews.set(l, { view: img, x: img.x, y: img.y });
       } else {
         painted = false;
         const g = this.add.graphics();
         g.fillStyle(tint, 0.9).fillRoundedRect(l.x, -l.y, l.w, 12, 5);
         g.fillStyle(l.road === 'high' ? 0x4a3f78 : 0x3a5c99, 0.9).fillRoundedRect(l.x + 6, -l.y + 10, l.w - 12, 14, 4);
         tower.add(g);
+        this.ledgeViews.set(l, { view: g, x: 0, y: 0 });
       }
       glow.fillStyle(tint, l.road === 'high' ? 0.26 : 0.18).fillRect(l.x, -l.y - 4, l.w, 6);
     }
@@ -231,6 +260,93 @@ export class ClimbScene extends Phaser.Scene {
     tower.add(foot);
     this.painted = painted && this.textures.exists('climb-cloud-cap');
     void top;
+  }
+
+  /** The gusts: streaks of air through each wind's band of the tower, emitted while a gust blows. */
+  private blow(layout: Layout): void {
+    for (const g of this.gusts) g.destroy();
+    this.gusts = [];
+    if (!this.textures.exists('fx-dot')) return;
+    for (const w of layout.winds) {
+      const e = this.add.particles(0, 0, 'fx-dot', {
+        x: { min: 0, max: CLIMB_FIELD_W },
+        y: { min: -w.y1, max: -w.y0 },
+        speedX: w.drift * 5,
+        speedY: { min: -12, max: 12 },
+        lifespan: 520,
+        scaleX: { start: 2.4, end: 0.8 },
+        scaleY: { start: 0.3, end: 0.08 },
+        alpha: { start: 0.5, end: 0 },
+        tint: [0xcfe6ff, 0x9fd0ff, 0xffffff],
+        blendMode: Phaser.BlendModes.ADD,
+        frequency: 30,
+        quantity: 2,
+        emitting: false,
+        // The streaks die at the tower's edges: the dark around the field stays still.
+        deathZone: { type: 'onLeave', source: new Phaser.Geom.Rectangle(0, -w.y1 - 40, CLIMB_FIELD_W, w.y1 - w.y0 + 80) },
+      });
+      e.setDepth(2);
+      this.gusts.push(e);
+    }
+  }
+
+  /** The lanterns on their chains where the clock has swung them, and the frail glass under the owl. */
+  private drawObstacles(layout: Layout, s: ClimbState): void {
+    const g = this.lanterns;
+    const glow = this.lanternGlow;
+    if (g && glow) {
+      g.clear();
+      glow.clear();
+      for (const l of layout.lanterns) {
+        const b = lanternBob(l, s.t);
+        g.lineStyle(2, CHAIN, 1).lineBetween(l.x, -l.y, b.x, -b.y);
+        g.fillStyle(CHAIN, 1).fillCircle(l.x, -l.y, 3);
+        // A glass lantern: a dark cap and foot, gold panes between lead lines, a warm glow around it.
+        g.fillStyle(CHAIN, 1).fillRoundedRect(b.x - 9, -b.y - LANTERN_R - 2, 18, 6, 2).fillRoundedRect(b.x - 7, -b.y + LANTERN_R - 5, 14, 5, 2);
+        g.fillStyle(LANTERN_GOLD, 0.95).fillRoundedRect(b.x - 12, -b.y - LANTERN_R + 3, 24, LANTERN_R * 2 - 7, 6);
+        g.lineStyle(1.5, CHAIN, 0.9).strokeRoundedRect(b.x - 12, -b.y - LANTERN_R + 3, 24, LANTERN_R * 2 - 7, 6).lineBetween(b.x, -b.y - LANTERN_R + 3, b.x, -b.y + LANTERN_R - 4);
+        g.fillStyle(0xfff2c2, 0.95).fillCircle(b.x, -b.y, 5);
+        glow.fillStyle(LANTERN_GOLD, 0.22).fillCircle(b.x, -b.y, LANTERN_R + 12);
+      }
+    }
+    for (const e of this.gusts) e.emitting = gusting(s.t);
+    // Frail glass shivers under the owl as its time runs out; it falls away when it gives, then returns.
+    for (const [l, v] of this.ledgeViews) {
+      if (!l.frail) continue;
+      const under = s.grounded && Math.abs(s.y - l.y) < 0.5 && s.x - 18 < l.x + l.w && s.x + 18 > l.x;
+      const k = under ? Math.min(1, s.stoodMs / FRAIL_MS) : 0;
+      v.view.setPosition(v.x + (k > 0 ? Math.sin(s.t / 18) * 4 * k : 0), v.y);
+    }
+    if (s.crumbled) {
+      const v = this.ledgeViews.get(s.crumbled);
+      if (v) {
+        this.tweens.killTweensOf(v.view);
+        v.view.setPosition(v.x, v.y);
+        this.tweens.add({ targets: v.view, alpha: 0, y: v.y + 14, duration: 160, ease: 'Quad.easeIn' });
+        this.time.delayedCall(CRUMBLE_GONE_MS, () => {
+          if (!v.view.scene) return;
+          this.tweens.add({ targets: v.view, alpha: s.crumbled?.frail ? 0.85 : 1, y: v.y, duration: 350, ease: 'Sine.easeOut' });
+        });
+      }
+    }
+    // A knock: the owl flares, the field jolts, and a scatter of glass flies from it.
+    if (s.stunMs > 0 && this.lastStun === 0) {
+      this.cameras.main.shake(140, 0.004);
+      if (this.textures.exists('fx-dot'))
+        this.add
+          .particles(s.x, -s.y - CLIMB_OWL_H / 2, 'fx-dot', {
+            lifespan: { min: 300, max: 600 },
+            speed: { min: 80, max: 220 },
+            scale: { start: 0.5, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [LANTERN_GOLD, 0xfff2c2, 0x9fd0ff],
+            blendMode: Phaser.BlendModes.ADD,
+            emitting: false,
+          })
+          .setDepth(6)
+          .explode(18);
+    }
+    this.lastStun = s.stunMs;
   }
 
   /** Where the HUD leaves room for the field (CSS pixels). */
@@ -297,6 +413,7 @@ export class ClimbScene extends Phaser.Scene {
       // The owl's own tick sorts it by its y, as the rooms do; here it stays in front of the tower.
       owl.setDepth(5);
     }
+    this.drawObstacles(run.layout, s);
     // The camera follows the owl up, settling at the anchor; it drops back when the owl glides down.
     const target = this.cameraTargetY(s.y);
     this.camY += (target - this.camY) * Math.min(1, delta / 160);

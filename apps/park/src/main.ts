@@ -207,6 +207,8 @@ declare global {
       arcade(): ReturnType<RoomScene['arcadeRun']>;
       /** The stained-glass climb under way: its seed, what is banked, and the owl on the field (null when none). */
       climb(): ReturnType<RoomScene['climbRun']>;
+      /** The scripted climber takes (or leaves) the climb's controls; false when no climb is up. For the browser tests. */
+      climbAuto(on: boolean): boolean;
       /** The busy ribbon's words as shown (null while it is off or hidden), OP-075. */
       ribbon(): string | null;
       /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
@@ -501,6 +503,7 @@ window.owlPark = {
   wallet: () => transport.tickets?.wallet() ?? Promise.resolve([]),
   arcade: () => roomScene()?.arcadeRun() ?? null,
   climb: () => roomScene()?.climbRun() ?? null,
+  climbAuto: (on) => roomScene()?.climbAuto(on) ?? false,
   ribbon: () => ribbon.shown(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };

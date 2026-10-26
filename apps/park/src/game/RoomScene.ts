@@ -860,6 +860,11 @@ export class RoomScene extends Phaser.Scene {
     return this.climb?.debug() ?? null;
   }
 
+  /** The scripted climber at the climb's controls, for tests. */
+  climbAuto(on: boolean): boolean {
+    return this.climb?.autopilot(on) ?? false;
+  }
+
   /** Read-only snapshot for tests and the console. */
   debugState(): {
     room: string;

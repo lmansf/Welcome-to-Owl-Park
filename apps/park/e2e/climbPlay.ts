@@ -41,8 +41,28 @@ export async function standing(page: Page): Promise<{ x: number; y: number }> {
 }
 
 /**
- * Climb until the owl's band is at least `band`, or `timeout` ms pass. Says how it went: 'reached',
- * or where it got to. Each frame it reads the owl and the tower from the page and presses the keys.
+ * Climb with the page's own scripted climber (window.owlPark.climbAuto) until the owl's band is at
+ * least `band`, or `timeout` ms pass. The climber takes the stairs and waits out the lanterns and
+ * the gusts as the floor test does, in the simulation's own steps, so a slow runner cannot mistime it.
+ */
+export async function autoClimbTo(page: Page, band: number, timeout = 240_000): Promise<string> {
+  expect(await page.evaluate(() => window.owlPark.climbAuto(true))).toBe(true);
+  try {
+    await expect.poll(() => page.evaluate(() => window.owlPark.climb()?.state?.band ?? -1), { timeout, intervals: [250] }).toBeGreaterThanOrEqual(band);
+    return 'reached';
+  } catch {
+    const s = await page.evaluate(() => window.owlPark.climb()?.state ?? null);
+    return s ? `timed out at band ${s.band}, ${Math.round(s.y)} px up` : 'no run';
+  } finally {
+    await page.evaluate(() => window.owlPark.climbAuto(false)).catch(() => undefined);
+  }
+}
+
+/**
+ * Climb by the keys until the owl's band is at least `band`, or `timeout` ms pass: the first two
+ * storeys, before the obstacles (from the third, the lanterns and the gusts want the page's own
+ * climber, autoClimbTo). Says how it went: 'reached', or where it got to. Each frame it reads the
+ * owl and the tower from the page and presses the keys.
  */
 export async function climbTo(page: Page, band: number, timeout = 200_000): Promise<string> {
   return page.evaluate(
