@@ -30,6 +30,8 @@ import { isEmoteId, isLook, isObj, isPlayableEmote, isVec2 } from './validate';
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade), so a stale page reloads. */
 export const EDGE_PROTOCOL_VERSION = 9;
 export const MAX_FRAME_BYTES = 1024;
+/** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
+export const BAND_COUNT = 6;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
 /** Moves the room server accepts from one visitor: a burst, then this many more per second. */

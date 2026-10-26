@@ -66,6 +66,38 @@ export function nextParkWeekAt(at: number): number {
   return t;
 }
 
+/** Whole days from park day `a` to park day `b` (both `YYYY-MM-DD`), negative when `b` is earlier. */
+export function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
+}
+
+// ---------- the park moon (the stained-glass climb, designs/the-stained-glass-climb.md) ----------
+
+/** A new moon; the preview's opening, fourteen days later, is a full moon. */
+export const MOON_EPOCH_DAY = '2026-11-17';
+export const MOON_CYCLE_DAYS = 28;
+export const MOON_PHASE_DAYS = 3.5;
+export type MoonTier = 'easy' | 'medium' | 'hard';
+
+/** The moon's phase on a park day: 0 new, 4 full, 7 the last crescent. A synthetic cycle, the same for everyone. */
+export function parkMoon(day: string): number {
+  const d = daysBetween(MOON_EPOCH_DAY, day);
+  return Math.floor((((d % MOON_CYCLE_DAYS) + MOON_CYCLE_DAYS) % MOON_CYCLE_DAYS) / MOON_PHASE_DAYS);
+}
+
+/** How hard the climb is under a phase: rising to the full moon and falling back. */
+export function moonTier(phase: number): MoonTier {
+  if (phase === 4) return 'hard';
+  if (phase === 0 || phase === 1 || phase === 7) return 'easy';
+  return 'medium';
+}
+
+/** Tonight's night key: the keepers' special night when it is one of `known`, else the moon's tier. */
+export function nightFor(day: string, special: string | null | undefined, known: (key: string) => boolean): string {
+  if (special && known(special)) return special;
+  return moonTier(parkMoon(day));
+}
+
 /** A small stable hash of a string to a 32-bit seed (FNV-1a), for public rotations. */
 export function hashSeed(text: string): number {
   let h = 0x811c9dc5;

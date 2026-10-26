@@ -7,7 +7,7 @@
  * sold: no money is involved here.
  */
 import { PRESENTS, RARITIES, STARTER_PACK, allVariants, parseVariant, type Rarity } from './collectibles';
-import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek, rotationRandom } from './parktime';
+import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek, rotationRandom, daysBetween } from './parktime';
 
 // ---------- defaults the owner may change ----------
 
@@ -123,10 +123,6 @@ function draw(rarity: Rarity, n: number, rnd: () => number, usedItems: Set<strin
     out.push(v);
   }
   return out;
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
 
 export function activeFeaturedSet(day: string): FeaturedSet | null {
