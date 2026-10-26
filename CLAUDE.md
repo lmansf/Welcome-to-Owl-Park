@@ -16,6 +16,8 @@ package scripts so the pinned version is used: `pnpm dev:edge`, `pnpm deploy:edg
   `--dry-run`; show the owner the contact sheet (`pnpm art:finish sheet <key>`) and let them pick;
   finish, then `pnpm art:preview` and show them the compare images before publishing anything.
   The owner approves art; never publish or commit generated art without that.
+  The stained-glass realm's two screens, the climb's six tower pieces (`climb-*`, drawn in plain
+  glass by the climb scene until they ship) and the Glass Circlet are art the owner picks the same way.
 - Secrets (`PASS_SIGNING_KEY`, `ADMIN_KEY`) are set with `wrangler secret put`, never committed.
   `TRUST_FORWARDED_FOR` is for local load tests only. Deploy steps live in `docs/DEPLOY.md`; what to
   do when the park is in trouble, in `docs/PLAYBOOK.md`.

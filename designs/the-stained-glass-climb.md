@@ -1034,9 +1034,10 @@ route absorbs on the next ledge).
 
 ### Art
 
-Six segment pieces, pipeline kind `piece`, `with_2x`: `climb-column` 160 x 900, `climb-ledge-a`
-160 x 32, `climb-ledge-b` 240 x 32, `climb-balcony` 480 x 64, `climb-cloud-cap` 480 x 220,
-`climb-sky` 480 x 900.
+Six segment pieces, pipeline kind `piece`, `with_2x`: `climb-column` 240 x 900, `climb-ledge-a`
+160 x 40, `climb-ledge-b` 240 x 60, `climb-balcony` 480 x 120, `climb-cloud-cap` 480 x 220,
+`climb-sky` 480 x 900. The flat pieces are no wider than four to one, the widest the image models
+take within their size limits; the ledges' top surfaces are their logical top edges.
 
 ## Appendix B: the room `glass`
 

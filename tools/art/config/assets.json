@@ -1453,6 +1453,67 @@
       "kind": "icon",
       "key_colour": "#00FF00",
       "with_2x": true
+    },
+    "glass": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "glass-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "climb-sky": {
+      "w": 480,
+      "h": 900,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-column": {
+      "w": 240,
+      "h": 900,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-ledge-a": {
+      "w": 160,
+      "h": 40,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-ledge-b": {
+      "w": 240,
+      "h": 60,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-balcony": {
+      "w": 480,
+      "h": 120,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-cloud-cap": {
+      "w": 480,
+      "h": 220,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-glass-circlet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
     }
   },
   "helpers": {
