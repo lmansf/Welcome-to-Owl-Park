@@ -6,9 +6,10 @@ import { createModal } from './modal';
 /**
  * The climb screen (designs/the-stained-glass-climb.md): the whole screen over the room while a
  * climb is played, the field drawn by game/ClimbScene.ts in the middle. It owns its controls: a
- * stick on the left and a jump button on the right for thumbs, the arrow keys (or A and D) and
- * the space bar for a keyboard, all read as a held state each frame. Its header, hints and cards
- * are its own elements: the HUD's `covered` state hides the HUD's.
+ * stick on the left and the jump and dash buttons on the right for thumbs (the stick held down is
+ * the talons down), the arrow keys (or A, D and S), the space bar and shift (or X) for a keyboard,
+ * all read as a held state each frame. Its header shows the panes left. Its hints and cards are its
+ * own elements: the HUD's `covered` state hides the HUD's.
  */
 
 /** The run as the screen shows it when it opens. */
@@ -57,8 +58,10 @@ export const PAD_TARGET_PX = 44;
 
 export interface ClimbScreen {
   open(view: ClimbView, handlers: ClimbHandlers): void;
-  /** The held state of the stick, the button and the keys right now; `jumpPressed` is reported once per press. */
+  /** The held state of the stick, the buttons and the keys right now; `jumpPressed` and `dashPressed` are reported once per press. */
   input(): ClimbInput;
+  /** The panes of glass left, of the night's: the header's row of panes. */
+  panes(left: number, of: number): void;
   /** The header as the run goes: the banked band and the feathers from games left today. */
   header(banked: number, remainingCap: number): void;
   /** A band reached and answered. */
@@ -89,7 +92,12 @@ const CSS = `
 #hud .climb .c-stick{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:max(56px,calc(env(safe-area-inset-bottom) + 44px));width:128px;height:128px;display:none}
 #hud .climb .c-jump{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:max(72px,calc(env(safe-area-inset-bottom) + 60px));width:84px;height:84px;min-height:${PAD_TARGET_PX}px;min-width:${PAD_TARGET_PX}px;padding:0;border-radius:50%;display:none;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.32);border:2px solid var(--glass);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(159,208,255,.35);touch-action:none;-webkit-tap-highlight-color:transparent;font-weight:800}
 #hud .climb .c-jump.on{background:rgba(159,208,255,.35)}
-@media (pointer:coarse){#hud .climb.playing .c-stick,#hud .climb.playing .c-jump{display:flex}}
+#hud .climb .c-dash{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:max(172px,calc(env(safe-area-inset-bottom) + 160px));width:68px;height:68px;min-height:${PAD_TARGET_PX}px;min-width:${PAD_TARGET_PX}px;padding:0;border-radius:50%;display:none;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.32);border:2px solid var(--glass);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(159,208,255,.35);touch-action:none;-webkit-tap-highlight-color:transparent;font-weight:800;font-size:13px}
+#hud .climb .c-dash.on{background:rgba(159,208,255,.35)}
+#hud .climb .c-panes{display:inline-flex;gap:4px;margin-left:4px;pointer-events:none}
+#hud .climb .c-panes i{display:block;width:12px;height:16px;border:1.5px solid var(--glass);border-radius:3px 3px 5px 5px;background:rgba(159,208,255,.75);box-shadow:0 0 8px rgba(159,208,255,.6)}
+#hud .climb .c-panes i.out{background:transparent;box-shadow:none;opacity:.45}
+@media (pointer:coarse){#hud .climb.playing .c-stick,#hud .climb.playing .c-jump,#hud .climb.playing .c-dash{display:flex}}
 #hud .climb .c-card{position:absolute;left:12px;right:12px;top:30%;margin:0 auto;max-width:420px;display:none;flex-direction:column;gap:8px;align-items:center;padding:16px;border-radius:20px;background:rgba(12,30,54,.95);border:1px solid var(--glass);box-shadow:0 0 30px rgba(0,0,0,.6);text-align:center}
 #hud .climb .c-card.show{display:flex}
 #hud .climb .c-line{font-size:20px;font-weight:800}
@@ -135,12 +143,14 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       <div class="c-head">
         <h2 data-title>The climb</h2>
         <span class="c-sub" data-sub></span>
+        <span class="c-panes" data-panes aria-live="polite"></span>
         <button class="ghost" data-stop aria-label="Stop climbing">Stop</button>
       </div>
       <div class="c-band" data-band aria-live="polite"></div>
       <div class="c-hint" data-hint></div>
       <div class="c-stick" data-stick></div>
       <button class="c-jump" data-jump aria-label="Jump">Jump</button>
+      <button class="c-dash" data-dash aria-label="Dash">Dash</button>
       <div class="c-card" data-start>
         <div class="c-line" data-start-line></div>
         <div data-start-sub></div>
@@ -162,6 +172,8 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
   const bandEl = $<HTMLElement>('[data-band]');
   const hintEl = $<HTMLElement>('[data-hint]');
   const jumpBtn = $<HTMLButtonElement>('[data-jump]');
+  const dashBtn = $<HTMLButtonElement>('[data-dash]');
+  const panesEl = $<HTMLElement>('[data-panes]');
   const startCard = $<HTMLElement>('[data-start]');
   const resultCard = $<HTMLElement>('[data-result]');
   let view: ClimbView | null = null;
@@ -171,16 +183,23 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
   // The held state: the keys by their place, the jump button's pointer, and a press not yet reported.
   const held = new Set<string>();
   let jumpPointer: number | null = null;
+  let dashPointer: number | null = null;
   let pressed = false;
+  let dashed = false;
   let playing = false;
 
   const press = () => {
     pressed = true;
   };
+  const dashPress = () => {
+    dashed = true;
+  };
   const release = () => {
     held.clear();
     jumpPointer = null;
+    dashPointer = null;
     jumpBtn.classList.remove('on');
+    dashBtn.classList.remove('on');
   };
   const onHide = () => {
     if (document.visibilityState !== 'visible') release();
@@ -195,15 +214,21 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       e.stopPropagation();
       if (!e.repeat && !held.has('jump')) press();
       held.add('jump');
-    } else if (code === 'ArrowLeft' || code === 'KeyA' || code === 'ArrowRight' || code === 'KeyD') {
+    } else if (code === 'ArrowLeft' || code === 'KeyA' || code === 'ArrowRight' || code === 'KeyD' || code === 'ArrowDown' || code === 'KeyS') {
       e.preventDefault();
       e.stopPropagation();
       held.add(code);
+    } else if (code === 'ShiftLeft' || code === 'ShiftRight' || code === 'KeyX' || code === 'KeyK') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat && !held.has('dash')) dashPress();
+      held.add('dash');
     }
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (!modal.isOpen()) return;
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') held.delete('jump');
+    else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyX' || e.code === 'KeyK') held.delete('dash');
     else held.delete(e.code);
     if (e.key === 'Meta') held.clear();
   };
@@ -241,6 +266,26 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
   jumpBtn.addEventListener('pointerup', jumpUp);
   jumpBtn.addEventListener('pointercancel', jumpUp);
   jumpBtn.addEventListener('lostpointercapture', jumpUp);
+  dashBtn.addEventListener('pointerdown', (e) => {
+    if (dashPointer !== null) return;
+    dashPointer = e.pointerId;
+    try {
+      dashBtn.setPointerCapture(e.pointerId);
+    } catch {
+      /* as above */
+    }
+    dashBtn.classList.add('on');
+    dashPress();
+    e.preventDefault();
+  });
+  const dashUp = (e: PointerEvent) => {
+    if (e.pointerId !== dashPointer) return;
+    dashPointer = null;
+    dashBtn.classList.remove('on');
+  };
+  dashBtn.addEventListener('pointerup', dashUp);
+  dashBtn.addEventListener('pointercancel', dashUp);
+  dashBtn.addEventListener('lostpointercapture', dashUp);
   // A tap anywhere else on the field jumps too (a phone held in one hand).
   stage.addEventListener('pointerdown', (e) => {
     if (!playing || (e.target as Element).closest('button, .c-stick, .c-card')) return;
@@ -286,11 +331,13 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       handlers = h;
       release();
       pressed = false;
+      dashed = false;
       playing = false;
       box.classList.remove('playing');
       resultCard.classList.remove('show');
       bandEl.textContent = '';
       hintEl.textContent = '';
+      panesEl.replaceChildren();
       $<HTMLElement>('[data-title]').textContent = v.night === v.tier ? 'The climb' : `The climb · ${v.night}`;
       subEl.textContent = climbSubline(v.banked, v.remainingCap, v.cap);
       $<HTMLElement>('[data-start-line]').textContent = v.resumed ? 'Your climb is where you left it.' : TIER_NAMES[v.tier];
@@ -310,10 +357,23 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       const dir = stick?.direction() ?? null;
       const left = held.has('ArrowLeft') || held.has('KeyA') || (dir !== null && dir.x < -0.5);
       const right = held.has('ArrowRight') || held.has('KeyD') || (dir !== null && dir.x > 0.5);
+      const down = held.has('ArrowDown') || held.has('KeyS') || (dir !== null && dir.y > 0.5);
       const jumpHeld = held.has('jump') || jumpPointer !== null;
       const jumpPressed = pressed;
+      const dashPressed = dashed;
       pressed = false;
-      return { left, right, jumpPressed, jumpHeld };
+      dashed = false;
+      return { left, right, down, jumpPressed, jumpHeld, dashPressed };
+    },
+    panes(left, of) {
+      const kids: HTMLElement[] = [];
+      for (let i = 0; i < of; i++) {
+        const pane = document.createElement('i');
+        if (i >= left) pane.className = 'out';
+        kids.push(pane);
+      }
+      panesEl.replaceChildren(...kids);
+      panesEl.setAttribute('aria-label', `${left} of ${of} panes`);
     },
     header(banked, remainingCap) {
       if (view) subEl.textContent = climbSubline(banked, remainingCap, view.cap);

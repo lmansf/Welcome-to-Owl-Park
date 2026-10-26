@@ -74,7 +74,7 @@ for (const [name, make] of STORES) {
       expect(climb.band(CID, 4242, 6, reach(6))).toMatchObject({ ok: true, banked: 6, added: 8, item: { variant: 'glass-circlet~0', first: true } });
       expect(climb.band(CID, 4242, 1, MON + CLIMB_RUN_MAX_MS + 1)).toEqual({ ok: false, reason: 'forgotten' });
       const found = climb.lookup(climbRef(CID, 4242));
-      expect(found).toMatchObject({ night: 'easy', layout: 'city-1', startedAt: MON });
+      expect(found).toMatchObject({ night: 'easy', layout: 'city-2', startedAt: MON });
       expect(found!.bands.map((b) => b.band)).toEqual([1, 2, 3, 4, 5, 6]);
       expect(JSON.stringify(found)).not.toContain(CID);
     });
@@ -128,7 +128,7 @@ describe('the keepers’ climb lookup', () => {
     const found = await ask(`?ref=${ref}`);
     expect(found.status).toBe(200);
     const body = (await found.json()) as { night: string; bands: Array<{ band: number; ref: string }> };
-    expect(body).toMatchObject({ night: 'easy', layout: 'city-1', startedAt: MON });
+    expect(body).toMatchObject({ night: 'easy', layout: 'city-2', startedAt: MON });
     expect(body.bands.map((b) => b.band)).toEqual([1, 2]);
     expect(JSON.stringify(body)).not.toContain(CID);
   });

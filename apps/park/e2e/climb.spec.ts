@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { autoClimbTo, climbRun, climbTo, openClimb, startClimb, toPortal } from './climbPlay';
+import { autoClimbTo, climbRun, climbState, openClimb, startClimb, tapKey, toPortal } from './climbPlay';
 import { E2E_ADMIN_KEY, openPark, state } from './helpers';
 
 /**
@@ -47,7 +47,17 @@ test.describe('the stained-glass climb', () => {
     await expect(page.locator('.climb [data-sub]')).toHaveText('At the foot · 25 of 25 feathers left from games today');
     await startClimb(page);
     await expect(page.locator('.climb [data-hint]')).not.toHaveText('');
-    expect(await climbTo(page, 2)).toBe('reached');
+    // The keys reach the climb: a jump leaves the ground, a dash in the air moves the owl sideways.
+    const foot = (await climbState(page))!;
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await climbState(page))?.jumpsUsed ?? 0, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
+    await page.keyboard.up('Space');
+    await page.keyboard.down('ArrowRight');
+    await tapKey(page, 'ShiftLeft', 60);
+    await page.keyboard.up('ArrowRight');
+    await expect.poll(async () => (await climbState(page))?.x ?? 0, { timeout: 5_000 }).toBeGreaterThan(foot.x + 40);
+    await expect.poll(async () => (await climbState(page))?.grounded ?? false, { timeout: 5_000 }).toBe(true);
+    expect(await autoClimbTo(page, 2)).toBe('reached');
     await expect(bandLine(page)).toHaveText('Second storey: +1 feather', { timeout: 15_000 });
     await expect.poll(() => feathers(page)).toBe(before + 2);
     await expect(page.locator('.climb [data-sub]')).toHaveText('Second storey banked · 23 of 25 feathers left from games today');
@@ -100,7 +110,7 @@ test.describe('the stained-glass climb through the room server', () => {
     await openClimb(page);
     await expect(page.locator('.climb [data-start-line]')).toHaveText('A gentle night');
     await startClimb(page);
-    expect(await climbTo(page, 1)).toBe('reached');
+    expect(await autoClimbTo(page, 1)).toBe('reached');
     await expect(bandLine(page)).toHaveText('First storey: +1 feather', { timeout: 15_000 });
     await expect.poll(() => feathers(page)).toBe(before + 1);
     const seed = (await climbRun(page))!.seed;
@@ -115,7 +125,7 @@ test.describe('the stained-glass climb through the room server', () => {
     expect(await page.evaluate(() => window.owlPark.drop())).toBe(true);
     await expect.poll(() => page.evaluate(() => (window as unknown as { statusSeen: string[] }).statusSeen), { timeout: 30_000 }).toEqual(expect.arrayContaining(['offline', 'online']));
     await expect.poll(() => page.evaluate(() => document.querySelector('[data-dot]')?.getAttribute('data-status')), { timeout: 30_000 }).toBe('online');
-    expect(await climbTo(page, 2)).toBe('reached');
+    expect(await autoClimbTo(page, 2)).toBe('reached');
     await expect(bandLine(page)).toHaveText('Second storey: +1 feather', { timeout: 15_000 });
     expect((await climbRun(page))!.seed).toBe(seed);
     await expect.poll(() => feathers(page)).toBe(before + 2);

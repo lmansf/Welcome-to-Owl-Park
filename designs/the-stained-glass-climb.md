@@ -910,74 +910,130 @@ until the owner opens the realm (then `VOTABLE_REALMS` gains `glass`); `docs/`.
 
 --------------------------------------------------------------------------------
 
+## Third pass: the overhaul
+
+### What the first tower got wrong
+
+A review of the climb after two passes, from the player's chair rather than the server's:
+
+*   **No stakes, so no tension.** Every fall landed on the balcony below and the only cost was time.
+    Nothing was ever at risk, so "harder" meant "more waiting", which played as tedium.
+*   **Floaty, unexpressive movement.** A full jump hung for most of a second and rose three and a
+    half body heights. The verbs were run, jump, jump again and glide; none of them refreshed
+    another, and there was no dash, no wall and no way to strike.
+*   **Obstacles you waited on rather than played.** Lanterns and gusts were timing gates: the
+    scripted route stood still until the swing passed. A rhythm puzzle, not a movement challenge.
+*   **A flat curve inside a storey.** Every storey was the same zigzag with one new verb; no set
+    pieces, no climax at the top, the two roads the only choice.
+*   **Thin feedback.** A knock was a camera nudge. Landing, dashing and taking damage had no
+    hit-stop, no flash, no dust. The reward arrived as a toast per storey; nothing on the screen
+    showed health or pressure.
+*   **Thin atmosphere.** A static backdrop with nothing moving and nothing alive.
+*   **Short and uniform.** Fifty seconds on the stairs at scripted speed, the same tower every
+    night, the night changing only how fast a glide sank.
+
+### What the third pass does about it
+
+*   **A heavier, fuller kit.** Gravity nearly doubled and the jump shortened to a snappy 149 px
+    with a hard cut on release; a double jump; a dash with no fall; a cling and a kick off walls;
+    and the talons-down pogo, which bounces the owl off any hazard it falls onto and gives back the
+    double jump and the dash. Every verb refreshes another: a landing, a cling or a pogo returns
+    the dash; a kick or a pogo keeps the double.
+*   **Real stakes.** Panes of glass are health (four on a gentle night, three on a brisk one, two
+    on a wild one). A hazard cracks one and throws the owl; thorns crack one and send it back to its
+    last safe ground. The last pane gone is the shade: the owl fades and stands on the bench it last
+    rested on, panes relit. Resting a second on any bench relights them too. Nothing is ever lost but
+    time, and time now has teeth.
+*   **Living hazards.** Thorn glass in beds and ceilings; glass moths on tracks; the lanterns; frail
+    glass. All of them pogo targets with the talons down, all of them a cracked pane without.
+*   **Storeys as set pieces.** Each storey is built around one verb and then they stack: the foot
+    (run, jump, double, dash), the walls, the lanterns, the moths under thorn ceilings, frail glass,
+    and the clouds, which asks for everything. Storeys are 1,200 px tall, half again the first
+    tower's.
+*   **A feel pass.** Hit-stop and a jolt when a pane cracks, a flicker while untouchable, the
+    shade's fade, dust on landings, kicks and dashes, a flash on a pogo, a shiver before frail glass
+    gives, a dark vignette, and a camera that leads a rise.
+*   **The night sets the stakes.** Panes and the hazards' pace, not a glide's sink.
+
+Measured against the first tower: the main road at scripted speed takes 61 s to the clouds instead
+of 50; the floors to the clouds (the faster road, less the margin) rose from 23.6 s to 32.5 to
+33.8 s; above the second storey every move can cost a pane; and the scripted route needs the dash,
+the wall and the pogo, none of which the first tower had. The routes, the floors and the brisk
+windows are in Appendix A.
+
 ## Appendix A: the simulation
 
-Field pixels: the field is `CLIMB_FIELD_W` (480) wide; y counts up from the start ledge at 0.
-Speeds are px/s and accelerations px/s^2; the step is `CLIMB_STEP_MS` = 1000/120.
+Everything both sides must agree on is in `packages/shared/src/climb.ts` (the rules) and
+`climbCity.ts` (the tower); the scripted climber is `climbPilot.ts`. No platform code in any of
+them.
 
 ### Structs
 
-```text
-Ledge      { x: number; y: number; w: number }   one-way; top surface at y
-Layout     { id: string; ledges: Ledge[]; bandLines: number[6];
-             start: Ledge }
-Tier       'easy' | 'medium' | 'hard'
-Night      { key: string; layout: string; tier: Tier;
-             glideFall: number }
-ClimbInput { left, right, jumpPressed, jumpHeld: boolean }
-ClimbState { x, y, vx, vy: number; grounded: boolean;
-             coyoteMs, bufferMs: number; jumpsUsed: 0 | 1 | 2;
-             rising: boolean; gliding: boolean; band: 0..6 }
-```
-
-`jumpPressed` is true on the step the button went down; `jumpHeld` while it is down. The owl's
-box is `OWL_W` by `OWL_H`, with (x, y) its bottom centre. The band lines are ledges spanning the
-field, listed in `bandLines` and treated as ledges; the cloud line is `bandLines[5]`.
+*   `Ledge { x, y, w, road?: 'high', frail?: true }`: a one-way platform, passed from below and
+    landed on from above at `y`.
+*   `Wall { x, y0, y1 }`: a vertical face the owl cannot pass and clings to in the air.
+*   `Thorns { x, y, w, h }`: a bed or ceiling of shards. Touched: a pane and the way back to the last
+    safe ground; pogoed from above: safe.
+*   `Moth { x0, x1, y, speed, phase }`: a glass moth there and back along a track, `speed` px/s
+    times the night's pace.
+*   `Lantern { x, y, len, amp, periodMs, phase }`: a pendulum from a hook.
+*   `Layout { id, bandLines, start, ledges, walls, thorns, moths, lanterns, routes }`: the tower, and
+    both roads' authored moves.
+*   `Night { key, layout, tier, panes, pace }`.
+*   `ClimbInput { left, right, down, jumpPressed, jumpHeld, dashPressed }`.
+*   `ClimbState`: the owl (`x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising,
+    facing`), the dash (`dashMs, dashCooldownMs, dashUsed`), the wall (`wall, wallLockMs`), the run
+    (`band, t, stoodMs`), the stakes (`panes, hurtMs, stunMs, shadeMs, bench, safeX, safeY,
+    shades`), and what the page shows (`crumbled, event`).
 
 ### Rules, applied in this order each step
 
-1.  **Timers.** `coyoteMs` resets to `COYOTE_MS` while grounded and counts down in the air;
-    `bufferMs` is set to `JUMP_BUFFER_MS` on `jumpPressed` and counts down.
-2.  **Horizontal.** With left or right held, `vx` moves toward `-RUN_SPEED` or `RUN_SPEED` by
-    `RUN_ACCEL` times the step; with neither, toward 0 by the same. While gliding, `vx` is clamped to
-    `GLIDE_SPEED`.
-3.  **Jump.** If `bufferMs` is positive and either `coyoteMs` is positive (first jump) or
-    `jumpsUsed` is 1 (double jump): `vy` becomes `JUMP_IMPULSE` or `DOUBLE_JUMP_IMPULSE`,
-    `jumpsUsed` increments, `grounded` is false, `rising` is true, `gliding` is false, `bufferMs`
-    and `coyoteMs` become 0.
-4.  **Jump cut.** If `rising`, `vy` is positive and `jumpHeld` is false, `vy` becomes
-    `min(vy, JUMP_CUT_SPEED)` and `rising` becomes false.
-5.  **Glide.** `gliding` is true while `jumpHeld`, `vy` is at or below 0, `jumpsUsed` is 2 and
-    the owl is not grounded; it ends the step `jumpHeld` is released and resumes if held again.
-6.  **Vertical.** Gliding: `vy` is `-night.glideFall`. Otherwise `vy` decreases by `GRAVITY` times
-    the step, floored at `-MAX_FALL`. `rising` is false once `vy` is at or below 0.
-7.  **Move and collide.** `x` advances by `vx` times the step and is clamped to `[OWL_W / 2,
-    CLIMB_FIELD_W - OWL_W / 2]`. `y` advances by `vy` times the step. If `vy` is below 0 and some
-    ledge has `x - OWL_W / 2 < ledge.x + ledge.w`, `x + OWL_W / 2 > ledge.x`, old `y >= ledge.y` and
-    new `y < ledge.y`, the owl lands: `y = ledge.y`, `vy = 0`, `grounded = true`, `jumpsUsed = 0`,
-    `gliding = false`. Otherwise, if grounded and no ledge is under the box at the new `x`, `grounded`
-    becomes false (coyote time runs).
-8.  **Band.** `band` becomes the highest index `i` (1-based) with `y >= bandLines[i - 1]`, never
-    lower than before.
+0.  The clock. In the shade nothing moves until it ends; then the owl stands on its bench with its
+    panes relit, untouchable for `HURT_MS`. The hurt, stun, dash-cooldown and wall-lock timers run
+    down; a stunned owl's controls are dead.
+1.  The coyote and buffer timers.
+2.  The dash: a press with the cooldown over and the air dash unspent (the ground, a wall or a
+    refresh give it back). It faces the held side, else the way the owl faces; a dash from a wall
+    faces away from it. `DASH_MS` of `DASH_SPEED`, no fall.
+3.  Horizontal: the dash's burst; or, after a kick, the kick's speed for `WALL_LOCK_MS`; or the
+    run's acceleration toward the held side.
+4.  Jump: off a wall when clinging (away at `WALL_KICK`, up at `WALL_JUMP_IMPULSE`, the double still
+    there); else off the ground or within `COYOTE_MS` of it; else the double, once.
+5.  The cut: a released button caps a rising jump at `JUMP_CUT_SPEED`. A pogo's bounce is never cut.
+6.  Vertical: none in a dash; a slide of at most `WALL_SLIDE` on a wall; gravity to `MAX_FALL`.
+7.  Move and collide: walls block sideways (and end a dash); a platform under a falling owl catches
+    it, which refreshes the double and the dash.
+8.  The cling: airborne, not dashing or locked, not rising fast, pressing into a wall the box
+    touches. A cling refreshes the double and the dash.
+9.  Frail glass gives way after `FRAIL_MS` on it, leaving the double.
+10. The benches and the safe ground: a band line stood on is the bench; `REST_MS` on it relights the
+    panes; sound glass stood on while whole is the safe ground.
+11. The hazards, when the owl is touchable: with the talons down, falling, and the hazard's middle
+    no higher than the owl's, a pogo (`POGO_IMPULSE` up, the double and the dash back, a moment
+    untouchable). Otherwise a pane: the last one is the shade; thorns send the owl to its safe
+    ground; anything else throws it away and up at `KNOCK_SPEED` and `KNOCK_UP`, controls dead for
+    `KNOCK_STUN_MS`, untouchable for `HURT_MS`, no jump left.
+12. The band.
 
 ### Constants and starting values
 
-| Constant | Value | Meaning |
+| Name | Value | Meaning |
 | --- | --- | --- |
 | `CLIMB_STEP_MS` | 1000/120 | one simulation step |
 | `CLIMB_FIELD_W` | 480 | the field's width |
 | `OWL_W`, `OWL_H` | 36, 44 | the collision box |
-| `RUN_ACCEL` | 1800 | horizontal acceleration |
-| `RUN_SPEED` | 220 | top horizontal speed |
-| `GRAVITY` | 1400 | downward acceleration when not gliding |
-| `MAX_FALL` | 900 | the fastest fall |
-| `JUMP_IMPULSE` | 650 | upward speed on a jump (about 150 px of rise) |
-| `JUMP_CUT_SPEED` | 200 | the cap on upward speed when the button is released early |
-| `DOUBLE_JUMP_IMPULSE` | 520 | upward speed on the second press (about 95 px more) |
-| `COYOTE_MS` | 80 | a jump still counts this long after leaving a ledge |
-| `JUMP_BUFFER_MS` | 80 | a press this long before landing jumps on landing |
-| `GLIDE_SPEED` | 180 | horizontal speed cap while gliding |
-| `glideFall` | 90 / 130 / 170 | by tier (easy, medium, hard); the one night parameter |
+| `RUN_ACCEL`, `RUN_SPEED` | 2600, 230 | the run |
+| `GRAVITY`, `MAX_FALL` | 2600, 1150 | the fall |
+| `JUMP_IMPULSE`, `JUMP_CUT_SPEED` | 880, 180 | the jump (149 px of rise) and its cut |
+| `DOUBLE_JUMP_IMPULSE` | 760 | the double (111 px more) |
+| `COYOTE_MS`, `JUMP_BUFFER_MS` | 90, 100 | the forgiveness |
+| `DASH_SPEED`, `DASH_MS`, `DASH_COOLDOWN_MS` | 640, 150, 420 | the dash: 96 px with no fall |
+| `WALL_SLIDE`, `WALL_KICK`, `WALL_JUMP_IMPULSE`, `WALL_LOCK_MS` | 140, 240, 840, 90 | the cling and the kick |
+| `POGO_IMPULSE` | 820 | the bounce (129 px) |
+| `KNOCK_SPEED`, `KNOCK_UP`, `KNOCK_STUN_MS`, `HURT_MS` | 260, 360, 300, 900 | a pane cracked |
+| `SHADE_MS`, `REST_MS` | 900, 1000 | the shade's fade; a rest that relights |
+| `LANTERN_R`, `MOTH_R`, `HIT_INSET` | 18, 14, 4 | the hazards' size, and how much of the owl's box a graze is forgiven |
+| `FRAIL_MS` | 600 | frail glass gives way |
 | `CLIMB_CAMERA_ANCHOR` | 0.58 | the owl's height in the view |
 | `CLIMB_SLACK_MS` | 1000 | the clock slack, as the arcade's |
 | `CLIMB_FLOOR_MARGIN` | 0.2 | floors are the route's time less this fraction |
@@ -986,121 +1042,90 @@ field, listed in `bandLines` and treated as ledges; the cloud line is `bandLines
 | `BAND_COUNT` | 6 | bands; the sixth is the clouds |
 | `BAND_FEATHERS` | 1, 1, 2, 2, 2, 2 | per band, ten in total |
 | `BRISK_FEATHERS`, `CLIMB_BRISK_FACTOR` | 1, 1.1 | the brisk feather, and the window as a multiple of the high road's time |
-| `LANTERN_R`, `KNOCK_INSET` | 18, 4 | a lantern's glass, and how much of the owl's box a graze is forgiven |
-| `KNOCK_SPEED`, `KNOCK_STUN_MS` | 240, 450 | the knock: thrown aside and down, controls dead this long, no jump left |
-| `GUST_ON_MS`, `GUST_OFF_MS` | 900, 1700 | a gust blows, then a lull; one clock for every wind, from the run's start |
-| `FRAIL_MS` | 600 | frail glass gives way this long after the owl lands; one flap is left |
+| nights | easy 4 panes, pace 0.9; medium 3, 1; hard 2, 1.15 | what the moon sets |
 
-### The layout `city-1` (second pass: two roads a storey)
+### The tower `city-2`
 
-`bandLines` = 900, 1800, 2700, 3600, 4500, 5400; `start` = `{x: 0, y: 0, w: 480}`. From band 2 up
-each storey has two roads, so that the climb grows harder one idea at a time, offers a choice at
-every storey, and pays for a calculated risk:
+Six storeys of 1,200 px (`bandLines` 1200 … 7200), each a set piece, each with a bench (the band
+line, a ledge spanning the field) at its top. From the second storey up every storey has a main
+road and a high road; the high road is the risky shortcut that pays the brisk feather. Where a
+storey's high road is a pogo chain, a dividing wall at x 300 keeps it apart from the main road, so
+neither road's hazards hang in the other's way.
 
-*   **The stairs** zigzag across the field on wide ledges in small steps, with a run between
-    jumps. They forgive a short jump; in bands 5 and 6 they are the glide across the open field.
-*   **The high road** goes straight up a column of narrow ledges (`road: 'high'`) in the gap the
-    stairs leave. No run between jumps, but the full height of each one (a double jump needs its
-    second press at the apex, a window of about ninety milliseconds either side) and a narrow
-    landing every time. It is the faster way up a storey: 5.4, 5.0, 3.8, 4.3 and 4.0 seconds for
-    bands 2 to 6 against the stairs' 8 to 9. Missing it lands on the stairs or the balcony below:
-    the price is time, never the run.
+1.  **The foot** (0 to 1,200): nine ledges across the field: single jumps, then doubles, then three
+    gaps only a dash crosses, then a last step and the bench. No hazards; no high road.
+2.  **The walls**: a shaft between two walls (x 200 and 360) with thorns on the left half of its
+    foot, climbed by kicking from wall to wall; a step and a double to the bench. High road: a
+    single ledge at the tower's own wall, then one climb straight up it past a moth that crosses
+    the wall at 1,800.
+3.  **The lanterns**: a zigzag on the left of the dividing wall, a lantern over its first gap, two
+    moths across later gaps, and one gap (to the ledge at 3,160) that only a pogo off the lantern
+    under it reaches. High road: a chain of five lanterns zigzagging at x 420 and 360, pogoed one
+    after another to a ledge at 3,420.
+4.  **The moths**: two corridors (full-width floors at 3,840 and 4,200) under thorn ceilings that
+    forbid the double jump, each with a moth to hop, each left by a double up the right-hand gap over
+    the ceiling and a short hop (the jump cut) and dash back left; a moth crosses the high road's
+    column above the ceilings. High road: a column of doubles up the right-hand edge, sharing the
+    corridors' exit ledges.
+5.  **Frail glass**: a staircase of four frail ledges crossed by dashes, moths across its gaps,
+    sound glass to finish. High road: a frail column at the right with two lanterns to pogo
+    between its ledges; the lanterns hang beside each rise, not over it.
+6.  **The clouds**: a shaft between walls (x 160 and 320), a moth over its exit, two frail ledges
+    crossed by dashes among two moths, and the clouds. High road: a climb straight up the tower's
+    wall past two moths.
 
-The roads never share a column, so a jump straight up from the stairs never lands on the high
-road. Ledge widths: the stairs 160 (band 1), 140 and 120 (band 2), 160 (3), 140 (4), 140 (5), 130
-(6); the high road 100 (bands 2 and 3), 80 (4 and 5), 70 (6).
+The ledges, walls, thorns, moths, lanterns and both roads' moves are `CITY_2` in `climbCity.ts`.
+`climb.test.ts` checks that no lantern or moth can touch an owl standing on any ledge at any
+moment (a moth may patrol a corridor floor, which the owl crosses), that no thorns lie on a
+standing surface, that band 1 has no hazards, and that every storey from the second has a high
+road.
 
-| Band | Teaches | Stairs (side, y, width) | High road (x, y, width) |
-| --- | --- | --- | --- |
-| 1 | the jump | L 128, R 256, L 384, R 512, L 640, R 768 (160 wide; 128 up, 80 across; single jumps) | none |
-| 2 | narrower ledges, a step straight up | L 1028 (140), R 1156 (140), L 1284 (120), R 1412 at x 220 (120), L 1540 (120), L 1680 at x 30 (120, straight up) | x 380: 1040, 1180, 1320, 1460, 1600, 1740 (100 wide; 140 up, single jumps) |
-| 3 | the double jump | L 1980, R 2160, L 2340, R 2520 (160 wide; 180 up, 160 across) | x 190: 2040, 2280, 2520 (100 wide; 240 up) |
-| 4 | the double jump, narrower | L 2880, R 3060 at x 300, L 3240, R 3420 at x 300 (140 wide; 180 up, 160 across) | x 200: 2940, 3180, 3420 (80 wide; 240 up) |
-| 5 | the glide | L 3800, R 4000 at x 340, L 4200, R 4400 at x 340 (140 wide; 200 up, 200 across; double jump and glide) | x 200: 3825, 4050, 4275 (80 wide; 225 up) |
-| 6 | the glide, narrower | L 4700, R 4900 at x 330, L 5100, R 5300 at x 330 (130 wide; 200 up, 200 across) | x 205: 4725, 4950, 5175 (70 wide; 225 up) |
+### The scripted climber
 
-Fifty-nine platforms: the start, twenty-six stairs ledges, twenty-six high-road ledges and six
-lines. `roadPlatforms(layout, road)` lists one road's platforms (the stairs' where a band has no
-high road), and `routeOf` derives its moves: `U` (stand under the target and jump) when the target
-spans the field or overlaps the ledge below, else toward a side; a single jump for 140 px or less
-with at most 100 px across, a glide for more than 170 px across, a double jump otherwise.
-
-### The obstacles (third pass)
-
-Three kinds, in from band 3 one at a time, then stacked; each is data on the layout and a rule in
-`stepClimb`, deterministic from the run's clock `t` (ms since this play began), so the page and the
-floor test agree without a replay.
-
-*   **Lanterns** (`Layout.lanterns`: hook `x, y`, chain `len`, half-swing `amp`, `periodMs`,
-    `phase`): a pendulum under a ledge or a balcony. Its glass (`LANTERN_R`) touching the owl's box
-    (less `KNOCK_INSET`) is a knock: thrown away from the glass at `KNOCK_SPEED`, falling, controls
-    dead for `KNOCK_STUN_MS`, both jumps spent. The owl lands on whatever is below, a ledge or the
-    band line: the price is time, never the run. No lantern hangs where an owl can stand:
-    `climb.test.ts` sweeps every lantern's whole swing against every standing spot. The gap lanterns
-    hang under the high road's ledges and swing through the air both roads cross; the balcony
-    lanterns hang under a balcony over a road's last jump. Band 3 has one; 4 and 5 two; 6 three,
-    swinging faster each band (2,400 ms down to 1,800).
-*   **Gusts** (`Layout.winds`: `y0, y1, drift`): between two heights, a gust carries anything
-    airborne `drift` px/s (east when positive); a grounded owl feels nothing. Every wind keeps one
-    clock: `GUST_ON_MS` blowing, `GUST_OFF_MS` still. Band 4 blows from the east at 40, band 5 from
-    the west at 55, band 6 from the east at 70. The lulls are the honest way through; leaning into
-    the gust (holding against it in the air) is the quick one.
-*   **Frail glass** (`Ledge.frail`, the high road only): `FRAIL_MS` after the owl lands, the ledge
-    gives way unless sound glass also holds the owl; the owl keeps one flap (`jumpsUsed` becomes 1).
-    The page shows it shiver, fall and return. Band 4's top high ledge, band 5's upper two, all of
-    band 6's.
-
-The pilot (`climbPilot.ts`) is the scripted climber both the floor test and the browser tests use:
-one policy for a move (run to the end and jump; stand under and jump, leaning back under the
-target in the air; the second press at the apex; the hold for a glide; the coyote press when a
-landing at a ledge's very end leaves no run-up), and a dry run that tries launches every 25 ms up
-to 2.6 s and takes the first that lands. That dry run is how it waits for a lantern to swing past
-or a gust to drop, as a player watching them would, and the waits are in the floors.
+`climbPilot.ts` plays one move of a route: `run` (to the ledge's end facing the move, jump, a double
+at the apex where it says, a short `hold` where a ceiling asks for a hop), `U` (stand under the
+target and jump straight up, steering back under it in the air), `dash` (the dash at the apex,
+then the double), `wall` (into the wall, kick when clinging, head for the other wall or back to
+the same one, and for the target's middle once a rise will top it), `pogo` (talons down over a
+hazard about to pass under the owl; straight up a chain it rises where it is and falls onto the
+nearest lantern below once the double is spent) and `cross` (along a corridor floor, hopping a
+moth that is near). Before a move its dry run tries launches every 25 ms up to 3 s and takes the
+first that lands and can stand a moment where it landed. That is how it waits for a lantern to
+swing past or a moth to turn, as a player watching them would, and the waits are in the floors. A
+landing at a ledge's very end gets the coyote press.
 
 ### The brisk feather
 
-`BRISK_FEATHERS` (1) more for a storey climbed within its brisk window: the high road's scripted
-time through the band times `CLIMB_BRISK_FACTOR` (1.1), per band in `CLIMB_BRISK` (derived and
-frozen by the test like the floors; 0 for band 1, which has no high road, and for band 2, whose
-high road is a column of single jumps and no gamble). The test also checks that the stairs'
-scripted time is at least a quarter again as long as the window, since a player need not wait to
-face a jump as the script does. The server judges it
-from what it already keeps: the band's arrival against the band below's arrival (the start for
-band 1), so a slow storey never costs the next one its bonus, and only the first band of an
-`ascent` frame can be brisk (bands caught up in one frame were not seen arriving). The row's `due`
-carries the brisk feather so the cap's `capped` reads right, the row records `brisk`, and the
-answer carries `brisk` (how many bands earned it this frame). The screen says "· brisk!" on the
-band line and "You reached the clouds, briskly!" on the card. Potential pay per run grows from ten
-to fourteen feathers, still under the activities' shared cap of twenty-five.
+One more feather for a storey climbed within `CLIMB_BRISK_FACTOR` of the high road's scripted time
+through it, judged from the arrival at the storey below (the first storey of a resumed play from the
+run's start). Storey 1 has no high road and pays none. The test checks that the main road's
+scripted time is at least a quarter again as long as every window, so the main road never earns it
+by accident. A full brisk climb pays 15 feathers instead of 10.
 
-### The scripted routes and the floors
+### The routes and the floors
 
-`ROUTES['city-1']` holds both roads' moves. The test drives each through `stepClimb` with the
-pilot under every tier, waiting for each launch as the pilot's dry run says, and records the step at
-which `band` first reaches each value on each road. The floors are the faster road's cumulative
-times less the margin, rounded down to 100 ms; the brisk windows the high road's segment times
-times the factor, up to 100 ms.
+The floors are the faster road's cumulative times less the margin, rounded down to 100 ms; the
+brisk windows the high road's segment times, times the factor, up to 100 ms. Frozen values, ms,
+by easy / medium / hard:
 
-Frozen values, ms, by easy / medium / hard (the waits for the lanterns and the lulls differ by the
-moment each road reaches them, so the tiers no longer agree):
-
-| Band | Stairs | High road | Floor | Brisk window |
+| Band | Main road | High road | Floor | Brisk window |
 | --- | --- | --- | --- | --- |
-| 1 | 7,117 | 7,117 (the stairs) | 5,600 | none |
-| 2 | 15,042 / 15,025 / 15,000 | 12,567 | 10,000 | none |
-| 3 | 23,492 / 23,425 / 23,408 | 16,942 | 13,500 | 4,900 |
-| 4 | 33,000 / 32,733 / 32,692 | 21,125 / 21,108 / 21,117 | 16,900 / 16,800 / 16,800 | 4,700 / 4,600 / 4,600 |
-| 5 | 42,783 / 42,617 / 42,500 | 25,850 / 25,842 / 25,833 | 20,600 | 5,200 / 5,300 / 5,200 |
-| 6 | 51,758 / 51,533 / 51,650 | 31,408 / 30,508 / 30,533 | 25,100 / 24,400 / 24,400 | 6,200 / 5,200 / 5,200 |
+| 1 | 10,617 | 10,617 (the main road) | 8,400 | none |
+| 2 | 18,808 / 18,942 / 19,050 | 15,608 | 12,400 | 5,500 |
+| 3 | 29,817 / 29,033 / 29,992 | 22,292 / 22,467 / 22,058 | 17,800 / 17,900 / 17,600 | 7,400 / 7,600 / 7,100 |
+| 4 | 42,050 / 40,175 / 42,208 | 28,783 / 29,958 / 28,550 | 23,000 / 23,900 / 22,800 | 7,200 / 8,300 / 7,200 |
+| 5 | 53,417 / 51,450 / 56,533 | 36,792 / 38,042 / 36,042 | 29,400 / 30,400 / 28,800 | 8,900 / 8,900 / 8,300 |
+| 6 | 63,750 / 61,225 / 66,575 | 42,250 / 43,183 / 40,667 | 33,800 / 34,500 / 32,500 | 6,100 / 5,700 / 5,200 |
 
-The stairs now wait 4.8 to 7.2 s a climb on the lanterns and the lulls, the high road 2.4 to 3.0 s.
+The scripted routes lose no pane on any night.
 
 ### Art
 
 Six segment pieces, pipeline kind `piece`, `with_2x`: `climb-column` 240 x 900, `climb-ledge-a`
 160 x 40, `climb-ledge-b` 240 x 60, `climb-balcony` 480 x 120, `climb-cloud-cap` 480 x 220,
 `climb-sky` 480 x 900. The flat pieces are no wider than four to one, the widest the image models
-take within their size limits; the ledges' top surfaces are their logical top edges.
+take within their size limits; the ledges' top surfaces are their logical top edges. The walls,
+thorns, moths and lanterns are drawn in code in the realm's palette; painting them is a later pass.
 
 ## Appendix B: the room `glass`
 
