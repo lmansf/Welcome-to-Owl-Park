@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { climbRun, climbTo, openClimb, startClimb, toPortal } from './climbPlay';
+import { autoClimbTo, climbRun, climbTo, openClimb, startClimb, toPortal } from './climbPlay';
 import { E2E_ADMIN_KEY, openPark, state } from './helpers';
 
 /**
@@ -73,7 +73,7 @@ test.describe('the stained-glass climb', () => {
     const before = await atThePortal(page, `e2e-clouds-${test.info().project.name}`);
     await openClimb(page);
     await startClimb(page);
-    expect(await climbTo(page, 6)).toBe('reached');
+    expect(await autoClimbTo(page, 6)).toBe('reached');
     await expect(card(page)).toBeVisible({ timeout: 15_000 });
     await expect(card(page).locator('[data-line]')).toHaveText('You reached the clouds!');
     await expect(card(page).locator('[data-paid]')).toHaveText('+10 feathers this climb');

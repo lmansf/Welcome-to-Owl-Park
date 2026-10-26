@@ -1,5 +1,28 @@
 import type Phaser from 'phaser';
-import { BAND_COUNT, CLIMB_SLACK_MS, LAYOUTS, NIGHTS, PLAY_FEATHERS_PER_DAY, leastClimbMs, type ClimbInput, type ClimbState, type Layout, type Night, type OwlLook, type RoomDef } from '@owl-park/shared';
+import {
+  BAND_COUNT,
+  CLIMB_SLACK_MS,
+  LAYOUTS,
+  NIGHTS,
+  NO_INPUT,
+  OWL_W,
+  PLAY_FEATHERS_PER_DAY,
+  leastClimbMs,
+  moveBetween,
+  pilotFor,
+  pilotInput,
+  platforms,
+  roadPlatforms,
+  waitToLaunch,
+  type ClimbInput,
+  type ClimbState,
+  type Layout,
+  type Ledge,
+  type Night,
+  type OwlLook,
+  type Pilot,
+  type RoomDef,
+} from '@owl-park/shared';
 import type { ActivityLink, ClimbReply } from '../collect/service';
 import type { Hud } from '../ui/hud';
 import type { PreviewRect } from './BuilderScene';
@@ -45,9 +68,46 @@ interface Run {
   over: boolean;
   /** The hints given, so each verb is taught once. */
   taught: Set<string>;
+  /** The scripted climber at the controls (the browser tests), or null for the visitor's own. */
+  auto: Autopilot | null;
+  hintTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const COARSE = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+/** An obstacle's hint stays this long. */
+const HINT_MS = 5000;
+/** The autopilot rests this long on each balcony, as a visitor on the stairs would: the brisk feather is the high road's. */
+const AUTO_REST_MS = 1500;
+
+/**
+ * The scripted climber at the controls, for the browser tests (window.owlPark.climbAuto): it takes
+ * the stairs with the shared pilot, waiting out the lanterns and the gusts as the floor test does.
+ */
+class Autopilot {
+  private pilot: Pilot | null = null;
+  private restUntil = 0;
+  constructor(private readonly layout: Layout, private readonly night: Night) {}
+  input(s: ClimbState): ClimbInput {
+    const all = platforms(this.layout);
+    if (this.pilot) {
+      const to = this.pilot.move.to;
+      const onTarget = s.grounded && Math.abs(s.y - to.y) < 0.5 && s.x - OWL_W / 2 < to.x + to.w && s.x + OWL_W / 2 > to.x;
+      const lost = s.stunMs > 0 || (s.grounded && this.pilot.phase > 0 && Math.abs(s.y - to.y) >= 0.5);
+      if (onTarget || lost) {
+        this.pilot = null;
+        if (onTarget && to.w >= this.layout.start.w) this.restUntil = s.t + AUTO_REST_MS;
+      } else return pilotInput(s, this.pilot);
+    }
+    if (!s.grounded || s.t < this.restUntil) return NO_INPUT;
+    const standing = all.find((p) => Math.abs(p.y - s.y) < 0.5 && s.x - OWL_W / 2 < p.x + p.w && s.x + OWL_W / 2 > p.x);
+    const road = roadPlatforms(this.layout, 'stairs');
+    const next = road.find((p) => p.y > s.y + 0.5);
+    if (!standing || !next) return NO_INPUT;
+    const move = moveBetween(standing, next);
+    this.pilot = pilotFor(standing, move, waitToLaunch(s, standing, move, this.layout, this.night, all) ?? 0);
+    return pilotInput(s, this.pilot);
+  }
+}
 
 /**
  * The stained-glass climb in its room (designs/the-stained-glass-climb.md): Climb at the portal
@@ -89,7 +149,7 @@ export class Climb {
     const night = NIGHTS[reply.night] ?? NIGHTS[reply.tier]!;
     const layout = LAYOUTS[night.layout]!;
     this.run?.retry && clearTimeout(this.run.retry);
-    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, ref: null, over: false, taught: new Set() };
+    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, ref: null, over: false, taught: new Set(), auto: null, hintTimer: null };
     this.host.hud.openClimb(
       { tier: reply.tier, night: reply.night, banked: reply.banked, remainingCap: reply.remainingCap, cap: PLAY_FEATHERS_PER_DAY, bestBandToday: reply.bestBandToday, resumed: reply.resumed, previousForgotten: reply.previousForgotten },
       { frame: (rect) => this.frame(rect), start: () => this.start() },
@@ -106,7 +166,11 @@ export class Climb {
       night: run.night,
       banked: run.banked,
       look: this.host.look(),
-      input: () => this.host.hud.climbInput(),
+      input: () => {
+        const auto = this.run?.auto;
+        const s = auto ? (this.host.scene.scene.get('climb') as ClimbScene | null)?.snapshot() : null;
+        return auto && s ? auto.input(s) : this.host.hud.climbInput();
+      },
       onStep: (s) => this.step(s),
       calm: this.host.calm(),
     });
@@ -114,11 +178,26 @@ export class Climb {
     this.teach('run', COARSE() ? 'Push the stick to run, tap Jump to jump' : 'Arrows run, Space jumps');
   }
 
-  private teach(key: string, line: string): void {
+  private teach(key: string, line: string, forMs = 0): void {
     const run = this.run;
     if (!run || run.taught.has(key)) return;
     run.taught.add(key);
     this.host.hud.climbHint(line);
+    if (run.hintTimer) clearTimeout(run.hintTimer);
+    run.hintTimer = forMs
+      ? setTimeout(() => {
+          run.hintTimer = null;
+          if (this.run === run) this.host.hud.climbHint('');
+        }, forMs)
+      : null;
+  }
+
+  /** The scripted climber takes or leaves the controls (the browser tests). */
+  autopilot(on: boolean): boolean {
+    const run = this.run;
+    if (!run) return false;
+    run.auto = on ? new Autopilot(run.layout, run.night) : null;
+    return true;
   }
 
   /** The climb's scene, started over the room if it is not running; the room stops drawing under it. */
@@ -140,6 +219,7 @@ export class Climb {
     if (!rect) {
       // The screen closed (Stop, Escape, the card's Close): the run waits in the room; nothing is sent.
       if (this.run?.retry) clearTimeout(this.run.retry);
+      if (this.run?.hintTimer) clearTimeout(this.run.hintTimer);
       this.run = null;
       this.stopView();
       return;
@@ -160,6 +240,11 @@ export class Climb {
       if (s.band >= 4) this.teach('glide', 'Hold Jump after the double jump to glide');
     }
     if (s.gliding && run.taught.has('glide')) this.host.hud.climbHint('');
+    // The obstacles, each explained once as it first matters: the lanterns from band 3, the gusts from band 4, frail glass when stood on, a knock when it lands.
+    if (s.band >= 2 && run.taught.has('double')) this.teach('lantern', 'Lanterns swing across the gaps: jump as one passes', HINT_MS);
+    if (s.band >= 3 && run.taught.has('lantern')) this.teach('gust', 'The wind gusts here: jump in a lull, or lean into it', HINT_MS);
+    if (s.grounded && s.stoodMs > 0 && run.layout.ledges.some((l) => l.frail && Math.abs(l.y - s.y) < 0.5 && s.x - OWL_W / 2 < l.x + l.w && s.x + OWL_W / 2 > l.x)) this.teach('frail', 'Frail glass: jump again before it gives', HINT_MS);
+    if (s.stunMs > 0) this.teach('knock', 'Knocked down! Let the lantern swing past next time', HINT_MS);
     if (s.band > run.sent) void this.ascend(s.band);
   }
 
@@ -249,6 +334,7 @@ export class Climb {
   destroy(): void {
     this.destroyed = true;
     if (this.run?.retry) clearTimeout(this.run.retry);
+    if (this.run?.hintTimer) clearTimeout(this.run.hintTimer);
     this.run = null;
     this.stopView();
   }

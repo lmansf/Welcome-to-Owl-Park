@@ -128,7 +128,9 @@ describe('the climb book: bands', () => {
     expect(store.bands(CID, 7)[3]).toMatchObject({ band: 4, brisk: false });
     // Two bands in one frame: the first is timed from band 4's arrival (and was quick), the one caught
     // up with it was not seen arriving and takes the table value alone.
-    const two = climb.band(CID, 7, 6, slow + 100);
+    const together = Math.max(slow + 100, MON + leastClimbMs(EASY, 6) + 250);
+    expect(together - slow).toBeLessThanOrEqual(briskMs(EASY, 5));
+    const two = climb.band(CID, 7, 6, together);
     expect(two).toMatchObject({ ok: true, banked: 6, added: BAND_FEATHERS[4]! + BRISK_FEATHERS + BAND_FEATHERS[5]!, brisk: 1 });
     expect(store.bands(CID, 7).slice(4).map((r) => [r.band, r.brisk])).toEqual([
       [5, true],

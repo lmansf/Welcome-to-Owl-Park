@@ -986,6 +986,10 @@ field, listed in `bandLines` and treated as ledges; the cloud line is `bandLines
 | `BAND_COUNT` | 6 | bands; the sixth is the clouds |
 | `BAND_FEATHERS` | 1, 1, 2, 2, 2, 2 | per band, ten in total |
 | `BRISK_FEATHERS`, `CLIMB_BRISK_FACTOR` | 1, 1.1 | the brisk feather, and the window as a multiple of the high road's time |
+| `LANTERN_R`, `KNOCK_INSET` | 18, 4 | a lantern's glass, and how much of the owl's box a graze is forgiven |
+| `KNOCK_SPEED`, `KNOCK_STUN_MS` | 240, 450 | the knock: thrown aside and down, controls dead this long, no jump left |
+| `GUST_ON_MS`, `GUST_OFF_MS` | 900, 1700 | a gust blows, then a lull; one clock for every wind, from the run's start |
+| `FRAIL_MS` | 600 | frail glass gives way this long after the owl lands; one flap is left |
 
 ### The layout `city-1` (second pass: two roads a storey)
 
@@ -1021,6 +1025,38 @@ high road), and `routeOf` derives its moves: `U` (stand under the target and jum
 spans the field or overlaps the ledge below, else toward a side; a single jump for 140 px or less
 with at most 100 px across, a glide for more than 170 px across, a double jump otherwise.
 
+### The obstacles (third pass)
+
+Three kinds, in from band 3 one at a time, then stacked; each is data on the layout and a rule in
+`stepClimb`, deterministic from the run's clock `t` (ms since this play began), so the page and the
+floor test agree without a replay.
+
+*   **Lanterns** (`Layout.lanterns`: hook `x, y`, chain `len`, half-swing `amp`, `periodMs`,
+    `phase`): a pendulum under a ledge or a balcony. Its glass (`LANTERN_R`) touching the owl's box
+    (less `KNOCK_INSET`) is a knock: thrown away from the glass at `KNOCK_SPEED`, falling, controls
+    dead for `KNOCK_STUN_MS`, both jumps spent. The owl lands on whatever is below, a ledge or the
+    band line: the price is time, never the run. No lantern hangs where an owl can stand:
+    `climb.test.ts` sweeps every lantern's whole swing against every standing spot. The gap lanterns
+    hang under the high road's ledges and swing through the air both roads cross; the balcony
+    lanterns hang under a balcony over a road's last jump. Band 3 has one; 4 and 5 two; 6 three,
+    swinging faster each band (2,400 ms down to 1,800).
+*   **Gusts** (`Layout.winds`: `y0, y1, drift`): between two heights, a gust carries anything
+    airborne `drift` px/s (east when positive); a grounded owl feels nothing. Every wind keeps one
+    clock: `GUST_ON_MS` blowing, `GUST_OFF_MS` still. Band 4 blows from the east at 40, band 5 from
+    the west at 55, band 6 from the east at 70. The lulls are the honest way through; leaning into
+    the gust (holding against it in the air) is the quick one.
+*   **Frail glass** (`Ledge.frail`, the high road only): `FRAIL_MS` after the owl lands, the ledge
+    gives way unless sound glass also holds the owl; the owl keeps one flap (`jumpsUsed` becomes 1).
+    The page shows it shiver, fall and return. Band 4's top high ledge, band 5's upper two, all of
+    band 6's.
+
+The pilot (`climbPilot.ts`) is the scripted climber both the floor test and the browser tests use:
+one policy for a move (run to the end and jump; stand under and jump, leaning back under the
+target in the air; the second press at the apex; the hold for a glide; the coyote press when a
+landing at a ledge's very end leaves no run-up), and a dry run that tries launches every 25 ms up
+to 2.6 s and takes the first that lands. That dry run is how it waits for a lantern to swing past
+or a gust to drop, as a player watching them would, and the waits are in the floors.
+
 ### The brisk feather
 
 `BRISK_FEATHERS` (1) more for a storey climbed within its brisk window: the high road's scripted
@@ -1039,28 +1075,25 @@ to fourteen feathers, still under the activities' shared cap of twenty-five.
 
 ### The scripted routes and the floors
 
-`ROUTES['city-1']` holds both roads' moves. The test drives each through `stepClimb` under every
-tier: hold `toward` until the owl's box edge is within 8 px of the current ledge's end, or for `U`
-stand under the target (as near its middle as the ledge allows) and still; press jump (`single`),
-press again at the apex (`double`), and hold jump from the second press until landing
-(`double-glide`). It records the step at which `band` first reaches each value on each road. The
-floors are the faster road's cumulative times less the margin, rounded down to 100 ms; the brisk
-windows the high road's segment times, up to 100 ms.
+`ROUTES['city-1']` holds both roads' moves. The test drives each through `stepClimb` with the
+pilot under every tier, waiting for each launch as the pilot's dry run says, and records the step at
+which `band` first reaches each value on each road. The floors are the faster road's cumulative
+times less the margin, rounded down to 100 ms; the brisk windows the high road's segment times
+times the factor, up to 100 ms.
 
-Frozen values (the high road has no glide, so the tiers agree):
+Frozen values, ms, by easy / medium / hard (the waits for the lanterns and the lulls differ by the
+moment each road reaches them, so the tiers no longer agree):
 
 | Band | Stairs | High road | Floor | Brisk window |
 | --- | --- | --- | --- | --- |
 | 1 | 7,117 | 7,117 (the stairs) | 5,600 | none |
-| 2 | 15,175 | 12,508 | 10,000 | none |
-| 3 | 23,025 | 17,492 | 13,900 | 5,500 |
-| 4 | 32,000 | 21,325 | 17,000 | 4,300 |
-| 5 | 40,650 / 39,758 / 39,583 | 25,600 | 20,400 | 4,800 |
-| 6 | 49,442 / 47,633 / 47,267 | 29,600 | 23,600 | 4,500 |
+| 2 | 15,042 / 15,025 / 15,000 | 12,567 | 10,000 | none |
+| 3 | 23,492 / 23,425 / 23,408 | 16,942 | 13,500 | 4,900 |
+| 4 | 33,000 / 32,733 / 32,692 | 21,125 / 21,108 / 21,117 | 16,900 / 16,800 / 16,800 | 4,700 / 4,600 / 4,600 |
+| 5 | 42,783 / 42,617 / 42,500 | 25,850 / 25,842 / 25,833 | 20,600 | 5,200 / 5,300 / 5,200 |
+| 6 | 51,758 / 51,533 / 51,650 | 31,408 / 30,508 / 30,533 | 25,100 / 24,400 / 24,400 | 6,200 / 5,200 / 5,200 |
 
-Times in ms (stairs by easy / medium / hard where the glide differs). Puzzles that need new rules
-(moving panes, wind, a ledge that gives way) are a later pass; this one works within the eight
-rules of the simulation.
+The stairs now wait 4.8 to 7.2 s a climb on the lanterns and the lulls, the high road 2.4 to 3.0 s.
 
 ### Art
 
