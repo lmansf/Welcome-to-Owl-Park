@@ -62,6 +62,8 @@ import {
   type Vec2,
   type Walk,
   type Wear,
+  REALMS_DEFAULTS,
+  type RealmsSettings,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -72,7 +74,7 @@ import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
 import { castVote } from '../net/vote';
-import { NEST_MIRROR, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, getRoom } from '../rooms';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
@@ -82,6 +84,7 @@ import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
+import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { loadArt, releaseArt, roomArtKeys } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomScaleCap } from './artFiles';
@@ -142,7 +145,7 @@ const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
 const TOUCH_HINT_BOTTOM = 190;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
-const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347' };
+const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347', glass: '#9FD0FF' };
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
 const KEY_TURNS = 8;
 /** Never wait longer than this for the park day to turn (timers past ~24 days overflow). */
@@ -184,6 +187,8 @@ export class RoomScene extends Phaser.Scene {
   /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
   private pendingVote = false;
   private pieces: SetPieces = {};
+  /** The realms switch as the room server last said (the stained-glass climb); without a server, every gated realm is open. */
+  private realms: RealmsSettings = REALMS_DEFAULTS;
   /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
   private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
@@ -218,6 +223,8 @@ export class RoomScene extends Phaser.Scene {
   private play: ActivityLayer | null = null;
   /** The arcade's cabinets, score wall and runs, in the arcade only. */
   private arcade: Arcade | null = null;
+  /** The stained-glass climb from its portal, in the glass realm only. */
+  private climb: Climb | null = null;
   private acts: ActivityLink | null = null;
   /** The nests: on the street, who lives behind each door; in a nest, what stands where. */
   private nests: NestLink | null = null;
@@ -288,6 +295,7 @@ export class RoomScene extends Phaser.Scene {
     this.tasks = this.registry.get('tasks') as TaskState;
     this.play = null;
     this.arcade = null;
+    this.climb = null;
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -335,12 +343,23 @@ export class RoomScene extends Phaser.Scene {
     // hairline of the clear colour shows at a join while the camera scrolls.
     for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
+    this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
       scene: this,
       hud: this.hud,
       acts: () => this.acts,
       look: () => this.look,
       feathers: (total) => this.collection.setFeathers(total),
+    });
+    this.climb = climbFor(room, {
+      scene: this,
+      hud: this.hud,
+      acts: () => this.acts,
+      look: () => this.look,
+      portalLive: () => this.realms.portal,
+      calm: () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false,
+      feathers: (total) => this.collection.setFeathers(total),
+      awarded: () => void this.collection.refresh(),
     });
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
@@ -477,6 +496,8 @@ export class RoomScene extends Phaser.Scene {
       onFull: (roomId) => live() && void this.roomFull(roomId),
       onQueued: () => live() && this.queued(),
       onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
+      onRealms: (realms) => live() && this.setRealms(realms),
+      onRealmClosed: (sign) => live() && this.onRealmClosed(sign),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -507,7 +528,11 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setStatus(s, this.transport.kind);
     const wentOffline = s === 'offline' && this.lastStatus !== 'offline';
     // Back online after a drop: the board may have moved meanwhile (a new park day, a push missed).
-    if (s === 'online' && this.lastStatus === 'offline' && this.conn) void this.refreshBoard();
+    if (s === 'online' && this.lastStatus === 'offline' && this.conn) {
+      void this.refreshBoard();
+      // A climb under way asks the room for its run again, with any band the room never answered.
+      void this.climb?.reconnected();
+    }
     this.lastStatus = s;
     if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
   }
@@ -796,6 +821,8 @@ export class RoomScene extends Phaser.Scene {
     booth: { label: 'Ticket booth', run: () => void this.openBooth() },
     // The arcade's cabinets whose games are live: Play starts a run (a cabinet switched off says Hatching Soon).
     ...Object.fromEntries(CABINETS.filter((c) => c.live).map((c) => [c.spot, { label: `Play ${GAMES[c.game].name}`, run: () => void this.arcade?.play(c.game) }])),
+    // The glass realm's portal: the climb, while the keepers' switch has the portal live.
+    portal: { label: 'Climb', run: () => (this.realms.portal ? void this.climb?.play() : this.hud.toast(PORTAL_OFF)) },
     mirror: { label: NEST_WORDS.mirror, run: () => this.lookInMirror() },
   };
 
@@ -826,6 +853,11 @@ export class RoomScene extends Phaser.Scene {
   /** The arcade's run under way, for tests: its game itself, to play it by its rules. */
   arcadeRun(): ReturnType<Arcade['debug']> {
     return this.arcade?.debug() ?? null;
+  }
+
+  /** The climb under way, for tests: its seed, what is banked, and the owl on the field. */
+  climbRun(): ReturnType<Climb['debug']> {
+    return this.climb?.debug() ?? null;
   }
 
   /** Read-only snapshot for tests and the console. */
@@ -1228,6 +1260,13 @@ export class RoomScene extends Phaser.Scene {
    * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
    * One every JUMP_EVERY_MS, so a held thumb cannot flood the room.
    */
+  /** Drop the room's socket as a bad network would (tests): false without one, or in the local mode. */
+  dropConnection(): boolean {
+    if (!this.conn?.drop) return false;
+    this.conn.drop();
+    return true;
+  }
+
   jump(): boolean {
     if (!this.built || this.leaving) return false;
     const now = Date.now();
@@ -1329,6 +1368,11 @@ export class RoomScene extends Phaser.Scene {
         continue;
       }
       if (door.to) {
+        if (this.realmClosed(door.to.room)) {
+          // The arch into a gated realm the keepers have not opened: its blockade's phrase, and no way through.
+          if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
+          continue;
+        }
         if (!takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null)) continue;
         if (door.id === 'gate') {
           void this.throughGate(door);
@@ -1531,6 +1575,8 @@ export class RoomScene extends Phaser.Scene {
     this.play = null;
     this.arcade?.destroy();
     this.arcade = null;
+    this.climb?.destroy();
+    this.climb = null;
     this.bubbles?.clear();
     this.bubbles = null;
     this.acts?.close();
@@ -1600,6 +1646,30 @@ export class RoomScene extends Phaser.Scene {
     if (this.leaving) return;
     this.hud.toast(NEST_WORDS.closedForNow, 3000);
     void this.goTo(STREET_ROOM, streetSpawnBack(this.cameFrom), undefined);
+  }
+
+  /** A gated realm the keepers have not opened (the realms switch). Rooms without `gated` are never closed this way. */
+  private realmClosed(roomId: string | undefined): boolean {
+    return !!roomId && ROOMS[roomId]?.gated === true && !this.realms.open.includes(roomId);
+  }
+
+  /** The realms switch, as the welcome or a later frame said it: the hub's arches draw open or closed, and the Menu map agrees. */
+  private setRealms(realms: RealmsSettings): void {
+    this.realms = realms;
+    this.hud.setOpenRealms(realms.open);
+    for (const [id, arch] of Object.entries(this.pieces.arches ?? {})) {
+      const closed = this.realmClosed(this.room.doors.find((d) => d.id === id)?.to?.room);
+      arch.blockade?.setVisible(closed);
+      arch.glow.setVisible(!closed);
+    }
+  }
+
+  /** The realm this owl is in (or was entering) is closed: back to the hub, by the arch it came through. */
+  private onRealmClosed(sign: string): void {
+    if (this.leaving) return;
+    this.hud.toast(sign || 'Pardon Our Feathers', 3000);
+    const back = `from-${this.room.id}`;
+    void this.goTo('hub', Object.hasOwn(ROOMS['hub']?.spawns ?? {}, back) ? back : 'default', undefined);
   }
 
   private decorateView(): DecorateView {

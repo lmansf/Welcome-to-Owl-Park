@@ -29,6 +29,8 @@ export interface ParkConfig {
   look: string | undefined;
   /** Local mode only: a fixed collector id (tests share or separate collections with it). */
   collector: string | undefined;
+  /** The climb's night in the local mode and the browser tests only (`?night=<key>`); the room server decides its own. */
+  night: string | undefined;
   /** Local mode only: the home time zone to use instead of the device's (tests). */
   tz: string | undefined;
   debug: boolean;
@@ -69,6 +71,7 @@ export function readConfig(): ParkConfig {
     id: q.get('id') ?? undefined,
     look: q.get('look') ?? undefined,
     collector: q.get('collector') ?? undefined,
+    night: q.get('night') ?? undefined,
     tz: q.get('tz') ?? undefined,
     debug: q.get('debug') === '1',
     pixelRatio: Math.min(2, Math.max(1, dpr)),

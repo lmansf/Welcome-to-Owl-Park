@@ -392,6 +392,7 @@ export class EdgeTransport implements ParkTransport {
           copy = f.copy ?? 1;
           this.keepEntry(f.entry);
           if (f.notice !== undefined) handlers.onNotice?.(f.notice);
+          if (f.realms) handlers.onRealms?.(f.realms);
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
           // This page speaks the room's protocol: a later version change may reload it again.
@@ -465,7 +466,11 @@ export class EdgeTransport implements ParkTransport {
           });
           break;
         case 'closed':
-          handlers.onNestClosed?.(f.why);
+          if (f.why === 'realm') handlers.onRealmClosed?.(f.sign ?? '');
+          else handlers.onNestClosed?.(f.why);
+          break;
+        case 'realms':
+          handlers.onRealms?.(f.realms);
           break;
         case 'lanterns': {
           const lit: Record<string, number> = {};
@@ -621,6 +626,20 @@ export class EdgeTransport implements ParkTransport {
         if (!f.ok) return f;
         return f.a === 'score' ? { ok: true, paid: f.paid } : unknown;
       },
+      climb: async () => {
+        const f = await act('climb');
+        if (!f.ok) return f;
+        if (f.a !== 'climb') return unknown;
+        const { a: _a, t: _t, r: _r, ok: _ok, startedAt, ...rest } = f;
+        return { ok: true, startedAt: startedAt - offset, ...rest };
+      },
+      ascent: async (k, band) => {
+        const f = await act('ascent', { k, band });
+        if (!f.ok) return f;
+        if (f.a !== 'ascent') return unknown;
+        const { a: _a, t: _t, r: _r, ok: _ok, ...rest } = f;
+        return { ok: true, ...rest };
+      },
       // The room forgets the owl's line and game when it leaves.
       close: () => undefined,
     };
@@ -710,7 +729,7 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return; // it waits in the line on the home screen
         }
-        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED) {
+        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED) {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop
         }
@@ -773,6 +792,10 @@ export class EdgeTransport implements ParkTransport {
       track(state: PlayerState) {
         current = state;
         spawn = undefined;
+      },
+      drop() {
+        // As a dead connection is closed: onclose schedules the reconnect.
+        ws?.close(4000, 'dropped');
       },
       async leave() {
         closed = true;

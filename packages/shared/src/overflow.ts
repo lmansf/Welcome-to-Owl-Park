@@ -119,3 +119,49 @@ export function waitMinutes(place: number, perMinute: number): number | null {
   if (!(perMinute > 0)) return null;
   return Math.max(1, Math.ceil(place / perMinute));
 }
+
+// ---------- the realms switch (the stained-glass climb, designs/the-stained-glass-climb.md) ----------
+
+/**
+ * Which gated rooms are open, whether the climb's portal is live, and the keepers' special night
+ * (null: the moon decides). A room without `gated` on its RoomDef never consults this.
+ */
+export interface RealmsSettings {
+  open: string[];
+  portal: boolean;
+  night: string | null;
+}
+export const REALMS_DEFAULTS: RealmsSettings = { open: [], portal: false, night: null };
+export const REALMS_OPEN_MAX = 16;
+
+/** The realms settings with the given changes, or null when a room is not gated or a night is unknown. */
+export function withRealmsChanges(base: RealmsSettings, v: unknown, gated: (room: string) => boolean, night: (key: string) => boolean): RealmsSettings | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const out: RealmsSettings = { open: [...base.open], portal: base.portal, night: base.night };
+  if (o['open'] !== undefined) {
+    const list = o['open'];
+    if (!Array.isArray(list) || list.length > REALMS_OPEN_MAX || !list.every((r) => typeof r === 'string' && gated(r))) return null;
+    out.open = [...new Set(list as string[])].sort();
+  }
+  if (o['portal'] !== undefined) {
+    if (typeof o['portal'] !== 'boolean') return null;
+    out.portal = o['portal'];
+  }
+  if (o['night'] !== undefined) {
+    const n = o['night'];
+    if (n !== null && (typeof n !== 'string' || !night(n))) return null;
+    out.night = n;
+  }
+  return out;
+}
+
+/** A realms value as it arrived (a notice, a stored copy): its shape kept, anything else the defaults. */
+export function cleanRealms(v: unknown): RealmsSettings {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return REALMS_DEFAULTS;
+  const o = v as Record<string, unknown>;
+  const open = Array.isArray(o['open']) ? (o['open'] as unknown[]).filter((r): r is string => typeof r === 'string' && r.length <= 32).slice(0, REALMS_OPEN_MAX).sort() : [];
+  return { open, portal: o['portal'] === true, night: typeof o['night'] === 'string' && o['night'].length <= 32 ? o['night'] : null };
+}
+
+export const sameRealms = (a: RealmsSettings, b: RealmsSettings): boolean => a.portal === b.portal && a.night === b.night && a.open.length === b.open.length && a.open.every((r, i) => r === b.open[i]);

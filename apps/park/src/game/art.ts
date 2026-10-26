@@ -21,8 +21,9 @@ export const OWL_H = 240;
 /**
  * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
  * the screen), and never given a placeholder: the arcade draws its neon stand-in for anything missing.
+ * `climb`: the stained-glass climb's tower pieces, the same way; the climb draws glass of its own until they come.
  */
-export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade';
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb';
 
 export interface ArtSpec {
   w: number;
@@ -48,8 +49,17 @@ export const ART: Record<string, ArtSpec> = {
   'arcade-title-moon-flap': { w: 251, h: 115, kind: 'arcade' },
   'arcade-title-nest-knockdown': { w: 280, h: 110, kind: 'arcade' },
   ...Object.fromEntries(Object.values(GAME_ART).flatMap((art) => Object.entries(art).map(([key, size]): [string, ArtSpec] => [key, { ...size, kind: 'arcade' }]))),
+  // The climb's tower (designs/the-stained-glass-climb.md, Appendix A): a band's sky, its ledges, the balcony on each band line, the cloud cap.
+  'climb-sky': { w: 480, h: 900, kind: 'climb' },
+  'climb-column': { w: 240, h: 900, kind: 'climb' },
+  'climb-ledge-a': { w: 160, h: 40, kind: 'climb' },
+  'climb-ledge-b': { w: 240, h: 60, kind: 'climb' },
+  'climb-balcony': { w: 480, h: 120, kind: 'climb' },
+  'climb-cloud-cap': { w: 480, h: 220, kind: 'climb' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
+  // The stained-glass realm's idol, on the plinth of its west screen.
+  'glass-idol': { w: 520, h: 416, kind: 'piece' },
   // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall
   // pieces are the clock, the framed leaf, the window box, the lanterns and the feather mobile.
   'decor-rug': { w: 240, h: 100, kind: 'piece' },
@@ -101,6 +111,9 @@ export const ART: Record<string, ArtSpec> = {
 
 export { OWL_LAYERS, SPECIES_LAYERS };
 
+/** The climb's pieces, loaded by its scene when a climb opens and released when it closes. */
+export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'climb');
+
 // The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
 for (const room of Object.values(ROOMS)) {
   for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
@@ -121,6 +134,7 @@ export function roomArtKeys(roomId: string): string[] {
   for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
+  if (roomId === 'glass') keys.push('glass-idol');
   if (roomId === ARCADE_ROOM) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
@@ -135,7 +149,7 @@ export function roomArtKeys(roomId: string): string[] {
  * of several tiles).
  */
 export function artScale(kind: ArtKind, pixelRatio: number, roomMax: number): number {
-  const target = kind === 'owl' || kind === 'arcade' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
+  const target = kind === 'owl' || kind === 'arcade' || kind === 'climb' ? Math.min(pixelRatio, 2) : Math.min(pixelRatio, roomMax);
   return Math.max(1, Math.round(target * 4) / 4);
 }
 
@@ -242,7 +256,7 @@ export function releaseArt(scene: Phaser.Scene, keys: string[]): void {
 export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
   if (scene.textures.exists(key)) return;
   const spec = ART[key];
-  if (!spec || spec.kind === 'arcade') return;
+  if (!spec || spec.kind === 'arcade' || spec.kind === 'climb') return;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
   const { w, h } = spec;
   switch (spec.kind) {

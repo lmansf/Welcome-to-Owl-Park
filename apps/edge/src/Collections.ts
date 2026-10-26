@@ -1,11 +1,12 @@
 /**
  * Durable Object holding every collector's collection, feathers and quests in its SQLite storage,
- * and beside them every owl's nest and furniture and the arcade's scores of the day. One object for
- * the park (`getByName('park')`), called over RPC by the Worker (inventory, the shop, grants, the
- * furniture gift) and by the room object (quests, uses, ownership checks for wear and emotes, the
- * nests, the arcade's runs). The rules live in the portable `CollectionBook`, `QuestBook`,
- * `NestBook` and `ArcadeBook` (packages/shared) over the SQL stores in sqlStore.ts, sqlNestStore.ts
- * and sqlScoreStore.ts. Rewards and nest ids draw from the platform's cryptographic random source.
+ * and beside them every owl's nest and furniture, the arcade's scores of the day and the climb's
+ * runs. One object for the park (`getByName('park')`), called over RPC by the Worker (inventory,
+ * the shop, grants, the furniture gift, a keeper's climb lookup) and by the room object (quests,
+ * uses, ownership checks for wear and emotes, the nests, the arcade's runs, the climb). The rules
+ * live in the portable `CollectionBook`, `QuestBook`, `NestBook`, `ArcadeBook` and `ClimbBook`
+ * (packages/shared) over the SQL stores in sqlStore.ts, sqlNestStore.ts, sqlScoreStore.ts and
+ * sqlClimbStore.ts. Rewards, nest ids and run seeds draw from the platform's cryptographic random source.
  * Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts). Every collectible
  * granted goes to the collection log (collectLog.ts, OP-107) in the same step, and on to the owner's
  * analytics once the call is done; the object's alarm retries what could not be sent.
@@ -13,14 +14,20 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
   ArcadeBook,
+  ClimbBook,
   CollectionBook,
   LEAF_FEATHERS_PER_DAY,
   NestBook,
   QuestBook,
+  climbRef,
   leafFeathers,
   secureNestId,
   type AbandonResult,
   type AcceptResult,
+  type AscentResult,
+  type ClimbFlags,
+  type ClimbLookup,
+  type ClimbStart,
   type GameWall,
   type OwnBests,
   type PortraitLook,
@@ -54,6 +61,7 @@ import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleTy
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { ROOMS } from './rooms';
+import { SqlClimbStore } from './sqlClimbStore';
 import { SqlNestStore } from './sqlNestStore';
 import { SqlScoreStore } from './sqlScoreStore';
 import { SqlCollectionStore } from './sqlStore';
@@ -85,6 +93,7 @@ export class Collections extends DurableObject<Env> {
   private readonly quests: QuestBook;
   private readonly nests: NestBook;
   private readonly arcade: ArcadeBook;
+  private readonly climb: ClimbBook;
   private readonly feedbackBox: FeedbackBox;
   private readonly log: CollectLog;
   private readonly stats: ParkStats;
@@ -102,6 +111,7 @@ export class Collections extends DurableObject<Env> {
     const nestStore = new SqlNestStore(sql, (cid, item, source, at) => this.acquired(cid, furnitureId(item), collectibleType(item, source), at));
     this.nests = new NestBook(nestStore, this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
     this.arcade = new ArcadeBook(new SqlScoreStore(sql), this.book);
+    this.climb = new ClimbBook(new SqlClimbStore(sql), this.book, () => crypto.getRandomValues(new Uint32Array(1))[0]!);
     this.feedbackBox = new FeedbackBox(sql);
   }
 
@@ -263,6 +273,27 @@ export class Collections extends DurableObject<Env> {
   async arcadeWalls(cid: string | null): Promise<{ walls: GameWall[]; mine: OwnBests }> {
     const now = Date.now();
     return { walls: this.arcade.walls(now), mine: cid ? this.arcade.mine(cid, now) : {} };
+  }
+
+  // ---------- the stained-glass climb (designs/the-stained-glass-climb.md): no answer carries a collector id ----------
+
+  /** Start a run at the live portal, or return the collector's open one wherever it stands. */
+  async climbStart(cid: string, flags: ClimbFlags): Promise<ClimbStart> {
+    return this.climb.start(cid, flags, Date.now());
+  }
+
+  /** A band reached: checked against its floor, paid under the activities' cap, recorded; the clouds' item on the visit it came in. */
+  async climbBand(cid: string, seed: number, band: number, visit?: Visit): Promise<AscentResult> {
+    return this.during(visit, () => {
+      const res = this.climb.band(cid, seed, band, Date.now());
+      if (!res.ok) console.log(`[owl-park] climb ${climbRef(cid, seed)} band ${band}: ${res.reason}`);
+      return res;
+    });
+  }
+
+  /** A run by the reference a visitor quotes, for the keepers. */
+  async climbLookup(ref: string): Promise<ClimbLookup | null> {
+    return this.climb.lookup(ref);
   }
 
   async gather(cid: string, quest: string, n: number, room: string, pos: Vec2): Promise<GatherResult> {

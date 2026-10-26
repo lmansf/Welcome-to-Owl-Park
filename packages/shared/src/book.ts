@@ -147,6 +147,17 @@ export class CollectionBook {
     return this.ensure(cid, undefined, now).feathers;
   }
 
+  /** Feathers earned today from a capped source (the climb's header shows the games' total against the cap). */
+  earnedToday(cid: string, source: EarnSource, now: number): number {
+    this.ensure(cid, undefined, now);
+    return this.store.earned(cid, parkDay(now), source);
+  }
+
+  /** The activities' shared daily cap, for whoever shows it. */
+  playCap(): number {
+    return PLAY_FEATHERS_PER_DAY;
+  }
+
   /** Add feathers; returns the new balance. */
   addFeathers(cid: string, n: number, now: number): number {
     const c = this.ensure(cid, undefined, now);

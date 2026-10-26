@@ -2,9 +2,11 @@ import {
   ARCADE_ROOM,
   Activities,
   ArcadeBook,
+  ClimbBook,
   CollectionBook,
   KIND_RULES,
   LEAF_FEATHERS_PER_DAY,
+  MemoryClimbStore,
   MemoryCollectionStore,
   MemoryNestStore,
   MemoryScoreStore,
@@ -28,6 +30,7 @@ import {
   leafRespawnMs,
   nestIdOf,
   normalizeTimeZone,
+  pointInRect,
   portraitLook,
   randomNestId,
   secureNestId,
@@ -59,6 +62,8 @@ const NESTS_KEY = 'owl-park:nests';
 const NESTS_CHANNEL = 'owl-park:nests';
 /** The arcade's scores of the day in this browser, every collector's: the wall shows them all. */
 const ARCADE_KEY = 'owl-park:arcade';
+/** The climb's runs and bands in this browser, every collector's. */
+const CLIMB_KEY = 'owl-park:climb';
 const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
 export interface KeyValueStorage {
@@ -104,6 +109,9 @@ export class LocalCollections implements CollectionService {
   private memory: MemoryCollectionStore | null = null;
   private nestMemory: MemoryNestStore | null = null;
   private scoreMemory: MemoryScoreStore | null = null;
+  private climbMemory: MemoryClimbStore | null = null;
+  /** The climb's night when the page pins one (`?night=`); otherwise the moon's. */
+  private readonly night: string | null;
   /** Shared objects used up in this page: id -> when they are back. */
   private readonly objects = new Map<string, number>();
   private usedAt = Number.NEGATIVE_INFINITY;
@@ -112,9 +120,10 @@ export class LocalCollections implements CollectionService {
 
   constructor(
     private readonly storage: KeyValueStorage | null,
-    opts: { collector?: string | undefined; tz?: string | undefined; now?: () => number; random?: () => number } = {},
+    opts: { collector?: string | undefined; tz?: string | undefined; now?: () => number; random?: () => number; night?: string | undefined } = {},
   ) {
     this.now = opts.now ?? (() => Date.now());
+    this.night = opts.night ?? null;
     this.random = opts.random ?? Math.random;
     this.tz = normalizeTimeZone(opts.tz);
     let cid = opts.collector && /^[A-Za-z0-9_-]{1,32}$/.test(opts.collector) ? opts.collector : null;
@@ -190,6 +199,25 @@ export class LocalCollections implements CollectionService {
       this.storage?.setItem(ARCADE_KEY, JSON.stringify(store.snapshot()));
     } catch {
       /* storage full or unavailable: the scores live for this page only */
+    }
+    return out;
+  }
+
+  /** Run against the latest stored climbs and this collector's collection (a band pays feathers), then store both again. */
+  private climb<T>(fn: (climb: ClimbBook) => T): T {
+    let store: MemoryClimbStore;
+    try {
+      const raw = this.storage?.getItem(CLIMB_KEY) ?? null;
+      store = raw ? MemoryClimbStore.from(JSON.parse(raw)) : (this.climbMemory ?? new MemoryClimbStore());
+    } catch {
+      store = this.climbMemory ?? new MemoryClimbStore();
+    }
+    const out = this.use(({ book }) => fn(new ClimbBook(store, book, runSeed)));
+    this.climbMemory = store;
+    try {
+      this.storage?.setItem(CLIMB_KEY, JSON.stringify(store.snapshot()));
+    } catch {
+      /* storage full or unavailable: the climbs live for this page only */
     }
     return out;
   }
@@ -502,6 +530,13 @@ export class LocalCollections implements CollectionService {
         if (t) later(() => pushes.onTasks?.(t.tasks, t.finished, t.paid, t.total));
         return { ok: true, paid: settled.paid };
       },
+      // The climb: the realm and the portal are open in this browser; the night is the moon's unless the page pins one.
+      climb: async () => {
+        const portal = ROOMS[room]?.doors.find((d) => d.id === 'portal');
+        const atPortal = !!portal && pointInRect(where(), portal.rect);
+        return this.climb((c) => c.start(cid, { atPortal, portalLive: true, special: this.night }, this.now()));
+      },
+      ascent: async (seed, band) => this.climb((c) => c.band(cid, seed, band, this.now())),
       close: () => {
         closed = true;
         if (quizTimer) clearTimeout(quizTimer);

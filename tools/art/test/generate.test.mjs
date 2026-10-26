@@ -187,7 +187,7 @@ test('the item keys in assets.json are exactly the catalogue wearables and pets,
   for (const id of tuples(face, neck)) want[`item-${id}`] = SIZE.face;
   for (const id of tuples(neck, neckEnd)) want[`item-${id}`] = SIZE.neck;
   for (const id of tuples(neckEnd, petEnd)) want[`item-${id}`] = SIZE.pet;
-  assert.equal(Object.keys(want).length, 82, 'parsed 58 wearables and 24 pets');
+  assert.equal(Object.keys(want).length, 83, 'parsed 59 wearables and 24 pets');
   const have = Object.fromEntries(Object.entries(ASSETS.keys).filter(([, v]) => v.kind === 'item').map(([k, v]) => [k, [v.w, v.h]]));
   assert.deepEqual(have, want);
 });
@@ -710,7 +710,7 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'grove', 'homes', 'hub', 'lobby', 'market', 'nest']);
+  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'lobby', 'market', 'nest']);
   assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 4800, h: 900 }, 'arcade']);
   assert.deepEqual(g.rooms.arcade.backgrounds.map((t) => [t.key, t.x]), [['arcade', 0], ['arcade-mid', 1600], ['arcade-end', 3200]]);
   assert.deepEqual(g.rooms.homes.backgrounds.map((t) => [t.key, t.x]), [['homes-west', 0], ['homes', 1600]]);

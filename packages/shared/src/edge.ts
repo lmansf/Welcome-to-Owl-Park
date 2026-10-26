@@ -23,13 +23,17 @@ import { parseNestEdit, type NestEdit, type NestRefusal, type NestView } from '.
 import { cleanLook } from './look';
 import type { NestGiftState, StreetDoor } from './nestbook';
 import { PHRASE_NUMBER_MAX } from './phrases';
+import type { RealmsSettings } from './overflow';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isPlayableEmote, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 9;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 10;
+// TODO-DOCS: docs/ARCHITECTURE.md section 4 says protocol v8; it is v10 (the arcade, then the climb's `climb` and `ascent` acts, `realms` in the welcome and the `realms` frame).
 export const MAX_FRAME_BYTES = 1024;
+/** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
+export const BAND_COUNT = 6;
 export const HEARTBEAT_FRAME = 'hb';
 export const HEARTBEAT_INTERVAL_MS = 25_000;
 /** Moves the room server accepts from one visitor: a burst, then this many more per second. */
@@ -48,6 +52,8 @@ export const CLOSE = {
   NEST_CLOSED: 4011,
   /** The park has a line (OP-075) and this visitor has not come through it: wait on the home screen. */
   QUEUED: 4012,
+  /** A gated realm is closed (the realms setting): turned away at the hello, or sent out when it closed. */
+  REALM_CLOSED: 4013,
   TOO_LARGE: 1009,
 } as const;
 
@@ -132,8 +138,8 @@ export interface ClientGather {
  * (arcade.ts): start a run of a game (`g`) at its cabinet, or end the run whose seed is `k` with its
  * score `s` (and for Nest Knockdown its shots, `n`). Answered with `act`.
  */
-export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks' | 'run' | 'score';
-export const ACT_KINDS: readonly ActKind[] = ['light', 'cast', 'reel', 'copy', 'note', 'tasks', 'run', 'score'];
+export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks' | 'run' | 'score' | 'climb' | 'ascent';
+export const ACT_KINDS: readonly ActKind[] = ['light', 'cast', 'reel', 'copy', 'note', 'tasks', 'run', 'score', 'climb', 'ascent'];
 export interface ClientAct {
   t: 'act';
   a: ActKind;
@@ -142,8 +148,14 @@ export interface ClientAct {
   s?: number;
   n?: number;
   k?: number;
+  /** The stained-glass climb: the band an `ascent` reached (1 to BAND_COUNT), with the run's seed in `k`. */
+  band?: number;
   r: number;
 }
+/** The climb's nights by difficulty (climb.ts); which one tonight is the moon's or the keepers' say. */
+export type ClimbTier = 'easy' | 'medium' | 'hard';
+/** Why an `ascent` added fewer feathers than its bands are worth. */
+export type ClimbWhy = 'capped' | 'paid-today' | 'item-already-given';
 /** On the street: ask for its nest doors, this visitor's own nest and other owls' open ones. Answered with `street`. */
 export interface ClientStreet {
   t: 'street';
@@ -170,6 +182,8 @@ export interface ServerWelcome {
   entry?: string;
   /** The busy ribbon's words while it is on (OP-075); null or absent while it is off. */
   notice?: string | null;
+  /** The realms switch as the room object holds it: which gated rooms are open, whether the climb's portal is live, the special night. */
+  realms?: RealmsSettings;
 }
 export interface ServerEnter {
   t: 'enter';
@@ -304,7 +318,11 @@ export type ServerAct = { t: 'act'; r: number } & (
   | { a: 'tasks'; ok: true; tasks: TaskView }
   | { a: 'run'; ok: true; game: ArcadeGame; seed: number; startedAt: number }
   | { a: 'score'; ok: true; paid: RunPaid }
-  | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' }
+  /** A climb started or resumed (the stained-glass climb, designs/the-stained-glass-climb.md). */
+  | { a: 'climb'; ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
+  /** A band reached: the run's banked band after it, what this frame added and the balance, and the first-time item when the clouds grant it. */
+  | { a: 'ascent'; ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
+  | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' }
 );
 /**
  * The arcade's score wall: today's best five per game (portraits and scores, no names). A newcomer
@@ -354,7 +372,14 @@ export interface ServerNotice {
 export interface ServerClosed {
   t: 'closed';
   room: string;
-  why: 'closed' | 'gone';
+  /** `realm`: a gated realm is closed; the socket closes with 4013 next, and `sign` is its approved phrase. */
+  why: 'closed' | 'gone' | 'realm';
+  sign?: string;
+}
+/** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
+export interface ServerRealms {
+  t: 'realms';
+  realms: RealmsSettings;
 }
 export type ServerFrame =
   | ServerWelcome
@@ -381,7 +406,8 @@ export type ServerFrame =
   | ServerStreet
   | ServerWall
   | ServerClosed
-  | ServerNotice;
+  | ServerNotice
+  | ServerRealms;
 
 // ---- validation (server side, strict) ----
 
@@ -453,6 +479,11 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (!isRequest(v['r']) || !(ACT_KINDS as readonly unknown[]).includes(a)) return null;
       if (a === 'note') return isEmoteId(v['e']) ? { t: 'act', a, e: v['e'], r: v['r'] } : null;
       if (a === 'run') return isArcadeGame(v['g']) ? { t: 'act', a, g: v['g'], r: v['r'] } : null;
+      if (a === 'ascent') {
+        const { k, band } = v;
+        if (!isCount(k, 2 ** 32 - 1) || !isCount(band, BAND_COUNT) || band < 1) return null;
+        return { t: 'act', a, k, band, r: v['r'] };
+      }
       if (a === 'score') {
         const { g, s, n, k } = v;
         if (!isArcadeGame(g) || !isCount(s, 1e6) || !isCount(k, 2 ** 32 - 1) || (n !== undefined && !isCount(n, 1000))) return null;
@@ -472,7 +503,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'realms']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

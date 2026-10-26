@@ -4,7 +4,7 @@
  * seconds, not one each, and a quiet night one every half minute. When the object cannot be reached
  * the last answer stands, and before any there is no line: a fault here never keeps owls out.
  */
-import { LINE_DEFAULTS, RIBBON_DEFAULTS } from '@owl-park/shared';
+import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS } from '@owl-park/shared';
 import type { OverflowState } from './Overflow';
 
 /** How long a Worker keeps what it read while anything is on: a keeper's change reaches every visitor within this. */
@@ -15,7 +15,7 @@ export const OVERFLOW_QUIET_KEEP_MS = 30_000;
 const quiet = (s: OverflowState) => !s.active && s.line.mode === 'off' && !s.ribbon.on && Object.keys(s.copies).length === 0;
 
 /** No line, no ribbon, no copies: the park as deployed. */
-export const QUIET: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null };
+export const QUIET: OverflowState = { line: LINE_DEFAULTS, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: null, countedAt: null, realms: REALMS_DEFAULTS };
 
 let kept: { state: OverflowState; until: number } | null = null;
 

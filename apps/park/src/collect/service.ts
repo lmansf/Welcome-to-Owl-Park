@@ -2,6 +2,8 @@ import type {
   ArcadeGame,
   Award,
   BuyResult,
+  ClimbTier,
+  ClimbWhy,
   FurnitureGiftResult,
   GameWall,
   GiftResult,
@@ -82,7 +84,7 @@ export interface QuestPushes {
 }
 
 /** Why the room did not take an activity. */
-export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown';
+export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten';
 type No = { ok: false; reason: ActRefusal };
 
 /** The robot owl's tune to copy: played until `listenUntil`, then each note due by `deadline`. */
@@ -109,6 +111,12 @@ export type NoteReply =
 export type RunReply = { ok: true; game: ArcadeGame; seed: number; startedAt: number } | No;
 /** A run's result taken: what it paid, the wall it changed and the owl's own bests. */
 export type ScoreReply = { ok: true; paid: RunPaid } | No;
+/** A climb started at the portal, or the open one returned (`resumed`); `startedAt` on this device's clock. */
+export type ClimbReply =
+  | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
+  | No;
+/** A band line reached: what the room banked and paid, and the run's reference. */
+export type AscentReply = { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string } | No;
 
 /**
  * The park's activities in one room (activities.ts in @owl-park/shared): the hub's lanterns, the pond
@@ -134,6 +142,10 @@ export interface ActivityLink {
   run(game: ArcadeGame): Promise<RunReply>;
   /** End the run with this seed: its score (and for Nest Knockdown, its shots). */
   score(result: RunResult, seed: number): Promise<ScoreReply>;
+  /** The stained-glass climb: start a run at the portal, or get the open one back wherever the owl stands. */
+  climb(): Promise<ClimbReply>;
+  /** A band line reached in the run with this seed (1 to BAND_COUNT). */
+  ascent(seed: number, band: number): Promise<AscentReply>;
   /** The owl left the room. */
   close(): void;
 }

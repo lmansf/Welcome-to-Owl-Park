@@ -1,4 +1,4 @@
-import { NEST_WORDS, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -8,6 +8,7 @@ import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
+import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbResultView, type ClimbView } from './climbScreen';
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
@@ -133,6 +134,19 @@ export interface Hud {
   /** The run is over: how it ended and what it paid. */
   arcadeResult(result: ArcadeResultView): void;
   closeArcade(): void;
+  /** The climb screen over everything while a climb is played; it owns its stick, button and keys. */
+  openClimb(view: ClimbView, handlers: ClimbHandlers): void;
+  /** The climb screen's held controls right now (`jumpPressed` once per press). */
+  climbInput(): ClimbInput;
+  /** The climb's header: the banked band and the feathers from games left today. */
+  climbHeader(banked: number, remainingCap: number): void;
+  /** A band line reached and answered. */
+  climbBand(band: ClimbBandView): void;
+  /** The climb's hint line (one verb at a time; empty clears it). */
+  climbHint(line: string): void;
+  /** The climb is over: at the clouds, or lost to the room. */
+  climbResult(result: ClimbResultView): void;
+  closeClimb(): void;
   /** Opening night (C42): after the ticket card, the half-price pass to claim. */
   offerFreePass(offer: FreePassOffer): void;
   /** Look for a pass the owl went to claim, and say when it has come. */
@@ -155,6 +169,8 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /** The gated realms the keepers have opened (the realms switch): the Menu map draws their arches as doorways. */
+  setOpenRealms(open: readonly string[]): void;
   onHint(cb: (id: string) => void): void;
   /**
    * The nest's welcome (OP-105): a card under the top bar the first time this device's owl is in its
@@ -394,6 +410,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let jumpCb: (() => void) | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
+  /** The gated realms the keepers have opened (the realms switch), for the Menu map. */
+  let openRealms: string[] = [];
   let shownActions = '';
   let here = 1;
   let park: number | null = null;
@@ -433,7 +451,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       { id: 'collection', label: 'Collection', render: (panel) => renderCollection(panel, collectionState) },
       { id: 'nest', label: 'Nest', render: (panel) => renderNest(panel, { canGoHome: waysOut.home }, () => openScreen('home')) },
       // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
-      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home)) },
+      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms) },
       {
         id: 'settings',
         label: 'Settings',
@@ -463,9 +481,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   // The arcade's game screen covers the whole park while a run is played, like the owl builder.
   const arcade = createArcadeScreen(root);
   arcade.onClose(() => root.classList.remove('covered'));
+  // So does the climb screen (the stained-glass climb), which owns its controls while it is up.
+  const climb = createClimbScreen(root);
+  climb.onClose(() => root.classList.remove('covered'));
   /** Close the Menu and every screen it opens. */
   const closeScreens = () => {
     arcade.close();
+    climb.close();
     menu.close();
     wheel?.close();
     sayWheel.close();
@@ -474,7 +496,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     feedback?.close();
     leaveCard.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || leaveCard.isOpen() || arcade.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
@@ -679,6 +701,17 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     arcadePlaying: (score, banner) => arcade.playing(score, banner),
     arcadeResult: (r) => arcade.result(r),
     closeArcade: () => arcade.close(),
+    openClimb(view, handlers) {
+      if (!climb.isOpen()) makeRoom();
+      root.classList.add('covered');
+      climb.open(view, handlers);
+    },
+    climbInput: () => climb.input(),
+    climbHeader: (banked, remainingCap) => climb.header(banked, remainingCap),
+    climbBand: (b) => climb.band(b),
+    climbHint: (line) => climb.hint(line),
+    climbResult: (r) => climb.result(r),
+    closeClimb: () => climb.close(),
     offerFreePass(offer) {
       freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
       freePass.show(offer);
@@ -726,6 +759,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     onJump(cb) {
       jumpCb = cb;
+    },
+    setOpenRealms(open) {
+      openRealms = [...open];
     },
     setHints(list) {
       const seen = new Set<string>();

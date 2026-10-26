@@ -194,6 +194,15 @@ function leafRing(ctx: Ctx, cx: number, cy: number, rx: number, colours: string[
 }
 
 const HEAD: Record<string, (ctx: Ctx) => void> = {
+  // The climb's gift: a thin ring of leaded glass panes, worn like a halo that sits on the crown.
+  'glass-circlet': (c) => {
+    stroke(c, 'rgba(159,208,255,0.35)', 12, ell(c, 70, 70, 44, 14));
+    stroke(c, '#9FD0FF', 4, ell(c, 70, 70, 44, 14));
+    for (const [x, y, w, h, col] of [[32, 60, 14, 10, '#FF8AD0'], [58, 54, 16, 9, '#FFD36A'], [84, 56, 14, 9, '#7BE0C8'], [106, 64, 12, 10, '#CDB0FF']] as const) {
+      fill(c, col, () => c.rect(x, y, w, h));
+      stroke(c, '#2A3B63', 2, () => c.rect(x, y, w, h));
+    }
+  },
   'witch-hat': (c) => {
     cone(c, '#3B2A5A', 70, 88, 64, 82, 14);
     fill(c, '#C9A227', poly(c, [40, 86, 100, 86, 98, 76, 42, 76]));

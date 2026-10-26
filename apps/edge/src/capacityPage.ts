@@ -79,6 +79,12 @@ function show(s) {
   }).join('');
   $('#rooms').innerHTML = rows;
   for (const b of document.querySelectorAll('[data-copy]')) b.addEventListener('click', () => copy(b.dataset.room, Number(b.dataset.n), b.dataset.copy));
+  // The realms switch: a checkbox per gated room, the portal, and the night.
+  const rl = s.realms || { open: [], portal: false, night: null };
+  $('#realms-state').textContent = (rl.open.length ? 'Open: ' + rl.open.join(', ') + '.' : 'Every gated realm is closed.') + (rl.portal ? ' The portal is live.' : ' The portal is off.') + (rl.night ? ' Special night: ' + rl.night + '.' : ' The moon chooses the night.');
+  $('#realm-rooms').innerHTML = (s.gated || []).map((r) => '<label><input type="checkbox" data-realm="' + r + '"' + (rl.open.includes(r) ? ' checked' : '') + '> ' + r + ' open</label>').join('');
+  $('#portal').checked = !!rl.portal;
+  $('#night').innerHTML = '<option value="">The moon</option>' + (s.nights || []).map((n) => '<option value="' + n + '"' + (rl.night === n ? ' selected' : '') + '>' + n + '</option>').join('');
 }
 
 async function load() {
@@ -134,6 +140,12 @@ for (const b of document.querySelectorAll('[data-line]')) b.addEventListener('cl
 $('#line-save').addEventListener('click', () => change({ line: { threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Saved.'));
 for (const b of document.querySelectorAll('[data-ribbon]')) b.addEventListener('click', () => change({ ribbon: { on: b.dataset.ribbon === 'on' } }, 'Done. Owls in the rooms see it at once, and the home screen within a minute.'));
 $('#words-save').addEventListener('click', () => change({ ribbon: { words: $('#words').value } }, 'Saved.'));
+$('#realms-save').addEventListener('click', () => {
+  const open = [...document.querySelectorAll('[data-realm]')].filter((c) => c.checked).map((c) => c.dataset.realm);
+  const night = $('#night').value || null;
+  if (!open.includes('glass') && now && now.realms && now.realms.open.includes('glass') && !confirm('Close the realm? Every owl in it is sent back to the hub.')) return;
+  change({ realms: { open, portal: $('#portal').checked, night } }, 'Done. Owls in the rooms see it at once.');
+});
 $('#refresh').addEventListener('click', load);
 $('#forget').addEventListener('click', () => { saveKey(''); say(''); locked(true); });
 load();
@@ -152,7 +164,7 @@ function html(nonce: string, ribbonWords: string): string {
 <body>
 <main>
 <h1>Owl Park capacity</h1>
-<p class="lede">Busy nights: the line, the busy ribbon and copies of rooms. No deploy needed. When to use which: docs/CAPACITY.md.</p>
+<p class="lede">Busy nights: the line, the busy ribbon and copies of rooms; and the realms switch. No deploy needed. When to use which: docs/CAPACITY.md.</p>
 <form id="key">
 <input type="password" name="key" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key" required>
 <button class="primary">Open</button>
@@ -178,6 +190,16 @@ function html(nonce: string, ribbonWords: string): string {
 <div class="tabs">
 <input id="words" maxlength="90" placeholder="${ribbonWords.replace(/"/g, '&quot;')}" aria-label="The ribbon's words (empty: the ribbon's own)">
 <button id="words-save">Save words</button>
+</div>
+</section>
+<section class="card" aria-labelledby="realms-h">
+<h2 id="realms-h">Realms and the climb</h2>
+<p id="realms-state"></p>
+<div class="tabs" id="realm-rooms"></div>
+<div class="tabs">
+<label><input type="checkbox" id="portal"> The climb's portal is live</label>
+<label>Night <select id="night"></select></label>
+<button id="realms-save">Save</button>
 </div>
 </section>
 <section class="card" aria-labelledby="copies-h">

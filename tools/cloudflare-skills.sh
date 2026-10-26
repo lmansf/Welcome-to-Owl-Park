@@ -42,6 +42,8 @@ cp "$SRC/LICENSE" "$DEST/LICENSE.cloudflare-skills"
   echo
   echo "Refresh them with \`tools/cloudflare-skills.sh\` (edit its SKILLS list to add one)."
   echo "Do not edit the skill folders by hand; changes are overwritten on the next refresh."
+  echo "Other folders here (for example \`owl-park-elephant/\`, the project's EGM context loader) are"
+  echo "the project's own; this script leaves them alone."
   echo
   for name in "${SKILLS[@]}"; do echo "- \`$name/\`"; done
 } > "$DEST/README.md"

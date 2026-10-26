@@ -21,6 +21,7 @@ import {
   QUIZ_ROOM,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
+  REALMS_DEFAULTS,
   RIBBON_MAX_CHARS,
   STREET_DOORS,
   STREET_ROOM,
@@ -39,7 +40,10 @@ import {
   nestLook,
   npcsIn,
   parseClientFrame,
+  pointInRect,
   portraitLook,
+  cleanRealms,
+  sameRealms,
   startRun,
   wearVariants,
   type ArcadeRun,
@@ -56,6 +60,7 @@ import {
   type PlayResult,
   type QuestBoard,
   type QuestUpdate,
+  type RealmsSettings,
   type RunResult,
   type ServerFrame,
   type ServerNest,
@@ -125,6 +130,10 @@ const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
 /** The busy ribbon (OP-075) is asked of the overflow object at most this often; it also tells the rooms when it changes. */
 const NOTICE_FRESH_MS = 60_000;
+/** Storage key for the realms switch as last heard (the stained-glass climb): a woken object starts from it, not from closed. */
+const REALMS_KEY = 'realms';
+/** The phrase a closed realm's door shows when none is set on it. */
+const REALM_CLOSED_SIGN = 'Pardon Our Feathers';
 
 function withoutWear(look: OwlLook): OwlLook {
   const { wear: _wear, ...rest } = look;
@@ -188,6 +197,8 @@ export class RoomObject extends DurableObject<Env> {
   private readonly nestViews = new Map<string, NestView>();
   /** The busy ribbon's words (OP-075), null while it is off, and when they were last asked for. */
   private notice: string | null = null;
+  /** The realms switch as last heard from the overflow object (its notice, its poll, or this object's storage). */
+  private realms: RealmsSettings = REALMS_DEFAULTS;
   /** The player stats are kept only while the analytics log is set up (OP-111): without it, no calls for them. */
   private readonly statsOn: boolean;
   private noticeAt = 0;
@@ -220,6 +231,9 @@ export class RoomObject extends DurableObject<Env> {
       if (lanterns && Object.hasOwn(ROOMS, LANTERN_ROOM)) this.activities(LANTERN_ROOM).restoreLanterns(lanterns);
       const settled = await ctx.storage.get<number>(QUIZ_KEY);
       if (typeof settled === 'number' && Object.hasOwn(ROOMS, QUIZ_ROOM)) this.activities(QUIZ_ROOM).quizSettled = settled;
+      // The realms switch as last heard, so a wake from hibernation does not close an open realm.
+      const realms = await ctx.storage.get<unknown>(REALMS_KEY);
+      if (realms) this.realms = cleanRealms(realms);
     });
   }
 
@@ -261,7 +275,11 @@ export class RoomObject extends DurableObject<Env> {
     if (!ns) return;
     try {
       const r = await ns.get(ns.idFromName('park')).fetch('https://park/notice');
-      if (r.ok) this.setNotice(((await r.json()) as { words?: unknown }).words);
+      if (r.ok) {
+        const body = (await r.json()) as { words?: unknown; realms?: unknown };
+        this.setNotice(body.words);
+        if (body.realms !== undefined) this.setRealms(body.realms);
+      }
     } catch {
       /* the ribbon stays as it was until the next ask */
     }
@@ -279,16 +297,53 @@ export class RoomObject extends DurableObject<Env> {
     for (const room of this.rooms.values()) room.broadcast({ t: 'notice', words: w });
   }
 
+  /** A gated room not in the switch's `open` (the stained-glass climb). Rooms without `gated` are never closed this way. */
+  private realmClosed(roomId: string): boolean {
+    return roomDef(roomId)?.gated === true && !this.realms.open.includes(roomId);
+  }
+
+  /** The approved phrase the hub's door into `roomId` shows while it is closed. */
+  private realmSign(roomId: string): string {
+    return ROOMS['hub']?.doors.find((d) => d.to?.room === roomId)?.closedSign ?? REALM_CLOSED_SIGN;
+  }
+
+  /**
+   * The realms switch changed (the overflow object's notice or poll): keep it, in memory and in storage,
+   * tell every owl so the hub's arch draws open or closed, and send the owls out of a realm that closed.
+   */
+  private setRealms(v: unknown): void {
+    const next = cleanRealms(v);
+    if (sameRealms(next, this.realms)) return;
+    const before = this.realms;
+    this.realms = next;
+    void this.ctx.storage.put(REALMS_KEY, next);
+    for (const room of this.rooms.values()) room.broadcast({ t: 'realms', realms: next });
+    for (const roomId of before.open) if (!next.open.includes(roomId) && roomDef(roomId)?.gated) this.sendRealmAway(roomId);
+  }
+
+  /** A realm just closed: every owl in it is told so and sent back to the hub by its own page. */
+  private sendRealmAway(roomId: string): void {
+    const sign = this.realmSign(roomId);
+    for (const ws of this.ctx.getWebSockets(`room:${roomId}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (!att?.state) continue;
+      this.send(ws, { t: 'closed', room: roomId, why: 'realm', sign });
+      closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
+      this.drop(ws);
+    }
+  }
+
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/counts') {
       return Response.json(this.counts());
     }
     if (url.pathname === '/notice' && request.method === 'POST') {
-      // The overflow object's word that the ribbon changed.
-      const body = (await request.json().catch(() => null)) as { words?: unknown } | null;
+      // The overflow object's word that the ribbon or the realms switch changed.
+      const body = (await request.json().catch(() => null)) as { words?: unknown; realms?: unknown } | null;
       this.noticeAt = Date.now();
       this.setNotice(body?.words, true);
+      if (body?.realms !== undefined) this.setRealms(body.realms);
       return Response.json({ ok: true });
     }
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
@@ -344,6 +399,11 @@ export class RoomObject extends DurableObject<Env> {
         // v2 hook: the Worker marks admitted passes; guests are refused when the gate is closed.
       }
       if (!isNestRoom(att.room)) {
+        if (this.realmClosed(att.room)) {
+          // A gated realm the keepers have not opened: the page walks the owl back to the hub.
+          this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
+          return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
+        }
         await this.join(ws, att, frame);
         return;
       }
@@ -418,7 +478,7 @@ export class RoomObject extends DurableObject<Env> {
     const room = this.room(att.room);
     // Wear the collector does not own (or is not yet known to own) is left off until checked.
     const { look, recheck } = this.vetLook(att, hello.look);
-    const welcome = { ...(att.copy ? { copy: att.copy } : {}), ...(att.entry ? { entry: att.entry } : {}), notice: this.notice };
+    const welcome = { ...(att.copy ? { copy: att.copy } : {}), ...(att.entry ? { entry: att.entry } : {}), notice: this.notice, realms: this.realms };
     const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome });
     if (result === 'full') {
       this.send(ws, { t: 'full', room: att.room, cap: room.cap });
@@ -652,7 +712,7 @@ export class RoomObject extends DurableObject<Env> {
 
   private async act(ws: WebSocket, att: Attachment, room: Room, frame: ClientAct): Promise<void> {
     const { r, a } = frame;
-    const no = (reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown') => this.send(ws, { t: 'act', r, a, ok: false, reason });
+    const no = (reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten') => this.send(ws, { t: 'act', r, a, ok: false, reason });
     if (!att.cid) return no('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     const cid = att.cid;
@@ -661,6 +721,22 @@ export class RoomObject extends DurableObject<Env> {
       if (a === 'tasks') return this.send(ws, { t: 'act', r, a, ok: true, tasks: await stub.tasks(cid) });
       // The nests have no activities: today's tasks are all that is asked for there.
       if (isNestRoom(att.room)) return no('unknown');
+      // The climb's run lives in the collections object, keyed by the collector: no state on the socket.
+      if (a === 'climb') {
+        const portal = roomDef(att.room)?.doors.find((d) => d.id === 'portal');
+        const pos = room.positionOf(att.id);
+        const atPortal = !!portal && !!pos && pointInRect(pos, portal.rect);
+        const res = await stub.climbStart(cid, { atPortal, portalLive: this.realms.portal, special: this.realms.night });
+        if (!res.ok) return no(res.reason);
+        const { ok: _ok, ...started } = res;
+        return this.send(ws, { t: 'act', r, a, ok: true, ...started });
+      }
+      if (a === 'ascent') {
+        const res = await stub.climbBand(cid, frame.k!, frame.band!, visitOf(att));
+        if (!res.ok) return no(res.reason);
+        const { ok: _ok, ...settled } = res;
+        return this.send(ws, { t: 'act', r, a, ok: true, ...settled });
+      }
       const acts = this.activities(att.room);
       switch (a) {
         case 'light': {

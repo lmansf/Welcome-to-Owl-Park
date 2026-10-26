@@ -7,10 +7,11 @@
  *
  * Internal routes, called by the Worker (which has checked the pass or the admin key already):
  *   GET  /state           the settings, whether the line is in front of the park, its pace, the count
- *   POST /settings        {line?, ribbon?, copy?: {room, n, state}}: the keepers' changes
+ *   POST /settings        {line?, ribbon?, copy?: {room, n, state}, realms?: {open?, portal?, night?}}: the keepers' changes
+ *                         (`realms` is the stained-glass climb's switch, designs/the-stained-glass-climb.md)
  *   POST /line/join       {who}: a number in the line (its turn at once while a place is free), or go when there is no line
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
- *   GET  /notice          the ribbon's words now (for the room objects)
+ *   GET  /notice          the ribbon's words and the realms switch now (for the room objects)
  *
  * TODO-DOCS (OP-075): built. docs/CAPACITY.md still marks the line, the ribbon and the capacity
  * process PLANNED. OP-075's write-up of all three is docs/CAPACITY.md at commit 9f7326a (`git show
@@ -40,7 +41,13 @@ import {
   type CopyState,
   type LineSettings,
   type RibbonSettings,
+  REALMS_DEFAULTS,
+  isNightKey,
+  sameRealms,
+  withRealmsChanges,
+  type RealmsSettings,
 } from '@owl-park/shared';
+import { GATED_ROOMS } from '@owl-park/shared/rooms';
 import { copiesIn, copyObjectName, withCopy } from './copies';
 import { Line, type LineEntry } from './line';
 import { ROOMS } from './rooms';
@@ -68,6 +75,8 @@ export interface OverflowState {
   /** Owls in the park when last counted, and when (null: not counted since the object woke). */
   count: number | null;
   countedAt: number | null;
+  /** The realms switch: open gated rooms, the climb's portal, the special night. */
+  realms: RealmsSettings;
 }
 
 /** The overflow object's answer to a line request, before the Worker adds the entry. */
@@ -110,6 +119,12 @@ class Settings {
   setCopies(v: Copies): void {
     this.write('copies', v);
   }
+  realms(): RealmsSettings {
+    return this.read('realms', REALMS_DEFAULTS);
+  }
+  setRealms(v: RealmsSettings): void {
+    this.write('realms', v);
+  }
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -118,8 +133,8 @@ export class Overflow extends DurableObject<Env> {
   private readonly settings: Settings;
   private readonly line: Line;
   private count: { n: number; at: number } | null = null;
-  /** The ribbon's words as last sent to the room objects (undefined: not sent since waking). */
-  private sent: string | null | undefined = undefined;
+  /** The ribbon's words and the realms switch as last sent to the room objects, as JSON (undefined: not sent since waking). */
+  private sent: string | undefined = undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -216,14 +231,15 @@ export class Overflow extends DurableObject<Env> {
       copies: this.settings.copies(),
       count: this.count?.n ?? null,
       countedAt: this.count?.at ?? null,
+      realms: this.settings.realms(),
     };
   }
 
-  /** Tell every room object the ribbon's words when they changed (they also ask every minute on their own). */
-  private async sendNotice(words: string | null): Promise<void> {
-    if (words === this.sent) return;
-    this.sent = words;
-    const body = JSON.stringify({ words });
+  /** Tell every room object the ribbon's words and the realms switch when either changed (they also ask every minute on their own). */
+  private async sendNotice(words: string | null, realms: RealmsSettings = this.settings.realms()): Promise<void> {
+    const body = JSON.stringify({ words, realms });
+    if (body === this.sent) return;
+    this.sent = body;
     await Promise.all(
       this.roomObjects().map((name) =>
         this.stub(name)
@@ -261,7 +277,7 @@ export class Overflow extends DurableObject<Env> {
     const url = new URL(request.url);
     const now = Date.now();
     if (url.pathname === '/state') return Response.json(await this.state(now));
-    if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)) });
+    if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)), realms: this.settings.realms() });
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
     const body = (await request.json().catch(() => null)) as unknown;
     if (!isRecord(body)) return Response.json({ error: 'bad request' }, { status: 400 });
@@ -270,6 +286,13 @@ export class Overflow extends DurableObject<Env> {
       let line = this.settings.line();
       let ribbon = this.settings.ribbon();
       let copies = this.settings.copies();
+      let realms = this.settings.realms();
+      if (body['realms'] !== undefined) {
+        const next = withRealmsChanges(realms, body['realms'], (r) => GATED_ROOMS.includes(r), isNightKey);
+        if (!next) return Response.json({ error: 'bad realms' }, { status: 400 });
+        if (!sameRealms(next, realms)) console.log(`[owl-park] realms: open [${next.open.join(', ')}], portal ${next.portal ? 'on' : 'off'}, night ${next.night ?? 'moon'}`);
+        realms = next;
+      }
       if (body['line'] !== undefined) {
         const next = withLineChanges(line, body['line']);
         if (!next) return Response.json({ error: 'bad line' }, { status: 400 });
@@ -292,6 +315,7 @@ export class Overflow extends DurableObject<Env> {
       this.settings.setLine(line);
       this.settings.setRibbon(ribbon);
       this.settings.setCopies(copies);
+      this.settings.setRealms(realms);
       // Turned on: the line counts the park now. Turned off: everyone waiting goes in on their next
       // look, so the line is taken down, and a line started later begins afresh rather than calling them.
       this.count = null;

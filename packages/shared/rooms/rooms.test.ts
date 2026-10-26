@@ -3,7 +3,7 @@ import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '.
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
-import { ANCHORS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -325,4 +325,31 @@ describe('hiding spots', () => {
       });
     });
   }
+});
+
+describe('the stained-glass realm (gated)', () => {
+  const hub = ROOMS.hub!;
+  const glass = ROOMS.glass!;
+
+  it('is the one gated room, two screens wide, with the arch back, the idol and the portal', () => {
+    expect(GATED_ROOMS).toEqual(['glass']);
+    expect(glass.gated).toBe(true);
+    expect(glass.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
+    expect(glass.doors.map((d) => d.id)).toEqual(['to-hub', 'idol', 'portal']);
+    expect(glass.doors.find((d) => d.id === 'to-hub')?.to).toEqual({ room: 'hub', spawn: 'from-glass' });
+    expect(ANCHORS.glass).toBeDefined();
+  });
+
+  it("opens from the hub's east arch, which keeps its sign and blockade while the realm is closed; the west arch stays boarded", () => {
+    const arch = hub.doors.find((d) => d.id === 'to-glass')!;
+    expect(arch.to).toEqual({ room: 'glass', spawn: 'from-hub' });
+    expect(arch.closedSign).toBe('Hatching Soon');
+    const boarded = hub.doors.filter((d) => d.closedSign && !d.to);
+    expect(boarded.map((d) => d.id)).toEqual(['closed-a']);
+    for (const d of hub.doors) if (d.closedSign) expect(CLOSED_SIGNS).toContain(d.closedSign);
+    // The floor now runs through the arch to its threshold, and the spawn back from the realm stands clear of it.
+    expect(isWalkable({ x: 2665, y: 640 }, hub.walkable)).toBe(true);
+    expect(isWalkable({ x: 2665, y: 740 }, hub.walkable)).toBe(true);
+    expect(pointInRect(hub.spawns['from-glass']!, arch.rect)).toBe(false);
+  });
 });
