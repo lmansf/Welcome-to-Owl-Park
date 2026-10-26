@@ -1,378 +1,839 @@
 # The stained-glass climb
 
-*   **Author:** lmansf, with Claude Code
+*   **Author:** the owner, with Claude Code
 *   **Status:** Proposed
-*   **Date:** 2026-10-26
-*   **Predecessor:** the EGM concepts brief of 2026-10-26 (six Goldfish lenses, decisions 1 to 12; kept in the ignored `EGM/` working folder, not in git)
+*   **Date:** 2026-10-26, revised the same day after the Goldfish review (five stages, eight
+    reviewer runs; the reports live in the ignored `EGM/` working folder)
 
 --------------------------------------------------------------------------------
 
 ## Overview
 
-Owl Park opens one of the hub's two closed arches onto a third realm: a shared stained-glass room that works like the grove and the market, and inside it a portal that starts a solo climb. The climb is a platformer played on the visitor's own device as their own owl, up a vertical city of backlit mosaic glass to a cloud line, with a jump, a double jump and a held-jump glide. Nothing about the climb crosses the wire while it is played; the room server starts the run, receives one result at the end, judges it against a minimum honest time, and pays feathers by the height reached. A park moon sets how hard each night is, and the owner can switch on special nights. Tap-to-walk, the phone pad, the keyboard and the hop emote stay exactly as they are everywhere else in the park.
+Owl Park opens one of the hub's two closed arches onto a third realm. Behind the arch is a shared
+stained-glass room that works like the grove and the market. Inside it is a portal that starts a
+solo climb: a platformer the visitor plays on their own device as their own owl, up a city of
+backlit mosaic glass to a cloud line, with a jump, a double jump and a held-jump glide. During a
+climb nothing but a handful of small frames crosses the wire: one to start, and one each time the
+owl reaches a new height band. The room server banks each band, checks it against the least time
+that band can honestly take, and pays feathers for it. A park moon makes some nights harder. One
+server-side setting opens the realm, lights the portal and names a special night. Tap-to-walk, the
+phone pad, the keyboard and the hop emote stay as they are everywhere else in the park.
+
+### Terms
+
+`docs/GLOSSARY.md` defines the park's words. The ones this document leans on, in one line each:
+
+*   **Collector id (`cid`)**: the per-device token that owns an owl's feathers, items and progress.
+*   **Park day**: the calendar day in America/New_York (`parkDay` in `packages/shared/src/parktime.ts`);
+    park midnight is when it changes.
+*   **Feathers and the cap**: the currency the activities pay; all games together pay at most
+    `PLAY_FEATHERS_PER_DAY` = 25 a park day per collector (`packages/shared/src/activities.ts`).
+*   **The three server objects**: Cloudflare Durable Objects. The room object holds rooms, sockets
+    and movement (`apps/edge/src/RoomObject.ts`); the collections object holds every per-collector
+    fact (`Collections.ts`); the overflow object holds the queue and the keepers' park settings
+    (`Overflow.ts`).
+*   **Keeper**: anyone holding `ADMIN_KEY`, who uses the admin pages. The owner decides and
+    approves; a keeper operates.
+*   **The local mode**: the zero-backend way to run the park in one browser; it runs the shared
+    books in the page (`apps/park/src/collect/local.ts`).
+*   **The HUD's `covered` state**: the full-screen modal the arcade uses, which hides the park's
+    bottom bar (`apps/park/src/ui/hud.ts`).
+*   **Tickets**: `OP-nnn` ids are rows on the Ticket Board (`docs/README.md`). `OP-069` is the
+    screening that clears a realm's public name; until it does, this realm has only its id.
+
+### The arcade's contract, which the climb extends
+
+Each arcade game is played on the client as the visitor's owl. The room server starts a run with a
+seed and `startedAt` from its own clock, receives one result frame, refuses it when the run took
+less than `leastRunMs(result)` minus `RUN_SLACK_MS` (1,000 ms) or more than `RUN_MAX_MS`
+(20 minutes), pays `runFeathers` by score band through `CollectionBook.play` under the cap, and
+keeps one row per (day, game, collector) for the score wall (`packages/shared/src/arcade.ts`,
+`arcadebook.ts`, `roomActivities.ts`). The climb keeps the seed, the server clock, the floor check
+and the payout path, and changes four things: a run lasts up to an hour and lives in the
+collections object, a result frame arrives per band rather than once, each band pays once a park
+day, and there is no score wall.
 
 ## The Problem
 
-The park promises four realms and has two. Both open realms are social rooms: places to stand with other owls, talk in phrases, vote at an idol and do small tasks that pay feathers. Nothing in the park today asks a visitor for skill over more than a few seconds, nothing is vertical, and the one skill game the park has (the arcade) is twenty seconds a run. The third realm's art style, stained glass, suggests height and light, and the owner wants it to play that way: a climb with a reward in the clouds.
+The park promises four realms and has two. Both open realms are social rooms: places to stand
+with other owls, talk in phrases, vote at an idol and do small tasks that pay feathers. Nothing
+in the park asks a visitor for skill over more than a few seconds, nothing is vertical, and the
+one skill game the park has, the arcade, is twenty seconds a run. The third realm's art style,
+stained glass, suggests height and light, and the owner wants it to play that way: a climb with
+a reward in the clouds.
 
-The obstacle is that the park cannot move like a platformer. Every room is a painted stage with walkable polygons; a tap sends one destination and every client animates the same straight walk, which is why one room server carries a hundred owls affordably and why the server can clamp every walk against the same geometry the client uses. Gravity, held keys and mid-air control do not fit that model, and streaming positions many times a second would break the message budget the edge server was chosen for. Replacing tap-to-walk across the park was considered and rejected during the brainstorm as a different project by an order of magnitude.
+The park cannot move like a platformer. Every room is a painted stage with walkable polygons. A
+tap sends one destination and every client animates the same straight walk, which is why one
+room server carries a hundred owls within the message budget the edge server was chosen for, and
+why the server can clamp every walk against the same geometry the client uses. Gravity, held keys
+and mid-air control do not fit that model, and streaming positions many times a second would
+break the budget. The brainstorm considered replacing tap-to-walk across the park and rejected it
+as a project about ten times this one (Alternative A).
 
-The proposed solution keeps the two models apart. The shared stained-glass room is an ordinary room: the same registry, geometry, doors, idol and caps as the other realms. The climb is a solo run on the arcade's model, which already proves the pattern: a game played on the client as the visitor's owl, started by the server with a seed, settled by one result frame, judged against a least possible time, paid under the activities' shared daily cap. The climb extends that model where the arcade did not need it: a run that lasts minutes and survives a dropped connection, a glide that makes a missed jump cost height rather than the run, per-band payouts once a day, a first-ascent item, a moon that selects the night's layout, and a record of every result so a dispute can be answered.
+The design keeps the two models apart. The shared stained-glass room is an ordinary room: the
+same registry, geometry, doors, idol and caps as the other realms. The climb is a solo run on the
+arcade's contract above, extended where the arcade did not need it: a run that lasts minutes and
+survives a dropped connection, a glide that makes a missed jump cost height rather than the run,
+per-band payouts once a day, a first-time item for reaching the clouds, a moon that sets the
+night's difficulty, and a row for every result so a keeper can answer "what happened to my
+climb".
 
 ## Goals
 
-*   **G1. A third realm as an ordinary room.** One hub arch opens onto a shared stained-glass room: walkable polygons, doors, spawns, a cap, other owls visible, the realm's idol accepting Realm Votes, the room server authoritative. The room is data in `packages/shared/rooms/index.ts` with the same tests as the other rooms.
-*   **G2. A solo climb on the arcade's run model.** A portal spot in the room starts a run; the climb plays entirely on the client as the visitor's own owl; at most seven frames cross the wire per run (one start, one per band reached), each under the 1,024-byte frame limit; no positions, inputs or client clocks are sent during play.
-*   **G3. Movement that feels responsive on phones and computers.** A fixed-step simulation with acceleration, coyote time and variable jump height as candidate techniques; a jump, a second press for a double jump, a held jump that glides; the climb screen owns its own stick and jump button inside the full-screen modal, built on the park's existing joystick and keyboard modules so key-place matching and the left-hand mirror carry over.
-*   **G4. The glide is the safety net.** A missed jump costs height, never the run: every point in a layout can glide to a ledge, every ledge has a route up, and once a height band is reached the owl cannot fall below it. These are tested invariants over the layout data, not promises.
-*   **G5. A run that survives.** The run record (seed, night, start time) is kept per collector in server storage, not on the socket, and is re-attached on the next connection; a visitor can stop and bank the highest band reached at any time; the server forgets a run one hour after it started.
-*   **G6. An honest result, cheaply.** The server refuses a result that arrives sooner than the least time to its band under the night's layout. Layouts, physics constants and the per-(layout, band) time floors live together in `packages/shared`, derived or checked by a unit test that scripts a perfect run, so a tuning change that invalidates a floor fails the build. Refused-as-implausible results are counted per collector for a keeper's review.
-*   **G7. Payout under the existing cap.** Each height band pays once a park day, through the activities' shared 25-feather daily cap (`PLAY_FEATHERS_PER_DAY`); the first ever ascent to the clouds grants one common catalogue item, recorded as its own fact; the start card shows the cap, today's best paid band and the moon before a climb begins; the server says why a payout was zero.
-*   **G8. Every result is answerable.** One row per result, written before the ledger call and finalised after, idempotent on (collector, seed), with a finer refusal reason and a structured log line on every refusal, plus a keeper's view of one collector and a daily climb counter.
-*   **G9. The moon and the special nights are data.** A pure `parkMoon(day)` over the park day clock selects a night (layout and pay table) at run start; the night is pinned to the run and judged by it even across park midnight; the owner's special nights are named entries in the same shared table, selected by a key in a server-side setting, never free-form content.
-*   **G10. Ships dark, switches on.** The realm, the portal and the current special night are governed by one server-side settings record on the gate switch's pattern; the socket route refuses a closed realm with its sign; a keeper flips it from the admin pages and the flip is logged; a rollback is the ordinary Worker rollback.
-*   **G11. Art within the pipeline and the phone budget.** A small set of reusable segment pieces (glass panels, ledges, a cloud cap, a sky) through the existing Seedream pipeline, loaded at run start and released at run end, counted in the room's budget; night variants as tints or grades over one approved set; the owner approves every image; neutral keys only.
-*   **G12. Tests stay deterministic.** `parkMoon` and the night selection are pure functions with fixed-input tests; the local mode and the browser tests accept a night override; `pnpm check` and `pnpm e2e` pass on every date.
+*   **G1. A third realm as an ordinary room.** One hub arch opens onto a shared stained-glass
+    room with the neutral id `glass`: walkable polygons, doors, spawns, a cap, other owls visible,
+    the realm's idol accepting Realm Votes, the room server authoritative. The room is data in
+    `packages/shared/rooms/index.ts` with the same tests as the other rooms.
+*   **G2. A solo climb on the arcade's contract.** A portal spot in the room starts a run. The
+    climb plays on the client as the visitor's own owl. Per run, the client sends one `climb` frame
+    and at most one `ascent` frame per band reached, each under `MAX_FRAME_BYTES` (1,024). No
+    position, input or client clock is sent.
+*   **G3. Deterministic, responsive movement.** The simulation steps at a fixed 120 Hz
+    (`CLIMB_STEP_MS` = 1000/120) and an input is reflected in the next step. It has a run with
+    acceleration, a jump whose height depends on how long the button is held, coyote time (a jump
+    still counts for 80 ms after leaving a ledge), a jump buffer (a press 80 ms before landing
+    jumps on landing), a second press for a double jump, and a held jump that glides.
+*   **G4. The glide is the safety net.** A missed jump costs height, never the run. The layout
+    data satisfies three tested invariants: from any reachable airborne point a glide lands on a
+    ledge; from every ledge a route up exists; once a band is reached the owl cannot fall below
+    that band's floor.
+*   **G5. A run that survives.** The collections object keeps the run (seed, night, `startedAt`,
+    banked band) per collector, not per socket. A new socket resumes it. The visitor can stop at
+    any time and keep every banked band. The server forgets a run `CLIMB_RUN_MAX_MS` (one hour)
+    after it started.
+*   **G6. An honest result, cheaply.** The server refuses a band that arrives sooner than
+    `leastClimbMs(layout, tier, band)` less `CLIMB_SLACK_MS` (1,000 ms) after the run started. The
+    layout, the physics constants and the floor table live together in `packages/shared`, and a
+    unit test derives the floors from a scripted route, so a tuning change that invalidates a floor
+    fails `pnpm check`. The floor proves only that enough time passed; a client that waits out the
+    cloud floor at the portal and sends band 6 is accepted. That loss is bounded by the cap and one
+    common item once, and the owner accepted it (decision 7). The server counts refused bands per
+    collector so a keeper can look; the count catches broken clients, not cheats.
+*   **G7. Payout under the existing cap.** Each band pays once a park day, under
+    `PLAY_FEATHERS_PER_DAY`, on the day the band arrives. Reaching the clouds grants one common
+    catalogue item the first time ever. The climb screen shows the cap and today's best band once
+    the run has started; the server says why a payout was zero.
+*   **G8. Every result is answerable.** One row per (collector, seed, band) with the verdict, the
+    floor, the elapsed time, the feathers added and why any were zero; a resend returns the same
+    row; a short run reference on the result card lets a keeper look the run up.
+*   **G9. The moon and the special nights are data.** `parkMoon(day)` is a pure function of the
+    park day; it gives a phase for display and a tier that sets one difficulty parameter. The night
+    (tier or special) is pinned to the run when it starts. Special nights are named entries in the
+    same shared table, selected by a key in the setting, never free-form content.
+*   **G10. Closed by default, opened by the `realms` setting.** One field of the overflow object's
+    park settings opens realms, lights the portal and names the special night. A keeper flips it
+    from the capacity page; the room objects learn of a flip within a minute; a Worker rollback is
+    the ordinary one.
+*   **G11. Art within the pipeline and the phone budget.** A small set of reusable segment pieces
+    through the Seedream pipeline, loaded while the climb scene is active and released after, within
+    the arcade's per-file limits; the owner approves every image; neutral keys only.
+*   **G12. Tests stay deterministic.** `parkMoon` and `nightFor` are pure functions with
+    fixed-input tests; the local mode and the browser tests pin the night; `pnpm check` and
+    `pnpm e2e` pass on every date.
 
 ## Non-Goals
 
-*   No change to tap-to-walk, the phone pad, the keyboard, `jumpEveryMs` or the hop emote anywhere outside the climb screen.
-*   No positions, inputs or client durations on the wire during a climb; no input-trace replay on the server (decision 7).
-*   No leaderboard, score wall or standings for the climb. If one is added later it follows the arcade's no-names rule.
-*   No layouts, pay tables or visitor-facing words delivered through a setting; the setting selects among entries already in the bundle.
-*   No new painting per moon phase or special night.
-*   No new feather source outside the shared daily cap, unless a special night is given its own capped source (open question).
-*   No per-visitor allowlist, private rehearsal mode or scheduling in the realm switch.
-*   No decision on the deferred flight ticket (OP-084) beyond naming the constants it must reuse or retire.
-*   No internal realm name, other game or studio name, or owner detail in code, docs, art keys, tests or commit messages; the public name waits on OP-069.
+*   No change to tap-to-walk, the phone pad, the keyboard, `jumpEveryMs` or the hop emote outside
+    the climb screen.
+*   No positions, inputs or client clocks on the wire; no input-trace replay on the server.
+*   No leaderboard or score wall for the climb.
+*   No layouts, pay tables or visitor-facing words delivered through a setting.
+*   No second layout, no special-night layout and no new painting per phase in the first release.
+*   No feathers grant route, collector view or counters page until a dispute needs one.
+*   No per-visitor allowlist, rehearsal mode or scheduling in the `realms` setting.
+*   No quests in the stained-glass room in this wave (they need a quest item kind and an NPC
+    there).
+*   No decision on the deferred flight ticket (`OP-084`) beyond naming the constants it must reuse
+    or retire.
+*   No internal realm name, other game or studio name, or owner detail anywhere; the public name
+    waits on `OP-069`.
+
+## Decisions carried from the brief
+
+The brainstorm's brief is a working file outside git. These are the decisions it holds, as this
+document uses them.
+
+1.  The shared stained-glass room ships first; the portal and the climb are inside it.
+2.  The climb is a solo run on the arcade's contract: client-played, server-started, server-judged.
+3.  The glide is the safety net: a missed jump costs height, never the run.
+4.  Feathers by band once a park day under the shared cap, plus one common item the first time the
+    clouds are reached.
+5.  The park moon sets the night's difficulty; the portal is open every night.
+6.  The owner can switch on special nights by name.
+7.  Anti-cheat by time floors, not replay, on two conditions: layout, constants and floors live
+    together in shared code with a test, and refused bands are counted per collector.
+8.  A run survives a dropped connection; it is keyed by collector in server storage.
+9.  A climb ends at the clouds or when the visitor stops; the server forgets it after one hour.
+10. The realm ships dark behind one server-side setting that covers open realms, the portal and the
+    special night.
+11. One row per result, idempotent on its key, with a finer refusal set.
+12. The climb screen owns its controls, built on the park's joystick and keyboard modules.
+
+The review changed how four of these are carried out, not what they decide: bands pay on the day
+they arrive rather than the run's start day (K1 in the review report); the setting lives in the
+overflow object rather than the vote ledger (M1); the first release has one layout and the moon
+sets one parameter (M2); the result row is one upsert and the keeper's tools are the existing
+grant route plus a lookup (M3).
 
 ## Open Questions
 
-Carried from the brief; the Technical Plan takes defaults for the rest (see "Decisions taken in this section") and the owner confirms or changes them at the gate.
-
-*   **Q1 (brief 5).** Which arch opens, `closed-a` ("Not Yet Fledged", west) or `closed-b` ("Hatching Soon", east), and does the hub's tile get repainted when it opens?
-*   **Q10 (brief 14).** Switch to `ROOM_SHARDING=room` before the arch opens, or run a five-room load test first? Is the paid Workers plan bought before opening night?
-*   **Q11 (brief 15).** Where the third realm sits in the Realm Vote's fixed tie-break order; whether it takes votes from the day the arch opens; whether the idol's art ships in this wave.
+| Question | Default taken here | Who confirms |
+| --- | --- | --- |
+| Which arch opens | `closed-b` ("Hatching Soon", east); `closed-a` keeps its blockade | the owner |
+| The third realm's place in the Realm Vote's fixed tie-break order; votes from the day the arch opens; the idol's art in this wave | third; yes; yes | the owner |
+| The feathers per band and the visitor-facing band names | `BAND_FEATHERS` = 1, 1, 2, 2, 2, 2; "storey" one to five, then "the clouds" | the owner |
+| The first-time item | a new common head wearable, `glass-circlet`, with no style set until the realm has furniture | the owner |
+| The moon's epoch | `MOON_EPOCH_DAY` = 2026-12-01, the preview's opening, a full moon by definition | the owner |
 
 ## Critical User Journeys (CUJs)
 
 ### CUJ 1: A first climb on a phone, stopped partway
 
-*   **Given**: The realm is open in the park settings, the portal is live, the visitor has a ticket and stands in the stained-glass room with the pad showing. It is the third night of the park moon (an easy night). The visitor has earned 4 of today's 25 feathers from games.
-*   **When**: They walk to the portal spot, tap Interact ("Climb"), read the start card (tonight's moon in one line, feathers from games today 4 of 25, no band paid yet, time to park midnight), and tap Start. The climb screen opens over the room with its own stick on the left and jump button on the right. They run, jump, double jump, miss a gap, hold jump and glide down to a ledge two storeys lower, climb again, reach the third band, then tap Stop.
-*   **Then**: Each time a new band was reached, one frame went to the server and came back accepted; the result card reads "Third storey. +4 feathers" with "8 of 25 today"; the owl stands at the portal again; the next climb tonight pays only for bands above the third; no move, emote or position frame was sent while the climb was up.
+*   **Given**: `glass` is open and the portal is live in the `realms` setting. The visitor has a
+    ticket and stands in the stained-glass room. It is an easy night (new moon tier). They have
+    earned 4 of today's 25 feathers from games.
+*   **When**: They walk to the portal spot and tap Interact ("Climb"). A card shows tonight's moon
+    in one line and the time to park midnight, with a Start button. They tap Start. The climb screen
+    opens over the room with its own stick on the left and jump button on the right, and its header
+    shows "4 of 25 feathers from games today" and "best storey today: none". They run, jump, double
+    jump, miss a gap, hold jump and glide down to a ledge two storeys lower, climb again, reach the
+    third storey, then tap Stop.
+*   **Then**: Each new storey sent one `ascent` frame and the server answered `ok`; the header
+    counted up to "8 of 25". Stop closes the screen without a frame. The result card reads "Third
+    storey. +4 feathers" with the run reference. The owl stands at the portal. A second climb tonight
+    pays only storeys above the third. No move, emote or position frame was sent while the screen was
+    up.
 
 ### CUJ 2: The connection drops mid-climb
 
-*   **Given**: A climb is open (banked up to the second band); the phone sleeps for four minutes; the socket is closed by the idle reaper.
-*   **When**: The visitor wakes the phone. The page reconnects, says hello, and the climb screen (still open on the page) asks the server for its run again.
-*   **Then**: The server returns the same run (same seed, night and start time, banked band 2, `resumed: true`); the climb continues where the page left it; bands above 2 still pay. If the page itself was reloaded, the climb screen reopens at the second band's floor with the same run, since the simulation state lives on the page and the banked progress on the server. If more than an hour has passed since the run started, the server answers that the run was forgotten and the card says so in plain words, with nothing taken.
+*   **Given**: A run is open with storey 2 banked; the phone sleeps for four minutes; the idle
+    reaper closes the socket.
+*   **When**: The visitor wakes the phone. The page reconnects and says hello; the climb screen,
+    still open on the page, sends `climb` again.
+*   **Then**: The server answers with the same run (same seed, night and `startedAt`, `banked` 2,
+    `resumed` true), whatever the portal setting says and wherever the owl stands; the climb
+    continues from the page's own state. If the page itself was reloaded, `climb` is sent on the
+    first hello and the screen reopens at storey 2's floor. If more than an hour has passed since
+    the run started, the server answers `forgotten`, the card says so and that nothing was taken, and
+    the next `climb` starts a new run.
 
-### CUJ 3: The first ascent to the clouds on a computer
+### CUJ 3: Reaching the clouds for the first time, on a computer
 
-*   **Given**: A visitor with the arrow keys and Space, on a full-moon night (the hardest regular layout), has never reached the clouds.
+*   **Given**: A visitor with the arrow keys and Space, on a full-moon night (the hard tier), has
+    never reached the clouds.
 *   **When**: They reach the cloud line.
-*   **Then**: The server checks the time since the run started against the cloud band's floor for that layout, pays the remaining bands under the cap, records the ascent, grants the realm's first-ascent item once, and the result card shows the item in the collection's style with a line saying it is given once ever. A second ascent, tonight or any night, pays its bands and says the item was already given.
+*   **Then**: The server checks the time since the run started against the cloud band's floor for
+    that tier, pays the remaining bands under the cap, finds no earlier band-6 row for this
+    collector, grants `glass-circlet`, and answers with the item. The result card shows it in the
+    collection's style with a line saying it is given once ever. A later climb to the clouds pays its
+    bands and says the item was already given.
 
 ### CUJ 4: The cap is already reached
 
 *   **Given**: The visitor earned 25 feathers from games today before entering the realm.
-*   **When**: They open the start card.
-*   **Then**: The card says feathers from games today 25 of 25 and that a climb tonight pays nothing until park midnight, with the time left; they may still climb. A result frame is accepted and recorded with "capped" as the reason the payout was zero, so the day's best band still counts and the first ascent is still recorded and granted.
+*   **When**: They start a climb.
+*   **Then**: The header shows "25 of 25" and "nothing more from games until park midnight" with
+    the time left. They may still climb. Each band is accepted and recorded with `why` =
+    `capped`, so today's best storey still counts and the clouds still grant the item.
 
-### CUJ 5: The owner switches a special night on and the portal off
+### CUJ 5: A keeper lights a special night, then turns the portal off
 
-*   **Given**: A keeper is signed in to the admin pages.
-*   **When**: They set the special night key to `blood-moon`, and later, after a report of a broken layout, turn the portal off.
-*   **Then**: Within a minute, new runs start under the blood-moon layout and pay table; runs already open keep the night they started with. After the portal is turned off, the portal spot shows an approved closed phrase, `climb` is refused with reason `closed`, open runs may still send their banked bands until they are forgotten, and both flips are logged with who and when.
+*   **Given**: A keeper is signed in to the capacity page. A special night exists in `NIGHTS`.
+*   **When**: They set the special night key, and later, after a report of a broken layout, turn
+    the portal off.
+*   **Then**: Within a minute, new runs start under the special night; runs already open keep the
+    night they started with. After the portal is off, the portal spot shows "Pardon Our Feathers",
+    a `climb` with no open run is refused with `closed`, open runs resume and send bands until they
+    are forgotten, and both flips are in the Workers log with who and when.
 
 ### CUJ 6: A visitor says they reached the clouds and got nothing
 
-*   **Given**: A Feedback note quotes the run reference shown on the result card.
+*   **Given**: A Feedback note quotes the run reference from the result card.
 *   **When**: A keeper looks the reference up on the admin climb page.
-*   **Then**: They see the run's night, start time, each band frame's arrival time and verdict, the floors in force, the feathers added per band and why any were zero, whether the first ascent was recorded, and can grant feathers or the item with a required note, written as an admin action the visitor's next result card does not need to know about.
+*   **Then**: They see the run's night, `startedAt`, and for each band its arrival time, verdict,
+    floor, elapsed time, feathers added and why any were zero, and whether band 6 was reached. If
+    the item is missing they grant it through the existing grant route. A feathers grant does not
+    exist yet (Future Improvements); the keeper says so in the Feedback reply.
 
 ## Technical Plan (Architecture)
 
-The design has four parts: an ordinary room, a solo climb simulation shared by the page and the server, a climb book that owns runs and payouts in the collections object, and one settings record that opens the realm. The hub, the room server's movement model and the wire protocol's shape are unchanged; the protocol gains two `act` kinds and bumps its version.
+The design has four parts: an ordinary room; a climb simulation shared by the page and the tests;
+a climb book in the collections object that owns runs and payouts; and a `realms` field in the
+overflow object's park settings. The hub, the room server's movement model and the wire protocol's
+shape are unchanged. The protocol gains two `act` kinds and bumps its version.
 
 ```text
- page (apps/park)                        room object (apps/edge RoomObject)         collections object (apps/edge Collections)
- ───────────────                         ──────────────────────────────────         ──────────────────────────────────────────
- RoomScene in room `glass`  ── move/emote/say ──▶ Room geometry, caps, fan-out        ClimbBook over climb_runs, climb_bands,
-   │ stands at `portal` spot                     (unchanged)                           climb_ascents, admin_actions
-   │ Interact ▶ act climb ─────────────────────▶ at the spot? portal live? ──RPC──▶ climbStart(cid, nightKey) → open run or new
-   │ ◀── act climb ok {seed, night, startedAt,                                      (seed, night pinned, startedAt, banked)
-   │       banked, remainingCap, resumed}
-   ▼
- ClimbScene (Phaser, full-screen modal, own stick + jump)
-   runs the shared simulation at 120 Hz from `seed` and `night`
-   ── act ascent {k: seed, band} per new band ─▶ passes through ──────RPC──▶ climbBand(cid, seed, band, now)
-   ◀── act ascent ok {band, added, feathers,                                      floor check: now − startedAt ≥ leastClimbMs(layout, band)
-         total, why?: 'capped'|'paid-today'|…,                                    pay (band − banked) through the 'play' cap, once a day
-         ascent?: {item, first}}                                                  band 6: record ascent, grant item once
-   Stop / Escape ▶ close the scene, no frame                                       row per frame: pending → settled, idempotent on (cid, seed, band)
+page (apps/park)
+  RoomScene in room `glass`, owl at the `portal` spot
+    | Interact, then Start
+    v
+  act climb ----------------------------> room object (RoomObject.ts)
+                                     no open run? needs: at the portal,
+                                     portal live (from its in-memory
+                                     `realms`); else resume
+                                     | RPC climbStart(cid, specialKey)
+                                     v
+                                   collections object (Collections.ts)
+                                     ClimbBook over climb_runs, climb_bands
+                                     open run under an hour -> resume
+                                     else new seed, night pinned, startedAt
+    <------ act climb ok {seed, startedAt, night, tier, banked,
+            remainingCap, bestBandToday, resumed}
 
- Worker (apps/edge index.ts)                 vote ledger object (park_settings)
- /ws/<room>: isRoomId AND realm open?  ◀──── realms: {open: [...], portal: bool, night: key|null}
- /api/admin/realms GET/POST (ADMIN_KEY)  ───▶ flips logged (who, when, before, after)
- /api/admin/climb, /api/admin/collector
+  ClimbScene (shared simulation, 120 Hz) + climbScreen (own stick and jump)
+    | each new band
+    v
+  act ascent {k: seed, band} -----------> room object: pass through
+                                     | RPC climbBand(cid, seed, band)
+                                     v
+                                   collections object
+                                     floors for every unpaid band up to `band`
+                                     pay through CollectionBook.play under the cap
+                                     band 6 first time: grant the item
+                                     upsert climb_bands row, return it
+    <------ act ascent ok {band, banked, added, feathers, total,
+            why?, item?, ref}
+
+  Stop / Escape: close the screen, no frame; the run stays open until forgotten
+
+Worker (index.ts)                         overflow object (Overflow.ts)
+  /ws/<room>: upgrade; the room object      park settings gain `realms`:
+  turns a closed realm away with            {open, portal, night, at, by}
+  CLOSE.REALM_CLOSED and its sign           POST /settings validates and logs
+  /api/admin/climb?ref= (ADMIN_KEY)         pushes a notice to room objects;
+                                            room objects also poll each minute
 ```
 
 ### The room
 
-The stained-glass room is a `RoomDef` in `packages/shared/rooms/index.ts` with the neutral id `glass`: one or two screens wide, horizontal like the others (only the climb is vertical), a floor polygon, a `from-hub` spawn, a door back to the hub, an `idol` door for the Realm Vote, a `portal` door without `to` (the arcade cabinet pattern: a spot the client's `interactions` table turns into an Interact action), and a new `mood` value for its lighting. The hub gains a `to` on the chosen closed arch and a `from-glass` spawn; the other arch keeps its blockade. The realm joins `VOTABLE_REALMS` as the third entry, `DEFAULT_CAPS` at 40, the quest catalogue's room list, the Menu map's places and paths (public name from OP-069), the collection log's spots, and a style set. The room's tests are the existing ones: tiles cover the room, spawns stand on the floor, doors resolve.
+The stained-glass room is a `RoomDef` in `packages/shared/rooms/index.ts` with the id `glass`.
+It is two screens wide and horizontal like the others; only the climb is vertical. It has a floor
+polygon, spawns `default` and `from-hub`, a door back to the hub, an `idol` door for the Realm
+Vote, a `portal` door without `to` (the arcade cabinet pattern: a spot that the client's
+`interactions` table turns into an Interact action), and the new `mood` value `glass`. The hub's
+`closed-b` arch gains `to: { room: 'glass', spawn: 'from-hub' }`, loses its `closedSign`, and its
+floor polygon is extended through the arch with vertices named in the plan; `closed-a` keeps its
+blockade. The hub gains a `from-glass` spawn. The realm joins `VOTABLE_REALMS` third, the Menu map
+(public name from `OP-069`) and the collection log's room labels (which derive from `ROOMS`). The
+room's tests are the existing ones: tiles cover the room, spawns stand on the floor, doors resolve,
+and exactly one closed arch still shows an approved phrase.
 
-### The simulation and the layouts (shared)
+### The simulation and the layout (shared)
 
-`packages/shared/src/climb.ts` holds everything both sides must agree on, with no platform code:
+`packages/shared/src/climb.ts` holds everything the page, the server and the tests must agree
+on, with no platform code. Appendix A gives the starting values.
 
-*   **Physics constants** (named, like the flap's): run acceleration and top speed, gravity, jump impulse and the variable-height cut, coyote time, jump buffer, the double jump's impulse, the glide's fall speed and horizontal speed, the owl's collision box. Movement is a fixed-step simulation at the arcade's `STEP_MS` (120 Hz) driven by a held-state input `{left, right, jumpPressed, jumpHeld}`, so a step is a pure function of state and input.
-*   **Layouts** as data: a list of ledges (rectangles in field pixels), the band lines (heights), the cloud line, the start ledge, and per-band floors. A layout is built from a small vocabulary of segment pieces (a glass column, a ledge, a balcony, a cloud cap) that the art pipeline paints once; the data says which piece sits where.
-*   **Nights**: `NIGHTS` maps a night key to a layout id and a band table. `parkMoon(day)` in `parktime.ts` is a pure function over the park day: a synthetic 28-day cycle from a fixed epoch, eight phases, difficulty rising from the new moon to the full moon and falling back (no cliff the day after full). The eight phases map onto three difficulty tiers (new and crescent easy, quarter and gibbous medium, full hard), so the regular layouts are three, one per tier, plus the special nights; the moon still shows eight phases. `nightFor(day, special)` returns the special night's key when the setting names one, else the moon's. The page never computes the night; it receives it.
-*   **Floors**: `leastClimbMs(layoutId, band)` from a table beside the layouts. A unit test runs a scripted route per layout through the simulation and asserts every floor is at most that route's time to the band less a fixed margin, so a change to a constant or a layout that makes a floor unreachable fails `pnpm test`. The script is the design's best known route, not a proof of the optimum; the margin and the stakes make that acceptable (decision 7).
-*   **Invariants, tested**: from any reachable point a glide lands on a ledge; from every ledge a route up exists; band floors are solid from below once passed (the owl cannot fall below a banked band); the start ledge is on band 0.
-*   **Pay**: `BAND_FEATHERS` per band (a default of 1, 1, 2, 2, 2, 2: ten feathers for a full ascent, each band paid once a park day), and the band names and one-line results, all defaults for the owner's approval.
+*   **Physics**: named constants for run acceleration and top speed, gravity, jump impulse, the
+    jump cut, coyote time, the jump buffer, the double-jump impulse, the glide's fall and horizontal
+    speeds, and the owl's collision box. `stepClimb(state, input, layout, night)` advances one fixed
+    step from a held-state input `{left, right, jumpPressed, jumpHeld}` and is a pure function.
+*   **The layout**: a list of ledge rectangles in field pixels, six band lines, the cloud line and
+    the start ledge, about six screens tall, built from a small vocabulary of segment pieces (a glass
+    column, two ledges, a balcony, a cloud cap, a sky) that the pipeline paints once.
+*   **Nights**: `NIGHTS` maps a key to a layout id and the one tuned parameter (the glide's fall
+    speed). The three regular keys are the moon's tiers; special nights are entries added later with
+    their own layout. `parkMoon(day)` returns a phase 0 to 7 from a synthetic 28-day cycle starting
+    at `MOON_EPOCH_DAY`; `moonTier(phase)` maps new and crescent to easy, quarter and gibbous to
+    medium, full to hard, so difficulty rises to the full moon and falls back. `nightFor(day,
+    special)` returns the special key when the setting names one that exists in `NIGHTS`, else the
+    tier.
+*   **Floors**: `leastClimbMs(layoutId, tier, band)` reads `CLIMB_FLOORS`, one row per band per
+    tier. A unit test runs a scripted route through `stepClimb` under each tier and asserts each
+    floor equals that route's time to the band less `CLIMB_FLOOR_MARGIN` (20 %), so a constant or
+    layout change that moves a floor fails `pnpm check`. The script is the design's best known route;
+    the margin and the stakes make that acceptable.
+*   **Invariants, tested**: glide reach from sampled airborne points; a route up from every ledge;
+    band floors solid from below; the start ledge on band 0.
+*   **Pay**: `BAND_FEATHERS` (1, 1, 2, 2, 2, 2, ten for the clouds), `BAND_NAMES`, and the
+    one-line results, all defaults for the owner's approval.
 
-### The protocol
+### The protocol and the run states
 
-Two `act` kinds in `packages/shared/src/edge.ts`, protocol version 10:
+Two `act` kinds in `packages/shared/src/edge.ts`; `EDGE_PROTOCOL_VERSION` becomes 10. The
+`welcome` frame gains `realms: {open: string[], portal: boolean, night: string | null}`.
 
-*   `climb` (start or resume): no payload beyond `r`. The server answers `{seed, startedAt, night, banked, remainingCap, bestBandToday, resumed}` or refuses with `far`, `closed` (portal off), `offline`.
-*   `ascent` (a band reached): `{k: seed, band}`, `band` validated as a small integer. The server answers `{band, added, feathers, total, why?, ascent?}` or refuses with `idle` (no such open run), `too-fast`, `forgotten` (over an hour), `offline`.
+`climb` (start or resume) carries only `r`. The server answers:
 
-No client duration or position is sent. A full climb sends at most seven frames. Stopping sends nothing; the run stays open until it is forgotten, so a visitor who stops and comes back within the hour continues. The protocol bump ships with the realm behind the switch, so no `live` flag is needed: the kinds exist from the deploy, and the portal setting decides whether `climb` is accepted.
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `seed` | integer 0 to 2^32 - 1 | the run's key |
+| `startedAt` | ms, the collections object's clock | for the result card only; never judged |
+| `night` | key in `NIGHTS` | pinned at start |
+| `tier` | `easy`, `medium`, `hard` | for the header |
+| `banked` | 0 to 6 | highest band paid in this run |
+| `remainingCap` | 0 to 25 | feathers from games left today, before this run's next band |
+| `bestBandToday` | 0 to 6 | highest band paid today across runs |
+| `resumed` | boolean | an open run was returned |
+
+Refusals: `far` (no open run and not at the portal), `closed` (no open run and the portal is off),
+`busy` (another socket of this collector holds the run's current session), `offline` (the
+collections object did not answer).
+
+`ascent` carries `k` (the seed) and `band` (1 to 6, validated with `isCount(band, BAND_COUNT)`).
+The server answers `{band, banked, added, feathers, total, why?, item?, ref}` where `why` is one
+of `capped`, `paid-today`, `below-first-band`, `item-already-given`; `item` is `{variant, first:
+true}` on the first band 6; `ref` is the run reference. Refusals: `idle` (no open run, or another
+seed), `too-fast` (a floor failed), `forgotten` (over an hour since the start), `offline`.
+
+Run states, as the server sees them:
+
+1.  **No run.** `climb` needs the owl at the portal and the portal live; it opens a run with a
+    fresh seed, tonight's night and `startedAt` = now. Otherwise `far` or `closed`.
+2.  **Open run, same session.** `ascent` pays every unpaid band up to `band`, each checked against
+    its own floor; the first failing floor refuses the whole frame as `too-fast` and nothing is
+    banked. A band at or below `banked` answers `paid-today` with that band's row. A resend of a
+    band already recorded returns the recorded row; the book runs inside one object, so a resend
+    cannot pay twice.
+3.  **Open run, new socket.** `climb` returns the run with `resumed` true, whatever the portal
+    setting and wherever the owl stands. If the run's previous socket is still open, `busy`.
+4.  **Forgotten.** An hour after `startedAt`, `climb` starts a new run and `ascent` answers
+    `forgotten`.
+
+On the page: the climb screen sends `climb` on Start; on reconnect or reload it sends `climb` and
+reopens at the banked band's floor when `resumed` is true; it resends an unanswered `ascent` once
+with the next `ascent` or on reconnect; Stop and Escape close the screen and send nothing.
 
 ### The climb book (collections object)
 
-Runs live in the collections object, not on the socket: it already holds every per-collector fact, its own clock and SQL, and a run keyed by collector id there survives any socket, room object or phone. `ClimbBook` in `packages/shared` (platform-free, like `ArcadeBook`, so the local mode and the tests run it in the browser) over a `ClimbStore`:
+Runs live in the collections object: it already holds every per-collector fact, its own clock
+and SQL, and a run keyed by collector there survives any socket, room object or phone.
+`ClimbBook` in `packages/shared/src/climbbook.ts` is platform-free like `ArcadeBook`, so the local
+mode and the tests run it in the browser, over a `ClimbStore` with two tables:
 
-*   `climb_runs (cid, seed, night, started_at, banked, forgotten_at)`: one open run per collector; `climbStart` returns the open run if one is under an hour old, else opens a new one with a fresh seed and tonight's night.
-*   `climb_bands (cid, seed, band, arrived_at, verdict, floor_ms, elapsed_ms, added, why, settled_at)`: one row per `ascent` frame, written `pending` before the ledger call and settled after; a repeat of the same `(cid, seed, band)` returns the settled row. Verdicts: `ok`, `too-fast`, `idle`, `forgotten`, `collections-away`.
-*   `climb_ascents (cid, at, seed, night)`: the first ascent fact, independent of item ownership.
-*   Payout through `CollectionBook.play` with a `PlayEvent` of kind `climb`, under `PLAY_FEATHERS_PER_DAY`; `addEarned(cid, day, 'climb', n)` records band feathers paid today so a second climb pays only new bands; the day is the run's start day. When the cap clips a payment the attempted amount is recorded so the day never pays twice for the same band.
-*   The first-ascent item: a new common head wearable in the realm's style set, granted with source `granted` on the first ascent row; it is earnable elsewhere like any catalogue item (the exclusion flag does not exist and is not built here).
-*   Refused-as-implausible counts per collector and the admin climb page's daily counters are queries over the band rows; there is no counters table to keep in step.
+*   `climb_runs`, one row per collector: `cid TEXT PRIMARY KEY, seed INTEGER, night TEXT,
+    started_at INTEGER, banked INTEGER, session TEXT`.
+*   `climb_bands`, one row per band: `cid TEXT, seed INTEGER, band INTEGER, arrived_at INTEGER,
+    verdict TEXT, floor_ms INTEGER, elapsed_ms INTEGER, added INTEGER, why TEXT, night TEXT, ref
+    TEXT, PRIMARY KEY (cid, seed, band)`, with an index on `ref`. Rows older than
+    `CLIMB_ROW_KEEP_DAYS` (30) are swept on write.
 
-The room object's part is small: on `climb`, check the owl stands at the portal and the portal is live, then call `climbStart`; on `ascent`, pass through to `climbBand`; no run state on the attachment. The climber stays in the room at the portal as arcade players stay at a cabinet; a per-visitor room for the duration is a future improvement if fan-out is measured as a problem.
+`start(cid, special, now)` returns the open run when it is under an hour old, else opens one with
+`nightFor(parkDay(now), special)`. `band(cid, seed, band, now)` applies the run states above, pays
+through `CollectionBook.play(cid, feathers, null, now)` on the day the band arrives (a null event:
+the climb does not count toward a daily task), derives "bands paid today" from the band rows,
+grants `glass-circlet` with source `granted` when band 6 has no earlier `ok` row for this
+collector, upserts the band row and returns it. The run reference is the first eight hex
+characters of the collection log's `sha256` over `cid:seed`, stored in `ref`. Refused bands are
+counted per collector from the rows. There is no counters table, no ascents table and no second
+ledger.
+
+The room object's part: on `climb`, when the book has no open run, check the owl stands at the
+portal and that its in-memory `realms.portal` is true, then call `climbStart(cid, realms.night)`;
+otherwise call it straight away; on `ascent`, pass through to `climbBand(cid, seed, band)`. No run
+state lives on the socket attachment. The climber stays in the room at the portal as arcade
+players stay at a cabinet.
 
 ### The page
 
-*   `ClimbScene` (Phaser) renders the shared simulation: a portrait field like the arcade's, fitted and letterboxed, camera following the owl anchored at about 55 to 60 % of the view height, segment pieces drawn from the layout data, the owl in its spread pose while gliding. It loads the climb's art keys at run start and releases them at run end.
-*   The climb screen is a full-screen modal in the HUD (the arcade's `covered` state) that owns its input: a stick built from the joystick module on the left, a jump button on the right, keyboard by `code` (arrows or WASD, Space) through the keyboard module's held set, released on blur and hidden. One explicit input owner replaces the scattered flags: while the climb is up, the room receives no taps, no jump emote and no keys.
-*   Start card, hints (one verb per step, cleared by doing it, the device's glyphs), result card with an item line and the run reference, and the moon line, all through the HUD's existing card and toast components. Calm motion turns off the glass pulse and parallax.
-*   The local mode runs `ClimbBook` in the browser as it runs `ArcadeBook`; `?night=` overrides the night in the local mode and the tests only.
+*   `ClimbScene` renders the shared simulation: a portrait field 480 px wide like the arcade's,
+    fitted and letterboxed, the camera following the owl anchored at `CLIMB_CAMERA_ANCHOR` (0.58 of
+    the view height), segment pieces drawn from the layout, the owl in run, jump and spread poses.
+    Its art keys have `kind: 'climb'` and load only while the scene is active.
+*   The climb screen is a full-screen modal in the HUD's `covered` state that owns its input: a
+    stick built with `createJoystick` on the left, a jump button on the right, keyboard by `code`
+    through `attachKeyboard`'s held set with Space handed to the climb while it is up, released on
+    blur and hidden. The room keeps `hud.isBlocking()` as its gate, so no tap, jump emote or key
+    reaches it while the screen is up.
+*   The start card, the header, hints (one verb per step, cleared by doing it, the device's
+    glyphs), the result card with an item line and the run reference, and the moon line all use
+    the HUD's existing card, hint and toast components. Calm motion turns off the glass pulse.
+*   The local mode runs `ClimbBook` over a memory store with a snapshot and a storage key like the
+    arcade's, with `realms` open and the portal live by default; `?night=<key>` pins the night in
+    the local mode and the browser tests only.
 
-### The switch
+### The `realms` setting (overflow object)
 
-A `realms` key in the vote ledger object's `park_settings` (the gate switch's table): `{open: string[], portal: boolean, night: string | null, at, by}`. The Worker reads it with the gate's short keep on `/ws/<room>` and refuses a closed realm with its sign; the room object reads it once per `climb` for `portal` and `night`; the client's door drawing and the Menu map read it from the `welcome` frame. `GET` and `POST /api/admin/realms` behind `ADMIN_KEY`, every flip written to `admin_actions`. The levers, fastest first: portal off (a minute), realm closed (a minute), Worker rollback (the whole version).
-
-### Decisions taken in this section
-
-Defaults chosen where the brief left a question, for the owner to confirm or change: the climb is its own activity, not a fourth arcade game (Q8); the climber stays in the room (Q9); a synthetic 28-day moon with a rise and fall (Q5); a run is judged under the day it started (Q6); special nights pay inside the shared cap in this version (Q2, Q7); six bands paying 1, 1, 2, 2, 2, 2 (Q3); a new common item in the realm's style set, earnable elsewhere (Q4); movement left and jump right, no stick-up jump (Q12); portrait letterboxed (Q13); double jump included (Q14); about six screens tall from segment pieces, outdoors (Q15); run rows kept 30 days, hashed collector id in logs, analytics row later (Q16); a run reference on the card (Q17); no `live` flag, the switch covers the bump (Q18); a switched-off portal shows "Pardon Our Feathers" (Q19); id `glass` (Q20). Still the owner's: which arch (Q1), sharding and the plan before opening (Q10), the vote order and the idol art (Q11).
+The overflow object already keeps keeper settings (`Settings` in `apps/edge/src/Overflow.ts`),
+takes `POST /settings`, has the capacity page, is read by the Worker through `overflowState.ts`
+with a short keep, pushes a notice to every room object on change, and is polled by the room
+objects once a minute (`freshNotice`). `realms` becomes a field of those settings: `{open:
+string[], portal: boolean, night: string | null, at: number, by: string}`, default `{open: [],
+portal: false, night: null}`. `POST /settings` rejects an id not in `ROOMS` or a night not in
+`NIGHTS` with 400 and logs every accepted flip with who and when. The room object keeps `realms` in
+memory: a hello into a realm not in `open` is turned away with `CLOSE.REALM_CLOSED` and the sign,
+and the client's close handler walks the owl back to the hub and shows the phrase; on a flip that
+closes a realm, the room object sends the owls inside it to the hub spawn with the same phrase. The
+`welcome` frame carries `realms` so the client draws the arch open or closed and the Menu map
+agrees. The levers, fastest first: portal off, realm closed, Worker rollback.
 
 ## Alternatives Considered
 
 ### Alternative A: Platformer movement across the whole park
 
-Replace tap-to-walk everywhere with a joystick or keys, a jump, a double jump and a glide, and remap every room's walkable space to the new physics.
+Replace tap-to-walk everywhere with a stick or keys, a jump, a double jump and a glide, and remap
+every room's walkable space to the new physics.
 
-*   **Pros**: One movement model for the park; the climb is not a mode but the park itself.
-*   **Cons**: Every room (the hub, the grove, the market, the lobby, the street, the nests, the arcade) becomes a level to re-author and partly repaint; the server's geometry clamping and the one-destination `move` frame go away; held input means either streamed positions (which breaks the message budget the edge server was chosen for and trips the rate limiter) or input events with a deterministic simulation on every client for a hundred owls; it removes the premise in `docs/ARCHITECTURE.md` section 1.
-*   **Reason for rejection**: A different project by about an order of magnitude, with no path that keeps the park playable during it. Rejected in the brainstorm's first turn.
+*   **Pros**: One movement model; the climb is the park, not a mode.
+*   **Cons**: Every room becomes a level to re-author and partly repaint; the server's geometry
+    clamping and the one-destination `move` frame go away; held input means streamed positions
+    (which breaks the message budget) or input events with a deterministic simulation for a
+    hundred owls; it removes the premise in `docs/ARCHITECTURE.md` section 1.
+*   **Reason for Rejection**: About ten times this project, with no path that keeps the park
+    playable during it.
 
 ### Alternative B: The arch as a portal straight into a solo climb
 
-No shared stained-glass room; the arch itself starts the climb.
-
-*   **Pros**: No new room art, floor, idol, vote entry or cap; the climb ships sooner (the skeptical architect's smaller first release).
-*   **Cons**: The realm would be different in kind from the grove and the market: no place to stand with other owls, no idol, no Realm Vote, no quests; the park's "four realms" promise would be three rooms and a mini-game.
-*   **Reason for rejection**: The owner chose a shared room first with the portal inside it (decision 1), and confirmed it when the smaller release was put back to them. The room is an ordinary `RoomDef`, so its cost is art approval and list edits, not new mechanisms.
+*   **Pros**: No new room art, floor, idol, vote entry or cap; the climb ships sooner.
+*   **Cons**: The realm would be different in kind from the grove and the market: no place to
+    stand with other owls, no idol, no Realm Vote; "four realms" would be three rooms and a
+    mini-game.
+*   **Reason for Rejection**: The park's realms are social rooms first. The room is an ordinary
+    `RoomDef`, so its cost is art approval and list edits, not a new mechanism.
 
 ### Alternative C: The moon decides whether the portal is open
 
-Open the portal only on certain moon phases (for example full moons).
-
-*   **Pros**: Strongly themed; rare nights feel like events.
-*   **Cons**: Contradicts the daily feather payout (nothing is daily when the portal is shut most nights); a visitor whose one evening falls on the wrong phase never sees the realm's main feature; the preview opens with people who will try everything once; a full moon comes about every twenty-nine and a half days.
-*   **Reason for rejection**: Replaced by a moon that changes the climb while the portal stays open (decisions 5 and 6).
+*   **Pros**: Strongly themed; rare nights read as events.
+*   **Cons**: Nothing is daily when the portal is shut most nights; a visitor whose one evening
+    falls on the wrong phase never sees the realm's main feature; a full moon comes about every
+    twenty-nine and a half days.
+*   **Reason for Rejection**: The daily payout needs a nightly portal. The moon changes the climb
+    instead.
 
 ### Alternative D: Verify runs by input-trace replay on the server
 
-The page sends its input trace; the server re-simulates the deterministic climb and accepts only the height it reproduces.
-
 *   **Pros**: The only check that proves the claimed height was reached under the rules.
-*   **Cons**: The physics must be deterministic and shared, which this design already does, but also run inside the Durable Object per result; a five-minute trace is tens of kilobytes, over the 1,024-byte frame limit, so it needs an HTTP route; every tuning change becomes a server deploy; and it does not stop a scripted perfect run, which is the cheat a motivated person would write.
-*   **Reason for rejection**: The stakes are the arcade's stakes, at most 25 feathers a day and one common item once. Par-time floors with a shared test and a per-collector implausibility count were chosen (decision 7). The shared simulation keeps replay possible later without changing the wire shape.
+*   **Cons**: The physics must run inside the Durable Object per result; a five-minute trace is
+    tens of kilobytes, over the frame limit, so it needs an HTTP route; every tuning change becomes
+    a server deploy; it does not stop a scripted perfect run.
+*   **Reason for Rejection**: The stakes are at most 25 feathers a day and one common item once.
+    Time floors with a shared test cost little; the shared simulation keeps replay possible later
+    without changing the wire shape.
 
 ### Alternative E: A short climb kept on the socket, as arcade runs are
 
-Design the climb to last two to three minutes and keep the run on the socket attachment, so a dropped connection loses at most a short run.
-
-*   **Pros**: No new server state; the arcade's `startRun` and `endRun` carry over unchanged.
-*   **Cons**: Caps the city's height and how much a moon phase can add; on phones a lost connection during a run is the normal case, not the exception, and "The park did not catch that run" after a real climb is a poor result.
-*   **Reason for rejection**: The owner chose a run that survives (decision 8). Keeping the run in the collections object keyed by collector id costs one table and makes band banking and resumption natural.
+*   **Pros**: No new server state; `startRun` and `endRun` carry over.
+*   **Cons**: Caps the city's height and what a moon phase can add; on phones a lost connection
+    during a run is the normal case, and "The park did not catch that run" after a real climb loses
+    the visitor's work.
+*   **Reason for Rejection**: A run in the collections object costs one table and makes band
+    banking and resumption natural.
 
 ### Alternative F: The climb as a fourth arcade game
 
-Add a member to `ArcadeGame`, a cabinet-like spot, and settle through `ArcadeBook`.
+*   **Pros**: Fewest new types; about four non-test files.
+*   **Cons**: `ArcadeGame` drives the score wall (one column per game, pushed to everyone in the
+    arcade), `cabinetOf` assumes a cabinet, `startRun` refuses any room but the arcade, and the
+    wall fields would be meaningless for a climb with no score; once-a-day band pay, the run
+    lifetime and the first-time item do not fit `finish`.
+*   **Reason for Rejection**: The climb gets its own `act` kinds and book. The arcade's pattern is
+    reused as a pattern, not as a type.
 
-*   **Pros**: Fewest new types; about four non-test files plus a parametrised `startRun`.
-*   **Cons**: `ArcadeGame` drives the score wall (one column per game, pushed to everyone in the arcade), `cabinetOf` assumes a cabinet, `startRun` refuses any room but the arcade, and `RunPaid.wall`, `OwnBests` and `WallEntry` would be nonsense for a climb with no score; the climb's once-a-day band payout, its run lifetime and its first-ascent item do not fit `finish`.
-*   **Reason for rejection**: The climb gets its own `act` kinds and its own book over its own tables. The arcade's pattern is reused as a pattern, not as a type.
+### Alternative G: A per-visitor room for the duration of a run (deferred)
 
-### Alternative G: Move the climber to a per-visitor room for the run
-
-On `climb`, move the socket to a dynamic room with cap 1 (the nests' mechanism) so the climber neither holds a slot nor receives the room's fan-out.
-
-*   **Pros**: Frees a cap slot and stops minutes of fan-out to a client that renders none of it; stops the room simulation under the climb on a slow phone.
-*   **Cons**: A room switch mid-activity with its own failure modes (rejoining at the portal spawn, the "visit" event, counts); the owl vanishes from the room while climbing, which reads oddly beside the idol and other owls.
-*   **Reason for rejection**: Deferred, not rejected. The climber stays at the portal as arcade players stay at a cabinet; with the run in the collections object the switch can be added later if fan-out is measured as a problem. Listed under Future Improvements.
+*   **Pros**: Frees a cap slot and stops minutes of fan-out to a client that renders none of it.
+*   **Cons**: A room switch mid-activity with its own failure modes; the owl vanishes from the room
+    beside the idol and other owls.
+*   **Reason for Deferral**: The climber stays at the portal. With the run in the collections
+    object the switch can be added later if the room object's CPU with a populated `glass` is
+    measured above the budget in `docs/CAPACITY.md`.
 
 ### Alternative H: Merge the realm in the opening deploy, as the arcade did
 
-No switch; the room data lands on `main` the day the realm opens.
-
-*   **Pros**: No new settings record, route or admin control; the arcade shipped this way in one commit.
-*   **Cons**: Any registered room is reachable by its id in the URL, so the realm cannot sit on `main` dark; closing a misbehaving realm on opening night is a redeploy that also reverts everything else that shipped with it; the owner's special nights and a portal off switch would each need a deploy too.
-*   **Reason for rejection**: The owner chose to ship dark behind one settings record that covers open realms, the portal and the special night (decision 10), on the gate switch's existing pattern.
+*   **Pros**: No setting, route or admin control.
+*   **Cons**: Any registered room is reachable by its id in the URL, so the realm cannot sit on
+    `main` dark; closing a misbehaving realm on opening night is a redeploy that reverts everything
+    else that shipped with it.
+*   **Reason for Rejection**: One setting field in an object that already has a settings class,
+    a page, a push and a poll.
 
 ### Alternative I: Keep the park's pad visible over the climb
 
-A new HUD mode that leaves the thumbstick and Jump button in place over a full modal, instead of the climb screen drawing its own controls.
-
-*   **Pros**: One set of controls for the visitor to learn; no second pad to draw.
-*   **Cons**: The park's pad is an eight-way walking stick bottom-right with buttons bottom-left, the opposite of where a two-thumb platformer wants movement and jump; the HUD's `covered` state hides the whole bottom bar and the room's input flags would need untangling to stop a jump reaching the room as an emote; the promise that the pad stays unchanged everywhere else would be broken by changing it.
-*   **Reason for rejection**: The climb screen owns its controls, built from the same joystick and keyboard modules (decision 12).
+*   **Pros**: One set of controls to learn.
+*   **Cons**: The park's pad is an eight-way walking stick bottom-right with buttons bottom-left,
+    the opposite of a two-thumb platformer; the HUD's `covered` state hides the bottom bar; Space
+    would reach the room's jump emote.
+*   **Reason for Rejection**: The climb screen draws its own stick and jump from the same modules.
 
 ### Alternative J: Other fall rules
 
-Fall all the way to the bottom on a missed jump (one tradition), or respawn on the last ledge (another).
-
-*   **Pros**: Falling to the bottom makes every jump matter and needs no glide; respawning needs no landing ledges under hard jumps.
-*   **Cons**: Falling to the bottom means most visitors never see the clouds and a ten-minute climb can vanish in a second; respawning removes the glide's reason to exist and the feel of recovering by skill.
-*   **Reason for rejection**: The owner chose the glide as the safety net (decision 3): a miss costs height, by how well the owl glides, and the layout guarantees a ledge within reach. The banked band floors keep the worst loss bounded.
+*   **Pros**: Falling to the bottom needs no glide; respawning on the last ledge needs no landing
+    ledges.
+*   **Cons**: Falling to the bottom means most visitors never see the clouds and a ten-minute
+    climb vanishes in a second; respawning removes the glide's reason to exist.
+*   **Reason for Rejection**: The glide makes a miss cost height by skill, and banked band floors
+    bound the worst loss.
 
 ### Alternative K: The existing Halo as the reward, or a one-time halo
 
-Give the catalogue's `halo` (an epic head wearable) for reaching the clouds, once.
+*   **Pros**: No new item.
+*   **Cons**: An epic item from a daily skill game outpaces every other way to earn it; an owl may
+    already own it; a one-time reward gives no reason to climb again.
+*   **Reason for Rejection**: Daily feathers by band plus one new common item the first time. The
+    halo stays a catalogue item.
 
-*   **Pros**: No new item; a strong reward.
-*   **Cons**: An epic item from a daily skill game outpaces every other way to earn it; an owl may already own it (a duplicate pays feathers and the "reward" is nothing); a one-time reward gives no reason to climb again.
-*   **Reason for rejection**: Daily feathers by band plus one new common item in the realm's style set on the first ascent (decision 4). The halo stays a catalogue item.
+## Risks and Mitigations
+
+*   **The overflow object is unreachable.** The room object keeps the last `realms` it received
+    and keeps serving; a freshly started room object with nothing received yet treats every realm
+    as closed, which is the safe side. The Worker's keep serves the admin page from its last read.
+*   **The collections object does not answer mid-run.** The room object answers `offline`; the
+    client keeps the band and resends once with the next band or on reconnect; nothing is lost
+    because the run is in storage.
+*   **Two sockets on one collector.** A `climb` from a second socket while the run's session is
+    still open answers `busy`; when the first socket closes, the second resumes.
+*   **The room is full when a climber reconnects.** Resume does not need the room slot: `climb`
+    is answered from the hub too; the climb screen reopens there and the owl walks back later.
+*   **A deploy mid-run.** Sockets drop, the stale bundle's hello is refused with 4002, the page
+    reloads once and `climb` resumes at the banked band; only the page's unbanked height is lost.
+    A deploy that changes a layout gives it a new id, so open runs are judged by the layout they
+    started under and `NIGHTS` keeps the old id until the hour is out.
+*   **A night key removed from the bundle.** `nightFor` falls back to the moon's tier and logs
+    once; `POST /settings` refuses unknown keys so the case arises only across a deploy.
+*   **Abuse of the start timer.** A client that opens a run and waits out the cloud floor is
+    accepted; the loss is bounded by the cap and one common item, stated in G6.
+*   **A fifth populated room.** Four rooms at cap already overload one object on
+    `ROOM_SHARDING=single` (`docs/CAPACITY.md`); before the arch opens, either `ROOM_SHARDING=room`
+    or copies of rooms (`apps/edge/src/copies.ts`, built) for `glass`. The CAPACITY doc still marks
+    copies PLANNED; a `TODO-DOCS` goes with the change.
+*   **The Durable Object request budget.** Per climb: one `climb` and up to six `ascent` frames to
+    the room object, and up to seven RPCs to the collections object, about fourteen requests. A
+    thousand climbs a day is about fourteen thousand against the free plan's hundred thousand
+    (`docs/PLAYBOOK.md` section 5), beside the park's existing load.
+*   **Public data.** The layout and art ship in the bundle while the realm is dark, as everything
+    in this repository does; the working name stays out of the data.
 
 --------------------------------------------------------------------------------
 
 ## Non-Functional Requirements
 
-*   **Security and privacy.** No new secret; the admin routes sit behind the existing `ADMIN_KEY`. The raw collector id never leaves the collections object: Workers Logs lines carry a short hash of it, the run reference on the result card is a short hash of (collector id, seed), and no analytics row is added in this wave. Nothing from a setting becomes words or layout on a page; the switch selects among bundled entries by key. No internal realm name in code, data, art keys, tests or commit messages; the public name waits on OP-069 and is used only in the Menu map and the sign.
-*   **Performance and latency.** Per run: at most seven incoming frames (billed), one collections RPC per band, one small row per band. The climb itself adds nothing to fan-out; the walking in the new room is the cost, and a fifth populated room pushes the single-object budget measured in `docs/CAPACITY.md`, so the opening checklist carries the sharding decision (Q10). On the page: a 120 Hz fixed-step simulation of one owl and a few dozen ledges, and a set of segment pieces under the arcade's per-file size limits, loaded at run start and released at run end, counted in the room's budget. The honest-time floors depend on the portrait field's look-ahead, so the field is fixed.
-*   **Rollout and rollback.** One deploy carries the protocol bump to 10, the room data, the climb and the settings record, with the realm closed and the portal off in the setting's default. Opening is a `POST /api/admin/realms`. Closing the portal or the realm is the same route; a Worker rollback is the ordinary one and leaves the new tables in place (the playbook's rule). The deploy happens in a quiet hour; climbs open at that moment are forgotten unpaid, and the keeper's grant route makes a visitor whole on request. `pnpm e2e` runs with a fixed night so the tests do not depend on the date.
+*   **Security and privacy.** No new secret; the admin route sits behind `ADMIN_KEY`. The raw
+    collector id never leaves the collections object: the Workers log carries the run reference,
+    which is a hash, and the admin lookup is by reference. Nothing from a setting becomes words or
+    layout on a page. No internal realm name anywhere.
+*   **Performance.** The climb adds nothing to fan-out; the walking in the new room is the cost
+    (Risks). On the page, a 120 Hz simulation of one owl and a few dozen ledges, and segment pieces
+    under the arcade's per-file limits, loaded while the scene is active.
+*   **Rollout and rollback.** One deploy carries the protocol bump, the room data, the climb and
+    the setting's default (closed, portal off). Opening is a `POST /settings`; closing is the same.
+    A Worker rollback leaves the new tables in place (the playbook's rule). The deploy happens in a
+    quiet hour; a climb in flight loses only its unbanked height.
 
 --------------------------------------------------------------------------------
 
 ### Additional Resources
 
-*   `EGM/concepts_brief.md`: the brainstorm's findings and the twelve decisions this design carries.
-*   `docs/ARCHITECTURE.md` sections 1, 2, 4, 5, 6, 7 and 8; `docs/ACTIVITIES.md` (the arcade section, feathers, the wire protocol); `docs/COLLECTIBLES.md`; `docs/CAPACITY.md`; `docs/PLAYBOOK.md` sections 2 and 5; `docs/ART-PIPELINE.md`.
-*   The arcade as the precedent: `packages/shared/src/arcade.ts`, `arcadebook.ts`, `roomActivities.ts`; `apps/park/src/game/ArcadeScene.ts`, `game/arcade.ts`, `arcade/field.ts`, `ui/arcadeScreen.ts`; `apps/edge/src/sqlScoreStore.ts`.
-*   The gate switch as the settings precedent: `apps/edge/src/gateSwitch.ts`, `gatePage.ts`, `sqlVoteStore.ts`.
+*   The EGM concepts brief and the five review reports (the ignored `EGM/` folder, not in git).
+*   `docs/ARCHITECTURE.md` sections 1, 2, 4, 5, 6, 7 and 8; `docs/ACTIVITIES.md` (the arcade,
+    feathers, the wire protocol); `docs/COLLECTIBLES.md`; `docs/CAPACITY.md`; `docs/PLAYBOOK.md`
+    sections 2 and 5; `docs/ART-PIPELINE.md`; `docs/GLOSSARY.md`.
+*   The arcade as the precedent: `packages/shared/src/arcade.ts`, `arcadebook.ts`,
+    `roomActivities.ts`; `apps/park/src/game/ArcadeScene.ts`, `apps/park/src/game/arcade.ts`,
+    `apps/park/src/arcade/field.ts`, `apps/park/src/arcade/paint.ts`,
+    `apps/park/src/ui/arcadeScreen.ts`; `apps/edge/src/sqlScoreStore.ts`.
+*   The settings precedent: `apps/edge/src/Overflow.ts`, `overflowState.ts`, `capacityPage.ts`.
 
 ### Future Improvements
 
-*   **A per-visitor room for the duration of a climb** (Alternative G): frees the cap slot and stops fan-out to a client that renders none of it; the run already lives outside the room object, so this is a room switch and nothing else.
-*   **A separate capped feather source for special nights**, so a blood moon can pay above the day's 25 without the arcade eating it.
-*   **An exclusion flag on catalogue items**, so a first-ascent item can be kept out of the shop and quest rewards.
-*   **A `REALMS` table in shared** from which the hardcoded realm lists derive, before the fourth arch opens.
-*   **A `run` row in the analytics log**, with its migration in the analytics project, under the under-13 rule.
-*   **A real lunar calendar** behind the same `parkMoon(day)` signature, if the synthetic cycle reads wrong to visitors.
-*   **Input-trace replay** behind the same shared simulation, if the stakes ever rise.
-*   **The flight ticket (OP-084)** reusing or retiring the climb's movement constants.
+*   **A per-visitor room for a run** (Alternative G).
+*   **A feathers grant route, a collector view and climb counters**, when the first dispute needs
+    them.
+*   **Special-night layouts** behind the `NIGHTS` keys already reserved.
+*   **Quests in the stained-glass room**: a quest item kind, its noun and an NPC there.
+*   **A style set for the realm** once it has furniture and a capstone piece.
+*   **An exclusion flag on catalogue items**, to keep a first-time item out of the shop and quests.
+*   **A `REALMS` table in shared** from which the hardcoded realm lists derive, before the fourth
+    arch opens.
+*   **A `run` row in the analytics log**, with its migration, under the under-13 rule.
+*   **A real lunar calendar** behind the same `parkMoon(day)` signature.
+*   **Input-trace replay** behind the same shared simulation, if the stakes rise.
+*   **The flight ticket (`OP-084`)** reusing or retiring the climb's movement constants.
 
 --------------------------------------------------------------------------------
 
 ## Detailed Implementation Plan
 
-Everything below is one wave behind the switch. Files are grouped by package; every file names what changes and why. Documentation under `docs/` is the doc agent's: this plan leaves `TODO-DOCS` comments in code where a doc must change and appends the changelog line when the ticket is Done.
+Five phases, each ending with `pnpm check` green and, where noted, `pnpm e2e`. Items are numbered
+within their phase. Documentation under `docs/` is the doc agent's: `TODO-DOCS` comments mark the
+places a doc must change, and one changelog line is appended when the ticket is Done.
 
-### Target Files to Create/Modify
+### Phase 1: the shared simulation (`packages/shared`)
 
-#### `packages/shared` (rules shared by the page, the server, the local mode and the tests)
+1.  **`src/climb.ts`** (new). The physics constants of Appendix A; the types `Ledge`, `Layout`,
+    `Night`, `ClimbInput`, `ClimbState`; `stepClimb`; `LAYOUTS` with the one layout of Appendix A;
+    `NIGHTS` with the three tier keys (and reserved keys for special nights, no layout yet);
+    `parkMoon`, `moonTier`, `nightFor` live in `parktime.ts` (item 3); `BAND_FEATHERS`,
+    `BAND_NAMES`, `BAND_LINES`, `CLIMB_FLOORS`, `leastClimbMs`, `plausibleBand`, `CLIMB_SLACK_MS`
+    = 1000, `CLIMB_RUN_MAX_MS` = 3,600,000, `CLIMB_FLOOR_MARGIN` = 0.2, `CLIMB_STEP_MS` = 1000/120,
+    `CLIMB_FIELD_W` = 480. `BAND_COUNT` = 6 is defined in `edge.ts` and re-exported here, so
+    `edge.ts` does not import `climb.ts`.
+2.  **`src/climb.test.ts`** (new). The floor test (a scripted route per tier through `stepClimb`;
+    each floor equals the route's time less the margin); the three layout invariants; `plausibleBand`
+    at the boundaries; every `NIGHTS` key with a layout points at an existing one; the band table
+    sums to ten.
+3.  **`src/parktime.ts`** (modify). `MOON_EPOCH_DAY` = `'2026-12-01'`, `MOON_CYCLE_DAYS` = 28,
+    `parkMoon(day)` = `floor(((daysSince(epoch) mod 28) + 28) mod 28 / 3.5)`, `moonTier(phase)`,
+    `nightFor(day, special)`; tests for fixed inputs in `src/activities.test.ts`'s sibling or a new
+    `parktime.test.ts`.
+4.  **`src/index.ts`** (modify). Export the new module.
 
-1.  **`packages/shared/src/climb.ts`** (Create). TypeScript module, no platform code. The climb's constants (`CLIMB_STEP_MS` = the arcade's step, run acceleration and top speed, gravity, jump impulse, jump cut, coyote ms, jump buffer ms, double-jump impulse, glide fall and glide horizontal speed, the owl's box, field width); the types `Ledge`, `Layout`, `Night`, `ClimbInput`, `ClimbState`; `stepClimb(state, input, layout)`: one fixed step as a pure function; `layoutFor(nightKey)`; `LAYOUTS` (segment-based data for the three regular layouts, one per tier, and the first special night); `NIGHTS` (key to layout id, band table, visitor-facing night line); `BAND_COUNT` = 6, `BAND_FEATHERS`, `BAND_NAMES`, `BAND_LINES` (defaults for the owner's approval); `leastClimbMs(layoutId, band)` over `CLIMB_FLOORS`; `plausibleBand(layoutId, band, elapsedMs)` with the arcade's slack; `CLIMB_RUN_MAX_MS` = 60 minutes; `bandFeathersDue(band, paidBands)`. Why: decision 7 requires the layouts, the constants and the floors in one place with a test; the page and the server must agree.
-2.  **`packages/shared/src/climb.test.ts`** (Create). Vitest. The floor test: a scripted route per layout (held-state input scripts kept in the test) run through `stepClimb`, asserting every floor is at most the route's time to that band less the margin; the layout invariants (glide reach from any sampled airborne point to a ledge, a route up from every ledge, band floors solid from below, the start ledge on band 0); `plausibleBand` edge cases; `NIGHTS` all point at existing layouts; band tables sum to the agreed total. Why: the build must fail when a tuning change invalidates a floor.
-3.  **`packages/shared/src/climbbook.ts`** (Create). `ClimbBook` over a `ClimbStore` interface (`openRun`, `putRun`, `putBand`, `bandRow`, `paidBands`, `ascent`, `putAscent`, `countImplausible`, `counters`) and a `MemoryClimbStore` for the local mode and tests, in the `ArcadeBook` shape: `start(cid, nightKey, now)` returns the open run under an hour old or opens a new one; `band(cid, seed, band, now)` writes the pending row, checks the floor, pays the due bands through `CollectionBook.play` with event kind `climb` under the shared cap on the run's start day, records why a payout was zero, records and grants the first ascent, settles the row, and returns the settled row on a repeat. Why: decision 8 puts runs in the collections object; decision 11 requires one row per result; the book must be platform-free so the local mode runs it.
-4.  **`packages/shared/src/climbbook.test.ts`** (Create). Start and resume, forgotten after an hour, a band paid once a day across two runs, the cap clipping a band and the day not paying it twice, a too-fast band refused and counted, the first ascent recorded once and the item granted once, idempotent repeat of a band frame, a run spanning park midnight paid under its start day. Why: the payout rules are the part a dispute will test.
-5.  **`packages/shared/src/edge.ts`** (Modify). `EDGE_PROTOCOL_VERSION` 9 to 10 with the version comment extended; `ActKind` gains `climb` and `ascent`; `ClientAct` gains `k` and `band` for `ascent`; `parseClientFrame` validates `band` with `isCount(band, BAND_COUNT)`; `ServerAct` gains the `climb` and `ascent` answers and the reasons `closed`, `too-fast`, `forgotten`; the `welcome` frame gains `realms` (open ids, portal live) so the client draws doors and the map. Why: the two new frames and the client's knowledge of the switch.
-6.  **`packages/shared/src/edge.test.ts`** (Modify). Parse and reject cases for the two kinds, the band bound, the version. Why: the parser is the server's first defence.
-7.  **`packages/shared/src/parktime.ts`** (Modify). `MOON_EPOCH_DAY`, `MOON_CYCLE_DAYS` = 28, `parkMoon(day)` returning a phase 0 to 7, `moonTier(phase)` returning easy, medium or hard, `nightFor(day, special)`. Why: decision 5; the night must be a pure function of the park day and the switch.
-8.  **`packages/shared/src/activities.ts`** (Modify). `TaskKind` gains `climb`; `TASK_SLOTS` left unchanged on purpose with a comment (the climb does not count toward "at a game" in this wave); the `PLAY_FEATHERS_PER_DAY` comment names the climb among the sources. Why: `PlayEvent.kind` is a `TaskKind`, and the decision not to count the climb toward a task must be explicit.
-9.  **`packages/shared/src/book.ts`** (Modify). `EarnSource` and `EARN_SOURCES` gain `climb` (a TEXT column, no SQL migration). Why: band feathers paid today must be recorded separately from the arcade's.
-10. **`packages/shared/src/room.ts`** (Modify). The `mood` union gains `glass`. Why: the room's lighting.
-11. **`packages/shared/rooms/index.ts`** (Modify). The `glass` `RoomDef` (size, tiles, floor, spawns `default` and `from-hub`, doors `hub`, `idol`, `portal`); the hub's chosen arch gains `to: { room: 'glass', spawn: 'from-hub' }` and loses its `closedSign`, with its floor polygon opened at the blockade's front; the hub gains a `from-glass` spawn; the header comment names the realm by its id. Why: the realm is an ordinary room (G1).
-12. **`packages/shared/rooms/rooms.test.ts`** (Modify). The existing invariants cover the new room; a case that exactly one of the two closed arches is still closed and shows an approved phrase. Why: the other arch's blockade must keep its sign.
-13. **`packages/shared/src/collectibles.ts`** (Modify). One new common head wearable with a neutral id and a `style` of the realm's set. Why: decision 4.
-14. **`packages/shared/src/styles.ts`** (Modify). The realm's style set with the new item as a piece (`STYLE_SETS` is empty today; the set tests already hold it to the catalogue). Why: a realm brings a style of its own (OP-110).
-15. **`packages/shared/src/questCatalog.ts`** (Modify). `ROOMS` gains `glass` so quests may send owls there. Why: the room is a realm like the others.
-16. **`packages/shared/src/index.ts`** (Modify). Export the new modules. Why: both apps import through it.
+### Phase 2: protocol, room data and the setting, realm dark
 
-#### `apps/edge` (the Worker and the Durable Objects)
+5.  **`src/edge.ts`** (modify). `EDGE_PROTOCOL_VERSION` 10 with the version comment; `BAND_COUNT`;
+    `ActKind` gains `climb` and `ascent`; `ClientAct` gains `band` for `ascent`; `parseClientFrame`
+    validates `band` with `isCount(band, BAND_COUNT)` and `k` as a seed; `ServerAct` gains the two
+    answers and the refusals `closed`, `busy`, `too-fast`, `forgotten`; `ServerWelcome` gains
+    `realms`; `CLOSE.REALM_CLOSED`.
+6.  **`src/edge.test.ts`** (modify). Parse and reject cases for the two kinds; the hard-coded
+    `v: 9` on line 12 becomes 10.
+7.  **`src/room.ts`** (modify). The `mood` union gains `glass`.
+8.  **`rooms/index.ts`** (modify). The `glass` `RoomDef`; `closed-b` gains `to` and loses its sign;
+    the hub floor gains vertices through the arch at x 2505 to 2515, y 600 to 672 (the current
+    polygon's points at the blockade front); the `from-glass` spawn.
+9.  **`rooms/rooms.test.ts`** (modify). The existing invariants cover the room; one case asserts
+    exactly one closed arch with an approved phrase.
+10. **`src/collectibles.ts`** (modify). `glass-circlet`, common, head slot, no style.
+11. **`apps/edge/src/Overflow.ts`**, **`overflowState.ts`**, **`capacityPage.ts`** (modify). The
+    `realms` field with its default, validation against `ROOMS` and `NIGHTS`, the logged flip, the
+    push on change; the three controls on the capacity page; the Worker-side read through the
+    existing keep.
+12. **`apps/edge/src/RoomObject.ts`** (modify). Keep `realms` in memory from the overflow notice
+    and the poll; turn a hello into a closed realm away with `CLOSE.REALM_CLOSED` and the sign; send
+    owls in a realm that closes to the hub spawn; put `realms` in `welcome`.
+13. **`apps/edge/src/Room.ts`** (modify). `Room.join`'s welcome extras type gains `realms`.
+14. **`apps/edge/test/copies.test.ts`** and **`RoomObject.test.ts`** (modify). A closed realm's hello
+    is turned away with the code and the sign; `welcome` carries `realms`; the default is closed.
+15. **`apps/park/src/net/edge.ts`** (modify). The close handler's `REALM_CLOSED` branch (walk to
+    the hub, show the phrase); `realms` kept from `welcome`; `ActRefusal` gains the new reasons.
+16. **`apps/park/src/game/RoomScene.ts`** and **`game/ambience.ts`** (modify). Draw `closed-b`
+    open or closed from `realms`; `DOOR_TINTS` and ambience's own tint table gain `glass`; the
+    `glass` mood and the idol piece.
+17. **`apps/park/src/ui/menuTabs.ts`** (modify). `renderMap` takes `realms.open`; one placeholder
+    entry becomes the realm with its public name.
+18. **`apps/park/e2e/park.spec.ts`** (modify). The closed-doorway test walks to `closed-a`.
+19. **`apps/edge/src/VoteLedger.ts`** (modify). `VOTABLE_REALMS` gains `glass` third.
 
-17. **`apps/edge/src/sqlClimbStore.ts`** (Create). `SqlClimbStore` implementing `ClimbStore` over `climb_runs`, `climb_bands` and `climb_ascents`, created with `CREATE TABLE IF NOT EXISTS` in the constructor (the `sqlScoreStore.ts` pattern), with a 30-day sweep of settled band rows. Why: durable, dispute-grade records.
-18. **`apps/edge/src/Collections.ts`** (Modify). Construct `ClimbBook` over `SqlClimbStore`; RPC methods `climbStart(cid, nightKey)`, `climbBand(cid, seed, band)`, `climbLookup(ref)`, `climbCounters()`, `adminGrantFeathers(cid, n, note, by)`; the first-ascent grant goes through the existing `acquired` path so the collection log sees it; a structured log line (hashed cid) on every refusal. Why: the run lives here (decision 8).
-19. **`apps/edge/src/RoomObject.ts`** (Modify). In the `act` switch: `climb` checks the owl stands at the room's `portal` door and that the setting's `portal` is live (read with the gate's short keep), then returns `climbStart`'s answer; `ascent` passes through to `climbBand`; no `run` on the attachment for the climb. The `welcome` frame carries `realms`. Why: the room object is a checkpoint, not the record.
-20. **`apps/edge/src/Room.ts`** (Modify). `jumpEveryMs` untouched; a comment that the climb's jump is never an emote. Why: a reader will look here first.
-21. **`apps/edge/src/gateSwitch.ts`** (Modify). Generalise the `park_settings` read and write to a second key `realms` (`RealmsSetting`: `open`, `portal`, `night`, `at`, `by`) with the same keep; `realmsNow()`. Why: decision 10 on the existing pattern.
-22. **`apps/edge/src/VoteLedger.ts`** (Modify). `VOTABLE_REALMS` gains `glass` third (the fixed order is the owner's decision, Q11); the object exposes the `realms` setting read and write over RPC as it does the gate's. Why: the idol must accept votes; the setting lives with the gate's.
-23. **`apps/edge/src/rooms.ts`** (Modify). `DEFAULT_CAPS` gains `glass: 40`; `isRoomId` unchanged; a new `isOpenRoom(id, realms)` used by the Worker and the room object. Why: a closed realm must be refused even though it is registered.
-24. **`apps/edge/src/index.ts`** (Modify). `/ws/<room>` refuses a closed realm with 404 and the sign after `isRoomId`; `GET`/`POST /api/admin/realms`; `GET /api/admin/climb` (counters and a run lookup by reference); `GET /api/admin/collector?cid=` (feathers, earned counters, owned, open run); `POST /api/admin/feathers` (grant with a required note); all behind `ADMIN_KEY`, each write appended to `admin_actions`. Why: the switch, the keeper's view and the make-whole route.
-25. **`apps/edge/src/realmsPage.ts`** (Create). The keepers' page for the switch, in `gatePage.ts`'s shape: the three controls, the last flips, and the climb counters. Why: a keeper flips it without a deploy.
-26. **`apps/edge/src/collectLog.ts`** (Modify). `SPOTS` gains the realm's spots so sightings there are labelled; no new row kind. Why: the collection log labels where things happen.
-27. **`apps/edge/test/climb.test.ts`** (Create). The room object's `climb` and `ascent` handling over the real SQLite store (`test/sqlite.ts`): far from the portal, portal off, resume on a new socket, a band paid, a forgotten run, the welcome frame's `realms`. Why: the server path end to end.
-28. **`apps/edge/test/gateSwitch.test.ts`** (Modify) and **`apps/edge/test/RoomObject.test.ts`** (Modify). The `realms` setting's keep and defaults; the `/ws/` refusal for a closed realm. Why: the switch is the rollout.
-29. **`apps/edge/wrangler.jsonc`** (Modify). No new binding; a comment under `ROOM_SHARDING` that a fifth populated room is the trigger to switch it (Q10). The generated `worker-configuration.d.ts` is not edited by hand. Why: the opening checklist lives next to the knob.
+`pnpm check` and `pnpm e2e` green with the realm dark.
 
-#### `apps/park` (the client)
+### Phase 3: the climb book and the server path
 
-30. **`apps/park/src/game/ClimbScene.ts`** (Create). Phaser scene in `ArcadeScene`'s shape: owns a `ClimbState`, steps it with `StepClock` at the shared step from the held input, draws the layout from segment pieces (with the `paintable` fallback), the band lines and the cloud line, the owl in run, jump and spread poses, a camera anchored at 55 to 60 % of the view, hints by layout step, calm-motion handling; loads the climb's art keys at run start and releases them at run end; emits `bandReached(band)`. Why: the climb's rendering.
-31. **`apps/park/src/game/climb.ts`** (Create). The client's climb handler in `game/arcade.ts`'s shape: the start card (moon line, feathers today of 25, best band today, time to park midnight), `act climb` and resume on reconnect, `act ascent` per band with the answers' lines, the result card with the item line and the run reference, Stop and Escape as stop-and-bank, the `?night=` override in the local mode only. Why: the page's protocol side.
-32. **`apps/park/src/ui/climbScreen.ts`** (Create). The full-screen modal with its own stick (built on `createJoystick`) on the left and a jump button on the right, held-state input `{left, right, jumpPressed, jumpHeld}` with press, second press and hold, 44 px targets, `touch-action:none`, release on blur and hidden, the device's glyphs in hints. Why: decision 12.
-33. **`apps/park/src/ui/keyboard.ts`** (Modify). Expose `heldCodes()` and a way to hand Space to the climb while it is up, so the room's `jump()` emote is not called. Why: one input owner.
-34. **`apps/park/src/ui/hud.ts`** (Modify). `openClimb`/`closeClimb` using the `covered` state; `isBlocking()` includes the climb; the start and result cards. Why: the screen lives in the HUD like the arcade's.
-35. **`apps/park/src/game/RoomScene.ts`** (Modify). An `interactions` entry for `portal` labelled from the approved words; an explicit input owner (`room`, `decorate`, `arcade`, `climb`) replacing the scattered flags; `DOOR_TINTS` gains `glass`; the hub's opened arch drawn from the `welcome` frame's `realms`. Why: the portal action and no leaked input.
-36. **`apps/park/src/game/ambience.ts`** (Modify). The `glass` mood (backlit panels, no rain) and the realm's idol piece. Why: lighting and the vote.
-37. **`apps/park/src/game/art.ts`** (Modify). Art specs for the realm's tiles (`kind: 'room'`) and the climb's segment pieces under the arcade kind, with the loader's guard widened from "in the arcade room" to "in the arcade room or a climb is running", so no new kind enters the loader or the scaler; the pieces load only during a run. Why: the phone budget.
-38. **`apps/park/src/game/doors.ts`** (Modify) and **`doors.test.ts`**. A closed door whose realm is in the setting's `open` list draws as open; the sign otherwise. Why: the switch must show on the hub's arch.
-39. **`apps/park/src/ui/menuTabs.ts`** (Modify). `MAP_PLACES` and `MAP_PATHS` gain the realm with its public name (OP-069) and `closed` driven by the setting. Why: the Menu map.
-40. **`apps/park/src/collect/local.ts`** (Modify) and **`local.test.ts`**. Run `ClimbBook` over `MemoryClimbStore` in the browser, with `?night=`. Why: the zero-backend mode must play the climb.
-41. **`apps/park/src/net/edge.ts`** (Modify). The `climb` and `ascent` requests; on reconnect, a resume request from the open climb screen. Why: decision 8 on the page side.
-42. **`apps/park/src/settings.ts`** (Modify). Nothing new; the climb reads `calm`. Listed so the reviewer finds it. Why: calm motion.
-43. **`apps/park/src/game/hints.ts`** (Modify) and **`hints.test.ts`**. The climb's one-verb hints and their clearing. Why: teaching in the first band.
-44. **`apps/park/src/ui/itemIcon.ts`** and **`apps/park/src/game/itemArt.ts`** (Modify). The new item's icon and drawn art. Why: every catalogue item has both.
-45. **`apps/park/e2e/climb.spec.ts`** (Create) and **`apps/park/e2e/climbPlay.ts`** (Create). Drive a run through `window.owlPark.climb()` with a fixed night: start card, a band banked, stop, the result card, a resume after a dropped socket (the edge transport in the local Worker), the portal off showing its phrase. Why: the journeys above, in the browser.
-46. **`apps/park/e2e/park.spec.ts`** (Modify). The closed-doorway test walks to the arch that stays closed. Why: the test names an arch that will open.
-47. **`apps/park/e2e/arcade.spec.ts`** (Modify, only if the HUD's `covered` handling moves). Why: shared modal code.
+20. **`packages/shared/src/climbbook.ts`** (new). `ClimbStore` interface: `openRun(cid): RunRow |
+    null`, `putRun(row: RunRow)`, `upsertBand(row: BandRow)`, `bands(cid, seed): BandRow[]`,
+    `paidBands(cid, day): number[]`, `byRef(ref): BandRow[]`, `refusedCount(cid): number`;
+    `MemoryClimbStore` with `snapshot()` and `static from(unknown)`; `ClimbBook.start(cid, special,
+    now)` and `band(cid, seed, band, now)` as the Technical Plan states; the run reference through
+    an injected `hash(text): string`.
+21. **`packages/shared/src/climbbook.test.ts`** (new). Start and resume; `busy`; forgotten after an
+    hour; a band paid once a day across two runs; a frame for band 3 with banked 1 paying 2 and 3;
+    the cap clipping a band with `why` = `capped`; a too-fast band refused and counted; the item
+    granted once; a resend returning the row; a run across park midnight paying later bands into the
+    new day.
+22. **`apps/edge/src/sqlClimbStore.ts`** (new). The two `CREATE TABLE IF NOT EXISTS` statements of
+    the Technical Plan, the index on `ref`, the 30-day sweep.
+23. **`apps/edge/src/Collections.ts`** (modify). `ClimbBook` over `SqlClimbStore` with the
+    collection log's `sha256`; RPCs `climbStart(cid, special)`, `climbBand(cid, seed, band)`,
+    `climbLookup(ref)`; the item grant through the existing `acquired` path; a log line per refusal
+    carrying the reference.
+24. **`apps/edge/src/RoomObject.ts`** (modify). The `climb` and `ascent` cases in the `act` switch
+    as the Technical Plan states; `no()` gains the new reasons.
+25. **`apps/edge/src/index.ts`** (modify). `GET /api/admin/climb?ref=` behind `ADMIN_KEY`,
+    returning the run and its band rows as JSON.
+26. **`apps/edge/test/climb.test.ts`** (new). The room object's two cases over the real SQLite
+    store (`test/sqlite.ts`): far, closed, start, resume on a new socket, busy, a band paid, a
+    forgotten run; `RoomObject.test.ts`'s fake Collections stub grows the two RPCs.
 
-#### Art and tools
+### Phase 4: the page
 
-48. **`tools/art/config/assets.json`** (Modify). The realm's room tile or tiles, the idol piece, the climb's segment pieces (a glass column, two ledges, a balcony, a cloud cap, a sky), the new item, all under neutral keys and the existing size limits. Why: the pipeline generates from this file.
-49. **`tools/art/prompts.mjs`** (Modify). Prompts for the above, neutral words only; the forbidden-word check runs before publish. Why: the owner picks from contact sheets; nothing is committed without approval.
-50. **`tools/load/`** (no change). A five-room run of `run-steps.mjs` on a throwaway copy is an opening-checklist step, not code. Listed for the reviewer.
+27. **`apps/park/src/game/ClimbScene.ts`** (new). As the Technical Plan states; art keys with
+    `kind: 'climb'`.
+28. **`apps/park/src/game/climb.ts`** (new). The handler: the card, Start sending `climb`, the
+    header, `ascent` per band with a single resend, resume on reconnect and reload, the result card,
+    Stop and Escape, `?night=` in the local mode.
+29. **`apps/park/src/ui/climbScreen.ts`** (new). The modal with its stick (`createJoystick` given
+    the modal as parent and its own selector prefix), the jump button (`PAD_TARGET_PX` = 44), the
+    held-state input, release on blur and hidden, the hints through `hud.setHints`.
+30. **`apps/park/src/ui/keyboard.ts`** (modify). `attachKeyboard` gains an `owner` the climb sets;
+    while set, Space calls the climb's jump instead of `actions.jump()`.
+31. **`apps/park/src/ui/hud.ts`** (modify). `openClimb` and `closeClimb` on the `covered` state;
+    `isBlocking()` includes the climb.
+32. **`apps/park/src/game/RoomScene.ts`** (modify). The `interactions` entry for `portal`.
+33. **`apps/park/src/game/art.ts`** and **`arcade/paint.ts`** (modify). The `climb` art kind and
+    the segment piece specs; the key list loads them only while `ClimbScene` is active.
+34. **`apps/park/src/main.ts`** (modify). `ClimbScene` in the scene list; `window.owlPark.climb()`
+    beside `arcade()`.
+35. **`apps/park/src/collect/local.ts`** (modify) and **`local.test.ts`**. `ClimbBook` over
+    `MemoryClimbStore` with its storage key; `realms` open and the portal live.
+36. **`apps/park/src/ui/itemIcon.ts`** and **`game/itemArt.ts`** (modify). `glass-circlet`.
+37. **`apps/park/e2e/climb.spec.ts`** and **`climbPlay.ts`** (new); **`playwright.config.ts`**
+    (modify: the `edge` project's regex gains `climb`). The spec opens the realm and the portal
+    through `POST /settings` with the e2e admin key, pins `?night=easy` in the local project, and
+    covers the card, a banked band, Stop, the result card, resume after a dropped socket under the
+    `edge` project, and the portal off showing its phrase.
 
-#### Documentation and repository notes
+### Phase 5: art and words
 
-51. **`docs/`** (no edits by Claude Code). `TODO-DOCS` comments in `edge.ts` (protocol 10), `climb.ts` (the activity), `gateSwitch.ts` (the switch) and `index.ts` (the admin routes) name the sections of `ARCHITECTURE.md`, `ACTIVITIES.md`, `PLAYBOOK.md` and `CAPACITY.md` that must change, and the playbook's new "a visitor says they reached the clouds" section. One line in `docs/CHANGELOG.md` when the ticket is Done (OP-103). Why: `docs/` is the doc agent's.
-52. **`CLAUDE.md`** (Modify). One line under the art rules naming the climb's segment pieces as art that needs the owner's pick. Why: the rule already exists; the pieces are a new kind.
-53. **`EGM/`** (no change). The brief and this draft stay out of git.
+38. **`tools/art/config/assets.json`** and **`tools/art/prompts.mjs`** (modify). Two room tiles,
+    the idol piece, the segment pieces (`climb-column` 160 x 900, `climb-ledge-a` 160 x 32,
+    `climb-ledge-b` 240 x 32, `climb-balcony` 320 x 64, `climb-cloud-cap` 480 x 220, `climb-sky`
+    480 x 900, all `with_2x`), and the item, under neutral keys; the forbidden-word check runs in
+    `generate.mjs`.
+39. **`CLAUDE.md`** (modify). One line under the art rules naming the climb's segment pieces as
+    art that needs the owner's pick.
+40. **Words for approval.** The card, the header lines, the hints, the band names, the result lines,
+    the forgotten-run line and the closed-portal phrase (`Pardon Our Feathers`, already approved).
+
+### Not changed, on purpose
+
+`apps/edge/src/Room.ts`'s `jumpEveryMs`; `apps/edge/wrangler.jsonc` (no new binding); `rooms.ts`
+(`roomCap` already returns 40 for an unknown room); `activities.ts` and `book.ts` (`play` takes a
+null event; no new `TaskKind` or `EarnSource`); `questCatalog.ts` (quests in `glass` are a Future
+Improvement); `styles.ts` (no set until the realm has furniture); `collectLog.ts` (room labels
+derive from `ROOMS`); `docs/` (the doc agent's; `TODO-DOCS` in `edge.ts`, `climb.ts`, `Overflow.ts`
+and `index.ts`).
 
 ### Verification Plan
 
-*   **Build and typecheck**: `pnpm check` (which runs `wrangler types`, `tsc` in all three packages, `vitest run` in all three, and the client build).
-*   **Unit tests**: `pnpm --filter @owl-park/shared test` for `climb.test.ts`, `climbbook.test.ts`, `edge.test.ts`, `rooms.test.ts`, `styles.test.ts`; `pnpm --filter @owl-park/edge test` for `climb.test.ts`, `gateSwitch.test.ts`, `RoomObject.test.ts`; `pnpm --filter @owl-park/park test` for `local.test.ts`, `doors.test.ts`, `hints.test.ts`, `keyboard.test.ts`.
-*   **The floor test is the gate**: a change to any climb constant or layout that makes a floor unreachable by the scripted route fails `pnpm test`.
-*   **End to end**: `pnpm e2e` with `climb.spec.ts` and the adjusted `park.spec.ts`, on a fixed night.
-*   **By hand before opening**: `pnpm dev:edge`; a climb on a phone with the tab backgrounded for five minutes and resumed; a climb across park midnight in the local mode with a shifted clock; the admin realms page flipping the portal while a run is open; the five-room load test on a throwaway copy if sharding stays `single`.
-*   **Measured after opening**: the climb counters on `/api/admin/climb` (runs started, by verdict, paid, capped, first ascents, resumed, implausible per collector) and the room object's CPU with five populated rooms.
+*   **Every phase**: `pnpm check` (typecheck with `wrangler types`, `vitest run` in all three
+    packages, the client build).
+*   **Phase 1**: `pnpm --filter @owl-park/shared test` runs `climb.test.ts` and the moon tests; the
+    floor test is the gate on every later tuning change.
+*   **Phase 2**: `edge.test.ts`, `rooms.test.ts`, `copies.test.ts`, `RoomObject.test.ts`;
+    `pnpm e2e` with the realm dark (the closed-arch test).
+*   **Phase 3**: `climbbook.test.ts`, `apps/edge/test/climb.test.ts`.
+*   **Phase 4**: `local.test.ts`, `keyboard.test.ts`; `pnpm e2e` with `climb.spec.ts` under both
+    projects.
+*   **By hand before opening**: `pnpm dev:edge`; a climb on a phone with the tab backgrounded for
+    five minutes and resumed; a climb across park midnight in the local mode with a shifted clock;
+    the capacity page flipping the portal while a run is open; the five-room load test
+    (`tools/load/run-steps.mjs`) on a throwaway copy, or `ROOM_SHARDING=room`.
+*   **After opening**: the Workers log's refusal lines and the admin lookup; the room object's CPU
+    with five populated rooms.
+
+--------------------------------------------------------------------------------
+
+## Appendix A: simulation starting values and the first layout
+
+Starting values to tune in Phase 1; the floor test derives the floors from them. Pixels are field
+pixels (480 wide); the vertical axis counts up from the start ledge at 0.
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `CLIMB_STEP_MS` | 1000/120 | one simulation step |
+| `RUN_ACCEL` | 1800 px/s^2 | horizontal acceleration while a direction is held |
+| `RUN_SPEED` | 220 px/s | top horizontal speed |
+| `GRAVITY` | 1400 px/s^2 | downward acceleration when not gliding |
+| `JUMP_IMPULSE` | 650 px/s | upward speed on a jump (about 150 px of rise) |
+| `JUMP_CUT_SPEED` | 200 px/s | upward speed is capped to this when the button is released early |
+| `COYOTE_MS` | 80 | a jump still counts this long after leaving a ledge |
+| `JUMP_BUFFER_MS` | 80 | a press this long before landing jumps on landing |
+| `DOUBLE_JUMP_IMPULSE` | 520 px/s | upward speed on the second press (about 95 px more) |
+| `GLIDE_FALL_SPEED` | 90 / 130 / 170 px/s | by tier (easy, medium, hard); the one night parameter |
+| `GLIDE_SPEED` | 180 px/s | horizontal speed while gliding |
+| `OWL_BOX` | 36 x 44 px | the collision box |
+| `CLIMB_CAMERA_ANCHOR` | 0.58 | the owl's height in the view |
+| `CLIMB_SLACK_MS` | 1000 | the arcade's clock slack |
+| `CLIMB_FLOOR_MARGIN` | 0.2 | floors are the scripted route's time less this fraction |
+| `CLIMB_RUN_MAX_MS` | 3,600,000 | a run is forgotten after this |
+| `CLIMB_ROW_KEEP_DAYS` | 30 | band rows older than this are swept |
+
+The first layout, `city-1`: six bands, band lines at y = 900, 1800, 2700, 3600, 4500 and the
+cloud line at 5400; a floor piece under each band line spanning the field so a banked band cannot
+be fallen below; the start ledge at y = 0 spanning the field; between band lines, ledges alternate
+sides with a vertical gap of 120 to 140 px (one jump) in bands 1 and 2, 160 to 230 px (a double
+jump) in bands 3 and 4, and 200 to 240 px with a glide crossing in bands 5 and 6. Ledges are
+`climb-ledge-a` (160 wide) or `climb-ledge-b` (240 wide), with a `climb-balcony` at each band line.
+The scripted route for the floor test holds right or left to the next ledge, jumps at the edge,
+and double-jumps where the gap needs it; its time per band under each tier, less the margin, is
+the floor.
 
 --------------------------------------------------------------------------------
 

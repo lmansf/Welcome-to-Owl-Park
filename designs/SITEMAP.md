@@ -7,4 +7,4 @@ out of these files as they do everywhere in this public repository.
 
 | Design | Date | Author | Components | Description |
 | --- | --- | --- | --- | --- |
-| [The stained-glass climb](the-stained-glass-climb.md) | 2026-10-26 | lmansf, with Claude Code | `packages/shared` (climb, climbbook, edge, parktime, rooms), `apps/edge` (Collections, RoomObject, gateSwitch, index), `apps/park` (ClimbScene, climbScreen, RoomScene, hud) | A third realm: a shared stained-glass room off a hub arch, and inside it a portal to a solo platformer climb on the arcade's run model, with a park moon setting the night and a server-side switch to open it |
+| [The stained-glass climb](the-stained-glass-climb.md) | 2026-10-26 | the owner, with Claude Code | `packages/shared` (climb, climbbook, edge, parktime, rooms), `apps/edge` (Collections, RoomObject, Overflow, index), `apps/park` (ClimbScene, climbScreen, RoomScene, hud) | A third realm: a shared stained-glass room off a hub arch, and inside it a portal to a solo platformer climb on the arcade's run model, with a park moon setting the night and the overflow object's `realms` setting to open it; revised after the Goldfish review |
