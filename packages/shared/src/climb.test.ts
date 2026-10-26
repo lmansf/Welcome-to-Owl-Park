@@ -110,12 +110,13 @@ function drive(night: Night, road: Road): { bandSteps: number[]; stood: Set<Ledg
 
 const ms = (steps: number) => steps * CLIMB_STEP_MS;
 const floorsFrom = (bandSteps: number[]) => bandSteps.map((n) => Math.floor((ms(n) * (1 - CLIMB_FLOOR_MARGIN)) / 100) * 100);
-/** The brisk window per band: the high road's time through the band times the factor, up to 100 ms; 0 where the band has no high road. */
+/** The brisk window per band: the high road's time through the band times the factor, up to 100 ms; 0 where the band's high road needs no double jump (or there is none). */
 const briskFrom = (layout: Layout, bandSteps: number[]) =>
   bandSteps.map((n, i) => {
-    const hasHigh = layout.ledges.some((l) => l.road === 'high' && l.y > (i === 0 ? 0 : layout.bandLines[i - 1]!) && l.y < layout.bandLines[i]!);
+    const lo = i === 0 ? 0 : layout.bandLines[i - 1]!;
+    const gamble = ROUTES[layout.id]!.high.some((m) => m.to.road === 'high' && m.to.y > lo && m.to.y < layout.bandLines[i]! && m.jump !== 'single');
     const segment = ms(n) - (i === 0 ? 0 : ms(bandSteps[i - 1]!));
-    return hasHigh ? Math.ceil((segment * CLIMB_BRISK_FACTOR) / 100) * 100 : 0;
+    return gamble ? Math.ceil((segment * CLIMB_BRISK_FACTOR) / 100) * 100 : 0;
   });
 
 describe('the climb layout', () => {
@@ -201,12 +202,14 @@ describe('the two roads, the floors and the brisk windows', () => {
       const times = (r: number[]) => r.map((n) => Math.round(ms(n))).join(', ');
       expect(CLIMB_FLOORS['city-1']![tier], `CLIMB_FLOORS['city-1'].${tier} must be [${floors.join(', ')}] (stairs ${times(stairs.bandSteps)} ms; high road ${times(high.bandSteps)} ms)`).toEqual(floors);
       expect(CLIMB_BRISK['city-1']![tier], `CLIMB_BRISK['city-1'].${tier} must be [${brisk.join(', ')}]`).toEqual(brisk);
-      // A brisk window is wider than the high road's own time, and the stairs do not make it.
-      for (let b = 1; b < BAND_COUNT; b++) {
+      // A brisk window is wider than the high road's own time, and the stairs do not make it even a
+      // quarter quicker than the script (a player need not wait to face a jump as the driver does).
+      for (let b = 2; b < BAND_COUNT; b++) {
         expect(brisk[b]!).toBeGreaterThan(ms(high.bandSteps[b]! - high.bandSteps[b - 1]!));
-        expect(brisk[b]!, `band ${b + 1}: the stairs are not brisk`).toBeLessThan(ms(stairs.bandSteps[b]! - stairs.bandSteps[b - 1]!));
+        expect(brisk[b]! * 1.25, `band ${b + 1}: the stairs are not brisk`).toBeLessThan(ms(stairs.bandSteps[b]! - stairs.bandSteps[b - 1]!));
       }
       expect(brisk[0]).toBe(0);
+      expect(brisk[1], 'band 2: a column of single jumps is no gamble').toBe(0);
       expect(CLIMB_BRISK_FACTOR).toBeGreaterThan(1);
     });
   }
@@ -227,7 +230,8 @@ describe('the two roads, the floors and the brisk windows', () => {
     expect(plausibleBand(night, 6, CLIMB_RUN_MAX_MS + 1)).toBe(false);
     expect(leastClimbMs({ ...night, layout: 'nowhere' }, 1)).toBe(Infinity);
     expect(briskMs(night, 1)).toBe(0);
-    expect(briskMs(night, 2)).toBeGreaterThan(0);
+    expect(briskMs(night, 2)).toBe(0);
+    expect(briskMs(night, 3)).toBeGreaterThan(0);
     expect(briskMs({ ...night, layout: 'nowhere' }, 2)).toBe(0);
   });
 });

@@ -2,7 +2,8 @@
  * The climb's runs and bands in the collections object's SQLite, behind the portable `ClimbStore`
  * (packages/shared/src/climbbook.ts): one open run per collector, and one row per band a run
  * reached, kept CLIMB_ROW_KEEP_DAYS and then swept on the next write. The run table is never
- * swept: a new run overwrites the collector's row. No wrangler migration is needed for the tables.
+ * swept: a new run overwrites the collector's row. No wrangler migration is needed for the tables:
+ * the constructor creates them and adds the columns that came later.
  */
 import { BAND_COUNT, isClimbRef, type BandRow, type ClimbStore, type ClimbWhy, type RunRow } from '@owl-park/shared';
 
@@ -41,6 +42,9 @@ export class SqlClimbStore implements ClimbStore {
     sql.exec(
       `CREATE TABLE IF NOT EXISTS climb_bands (cid TEXT NOT NULL, seed INTEGER NOT NULL, band INTEGER NOT NULL, day TEXT NOT NULL, arrived_at INTEGER NOT NULL, verdict TEXT NOT NULL, floor_ms INTEGER NOT NULL, elapsed_ms INTEGER NOT NULL, due INTEGER NOT NULL, added INTEGER NOT NULL, brisk INTEGER NOT NULL DEFAULT 0, why TEXT, night TEXT NOT NULL, ref TEXT NOT NULL, PRIMARY KEY (cid, seed, band))`,
     );
+    // The brisk feather came after the first tables: a band table from before it gains the column.
+    const columns = sql.exec<{ name: string }>(`PRAGMA table_info(climb_bands)`).toArray();
+    if (!columns.some((c) => c.name === 'brisk')) sql.exec(`ALTER TABLE climb_bands ADD COLUMN brisk INTEGER NOT NULL DEFAULT 0`);
     // A keeper's lookup by the reference a visitor quotes.
     sql.exec(`CREATE INDEX IF NOT EXISTS climb_bands_ref ON climb_bands (ref)`);
     // The day's paid bands, and the sweep.

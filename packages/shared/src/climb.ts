@@ -42,10 +42,14 @@ export const CLIMB_FLOOR_MARGIN = 0.2;
 export const CLIMB_ROW_KEEP_DAYS = 30;
 /** Feathers per band, paid once a park day each: ten in all for the clouds. */
 export const BAND_FEATHERS: readonly number[] = [1, 1, 2, 2, 2, 2];
-/** One more feather for a storey climbed briskly: within the high road's time and a fifth (bands with a high road only). */
+/**
+ * One more feather for a storey climbed briskly: within the high road's time and a tenth, in the
+ * bands whose high road asks for the double jump (3 to 6). Band 2's high road is a column of single
+ * jumps, no gamble, so it pays none; nor does band 1, which has no high road.
+ */
 export const BRISK_FEATHERS = 1;
 /** The brisk window is the high road's time through the band, times this. */
-export const CLIMB_BRISK_FACTOR = 1.2;
+export const CLIMB_BRISK_FACTOR = 1.1;
 /** Visitor-facing names (defaults for the owner's approval). */
 export const BAND_NAMES: readonly string[] = ['First storey', 'Second storey', 'Third storey', 'Fourth storey', 'Fifth storey', 'The clouds'];
 
@@ -349,14 +353,15 @@ export const CLIMB_FLOORS: Readonly<Record<string, Readonly<Record<Tier, readonl
 
 /**
  * The brisk window of each band, by tier, in ms: the high road's scripted time through the band times
- * CLIMB_BRISK_FACTOR, rounded up to 100 ms; 0 where a band has no high road (no bonus there).
- * Derived and frozen by climb.test.ts like the floors.
+ * CLIMB_BRISK_FACTOR, rounded up to 100 ms, in the bands whose high road needs a double jump; 0
+ * elsewhere (no bonus there). Derived and frozen by climb.test.ts like the floors, which also checks
+ * that the stairs' scripted time is at least a quarter again as long as the window.
  */
 export const CLIMB_BRISK: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
   'city-1': {
-    easy: [0, 6500, 6000, 4600, 5200, 4900],
-    medium: [0, 6500, 6000, 4600, 5200, 4900],
-    hard: [0, 6500, 6000, 4600, 5200, 4900],
+    easy: [0, 0, 5500, 4300, 4800, 4500],
+    medium: [0, 0, 5500, 4300, 4800, 4500],
+    hard: [0, 0, 5500, 4300, 4800, 4500],
   },
 };
 

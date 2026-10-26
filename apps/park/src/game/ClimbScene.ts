@@ -29,6 +29,8 @@ const GLASS = 0x9fd0ff;
 /** The high road's ledges are tinted lilac, so a climber can tell the two roads apart at a glance. */
 const HIGH_ROAD = 0xcdb0ff;
 const NIGHT_SKY = 0x0b1630;
+/** Where each painted piece's standing surface lies, in logical px from its top edge (lanterns and clouds rise above it). */
+const SURFACE: Readonly<Record<string, number>> = { 'climb-ledge-a': 11, 'climb-ledge-b': 11, 'climb-balcony': 36, 'climb-cloud-cap': 135 };
 /** The band's tints, foot to clouds: the tower's glass warms as it rises. */
 const BAND_TINTS = [0x1a2d5a, 0x24366b, 0x3a3f78, 0x58437f, 0x7a4f85, 0x9c6a8f];
 
@@ -186,7 +188,8 @@ export class ClimbScene extends Phaser.Scene {
       const key = l.w >= 240 ? 'climb-ledge-b' : 'climb-ledge-a';
       const h = ART[key]?.h ?? 40;
       const tint = l.road === 'high' ? HIGH_ROAD : GLASS;
-      const img = this.piece(key, l.x, -l.y + h, l.w, h);
+      // The piece's standing surface sits SURFACE px under its top edge: that row goes on the ledge's line.
+      const img = this.piece(key, l.x, -l.y + h - SURFACE[key]!, l.w, h);
       if (img) {
         if (l.road === 'high') img.setTint(HIGH_ROAD);
         tower.add(img);
@@ -201,7 +204,9 @@ export class ClimbScene extends Phaser.Scene {
     }
     layout.bandLines.forEach((y, i) => {
       const last = i === BAND_COUNT - 1;
-      const img = last ? this.piece('climb-cloud-cap', 0, -y + 64, CLIMB_FIELD_W, ART['climb-cloud-cap']?.h ?? 220) : this.piece('climb-balcony', 0, -y + (ART['climb-balcony']?.h ?? 120), CLIMB_FIELD_W, ART['climb-balcony']?.h ?? 120);
+      const capKey = last ? 'climb-cloud-cap' : 'climb-balcony';
+      const capH = ART[capKey]?.h ?? (last ? 220 : 120);
+      const img = this.piece(capKey, 0, -y + capH - SURFACE[capKey]!, CLIMB_FIELD_W, capH);
       if (img) tower.add(img);
       else {
         painted = false;
@@ -289,6 +294,8 @@ export class ClimbScene extends Phaser.Scene {
       owl.setScale(this.owlBase * sx, this.owlBase * sy);
       owl.showShadow(s.grounded);
       owl.tick(Date.now());
+      // The owl's own tick sorts it by its y, as the rooms do; here it stays in front of the tower.
+      owl.setDepth(5);
     }
     // The camera follows the owl up, settling at the anchor; it drops back when the owl glides down.
     const target = this.cameraTargetY(s.y);

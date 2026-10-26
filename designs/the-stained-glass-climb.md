@@ -985,7 +985,7 @@ field, listed in `bandLines` and treated as ledges; the cloud line is `bandLines
 | `CLIMB_ROW_KEEP_DAYS` | 30 | band rows older than this are swept |
 | `BAND_COUNT` | 6 | bands; the sixth is the clouds |
 | `BAND_FEATHERS` | 1, 1, 2, 2, 2, 2 | per band, ten in total |
-| `BRISK_FEATHERS`, `CLIMB_BRISK_FACTOR` | 1, 1.2 | the brisk feather, and the window as a multiple of the high road's time |
+| `BRISK_FEATHERS`, `CLIMB_BRISK_FACTOR` | 1, 1.1 | the brisk feather, and the window as a multiple of the high road's time |
 
 ### The layout `city-1` (second pass: two roads a storey)
 
@@ -1024,15 +1024,18 @@ with at most 100 px across, a glide for more than 170 px across, a double jump o
 ### The brisk feather
 
 `BRISK_FEATHERS` (1) more for a storey climbed within its brisk window: the high road's scripted
-time through the band times `CLIMB_BRISK_FACTOR` (1.2), per band in `CLIMB_BRISK` (derived and
-frozen by the test like the floors; 0 for band 1, which has no high road). The server judges it
+time through the band times `CLIMB_BRISK_FACTOR` (1.1), per band in `CLIMB_BRISK` (derived and
+frozen by the test like the floors; 0 for band 1, which has no high road, and for band 2, whose
+high road is a column of single jumps and no gamble). The test also checks that the stairs'
+scripted time is at least a quarter again as long as the window, since a player need not wait to
+face a jump as the script does. The server judges it
 from what it already keeps: the band's arrival against the band below's arrival (the start for
 band 1), so a slow storey never costs the next one its bonus, and only the first band of an
 `ascent` frame can be brisk (bands caught up in one frame were not seen arriving). The row's `due`
 carries the brisk feather so the cap's `capped` reads right, the row records `brisk`, and the
 answer carries `brisk` (how many bands earned it this frame). The screen says "· brisk!" on the
 band line and "You reached the clouds, briskly!" on the card. Potential pay per run grows from ten
-to fifteen feathers, still under the activities' shared cap of twenty-five.
+to fourteen feathers, still under the activities' shared cap of twenty-five.
 
 ### The scripted routes and the floors
 
@@ -1049,11 +1052,11 @@ Frozen values (the high road has no glide, so the tiers agree):
 | Band | Stairs | High road | Floor | Brisk window |
 | --- | --- | --- | --- | --- |
 | 1 | 7,117 | 7,117 (the stairs) | 5,600 | none |
-| 2 | 15,175 | 12,508 | 10,000 | 6,500 |
-| 3 | 23,025 | 17,492 | 13,900 | 6,000 |
-| 4 | 32,000 | 21,325 | 17,000 | 4,600 |
-| 5 | 40,650 / 39,758 / 39,583 | 25,600 | 20,400 | 5,200 |
-| 6 | 49,442 / 47,633 / 47,267 | 29,600 | 23,600 | 4,900 |
+| 2 | 15,175 | 12,508 | 10,000 | none |
+| 3 | 23,025 | 17,492 | 13,900 | 5,500 |
+| 4 | 32,000 | 21,325 | 17,000 | 4,300 |
+| 5 | 40,650 / 39,758 / 39,583 | 25,600 | 20,400 | 4,800 |
+| 6 | 49,442 / 47,633 / 47,267 | 29,600 | 23,600 | 4,500 |
 
 Times in ms (stairs by easy / medium / hard where the glide differs). Puzzles that need new rules
 (moving panes, wind, a ledge that gives way) are a later pass; this one works within the eight

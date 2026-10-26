@@ -82,6 +82,8 @@ export async function climbTo(page: Page, band: number, timeout = 200_000): Prom
       const overlaps = (x: number, p: P) => x - OWL_W / 2 < p.x + p.w && x + OWL_W / 2 > p.x;
       // The jump planned at the last press, whether the owl has been seen in the air since, and how many frames it has waited to leave the ground.
       let plan: { kind: 'single' | 'double' | 'glide'; airborne: boolean; waited: number } | null = null;
+      // On each balcony the driver takes a breath, as a visitor on the stairs would: the brisk feather is the high road's.
+      let balconyAt: number | null = null;
       const begun = performance.now();
       // On a slow runner a frame is long and the owl moves far between two looks: the press comes one frame early.
       let lastTick = begun;
@@ -123,6 +125,13 @@ export async function climbTo(page: Page, band: number, timeout = 200_000): Prom
             const kind = dy <= 140 ? 'single' : dy <= 190 ? 'double' : 'glide';
             const nextCx = next.x + next.w / 2;
             const overlapping = next.x < cur.x + cur.w && next.x + next.w > cur.x;
+            if (cur.w >= W) {
+              balconyAt ??= performance.now();
+              if (performance.now() - balconyAt < 1500) {
+                hold(null);
+                return requestAnimationFrame(tick);
+              }
+            } else balconyAt = null;
             if (cur.w >= W || overlapping) {
               // A balcony spans the field, or the next ledge sits over this one: get under it (as near its
               // middle as this ledge allows), let the run die down a little and jump straight up.

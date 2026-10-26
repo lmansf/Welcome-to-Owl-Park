@@ -113,24 +113,26 @@ describe('the climb book: bands', () => {
   it('pays a brisk feather for a storey climbed within the high road’s window, judged from the storey below', () => {
     const { climb, store } = setup();
     climb.start(CID, AT, MON);
-    // Band 1 has no high road: never brisk.
+    // Bands 1 and 2 pay no brisk feather: no high road, and a high road that is no gamble.
     expect(briskMs(EASY, 1)).toBe(0);
+    expect(briskMs(EASY, 2)).toBe(0);
     expect(climb.band(CID, 7, 1, reach(1))).toMatchObject({ ok: true, added: 1, brisk: 0 });
-    // Band 2 within its window of band 1's arrival: a feather more, recorded on the row.
-    const quick = reach(1) + briskMs(EASY, 2) - 500;
-    expect(climb.band(CID, 7, 2, quick)).toMatchObject({ ok: true, banked: 2, added: BAND_FEATHERS[1]! + BRISK_FEATHERS, total: 3, brisk: 1 });
-    expect(store.bands(CID, 7)[1]).toMatchObject({ band: 2, brisk: true, due: BAND_FEATHERS[1]! + BRISK_FEATHERS, added: 2 });
-    // Band 3 dawdled: the table value alone.
-    const slow = quick + briskMs(EASY, 3) + 3000;
-    expect(climb.band(CID, 7, 3, slow)).toMatchObject({ ok: true, banked: 3, added: BAND_FEATHERS[2], brisk: 0 });
-    expect(store.bands(CID, 7)[2]).toMatchObject({ band: 3, brisk: false });
-    // Two bands in one frame: the first is timed from band 3's arrival (and was quick), the one caught
+    expect(climb.band(CID, 7, 2, reach(2))).toMatchObject({ ok: true, added: 1, brisk: 0 });
+    // Band 3 within its window of band 2's arrival: a feather more, recorded on the row.
+    const quick = reach(2) + briskMs(EASY, 3) - 500;
+    expect(climb.band(CID, 7, 3, quick)).toMatchObject({ ok: true, banked: 3, added: BAND_FEATHERS[2]! + BRISK_FEATHERS, total: 5, brisk: 1 });
+    expect(store.bands(CID, 7)[2]).toMatchObject({ band: 3, brisk: true, due: BAND_FEATHERS[2]! + BRISK_FEATHERS, added: 3 });
+    // Band 4 dawdled: the table value alone.
+    const slow = quick + briskMs(EASY, 4) + 3000;
+    expect(climb.band(CID, 7, 4, slow)).toMatchObject({ ok: true, banked: 4, added: BAND_FEATHERS[3], brisk: 0 });
+    expect(store.bands(CID, 7)[3]).toMatchObject({ band: 4, brisk: false });
+    // Two bands in one frame: the first is timed from band 4's arrival (and was quick), the one caught
     // up with it was not seen arriving and takes the table value alone.
-    const two = climb.band(CID, 7, 5, slow + 100);
-    expect(two).toMatchObject({ ok: true, banked: 5, added: BAND_FEATHERS[3]! + BRISK_FEATHERS + BAND_FEATHERS[4]!, brisk: 1 });
-    expect(store.bands(CID, 7).slice(3).map((r) => [r.band, r.brisk])).toEqual([
-      [4, true],
-      [5, false],
+    const two = climb.band(CID, 7, 6, slow + 100);
+    expect(two).toMatchObject({ ok: true, banked: 6, added: BAND_FEATHERS[4]! + BRISK_FEATHERS + BAND_FEATHERS[5]!, brisk: 1 });
+    expect(store.bands(CID, 7).slice(4).map((r) => [r.band, r.brisk])).toEqual([
+      [5, true],
+      [6, false],
     ]);
   });
 
