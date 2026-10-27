@@ -1,5 +1,8 @@
 name: CI
 
+# Typecheck, unit tests and build run as three jobs at once; the browser suite starts once the build
+# passes, and a failed typecheck or unit test run cancels the rest of the run (OP-123). A pull
+# request branch runs once, on the pull_request event: a push to it does not start a second run.
 on:
   push:
     branches: [main]
@@ -9,15 +12,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write # to cancel the run when a check fails
+
 jobs:
-  check:
-    name: Typecheck, unit tests, build, end-to-end
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
-    # The browser suite (computer, phone and the room server, one test at a time) takes 45 to 85
-    # minutes on a hosted runner (the slower runners take nearly twice as long), and installing the
-    # browser sometimes takes nine more; this limit only stops a run that hangs. A pull request
-    # branch runs once, on the pull_request event: a push to it no longer starts a second run.
-    timeout-minutes: 150
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -29,10 +32,67 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - name: Cancel the rest of the run
+        if: failure()
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - name: Cancel the rest of the run
+        if: failure()
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      # Playwright's browser is kept between runs, keyed on Playwright's version; its system packages
-      # are installed on each runner (OP-123).
+
+  e2e:
+    name: Browser suite
+    needs: build
+    runs-on: ubuntu-latest
+    # The browser suite (computer, phone and the room server, one test at a time) takes 45 to 85
+    # minutes on a hosted runner (the slower runners take nearly twice as long); this limit only stops
+    # a run that hangs.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - id: playwright
         name: Playwright's version
         run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
