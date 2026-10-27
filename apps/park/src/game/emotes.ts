@@ -28,6 +28,9 @@ export interface EmoteHost {
 const MID = 120;
 
 function reset(pose: Phaser.GameObjects.Container): void {
+  // An emote can end after its owl is gone (the room torn down mid-emote while the page waits):
+  // nothing is left to put back, and a throw here would stop the game loop.
+  if (!pose.scene) return;
   pose.scene.tweens.killTweensOf(pose);
   pose.setPosition(0, 0).setRotation(0).setScale(1, 1).setAlpha(1);
 }

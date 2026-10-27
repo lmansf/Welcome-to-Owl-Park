@@ -531,6 +531,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   override destroy(fromScene?: boolean): void {
     this.destroyed = true;
     for (const z of this.zs.splice(0)) this.scene?.tweens.killTweensOf(z);
+    this.scene?.tweens.killTweensOf(this.pose);
     this.fx?.destroy();
     this.fx = null;
     this.pet?.destroy();
