@@ -35,6 +35,46 @@ const actionButton = (label: string, screen: string, onClick: () => void, ghost 
   return b;
 };
 
+/** How long Go home is held before the owl goes (OP-114): long enough that a stray tap mid-quest does nothing. */
+const HOLD_MS = 350;
+const HOLD_HINT = 'Hold to go home.';
+
+/**
+ * A button that acts once held for HOLD_MS, a fill running across it meanwhile (Go home, OP-114);
+ * let go sooner and it empties, and `early` is told. A key's press is meant: it acts at once.
+ */
+const holdButton = (label: string, screen: string, onHold: () => void, early: () => void): HTMLButtonElement => {
+  const b = el('button', 'mbtn hold', label);
+  b.dataset['screen'] = screen;
+  b.dataset['key'] = screen;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const letGo = (): boolean => {
+    if (!timer) return false;
+    clearTimeout(timer);
+    timer = null;
+    b.classList.remove('holding');
+    return true;
+  };
+  b.addEventListener('pointerdown', () => {
+    letGo();
+    b.classList.add('holding');
+    timer = setTimeout(() => {
+      timer = null;
+      b.classList.remove('holding');
+      onHold();
+    }, HOLD_MS);
+  });
+  b.addEventListener('pointerup', () => {
+    if (letGo()) early();
+  });
+  for (const t of ['pointercancel', 'pointerleave'] as const) b.addEventListener(t, () => void letGo());
+  b.addEventListener('click', (e) => {
+    if (e.detail === 0) onHold();
+  });
+  b.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is the hold, not the browser's menu
+  return b;
+};
+
 // ---------- Collection ----------
 
 const KIND_NAMES: Record<ItemKind, string> = { wear: 'Things to wear', pet: 'Pets', fx: 'Effects', emote: 'Emotes' };
@@ -139,9 +179,18 @@ export interface NestTabState {
 export function renderNest(panel: HTMLElement, nest: NestTabState, goHome: () => void): void {
   if (nest.canGoHome) {
     const c = card(NEST_WORDS.yourNest, note('Your own room on the nests’ street: decorate it with your furniture, open it to visitors, and change how your owl looks at its mirror.'));
+    // Going home is the Menu's, not the pad's (Logan, 2026-10-27), held as the pad's Nest was.
     const row = el('div', 'mrow');
-    row.appendChild(actionButton(WAY_OUT_WORDS.home, 'home', goHome));
-    c.appendChild(row);
+    const hint = note(HOLD_HINT);
+    hint.hidden = true;
+    let hide: ReturnType<typeof setTimeout> | undefined;
+    const tooQuick = () => {
+      hint.hidden = false;
+      clearTimeout(hide);
+      hide = setTimeout(() => (hint.hidden = true), 2500);
+    };
+    row.appendChild(holdButton(WAY_OUT_WORDS.home, 'home', goHome, tooQuick));
+    c.append(row, hint);
     panel.appendChild(c);
   } else {
     panel.appendChild(card(NEST_WORDS.yourNest, note('You are home. Tap Decorate to arrange your furniture and open your nest to visitors, or stand at the mirror to change how your owl looks.')));

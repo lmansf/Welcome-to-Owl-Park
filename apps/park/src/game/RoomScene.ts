@@ -118,9 +118,9 @@ export interface RoomStart {
 const TAP_SLOP = 16;
 /** How long the room fades out on the way to another. */
 const LEAVE_FADE_MS = 220;
-/** Where Play and the pad's Nest land the owl in its own nest (OP-105, OP-114): before its mirror. */
+/** Where Play and the Menu's Go home land the owl in its own nest (OP-105, OP-114): before its mirror. */
 export const NEST_SPAWN = 'mirror';
-/** The pad's Nest fades out slower than a doorway, so going home is not a jolt (OP-114). */
+/** Go home fades out slower than a doorway, so going home is not a jolt (OP-114). */
 export const NEST_FADE_MS = 400;
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
@@ -768,7 +768,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * "Go home" (the Menu's way out, and the pad's Nest held, OP-114): straight to the owl's own nest,
+   * "Go home" (the Menu's way out, held, OP-114): straight to the owl's own nest,
    * from anywhere, an open dialogue closing first (the quest stays as it was). Out of it again, the
    * owl is on the street in front of its own door, as if it had come in that way.
    */

@@ -162,7 +162,8 @@ test.describe('the home screen (OP-065)', () => {
     // Home again, the welcome does not come back: it was this device's first time.
     await page.locator('[data-menu-btn]').click();
     await page.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="nest"]').click();
-    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').click();
+    // Go home acts at once on a key; a pointer holds it (pad.spec.ts).
+    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').press('Enter');
     await inOwnNest(page);
     await expect.poll(async () => (await state(page)).walking).toBe(false);
     await expect(welcome).toBeHidden();

@@ -235,7 +235,8 @@ test.describe('room server', () => {
     // Go home (the Menu's Nest): straight to the owl's own nest, which the room server makes on first sight.
     await a.locator('[data-menu-btn]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="nest"]').click();
-    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').click();
+    // Go home acts at once on a key; a pointer holds it (pad.spec.ts).
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').press('Enter');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
     await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
     await a.context().close();

@@ -11,48 +11,50 @@ const gap = (a: Box, b: Box) => Math.hypot(centre(a).x - centre(b).x, centre(a).
 const npc = async (page: Page, id: string) => (await state(page)).npcs.find((n) => n.id === id)!;
 
 test.describe('the pad (OP-082, OP-114)', () => {
-  test('a phone has a diamond on the left: Nest on top, Interact nearer the middle, the Menu below, the Map outside; Emotes and Say above', async ({ page, isMobile }) => {
+  test('a phone has three places on the left: Interact nearer the middle, the Menu outside, Jump’s place below them; Emotes and Say above', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page);
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
     const stick = await box('#hud .stick');
-    const nest = await box('[data-pad-nest]');
     const interact = await box('[data-pad-interact]');
     const menu = await box('[data-menu-btn]');
-    const map = await box('[data-pad-map]');
+    const slot = await box('[data-pad-slot]');
     const emotes = await box('[data-emotes-btn]');
     const say = await box('[data-say-btn]');
     const width = page.viewportSize()!.width;
     // The stick keeps the bottom-right corner; the pad keeps to the left.
     expect(stick.x + stick.width).toBeGreaterThan(width - 40);
-    for (const b of [nest, interact, menu, map, emotes, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
-    // A diamond like a handheld's face buttons: Nest over the Menu, the Map and Interact either side.
-    const [n, i, m, l] = [nest, interact, menu, map].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>];
-    expect(Math.abs(n.x - m.x)).toBeLessThan(1);
-    expect(Math.abs(l.y - i.y)).toBeLessThan(1);
-    expect(n.y).toBeLessThan(i.y);
-    expect(m.y).toBeGreaterThan(i.y);
-    expect(i.x).toBeGreaterThan(n.x);
-    expect(l.x).toBeLessThan(n.x);
-    // One size, and each 8 px from the next round the diamond.
-    for (const b of [interact, menu, map]) expect(b.width).toBeCloseTo(nest.width, 0);
-    for (const [a, b] of [[nest, interact], [interact, menu], [menu, map], [map, nest]] as const) expect(gap(a, b)).toBeCloseTo(8, 0);
-    // Emotes and Say in the notches above, on either side of Nest.
-    expect(centre(emotes).x).toBeLessThan(n.x);
-    expect(centre(say).x).toBeGreaterThan(n.x);
-    expect(centre(emotes).y).toBeLessThan(i.y);
+    for (const b of [interact, menu, slot, emotes, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
+    // Three of a handheld's face buttons (Logan, 2026-10-27): the Menu and Interact either side, Jump's place below between them.
+    const [i, m, j] = [interact, menu, slot].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>];
+    expect(Math.abs(m.y - i.y)).toBeLessThan(1);
+    expect(m.x).toBeLessThan(i.x);
+    expect(j.y).toBeGreaterThan(i.y);
+    expect(Math.abs(j.x - (m.x + i.x) / 2)).toBeLessThan(1);
+    // One size, and Jump's place 8 px from each.
+    for (const b of [menu, slot]) expect(b.width).toBeCloseTo(interact.width, 0);
+    for (const [a, b] of [[menu, slot], [slot, interact]] as const) expect(gap(a, b)).toBeCloseTo(8, 0);
+    // Emotes and Say above, over the Menu and Interact.
+    expect(centre(emotes).x).toBeLessThan(centre(say).x);
+    expect(centre(emotes).y).toBeLessThan(m.y);
     expect(centre(say).y).toBeLessThan(i.y);
     // Thumb-sized and apart: each live button at least 44 px; round ones measured as circles, none over another or the stick.
-    const live = [nest, interact, menu, map, emotes, say];
+    const live = [interact, menu, emotes, say];
     for (const b of live) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
     for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) expect(gap(live[a]!, live[b]!), `${a} and ${b}`).toBeGreaterThan(7.5);
-    for (const b of live) expect(overlaps(b, stick)).toBe(false);
-    // No Jump while the hop is off: the Map has its place.
+    for (const b of [...live, slot]) expect(overlaps(b, stick)).toBe(false);
+    // Going home and the Map are the Menu's: no Nest and no Map on the pad.
+    await expect(page.locator('[data-pad-nest], [data-pad-map]')).toHaveCount(0);
+    // No Jump while the hop is off: its place is drawn dim and takes no tap.
     await expect(page.locator('[data-pad-jump]')).toBeHidden();
+    const empty = page.locator('[data-pad-slot]');
+    await expect(empty).toBeVisible();
+    expect(await empty.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+    expect(Number(await empty.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(0.5);
     // Interact wears the '!' (a stroke and a dot), not a hand.
     await expect(page.locator('[data-pad-interact] svg path')).toHaveCount(1);
     await expect(page.locator('[data-pad-interact] svg circle')).toHaveCount(1);
-    // The pad's Menu button is the only one, and it still opens the Menu; the Map opens it at its Map tab.
+    // The pad's Menu button is the only one, and it still opens the Menu.
     await expect(page.locator('[data-menu-btn]')).toHaveCount(1);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-pad.png` });
     await page.locator('[data-menu-btn]').tap();
@@ -60,9 +62,6 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await expect(dialog).toBeVisible();
     await page.getByRole('button', { name: 'Close the menu' }).tap();
     await expect(dialog).toBeHidden();
-    await page.locator('[data-pad-map]').tap();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator('[data-tab="map"]')).toHaveAttribute('aria-selected', 'true');
   });
 
   test('Interact does what the owl stands at, as E does, and rests where there is nothing', async ({ page, isMobile }) => {
@@ -94,31 +93,35 @@ test.describe('the pad (OP-082, OP-114)', () => {
     expect((await state(page)).pos).toEqual(before);
   });
 
-  test('Nest, held, takes the owl home before its mirror; let go sooner it does nothing, and at home it rests', async ({ page, isMobile }) => {
+  test('Go home, at the top of the Menu’s Nest tab, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {
     test.slow(); // two rooms drawn with software WebGL on CI runners
-    test.skip(!isMobile, 'the pad is for touch screens');
-    await openPark(page, { collector: `e2e-nest-pad-${test.info().project.name}` });
-    const nest = page.locator('[data-pad-nest]');
-    await expect(nest).toHaveAttribute('aria-disabled', 'false');
-    // The thumb's press and its letting go, each in the page at once (a slow runner's frames would
-    // otherwise stretch a quick tap past the hold); the answer is whether the ring is filling.
-    const press = (type: 'pointerdown' | 'pointerup') => nest.evaluate((el, t) => (el.dispatchEvent(new PointerEvent(t, { bubbles: true })), el.classList.contains('holding')), type);
-    // Let go before the ring is full: the owl stays where it is.
+    await openPark(page, { collector: `e2e-go-home-${test.info().project.name}` });
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="nest"]').click();
+    const home = menu.locator('[data-screen="home"]');
+    await expect(home).toHaveText('Go home');
+    // The press and its letting go, each in the page at once (a slow runner's frames would otherwise
+    // stretch a quick tap past the hold); the answer is whether the button is filling.
+    const press = (type: 'pointerdown' | 'pointerup') => home.evaluate((el, t) => (el.dispatchEvent(new PointerEvent(t, { bubbles: true })), el.classList.contains('holding')), type);
+    // Let go before it is full: the owl stays where it is, and the Menu says to hold it.
     expect(await press('pointerdown')).toBe(true);
     expect(await press('pointerup')).toBe(false);
+    await expect(menu.getByText('Hold to go home.')).toBeVisible();
     await page.waitForTimeout(900);
     expect((await state(page)).room).toBe('hub');
-    // Held until the ring is full: the owl goes home, landing before its mirror.
+    await expect(menu).toBeVisible();
+    // Held until it is full: the Menu closes and the owl goes home, landing before its mirror.
     expect(await press('pointerdown')).toBe(true);
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^nest-/);
-    await press('pointerup');
-    const home = await state(page);
-    expect(home.nest?.mine).toBe(true);
-    expect(Math.hypot(home.pos.x - home.mirror!.x, home.pos.y - home.mirror!.y)).toBeLessThan(160);
-    // Home already: Nest rests, dimmed, and holding it does nothing.
-    await expect(nest).toHaveAttribute('aria-disabled', 'true');
-    expect(await press('pointerdown')).toBe(false);
-    await press('pointerup');
+    await expect(menu).toBeHidden();
+    const at = await state(page);
+    expect(at.nest?.mine).toBe(true);
+    expect(Math.hypot(at.pos.x - at.mirror!.x, at.pos.y - at.mirror!.y)).toBeLessThan(160);
+    // Home already: the Nest tab offers no way home.
+    await page.locator('[data-menu-btn]').click();
+    await menu.locator('[data-tab="nest"]').click();
+    await expect(home).toHaveCount(0);
   });
 
   test("a '!' shows over the one owl Interact would talk to, from as far as it reaches, and goes as the visitor walks away", async ({ page }) => {

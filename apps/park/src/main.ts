@@ -117,7 +117,7 @@ game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies Ro
 // touch screens; E interacts (the pad's Interact on touch screens), M opens the Menu, T the Say wheel
 // (1 to 8 play an emote at once), Q goes to the mirror in the owl's nest, where Your owl is (OP-077),
 // and J the quests. The space bar hops (the pad's Jump) only in a build with the hop (`padJump`):
-// off until flight makes it real (OP-084, OP-114). The pad's Nest, held, goes home. While the Menu or
+// off until flight makes it real (OP-084, OP-114). Go home, held in the Menu, goes home. While the Menu or
 // one of its screens is open, the owl stays put. On the home screen only Q (as Play does, once there
 // is an owl: into the nest, before its mirror) and Escape do anything; Enter plays too (ui/home.ts).
 const interact = () => {
@@ -129,10 +129,6 @@ const jump = () => {
 hud.onInteract(interact);
 hud.setPadJump(cfg.padJump);
 hud.onJump(jump);
-// Nest lands the owl where Play does (OP-105): before the mirror in its own nest, after a slower fade.
-hud.onNest(() => {
-  if (!atHome && !hud.isBlocking()) void roomScene()?.goHome(NEST_SPAWN, NEST_FADE_MS);
-});
 const keyboard = attachKeyboard(window, {
   interact,
   jump,
@@ -257,9 +253,10 @@ hud.attachCollection(collection, {
   look: lookNow,
 });
 // The Menu's ways out (C43): out of the park to the lobby, home to the owl's own nest, and back to the home screen.
+// Home lands the owl where Play does (OP-105): before the mirror in its own nest, after a slower fade.
 hud.attachWayOut({
   leave: () => void roomScene()?.leavePark(),
-  home: () => void roomScene()?.goHome(),
+  home: () => void roomScene()?.goHome(NEST_SPAWN, NEST_FADE_MS),
   title: () => void roomScene()?.toHomeScreen(),
 });
 
