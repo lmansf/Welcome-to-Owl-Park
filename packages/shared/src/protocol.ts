@@ -6,6 +6,7 @@
  * carries text written by visitors.
  */
 import type { Wear } from './collectibles';
+import type { Air } from './flight';
 import type { SpeciesId } from './species';
 
 export const PROTOCOL_VERSION = 1;
@@ -48,6 +49,8 @@ export interface PlayerState {
   walk: Walk | null;
   /** Asleep where it stands, its visitor idle (OP-126). */
   asleep?: boolean;
+  /** Off the ground (OP-084): its last air state and when it began (sender's clock), for a newcomer to carry on. */
+  air?: Air & { at: number };
   /** Protocol version the sender speaks. */
   v: number;
 }
@@ -77,7 +80,7 @@ export interface ByeMessage {
   id: string;
 }
 
-/** A player played one of its emotes (an emote id from the collectibles catalogue), or hopped (JUMP_EMOTE). */
+/** A player played one of its emotes (an emote id from the collectibles catalogue). */
 export interface EmoteMessage {
   t: 'emote';
   id: string;
@@ -98,4 +101,12 @@ export interface RestMessage {
   asleep: boolean;
 }
 
-export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SayMessage | RestMessage;
+/** A player's owl's air state changed (OP-084): a state, not an event, so nothing logs it. `at` is the sender's clock. */
+export interface AirMessage {
+  t: 'air';
+  id: string;
+  air: Air;
+  at: number;
+}
+
+export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SayMessage | RestMessage | AirMessage;

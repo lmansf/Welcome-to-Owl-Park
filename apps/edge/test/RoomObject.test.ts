@@ -7,7 +7,6 @@ import {
   CollectionBook,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
-  JUMP_EMOTE,
   MemoryClimbStore,
   MemoryCollectionStore,
   MemoryNestStore,
@@ -684,20 +683,31 @@ describe('the realms switch (the stained-glass climb)', () => {
   });
 });
 
-describe('the hop in the room object', () => {
-  it('goes to the other owls without asking for a collection, and moves no quest', async () => {
+describe('flight in the room object (OP-084)', () => {
+  const up = { z: 7.2, vz: 858.3, s: 1, f: 1 } as const;
+
+  it('goes to the other owls without asking for a collection, moves no quest, and is never logged', async () => {
     const obj = roomObject();
     const a = await join(obj, 'hub', 'v_a', OWNER);
     const b = await join(obj, 'hub', 'v_b');
     const questEvent = vi.spyOn(collections, 'questEvent');
-    await send(obj, a, { t: 'emote', e: JUMP_EMOTE });
+    await send(obj, a, { t: 'air', air: up });
     await settle();
-    expect(b.last('emote')).toEqual({ t: 'emote', id: 'v_a', e: JUMP_EMOTE });
-    expect(a.of('emote')).toEqual([]);
+    expect(b.last('air')).toEqual({ t: 'air', id: 'v_a', air: up, at: expect.any(Number) });
+    expect(a.of('air')).toEqual([]);
     expect(questEvent).not.toHaveBeenCalled();
-    // A page without a collection hops too: every owl has it.
-    await send(obj, b, { t: 'emote', e: JUMP_EMOTE });
-    expect(a.last('emote')).toEqual({ t: 'emote', id: 'v_b', e: JUMP_EMOTE });
+    // A page without a collection flies too: every owl has it.
+    await send(obj, b, { t: 'air', air: up });
+    expect(a.last('air')).toMatchObject({ t: 'air', id: 'v_b', air: up });
+    // Numbers the room cannot believe are dropped, the socket kept; a frame of the wrong shape is a broken page.
+    await send(obj, a, { t: 'air', air: { ...up, z: 5000 } });
+    expect(b.of('air')).toHaveLength(1);
+    expect(a.closed).toBeNull();
+    await send(obj, a, { t: 'air', air: { ...up, s: 9 } } as Record<string, unknown>);
+    expect(a.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
+    // The old hop is gone with it.
+    await send(obj, b, { t: 'emote', e: 'jump' });
+    expect(b.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
   });
 });
 

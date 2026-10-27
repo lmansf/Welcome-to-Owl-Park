@@ -2,7 +2,8 @@
  * Structural validation for anything that arrives from another visitor. Peers share public
  * channels, so every field is untrusted until it has the expected shape and range.
  */
-import { EMOTE_IDS, JUMP_EMOTE, isWear } from './collectibles';
+import { EMOTE_IDS, isWear } from './collectibles';
+import { MAX_RISE, checkAir } from './flight';
 import { isHexColour, isPledge } from './look';
 import { isPhrase } from './phrases';
 import { isSpecies } from './species';
@@ -50,17 +51,17 @@ export function isEmoteId(v: unknown): v is string {
   return typeof v === 'string' && EMOTE_IDS.includes(v);
 }
 
-/** What an emote frame may carry: an emote from the catalogue, or the hop every owl has (JUMP_EMOTE). */
-export function isPlayableEmote(v: unknown): v is string {
-  return v === JUMP_EMOTE || isEmoteId(v);
-}
-
 export function isWalk(v: unknown): v is Walk {
   return isObj(v) && isVec2(v['from']) && isVec2(v['to']) && typeof v['startedAt'] === 'number' && Number.isFinite(v['startedAt']);
 }
 
 export function isPlayerState(v: unknown): v is PlayerState {
-  return isObj(v) && isId(v['id']) && isLook(v['look']) && isVec2(v['pos']) && (v['walk'] === null || isWalk(v['walk']));
+  return isObj(v) && isId(v['id']) && isLook(v['look']) && isVec2(v['pos']) && (v['walk'] === null || isWalk(v['walk'])) && (v['air'] === undefined || isAirAt(v['air']));
+}
+
+/** An air state with the time it began (OP-084), as another page sends it. */
+function isAirAt(v: unknown): boolean {
+  return isObj(v) && typeof v['at'] === 'number' && Number.isFinite(v['at']) && checkAir(v, MAX_RISE) !== null;
 }
 
 export function isParkMessage(value: unknown): value is ParkMessage {
@@ -74,12 +75,14 @@ export function isParkMessage(value: unknown): value is ParkMessage {
     case 'bye':
       return isId(value['id']);
     case 'emote':
-      return isId(value['id']) && isPlayableEmote(value['e']);
+      return isId(value['id']) && isEmoteId(value['e']);
     case 'say':
       // A phrase this page does not know is dropped: there is nothing to show for it.
       return isId(value['id']) && isPhrase(value['n']);
     case 'rest':
       return isId(value['id']) && typeof value['asleep'] === 'boolean';
+    case 'air':
+      return isId(value['id']) && checkAir(value['air'], MAX_RISE) !== null && typeof value['at'] === 'number' && Number.isFinite(value['at']);
     default:
       return false;
   }

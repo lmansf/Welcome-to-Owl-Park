@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CLOSE, EDGE_PROTOCOL_VERSION, JUMP_EMOTE, JUMP_EVERY_MS, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, isWalkable, nestDoorIndex, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, isWalkable, nestDoorIndex, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
 
@@ -301,26 +301,74 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(b.count('emote')).toBe(2);
   });
 
-  it('relays a hop to the others on its own clock: a hop leaves room for an emote, and too many are dropped', () => {
+  // One step into a jump, as the page sends it (OP-084).
+  const up: Air = { z: 7.2, vz: 858.3, s: AIRBORNE, f: 1 };
+
+  it('relays an owl’s air to the others on the room’s clock, shows a newcomer an owl still up, and wakes a sleeper that jumps (OP-084)', () => {
     const a = new FakePeer();
     const b = new FakePeer();
     room.join(a, 'a', hello());
     room.join(b, 'b', hello());
     const at = room.positionOf('a');
-    expect(room.jump('a')).toBe(true);
-    expect(b.last('emote')).toEqual({ t: 'emote', id: 'a', e: JUMP_EMOTE });
-    expect(a.count('emote')).toBe(0); // the hopper hops on its own page at once
-    // An emote straight after a hop still goes out: they do not share a limit.
-    expect(room.emote('a', 'hoot')).toBe(true);
-    // A hop sooner than the room's limit is dropped; the page sends one at most every JUMP_EVERY_MS.
-    expect(room.jump('a')).toBe(false);
-    expect(LIMITS.jumpEveryMs).toBeLessThan(JUMP_EVERY_MS);
-    now += LIMITS.jumpEveryMs;
-    expect(room.jump('a')).toBe(true);
-    expect(b.count('emote')).toBe(3);
-    // A hop is a look only: the owl stays where it stood.
+    room.rest('a', true);
+    expect(room.air('a', up)).toBe(true);
+    // Awake first, for everyone, then up.
+    expect(b.frames.slice(-2)).toEqual([
+      { t: 'rest', id: 'a', asleep: false },
+      { t: 'air', id: 'a', air: up, at: now },
+    ]);
+    expect(a.count('air')).toBe(0); // its own page flies it
+    expect(a.persisted.at(-1)?.air).toEqual({ ...up, at: now });
+    // Flight is a height over the floor: the owl's spot in the room is where it was.
     expect(room.positionOf('a')).toEqual(at);
-    expect(room.jump('nobody')).toBe(false);
+    // A newcomer a moment later is told the state and when, to carry it on from there.
+    const told = now;
+    now += 200;
+    const c = new FakePeer();
+    room.join(c, 'c', hello());
+    const owls = c.last('welcome')!.owls;
+    expect(owls.find((o) => o.id === 'a')?.air).toEqual({ ...up, at: told });
+    expect(owls.find((o) => o.id === 'b')?.air).toBeUndefined();
+    // Down by now: the landing is never sent (every page reckons it), and the room has the owl on the ground.
+    now += 3000;
+    expect(room.snapshot().find((o) => o.id === 'a')?.air).toBeUndefined();
+    // Up again, then told it is on the ground (the page put it there): the same.
+    expect(room.air('a', up)).toBe(true);
+    expect(room.air('a', ON_GROUND)).toBe(true);
+    expect(b.last('air')).toEqual({ t: 'air', id: 'a', air: ON_GROUND, at: now });
+    expect(room.snapshot().find((o) => o.id === 'a')?.air).toBeUndefined();
+    expect(room.air('nobody', up)).toBe(false);
+  });
+
+  it('drops air it cannot believe, and air past the allowance, closing only a page that floods (OP-084)', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    // Above the room's top, on the ground in mid-air, a mode it does not know.
+    for (const bad of [
+      { z: LIMITS.maxAirZ + 1, vz: 0, s: AIRBORNE, f: 1 },
+      { z: 30, vz: 0, s: GROUNDED, f: 0 },
+      { z: 30, vz: 0, s: 7, f: 0 },
+    ]) {
+      expect(room.air('a', bad as Air)).toBe(false);
+    }
+    expect(b.count('air')).toBe(0);
+    // Each frame spends the allowance; past it they are dropped quietly, and it comes back with time.
+    for (let i = 3; i < LIMITS.airBurst; i++) expect(room.air('a', up)).toBe(true);
+    expect(room.air('a', up)).toBe(false);
+    expect(a.closed).toBeNull();
+    now += 1000 / LIMITS.airRefillPerS;
+    expect(room.air('a', up)).toBe(true);
+    expect(b.count('air')).toBe(LIMITS.airBurst - 3 + 1);
+    // Only the dropped ones count towards the flood, which closes the socket.
+    let dropped = 1;
+    while (!a.closed && dropped <= 100) {
+      room.air('a', up);
+      dropped++;
+    }
+    expect(a.closed).toEqual({ code: CLOSE.RATE_LIMITED, reason: 'too many frames' });
+    expect(dropped).toBe(LIMITS.framesPerWindow + 1);
   });
 
   it('relays a phrase’s number to the others, one phrase every three seconds per owl', () => {

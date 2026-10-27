@@ -14,7 +14,6 @@ import {
   COPY_BASE_EMOTES,
   DEFAULT_LOOK,
   HEARTBEAT_FRAME,
-  JUMP_EMOTE,
   KIND_RULES,
   LANTERN_ROOM,
   QUIZ_FEATHERS,
@@ -428,6 +427,9 @@ export class RoomObject extends DurableObject<Env> {
         return room.move(att.id, frame);
       case 'rest':
         return room.rest(att.id, frame.asleep);
+      case 'air':
+        // Flight (OP-084): a state of the owl, counted against its own allowance, never logged.
+        return void room.air(att.id, frame.air);
       case 'look': {
         const { look, recheck } = this.vetLook(att, frame.look);
         room.look(att.id, look);
@@ -446,8 +448,6 @@ export class RoomObject extends DurableObject<Env> {
         return;
       case 'emote':
         if (!room.admit(att.id)) return;
-        // The hop is every owl's: no collection is asked, and no quest counts it.
-        if (frame.e === JUMP_EMOTE) return void room.jump(att.id);
         return this.emote(ws, att, room, frame.e);
       case 'say':
         // Every phrase is everyone's: no collection is needed to say one.

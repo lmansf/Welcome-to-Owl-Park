@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMOTE_IDS, JUMP_EMOTE } from './collectibles';
 import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, type ServerFrame } from './edge';
+import { MAX_RISE } from './flight';
 import { isEmoteId, isParkMessage } from './validate';
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
@@ -22,8 +22,8 @@ describe('protocol v10, the climb', () => {
 });
 
 describe('protocol v9, the arcade', () => {
-  it('is version 11 (owls asleep, OP-126), and a page speaking the version before is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(11);
+  it('is version 12 (flight, OP-084), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(12);
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
@@ -125,14 +125,27 @@ describe('parseClientFrame', () => {
     expect(parseServerFrame(JSON.stringify({ t: 'rest', id: 'o1', asleep: false }))).toEqual({ t: 'rest', id: 'o1', asleep: false });
   });
 
-  it('accepts an emote from the catalogue and the hop every owl has, and nothing else', () => {
+  it('accepts an emote from the catalogue and nothing else: the old hop is gone with flight (OP-084)', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'hoot' }))).toEqual({ t: 'emote', e: 'hoot' });
-    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: JUMP_EMOTE }))).toEqual({ t: 'emote', e: JUMP_EMOTE });
     expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'fly' }))).toBeNull();
-    // The hop is not a collectible: no catalogue emote, so a quest, the wheel or the shop never meet it.
-    expect(EMOTE_IDS).not.toContain(JUMP_EMOTE);
-    expect(isEmoteId(JUMP_EMOTE)).toBe(false);
-    expect(isParkMessage({ t: 'emote', id: 'p1', e: JUMP_EMOTE })).toBe(true);
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'jump' }))).toBeNull();
+    expect(isEmoteId('jump')).toBe(false);
+    expect(isParkMessage({ t: 'emote', id: 'p1', e: 'jump' })).toBe(false);
+  });
+
+  it('carries an owl’s air state each way (OP-084); a page drops one it cannot believe', () => {
+    const air = { z: 120, vz: -86.7, s: 2, f: 1 };
+    expect(parseClientFrame(JSON.stringify({ t: 'air', air }))).toEqual({ t: 'air', air });
+    expect(parseClientFrame(JSON.stringify({ t: 'air', air: { ...air, extra: 'x' } }))).toEqual({ t: 'air', air });
+    // The room server reads the shape; whether it can believe the numbers is the room's (Room.air drops them).
+    expect(parseClientFrame(JSON.stringify({ t: 'air', air: { z: MAX_RISE + 5, vz: 0, s: 1, f: 0 } }))).not.toBeNull();
+    for (const bad of [{ z: 30, vz: 0, s: 4, f: 0 }, { z: 30, vz: 0, s: 1, f: 2 }, { z: '30', vz: 0, s: 1, f: 0 }, null, 'high'])
+      expect(parseClientFrame(JSON.stringify({ t: 'air', air: bad })), JSON.stringify(bad)).toBeNull();
+    expect(parseServerFrame(JSON.stringify({ t: 'air', id: 'o1', air, at: 5 }))).toEqual({ t: 'air', id: 'o1', air, at: 5 });
+    // Between pages on this device (and the Supabase transport): the same state, on the sender's clock.
+    expect(isParkMessage({ t: 'air', id: 'p1', air, at: 5 })).toBe(true);
+    expect(isParkMessage({ t: 'air', id: 'p1', air: { ...air, z: -40 }, at: 5 })).toBe(false);
+    expect(isParkMessage({ t: 'air', id: 'p1', air })).toBe(false);
   });
 
   it('accepts positions anywhere in a room wider than one screen', () => {

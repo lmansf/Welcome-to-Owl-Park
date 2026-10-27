@@ -15,13 +15,14 @@
  */
 import { BAND_COUNT } from './edge';
 import { LAYOUTS } from './climbCity';
+import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
 
 export { BAND_COUNT };
 
 // ---------- constants ----------
 
 /** One simulation step: the arcade's pace, so a run plays the same on every device. */
-export const CLIMB_STEP_MS = 1000 / 120;
+export const CLIMB_STEP_MS = JUMP_STEP_MS;
 /** The field's width in field pixels; the page fits it to the device, portrait and letterboxed. */
 export const CLIMB_FIELD_W = 480;
 /** The owl's collision box, with (x, y) its bottom centre. */
@@ -29,14 +30,8 @@ export const OWL_W = 36;
 export const OWL_H = 44;
 export const RUN_ACCEL = 2600;
 export const RUN_SPEED = 230;
-export const GRAVITY = 2600;
-export const MAX_FALL = 1150;
-/** The jump: 880 px/s rises 149 px in 0.34 s; a release early cuts it to the cut speed. */
-export const JUMP_IMPULSE = 880;
-export const JUMP_CUT_SPEED = 180;
-export const DOUBLE_JUMP_IMPULSE = 760;
-export const COYOTE_MS = 90;
-export const JUMP_BUFFER_MS = 100;
+// The jump itself (its gravity, impulses, cut, fall cap and windows) is jump.ts's, shared with the park's flight (OP-084).
+export { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, MAX_FALL };
 /** The dash: a burst sideways with no fall, once in the air until the owl lands, clings or pogos. */
 export const DASH_SPEED = 640;
 export const DASH_MS = 150;

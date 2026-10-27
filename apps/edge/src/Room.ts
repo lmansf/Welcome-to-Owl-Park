@@ -7,11 +7,15 @@
 import {
   MOVE_BURST,
   MOVE_REFILL_PER_S,
+  AIR_BURST,
+  AIR_REFILL_PER_S,
+  GROUNDED,
+  MAX_RISE,
+  carryOn,
+  checkAir,
   USE_COOLDOWN_MS,
   REACH_SLACK,
   SAY_EVERY_MS,
-  JUMP_EMOTE,
-  JUMP_EVERY_MS,
   isPhrase,
   findSpawn,
   isWalkable,
@@ -22,6 +26,8 @@ import {
   EDGE_PROTOCOL_VERSION,
   CLOSE,
   type ClientHello,
+  type Air,
+  type AirAt,
   type ClientMove,
   type OwlLook,
   type OwlSnapshot,
@@ -47,6 +53,8 @@ export interface VisitorState {
   walk: ServerWalk | null;
   /** Asleep where it stands, its visitor idle (OP-126). */
   asleep?: true;
+  /** Off the ground (OP-084): its last air state and when the room was told it. */
+  air?: AirAt;
 }
 
 interface Visitor {
@@ -60,8 +68,9 @@ interface Visitor {
   strikes: number[];
   frames: number[];
   emotedAt: number;
-  /** When this visitor last hopped. */
-  jumpedAt: number;
+  /** Air states this visitor may still send now (OP-084), and when they last refilled. */
+  airTokens: number;
+  airRefilledAt: number;
   /** When this visitor last said a phrase. */
   saidAt: number;
   /** When this visitor last used an interactable (leaf piles, stalls). */
@@ -95,8 +104,11 @@ export const LIMITS = {
   leaverMemoryMs: 120_000,
   /** One emote per visitor this often; faster ones are dropped quietly. */
   emoteEveryMs: 1_500,
-  /** One hop (the Jump button) per visitor this often, a little under the page's own limit to allow for the network; faster ones are dropped quietly. */
-  jumpEveryMs: Math.round(JUMP_EVERY_MS * 0.8),
+  /** Air states (OP-084): a burst, then this many more a second; more are dropped quietly, and only those count towards the flood. */
+  airBurst: AIR_BURST,
+  airRefillPerS: AIR_REFILL_PER_S,
+  /** The highest an owl can be above the floor (a jump and a flap at its top, flight.ts): rooms have no upper levels yet. */
+  maxAirZ: MAX_RISE,
   /** One prewritten phrase per visitor this often; faster ones are dropped quietly. */
   sayEveryMs: SAY_EVERY_MS,
   /** One use of an interactable per visitor this often. */
@@ -167,7 +179,8 @@ export class Room {
     const out: OwlSnapshot[] = [];
     for (const [id, v] of this.visitors) {
       if (id === except) continue;
-      out.push({ id, look: v.st.look, pos: v.st.pos, walk: v.st.walk, ...(v.st.asleep ? { asleep: true as const } : {}) });
+      const air = this.airOf(v);
+      out.push({ id, look: v.st.look, pos: v.st.pos, walk: v.st.walk, ...(v.st.asleep ? { asleep: true as const } : {}), ...(air ? { air } : {}) });
     }
     return out;
   }
@@ -244,7 +257,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, jumpedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0 };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -269,7 +282,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, jumpedAt: 0, saidAt: 0, usedAt: 0, arrangedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0 });
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */
@@ -408,15 +421,47 @@ export class Room {
     return true;
   }
 
-  /** A hop for everyone else in the room: every owl has it, so no collection is asked. Rate limited apart from emotes. */
-  jump(id: string): boolean {
+  /**
+   * The owl's air state changed (OP-084): kept on the visitor, so a newcomer carries it on, and told
+   * to the others with the room's time. Movement is state, not events: nothing is logged, and the
+   * landing is never sent, since every page reckons it. Air the room cannot believe (past the room's
+   * top, or on the ground above the floor) is dropped, and so is air beyond the visitor's allowance;
+   * only that excess counts towards the flood limit, so jumping never closes a socket.
+   */
+  air(id: string, a: Air): boolean {
     const v = this.visitors.get(id);
     if (!v) return false;
     const now = this.now();
-    if (now - v.jumpedAt < LIMITS.jumpEveryMs) return false;
-    v.jumpedAt = now;
-    this.broadcast({ t: 'emote', id, e: JUMP_EMOTE }, id);
+    const refill = ((now - v.airRefilledAt) / 1000) * LIMITS.airRefillPerS;
+    if (refill >= 1) {
+      v.airTokens = Math.min(LIMITS.airBurst, v.airTokens + Math.floor(refill));
+      v.airRefilledAt = now;
+    }
+    if (v.airTokens <= 0) {
+      if (!this.admitFrame(v)) v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
+      return false;
+    }
+    v.airTokens -= 1;
+    const air = checkAir(a, LIMITS.maxAirZ);
+    if (!air) return false;
+    if (air.s === GROUNDED) delete v.st.air;
+    else v.st.air = { ...air, at: now };
+    // An owl that jumps is awake, for everyone (OP-126).
+    const woke = v.st.asleep === true;
+    delete v.st.asleep;
+    v.peer.persist?.(v.st);
+    if (woke) this.broadcast({ t: 'rest', id, asleep: false }, id);
+    this.broadcast({ t: 'air', id, air, at: now }, id);
     return true;
+  }
+
+  /** A visitor's air state as a newcomer should have it: none once its last state has come down to the floor. */
+  private airOf(v: Visitor): AirAt | undefined {
+    const a = v.st.air;
+    if (!a) return undefined;
+    if (carryOn(a, this.now() - a.at).s !== GROUNDED) return a;
+    delete v.st.air;
+    return undefined;
   }
 
   /**

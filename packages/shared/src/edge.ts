@@ -26,10 +26,11 @@ import { PHRASE_NUMBER_MAX } from './phrases';
 import type { RealmsSettings } from './overflow';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
-import { isEmoteId, isLook, isObj, isPlayableEmote, isVec2 } from './validate';
+import { isAirShape, type Air } from './flight';
+import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 11;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 12;
 // TODO-DOCS: docs/ARCHITECTURE.md section 4 says protocol v8; it is v11 (the arcade, then the climb's `climb` and `ascent` acts, `realms` in the welcome and the `realms` frame, then `rest` both ways and `asleep` on an owl, OP-126).
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
@@ -39,6 +40,9 @@ export const HEARTBEAT_INTERVAL_MS = 25_000;
 /** Moves the room server accepts from one visitor: a burst, then this many more per second. */
 export const MOVE_BURST = 5;
 export const MOVE_REFILL_PER_S = 2;
+/** Air states the room server takes from one visitor (OP-084): a jump, a flap, a cut, a glide and a landing are five. */
+export const AIR_BURST = 8;
+export const AIR_REFILL_PER_S = 4;
 
 /** Close codes the server uses; the client reacts to each differently. */
 export const CLOSE = {
@@ -71,7 +75,12 @@ export interface OwlSnapshot {
   walk: ServerWalk | null;
   /** Its visitor has been idle a while (OP-126): it sleeps where it stands, for everyone. */
   asleep?: true;
+  /** Off the ground (OP-084): its last air state and when the room was told it, for a newcomer to carry on. */
+  air?: AirAt;
 }
+
+/** An owl's air state (flight.ts) and when it began, in server ms. */
+export type AirAt = Air & { at: number };
 
 // ---- client -> server ----
 export interface ClientHello {
@@ -99,7 +108,16 @@ export interface ClientRest {
   t: 'rest';
   asleep: boolean;
 }
-/** Play an owned emote for everyone in the room, or the hop every owl has (JUMP_EMOTE). */
+/**
+ * The owl's air state changed (OP-084): off the ground, a flap, the cut, a glide begun or ended, the
+ * landing. A state of the owl, not an event: the room keeps the last one for newcomers, tells the
+ * others, and logs nothing.
+ */
+export interface ClientAir {
+  t: 'air';
+  air: Air;
+}
+/** Play an owned emote for everyone in the room. */
 export interface ClientEmote {
   t: 'emote';
   e: string;
@@ -170,7 +188,7 @@ export interface ClientStreet {
 }
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -213,6 +231,13 @@ export interface ServerLook {
 export interface ServerLeave {
   t: 'leave';
   id: string;
+}
+/** Another owl's air state changed (OP-084), with when the room was told it: pages carry it on from there. */
+export interface ServerAir {
+  t: 'air';
+  id: string;
+  air: Air;
+  at: number;
 }
 /** Another owl fell asleep or woke (OP-126). */
 export interface ServerRest {
@@ -401,6 +426,7 @@ export type ServerFrame =
   | ServerLook
   | ServerLeave
   | ServerRest
+  | ServerAir
   | ServerCounts
   | ServerFull
   | ServerEmote
@@ -468,8 +494,13 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       return { t: 'bye' };
     case 'rest':
       return typeof v['asleep'] === 'boolean' ? { t: 'rest', asleep: v['asleep'] } : null;
+    case 'air': {
+      // Its shape only: whether the room can believe it is the room's to decide (it drops it quietly).
+      const a = v['air'];
+      return isAirShape(a) ? { t: 'air', air: { z: a.z, vz: a.vz, s: a.s, f: a.f } } : null;
+    }
     case 'emote':
-      return isPlayableEmote(v['e']) ? { t: 'emote', e: v['e'] } : null;
+      return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
     case 'say': {
       // A whole number in range; whether the phrase list has it is the room's to decide.
       const n = v['n'];
@@ -519,7 +550,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'realms', 'rest']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'realms', 'rest', 'air']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {
