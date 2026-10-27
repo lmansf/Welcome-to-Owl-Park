@@ -1,8 +1,9 @@
 name: CI
 
 # Typecheck, unit tests and build run as three jobs at once; the browser suite starts once the build
-# passes, and a failed typecheck or unit test run cancels the rest of the run (OP-123). A pull
-# request branch runs once, on the pull_request event: a push to it does not start a second run.
+# passes, split across eight runners one test at a time, and their reports are merged into one. A
+# failed typecheck or unit test run cancels the rest of the run (OP-123). A pull request branch runs
+# once, on the pull_request event: a push to it does not start a second run.
 on:
   push:
     branches: [main]
@@ -76,13 +77,15 @@ jobs:
       - run: pnpm build
 
   e2e:
-    name: Browser suite
+    name: Browser suite ${{ matrix.shard }}/8
     needs: build
     runs-on: ubuntu-latest
-    # The browser suite (computer, phone and the room server, one test at a time) takes 45 to 85
-    # minutes on a hosted runner (the slower runners take nearly twice as long); this limit only stops
-    # a run that hangs.
-    timeout-minutes: 150
+    # A shard runs an eighth of the suite: 6 to 9 minutes on a hosted runner, about half again on a slow one.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -107,18 +110,62 @@ jobs:
       - name: Install the browser's system packages
         if: steps.browser.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
-      - name: End-to-end tests (local transport on desktop and phone, then the room server)
-        run: pnpm e2e
+      - name: End-to-end tests, shard ${{ matrix.shard }} of 8 (local transport on desktop and phone, and the room server)
+        run: pnpm e2e --shard=${{ matrix.shard }}/8
         env:
           CI: 'true'
-      - name: Upload screenshots and reports
+          PW_BLOB: 'true'
+      - name: Upload this shard's report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-output
+          name: blob-report-${{ matrix.shard }}
+          path: apps/park/blob-report
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-${{ matrix.shard }}
           path: |
             apps/park/e2e-screenshots
-            apps/park/playwright-report
             apps/park/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  report:
+    name: Browser suite report
+    if: always() && needs.e2e.result != 'skipped'
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          path: apps/park/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+      - name: Merge the shards' reports into one
+        working-directory: apps/park
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
+      - name: Upload the merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/park/playwright-report
+          retention-days: 7
+      - name: The suite's result
+        if: needs.e2e.result != 'success'
+        run: |
+          echo "The browser suite did not pass (${{ needs.e2e.result }}): see the shards above and the merged report." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
