@@ -57,12 +57,16 @@ describe('worn items placed by anchor (OP-127)', () => {
     return { top, bottom: top + (h / SPRITES[art]!.size[1]) * p.h };
   };
 
-  it('stands a hat on the crown, its own bottom above the eyes', () => {
+  it('brings a hat down over the forehead, its own bottom just above the eyes', () => {
     const hat = edges('head', DEFAULT_ANCHORS, 'item-wizard-hat');
-    expect(hat.bottom).toBeCloseTo(DEFAULT_ANCHORS.head.y + 8);
-    // A head painted low, its crown nearly on the eyes: the hat stops at the brow.
+    expect(hat.bottom).toBeCloseTo(DEFAULT_ANCHORS.brow - 4);
+    expect(hat.bottom).toBeGreaterThan(DEFAULT_ANCHORS.head.y + 8);
+    // A halo floats over the crown and a party hat perches on it: they stay up there.
+    expect(edges('head', DEFAULT_ANCHORS, 'item-halo').bottom).toBeCloseTo(DEFAULT_ANCHORS.head.y + 8);
+    expect(edges('head', DEFAULT_ANCHORS, 'item-party-hat').bottom).toBeCloseTo(DEFAULT_ANCHORS.head.y + 8);
+    // A head painted low, its crown nearly on the eyes: even those stop above the eyes.
     const low = { ...DEFAULT_ANCHORS, head: { ...DEFAULT_ANCHORS.head, y: 60 } };
-    expect(edges('head', low, 'item-wizard-hat').bottom).toBeCloseTo(low.brow);
+    expect(edges('head', low, 'item-halo').bottom).toBeCloseTo(low.brow - 4);
   });
 
   it('hangs a collar from the neck, never up over the beak', () => {
