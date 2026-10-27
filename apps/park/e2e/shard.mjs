@@ -12,7 +12,7 @@
  *                                                (playwright merge-reports --reporter json)
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,19 +22,44 @@ const DURATIONS = join(PARK, 'e2e', 'durations.json');
 /** A listed test's key: its line from `--list` without the line and column. */
 const keyOf = (line) => line.trim().replace(/^(\[[^\]]+\] › [^ ]+?):\d+:\d+ › /, '$1 › ');
 
+/** The project and file a listed test is in. */
+const fileOf = (line) => /^(\[[^\]]+\]) › ([^ ]+?):\d+:\d+ › /.exec(line.trim())?.slice(1, 3) ?? ['', ''];
+
+/** A spec file whose tests run in order on one runner (`mode: 'serial'`): its tests stay together. */
+const serial = new Map();
+const isSerial = (file) => {
+  if (!serial.has(file)) {
+    const path = join(PARK, 'e2e', file);
+    serial.set(file, existsSync(path) && /mode:\s*'serial'/.test(readFileSync(path, 'utf8')));
+  }
+  return serial.get(file);
+};
+
 /** Every test, as `playwright test --list` prints it. */
 function listed() {
   const out = execFileSync(join(PARK, 'node_modules', '.bin', 'playwright'), ['test', '--list'], { cwd: PARK, encoding: 'utf8' });
   return out.split('\n').filter((l) => /^\s+\[\w+\] › /.test(l)).map((l) => l.trim());
 }
 
-/** Longest first onto the shard with the least so far; each shard's tests back in the suite's order. */
+/**
+ * Longest first onto the shard with the least so far; each shard's tests back in the suite's order.
+ * The tests of a serial file (in one project) go as one, so they run together and in order.
+ */
 function balance(tests, shards) {
+  const units = new Map();
+  for (const t of tests) {
+    const [project, file] = fileOf(t.line);
+    const key = isSerial(file) ? `${project} › ${file}` : t.line;
+    const unit = units.get(key) ?? { seconds: 0, index: t.index, tests: [] };
+    unit.seconds += t.seconds;
+    unit.tests.push(t);
+    units.set(key, unit);
+  }
   const bins = Array.from({ length: shards }, () => ({ total: 0, tests: [] }));
-  for (const t of [...tests].sort((a, b) => b.seconds - a.seconds || a.index - b.index)) {
+  for (const u of [...units.values()].sort((a, b) => b.seconds - a.seconds || a.index - b.index)) {
     const bin = bins.reduce((least, b) => (b.total < least.total ? b : least));
-    bin.total += t.seconds;
-    bin.tests.push(t);
+    bin.total += u.seconds;
+    bin.tests.push(...u.tests);
   }
   for (const b of bins) b.tests.sort((x, y) => x.index - y.index);
   return bins;
