@@ -32,6 +32,14 @@ export const SPECIES: readonly SpeciesDef[] = [
   { id: 'screech', name: 'Screech owl', size: 0.62, natural: { body: '#6B6B6B', belly: '#D6C7B0', accent: '#5C4033' }, art: true, founders: true },
 ];
 
+/**
+ * Every real owl species the park names, in one fixed list: the five a visitor can be (SPECIES)
+ * and the barred owl, which only the market's guardian is (OP-112). A realm's guardian names its
+ * species from here (GUARDIANS in rooms/index.ts).
+ */
+export const OWL_SPECIES = ['great-horned', 'barn', 'burrowing', 'snowy', 'screech', 'barred'] as const;
+export type OwlSpeciesId = (typeof OWL_SPECIES)[number];
+
 export const DEFAULT_SPECIES: SpeciesId = 'great-horned';
 /** Founder-only species are open to every visitor until founder status exists. */
 export const FOUNDER_SPECIES_OPEN = true;
