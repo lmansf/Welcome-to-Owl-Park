@@ -58,7 +58,14 @@ test.describe('single visitor', () => {
     await page.getByRole('button', { name: 'Close the menu' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
     const view = await settleCamera(page);
-    const target = { x: before.pos.x - Math.min(200, view.viewW * 0.3), y: before.pos.y + 30 };
+    // Beside the owl, clear of the pad and the stick on a phone (as in the test above).
+    const step = Math.min(200, view.viewW * 0.3);
+    const target = await openGround(page, [
+      { x: before.pos.x - step, y: before.pos.y + 30 },
+      { x: before.pos.x - step, y: before.pos.y },
+      { x: before.pos.x + step, y: before.pos.y },
+      { x: before.pos.x - step, y: before.pos.y - 30 },
+    ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y);
   });

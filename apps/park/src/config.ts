@@ -40,6 +40,11 @@ export interface ParkConfig {
   artScaleMax: number;
   /** Decoded bytes one room's big art may take; a wide room that would pass it at 2x loads its 1x copies. */
   roomArtBudget: number;
+  /**
+   * The hop (the pad's Jump button and the space bar, OP-082), off until flight makes it real (OP-084):
+   * a button must do something (OP-114). Only a build with VITE_PAD_JUMP=on hops; no address turns it on.
+   */
+  padJump: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -78,5 +83,6 @@ export function readConfig(): ParkConfig {
     artScaleMax: Math.min(2, Math.max(1, Number(env.VITE_ART_SCALE_MAX) || 1.5)),
     // Phones and tablets (a coarse pointer) keep what a one-screen room costs today; computers get three times that.
     roomArtBudget: (Number(env.VITE_ROOM_ART_BUDGET_MB) * 1024 * 1024) || PHONE_ROOM_BUDGET * (globalThis.matchMedia?.('(pointer: coarse)').matches ? 1 : 3),
+    padJump: ((env.VITE_PAD_JUMP as string | undefined) ?? '').trim() === 'on',
   };
 }

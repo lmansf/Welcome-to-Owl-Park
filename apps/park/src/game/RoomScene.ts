@@ -109,6 +109,12 @@ export interface RoomStart {
 
 /** How far a tap may drift before it counts as a drag (game pixels). */
 const TAP_SLOP = 16;
+/** How long the room fades out on the way to another. */
+const LEAVE_FADE_MS = 220;
+/** Where Play and the pad's Nest land the owl in its own nest (OP-105, OP-114): before its mirror. */
+export const NEST_SPAWN = 'mirror';
+/** The pad's Nest fades out slower than a doorway, so going home is not a jolt (OP-114). */
+export const NEST_FADE_MS = 400;
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
 
@@ -719,10 +725,11 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * "Go home": straight to the owl's own nest, from anywhere. Out of it again, the owl is on the street
-   * in front of its own door, as if it had come in that way.
+   * "Go home" (the Menu's way out, and the pad's Nest held, OP-114): straight to the owl's own nest,
+   * from anywhere, an open dialogue closing first (the quest stays as it was). Out of it again, the
+   * owl is on the street in front of its own door, as if it had come in that way.
    */
-  async goHome(spawn = 'default'): Promise<boolean> {
+  async goHome(spawn = 'default', fadeMs = LEAVE_FADE_MS): Promise<boolean> {
     if (!this.built || this.leaving) return false;
     const nestId = await this.collection.service.homeNest();
     if (!this.built || this.leaving) return false;
@@ -732,7 +739,9 @@ export class RoomScene extends Phaser.Scene {
       return false;
     }
     if (home === this.room.id) return false;
-    void this.goTo(home, spawn, { room: STREET_ROOM, spawn: 'from-nest-0' });
+    this.hud.closeDialogue();
+    this.talkingTo = null;
+    void this.goTo(home, spawn, { room: STREET_ROOM, spawn: 'from-nest-0' }, fadeMs);
     return true;
   }
 
@@ -882,8 +891,8 @@ export class RoomScene extends Phaser.Scene {
     eyes: number;
     /** The owl's body layer in use: `owl-body`, or its species' own (`owl-barn-body`). */
     owlArt: string;
-    /** NPC owls in this room and the marker each shows. */
-    npcs: Array<{ id: string; x: number; y: number; mark: string | null }>;
+    /** NPC owls in this room, the quest marker each shows, and whether its '!' says the owl can talk to it now (OP-114). */
+    npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
     /** Interactables in this room; `here` is false while a leaf pile is used up. */
     objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
     /** Quest items waiting in this room (only this visitor sees them). */
@@ -916,7 +925,7 @@ export class RoomScene extends Phaser.Scene {
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
       owlArt: this.me.artKey,
-      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id) })),
+      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y })),
       actions: this.actions.map((a) => a.id),
@@ -1013,6 +1022,11 @@ export class RoomScene extends Phaser.Scene {
         best = d;
       }
     }
+    // The '!' over the one the owl can talk to now (OP-114): the nearest in reach, while talking to it
+    // is what Interact's '!' (and E) would do, not a spot the owl stands in first, such as the gift shop.
+    const calm = (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false;
+    const talkFirst = out.length === 0;
+    for (const npc of this.npcs.values()) npc.setApproach(npc === nearest && talkFirst, calm);
     if (nearest) {
       const id = nearest.id;
       out.push({ id: `npc:${id}`, label: `Talk to ${nearest.def.name}`, run: () => void this.talk(id) });
@@ -1260,11 +1274,6 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
-  /**
-   * The Jump button or the space bar (OP-082): a hop with a flap, here and for everyone in the room.
-   * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
-   * One every JUMP_EVERY_MS, so a held thumb cannot flood the room.
-   */
   /** Drop the room's socket as a bad network would (tests): false without one, or in the local mode. */
   dropConnection(): boolean {
     if (!this.conn?.drop) return false;
@@ -1272,8 +1281,14 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * The Jump button or the space bar (OP-082): a hop with a flap, here and for everyone in the room.
+   * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
+   * One every JUMP_EVERY_MS, so a held thumb cannot flood the room. Only in a build with the hop
+   * (`padJump`, OP-114): otherwise nothing hops and nothing goes to the room, until flight (OP-084).
+   */
   jump(): boolean {
-    if (!this.built || this.leaving) return false;
+    if (!this.cfg.padJump || !this.built || this.leaving) return false;
     const now = Date.now();
     if (now - this.jumpedAt < JUMP_EVERY_MS) return false;
     this.jumpedAt = now;
@@ -1530,17 +1545,18 @@ export class RoomScene extends Phaser.Scene {
     else this.hud.toast('The gift shop opens soon.');
   }
 
-  private async goTo(roomId: string, spawn: string, from: RoomStart['from']): Promise<void> {
-    if (await this.leaveRoom()) this.scene.start('room', { room: roomId, spawn, from } satisfies RoomStart);
+  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS): Promise<void> {
+    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from } satisfies RoomStart);
   }
 
   /** The owl stops, the room fades and its connection closes. False when the room is already being left. */
-  private async leaveRoom(): Promise<boolean> {
+  private async leaveRoom(fadeMs = LEAVE_FADE_MS): Promise<boolean> {
     if (this.leaving) return false;
     this.leaving = true;
     this.hud.setHints([]);
     this.me.walk = null;
-    this.cameras.main.fadeOut(220, 12, 30, 54);
+    for (const npc of this.npcs.values()) npc.setApproach(false, true);
+    this.cameras.main.fadeOut(fadeMs, 12, 30, 54);
     await new Promise<void>((r) => this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => r()));
     await this.teardown();
     return true;

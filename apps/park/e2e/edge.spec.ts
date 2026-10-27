@@ -334,19 +334,16 @@ test.describe('room server', () => {
     await b.context().close();
   });
 
-  test('a hop through the room server: the other owls see it, and the owl stays where it stood', async ({ browser }) => {
+  test('no hop goes through the room server while the hop is off (OP-114): the other owls see nothing', async ({ browser }) => {
     const a = await visitor(browser);
     const b = await visitor(browser);
     await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
-    const where = (await state(a)).peers[0]!.pos;
-    const seen = peakHeight(a, 'peer');
-    expect(await b.evaluate(() => window.owlPark.jump())).toBe(true);
-    expect(await seen).toBeGreaterThan(8);
-    await expect.poll(async () => (await state(a)).peers[0]?.emote, { timeout: 5_000 }).toBe('jump');
-    // Only a look: the owl is in the same place for everyone, and no quest or collection was asked.
-    expect((await state(a)).peers[0]!.pos).toEqual(where);
-    expect((await state(b)).pos).toEqual(where);
+    const seen = peakHeight(a, 'peer', 2_000);
+    expect(await b.evaluate(() => window.owlPark.jump())).toBe(false);
+    await b.keyboard.press('Space');
+    expect(await seen).toBe(0);
+    expect((await state(a)).peers[0]?.emote ?? null).toBeNull();
     await a.context().close();
     await b.context().close();
   });
