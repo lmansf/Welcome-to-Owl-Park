@@ -66,7 +66,8 @@ test.describe('leaving the park (this device)', () => {
   test('Go home goes straight to the owl’s own nest, from the park and from the lobby', async ({ page }) => {
     await openPark(page, { room: 'hub', collector: 'e2e-go-home' });
     let menu = await openMenu(page, 'nest');
-    await menu.locator('[data-screen="home"]').click();
+    // Go home acts at once on a key; a pointer holds it (pad.spec.ts).
+    await menu.locator('[data-screen="home"]').press('Enter');
     await inRoom(page, /^nest-/);
     await expect.poll(async () => (await state(page)).nest?.mine, { timeout: 10_000 }).toBe(true);
     const home = (await state(page)).room;
@@ -87,7 +88,7 @@ test.describe('leaving the park (this device)', () => {
     // And from the lobby, the same nest.
     await openPark(page, { room: 'lobby', collector: 'e2e-go-home' });
     menu = await openMenu(page, 'nest');
-    await menu.locator('[data-screen="home"]').click();
+    await menu.locator('[data-screen="home"]').press('Enter');
     await inRoom(page, home);
   });
 });

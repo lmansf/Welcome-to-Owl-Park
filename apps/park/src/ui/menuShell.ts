@@ -64,11 +64,6 @@ const ICONS: Record<MenuTabId, string> = {
     '<svg viewBox="0 0 32 32" aria-hidden="true"><path class="i2" d="M16 3l2.3 3.1 3.8-.9.9 3.8 3.1 2.3-1.8 3.5 1.8 3.5-3.1 2.3-.9 3.8-3.8-.9L16 29l-2.3-3.1-3.8.9-.9-3.8-3.1-2.3 1.8-3.5-1.8-3.5 3.1-2.3.9-3.8 3.8.9z"/><circle class="i1" cx="16" cy="16" r="5"/></svg>',
 };
 
-/** A tab's icon (`i1` the main tone, `i2` the accent), for a button elsewhere that leads the same way (the pad's Nest, OP-114). */
-export function menuIcon(id: MenuTabId): string {
-  return ICONS[id];
-}
-
 const CSS = `
 #hud .menu-layer{position:fixed;inset:0;z-index:20;display:none;pointer-events:auto;align-items:center;justify-content:center}
 #hud .menu-layer.open{display:flex}
@@ -99,6 +94,9 @@ const CSS = `
 #hud .menu-shell .mbtn{min-height:var(--m-target);padding:10px 18px;border-radius:999px;background:var(--m-accent);color:var(--m-on-accent);border:0;font-weight:800}
 #hud .menu-shell .mbtn.ghost{background:transparent;color:var(--m-text);border:2px solid var(--m-frame)}
 #hud .menu-shell .mbtn[disabled]{opacity:.55}
+#hud .menu-shell .mbtn.hold{position:relative;overflow:hidden;isolation:isolate;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#hud .menu-shell .mbtn.hold::before{content:'';position:absolute;inset:0;z-index:-1;background:rgba(12,30,54,.3);transform:scaleX(0);transform-origin:left;transition:transform .12s ease-out}
+#hud .menu-shell .mbtn.hold.holding::before{transform:scaleX(1);transition:transform .35s linear}
 #hud .menu-shell .mmeter{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:baseline}
 #hud .menu-shell .mmeter .bar{grid-column:1 / -1;display:block;height:12px;border-radius:6px;background:color-mix(in srgb,var(--m-frame) 22%,transparent);overflow:hidden}
 #hud .menu-shell .mmeter .bar i{display:block;height:100%;background:var(--m-accent);border-radius:6px}

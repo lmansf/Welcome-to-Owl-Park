@@ -132,7 +132,7 @@ test.describe('busy nights (OP-075)', () => {
     await inPark(phone);
     await expect(ribbon(phone)).toContainText('The market is packed tonight');
     await showNotice(phone);
-    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-nest]', '[data-pad-interact]', '[data-menu-btn]', '[data-pad-map]', '[data-emotes-btn]', '[data-say-btn]', '#hud .stick']);
+    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-interact]', '[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]', '#hud .stick']);
     await phone.screenshot({ path: 'e2e-screenshots/ribbon-phone-room.png' });
     await dropNotice(phone);
     // Off: gone for everyone inside.

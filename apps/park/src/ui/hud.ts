@@ -14,7 +14,7 @@ import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createJoystick } from './joystick';
 import { createLeaveCard } from './leaveCard';
-import { createMenuShell, menuIcon } from './menuShell';
+import { createMenuShell } from './menuShell';
 import { mapPlaceOf, renderCollection, renderMap, renderNest, renderSettings } from './menuTabs';
 import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuilder';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
@@ -160,11 +160,9 @@ export interface Hud {
   onAction(cb: (id: string) => void): void;
   /** The pad's Interact button (touch screens): what E does, the first action where the owl stands. */
   onInteract(cb: () => void): void;
-  /** The pad's Jump button (touch screens): a hop, while the build has it (`padJump`); its place in the diamond waits empty otherwise. */
+  /** The pad's Jump button (touch screens): a hop, while the build has it (`padJump`); its place on the pad is drawn dim otherwise. */
   onJump(cb: () => void): void;
   setPadJump(on: boolean): void;
-  /** The pad's Nest button (touch screens, OP-114), once it has been held: home to the owl's own nest. */
-  onNest(cb: () => void): void;
   /**
    * Quest news (OP-083): a new quest taken on, or one ready to hand in. A short line at the top of
    * the screen, and a dot on the Menu button and its Quests tile until the quests screen is opened.
@@ -254,15 +252,16 @@ const CSS = `
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
  * Touch screens: a pad like a handheld's (OP-082, OP-114). The thumbstick stays in the bottom-right
- * corner; on the left a diamond of four like a handheld's face buttons: Nest at the top (held to go
- * home), Interact on the right (nearer the middle), the Menu at the bottom (darker, a handheld's
- * Start) and outside the Map, which opens the Menu at its Map tab (Logan, 2026-10-27, until the pad
- * has fewer buttons): the place Jump takes once flight makes it real (OP-084). Four 56 px buttons whose centres sit 45.25 px from the diamond's middle (81.25 px in,
- * 73.25 px up), so neighbours are 8 px apart; Emotes and Say, 44 px, sit in the two notches above,
- * 9 px clear of their neighbours. All see-through, like the stick.
- * TODO-DOCS (OP-114): docs/PLAYBOOK.md's controls (OP-099): the diamond, Nest held to go home, the
- * '!' for Interact, the Map outside, no hop until flight; docs/ACTIVITIES.md, talking to characters: the '!' over the
- * one the owl can talk to now (game/Npc.ts), at the reach Interact talks from.
+ * corner; on the left three places of a handheld's face buttons (Logan, 2026-10-27): Interact on the
+ * right (nearer the middle), the Menu outside (darker, a handheld's Start) and, below between them,
+ * the place Jump takes once flight makes it real (OP-084), drawn dim and taking no tap until then.
+ * Going home and the Map are the Menu's. Three 56 px places whose centres sit 45.25 px from the
+ * cluster's middle (81.25 px in, 73.25 px up), so Jump's is 8 px from each; Emotes and Say, 44 px,
+ * sit above the Menu and Interact, 9 px clear of them. All see-through, like the stick.
+ * TODO-DOCS (OP-114): docs/PLAYBOOK.md's controls (OP-099): Interact, the Menu and Jump's place, Go
+ * home held in the Menu's Nest tab, the '!' for Interact, no hop until flight; docs/ACTIVITIES.md,
+ * talking to characters: the '!' over the one the owl can talk to now (game/Npc.ts), at the reach
+ * Interact talks from.
  */
 @media (pointer:coarse){
   #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}
@@ -272,18 +271,13 @@ const CSS = `
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
   #hud .pad-btn .i2{fill:#FFD36A}
-  #hud .pad-btn.nest{left:53.25px;bottom:90.5px}
-  #hud .pad-btn.nest.idle{opacity:.55}
-  #hud .pad-btn.nest .ring{position:absolute;left:-6px;top:-6px;width:64px;height:64px;transform:rotate(-90deg);pointer-events:none}
-  #hud .pad-btn.nest .ring circle{fill:none;stroke:#FFD36A;stroke-width:4;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset .12s ease-out}
-  #hud .pad-btn.nest.holding .ring circle{stroke-dashoffset:0;transition:stroke-dashoffset .35s linear}
   #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
-  #hud .pad-btn.jump{left:8px;bottom:45.25px}
-  #hud .pad-btn.map{left:8px;bottom:45.25px}
-  #hud .pad.jumps .pad-btn.map{display:none}
+  #hud .pad-btn.jump{left:53.25px;bottom:0}
+  #hud .pad-slot{position:absolute;left:53.25px;bottom:0;width:56px;height:56px;border-radius:50%;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);opacity:.4;pointer-events:none}
+  #hud .pad.jumps .pad-slot{display:none}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
-  #hud .menu-btn{position:absolute;left:53.25px;bottom:0;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .menu-btn{position:absolute;left:8px;bottom:45.25px;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .menu-btn i{width:20px;height:14px}
   #hud .emote-btn{position:absolute;left:1.5px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .emote-btn svg{width:28px;height:28px}
@@ -328,11 +322,6 @@ const EMOTES_ICON =
 const INTERACT_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path class="i1" d="M16 5.5v13.5" stroke-width="4.6" stroke-linecap="round" fill="none"/><circle class="i2" cx="16" cy="25.6" r="2.9"/></svg>';
 
-/** The pad's Nest button: the Menu's nest (OP-108), with a ring that fills while it is held. */
-const NEST_ICON = `<svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" pathLength="100"/></svg>${menuIcon('nest')}`;
-/** How long the Nest button is held before the owl goes home (OP-114): long enough that a tap mid-quest does nothing. */
-const NEST_HOLD_MS = 350;
-
 /** The pad's Jump button: up from a little arc. */
 const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -359,10 +348,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom">
       <div class="pad">
-        <button class="pad-btn nest" data-pad-nest aria-label="Go home (hold)">${NEST_ICON}</button>
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}</button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" hidden>${JUMP_ICON}</button>
-        <button class="pad-btn map" data-pad-map aria-label="Map" aria-haspopup="dialog">${menuIcon('map')}</button>
+        <div class="pad-slot" data-pad-slot aria-hidden="true"></div>
       </div>
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
@@ -381,10 +369,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
   const pad = $<HTMLElement>('.pad');
-  const nestBtn = $<HTMLButtonElement>('[data-pad-nest]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
-  const mapBtn = $<HTMLButtonElement>('[data-pad-map]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
   const notices = $<HTMLElement>('[data-notices]');
   const actionsEl = $<HTMLElement>('[data-actions]');
@@ -446,7 +432,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let actionCb: ((id: string) => void) | null = null;
   let interactCb: (() => void) | null = null;
   let jumpCb: (() => void) | null = null;
-  let nestCb: (() => void) | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
   /** The gated realms the keepers have opened (the realms switch), for the Menu map. */
@@ -575,40 +560,16 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     else openScreen(id);
   };
   menuBtn.addEventListener('click', () => toggle('menu', () => menu.isOpen()));
-  mapBtn.addEventListener('click', () => toggle('map', () => menu.isOpen()));
   emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
   sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
   sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
   interactBtn.addEventListener('click', () => interactCb?.());
   jumpBtn.addEventListener('click', () => jumpCb?.());
   // A pressed look while the thumb is down (touch screens do not all show :active).
-  for (const b of [nestBtn, interactBtn, jumpBtn, mapBtn]) {
+  for (const b of [interactBtn, jumpBtn]) {
     b.addEventListener('pointerdown', () => b.classList.add('on'));
     for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) b.addEventListener(t, () => b.classList.remove('on'));
   }
-  // Nest goes home only once held for NEST_HOLD_MS, its ring filling, so a stray tap mid-quest does
-  // nothing; let go sooner and the ring empties. A keyboard's press is meant: it goes at once.
-  let nestHold: ReturnType<typeof setTimeout> | null = null;
-  const nestOn = () => nestBtn.getAttribute('aria-disabled') !== 'true';
-  const letGo = () => {
-    if (nestHold) clearTimeout(nestHold);
-    nestHold = null;
-    nestBtn.classList.remove('holding');
-  };
-  nestBtn.addEventListener('pointerdown', () => {
-    if (!nestOn()) return;
-    letGo();
-    nestBtn.classList.add('holding');
-    nestHold = setTimeout(() => {
-      letGo();
-      nestCb?.();
-    }, NEST_HOLD_MS);
-  });
-  for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) nestBtn.addEventListener(t, letGo);
-  nestBtn.addEventListener('click', (e) => {
-    if (e.detail === 0 && nestOn()) nestCb?.();
-  });
-  nestBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is the hold, not the browser's menu
 
   function setQuestNews(on: boolean) {
     questNews = on;
@@ -697,10 +658,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setWaysOut(ways) {
       waysOut = { ...ways };
-      // In its own nest the owl is home: Nest rests, dimmed.
-      nestBtn.classList.toggle('idle', !ways.home);
-      nestBtn.setAttribute('aria-disabled', String(!ways.home));
-      if (!ways.home) letGo();
       menu.refresh();
     },
     attachQuests(state, actions, tasks) {
@@ -832,9 +789,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setPadJump(on) {
       jumpBtn.hidden = !on;
       pad.classList.toggle('jumps', on);
-    },
-    onNest(cb) {
-      nestCb = cb;
     },
     onJump(cb) {
       jumpCb = cb;
