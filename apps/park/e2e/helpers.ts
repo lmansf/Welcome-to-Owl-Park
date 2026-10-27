@@ -242,20 +242,27 @@ export async function holdSpace(page: Page, ms: number): Promise<void> {
 }
 
 /**
- * The space bar held through a jump to near its top, let go, and pressed again for the flap, held
- * `ms` more: from the flap's top on, a glide (OP-084). Near the top by the page's own reckoning, so
- * a slow runner's round trips cannot turn the flap into a second jump from the floor.
+ * A jump held to its top and a little past, then the flap, held `ms`: from the flap's top on, a
+ * glide (OP-084). Pressed in the page with set holds (owlPark.jump), the flap the moment the owl is
+ * near the top by the page's own reckoning, so a slow runner's round trips cannot let the owl come
+ * down first and turn the flap into a second jump from the floor. Resolves once the flap is pressed.
  */
 export async function jumpFlapGlide(page: Page, ms: number): Promise<void> {
-  await page.keyboard.down('Space');
-  await page.waitForFunction(() => {
-    const s = window.owlPark.state();
-    return !!s && s.height > 100 && s.air.vz < 150;
-  });
-  await page.keyboard.up('Space');
-  await page.keyboard.down('Space');
-  await page.waitForTimeout(ms);
-  await page.keyboard.up('Space');
+  await page.evaluate(
+    (ms) =>
+      new Promise<void>((resolve) => {
+        window.owlPark.jump(500);
+        const tick = () => {
+          const s = window.owlPark.state();
+          if (s && s.height > 100 && s.air.vz < 150) {
+            window.owlPark.jump(ms);
+            resolve();
+          } else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    ms,
+  );
 }
 
 /** Wait for an action button where the owl stands, then press it. */

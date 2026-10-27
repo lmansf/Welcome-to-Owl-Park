@@ -1477,6 +1477,13 @@ export class RoomScene extends Phaser.Scene {
     this.jumpUpAt = Math.max(at, this.jumpDownAt);
   }
 
+  /** Jump pressed now and let go `holdMs` after the press takes, set at once (the tests and the console). */
+  jumpFor(holdMs: number): boolean {
+    if (!this.jumpDown()) return false;
+    this.jumpUp(this.jumpDownAt + holdMs);
+    return true;
+  }
+
   /**
    * The own owl's flight, stepped to `now` at the flight's step. Its drawing is told each change the
    * moment it comes, and so is the room, within its allowance: a change that finds the allowance

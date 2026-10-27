@@ -187,7 +187,10 @@ declare global {
       /** Talk to an NPC owl or use an interactable in this room, walking up first if need be. */
       talk(npc: string): boolean;
       use(target: string): boolean;
-      /** Press Jump and let go `holdMs` later, as the space bar and the pad's Jump do (OP-084); false out of a room. */
+      /**
+       * Press Jump now and let go exactly `holdMs` after the press takes, as the space bar and the pad's
+       * Jump do (OP-084); false out of a room. The letting go is set at once, so a slow page never holds it longer.
+       */
       jump(holdMs?: number): boolean;
       /** Drop the room server's socket as a bad network would; it reconnects on its own (false in the local mode). */
       drop(): boolean;
@@ -495,12 +498,7 @@ window.owlPark = {
   quests: () => quests.board,
   tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
-  jump: (holdMs = 0) => {
-    const scene = roomScene();
-    if (!scene?.jumpDown()) return false;
-    setTimeout(() => scene.jumpUp(), holdMs);
-    return true;
-  },
+  jump: (holdMs = 0) => roomScene()?.jumpFor(holdMs) ?? false,
   drop: () => roomScene()?.dropConnection() ?? false,
   mirror: () => roomScene()?.toMirror() ?? false,
   openBuilder: () => hud.openOwl(document.body),

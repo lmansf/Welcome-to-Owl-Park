@@ -362,12 +362,13 @@ test.describe('room server', () => {
     const own = flightOf(b, 'own', 12_000);
     await jumpFlapGlide(b, 1_200);
     const [there, here] = await Promise.all([seen, own]);
-    // The other page draws it from the same states: as high, gliding, and as long in the air, give or take the network.
+    // The other page draws it from the same states: as high, gliding, and as long in the air, give or
+    // take the network and a frame on each page (runners draw few frames a second).
     expect(here.peak).toBeGreaterThan(200);
-    expect(there.peak).toBeGreaterThan(here.peak - 15);
-    expect(there.peak).toBeLessThan(here.peak + 15);
+    expect(there.peak).toBeGreaterThan(here.peak - 25);
+    expect(there.peak).toBeLessThan(here.peak + 25);
     expect(there.glided).toBe(true);
-    expect(Math.abs(there.airMs - here.airMs)).toBeLessThan(600);
+    expect(Math.abs(there.airMs - here.airMs)).toBeLessThan(900);
     // Flight is a height over the floor: on both pages the owl comes down where it stood.
     expect((await state(b)).pos).toEqual(stood);
     expect((await state(a)).peers[0]?.pos).toEqual(stood);
