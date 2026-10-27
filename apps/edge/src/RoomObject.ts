@@ -492,7 +492,7 @@ export class RoomObject extends DurableObject<Env> {
       ws.serializeAttachment(kept);
     }
     this.emitCounts();
-    this.statsSeen(att, look);
+    this.statsSeen(att, look, true);
     if (recheck) void this.recheckLook(att, hello.look);
     // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
     if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
@@ -929,11 +929,15 @@ export class RoomObject extends DurableObject<Env> {
     return this.env.COLLECTIONS.getByName('park');
   }
 
-  /** An owl in a room, for the player stats (OP-111): its visit goes on, and its kind and colour as it shows them. */
-  private statsSeen(att: Attachment, look: OwlLook): void {
+  /**
+   * An owl in a room, for the player stats (OP-111): its visit goes on, and its kind and colour as it
+   * shows them. At its hello (`entered`) its time in the room begins (OP-113), in its own nest or not.
+   */
+  private statsSeen(att: Attachment, look: OwlLook, entered = false): void {
     const s = sightingOf(att);
     if (!this.statsOn || !s) return;
-    this.ctx.waitUntil(this.collections().seen(s, { body: look.body, ...(look.species ? { species: look.species } : {}) }).catch(() => undefined));
+    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}) } : s;
+    this.ctx.waitUntil(this.collections().seen(sighting, { body: look.body, ...(look.species ? { species: look.species } : {}) }).catch(() => undefined));
   }
 
   /** These owls' visits are still going (the minute heartbeat, a socket's close), for the player stats. */
