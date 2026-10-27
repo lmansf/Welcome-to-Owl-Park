@@ -1,16 +1,22 @@
 name: CI
 
-# Typecheck, unit tests and build run as three jobs at once; the browser suite starts once the build
-# passes, split across eight runners one test at a time, and their reports are merged into one. A
-# failed typecheck or unit test run cancels the rest of the run (OP-123). A pull request branch runs
-# once, on the pull_request event: a push to it does not start a second run.
+# Two tiers (OP-123). A push to a branch other than main runs the quick tier: typecheck, unit tests
+# and build as three jobs at once, then the browser smoke set (the tests tagged @smoke), in under
+# five minutes. A pull request, a push to main, the nightly run and a run by hand take the full
+# tier: the same three jobs, then the whole browser suite split across eight runners, one test at a
+# time, with their reports merged into one. A push that changes only docs or Markdown runs nothing.
+# A failed typecheck or unit test run cancels the rest of the run.
 on:
   push:
-    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+  schedule:
+    # 07:00 UTC: 03:00 in New York in summer, 02:00 in winter.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -76,8 +82,55 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+  smoke:
+    name: Browser smoke set
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright
+        name: Playwright's version
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install the browser's system packages
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - name: The smoke set (computer and room server)
+        run: pnpm e2e --grep @smoke --project=desktop --project=edge
+        env:
+          CI: 'true'
+      - name: Upload screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-output
+          path: |
+            apps/park/e2e-screenshots
+            apps/park/playwright-report
+            apps/park/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
   e2e:
     name: Browser suite ${{ matrix.shard }}/8
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     # A shard runs an eighth of the suite: 6 to 9 minutes on a hosted runner, about half again on a slow one.

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { state } from './helpers';
 
 test.describe('the lobby (this device)', () => {
-  test('straight into the park with no room asked for, the lobby: the booth window, then the turnstiles into the hub', async ({ page }) => {
+  test('straight into the park with no room asked for, the lobby: the booth window, then the turnstiles into the hub', { tag: '@smoke' }, async ({ page }) => {
     // Past the home screen (home=0) with no room asked for: the park's front entrance.
     await page.goto('/?transport=local&home=0');
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });

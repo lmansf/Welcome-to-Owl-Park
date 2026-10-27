@@ -132,7 +132,7 @@ test.describe('single visitor', () => {
     await expect.poll(async () => (await state(page)).walking).toBe(false);
   });
 
-  test('M opens the Menu, T Say and J the Menu on its quests; each key closes its screen again, and so does Escape (Q: mirror.spec.ts)', async ({ page }) => {
+  test('M opens the Menu, T Say and J the Menu on its quests; each key closes its screen again, and so does Escape (Q: mirror.spec.ts)', { tag: '@smoke' }, async ({ page }) => {
     await openPark(page);
     for (const [key, name, opener] of [
       ['KeyM', 'Menu', '[data-menu-btn]'],

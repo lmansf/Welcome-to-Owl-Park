@@ -29,7 +29,7 @@ test.describe('room server', () => {
     expect(js.headers()['cache-control'] ?? '').not.toBe('no-store');
   });
 
-  test('the server places the owl and the HUD shows the park count', async ({ browser }) => {
+  test('the server places the owl and the HUD shows the park count', { tag: '@smoke' }, async ({ browser }) => {
     const a = await visitor(browser);
     const s = await state(a);
     expect(s.room).toBe('hub');
@@ -38,7 +38,7 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
-  test('two visitors in separate contexts see each other appear, walk, and leave', async ({ browser }) => {
+  test('two visitors in separate contexts see each other appear, walk, and leave', { tag: '@smoke' }, async ({ browser }) => {
     const a = await visitor(browser, { look: '#8B5A2B,#F6F1E3,#C9A227' });
     const b = await visitor(browser, { look: '#2F3E5C,#E0D4F0,#00E5FF' });
     await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);

@@ -30,7 +30,7 @@ test.describe('the opening switch (OP-067)', () => {
     await flip(request, 'deployed');
   });
 
-  test('only the keepers flip it, on their page or with the admin key, and a new pass finds the gate closed', async ({ browser, request }) => {
+  test('only the keepers flip it, on their page or with the admin key, and a new pass finds the gate closed', { tag: '@smoke' }, async ({ browser, request }) => {
     expect((await request.get('/api/admin/gate')).status()).toBe(403);
     expect((await request.post('/api/admin/gate', { data: { mode: 'ticket' } })).status()).toBe(403);
     expect(await (await request.get('/api/admin/gate', { headers: ADMIN })).json()).toEqual({ mode: 'open', closedAt: null, set: null, deployed: 'open' });
