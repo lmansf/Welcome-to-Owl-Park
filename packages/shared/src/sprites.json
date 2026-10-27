@@ -199,6 +199,8 @@
     "owl-snowy-blink": {"size": [200, 240], "drawn": [20, 48, 87, 53], "centre": [63.5, 75], "solid": [20, 48, 87, 53]},
     "owl-snowy-body": {"size": [200, 240], "drawn": [6, 4, 172, 236], "centre": [92, 122], "solid": [6, 20, 155, 220]},
     "owl-snowy-face": {"size": [200, 240], "drawn": [20, 48, 87, 53], "centre": [63.5, 75], "solid": [20, 48, 87, 53]},
+    "owl-wing-accent": {"size": [200, 120], "drawn": [69, 1, 119, 109], "centre": [129, 55.5], "solid": [69, 1, 119, 109]},
+    "owl-wing-body": {"size": [200, 120], "drawn": [6, 0, 183, 112], "centre": [97, 56], "solid": [6, 1, 182, 111]},
     "robot-owl": {"size": [900, 900], "drawn": [149, 16, 601, 884], "centre": [449.5, 458], "solid": [150, 19, 599, 880]}
   }
 }

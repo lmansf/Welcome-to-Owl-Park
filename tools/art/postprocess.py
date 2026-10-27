@@ -60,8 +60,8 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
 
 from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, SPRITES_PATH, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
-                    TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size, now_iso, owl_layer_base,
-                    owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
+                    TINTED_LAYERS, TOOLS_ART_DIR, WING_LAYERS, WING_MASTER, ArtError, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size,
+                    now_iso, owl_layer_base, owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, sprites, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, clear_glow, key_out, solidify  # noqa: E402
@@ -74,6 +74,7 @@ from artlib.resize import downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
 import owl_layers  # noqa: E402
+import wing_layers  # noqa: E402
 
 Image.MAX_IMAGE_PIXELS = 80_000_000
 
@@ -728,6 +729,33 @@ def cmd_owl(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_wings(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Flight (OP-084): the picked wing painting -> owl-wing-body and owl-wing-accent at 1x and 2x."""
+    raw, sc = resolve_raw(ctx, WING_MASTER, a.raw)
+    master = open_raw(raw)
+    keys = owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), sc)
+    auto = bool(a.key_colour) and a.key_colour.lower() == "auto"
+    kc = None if auto else (key_colour_for(ctx, WING_MASTER, a.key_colour, sc) or keys["backdrop"])
+    res = wing_layers.split_wing(master, keys, flip=a.flip, chroma=chroma_params(a, kc))
+    tools = [f"wings: flip={a.flip} key={res.info.get('backdrop')} root={wing_layers.ROOT} span={wing_layers.SPAN} windows=" + ",".join(f"{n}:{r['hue']}±{r['window']}" for n, r in keys["regions"].items() if n != "belly") + f" floor={keys['luminance_floor']} lit_pct={keys['lit_percentile']}", "budget: LA truecolour"]
+    for key in WING_LAYERS:
+        outputs: dict[str, dict] = {}
+        for tag, layer, mult in (("1x", res.layers_1x[key], 1), ("2x", res.layers_2x[key], 2)):
+            data, _info = encode_under_budget(layer, ctx.budget)
+            fname = f"{key}.png" if tag == "1x" else f"{key}@2x.png"
+            outputs[tag] = {**write_final(ctx, fname, data, (wing_layers.WING_W * mult, wing_layers.WING_H * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": key, "logical": tag}
+            note(f"{fname}: {outputs[tag]['bytes']} bytes ({layer.mode})")
+        save_post_record(ctx, key, {"key": key, "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
+    looks = (("#5A6E8C", "#C8783C"), ("#8B5A2B", "#F2E3C6"), ("#2F3E5C", "#00E5FF"))
+    sheet = Image.new("RGBA", (wing_layers.WING_W * 2 * len(looks) + 20 * (len(looks) + 1), wing_layers.WING_H * 2 + 40), (12, 30, 54, 255))
+    for i, (body, accent) in enumerate(looks):
+        sheet.alpha_composite(wing_layers.composite(res.layers_2x, body, accent), (20 + i * (wing_layers.WING_W * 2 + 20), 20))
+    rv = write_review(ctx, "owl-wing-layers.png", sheet)
+    note(f"review: {rel_to_repo(rv)}")
+    note(json.dumps({k: res.info[k] for k in ("region_px", "registration") if k in res.info}))
+    return 0
+
+
 def cmd_grade(ctx: Ctx, a: argparse.Namespace) -> int:
     pal, sha = load_palette(a.realm)
     img = Image.open(a.input)
@@ -1048,6 +1076,11 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
                 rep = check_overlay(Image.open(pngs[f"{key}.png"]), *view, key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"))
                 for v in rep["violations"]:
                     problems.append(f"{key}.png: {v}")
+        if key in WING_LAYERS:
+            for name in (f"{key}.png", f"{key}@2x.png"):
+                p = pngs.get(name)
+                if p and Image.open(p).mode != "LA":
+                    problems.append(f"{name}: the wing is a tintable layer and must be LA (white with grey shading)")
         base = owl_layer_base(key)
         if base:
             for name in (f"{key}.png", f"{key}@2x.png"):
@@ -1342,6 +1375,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(despill_band=4)  # the owl's flat fills need only a narrow despill band
     add_common(sp)
     sp.set_defaults(fn=cmd_owl)
+
+    sp = sub.add_parser("wings", help="the owls' wing painting (owl-wing-right) -> owl-wing-body and owl-wing-accent at 1x and 2x (OP-084)")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--keys", default=None, help="owl-keys.json override")
+    sp.add_argument("--flip", action="store_true", help="mirror a winner painted as a left wing")
+    add_chroma_flags(sp)
+    sp.set_defaults(despill_band=4)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_wings)
 
     sp = sub.add_parser("grade", help="apply a realm palette grade to one image")
     sp.add_argument("input")

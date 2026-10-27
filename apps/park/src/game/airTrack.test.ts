@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AIRBORNE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, ON_GROUND, carryOn, newFlier, stepFlier, type Air } from '@owl-park/shared';
-import { AirTrack, FLAP_MS, SHADOW_FULL_Z, shadowFade, wingsFor } from './airTrack';
+import { AirTrack, FLAP_BEATS, FLAP_MS, SHADOW_FULL_Z, WING_TURN, shadowFade, wingTurn } from './airTrack';
 
 /** One step into a jump, as the jumping page tells it. */
 const up = stepFlier(newFlier(), { pressed: true, held: true }).air;
@@ -41,7 +41,7 @@ describe('an owl’s flight as a page draws it (OP-084)', () => {
     expect(soon.at(2900)).toEqual(ON_GROUND);
   });
 
-  it('beats the wings for a jump or a flap, spreads them in a glide and tucks them in a fall', () => {
+  it('beats the wings for a jump or a flap, spreads them in a glide, raises them a little in a fall, and folds them away on the ground', () => {
     const track = new AirTrack();
     track.tell(up, 1000);
     track.at(1000);
@@ -50,10 +50,16 @@ describe('an owl’s flight as a page draws it (OP-084)', () => {
     track.tell({ z: 40, vz: 180, s: AIRBORNE, f: 1 }, 1100);
     track.at(1100);
     expect(track.flapAt).toBe(1000);
-    expect([0, 0.3, 0.55, 0.8].map((t) => wingsFor(up, t * FLAP_MS))).toEqual(['spread', 'tucked', 'spread', 'tucked']);
-    expect(wingsFor({ z: 80, vz: -GLIDE_SINK, s: GLIDING, f: 0 }, FLAP_MS * 2)).toBe('spread');
-    expect(wingsFor({ z: 80, vz: -400, s: AIRBORNE, f: 0 }, FLAP_MS * 2)).toBe('tucked');
-    expect(wingsFor(ON_GROUND, 0)).toBeNull();
+    // A beat starts with the wings up, sweeps them down (the power stroke) and back, FLAP_BEATS times.
+    const beat = FLAP_MS / FLAP_BEATS;
+    expect(wingTurn(up, 0)).toEqual({ turn: WING_TURN.up, beating: true });
+    expect(wingTurn(up, beat / 2)!.turn).toBeCloseTo(WING_TURN.down);
+    expect(wingTurn(up, beat)!.turn).toBeCloseTo(WING_TURN.up);
+    expect(wingTurn(up, beat * 1.5)!.turn).toBeCloseTo(WING_TURN.down);
+    // Then they hold: spread in a glide, raised a little in a fall.
+    expect(wingTurn({ z: 80, vz: -GLIDE_SINK, s: GLIDING, f: 0 }, FLAP_MS * 2)).toEqual({ turn: WING_TURN.glide, beating: false });
+    expect(wingTurn({ z: 80, vz: -400, s: AIRBORNE, f: 0 }, FLAP_MS * 2)).toEqual({ turn: WING_TURN.fall, beating: false });
+    expect(wingTurn(ON_GROUND, 0)).toBeNull();
     expect(GROUNDED).toBe(ON_GROUND.s);
   });
 

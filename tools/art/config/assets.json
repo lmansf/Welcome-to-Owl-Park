@@ -545,6 +545,20 @@
       "from": "owl-screech-master",
       "with_2x": true
     },
+    "owl-wing-body": {
+      "w": 200,
+      "h": 120,
+      "kind": "owl",
+      "from": "owl-wing-right",
+      "with_2x": true
+    },
+    "owl-wing-accent": {
+      "w": 200,
+      "h": 120,
+      "kind": "owl",
+      "from": "owl-wing-right",
+      "with_2x": true
+    },
     "item-witch-hat": {
       "w": 140,
       "h": 100,
@@ -1544,6 +1558,10 @@
     },
     "owl-screech-master": {
       "role": "colour-coded screech owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-wing-right": {
+      "role": "colour-coded right wing of the owls, spread (an edit of the owl master), split into the owl-wing layers",
       "key_colour": "#FF00FF"
     }
   }

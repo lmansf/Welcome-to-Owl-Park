@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
-import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_LAYERS, loadSpeciesArt } from './art';
+import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_LAYERS, WING_H, WING_W, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
-import { AirTrack, shadowFade, wingsFor } from './airTrack';
+import { AirTrack, WING_TURN, shadowFade, wingTurn } from './airTrack';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { EYE_SPREAD, FEET, solidTop, wornAt } from './fit';
 import type { OwlFit } from './fitOverlay';
@@ -18,6 +18,16 @@ const LAYERS = OWL_LAYERS;
 
 /** How far a gliding owl leans into its glide (radians, OP-084). */
 const GLIDE_LEAN = 0.07;
+
+/**
+ * The wings (OP-084): one painted right wing, `owl-wing-body` in the owl's body colour and
+ * `owl-wing-accent` in its accent colour, drawn twice behind the body (the left one mirrored), each
+ * turned about its root at a shoulder (airTrack.ts wingTurn). `root` is the root on the wing's canvas
+ * (the art tools' wing_layers.ROOT); `scale` how big the wing is drawn against the owl; the shoulders
+ * sit `shoulder` of the chest's width either side of its middle and `drop` below its top (owl canvas
+ * units); a held wing eases to where it is held at `ease` a second.
+ */
+const WING = { root: { x: 12, y: 72 }, scale: 0.85, shoulder: 0.24, drop: 10, ease: 10 } as const;
 
 /** Asleep (OP-126): a breath this long, a 'z' this often, and the blink a waking owl gives. */
 const SLEEP = { breathMs: 1500, zEveryMs: 2600, zRiseMs: 700, zFadeMs: 1100, wakeBlinkMs: 150 };
@@ -106,6 +116,12 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private air: Air = ON_GROUND;
   /** How high the owl is drawn above its feet right now (owl canvas units). */
   private lift = 0;
+  /** The wings (OP-084): behind the body, a side for each shoulder; folded away on the ground. */
+  private readonly wings: Phaser.GameObjects.Container;
+  private readonly wingSides: ReadonlyArray<{ side: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image; accent: Phaser.GameObjects.Image; dir: 1 | -1 }>;
+  /** The wings' turn as last drawn (radians), and when the owl was last drawn (ms). */
+  private wingAt: number = WING_TURN.fall;
+  private drawnAt = 0;
   private fx: FxHandle | null = null;
   private fxVariant: string | undefined;
   private pet: Pet | null = null;
@@ -143,7 +159,15 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.wearImgs = { neck: worn(0.12), face: worn(0.5), head: worn(1) };
     this.back = scene.add.container(0, 0);
     this.front = scene.add.container(0, 0);
-    this.pose = scene.add.container(0, 0, [this.back, this.bodyImg, this.bellyImg, this.accentImg, this.wearImgs.neck, this.faceImg, this.blinkImg, this.wearImgs.face, this.wearImgs.head, this.front]);
+    const wing = (dir: 1 | -1) => {
+      const layer = (key: string) => scene.add.image(0, 0, key).setOrigin(WING.root.x / WING_W, WING.root.y / WING_H).setDisplaySize(WING_W * WING.scale, WING_H * WING.scale);
+      const body = layer('owl-wing-body');
+      const accent = layer('owl-wing-accent');
+      return { side: scene.add.container(0, 0, [body, accent]).setScale(dir, 1), body, accent, dir };
+    };
+    this.wingSides = [wing(1), wing(-1)];
+    this.wings = scene.add.container(0, 0, this.wingSides.map((w) => w.side)).setVisible(false);
+    this.pose = scene.add.container(0, 0, [this.back, this.wings, this.bodyImg, this.bellyImg, this.accentImg, this.wearImgs.neck, this.faceImg, this.blinkImg, this.wearImgs.face, this.wearImgs.head, this.front]);
     this.art = scene.add.container(0, 0, [this.pose]);
     this.add([this.pledgeMark, this.shadow, this.art]);
     this.applyLook(look);
@@ -165,6 +189,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.faceImg.setTexture(layers[3]!).setDisplaySize(OWL_W, OWL_H);
       this.blinkImg.setTexture(layers[4]!).setDisplaySize(OWL_W, OWL_H);
     }
+    // The wings sit at this kind's shoulders, measured from its chest.
+    const chest = this.anchors.neck;
+    for (const w of this.wingSides) w.side.setPosition(chest.x - FEET.x + w.dir * chest.w * WING.shoulder, chest.y - FEET.y + WING.drop);
     const sp = speciesOf(look);
     if (sp.art && layers === LAYERS && sp.id !== DEFAULT_SPECIES) {
       // Its own layers load on first sight; until then (or if they are missing) it wears the great horned owl's.
@@ -177,6 +204,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.bodyImg.setTexture(tintedLayer(this.scene, layers[0]!, look.body)).setDisplaySize(OWL_W, OWL_H);
       this.bellyImg.setTexture(tintedLayer(this.scene, layers[1]!, look.belly)).setDisplaySize(OWL_W, OWL_H);
       this.accentImg.setTexture(tintedLayer(this.scene, layers[2]!, look.accent)).setDisplaySize(OWL_W, OWL_H);
+      for (const w of this.wingSides) {
+        w.body.setTexture(tintedLayer(this.scene, 'owl-wing-body', look.body)).setDisplaySize(WING_W * WING.scale, WING_H * WING.scale);
+        w.accent.setTexture(tintedLayer(this.scene, 'owl-wing-accent', look.accent)).setDisplaySize(WING_W * WING.scale, WING_H * WING.scale);
+      }
     } else {
       this.bodyImg.setTexture(layers[0]!).setDisplaySize(OWL_W, OWL_H);
       this.bellyImg.setTexture(layers[1]!).setDisplaySize(OWL_W, OWL_H);
@@ -184,6 +215,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.bodyImg.setTint(hexToInt(look.body));
       this.bellyImg.setTint(hexToInt(look.belly));
       this.accentImg.setTint(hexToInt(look.accent));
+      for (const w of this.wingSides) {
+        w.body.setTint(hexToInt(look.body));
+        w.accent.setTint(hexToInt(look.accent));
+      }
     }
     this.applyWear(look.wear);
   }
@@ -492,16 +527,20 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       sy = 1 + Math.sin(now / 900) * 0.012;
     }
 
-    // Flight: the drawing rises and falls with the wings beating for a jump or a flap, spread in a
-    // glide (leaning into it) and tucked in a fall; the shadow stays on the floor, smaller and fainter.
+    // Flight: the drawing rises and falls; the wings open behind the body, beating for a jump or a
+    // flap, spread in a glide (the owl leaning into it) and raised a little in a fall, and fold away
+    // on landing; the shadow stays on the floor, smaller and fainter.
     this.lift = air.z / (OWL_SCALE * this.size);
-    const wings = wingsFor(air, now - this.flight.flapAt);
-    if (wings === 'spread') {
-      sx *= 1.12;
-      sy *= 0.94;
-    } else if (wings === 'tucked') {
-      sx *= 0.95;
-      sy *= 1.05;
+    const dt = this.drawnAt ? Math.min(0.1, Math.max(0, now - this.drawnAt) / 1000) : 0;
+    this.drawnAt = now;
+    const wingPose = wingTurn(air, now - this.flight.flapAt);
+    if (!wingPose) {
+      this.wings.setVisible(false);
+      this.wingAt = WING_TURN.fall;
+    } else {
+      this.wings.setVisible(true);
+      this.wingAt = wingPose.beating ? wingPose.turn : this.wingAt + (wingPose.turn - this.wingAt) * Math.min(1, dt * WING.ease);
+      for (const w of this.wingSides) w.side.rotation = this.wingAt * w.dir;
     }
     this.art.setScale(this.dir * this.drawnFacing * sx, sy);
     this.art.y = y - this.lift;

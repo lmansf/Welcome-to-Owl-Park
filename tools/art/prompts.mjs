@@ -618,6 +618,34 @@ Object.assign(PROMPTS, SPECIES_OWL_PROMPTS);
 HELPER_KEYS.push(...SPECIES_MASTER_KEYS);
 JOBS.push(...SPECIES_JOBS);
 
+// Flight (OP-084): the owls' wing. One right wing spread open, painted in the owl master's colour code
+// (the covert feathers FLAT red, the long flight feathers FLAT blue, on magenta) as an edit of the
+// selected owl master, so it shares the owls' style. The post stage splits the picked one into the two
+// tintable layers (`pnpm art:finish wings`); the game mirrors it for the left wing and turns both at
+// the shoulder, spread for a glide and swept up and down for a flap, on every owl kind in its colours.
+const WING_COLOURS = 'Each wing is a big, rounded cartoon owl wing in the same simple flat vector-like style as the reference owl: a broad rounded inner part of covert feathers painted FLAT pure red #FF0000, and along its outer and trailing edge a fan of five or six long, rounded-tipped flight feathers painted FLAT pure blue #0000FF, the feathers told apart by thin darker-blue lines; any shading is ONLY a darker value of the same hue (darker red on red, darker blue on blue), with no highlights, no outlines and no colour mixing, and crisp hard edges between the red and the blue.';
+const WING_ONLY = 'NO body, NO head, NO face, NO eyes, NO beak, NO belly, NO feet and NO tail: only the wings. The wings are isolated on a flat, solid, uniform pure magenta #FF00FF background that fills everything else, with no gradient, no vignette and no cast shadow. STYLE: clean flat 2D game sprite art matching the reference owl, simple rounded shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain, friendly and cute. No text, no watermark. AVOID: any owl body, head, face or eyes; any bird, animal or character; any colour other than pure red, pure blue and their darker shades on the wings; any green; magenta tint on the wings; soft or feathered edges; outlines; realistic or detailed feather texture.';
+PROMPTS['owl-wing-right'] = `Using the reference image only for its style and its strict colour code, paint a NEW image: ONE wing of this same cute cartoon owl, its right wing, and nothing else, spread wide open as when it glides, seen straight from the front: its rounded root at the left edge of the frame, halfway down, and the wing spreading out and slightly up to the right, filling most of a 3:2 frame. ${WING_COLOURS} ${WING_ONLY}`;
+/** The wing's shipped layers, split from `owl-wing-right` by the post stage. */
+export const WING_LAYER_KEYS = ['owl-wing-body', 'owl-wing-accent'];
+HELPER_KEYS.push('owl-wing-right');
+JOBS.push({
+  key: 'owl-wing-right',
+  kind: 'owl-edit',
+  derives: WING_LAYER_KEYS,
+  realm: 'hub',
+  optional: true,
+  size: '1536x1024',
+  seed: 1811,
+  variants: 2,
+  key_colour: '#FF00FF',
+  regions: OWL_REGIONS,
+  refs: [{ ref: '@raw:owl-master', role: 'style and colour code', optional: false }],
+  // fal's edit endpoint answers in JPEG unless asked; JPEG rings at the key-colour edges.
+  providers: { fal: { output_format: 'png' } },
+  prompt: PROMPTS['owl-wing-right'],
+});
+
 // ---------------------------------------------------------------------------------------------
 // Wings: the hub and the grove are three screens wide and the market two. A wing is an edit of
 // the room's approved painting: its 800 px edge strip sits at one end of a grey canvas

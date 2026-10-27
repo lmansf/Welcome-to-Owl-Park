@@ -40,6 +40,7 @@ from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRU
 from artlib import patch, sprites, wings  # noqa: E402
 import owl_layers  # noqa: E402
 import postprocess  # noqa: E402
+import wing_layers  # noqa: E402
 
 
 def dist_to_edge(truth: np.ndarray) -> np.ndarray:
@@ -219,6 +220,44 @@ class TestLabels(unittest.TestCase):
         filled, holes = fill_holes(cleaned, 64)
         self.assertEqual(int(holes.sum()), 9)
         self.assertTrue(filled[21, 21])
+
+
+class TestWingSplit(unittest.TestCase):
+    """Flight (OP-084): the owls' wing, split into its two tintable layers with its root at ROOT."""
+
+    @classmethod
+    def setUpClass(cls):
+        # A right wing on magenta: red coverts from the root out to the right, blue flight feathers along their lower edge.
+        im = Image.new("RGB", (1200, 800), (255, 0, 255))
+        d = ImageDraw.Draw(im)
+        for i in range(5):
+            d.ellipse((500 + i * 100, 420 + i * 20, 1100, 520 + i * 20), fill=(0, 0, 255))
+        d.ellipse((100, 250, 900, 550), fill=(255, 0, 0))
+        cls.res = wing_layers.split_wing(im)
+
+    def test_two_tintable_layers_at_1x_and_2x_the_root_on_root_and_the_tip_span_away(self):
+        for tag, k in (("1x", 1), ("2x", 2)):
+            for name in wing_layers.LAYER_NAMES:
+                im = getattr(self.res, f"layers_{tag}")[name]
+                self.assertEqual(im.mode, "LA", f"{name} {tag}")
+                self.assertEqual(im.size, (wing_layers.WING_W * k, wing_layers.WING_H * k))
+        body = np.asarray(self.res.layers_1x["owl-wing-body"].getchannel("A"))
+        accent = np.asarray(self.res.layers_1x["owl-wing-accent"].getchannel("A"))
+        rx, ry = wing_layers.ROOT
+        self.assertGreater(int(body[ry, rx + 2]), 128, "the root is on the wing")
+        self.assertGreater(int(accent.sum()), 0)
+        self.assertTrue(((accent > 8) <= (body > 0)).all(), "the flight feathers lie on the wing, never past it")
+        cols = np.nonzero((body >= 128).any(0))[0]
+        self.assertAlmostEqual(int(cols.max()), rx + wing_layers.SPAN, delta=3)
+        self.assertFalse((body[:, -1] > 0).any() or (body[0, :] > 0).any() or (body[-1, :] > 0).any(), "nothing on the canvas edge")
+
+    def test_a_wing_that_cannot_fit_the_canvas_is_refused(self):
+        im = Image.new("RGB", (800, 1200), (255, 0, 255))
+        d = ImageDraw.Draw(im)
+        d.ellipse((100, 100, 700, 1100), fill=(255, 0, 0))
+        d.ellipse((400, 500, 700, 1100), fill=(0, 0, 255))
+        with self.assertRaises(ArtError):
+            wing_layers.split_wing(im)
 
 
 class TestOwlSplit(unittest.TestCase):

@@ -67,6 +67,9 @@ OWL_LAYERS = ("owl-body", "owl-belly", "owl-accent", "owl-face", "owl-blink")
 TINTED_LAYERS = ("owl-body", "owl-belly", "owl-accent")
 #: Owl species with masters of their own: ``owl-<species>-master`` splits into ``owl-<species>-body`` and so on.
 OWL_SPECIES = ("barn", "burrowing", "snowy", "screech")
+#: Flight (OP-084): the owls' wing, split from one painted right wing into two tintable layers (wing_layers.py).
+WING_MASTER = "owl-wing-right"
+WING_LAYERS = ("owl-wing-body", "owl-wing-accent")
 
 
 def species_layers(species: str) -> tuple[str, ...]:
@@ -93,7 +96,7 @@ def owl_master_of(key: str) -> str:
     return "owl-master"
 
 #: Helper keys used by the generator for anchors and masters; never published as art.
-HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master",
+HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master", "owl-wing-right",
                "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door", "glass-seam",
                "arcade-bays-a", "arcade-bays-b1", "arcade-bays-c1", "arcade-bays-b2", "arcade-bays-c2", "arcade-bays-b3", "arcade-bays-c3")
 PUBLIC_ROOMS = ("hub", "grove", "market", "lobby", "homes")

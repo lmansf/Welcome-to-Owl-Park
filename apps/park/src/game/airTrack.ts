@@ -7,8 +7,14 @@
  */
 import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, JUMP_CUT_SPEED, ON_GROUND, fall, type Air } from '@owl-park/shared';
 
-/** How long the wings beat for a jump or a flap. */
-export const FLAP_MS = 360;
+/** How long the wings beat for a jump or a flap, and how many beats that is. */
+export const FLAP_MS = 420;
+export const FLAP_BEATS = 2;
+/**
+ * The wing's turn about its root at the shoulder (radians; the painted wing is spread and a little
+ * raised at 0, and + lowers the tip): up and down in a beat, spread in a glide, raised a little in a fall.
+ */
+export const WING_TURN = { up: -0.55, down: 0.8, glide: 0.2, fall: -0.1 } as const;
 /** From this height up (room px) the shadow is as small and faint as it gets. */
 export const SHADOW_FULL_Z = 220;
 
@@ -57,13 +63,17 @@ export class AirTrack {
 }
 
 /**
- * The wings in flight: a jump or a flap beats them (spread and tucked in turn, four times over
- * FLAP_MS), a glide holds them spread, a fall keeps them tucked; on the ground, none.
+ * How the wings are turned (WING_TURN) and whether they are beating: a jump or a flap beats them,
+ * from up through down and back FLAP_BEATS times over FLAP_MS, the power in the down stroke; then
+ * they hold spread in a glide or raised a little in a fall. Null on the ground: folded away.
  */
-export function wingsFor(air: Air, sinceFlapMs: number): 'spread' | 'tucked' | null {
+export function wingTurn(air: Air, sinceFlapMs: number): { turn: number; beating: boolean } | null {
   if (air.s === GROUNDED) return null;
-  if (sinceFlapMs >= 0 && sinceFlapMs < FLAP_MS) return Math.floor((sinceFlapMs / FLAP_MS) * 4) % 2 === 0 ? 'spread' : 'tucked';
-  return air.s === GLIDING ? 'spread' : 'tucked';
+  if (sinceFlapMs >= 0 && sinceFlapMs < FLAP_MS) {
+    const swing = 0.5 - 0.5 * Math.cos((2 * Math.PI * FLAP_BEATS * sinceFlapMs) / FLAP_MS);
+    return { turn: WING_TURN.up + (WING_TURN.down - WING_TURN.up) * swing, beating: true };
+  }
+  return { turn: air.s === GLIDING ? WING_TURN.glide : WING_TURN.fall, beating: false };
 }
 
 /** How much of its size and darkness the shadow on the floor gives up at a height: 0 on the floor, 1 from SHADOW_FULL_Z up. */

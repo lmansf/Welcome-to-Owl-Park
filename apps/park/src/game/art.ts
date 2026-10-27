@@ -17,6 +17,9 @@ import { loadSvgTexture } from './svgLoader';
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
 export const OWL_H = 240;
+/** The wing's canvas (OP-084): one right wing, its root at Owl.ts's WING.root, in owl canvas units. */
+export const WING_W = 200;
+export const WING_H = 120;
 
 /**
  * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
@@ -107,6 +110,11 @@ export const ART: Record<string, ArtSpec> = {
   'owl-screech-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-screech-face': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-screech-blink': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  // Flight (OP-084): the owls' wing, one painted right wing in two tintable layers, its feathers in
+  // the owl's body colour and its flight feathers in its accent colour. Every owl kind wears it, drawn
+  // twice behind the body (the left one mirrored) and turned at the shoulder, so it loads at boot.
+  'owl-wing-body': { w: WING_W, h: WING_H, kind: 'owl' },
+  'owl-wing-accent': { w: WING_W, h: WING_H, kind: 'owl' },
 };
 
 export { OWL_LAYERS, SPECIES_LAYERS };
@@ -308,6 +316,16 @@ function drawOwlPlaceholder(g: Phaser.GameObjects.Graphics, key: string): void {
       g.fillCircle(124, 80, 9);
       g.fillStyle(0xc9a227, 1);
       g.fillTriangle(92, 96, 108, 96, 100, 112);
+      break;
+    case 'owl-wing-body':
+      // A broad rounded wing from its root (12, 72) out to the right, a little raised.
+      g.fillStyle(0xffffff, 1);
+      g.fillEllipse(96, 60, 168, 64);
+      break;
+    case 'owl-wing-accent':
+      // Its flight feathers along the trailing edge.
+      g.fillStyle(0xffffff, 1);
+      for (let i = 0; i < 5; i++) g.fillEllipse(118 + i * 14, 70 + i * 5, 64, 16);
       break;
     case 'owl-blink':
       g.lineStyle(4, 0x0c1e36, 1);

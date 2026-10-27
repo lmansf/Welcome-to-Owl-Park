@@ -23,7 +23,7 @@ function parseArtTable() {
   const roomSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/room.ts'), 'utf8');
   const consts = { ROOM_W: Number(/ROOM_W = (\d+)/.exec(roomSrc)[1]), ROOM_H: Number(/ROOM_H = (\d+)/.exec(roomSrc)[1]) };
   const src = fs.readFileSync(path.join(G.REPO_ROOT, 'apps/park/src/game/art.ts'), 'utf8');
-  for (const m of src.matchAll(/export const (OWL_[WH]) = (\d+);/g)) consts[m[1]] = Number(m[2]);
+  for (const m of src.matchAll(/export const ((?:OWL|WING)_[WH]) = (\d+);/g)) consts[m[1]] = Number(m[2]);
   const start = src.indexOf('export const ART');
   const block = src.slice(start, src.indexOf('\n};', start));
   const re = /^\s*'?([a-z][a-z0-9-]*)'?:\s*\{\s*w:\s*(\w+),\s*h:\s*(\w+),\s*kind:\s*'(\w+)'/gm;
@@ -455,7 +455,7 @@ test('validateJobs rejects invalid or non-public keys, bad sizes and missing key
 
 test('selectJobs supports lists and globs and rejects unmatched patterns', () => {
   const jobs = G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS });
-  assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS]);
+  assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, 'owl-wing-right']);
   assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), P.SPECIES_MASTER_KEYS);
   assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
