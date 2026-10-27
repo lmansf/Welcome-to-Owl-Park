@@ -59,10 +59,10 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
     sys.exit(2)
 
 from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
-                    PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
+                    PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, SPRITES_PATH, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
                     TINTED_LAYERS, TOOLS_ART_DIR, ArtError, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size, now_iso, owl_layer_base,
                     owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
-from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
+from artlib import forbidden, pngmeta, prov, sprites, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib.fields import GAMES as FIELD_GAMES, render_field_guide  # noqa: E402
@@ -920,6 +920,32 @@ def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
         for name in remove_rasters(ctx.public, key, {path.name for path, _, _ in files}):
             note(f"removed stale {name} (not part of this finish; the loader would have kept showing the old art)")
     note(f"{written} file(s) published; provenance appended to {rel_to_repo(prov_path)}")
+    if ctx.public.resolve() == PUBLIC_ART_DIR.resolve():
+        # A new or changed sprite gets its drawn area at once (OP-127).
+        write_sprites(ctx, SPRITES_PATH)
+    return 0
+
+
+def write_sprites(ctx: Ctx, path: Path) -> None:
+    manifest = sprites.build(ctx.public)
+    text = sprites.dumps(manifest)
+    if path.exists() and path.read_text(encoding="utf-8") == text:
+        note(f"sprites: {rel_to_repo(path)} unchanged")
+        return
+    path.write_text(text, encoding="utf-8")
+    note(f"sprites: {rel_to_repo(path)} written ({len(manifest['sprites'])} sprites)")
+
+
+def cmd_sprites(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The sprite manifest from the published art: rewritten, or with --check only compared."""
+    path = Path(a.manifest) if a.manifest else SPRITES_PATH
+    if a.check:
+        text = sprites.dumps(sprites.build(ctx.public))
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
+            raise ArtError(f"{rel_to_repo(path)} does not match the art in {rel_to_repo(ctx.public)}: run `pnpm art:finish sprites`")
+        note(f"sprites: {rel_to_repo(path)} matches the art")
+        return 0
+    write_sprites(ctx, path)
     return 0
 
 
@@ -1315,6 +1341,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
     add_common(sp)
     sp.set_defaults(fn=cmd_publish)
+
+    sp = sub.add_parser("sprites", help="the sprite manifest: every published sprite's drawn area (packages/shared/src/sprites.json; publish rewrites it)")
+    sp.add_argument("--manifest", default=None, help=argparse.SUPPRESS)
+    sp.add_argument("--check", action="store_true", help="fail when the manifest does not match the art, rewriting nothing")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_sprites)
 
     sp = sub.add_parser("check", help="verify published art against the loader contract")
     sp.add_argument("keys", nargs="*")
