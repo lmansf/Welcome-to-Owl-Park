@@ -148,7 +148,10 @@ test.describe('the stained-glass climb through the room server', () => {
     await realms(request, { open: ['glass'], portal: false, night: 'easy' });
     await toPortal(page);
     await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain('portal');
-    await page.waitForTimeout(500);
+    // The room server's word that the portal is off has reached the page.
+    await expect
+      .poll(() => page.evaluate(() => (window.owlPark.game.scene.getScene('room') as unknown as { realms: { portal: boolean } }).realms.portal), { timeout: 10_000 })
+      .toBe(false);
     await page.locator('[data-action="portal"]').click();
     await expect(page.locator('[data-toasts]')).toContainText('Pardon Our Feathers');
     await expect(page.locator('.climb-layer')).toBeHidden();

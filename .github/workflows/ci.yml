@@ -6,6 +6,10 @@ name: CI
 # tier: the same three jobs, then the whole browser suite split across twelve runners by the tests'
 # measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push that changes
 # only docs or Markdown runs nothing. A failed typecheck or unit test run cancels the rest of the run.
+#
+# TODO-DOCS (OP-123): docs/DEPLOY.md gains a CI section: the two tiers and what each runs, tagging a
+# test @smoke, refreshing the shard timings (apps/park/e2e/durations.json) when tests are added, and
+# that browser tests wait on the park's own state (or frames), never on fixed sleeps.
 on:
   push:
     paths-ignore: ['docs/**', '**/*.md']

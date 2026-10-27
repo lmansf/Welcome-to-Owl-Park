@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openPark, state } from './helpers';
+import { frames, openPark, state } from './helpers';
 
 /** Give a collector a variant before the park loads (as if earned earlier), stored the way the local mode keeps it. */
 async function seed(page: Page, collector: string, variant: string): Promise<void> {
@@ -60,7 +60,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     // Step 1: Pip, in the same room. A step done says nothing over the room.
     expect(await page.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
     await expect.poll(() => questStep(page, 'story-welcome'), { timeout: 15_000 }).toBe(1);
-    await page.waitForTimeout(500);
+    await frames(page, 30);
     await expect(page.locator('.toast').filter({ hasText: /step done|\d of \d/ })).toHaveCount(0);
 
     // Step 2 and 3: arriving in the clearing counts; then a flop into the leaves.
@@ -242,7 +242,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await page.keyboard.press('KeyM');
     await page.keyboard.press('Digit1');
     await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
-    await page.waitForTimeout(1_000);
+    await frames(page, 30);
     expect(await seen()).toBe(order[1]);
     await page.keyboard.press('Escape');
   });

@@ -84,7 +84,8 @@ test.describe('room server', () => {
     const start = (await state(a)).pos;
     const target = { x: start.x < 2400 ? 3000 : 1800, y: 800 }; // a long walk, several seconds
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
-    await a.waitForTimeout(300);
+    // Under way before B comes in.
+    await expect.poll(async () => dist((await state(a)).pos, start), { intervals: [50] }).toBeGreaterThan(30);
     const b = await visitor(browser);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 10_000 }).toBe(1);
     const [mine, other] = await Promise.all([state(a), state(b)]);
