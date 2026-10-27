@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openPark, peakHeight, state } from './helpers';
+import { openPark, state } from './helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -11,46 +11,41 @@ const gap = (a: Box, b: Box) => Math.hypot(centre(a).x - centre(b).x, centre(a).
 const npc = async (page: Page, id: string) => (await state(page)).npcs.find((n) => n.id === id)!;
 
 test.describe('the pad (OP-082, OP-114)', () => {
-  test('a phone has three places on the left: Interact nearer the middle, the Menu outside, Jump’s place below them; Emotes and Say above', async ({ page, isMobile }) => {
+  test('a phone has three buttons on the left: Interact nearer the middle, the Menu outside, Jump below them; Emotes and Say above', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page);
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
     const stick = await box('#hud .stick');
     const interact = await box('[data-pad-interact]');
     const menu = await box('[data-menu-btn]');
-    const slot = await box('[data-pad-slot]');
+    const jump = await box('[data-pad-jump]');
     const emotes = await box('[data-emotes-btn]');
     const say = await box('[data-say-btn]');
     const width = page.viewportSize()!.width;
     // The stick keeps the bottom-right corner; the pad keeps to the left.
     expect(stick.x + stick.width).toBeGreaterThan(width - 40);
-    for (const b of [interact, menu, slot, emotes, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
-    // Three of a handheld's face buttons (Logan, 2026-10-27): the Menu and Interact either side, Jump's place below between them.
-    const [i, m, j] = [interact, menu, slot].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>];
+    for (const b of [interact, menu, jump, emotes, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
+    // Three of a handheld's face buttons (Logan, 2026-10-27): the Menu and Interact either side, Jump below between them.
+    const [i, m, j] = [interact, menu, jump].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>];
     expect(Math.abs(m.y - i.y)).toBeLessThan(1);
     expect(m.x).toBeLessThan(i.x);
     expect(j.y).toBeGreaterThan(i.y);
     expect(Math.abs(j.x - (m.x + i.x) / 2)).toBeLessThan(1);
-    // One size, and Jump's place 8 px from each.
-    for (const b of [menu, slot]) expect(b.width).toBeCloseTo(interact.width, 0);
-    for (const [a, b] of [[menu, slot], [slot, interact]] as const) expect(gap(a, b)).toBeCloseTo(8, 0);
+    // One size, and Jump 8 px from each.
+    for (const b of [menu, jump]) expect(b.width).toBeCloseTo(interact.width, 0);
+    for (const [a, b] of [[menu, jump], [jump, interact]] as const) expect(gap(a, b)).toBeCloseTo(8, 0);
     // Emotes and Say above, over the Menu and Interact.
     expect(centre(emotes).x).toBeLessThan(centre(say).x);
     expect(centre(emotes).y).toBeLessThan(m.y);
     expect(centre(say).y).toBeLessThan(i.y);
-    // Thumb-sized and apart: each live button at least 44 px; round ones measured as circles, none over another or the stick.
-    const live = [interact, menu, emotes, say];
+    // Thumb-sized and apart: each button at least 44 px; round ones measured as circles, none over another or the stick.
+    const live = [interact, menu, jump, emotes, say];
     for (const b of live) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
     for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) expect(gap(live[a]!, live[b]!), `${a} and ${b}`).toBeGreaterThan(7.5);
-    for (const b of [...live, slot]) expect(overlaps(b, stick)).toBe(false);
-    // Going home and the Map are the Menu's: no Nest and no Map on the pad.
-    await expect(page.locator('[data-pad-nest], [data-pad-map]')).toHaveCount(0);
-    // No Jump while the hop is off: its place is drawn dim and takes no tap.
-    await expect(page.locator('[data-pad-jump]')).toBeHidden();
-    const empty = page.locator('[data-pad-slot]');
-    await expect(empty).toBeVisible();
-    expect(await empty.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
-    expect(Number(await empty.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(0.5);
+    for (const b of live) expect(overlaps(b, stick)).toBe(false);
+    // Going home and the Map are the Menu's: no Nest and no Map on the pad, and no place kept empty.
+    await expect(page.locator('[data-pad-nest], [data-pad-map], [data-pad-slot]')).toHaveCount(0);
+    await expect(page.locator('[data-pad-jump]')).toHaveAttribute('aria-label', 'Jump');
     // Interact wears the '!' (a stroke and a dot), not a hand.
     await expect(page.locator('[data-pad-interact] svg path')).toHaveCount(1);
     await expect(page.locator('[data-pad-interact] svg circle')).toHaveCount(1);
@@ -80,17 +75,6 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await expect(page.locator('[data-action="booth"] .bang svg')).toBeVisible();
     await interact.tap();
     await expect(page.locator('[data-booth="say"]')).toContainText('coming soon');
-  });
-
-  test('nothing hops while the hop is off: no Jump on the pad, and the space bar does nothing', async ({ page }) => {
-    await openPark(page);
-    await expect(page.locator('[data-pad-jump]')).toBeHidden();
-    const before = (await state(page)).pos;
-    const peak = peakHeight(page, 'own', 1_500);
-    await page.keyboard.press('Space');
-    expect(await peak).toBe(0);
-    expect(await page.evaluate(() => window.owlPark.jump())).toBe(false);
-    expect((await state(page)).pos).toEqual(before);
   });
 
   test('Go home, at the top of the Menu’s Nest tab, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {

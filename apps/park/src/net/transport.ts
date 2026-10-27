@@ -1,4 +1,4 @@
-import type { FeedbackDraft, LineStatus, OwlLook, ParkMessage, PlayerState, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
+import type { Air, FeedbackDraft, LineStatus, OwlLook, ParkMessage, PlayerState, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -28,6 +28,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onPeerSay?(id: string, phrase: number): void;
   /** A peer's owl fell asleep or woke (OP-126). */
   onPeerRest?(id: string, asleep: boolean): void;
+  /** A peer's owl's air state changed (OP-084), holding from `at` on this page's clock: carry it on from there. */
+  onPeerAir?(id: string, air: Air, at: number): void;
   /** The park has a line (OP-075) and this owl has not come through it: it waits on the home screen. */
   onQueued?(): void;
   /** The busy ribbon's words (OP-075), or null when it goes off. */

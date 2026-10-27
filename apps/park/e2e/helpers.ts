@@ -11,13 +11,17 @@ export interface ParkState {
     walking: boolean;
     look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
     emote: string | null;
-    /** How high this owl is drawn above the floor (a hop), in room pixels. */
+    /** How high this owl is drawn above the floor (OP-084), in room pixels. */
     height: number;
+    /** On the ground (0), in the air (1) or gliding (2), as drawn. */
+    air: 0 | 1 | 2;
     /** Asleep where it stands, its visitor idle a while (OP-126). */
     asleep: boolean;
   }>;
-  /** How high this visitor's owl is drawn above the floor (a hop), in room pixels; `pos` stays on the floor. */
+  /** How high this visitor's owl is drawn above the floor (OP-084), in room pixels; `pos` stays on the floor. */
   height: number;
+  /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1) or gliding (2), and flaps left. */
+  air: { z: number; vz: number; s: 0 | 1 | 2; f: 0 | 1 };
   /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */
   asleep: boolean;
   /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
@@ -197,28 +201,44 @@ export async function walkAndStop(page: Page, x: number, y: number): Promise<{ x
   return (await state(page)).pos;
 }
 
+/** An owl's flight as a page drew it: how high it went (room px), how long it was off the floor, and whether it glided. */
+export type FlightSeen = { peak: number; airMs: number; glided: boolean };
+
 /**
- * The highest a page draws an owl (its own, or the first other owl's) during the next hop, sampled
- * every frame: a hop lasts under half a second, too quick for polling. Done once the owl is back on
- * the floor after a hop, or after `ms` with none.
+ * The next flight a page draws (OP-084: its own owl's, or the first other owl's), sampled every
+ * frame, too quick for polling. Done once the owl is back on the floor after leaving it, or after
+ * `ms` with no flight.
  */
-export function peakHeight(page: Page, whose: 'own' | 'peer', ms = 6000): Promise<number> {
+export function flightOf(page: Page, whose: 'own' | 'peer', ms = 8000): Promise<FlightSeen> {
   return page.evaluate(
     ({ whose, ms }) =>
-      new Promise<number>((resolve) => {
-        let max = 0;
+      new Promise<{ peak: number; airMs: number; glided: boolean }>((resolve) => {
+        let peak = 0;
+        let up = 0;
+        let glided = false;
         const start = performance.now();
         const tick = () => {
           const s = window.owlPark.state();
+          const now = performance.now();
           const h = (whose === 'own' ? s?.height : s?.peers[0]?.height) ?? 0;
-          max = Math.max(max, h);
-          if ((max > 0 && h === 0) || performance.now() - start >= ms) resolve(max);
+          const mode = whose === 'own' ? s?.air.s : s?.peers[0]?.air;
+          if (h > 0 && !up) up = now;
+          if (mode === 2) glided = true;
+          peak = Math.max(peak, h);
+          if ((up && h === 0) || now - start >= ms) resolve({ peak, airMs: up ? now - up : 0, glided });
           else requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       }),
     { whose, ms },
   );
+}
+
+/** Hold the space bar down for `ms`, then let it go (OP-084: a jump held, a flap, a glide). */
+export async function holdSpace(page: Page, ms: number): Promise<void> {
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(ms);
+  await page.keyboard.up('Space');
 }
 
 /** Wait for an action button where the owl stands, then press it. */

@@ -29,7 +29,7 @@ const CSS = `
 export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
   [['E'], 'Do what you are standing at'],
-  [['Space'], 'Hop'],
+  [['Space'], 'Jump; again in the air to flap, held on the way down to glide'],
   [['M'], 'Menu'],
   [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],
@@ -130,7 +130,7 @@ export function settingsRows(store: SettingsStore, redraw: () => void): HTMLElem
     const tips = document.createElement('p');
     tips.className = 'tips';
     tips.textContent =
-      'Tap the floor to walk there, or hold the thumbstick. On a phone, the hand does what you are standing at, the arrow hops, the small buttons in the corner open the Menu and Say, and the smile above them your emotes. Tap an owl with a gold “!” to talk. Your quests are in the Menu.';
+      'Tap the floor to walk there, or hold the thumbstick. On a phone, the “!” does what you are standing at and the arrow below jumps: tap it again in the air to flap, and hold it on the way down to glide. The button beside the “!” opens the Menu, and the small ones above open your emotes and Say. Tap an owl with a gold “!” to talk. Your quests are in the Menu.';
     rows.push(keys, tips);
   }
   for (const r of rows) syncSettings(r, store.get());

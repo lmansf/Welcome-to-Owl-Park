@@ -50,6 +50,7 @@ describe('attachKeyboard', () => {
     const keys = attachKeyboard(fake.win, {
       interact: () => calls.push('interact'),
       jump: () => calls.push('jump'),
+      jumpEnd: () => calls.push('jump end'),
       menu: () => calls.push('menu'),
       say: () => calls.push('say'),
       emoteKey: (n) => calls.push(`emote ${n}`),
@@ -92,11 +93,13 @@ describe('attachKeyboard', () => {
     expect(calls).toEqual(['emote 1', 'emote 8']);
   });
 
-  it('hops on the space bar once per press, and keeps the page from scrolling', () => {
+  it('jumps on the space bar once per press and lets go as it comes up (OP-084), and keeps the page from scrolling', () => {
     const { key, calls } = setup();
     expect(key('keydown', 'Space')).toBe(true);
     expect(key('keydown', 'Space', { repeat: true })).toBe(true);
     expect(calls).toEqual(['jump']);
+    key('keyup', 'Space');
+    expect(calls).toEqual(['jump', 'jump end']);
   });
 
   it('leaves the space bar to a focused button, which it presses', () => {
@@ -116,10 +119,12 @@ describe('attachKeyboard', () => {
     expect(calls).toEqual([]);
   });
 
-  it('lets go of every key when the window loses focus', () => {
-    const { key, keys, fire } = setup();
+  it('lets go of every key when the window loses focus, the space bar too', () => {
+    const { key, keys, fire, calls } = setup();
     key('keydown', 'ArrowUp');
+    key('keydown', 'Space');
     fire('blur');
     expect(keys.direction()).toBeNull();
+    expect(calls).toEqual(['jump', 'jump end']);
   });
 });

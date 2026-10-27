@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { DEFAULT_SPECIES, JUMP_EMOTE, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_LAYERS, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
-import { HOP_HEIGHT, HOP_MS, hopFlap, hopLift } from './hop';
+import { AirTrack, shadowFade, wingsFor } from './airTrack';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { EYE_SPREAD, FEET, solidTop, wornAt } from './fit';
 import type { OwlFit } from './fitOverlay';
@@ -15,6 +15,9 @@ export { OWL_H, OWL_W };
 export const OWL_SCALE = 0.5;
 
 const LAYERS = OWL_LAYERS;
+
+/** How far a gliding owl leans into its glide (radians, OP-084). */
+const GLIDE_LEAN = 0.07;
 
 /** Asleep (OP-126): a breath this long, a 'z' this often, and the blink a waking owl gives. */
 const SLEEP = { breathMs: 1500, zEveryMs: 2600, zRiseMs: 700, zFadeMs: 1100, wakeBlinkMs: 150 };
@@ -97,8 +100,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private nextZAt = 0;
   private readonly zs: Phaser.GameObjects.Text[] = [];
   private jitter = 0;
-  /** When the last hop began (ms): a hop lifts the drawn owl, never its place in the room. */
-  private hopAt = Number.NEGATIVE_INFINITY;
+  /** Its flight (OP-084): the air states it is told, carried on as frames go by. Flight lifts the drawn owl, never its place in the room. */
+  private readonly flight = new AirTrack();
+  /** Its air as last drawn: how high above the floor (room px), and on the ground, in the air or gliding. */
+  private air: Air = ON_GROUND;
   /** How high the owl is drawn above its feet right now (owl canvas units). */
   private lift = 0;
   private fx: FxHandle | null = null;
@@ -230,27 +235,28 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     }
   }
 
-  /** Play an emote on this owl (everyone in the room plays it on their copy); the hop is one too. */
+  /** Play an emote on this owl (everyone in the room plays it on their copy). */
   playEmote(emote: string): boolean {
-    if (emote === JUMP_EMOTE) {
-      this.hop();
-      return true;
-    }
     return playEmote(this, emote);
   }
 
   /**
-   * A hop with a flap of the wings: only the drawing goes up, so the owl's place, its walk and what
-   * it stands at stay as they are (a hop crosses nothing). Its own state beside emotes, so one can
-   * play during the other.
+   * Tell the owl an air state from `at` on (OP-084; this page's clock): it carries it on as every
+   * page does, so all draw the same arc. Only the drawing goes up, so the owl's place, its walk and
+   * what it stands at stay as they are. Its own state beside emotes, so one can play during the other.
    */
-  hop(now = Date.now()): void {
-    this.hopAt = now;
+  fly(air: Air, at: number): void {
+    this.flight.tell(air, at);
   }
 
   /** How high the owl is drawn above the floor right now, in room pixels (0 on the ground). */
-  hopHeight(): number {
-    return this.lift * OWL_SCALE * this.size;
+  flightHeight(): number {
+    return this.air.z;
+  }
+
+  /** On the ground, in the air or gliding, as last drawn. */
+  get airMode(): Air['s'] {
+    return this.air.s;
   }
 
   /** Flop into a leaf pile. */
@@ -379,9 +385,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   }
 
   /**
-   * The same anchor where it is drawn right now, as a world offset from the feet: lifted by a hop,
+   * The same anchor where it is drawn right now, as a world offset from the feet: lifted in flight,
    * bobbing with the walk, turned by an emote (OP-127). Effects follow this one, so a halo stays on
-   * the head mid-hop; bubbles and marks keep the steady `anchor`, so they can be read.
+   * the head in the air; bubbles and marks keep the steady `anchor`, so they can be read.
    */
   drawnAnchor(name: AnchorName): { x: number; y: number } {
     const p = this.localAnchor(name);
@@ -464,8 +470,13 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     let shadow = 1;
     this.art.x = this.jitter;
 
-    // Walk cycle: a gentle bob and squash while moving.
-    if (this.walk) {
+    // In the air (OP-084): carried on from the last state told, as every page does.
+    const air = this.flight.at(now);
+    this.air = air;
+    const flying = air.s !== GROUNDED;
+
+    // Walk cycle: a gentle bob and squash while moving (on the ground: in the air the feet are off it).
+    if (this.walk && !flying) {
       const phase = (now / 140) % (Math.PI * 2);
       const bob = Math.abs(Math.sin(phase));
       y = -bob * 10;
@@ -481,11 +492,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       sy = 1 + Math.sin(now / 900) * 0.012;
     }
 
-    // A hop: the drawing rises and falls with the wings flapping; the shadow stays on the floor and shrinks.
-    const t = (now - this.hopAt) / HOP_MS;
-    const up = hopLift(t);
-    this.lift = up * HOP_HEIGHT;
-    const wings = hopFlap(t);
+    // Flight: the drawing rises and falls with the wings beating for a jump or a flap, spread in a
+    // glide (leaning into it) and tucked in a fall; the shadow stays on the floor, smaller and fainter.
+    this.lift = air.z / (OWL_SCALE * this.size);
+    const wings = wingsFor(air, now - this.flight.flapAt);
     if (wings === 'spread') {
       sx *= 1.12;
       sy *= 0.94;
@@ -495,8 +505,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     }
     this.art.setScale(this.dir * this.drawnFacing * sx, sy);
     this.art.y = y - this.lift;
-    this.shadow.setScale(shadow * (1 - up * 0.35), shadow * (1 - up * 0.35));
-    this.shadow.setAlpha(1 - up * 0.4);
+    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : 0;
+    const up = shadowFade(air.z);
+    this.shadow.setScale(shadow * (1 - up * 0.45), shadow * (1 - up * 0.45));
+    this.shadow.setAlpha(1 - up * 0.5);
 
     if (this.look.pledge) this.pledgeMark.setAlpha(0.6 + Math.sin(now / 500) * 0.15);
 

@@ -11,7 +11,7 @@ import { ITEM_SIZES } from './itemArt';
  * TODO-DOCS (OP-127): docs/ARCHITECTURE.md describes worn items placed by anchor (wornAt: a hat down
  * over the forehead, its own bottom just above the eyes, a halo and a party hat on the crown instead;
  * glasses on the eyes and a monocle on one of them; a collar from the neck and never above the chin;
- * brow and chin measured from the face layer), effects following the drawn anchors through hops and
+ * brow and chin measured from the face layer), effects following the drawn anchors through flight and
  * emotes, and pets at their owl's size.
  */
 export interface Origin {

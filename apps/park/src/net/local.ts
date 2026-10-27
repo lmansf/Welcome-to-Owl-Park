@@ -63,6 +63,12 @@ export class LocalTransport implements ParkTransport {
           lastSeen.set(msg.id, Date.now());
           handlers.onPeerRest?.(msg.id, msg.asleep);
           break;
+        case 'air':
+          // Tabs of one browser share a clock: the state holds from when its page stepped it.
+          if (msg.id === current.id) return;
+          lastSeen.set(msg.id, Date.now());
+          handlers.onPeerAir?.(msg.id, msg.air, msg.at);
+          break;
       }
     };
 

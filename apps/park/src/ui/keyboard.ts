@@ -2,7 +2,7 @@ import type { Vec2 } from '@owl-park/shared';
 
 /**
  * Keyboard controls: WASD and the arrow keys walk the owl while held, E interacts with what the
- * owl stands at, the space bar hops, M opens and closes the Menu, T the Say wheel, 1 to 8 play an
+ * owl stands at, the space bar jumps (OP-084: again in the air to flap, held to glide), M opens and closes the Menu, T the Say wheel, 1 to 8 play an
  * emote, Q goes to the mirror in the owl's nest where Your owl is (OP-077), J the quests, and
  * Escape closes whatever is open. Keys are matched by place (`KeyboardEvent.code`), so ZQSD walks
  * on an AZERTY keyboard. Typing in a text field, and shortcuts with Ctrl, Alt or Cmd, are left alone.
@@ -38,8 +38,10 @@ export function heldDirection(codes: Iterable<string>): Vec2 | null {
 export interface KeyActions {
   /** E: use whatever the owl is standing at. */
   interact(): void;
-  /** The space bar: hop (the Jump button on a phone). */
-  jump(): void;
+  /** The space bar goes down (the Jump button on a phone, OP-084): a jump, or a flap in the air. `at`: when (ms since 1970). */
+  jump(at?: number): void;
+  /** The space bar comes up, or the page loses the keyboard: let go on the way up and the rise is cut; the glide ends. */
+  jumpEnd(at?: number): void;
   /** M: open or close the Menu. */
   menu(): void;
   /** T: open or close the Say wheel. */
@@ -67,7 +69,17 @@ function ignored(e: KeyboardEvent): boolean {
   return !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
 }
 
-/** The space bar on a focused button or link presses it: that press is the button's, not a hop. */
+/**
+ * When an input happened (ms since 1970), from the event's own time: a press and its letting go keep
+ * the time between them even when the page is slow to hear them (a busy frame). Now, without one.
+ */
+export function eventTime(e: { timeStamp?: number }): number {
+  const now = Date.now();
+  const t = typeof e.timeStamp === 'number' && e.timeStamp > 0 ? performance.timeOrigin + e.timeStamp : now;
+  return Math.min(now, Math.max(now - 1000, t));
+}
+
+/** The space bar on a focused button or link presses it: that press is the button's, not a jump. */
 function pressesControl(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement | null;
   return !!t && (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'SUMMARY' || t.getAttribute?.('role') === 'button');
@@ -85,7 +97,7 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
     if (e.code === 'Space') {
       if (pressesControl(e)) return;
       e.preventDefault(); // the space bar would otherwise scroll the page
-      if (!e.repeat) actions.jump();
+      if (!e.repeat) actions.jump(eventTime(e));
       return;
     }
     if (e.repeat) return;
@@ -102,10 +114,14 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
   };
   const onUp = (e: KeyboardEvent) => {
     held.delete(e.code);
+    if (e.code === 'Space') actions.jumpEnd(eventTime(e));
     // While Cmd is down, macOS sends no key-ups for the other keys: start afresh when it lifts.
     if (e.key === 'Meta') held.clear();
   };
-  const release = () => held.clear();
+  const release = () => {
+    held.clear();
+    actions.jumpEnd();
+  };
   const onVisibility = () => {
     if (win.document.visibilityState !== 'visible') release();
   };

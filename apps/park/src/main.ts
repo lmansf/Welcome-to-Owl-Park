@@ -116,22 +116,24 @@ game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies Ro
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
 // touch screens; E interacts (the pad's Interact on touch screens), M opens the Menu, T the Say wheel
 // (1 to 8 play an emote at once), Q goes to the mirror in the owl's nest, where Your owl is (OP-077),
-// and J the quests. The space bar hops (the pad's Jump) only in a build with the hop (`padJump`):
-// off until flight makes it real (OP-084, OP-114). Go home, held in the Menu, goes home. While the Menu or
+// and J the quests. The space bar (the pad's Jump) jumps, flaps once more in the air, and held on the
+// way down glides (OP-084). Go home, held in the Menu, goes home. While the Menu or
 // one of its screens is open, the owl stays put. On the home screen only Q (as Play does, once there
 // is an owl: into the nest, before its mirror) and Escape do anything; Enter plays too (ui/home.ts).
 const interact = () => {
   if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
 };
-const jump = () => {
-  if (!atHome && !hud.isBlocking()) roomScene()?.jump();
+const jump = (at?: number) => {
+  if (!atHome && !hud.isBlocking()) roomScene()?.jumpDown(at);
 };
+// Letting go always reaches the owl, whatever has opened since.
+const jumpEnd = (at?: number) => roomScene()?.jumpUp(at);
 hud.onInteract(interact);
-hud.setPadJump(cfg.padJump);
-hud.onJump(jump);
+hud.onJump(jump, jumpEnd);
 const keyboard = attachKeyboard(window, {
   interact,
   jump,
+  jumpEnd,
   menu: () => {
     if (!atHome) hud.toggleMenu();
   },
@@ -185,8 +187,8 @@ declare global {
       /** Talk to an NPC owl or use an interactable in this room, walking up first if need be. */
       talk(npc: string): boolean;
       use(target: string): boolean;
-      /** Hop, as the Jump button and the space bar do (false: too soon after the last one). */
-      jump(): boolean;
+      /** Press Jump and let go `holdMs` later, as the space bar and the pad's Jump do (OP-084); false out of a room. */
+      jump(holdMs?: number): boolean;
       /** Drop the room server's socket as a bad network would; it reconnects on its own (false in the local mode). */
       drop(): boolean;
       /** As Q does: to the mirror (walking up to it in a nest, else home to it); false where it cannot. */
@@ -493,7 +495,12 @@ window.owlPark = {
   quests: () => quests.board,
   tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
-  jump: () => roomScene()?.jump() ?? false,
+  jump: (holdMs = 0) => {
+    const scene = roomScene();
+    if (!scene?.jumpDown()) return false;
+    setTimeout(() => scene.jumpUp(), holdMs);
+    return true;
+  },
   drop: () => roomScene()?.dropConnection() ?? false,
   mirror: () => roomScene()?.toMirror() ?? false,
   openBuilder: () => hud.openOwl(document.body),

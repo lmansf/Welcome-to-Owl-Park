@@ -13,6 +13,7 @@ import { createDecorateSheet, type DecorateActions, type DecorateSheet, type Dec
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createJoystick } from './joystick';
+import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
 import { createMenuShell } from './menuShell';
 import { mapPlaceOf, renderCollection, renderMap, renderNest, renderSettings } from './menuTabs';
@@ -160,9 +161,11 @@ export interface Hud {
   onAction(cb: (id: string) => void): void;
   /** The pad's Interact button (touch screens): what E does, the first action where the owl stands. */
   onInteract(cb: () => void): void;
-  /** The pad's Jump button (touch screens): a hop, while the build has it (`padJump`); its place on the pad is drawn dim otherwise. */
-  onJump(cb: () => void): void;
-  setPadJump(on: boolean): void;
+  /**
+   * The pad's Jump button (touch screens, OP-084): `press` as the thumb goes down, `release` as it
+   * lifts (each with when), so a tap jumps, a second tap flaps and a hold glides, as the space bar does.
+   */
+  onJump(press: (at?: number) => void, release: (at?: number) => void): void;
   /**
    * Quest news (OP-083): a new quest taken on, or one ready to hand in. A short line at the top of
    * the screen, and a dot on the Menu button and its Quests tile until the quests screen is opened.
@@ -252,14 +255,15 @@ const CSS = `
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
  * Touch screens: a pad like a handheld's (OP-082, OP-114). The thumbstick stays in the bottom-right
- * corner; on the left three places of a handheld's face buttons (Logan, 2026-10-27): Interact on the
- * right (nearer the middle), the Menu outside (darker, a handheld's Start) and, below between them,
- * the place Jump takes once flight makes it real (OP-084), drawn dim and taking no tap until then.
- * Going home and the Map are the Menu's. Three 56 px places whose centres sit 45.25 px from the
- * cluster's middle (81.25 px in, 73.25 px up), so Jump's is 8 px from each; Emotes and Say, 44 px,
- * sit above the Menu and Interact, 9 px clear of them. All see-through, like the stick.
- * TODO-DOCS (OP-114): docs/PLAYBOOK.md's controls (OP-099): Interact, the Menu and Jump's place, Go
- * home held in the Menu's Nest tab, the '!' for Interact, no hop until flight; docs/ACTIVITIES.md,
+ * corner; on the left three of a handheld's face buttons (Logan, 2026-10-27): Interact on the right
+ * (nearer the middle), the Menu outside (darker, a handheld's Start) and, below between them, Jump
+ * (OP-084: a tap jumps, a tap in the air flaps, held on the way down it glides). Going home and the
+ * Map are the Menu's. Three 56 px buttons whose centres sit 45.25 px from the cluster's middle
+ * (81.25 px in, 73.25 px up), so Jump is 8 px from each; Emotes and Say, 44 px, sit above the Menu
+ * and Interact, 9 px clear of them. All see-through, like the stick.
+ * TODO-DOCS (OP-114, OP-084): docs/PLAYBOOK.md's controls (OP-099): Interact, the Menu and Jump (tap,
+ * tap again in the air, hold to glide; the space bar on a keyboard), Go home held in the Menu's Nest
+ * tab, the '!' for Interact; docs/ACTIVITIES.md,
  * talking to characters: the '!' over the one the owl can talk to now (game/Npc.ts), at the reach
  * Interact talks from.
  */
@@ -274,8 +278,6 @@ const CSS = `
   #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .pad-btn.jump{left:53.25px;bottom:0}
-  #hud .pad-slot{position:absolute;left:53.25px;bottom:0;width:56px;height:56px;border-radius:50%;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);opacity:.4;pointer-events:none}
-  #hud .pad.jumps .pad-slot{display:none}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
   #hud .menu-btn{position:absolute;left:8px;bottom:45.25px;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .menu-btn i{width:20px;height:14px}
@@ -322,6 +324,9 @@ const EMOTES_ICON =
 const INTERACT_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path class="i1" d="M16 5.5v13.5" stroke-width="4.6" stroke-linecap="round" fill="none"/><circle class="i2" cx="16" cy="25.6" r="2.9"/></svg>';
 
+/** A keyboard's click on the pad's Jump is a tap this long: a jump, not a glide. */
+const KEY_TAP_MS = 150;
+
 /** The pad's Jump button: up from a little arc. */
 const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -349,8 +354,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="bottom">
       <div class="pad">
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}</button>
-        <button class="pad-btn jump" data-pad-jump aria-label="Jump" hidden>${JUMP_ICON}</button>
-        <div class="pad-slot" data-pad-slot aria-hidden="true"></div>
+        <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>
       </div>
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
@@ -368,7 +372,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const menuBtn = $<HTMLButtonElement>('[data-menu-btn]');
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
-  const pad = $<HTMLElement>('.pad');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
@@ -431,7 +434,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let lookCb: ((l: OwlLook) => void) | null = null;
   let actionCb: ((id: string) => void) | null = null;
   let interactCb: (() => void) | null = null;
-  let jumpCb: (() => void) | null = null;
+  let jumpCbs: { press: (at?: number) => void; release: (at?: number) => void } | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
   /** The gated realms the keepers have opened (the realms switch), for the Menu map. */
@@ -564,7 +567,24 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
   sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
   interactBtn.addEventListener('click', () => interactCb?.());
-  jumpBtn.addEventListener('click', () => jumpCb?.());
+  // Jump goes down with the thumb and comes up with it (a hold glides); held onto the button, so a
+  // thumb that drifts off it while held still holds. A click from a keyboard (no pointer) is a tap.
+  jumpBtn.addEventListener('pointerdown', (e) => {
+    try {
+      jumpBtn.setPointerCapture(e.pointerId);
+    } catch {
+      /* a synthetic pointer: nothing to hold on to */
+    }
+    jumpCbs?.press(eventTime(e));
+  });
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) jumpBtn.addEventListener(t, (e) => jumpCbs?.release(eventTime(e)));
+  jumpBtn.addEventListener('click', (e) => {
+    if (e.detail !== 0 || !jumpCbs) return;
+    const { press, release } = jumpCbs;
+    press();
+    setTimeout(release, KEY_TAP_MS);
+  });
+  jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is a glide, not the browser's menu
   // A pressed look while the thumb is down (touch screens do not all show :active).
   for (const b of [interactBtn, jumpBtn]) {
     b.addEventListener('pointerdown', () => b.classList.add('on'));
@@ -786,12 +806,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     onInteract(cb) {
       interactCb = cb;
     },
-    setPadJump(on) {
-      jumpBtn.hidden = !on;
-      pad.classList.toggle('jumps', on);
-    },
-    onJump(cb) {
-      jumpCb = cb;
+    onJump(press, release) {
+      jumpCbs = { press, release };
     },
     setOpenRealms(open) {
       openRealms = [...open];

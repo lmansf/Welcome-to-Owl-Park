@@ -95,6 +95,10 @@ export class SupabaseTransport implements ParkTransport {
           case 'rest':
             if (known.has(payload.id)) handlers.onPeerRest?.(payload.id, payload.asleep);
             break;
+          case 'air':
+            // On the sender's clock, as its walks are (the room scene rebases one too far ahead).
+            if (known.has(payload.id)) handlers.onPeerAir?.(payload.id, payload.air, payload.at);
+            break;
           case 'hello':
           case 'bye':
             break; // never sent by this transport; presence join/leave is the roster

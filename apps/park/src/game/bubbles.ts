@@ -77,8 +77,8 @@ export class SpeechBubbles {
 
   private place(b: Bubble, now: number): void {
     const k = this.cssPx();
-    // Just above the head, or the hat on it, the same size on every screen.
-    b.box.setPosition(b.owl.x + b.owl.anchor('head').x, b.owl.y + b.owl.crown() - 8 * k).setScale((TEXT_CSS_PX / DRAWN_PX) * k);
+    // Just above the head, or the hat on it, up with the owl in flight (OP-084), the same size on every screen.
+    b.box.setPosition(b.owl.x + b.owl.anchor('head').x, b.owl.y + b.owl.crown() - b.owl.flightHeight() - 8 * k).setScale((TEXT_CSS_PX / DRAWN_PX) * k);
     b.box.setAlpha(Math.min(1, (b.until - now) / FADE_MS));
   }
 

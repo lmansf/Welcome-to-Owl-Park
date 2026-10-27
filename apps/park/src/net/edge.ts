@@ -293,6 +293,8 @@ export class EdgeTransport implements ParkTransport {
     const readyWaiters: Array<(ok: boolean) => void> = [];
 
     const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS });
+    /** A time on the room's clock as remote owls are drawn on this page's (an air state's, OP-084). */
+    const toLocalAt = (at: number): number => at - offset + RENDER_DELAY_MS;
     /** Board times are on the server clock; the HUD counts down on this device's. */
     const toLocalBoard = (b: QuestBoard): QuestBoard => ({
       ...b,
@@ -382,7 +384,7 @@ export class EdgeTransport implements ParkTransport {
           for (const o of f.owls) {
             seen.add(o.id);
             knownPeers.add(o.id);
-            handlers.onPeerState(fromSnapshot(o, toLocalWalk));
+            handlers.onPeerState(fromSnapshot(o, toLocalWalk, toLocalAt));
           }
           for (const id of [...knownPeers]) {
             if (!seen.has(id)) {
@@ -408,7 +410,7 @@ export class EdgeTransport implements ParkTransport {
         case 'enter':
           if (f.owl.id === selfId) break;
           knownPeers.add(f.owl.id);
-          handlers.onPeerState(fromSnapshot(f.owl, toLocalWalk));
+          handlers.onPeerState(fromSnapshot(f.owl, toLocalWalk, toLocalAt));
           break;
         case 'move': {
           // Refine the clock: (at - receive time) is the skew minus one-way latency, so the
@@ -434,6 +436,10 @@ export class EdgeTransport implements ParkTransport {
           break;
         case 'rest':
           if (f.id !== selfId) handlers.onPeerRest?.(f.id, f.asleep);
+          break;
+        case 'air':
+          // On the room's clock, drawn as far behind it as walks are, so the two stay together.
+          if (f.id !== selfId) handlers.onPeerAir?.(f.id, f.air, f.at - offset + RENDER_DELAY_MS);
           break;
         case 'leave':
           if (f.id === selfId) break;
@@ -791,6 +797,10 @@ export class EdgeTransport implements ParkTransport {
             current = { ...current, asleep: msg.asleep };
             sendFrame({ t: 'rest', asleep: msg.asleep });
             break;
+          case 'air':
+            // The room stamps it with its own time.
+            sendFrame({ t: 'air', air: msg.air });
+            break;
           case 'hello':
             break;
         }
@@ -825,6 +835,6 @@ export class EdgeTransport implements ParkTransport {
   }
 }
 
-function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number }) => Walk): PlayerState {
-  return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, ...(o.asleep ? { asleep: true } : {}), v: 1 };
+function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number }) => Walk, toLocalAt: (at: number) => number): PlayerState {
+  return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, ...(o.asleep ? { asleep: true } : {}), ...(o.air ? { air: { ...o.air, at: toLocalAt(o.air.at) } } : {}), v: 1 };
 }

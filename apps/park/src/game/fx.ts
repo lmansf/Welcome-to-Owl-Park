@@ -3,7 +3,7 @@
  * colourway. Cheap by design (a few emitters capped at a couple of dozen live particles, no
  * shaders), so a room full of sparkling owls still runs on a phone.
  *
- * Emitters sit at (0, 0) and follow the owl's drawn anchors (through hops, bobs and emotes), so
+ * Emitters sit at (0, 0) and follow the owl's drawn anchors (through flight, bobs and emotes), so
  * trails stay where they were dropped in the world; glows and orbiting rigs live in the owl's own
  * containers and turn and bob with it.
  */
@@ -23,7 +23,7 @@ export interface FxHost {
   facing(): 1 | -1;
   isWalking(): boolean;
   anchor(name: AnchorName): { x: number; y: number };
-  /** The same anchor where it is drawn right now: lifted by a hop, bobbing with the walk, turned by an emote. */
+  /** The same anchor where it is drawn right now: lifted in flight, bobbing with the walk, turned by an emote. */
   drawnAnchor(name: AnchorName): { x: number; y: number };
   /** The same anchor in owl canvas units inside the owl's containers (origin at the feet, as painted). */
   localAnchor(name: AnchorName): { x: number; y: number };

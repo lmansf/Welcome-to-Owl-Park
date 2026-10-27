@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import {
+  AIR_BURST,
+  AIR_REFILL_PER_S,
   CABINETS,
   CABINET_OFF,
   EMOTE_IDS,
+  FLIGHT_STEP_MS,
   GAMES,
-  JUMP_EMOTE,
-  JUMP_EVERY_MS,
+  GROUNDED,
   LEFT_PARK_SPAWN,
   LOBBY_ROOM,
   KIND_RULES,
@@ -67,6 +69,13 @@ import {
   type Wear,
   REALMS_DEFAULTS,
   type RealmsSettings,
+  ON_GROUND,
+  airChanged,
+  fall,
+  newFlier,
+  stepFlier,
+  type Air,
+  type Flier,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -124,6 +133,11 @@ export const NEST_SPAWN = 'mirror';
 export const NEST_FADE_MS = 400;
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
+/** Air states this page sends the room (OP-084): a burst and a refill each a little under the room server's, so frames bunched by the network still fit. */
+const AIR_SEND_BURST = AIR_BURST - 2;
+const AIR_SEND_PER_S = AIR_REFILL_PER_S - 1;
+/** Back from a hidden tab, the flight catches up this much at most (a flight is down well within it). */
+const FLIGHT_CATCH_UP_MS = 10_000;
 
 const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
 /** Ask again after a failed pickup this long later (the owl may still be walking up). */
@@ -236,8 +250,30 @@ export class RoomScene extends Phaser.Scene {
   /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
   private bubbles: SpeechBubbles | null = null;
   private saidAt = Number.NEGATIVE_INFINITY;
-  /** When this owl last hopped (the Jump button). */
-  private jumpedAt = Number.NEGATIVE_INFINITY;
+  /** The visitor's own flight (OP-084), stepped from Jump at the flight's step on this page's clock (Date.now). */
+  private flier: Flier = newFlier();
+  /** When the flight last stepped (ms; 0 before the first step in this room). */
+  private flightClock = 0;
+  /**
+   * Whether Jump is down, when it last went down and last came up (this page's ms, 0 never), and the
+   * press the flight has taken: each step reads Jump as it was at the step's own time, so a tap in a
+   * slow frame is still a tap, not as long as the frame.
+   */
+  private jumpIsDown = false;
+  private jumpDownAt = 0;
+  private jumpUpAt = 0;
+  private jumpTaken = 0;
+  /**
+   * The flight as this owl's drawing and the room carry it on, each a step at a time from what it was
+   * last told, as the flier goes: the moment the flier parts from one, it is told the flier's state.
+   */
+  private drawnAir: Air = ON_GROUND;
+  private roomAir: Air = ON_GROUND;
+  /** What the room was last told of the flight, and when (for a newcomer's snapshot on the peer transports). */
+  private roomTold: { air: Air; at: number } = { air: ON_GROUND, at: 0 };
+  /** Air states this page may still send now, a little under the room server's allowance so a late frame is never dropped there. */
+  private airTokens = AIR_SEND_BURST;
+  private airRefilledAt = 0;
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
@@ -301,6 +337,18 @@ export class RoomScene extends Phaser.Scene {
     this.sleptAt = 0;
     this.askedAt = 0;
     this.goingAway = false;
+    // A new room: on the ground, Jump let go, the allowance full.
+    this.flier = newFlier();
+    this.flightClock = 0;
+    this.jumpIsDown = false;
+    this.jumpDownAt = 0;
+    this.jumpUpAt = 0;
+    this.jumpTaken = 0;
+    this.drawnAir = ON_GROUND;
+    this.roomAir = ON_GROUND;
+    this.roomTold = { air: ON_GROUND, at: 0 };
+    this.airTokens = AIR_SEND_BURST;
+    this.airRefilledAt = 0;
     this.gen += 1;
     this.lastStatus = null;
     this.collection = this.registry.get('collection') as CollectionState;
@@ -472,6 +520,7 @@ export class RoomScene extends Phaser.Scene {
   override update(): void {
     if (!this.built) return;
     const now = Date.now();
+    this.fly(now);
     const finished = this.me.tick(now);
     if (!this.leaving) {
       this.steer();
@@ -491,7 +540,8 @@ export class RoomScene extends Phaser.Scene {
   // ---------- networking ----------
 
   private snapshot(): PlayerState {
-    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, ...(this.sleptAt ? { asleep: true } : {}), v: PROTOCOL_VERSION };
+    const told = this.roomTold;
+    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, ...(this.sleptAt ? { asleep: true } : {}), ...(told.air.s !== GROUNDED ? { air: { ...told.air, at: told.at } } : {}), v: PROTOCOL_VERSION };
   }
 
   private async connect(): Promise<void> {
@@ -534,6 +584,7 @@ export class RoomScene extends Phaser.Scene {
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
       onPeerRest: (id, asleep) => live() && this.peers.get(id)?.setAsleep(asleep, this.calm()),
+      onPeerAir: (id, air, at) => live() && this.peers.get(id)?.fly(air, this.peerTime(at)),
       onCounts: (rooms) => {
         if (!live()) return;
         this.registry.set('counts', rooms);
@@ -614,6 +665,11 @@ export class RoomScene extends Phaser.Scene {
       owl.applyLook(s.look);
     }
     owl.setAsleep(s.asleep === true, this.calm());
+    if (s.air) {
+      // Off the ground when the snapshot was made: carried on from then, as its own page carries it.
+      const { at, ...air } = s.air;
+      owl.fly(air, this.peerTime(at));
+    }
     if (s.walk) {
       // A snapshot keeps the last walk until the next one: a future-dated start is pulled back to
       // now, an old one is played out to its end, and one we already animate (or already finished)
@@ -802,7 +858,7 @@ export class RoomScene extends Phaser.Scene {
   private rest(now: number): void {
     const idle = this.registry.get('idle') as { at: number } | undefined;
     if (!idle || this.goingAway) return;
-    if (this.me.walking || this.keys?.direction()) idle.at = now;
+    if (this.me.walking || this.keys?.direction() || this.flier.air.s !== GROUNDED) idle.at = now;
     if (!this.sleptAt) {
       if (now - idle.at >= this.cfg.sleepAfterMs && this.maySleep()) this.fallAsleep(now);
       return;
@@ -989,9 +1045,12 @@ export class RoomScene extends Phaser.Scene {
     pos: Vec2;
     walking: boolean;
     look: OwlLook;
-    /** How high the owl is drawn above the floor (a hop), in room pixels; its place stays at `pos`. */
+    /** How high the owl is drawn above the floor (OP-084), in room pixels; its place stays at `pos`. */
     height: number;
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; asleep: boolean }>;
+    /** Its flight as it steps (on the ground, in the air or gliding; flaps left). */
+    air: Air;
+    /** The others, with how high each is drawn and whether on the ground (0), in the air (1) or gliding (2). */
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; asleep: boolean }>;
     /** Asleep, its visitor idle (OP-126). */
     asleep: boolean;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
@@ -1030,8 +1089,9 @@ export class RoomScene extends Phaser.Scene {
       pos: { ...this.me.pos },
       walking: this.me.walking,
       look: this.look,
-      height: this.me.hopHeight(),
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.hopHeight(), asleep: o.asleep })),
+      height: this.me.flightHeight(),
+      air: { ...this.flier.air },
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, asleep: o.asleep })),
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
@@ -1394,19 +1454,71 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * The Jump button or the space bar (OP-082): a hop with a flap, here and for everyone in the room.
-   * Only a look: the owl's place and what it stands at stay as they are, and no quest counts it.
-   * One every JUMP_EVERY_MS, so a held thumb cannot flood the room. Only in a build with the hop
-   * (`padJump`, OP-114): otherwise nothing hops and nothing goes to the room, until flight (OP-084).
+   * Jump goes down (`at`, when: the space bar, the pad's Jump; OP-084): on the ground a jump, in the
+   * air the one flap more, and held on the way down a glide (jumpUp lets go). Flight is a height over the floor:
+   * the owl's place, its walk and what it stands at stay as they are, and no quest counts it.
    */
-  jump(): boolean {
-    if (!this.cfg.padJump || !this.built || this.leaving) return false;
-    const now = Date.now();
-    if (now - this.jumpedAt < JUMP_EVERY_MS) return false;
-    this.jumpedAt = now;
-    this.me.hop(now);
-    this.conn?.send({ t: 'emote', id: this.playerId, e: JUMP_EMOTE });
+  jumpDown(at = Date.now()): boolean {
+    if (!this.built || this.leaving) return false;
+    if (this.jumpIsDown) return true; // a second thumb on it, or the key's repeat
+    this.jumpIsDown = true;
+    this.jumpDownAt = Math.max(at, this.jumpUpAt, this.jumpDownAt);
     return true;
+  }
+
+  /** Jump comes up (`at`, when): on the way up the rise is cut short, and a glide ends. */
+  jumpUp(at = Date.now()): void {
+    if (!this.jumpIsDown) return;
+    this.jumpIsDown = false;
+    this.jumpUpAt = Math.max(at, this.jumpDownAt);
+  }
+
+  /**
+   * The own owl's flight, stepped to `now` at the flight's step. Its drawing is told each change the
+   * moment it comes, and so is the room, within its allowance: a change that finds the allowance
+   * spent goes with the next one that has it (as the flight stands then), and the landing is never
+   * sent, since every page reckons it.
+   */
+  private fly(now: number): void {
+    if (!this.flightClock || now - this.flightClock > FLIGHT_CATCH_UP_MS) this.flightClock = now;
+    while (now - this.flightClock >= FLIGHT_STEP_MS) {
+      this.flightClock += FLIGHT_STEP_MS;
+      const at = this.flightClock;
+      const down = this.jumpDownAt;
+      const pressed = down > this.jumpTaken && down <= at;
+      if (pressed) this.jumpTaken = down;
+      const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
+      this.flier = stepFlier(this.flier, { pressed, held });
+      const air = this.flier.air;
+      this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
+      if (airChanged(this.drawnAir, air)) {
+        this.drawnAir = air;
+        this.me.fly(air, at);
+      }
+      this.roomAir = fall(this.roomAir, FLIGHT_STEP_MS);
+      if (airChanged(this.roomAir, air) && this.takeAirToken(at)) {
+        this.roomAir = air;
+        this.roomTold = { air, at };
+        this.conn?.send({ t: 'air', id: this.playerId, air: { z: Math.round(air.z * 10) / 10, vz: Math.round(air.vz * 10) / 10, s: air.s, f: air.f }, at });
+      }
+    }
+  }
+
+  private takeAirToken(now: number): boolean {
+    const refill = ((now - this.airRefilledAt) / 1000) * AIR_SEND_PER_S;
+    if (refill >= 1) {
+      this.airTokens = Math.min(AIR_SEND_BURST, this.airTokens + Math.floor(refill));
+      this.airRefilledAt = now;
+    }
+    if (this.airTokens <= 0) return false;
+    this.airTokens -= 1;
+    return true;
+  }
+
+  /** Another page's time on this page's clock, rebased to now when it is too far ahead to believe (as walks are). */
+  private peerTime(at: number): number {
+    const now = Date.now();
+    return at - now > CLOCK_TOLERANCE_MS ? now : at;
   }
 
   /**

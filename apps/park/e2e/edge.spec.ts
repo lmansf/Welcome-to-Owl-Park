@@ -1,6 +1,6 @@
 import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, openPark, peakHeight, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, flightOf, holdSpace, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -350,16 +350,29 @@ test.describe('room server', () => {
     await b.context().close();
   });
 
-  test('no hop goes through the room server while the hop is off (OP-114): the other owls see nothing', async ({ browser }) => {
+  test('a jump, a flap and a glide go through the room server: the other owl sees each, and its owl stays where it stood (OP-084)', async ({ browser }) => {
+    test.slow(); // two live parks drawn with software WebGL on CI runners
     const a = await visitor(browser);
     const b = await visitor(browser);
     await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
-    const seen = peakHeight(a, 'peer', 2_000);
-    expect(await b.evaluate(() => window.owlPark.jump())).toBe(false);
-    await b.keyboard.press('Space');
-    expect(await seen).toBe(0);
-    expect((await state(a)).peers[0]?.emote ?? null).toBeNull();
+    const stood = (await state(b)).pos;
+    // A jump held to its top, the flap at the top, and the flap held on the way down: a glide.
+    const seen = flightOf(a, 'peer', 12_000);
+    const own = flightOf(b, 'own', 12_000);
+    await holdSpace(b, 300);
+    await holdSpace(b, 1_200);
+    const [there, here] = await Promise.all([seen, own]);
+    // The other page draws it from the same states: as high, gliding, and as long in the air, give or take the network.
+    expect(here.peak).toBeGreaterThan(200);
+    expect(there.peak).toBeGreaterThan(here.peak - 15);
+    expect(there.peak).toBeLessThan(here.peak + 15);
+    expect(there.glided).toBe(true);
+    expect(Math.abs(there.airMs - here.airMs)).toBeLessThan(600);
+    // Flight is a height over the floor: on both pages the owl comes down where it stood.
+    expect((await state(b)).pos).toEqual(stood);
+    expect((await state(a)).peers[0]?.pos).toEqual(stood);
+    expect((await state(a)).peers[0]?.height).toBe(0);
     await a.context().close();
     await b.context().close();
   });
