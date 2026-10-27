@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CLOSE, EDGE_PROTOCOL_VERSION, JUMP_EMOTE, JUMP_EVERY_MS, STREET_DOORS, STREET_ROOM, WALK_SPEED, isWalkable, nestDoorIndex, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { CLOSE, EDGE_PROTOCOL_VERSION, JUMP_EMOTE, JUMP_EVERY_MS, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, isWalkable, nestDoorIndex, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
 
@@ -81,6 +81,16 @@ describe('Room', () => {
     room.join(a, 'a', hello({ spawn: 'default' }));
     const p = a.last('welcome')!.you.pos;
     expect(Math.abs(p.x - 800)).toBeLessThanOrEqual(LIMITS.scatterDoor);
+  });
+
+  it("keeps an owl where it came through a doorway, as far across as it was (OP-124)", () => {
+    const hub = new Room(ROOMS['hub']!, { now: () => now, cap: 50 });
+    // Through the gate's left turnstile: the hub's path at its left, not its middle.
+    const pos = arrivalPoint(ROOMS['hub']!, 'default', 'lobby', { axis: 'x', t: 0 });
+    expect(pos.x).toBeLessThan(ROOMS['hub']!.spawns['default']!.x - 60);
+    const a = new FakePeer();
+    hub.join(a, 'a', hello({ spawn: 'default', pos }));
+    expect(a.last('welcome')!.you.pos).toEqual(pos);
   });
 
   it('never scatters an arrival into an exit doorway', () => {

@@ -15,7 +15,7 @@ import {
   isPhrase,
   findSpawn,
   isWalkable,
-  nestDoorIndex,
+  inExit,
   positionAlongWalk,
   resolveTarget,
   distance,
@@ -190,17 +190,9 @@ export class Room {
     return false;
   }
 
-  /**
-   * Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. A
-   * nest door on the street leads into a nest though it has no `to` (each visitor's door goes to its own place).
-   */
-  private inExit(p: Vec2): boolean {
-    return this.def.doors.some((d) => (d.to !== undefined || nestDoorIndex(d.id) !== null) && p.x >= d.rect.x && p.x <= d.rect.x + d.rect.w && p.y >= d.rect.y && p.y <= d.rect.y + d.rect.h);
-  }
-
   /** A point the owl may be put on: walkable, not in an exit, not on top of another owl. */
   private free(p: Vec2, except?: string): boolean {
-    return isWalkable(p, this.def.walkable) && !this.inExit(p) && !this.occupied(p, except);
+    return isWalkable(p, this.def.walkable) && !inExit(this.def, p) && !this.occupied(p, except);
   }
 
   /** Pick a free walkable point near the spawn, shrinking the search each failed attempt. */
@@ -210,10 +202,10 @@ export class Room {
     for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++) {
       const p = { x: Math.round(spawn.x + (this.rnd() * 2 - 1) * r), y: Math.round(spawn.y + (this.rnd() * 2 - 1) * r * 0.5) };
       if (this.free(p, except)) return p;
-      if (!fallback && isWalkable(p, this.def.walkable) && !this.inExit(p)) fallback = p;
+      if (!fallback && isWalkable(p, this.def.walkable) && !inExit(this.def, p)) fallback = p;
       r -= LIMITS.scatterShrink;
     }
-    if (isWalkable(spawn, this.def.walkable) && !this.inExit(spawn)) return { ...spawn };
+    if (isWalkable(spawn, this.def.walkable) && !inExit(this.def, spawn)) return { ...spawn };
     return fallback ?? { ...spawn };
   }
 
@@ -241,7 +233,7 @@ export class Room {
     const isDoorEntry = hello.spawn !== undefined;
     const spawn = findSpawn(this.def, hello.spawn);
     let pos: Vec2 | null = null;
-    if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !this.inExit(hello.pos)) {
+    if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !inExit(this.def, hello.pos)) {
       const recent = this.leavers.get(id);
       const nearSpawn = distance(hello.pos, spawn) <= LIMITS.resumeRadius;
       const nearLeave = recent !== undefined && this.now() - recent.leftAt <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius;

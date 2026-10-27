@@ -500,8 +500,9 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'to-homes', rect: { x: 0, y: 790, w: 110, h: 98 }, to: { room: 'homes', spawn: 'from-lobby' }, marker: { x: 55, y: 790 } },
       // The ticket window of the birdhouse booth.
       { id: 'booth', rect: { x: 1890, y: 702, w: 170, h: 88 }, marker: { x: 1960, y: 590 } },
-      // The five turnstiles beneath the owls' wings: through them is the hub.
-      { id: 'gate', rect: { x: 2400, y: 650, w: 390, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
+      // The five turnstiles beneath the owls' wings, from the left owl's plinth to the right one's
+      // (the first turns between the plinth and the first post): through them is the hub.
+      { id: 'gate', rect: { x: 2350, y: 650, w: 440, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
     ],
   },
   homes: {

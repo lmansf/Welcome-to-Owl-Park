@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { arrivalPoint, doorAxis, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
@@ -351,5 +352,47 @@ describe('the stained-glass realm (gated)', () => {
     expect(isWalkable({ x: 2665, y: 640 }, hub.walkable)).toBe(true);
     expect(isWalkable({ x: 2665, y: 740 }, hub.walkable)).toBe(true);
     expect(pointInRect(hub.spawns['from-glass']!, arch.rect)).toBe(false);
+  });
+});
+
+describe("doorways keep the owl's lane (OP-124)", () => {
+  const exits = Object.values(ROOMS).flatMap((room) => room.doors.filter((d) => d.to).map((door) => ({ room, door, to: ROOMS[door.to!.room]! })));
+  const through = (e: (typeof exits)[number], t: number) => arrivalPoint(e.to, e.door.to!.spawn, e.room.id, { axis: doorAxis(e.room, e.door), t });
+
+  it('lands every lane of every doorway on the floor, out of the exits and near its spawn', () => {
+    expect(exits.length).toBeGreaterThan(10);
+    for (const e of exits) {
+      const spawn = e.to.spawns[e.door.to!.spawn]!;
+      for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+        const p = through(e, t);
+        const where = `${e.room.id}:${e.door.id} t=${t}`;
+        expect(isWalkable(p, e.to.walkable), where).toBe(true);
+        expect(inExit(e.to, p), where).toBe(false);
+        // The room server keeps an arrival within its resume radius of the spawn (LIMITS.resumeRadius, 240).
+        expect(distance(p, spawn), where).toBeLessThanOrEqual(240);
+      }
+    }
+  });
+
+  it('keeps the lane where both doorways run the same way; round a corner the owl arrives at the spawn', () => {
+    const keeping = exits.filter((e) => {
+      const [a, b] = [through(e, 0), through(e, 1)];
+      return a.x !== b.x || a.y !== b.y;
+    });
+    expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual(['grove:to-hub', 'homes:to-lobby', 'hub:to-grove', 'hub:to-lobby', 'lobby:gate', 'lobby:to-homes']);
+  });
+
+  it("takes the owl through the gate's left turnstile, between the plinth and the first post, onto the hub's path at its left", () => {
+    const lobby = ROOMS['lobby']!;
+    const hub = ROOMS['hub']!;
+    const gate = lobby.doors.find((d) => d.id === 'gate')!;
+    const left = { x: 2365, y: 708 };
+    expect(isWalkable(left, lobby.walkable)).toBe(true);
+    expect(pointInRect(left, gate.rect)).toBe(true);
+    const fromLeft = arrivalPoint(hub, 'default', 'lobby', laneThrough(lobby, gate, left));
+    const fromMiddle = arrivalPoint(hub, 'default', 'lobby', laneThrough(lobby, gate, { x: 2570, y: 700 }));
+    expect(fromMiddle).toEqual(hub.spawns['default']);
+    expect(fromLeft.x).toBeLessThan(fromMiddle.x - 60);
+    expect(fromLeft.y).toBe(fromMiddle.y);
   });
 });

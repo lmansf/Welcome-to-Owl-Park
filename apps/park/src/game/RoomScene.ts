@@ -23,11 +23,11 @@ import {
   RARITY_NAMES,
   SAY_EVERY_MS,
   STREET_ROOM,
+  arrivalPoint,
   backgroundTiles,
   cabinetAt,
   distance,
   filterOwnedWear,
-  findSpawn,
   foregroundTiles,
   getFurniture,
   getInteractable,
@@ -36,6 +36,7 @@ import {
   interactablesIn,
   isNestRoom,
   isPhrase,
+  laneThrough,
   nestDoorIndex,
   nestIdOf,
   nestLook,
@@ -51,6 +52,7 @@ import {
   variantName,
   type DoorDef,
   type EquipSlot,
+  type Lane,
   type NestLayout,
   type NestSpotId,
   type NestView,
@@ -105,6 +107,8 @@ export interface RoomStart {
   spawn: string | undefined;
   /** Where we came from, so a full room can send us back. */
   from?: { room: string; spawn: string | undefined } | undefined;
+  /** How far across the doorway the owl came through, so it comes out as far across the doorway back (OP-124). */
+  lane?: Lane | undefined;
 }
 
 /** How far a tap may drift before it counts as a drag (game pixels). */
@@ -198,6 +202,7 @@ export class RoomScene extends Phaser.Scene {
   /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
   private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
+  private lane: Lane | undefined;
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
   private lastStatus: ConnectionStatus | null = null;
@@ -281,6 +286,7 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false;
     this.pieces = {};
     this.cameFrom = data.from;
+    this.lane = data.lane;
     this.gen += 1;
     this.lastStatus = null;
     this.collection = this.registry.get('collection') as CollectionState;
@@ -395,7 +401,7 @@ export class RoomScene extends Phaser.Scene {
       if (this.textures.exists(t.key)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100);
     }
 
-    const spawn = findSpawn(room, this.registry.get('spawnName') as string | undefined);
+    const spawn = arrivalPoint(room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
     // Come in to stand before the mirror (Play, OP-105), the owl faces it.
     if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
@@ -621,7 +627,7 @@ export class RoomScene extends Phaser.Scene {
 
   private setupInput(): void {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
-      if (this.leaving || this.decorating || !this.onCanvas(p)) return;
+      if (this.leaving || this.passingGate || this.decorating || !this.onCanvas(p)) return;
       if (Date.now() - this.tapTakenAt < 100) return; // the idol or an NPC took this tap
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
       this.pendingVote = false; // a new destination cancels a walk to the idol
@@ -633,6 +639,8 @@ export class RoomScene extends Phaser.Scene {
 
   /** WASD and the arrow keys: walk while held (sliding along edges) and stop on letting go. */
   private steer(): void {
+    // In the turnstiles the owl goes on through where it stands, not sideways along them (OP-124).
+    if (this.passingGate) return;
     // Decorating, the arrow keys step through the spots and the owl stays where it is.
     const dir = this.decorating ? null : (this.keys?.direction() ?? null);
     if (!dir) {
@@ -1400,7 +1408,7 @@ export class RoomScene extends Phaser.Scene {
         }
         // Out of a nest, the owl comes back out by the street door it went in by.
         const spawn = isNestRoom(this.room.id) && door.to.room === STREET_ROOM ? streetSpawnBack(this.cameFrom) : door.to.spawn;
-        void this.goTo(door.to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
+        void this.goTo(door.to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, pos));
         return;
       }
       if (this.interactions[door.id]) spots.push(door.id);
@@ -1513,20 +1521,22 @@ export class RoomScene extends Phaser.Scene {
    * The lobby's turnstiles scan a ticket this device holds (its first scan starts its time, C35):
    * the ticket card flips up and the owl goes on into the hub. Without a ticket that goes through,
    * the turnstiles let everyone in while the gate is open; once the park takes tickets
-   * (GATE=ticket) they turn the owl back toward the booth and say why.
+   * (GATE=ticket) they send the owl back out of the turnstile it tried and say why. The owl keeps its
+   * lane: it stands still while the turnstiles decide and comes out in the hub as far across (OP-124).
    */
   private async throughGate(door: DoorDef): Promise<void> {
     const to = door.to;
     if (this.passingGate || this.leaving || !to) return;
     this.passingGate = true;
     this.me.walk = null;
+    const lane = laneThrough(this.room, door, this.me.pos);
     const scan: ScanReply = this.transport.tickets ? await this.transport.tickets.scan() : { ok: false, reason: 'none' };
     if (this.leaving) return;
     const entry = await this.entry();
     if (this.leaving) return;
     if (!scan.ok && entry.gate === 'ticket' && !entry.admitted) {
       this.hud.toast(gateRefusal(scan.reason, scan.kind), 4500);
-      this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h + 70 });
+      this.walkTo({ x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
       this.time.delayedCall(1500, () => {
         this.passingGate = false;
       });
@@ -1537,7 +1547,7 @@ export class RoomScene extends Phaser.Scene {
     else this.hud.toast('Welcome to Owl Park!', 2600);
     if (scan.ok && scan.kind === 'opening-night') void this.offerFreePass(scan.id);
     // The card stays up a moment before the walk on into the hub.
-    this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }));
+    this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
   }
 
   private openShop(): void {
@@ -1545,8 +1555,8 @@ export class RoomScene extends Phaser.Scene {
     else this.hud.toast('The gift shop opens soon.');
   }
 
-  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS): Promise<void> {
-    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from } satisfies RoomStart);
+  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane): Promise<void> {
+    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane } satisfies RoomStart);
   }
 
   /** The owl stops, the room fades and its connection closes. False when the room is already being left. */
