@@ -11,7 +11,7 @@ import { ClimbScene } from './game/ClimbScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
-import { RoomScene, type RoomStart } from './game/RoomScene';
+import { NEST_FADE_MS, NEST_SPAWN, RoomScene, type RoomStart } from './game/RoomScene';
 import { holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
@@ -104,11 +104,12 @@ game.registry.set('tasks', tasks);
 game.registry.set('ribbon', ribbon);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
-// touch screens; E interacts and the space bar hops (the pad's Interact and Jump on touch screens), M
-// opens the Menu, T the Say wheel (1 to 8 play an emote at once), Q goes to the mirror in the owl's
-// nest, where Your owl is (OP-077), and J the quests. While the Menu or one of its screens is open,
-// the owl stays put. On the home screen only Q (as Play does, once there is an owl: into the nest,
-// before its mirror) and Escape do anything; Enter plays too (ui/home.ts).
+// touch screens; E interacts (the pad's Interact on touch screens), M opens the Menu, T the Say wheel
+// (1 to 8 play an emote at once), Q goes to the mirror in the owl's nest, where Your owl is (OP-077),
+// and J the quests. The space bar hops (the pad's Jump) only in a build with the hop (`padJump`):
+// off until flight makes it real (OP-084, OP-114). The pad's Nest, held, goes home. While the Menu or
+// one of its screens is open, the owl stays put. On the home screen only Q (as Play does, once there
+// is an owl: into the nest, before its mirror) and Escape do anything; Enter plays too (ui/home.ts).
 const interact = () => {
   if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
 };
@@ -116,7 +117,12 @@ const jump = () => {
   if (!atHome && !hud.isBlocking()) roomScene()?.jump();
 };
 hud.onInteract(interact);
+hud.setPadJump(cfg.padJump);
 hud.onJump(jump);
+// Nest lands the owl where Play does (OP-105): before the mirror in its own nest, after a slower fade.
+hud.onNest(() => {
+  if (!atHome && !hud.isBlocking()) void roomScene()?.goHome(NEST_SPAWN, NEST_FADE_MS);
+});
 const keyboard = attachKeyboard(window, {
   interact,
   jump,
@@ -291,7 +297,7 @@ function leaveHome(start: RoomStart): void {
 async function playStart(): Promise<RoomStart> {
   const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
-  return room ? { room, spawn: 'mirror' } : { room: LOBBY_ROOM, spawn: undefined };
+  return room ? { room, spawn: NEST_SPAWN } : { room: LOBBY_ROOM, spawn: undefined };
 }
 let collecting = false;
 /** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */

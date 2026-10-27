@@ -23,7 +23,8 @@ export interface ParkState {
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
   eyes: number;
   owlArt: string;
-  npcs: Array<{ id: string; x: number; y: number; mark: string | null }>;
+  /** NPC owls, the quest marker each shows, and whether its '!' says the visitor can talk to it now (OP-114). */
+  npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
   objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;
   actions: string[];
