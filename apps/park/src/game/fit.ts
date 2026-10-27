@@ -8,10 +8,11 @@ import { ITEM_SIZES } from './itemArt';
  * and one centred on its frame sits off to a side. These give the origin that puts the object itself
  * where it belongs; a sprite the manifest does not know keeps the frame's own point.
  *
- * TODO-DOCS (OP-127): docs/ARCHITECTURE.md describes worn items placed by anchor (wornAt: a hat's own
- * bottom on the crown and never below the brow, glasses on the eyes and a monocle on one of them, a
- * collar from the neck and never above the chin; brow and chin measured from the face layer), effects
- * following the drawn anchors through hops and emotes, and pets at their owl's size.
+ * TODO-DOCS (OP-127): docs/ARCHITECTURE.md describes worn items placed by anchor (wornAt: a hat down
+ * over the forehead, its own bottom just above the eyes, a halo and a party hat on the crown instead;
+ * glasses on the eyes and a monocle on one of them; a collar from the neck and never above the chin;
+ * brow and chin measured from the face layer), effects following the drawn anchors through hops and
+ * emotes, and pets at their owl's size.
  */
 export interface Origin {
   x: number;
@@ -66,6 +67,10 @@ const REF = { head: 110, eyes: 92, neck: 100 };
 export const EYE_SPREAD = 0.27;
 /** Face items drawn for one eye (by art key): they sit over the painting's right eye, not between the two. */
 const ONE_EYE: ReadonlySet<string> = new Set(['item-monocle']);
+/** How far above the eyes a hat's own bottom stops: it covers the forehead, never the eyes. */
+const BROW_GAP = 4;
+/** Head items that sit on top of the head instead (by art key): a halo floats over it, a party hat perches on it. */
+const ON_TOP: ReadonlySet<string> = new Set(['item-halo', 'item-party-hat']);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** A worn item on an owl: the point its origin goes to (owl canvas units, the feet at 0, 0), its drawn size and its origin. */
@@ -78,16 +83,18 @@ export interface Worn {
 }
 
 /**
- * Where a worn item sits on an owl, by what it draws (OP-127): a hat stands its own bottom on the
- * crown, never down over the eyes; glasses centre on the eyes (a monocle on one of them); a collar
- * hangs from the neck with its top band a little above it, never up over the beak. `art` is the
- * item's art key.
+ * Where a worn item sits on an owl, by what it draws (OP-127): a hat comes down over the forehead,
+ * its own bottom just above the eyes (a halo or a party hat sits on the crown instead), never over
+ * them; glasses centre on the eyes (a monocle on one of them); a collar hangs from the neck with its
+ * top band a little above it, never up over the beak. `art` is the item's art key.
  */
 export function wornAt(slot: 'head' | 'face' | 'neck', a: OwlAnchors, art: string | undefined): Worn {
   const size = ITEM_SIZES[slot];
   if (slot === 'head') {
     const s = clamp(a.head.w / REF.head, 0.75, 1.35);
-    return { x: a.head.x - FEET.x, y: Math.min(a.head.y + 8, a.brow) - FEET.y, w: size.w * s, h: size.h * s, origin: footOrigin(art) };
+    const forehead = a.brow - BROW_GAP;
+    const bottom = art && ON_TOP.has(art) ? Math.min(a.head.y + 8, forehead) : forehead;
+    return { x: a.head.x - FEET.x, y: bottom - FEET.y, w: size.w * s, h: size.h * s, origin: footOrigin(art) };
   }
   if (slot === 'face') {
     const s = clamp(a.eyes.w / REF.eyes, 0.7, 1.4);
