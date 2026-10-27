@@ -31,8 +31,22 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - name: Install Playwright browser
+      # Playwright's browser is kept between runs, keyed on Playwright's version; its system packages
+      # are installed on each runner (OP-123).
+      - id: playwright
+        name: Playwright's version
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's browser
+        if: steps.browser.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+      - name: Install the browser's system packages
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
       - name: End-to-end tests (local transport on desktop and phone, then the room server)
         run: pnpm e2e
         env:
