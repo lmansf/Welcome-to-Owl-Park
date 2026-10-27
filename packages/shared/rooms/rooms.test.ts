@@ -4,7 +4,8 @@ import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '.
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
-import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
+import { OWL_SPECIES, SPECIES } from '../src/species';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -395,5 +396,30 @@ describe("doorways keep the owl's lane (OP-124)", () => {
     expect(fromMiddle).toEqual(hub.spawns['default']);
     expect(fromLeft.x).toBeLessThan(fromMiddle.x - 60);
     expect(fromLeft.y).toBe(fromMiddle.y);
+  });
+});
+
+describe("the realms' guardians (OP-112)", () => {
+  it('stand in every realm with a Realm Vote spot, and only there', () => {
+    const voting = Object.values(ROOMS).filter((r) => r.doors.some((d) => d.id === 'idol')).map((r) => r.id);
+    expect(GUARDIANS.filter((g) => !g.reserved).map((g) => g.realm).sort()).toEqual(voting.sort());
+  });
+
+  it('are a different real species in every realm, the held ones too', () => {
+    const species = GUARDIANS.map((g) => g.species);
+    expect(new Set(species).size).toBe(species.length);
+    expect(new Set(GUARDIANS.map((g) => g.realm)).size).toBe(GUARDIANS.length);
+    for (const s of species) expect(OWL_SPECIES).toContain(s);
+    expect(GUARDIANS.find((g) => g.realm === 'market')?.species).toBe('barred');
+  });
+
+  it('hold a species for a realm not open yet, which has no room', () => {
+    const held = GUARDIANS.filter((g) => g.reserved);
+    expect(held.map((g) => g.species).sort()).toEqual(['burrowing', 'snowy']);
+    for (const g of held) expect(Object.hasOwn(ROOMS, g.realm)).toBe(false);
+  });
+
+  it("name species from the list the visitors' owls come from", () => {
+    for (const s of SPECIES) expect(OWL_SPECIES).toContain(s.id);
   });
 });

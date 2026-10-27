@@ -30,12 +30,12 @@ describe('sprites placed by what they draw (OP-127)', () => {
   });
 
   it("hugs an idol's tap area round the idol, not its glow", () => {
-    // The robot owl's glow fills its 900 px frame; its body is 552 x 833 of it.
-    const robot = SPRITES['robot-owl']!;
-    expect(robot.drawn![2]).toBeGreaterThan(850);
-    const scale = 0.55; // room pixels per frame pixel, as the market draws it
-    const area = hitArea('robot-owl', scale)!;
-    const [x, y, w, h] = robot.solid!;
+    // The stained-glass idol's glow fills its 520 px frame; the owl itself is 198 x 363 of it.
+    const idol = SPRITES['glass-idol']!;
+    expect(idol.drawn![2]).toBeGreaterThan(450);
+    const scale = 0.55; // room pixels per frame pixel
+    const area = hitArea('glass-idol', scale)!;
+    const [x, y, w, h] = idol.solid!;
     expect(area.w).toBeCloseTo(w + (2 * FIT.margin) / scale);
     expect(area.h).toBeCloseTo(h + (2 * FIT.margin) / scale);
     expect(area.x + area.w / 2).toBeCloseTo(x + w / 2);

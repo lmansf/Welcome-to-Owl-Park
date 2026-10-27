@@ -429,6 +429,7 @@ export class RoomScene extends Phaser.Scene {
       feathers: (total) => this.collection.setFeathers(total),
       tasks: this.tasks,
       cheer: () => this.pieces.idol?.react(),
+      robot: () => this.pieces.idol?.image ?? null,
     });
 
     this.setupCamera();

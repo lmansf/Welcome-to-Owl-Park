@@ -1,6 +1,7 @@
 import { isNestRoom } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
+import type { OwlSpeciesId } from '../src/species';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 
@@ -697,6 +698,34 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
   glass: { idol: { x: 1260, y: 705 }, portal: { x: 2885, y: 560 } },
 };
+
+/** A realm's guardian: the owl over its Realm Vote spot (the `idol` door). */
+export interface GuardianDef {
+  /** The realm's room id, or a neutral id held for a realm that is not open yet. */
+  realm: string;
+  /** A real owl species from the one list (OWL_SPECIES), never another realm's. */
+  species: OwlSpeciesId;
+  /** Held for a realm not open yet, so no other realm takes its species; it has no room. */
+  reserved?: true;
+}
+
+/**
+ * Every realm's guardian owl and its species (OP-112): a different real species in each realm, so
+ * the realms read apart at a glance. The grove's guardian is a great horned owl, the market's giant
+ * robot is built as a barred owl and the stained-glass realm's idol is a barn owl. Two are held for
+ * realms not open yet: the snowy owl for the ink-wash realm and the burrowing owl for a desert realm.
+ *
+ * TODO-DOCS (OP-112): docs/GLOSSARY.md (Guardian: every realm has one, each a species of its own;
+ * Species: the barred owl is the market guardian's only) and docs/ART-PIPELINE.md's `robot-owl` row
+ * (built as a barred owl).
+ */
+export const GUARDIANS: readonly GuardianDef[] = [
+  { realm: 'grove', species: 'great-horned' },
+  { realm: 'market', species: 'barred' },
+  { realm: 'glass', species: 'barn' },
+  { realm: 'ink', species: 'snowy', reserved: true },
+  { realm: 'desert', species: 'burrowing', reserved: true },
+];
 
 /** The rooms the realms setting gates, as the keepers' page lists them. */
 export const GATED_ROOMS: readonly string[] = Object.values(ROOMS).filter((r) => r.gated).map((r) => r.id);

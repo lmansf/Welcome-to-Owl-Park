@@ -34,6 +34,7 @@ import { ANCHORS } from '../rooms';
 import type { CopyView, QuizView } from '../ui/activities';
 import type { Hud } from '../ui/hud';
 import { FishingLine } from './Fishing';
+import { ART } from './art';
 import { LanternGlows } from './Lanterns';
 import type { Owl } from './Owl';
 import { QuizPlates } from './QuizStage';
@@ -52,6 +53,8 @@ export interface ActivityHost {
   tasks: TaskState;
   /** The robot owl's big reaction (the market's idol). */
   cheer(): void;
+  /** The robot owl's sprite (the market's idol), for its eyes to sing from; null until it is placed. */
+  robot(): Phaser.GameObjects.Image | null;
 }
 
 /** Something to do where the owl stands (the room scene shows a button, and E runs the first). */
@@ -69,14 +72,26 @@ const GONE_AFTER_MS = 900;
 const TASKS_RETRY_MS = 5_000;
 /** Never wait longer than this for the park day to turn (timers past ~24 days overflow). */
 const MAX_TIMER_MS = 6 * 60 * 60 * 1000;
-/** The robot owl's eyes (offsets from its anchor, on the painting's eyes), and a colour for each note it uses. */
+/**
+ * The robot owl's eye lenses, and where a sung note sets off beside its head, in its sprite's own
+ * pixels (robot-owl.png, 900 x 900): measured from the art, so they follow the sprite however it is
+ * placed, scaled or bobbing, and a new robot needs only new points here.
+ */
 const ROBOT_EYES: readonly Vec2[] = [
-  { x: -38, y: -368 },
-  { x: 18, y: -368 },
+  { x: 318, y: 190 },
+  { x: 477, y: 179 },
 ];
+const ROBOT_NOTE: Vec2 = { x: 660, y: 180 };
+/** And a colour for each note the tune uses. */
 const NOTE_TINTS = [0x00e5ff, 0xff2aa1, 0xffd36a, 0x8fe3a8];
 
 const feathersText = (n: number) => `+${n} feather${n === 1 ? '' : 's'}`;
+
+/** A point in a sprite's own pixels (`frame` its logical size), in room pixels where the sprite is drawn right now. */
+function spritePoint(img: Phaser.GameObjects.Image, frame: { w: number; h: number }, p: Vec2): Vec2 {
+  const sx = (img.displayWidth / frame.w) * (img.flipX ? -1 : 1);
+  return { x: img.x + (p.x - img.originX * frame.w) * sx, y: img.y + (p.y - img.originY * frame.h) * (img.displayHeight / frame.h) };
+}
 
 /** The robot owl sings each note of its tune with its eyes, and a note drifts up beside its head. */
 class RobotSong {
@@ -84,18 +99,24 @@ class RobotSong {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly at: Vec2,
+    private readonly robot: () => Phaser.GameObjects.Image | null,
   ) {
-    this.eyes = ROBOT_EYES.map((o) => scene.add.image(at.x + o.x, at.y + o.y, 'fx-glow').setScale(0.22).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(at.y + 1));
+    this.eyes = ROBOT_EYES.map(() => scene.add.image(0, 0, 'fx-glow').setScale(0.22).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD));
   }
 
   note(tint: number): void {
-    for (const eye of this.eyes) {
+    const robot = this.robot();
+    const frame = ART['robot-owl'];
+    if (!robot || !frame) return;
+    ROBOT_EYES.forEach((p, i) => {
+      const eye = this.eyes[i]!;
+      const at = spritePoint(robot, frame, p);
       this.scene.tweens.killTweensOf(eye);
-      eye.setTint(tint).setAlpha(0.95);
+      eye.setPosition(at.x, at.y).setDepth(robot.depth + 1).setTint(tint).setAlpha(0.95);
       this.scene.tweens.add({ targets: eye, alpha: 0, duration: COPY_NOTE_MS * 0.8, ease: 'Quad.easeIn' });
-    }
-    const n = this.scene.add.image(this.at.x + 90, this.at.y - 380, symbolTexture(this.scene, 'note')).setTint(tint).setScale(0.9).setDepth(this.at.y + 2);
+    });
+    const from = spritePoint(robot, frame, ROBOT_NOTE);
+    const n = this.scene.add.image(from.x, from.y, symbolTexture(this.scene, 'note')).setTint(tint).setScale(0.9).setDepth(robot.depth + 2);
     this.scene.tweens.add({ targets: n, y: n.y - 70, x: n.x + 24, alpha: 0, duration: 1100, ease: 'Sine.easeOut', onComplete: () => n.destroy() });
   }
 
@@ -140,8 +161,7 @@ export class ActivityLayer {
     this.lanterns = room === LANTERN_ROOM ? new LanternGlows(scene) : null;
     this.quiz = room === QUIZ_ROOM ? new QuizPlates(scene) : null;
     this.fishing = room === FISHING_ROOM ? new FishingLine(scene) : null;
-    const robot = ANCHORS[room]?.['robot'];
-    this.robot = room === COPY_ROOM && robot ? new RobotSong(scene, robot) : null;
+    this.robot = room === COPY_ROOM && ANCHORS[room]?.['robot'] ? new RobotSong(scene, () => host.robot()) : null;
     host.hud.onCopy((note) => (note === null ? this.stopCopy() : void this.playNote(note)));
   }
 
