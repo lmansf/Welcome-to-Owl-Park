@@ -109,9 +109,13 @@ jobs:
       - name: Install Playwright's browser
         if: steps.browser.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - name: Install the browser's system packages
+      - name: The browser's system packages, only if the runner lacks some
         if: steps.browser.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        working-directory: apps/park
+        # The runner image has them already; installing them anyway waits on the runner's own package
+        # updates, up to ten minutes on some runners. So the browser starts first, and only on a failure
+        # are they installed.
+        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
       - name: The smoke set (computer and room server)
         run: pnpm e2e --grep @smoke --project=desktop --project=edge
         env:
@@ -160,9 +164,13 @@ jobs:
       - name: Install Playwright's browser
         if: steps.browser.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - name: Install the browser's system packages
+      - name: The browser's system packages, only if the runner lacks some
         if: steps.browser.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        working-directory: apps/park
+        # The runner image has them already; installing them anyway waits on the runner's own package
+        # updates, up to ten minutes on some runners. So the browser starts first, and only on a failure
+        # are they installed.
+        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
       - name: This shard's tests, shared out by their measured times (e2e/shard.mjs)
         working-directory: apps/park
         run: node e2e/shard.mjs ${{ matrix.shard }} 8 > shard-tests.txt
