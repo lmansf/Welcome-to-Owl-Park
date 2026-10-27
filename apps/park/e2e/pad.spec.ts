@@ -85,18 +85,23 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await menu.locator('[data-tab="nest"]').click();
     const home = menu.locator('[data-screen="home"]');
     await expect(home).toHaveText('Go home');
-    // The press and its letting go, each in the page at once (a slow runner's frames would otherwise
-    // stretch a quick tap past the hold); the answer is whether the button is filling.
-    const press = (type: 'pointerdown' | 'pointerup') => home.evaluate((el, t) => (el.dispatchEvent(new PointerEvent(t, { bubbles: true })), el.classList.contains('holding')), type);
+    // Pressed and let go in one go in the page (a busy runner's round trips would otherwise stretch a
+    // quick tap past the hold): filling while pressed, empty once let go.
+    const tap = () =>
+      home.evaluate((el) => {
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        const filling = el.classList.contains('holding');
+        el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+        return [filling, el.classList.contains('holding')];
+      });
     // Let go before it is full: the owl stays where it is, and the Menu says to hold it.
-    expect(await press('pointerdown')).toBe(true);
-    expect(await press('pointerup')).toBe(false);
+    expect(await tap()).toEqual([true, false]);
     await expect(menu.getByText('Hold to go home.')).toBeVisible();
     await page.waitForTimeout(900);
     expect((await state(page)).room).toBe('hub');
     await expect(menu).toBeVisible();
     // Held until it is full: the Menu closes and the owl goes home, landing before its mirror.
-    expect(await press('pointerdown')).toBe(true);
+    expect(await home.evaluate((el) => (el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })), el.classList.contains('holding')))).toBe(true);
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^nest-/);
     await expect(menu).toBeHidden();
     const at = await state(page);
