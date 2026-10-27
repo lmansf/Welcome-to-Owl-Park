@@ -15,10 +15,13 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 45_000,
   expect: { timeout: 10_000 },
-  fullyParallel: false,
+  // One test at a time on a machine. In CI the suite is split across runners one test at a time, not
+  // a file at a time, so the slow files (the climb, the arcade, the room server) spread out (OP-123).
+  fullyParallel: !!process.env['CI'],
   workers: 1,
   retries: process.env['CI'] ? 1 : 0,
-  reporter: process.env['CI'] ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // A shard's report is a blob, merged with the others' into one HTML report by the CI's report job.
+  reporter: process.env['CI'] ? [['list'], process.env['PW_BLOB'] ? ['blob'] : ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',

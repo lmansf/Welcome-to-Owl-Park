@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cameraView, dist, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -96,7 +96,7 @@ test.describe('single visitor', () => {
     await page.mouse.up();
     await expect.poll(async () => (await state(page)).walking).toBe(false);
     const stopped = (await state(page)).pos;
-    await page.waitForTimeout(400);
+    await frames(page, 24);
     expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
   });
 
@@ -114,7 +114,7 @@ test.describe('single visitor', () => {
     await page.keyboard.up('KeyD');
     await expect.poll(async () => (await state(page)).walking).toBe(false);
     const stopped = (await state(page)).pos;
-    await page.waitForTimeout(400);
+    await frames(page, 24);
     expect((await state(page)).pos).toEqual(stopped); // it stays where it was let go
 
     await page.keyboard.down('ArrowLeft');
@@ -132,7 +132,7 @@ test.describe('single visitor', () => {
     await expect.poll(async () => (await state(page)).walking).toBe(false);
   });
 
-  test('M opens the Menu, T Say and J the Menu on its quests; each key closes its screen again, and so does Escape (Q: mirror.spec.ts)', async ({ page }) => {
+  test('M opens the Menu, T Say and J the Menu on its quests; each key closes its screen again, and so does Escape (Q: mirror.spec.ts)', { tag: '@smoke' }, async ({ page }) => {
     await openPark(page);
     for (const [key, name, opener] of [
       ['KeyM', 'Menu', '[data-menu-btn]'],
@@ -156,7 +156,7 @@ test.describe('single visitor', () => {
     const before = (await state(page)).pos;
     await page.keyboard.press('KeyM');
     await page.keyboard.down('KeyD');
-    await page.waitForTimeout(500);
+    await frames(page, 30);
     expect((await state(page)).walking).toBe(false);
     await page.keyboard.up('KeyD');
     expect((await state(page)).pos).toEqual(before);

@@ -11,6 +11,14 @@ const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 }
 const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
 const TURNED_BACK = 'The park is open to ticket-holders. The ticket booth is along the plaza.';
 
+/**
+ * Passes are dated to the second, and one dated in the second the gate closed counts as made before
+ * it: wait until a pass made now is dated after `closedAt` (ms).
+ */
+async function pastTheClose(closedAt: number): Promise<void> {
+  await expect.poll(() => Date.now(), { intervals: [50] }).toBeGreaterThanOrEqual(Math.floor(closedAt / 1000) * 1000 + 1000);
+}
+
 async function flip(request: APIRequestContext, mode: 'open' | 'ticket' | 'deployed'): Promise<Record<string, unknown>> {
   const r = await request.post('/api/admin/gate', { headers: ADMIN, data: { mode } });
   expect(r.status(), await r.text()).toBe(200);
@@ -30,7 +38,7 @@ test.describe('the opening switch (OP-067)', () => {
     await flip(request, 'deployed');
   });
 
-  test('only the keepers flip it, on their page or with the admin key, and a new pass finds the gate closed', async ({ browser, request }) => {
+  test('only the keepers flip it, on their page or with the admin key, and a new pass finds the gate closed', { tag: '@smoke' }, async ({ browser, request }) => {
     expect((await request.get('/api/admin/gate')).status()).toBe(403);
     expect((await request.post('/api/admin/gate', { data: { mode: 'ticket' } })).status()).toBe(403);
     expect(await (await request.get('/api/admin/gate', { headers: ADMIN })).json()).toEqual({ mode: 'open', closedAt: null, set: null, deployed: 'open' });
@@ -56,7 +64,7 @@ test.describe('the opening switch (OP-067)', () => {
     expect(now.closedAt).toBe(now.set.at);
 
     // A pass made now: the gate says closed, and the shop inside is shut to it.
-    await new Promise((r) => setTimeout(r, 1_100));
+    await pastTheClose(now.closedAt);
     const { pass, gate } = (await (await request.get('/api/pass')).json()) as { pass: string; gate: string };
     expect(gate).toBe('ticket');
     const auth = { Authorization: `Bearer ${pass}` };
@@ -86,8 +94,7 @@ test.describe('the opening switch (OP-067)', () => {
     ['a phone', PHONE],
   ] as const) {
     test(`on ${name}: with the gate taking tickets, the booth sells and the turnstiles turn an owl without a ticket back`, async ({ browser, request }) => {
-      await flip(request, 'ticket');
-      await new Promise((r) => setTimeout(r, 1_100));
+      await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';
       await walkToDoor(a, 'booth');
@@ -119,13 +126,13 @@ test.describe('the opening switch (OP-067)', () => {
     await expect.poll(async () => (await state(inside)).room, { timeout: 20_000 }).toBe('hub');
 
     // The keepers close the gate: the owl inside goes on from room to room.
-    await flip(request, 'ticket');
+    const closed = await flip(request, 'ticket');
     await walkToDoor(inside, 'to-market');
     await expect.poll(async () => (await state(inside)).room, { timeout: 20_000 }).toBe('market');
     await expect.poll(async () => (await state(inside)).connected, { timeout: 20_000 }).toBe(true);
 
     // An owl arriving now stops at the turnstiles.
-    await new Promise((r) => setTimeout(r, 1_100));
+    await pastTheClose(closed['closedAt'] as number);
     const late = await arrive(browser, COMPUTER);
     await walkToDoor(late, 'gate');
     await expect(late.getByText(TURNED_BACK)).toBeVisible({ timeout: 15_000 });

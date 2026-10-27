@@ -58,6 +58,9 @@ const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 }
 const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
 
 test.describe('opening night (C42)', () => {
+  // The night's count reads the tickets the tests before it gave out, so these run together and in
+  // order, on one runner, however the suite is split (OP-123).
+  test.describe.configure({ mode: 'serial' });
   test.beforeAll(async ({ request }) => {
     await request.post(`${E2E_STORE.origin}/test/night`, { data: { on: true } });
   });

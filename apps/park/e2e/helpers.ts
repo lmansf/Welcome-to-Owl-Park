@@ -103,6 +103,23 @@ export async function cameraView(page: Page): Promise<CameraView> {
   return cam;
 }
 
+/**
+ * Let the page draw `n` more frames. For a check that something does not happen while the game runs
+ * (an owl let go stays put), counted in the game's own updates rather than in milliseconds, so a slow
+ * runner gives it as many updates as a quick one (OP-123).
+ */
+export async function frames(page: Page, n: number): Promise<void> {
+  await page.evaluate(
+    (n) =>
+      new Promise<void>((resolve) => {
+        let left = n;
+        const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
+        requestAnimationFrame(tick);
+      }),
+    n,
+  );
+}
+
 /** Wait until the camera stops panning (it follows the owl with a lerp). */
 export async function settleCamera(page: Page): Promise<CameraView> {
   let last = await cameraView(page);

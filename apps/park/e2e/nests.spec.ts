@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openPark, state, tapRoomPoint, toScreen, walkToDoor, type ParkState } from './helpers';
+import { openPark, settleCamera, state, tapRoomPoint, toScreen, walkToDoor, type ParkState } from './helpers';
 
 /** The nest this page's owl is in, once the nest has said how it stands. */
 async function nestOf(page: Page): Promise<NonNullable<ParkState['nest']>> {
@@ -67,7 +67,7 @@ test.describe('the nests (this device)', () => {
 
     // A tap on a spot's ring in the room chooses it, and never walks the owl.
     const before = (await state(page)).pos;
-    await page.waitForTimeout(600); // the camera pans to the chosen spot
+    await settleCamera(page); // the camera pans to the chosen spot
     await tapRoomPoint(page, 820, 794);
     await expect(sheet(page).locator('[data-where]')).toHaveText('6 / 12 · On the floor');
     expect((await state(page)).nest?.spot).toBe('f6');
@@ -168,7 +168,7 @@ test.describe('decorating on a phone', () => {
     ] as const) {
       while (!(await sheet(page).locator('[data-where]').textContent())?.startsWith(`${n} /`)) await sheet(page).getByRole('button', { name: 'Next spot' }).click();
       // Let the camera pan to the spot, then check it is on screen and above the sheet.
-      await page.waitForTimeout(600);
+      await settleCamera(page);
       const top = await sheet(page).evaluate((el) => el.getBoundingClientRect().top);
       const p = await toScreen(page, x, y);
       const width = page.viewportSize()!.width;

@@ -1,23 +1,37 @@
 name: CI
 
+# Two tiers (OP-123). A push to a branch other than main runs the quick tier: typecheck, unit tests
+# and build as three jobs at once, then the browser smoke set (the tests tagged @smoke), in under
+# five minutes. A pull request, a push to main, the nightly run and a run by hand take the full
+# tier: the same three jobs, then the whole browser suite split across twelve runners by the tests'
+# measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push that changes
+# only docs or Markdown runs nothing. A failed typecheck or unit test run cancels the rest of the run.
+#
+# TODO-DOCS (OP-123): docs/DEPLOY.md gains a CI section: the two tiers and what each runs, tagging a
+# test @smoke, refreshing the shard timings (apps/park/e2e/durations.json) when tests are added, and
+# that browser tests wait on the park's own state (or frames), never on fixed sleeps.
 on:
   push:
-    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+  schedule:
+    # 07:00 UTC: 03:00 in New York in summer, 02:00 in winter.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write # to cancel the run when a check fails
+
 jobs:
-  check:
-    name: Typecheck, unit tests, build, end-to-end
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
-    # The browser suite (computer, phone and the room server, one test at a time) takes 45 to 85
-    # minutes on a hosted runner (the slower runners take nearly twice as long), and installing the
-    # browser sometimes takes nine more; this limit only stops a run that hangs. A pull request
-    # branch runs once, on the pull_request event: a push to it no longer starts a second run.
-    timeout-minutes: 150
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -29,22 +43,216 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - name: Cancel the rest of the run
+        if: failure()
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - name: Cancel the rest of the run
+        if: failure()
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Install Playwright browser
+
+  smoke:
+    name: Browser smoke set
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright
+        name: Playwright's version
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's browser
+        if: steps.browser.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - name: End-to-end tests (local transport on desktop and phone, then the room server)
-        run: pnpm e2e
+      - name: The browser's system packages, only if the runner lacks some
+        if: steps.browser.outputs.cache-hit == 'true'
+        working-directory: apps/park
+        # The runner image has them already; installing them anyway waits on the runner's own package
+        # updates, up to ten minutes on some runners. So the browser starts first, and only on a failure
+        # are they installed.
+        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
+      - name: The smoke set (computer and room server)
+        run: pnpm e2e --grep @smoke --project=desktop --project=edge
         env:
           CI: 'true'
-      - name: Upload screenshots and reports
+      - name: Upload screenshots and the report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-output
+          name: smoke-output
           path: |
             apps/park/e2e-screenshots
             apps/park/playwright-report
             apps/park/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  e2e:
+    name: Browser suite ${{ matrix.shard }}/12
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    # A shard runs a twelfth of the suite: about 4 minutes of tests on a quick runner, and up to 7 on the
+    # slowest seen (some runners are two thirds slower), so the run stays under ten minutes.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright
+        name: Playwright's version
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: The browser's system packages, only if the runner lacks some
+        if: steps.browser.outputs.cache-hit == 'true'
+        working-directory: apps/park
+        # The runner image has them already; installing them anyway waits on the runner's own package
+        # updates, up to ten minutes on some runners. So the browser starts first, and only on a failure
+        # are they installed.
+        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
+      - name: This shard's tests, shared out by their measured times (e2e/shard.mjs)
+        working-directory: apps/park
+        run: node e2e/shard.mjs ${{ matrix.shard }} 12 > shard-tests.txt
+        env:
+          CI: 'true'
+      - name: End-to-end tests, shard ${{ matrix.shard }} of 12 (local transport on desktop and phone, and the room server)
+        run: pnpm e2e --test-list shard-tests.txt
+        env:
+          CI: 'true'
+          PW_BLOB: 'true'
+          # Each shard's report needs its own name: the report job downloads them all into one folder.
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
+      - name: Upload this shard's report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: apps/park/blob-report
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-${{ matrix.shard }}
+          path: |
+            apps/park/e2e-screenshots
+            apps/park/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report:
+    name: Browser suite report
+    # After every shard, failed ones too, but not when the run was cancelled.
+    if: ${{ !cancelled() && needs.e2e.result != 'skipped' }}
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          path: apps/park/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+      - name: Merge the shards' reports into one
+        working-directory: apps/park
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
+      - name: Upload the merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/park/playwright-report
+          retention-days: 7
+      - name: This run's measured times, to refresh e2e/durations.json now and then
+        if: needs.e2e.result == 'success'
+        working-directory: apps/park
+        run: |
+          pnpm exec playwright merge-reports --reporter json ./all-blob-reports > report.json
+          node e2e/shard.mjs durations report.json
+      - name: Upload the measured times
+        if: needs.e2e.result == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: durations
+          path: apps/park/e2e/durations.json
+          retention-days: 30
+      - name: The suite's result
+        if: needs.e2e.result != 'success'
+        run: |
+          echo "The browser suite did not pass (${{ needs.e2e.result }}): see the shards above and the merged report." >> "$GITHUB_STEP_SUMMARY"
+          exit 1

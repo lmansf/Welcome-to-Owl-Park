@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cameraView, dist, openPark, state } from './helpers';
+import { cameraView, dist, frames, openPark, state } from './helpers';
 
 /**
  * The mirror (OP-077), on this device (local mode): Your owl is at a mirror in the owl's own nest.
@@ -80,7 +80,7 @@ test.describe('the mirror in the nest (OP-077)', () => {
     await expect.poll(async () => (await state(page)).look.body).toBe(pick);
     await expect(builder(page)).toBeVisible();
     expect(await page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(false);
-    await page.waitForTimeout(300);
+    await frames(page, 3); // the preview drawn in the new colour
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-mirror.png` });
 
     // Done: the room's camera has the whole screen and follows the owl again, in its new colour.
