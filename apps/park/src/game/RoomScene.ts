@@ -73,6 +73,7 @@ import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
+import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
 import { GATED_ROOMS, NEST_MIRROR, ROOMS, getRoom } from '../rooms';
 import type { DecorateView } from '../ui/decorate';
@@ -198,6 +199,12 @@ export class RoomScene extends Phaser.Scene {
   /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
   private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
+  /** When the owl fell asleep, its visitor idle (OP-126); 0 awake. */
+  private sleptAt = 0;
+  /** When "Still here?" went up; 0 when it is not up. */
+  private askedAt = 0;
+  /** No answer came: the owl is on its way out of the room. */
+  private goingAway = false;
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
   private lastStatus: ConnectionStatus | null = null;
@@ -281,6 +288,9 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false;
     this.pieces = {};
     this.cameFrom = data.from;
+    this.sleptAt = 0;
+    this.askedAt = 0;
+    this.goingAway = false;
     this.gen += 1;
     this.lastStatus = null;
     this.collection = this.registry.get('collection') as CollectionState;
@@ -441,6 +451,7 @@ export class RoomScene extends Phaser.Scene {
       this.checkDoors(finished);
       this.checkItems(now);
       this.updateHints();
+      this.rest(now);
     }
     for (const owl of this.peers.values()) owl.tick(now);
     this.bubbles?.tick(now);
@@ -452,7 +463,7 @@ export class RoomScene extends Phaser.Scene {
   // ---------- networking ----------
 
   private snapshot(): PlayerState {
-    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, v: PROTOCOL_VERSION };
+    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, ...(this.sleptAt ? { asleep: true } : {}), v: PROTOCOL_VERSION };
   }
 
   private async connect(): Promise<void> {
@@ -494,6 +505,7 @@ export class RoomScene extends Phaser.Scene {
       },
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
+      onPeerRest: (id, asleep) => live() && this.peers.get(id)?.setAsleep(asleep, this.calm()),
       onCounts: (rooms) => {
         if (!live()) return;
         this.registry.set('counts', rooms);
@@ -573,6 +585,7 @@ export class RoomScene extends Phaser.Scene {
     } else {
       owl.applyLook(s.look);
     }
+    owl.setAsleep(s.asleep === true, this.calm());
     if (s.walk) {
       // A snapshot keeps the last walk until the next one: a future-dated start is pulled back to
       // now, an old one is played out to its end, and one we already animate (or already finished)
@@ -745,6 +758,72 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
+  /** Calm motion, as this visitor set it. */
+  private calm(): boolean {
+    return (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false;
+  }
+
+  /**
+   * An idle owl (OP-126). With no key, touch, click or scroll for a while, no walk under way and no
+   * stick held, it falls asleep where it stands, for everyone; anything its visitor does wakes it.
+   * Asleep a long while anywhere but its own nest, "Still here?" asks; with no answer it leaves the
+   * room, freeing its place, and comes home to its nest at a tap. Never during a climb or a game.
+   */
+  private rest(now: number): void {
+    const idle = this.registry.get('idle') as { at: number } | undefined;
+    if (!idle || this.goingAway) return;
+    if (this.me.walking || this.keys?.direction()) idle.at = now;
+    if (!this.sleptAt) {
+      if (now - idle.at >= this.cfg.sleepAfterMs && this.maySleep()) this.fallAsleep(now);
+      return;
+    }
+    if (idle.at > this.sleptAt) return this.wake();
+    if (isNestRoom(this.room.id) && this.nestMine) return; // at home an owl sleeps as long as it likes
+    if (!this.askedAt) {
+      if (now - this.sleptAt < this.cfg.awayAskMs) return;
+      this.askedAt = now;
+      this.awayScreen()?.ask();
+    } else if (now - this.askedAt >= this.cfg.awayAnswerMs) void this.goAway();
+  }
+
+  private maySleep(): boolean {
+    return !this.passingGate && !this.decorating && !this.climb?.debug() && !this.arcade?.debug();
+  }
+
+  private fallAsleep(now: number): void {
+    this.sleptAt = now;
+    this.me.setAsleep(true, this.calm());
+    this.conn?.track(this.snapshot());
+    this.conn?.send({ t: 'rest', id: this.playerId, asleep: true });
+  }
+
+  private wake(): void {
+    this.sleptAt = 0;
+    this.askedAt = 0;
+    this.awayScreen()?.close();
+    this.me.setAsleep(false);
+    this.conn?.track(this.snapshot());
+    this.conn?.send({ t: 'rest', id: this.playerId, asleep: false });
+  }
+
+  private awayScreen(): Away | undefined {
+    return this.registry.get('away') as Away | undefined;
+  }
+
+  /**
+   * No answer to "Still here?": the owl leaves the room as any visitor does (its place freed, its
+   * visit closed), and the page waits for a tap to bring it back, to its own nest (OP-105).
+   */
+  private async goAway(): Promise<void> {
+    this.goingAway = true;
+    this.awayScreen()?.close();
+    const nestId = await this.collection.service.homeNest().catch(() => null);
+    const home = nestId ? nestRoomId(nestId) : null;
+    if (!(await this.leaveRoom())) return;
+    const back: RoomStart = home ? { room: home, spawn: NEST_SPAWN, from: { room: STREET_ROOM, spawn: 'from-nest-0' } } : { room: LOBBY_ROOM, spawn: undefined };
+    this.awayScreen()?.gone(() => this.scene.start('room', back));
+  }
+
   /**
    * At a nest's mirror (OP-077): the owl turns to it and Your owl opens, the room showing round the
    * owl as it changes. Any owl may look into any nest's mirror: it changes only that owl.
@@ -882,7 +961,9 @@ export class RoomScene extends Phaser.Scene {
     look: OwlLook;
     /** How high the owl is drawn above the floor (a hop), in room pixels; its place stays at `pos`. */
     height: number;
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number }>;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; asleep: boolean }>;
+    /** Asleep, its visitor idle (OP-126). */
+    asleep: boolean;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
     bubbles: Array<{ id: string; n: number }>;
     connected: boolean;
@@ -920,7 +1001,8 @@ export class RoomScene extends Phaser.Scene {
       walking: this.me.walking,
       look: this.look,
       height: this.me.hopHeight(),
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.hopHeight() })),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.hopHeight(), asleep: o.asleep })),
+      asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
@@ -1026,7 +1108,7 @@ export class RoomScene extends Phaser.Scene {
     // is what Interact's '!' (and E) would do, not a spot the owl stands in first, such as the gift shop.
     const calm = (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false;
     const talkFirst = out.length === 0;
-    for (const npc of this.npcs.values()) npc.setApproach(npc === nearest && talkFirst, calm);
+    for (const npc of this.npcs.values()) npc.setApproach(npc === nearest && talkFirst && !this.sleptAt, calm);
     if (nearest) {
       const id = nearest.id;
       out.push({ id: `npc:${id}`, label: `Talk to ${nearest.def.name}`, run: () => void this.talk(id) });

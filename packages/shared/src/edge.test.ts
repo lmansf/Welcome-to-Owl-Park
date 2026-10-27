@@ -22,8 +22,8 @@ describe('protocol v10, the climb', () => {
 });
 
 describe('protocol v9, the arcade', () => {
-  it('is version 10, and a page speaking the version before is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(10);
+  it('is version 11 (owls asleep, OP-126), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(11);
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
@@ -116,6 +116,13 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1, y: 2 }, seq: 3 }))).toEqual({ t: 'move', to: { x: 1, y: 2 }, seq: 3 });
     expect(parseClientFrame(JSON.stringify({ t: 'look', look, extra: 1 }))).toEqual({ t: 'look', look });
     expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
+    // An owl asleep or awake (OP-126): a plain yes or no, nothing else.
+    expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: true }))).toEqual({ t: 'rest', asleep: true });
+    expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: false, extra: 1 }))).toEqual({ t: 'rest', asleep: false });
+    expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: 'yes' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'rest' }))).toBeNull();
+    // And the room server's word to the others reaches their pages.
+    expect(parseServerFrame(JSON.stringify({ t: 'rest', id: 'o1', asleep: false }))).toEqual({ t: 'rest', id: 'o1', asleep: false });
   });
 
   it('accepts an emote from the catalogue and the hop every owl has, and nothing else', () => {

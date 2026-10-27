@@ -376,6 +376,8 @@ export class EdgeTransport implements ParkTransport {
           clearQueue();
           handlers.onSelf?.(f.you.pos);
           current = { ...current, pos: f.you.pos, walk: null };
+          // A new socket is a new visitor to the room: an owl still asleep says so again (OP-126).
+          if (current.asleep) sendFrame({ t: 'rest', asleep: true });
           const seen = new Set<string>();
           for (const o of f.owls) {
             seen.add(o.id);
@@ -429,6 +431,9 @@ export class EdgeTransport implements ParkTransport {
         }
         case 'look':
           if (f.id !== selfId) handlers.onPeerLook?.(f.id, f.look);
+          break;
+        case 'rest':
+          if (f.id !== selfId) handlers.onPeerRest?.(f.id, f.asleep);
           break;
         case 'leave':
           if (f.id === selfId) break;
@@ -782,6 +787,10 @@ export class EdgeTransport implements ParkTransport {
           case 'say':
             sendFrame({ t: 'say', n: msg.n });
             break;
+          case 'rest':
+            current = { ...current, asleep: msg.asleep };
+            sendFrame({ t: 'rest', asleep: msg.asleep });
+            break;
           case 'hello':
             break;
         }
@@ -817,5 +826,5 @@ export class EdgeTransport implements ParkTransport {
 }
 
 function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number }) => Walk): PlayerState {
-  return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, v: 1 };
+  return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, ...(o.asleep ? { asleep: true } : {}), v: 1 };
 }

@@ -28,9 +28,9 @@ import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import { isEmoteId, isLook, isObj, isPlayableEmote, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 10;
-// TODO-DOCS: docs/ARCHITECTURE.md section 4 says protocol v8; it is v10 (the arcade, then the climb's `climb` and `ascent` acts, `realms` in the welcome and the `realms` frame).
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 11;
+// TODO-DOCS: docs/ARCHITECTURE.md section 4 says protocol v8; it is v11 (the arcade, then the climb's `climb` and `ascent` acts, `realms` in the welcome and the `realms` frame, then `rest` both ways and `asleep` on an owl, OP-126).
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
 export const BAND_COUNT = 6;
@@ -69,6 +69,8 @@ export interface OwlSnapshot {
   look: OwlLook;
   pos: Vec2;
   walk: ServerWalk | null;
+  /** Its visitor has been idle a while (OP-126): it sleeps where it stands, for everyone. */
+  asleep?: true;
 }
 
 // ---- client -> server ----
@@ -91,6 +93,11 @@ export interface ClientLook {
 }
 export interface ClientBye {
   t: 'bye';
+}
+/** The owl falls asleep (its visitor idle) or wakes (OP-126). A state of the owl, not an event: nothing logs it. */
+export interface ClientRest {
+  t: 'rest';
+  asleep: boolean;
 }
 /** Play an owned emote for everyone in the room, or the hop every owl has (JUMP_EMOTE). */
 export interface ClientEmote {
@@ -163,7 +170,7 @@ export interface ClientStreet {
 }
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -206,6 +213,12 @@ export interface ServerLook {
 export interface ServerLeave {
   t: 'leave';
   id: string;
+}
+/** Another owl fell asleep or woke (OP-126). */
+export interface ServerRest {
+  t: 'rest';
+  id: string;
+  asleep: boolean;
 }
 export interface ServerCounts {
   t: 'counts';
@@ -387,6 +400,7 @@ export type ServerFrame =
   | ServerMove
   | ServerLook
   | ServerLeave
+  | ServerRest
   | ServerCounts
   | ServerFull
   | ServerEmote
@@ -452,6 +466,8 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     }
     case 'bye':
       return { t: 'bye' };
+    case 'rest':
+      return typeof v['asleep'] === 'boolean' ? { t: 'rest', asleep: v['asleep'] } : null;
     case 'emote':
       return isPlayableEmote(v['e']) ? { t: 'emote', e: v['e'] } : null;
     case 'say': {
@@ -503,7 +519,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'realms']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'realms', 'rest']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

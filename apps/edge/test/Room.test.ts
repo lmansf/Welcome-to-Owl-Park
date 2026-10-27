@@ -83,6 +83,31 @@ describe('Room', () => {
     expect(Math.abs(p.x - 800)).toBeLessThanOrEqual(LIMITS.scatterDoor);
   });
 
+  it('tells the others an owl fell asleep, shows a newcomer it asleep, and wakes it for everyone when it walks (OP-126)', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    room.rest('a', true);
+    expect(b.last('rest')).toEqual({ t: 'rest', id: 'a', asleep: true });
+    expect(a.count('rest')).toBe(0); // its own page knows
+    room.rest('a', true); // already asleep: nothing new to tell
+    expect(b.count('rest')).toBe(1);
+    expect(a.persisted.at(-1)?.asleep).toBe(true);
+    // A newcomer sees it asleep, and the one awake as it is.
+    const c = new FakePeer();
+    room.join(c, 'c', hello());
+    const owls = c.last('welcome')!.owls;
+    expect(owls.find((o) => o.id === 'a')?.asleep).toBe(true);
+    expect(owls.find((o) => o.id === 'b')?.asleep).toBeUndefined();
+    // Walking wakes it, for everyone, before the walk.
+    room.move('a', { t: 'move', to: { x: 1000, y: 700 }, seq: 1 });
+    const seen = b.frames.slice(-2).map((f) => f.t);
+    expect(seen).toEqual(['rest', 'move']);
+    expect(b.last('rest')).toEqual({ t: 'rest', id: 'a', asleep: false });
+    expect(room.snapshot().find((o) => o.id === 'a')?.asleep).toBeUndefined();
+  });
+
   it('never scatters an arrival into an exit doorway', () => {
     const withExit: RoomDef = { ...def, spawns: { default: { x: 650, y: 700 } }, doors: [{ id: 'out', rect: { x: 700, y: 600, w: 200, h: 200 }, to: { room: 'other', spawn: 'default' } }] };
     const r2 = new Room(withExit, { now: () => now, cap: 50 });

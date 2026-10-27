@@ -46,6 +46,8 @@ export interface PlayerState {
   pos: Vec2;
   /** The walk in progress, if any. */
   walk: Walk | null;
+  /** Asleep where it stands, its visitor idle (OP-126). */
+  asleep?: boolean;
   /** Protocol version the sender speaks. */
   v: number;
 }
@@ -89,4 +91,11 @@ export interface SayMessage {
   n: number;
 }
 
-export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SayMessage;
+/** A player's owl fell asleep (its visitor idle) or woke (OP-126). */
+export interface RestMessage {
+  t: 'rest';
+  id: string;
+  asleep: boolean;
+}
+
+export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SayMessage | RestMessage;

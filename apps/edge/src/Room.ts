@@ -45,6 +45,8 @@ export interface VisitorState {
   look: OwlLook;
   pos: Vec2;
   walk: ServerWalk | null;
+  /** Asleep where it stands, its visitor idle (OP-126). */
+  asleep?: true;
 }
 
 interface Visitor {
@@ -165,7 +167,7 @@ export class Room {
     const out: OwlSnapshot[] = [];
     for (const [id, v] of this.visitors) {
       if (id === except) continue;
-      out.push({ id, look: v.st.look, pos: v.st.pos, walk: v.st.walk });
+      out.push({ id, look: v.st.look, pos: v.st.pos, walk: v.st.walk, ...(v.st.asleep ? { asleep: true as const } : {}) });
     }
     return out;
   }
@@ -333,7 +335,11 @@ export class Room {
     const at = this.now();
     v.st.walk = { from, to: target, at };
     v.st.pos = from;
+    // An owl that walks is awake, for everyone, whatever its page said last (OP-126).
+    const woke = v.st.asleep === true;
+    delete v.st.asleep;
     v.peer.persist?.(v.st);
+    if (woke) this.broadcast({ t: 'rest', id, asleep: false }, id);
     const frame: ServerFrame = { t: 'move', id, from, to: target, at };
     this.broadcast(frame, id);
     this.send(v, { ...frame, seq: msg.seq });
@@ -362,6 +368,18 @@ export class Room {
     v.st.look = look;
     v.peer.persist?.(v.st);
     this.broadcast({ t: 'look', id, look }, id);
+  }
+
+  /** The owl falls asleep or wakes (OP-126): kept on the visitor, so a newcomer sees it too, and told to the others. */
+  rest(id: string, asleep: boolean): void {
+    const v = this.visitors.get(id);
+    if (!v) return;
+    if (!this.admitFrame(v)) return void v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
+    if (asleep === (v.st.asleep === true)) return;
+    if (asleep) v.st.asleep = true;
+    else delete v.st.asleep;
+    v.peer.persist?.(v.st);
+    this.broadcast({ t: 'rest', id, asleep }, id);
   }
 
   /** The visitor's current look (what everyone else sees), if present. */
