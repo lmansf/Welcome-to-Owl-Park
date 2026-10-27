@@ -241,6 +241,23 @@ export async function holdSpace(page: Page, ms: number): Promise<void> {
   await page.keyboard.up('Space');
 }
 
+/**
+ * The space bar held through a jump to near its top, let go, and pressed again for the flap, held
+ * `ms` more: from the flap's top on, a glide (OP-084). Near the top by the page's own reckoning, so
+ * a slow runner's round trips cannot turn the flap into a second jump from the floor.
+ */
+export async function jumpFlapGlide(page: Page, ms: number): Promise<void> {
+  await page.keyboard.down('Space');
+  await page.waitForFunction(() => {
+    const s = window.owlPark.state();
+    return !!s && s.height > 100 && s.air.vz < 150;
+  });
+  await page.keyboard.up('Space');
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(ms);
+  await page.keyboard.up('Space');
+}
+
 /** Wait for an action button where the owl stands, then press it. */
 export async function doAction(page: Page, id: string): Promise<void> {
   await expect.poll(async () => (await state(page)).actions, { timeout: 10_000, intervals: [50] }).toContain(id);

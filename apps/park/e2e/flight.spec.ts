@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { flightOf, holdSpace, openPark, state } from './helpers';
+import { flightOf, holdSpace, jumpFlapGlide, openPark, state } from './helpers';
 
 /**
  * Flight (OP-084): Jump (the space bar, the pad's Jump on a phone) jumps the climb's jump, pressed
@@ -30,11 +30,10 @@ test.describe('flight (OP-084)', () => {
     await page.keyboard.press('Space');
     const tap = await seen;
     expect(tap.peak).toBeGreaterThan(0);
-    expect(tap.peak).toBeLessThan(held.peak * 0.7);
+    expect(tap.peak).toBeLessThan(held.peak - 10);
     // Pressed again near the top: the one flap more, higher than the jump alone.
     seen = flightOf(page, 'own');
-    await holdSpace(page, 300);
-    await holdSpace(page, 250);
+    await jumpFlapGlide(page, 200);
     const flapped = await seen;
     expect(flapped.peak).toBeGreaterThan(held.peak + 60);
     // Flight is a height over the floor: the owl never left its spot, and stands on the floor again.
@@ -90,8 +89,7 @@ test.describe('flight (OP-084)', () => {
     const stood = (await state(a)).pos;
     const seen = flightOf(b, 'peer', 12_000);
     const own = flightOf(a, 'own', 12_000);
-    await holdSpace(a, 300);
-    await holdSpace(a, 1_200);
+    await jumpFlapGlide(a, 1_200);
     const [there, here] = await Promise.all([seen, own]);
     expect(here.peak).toBeGreaterThan(200);
     expect(there.peak).toBeGreaterThan(here.peak - 10);

@@ -1,6 +1,6 @@
 import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, flightOf, holdSpace, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, flightOf, jumpFlapGlide, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -360,8 +360,7 @@ test.describe('room server', () => {
     // A jump held to its top, the flap at the top, and the flap held on the way down: a glide.
     const seen = flightOf(a, 'peer', 12_000);
     const own = flightOf(b, 'own', 12_000);
-    await holdSpace(b, 300);
-    await holdSpace(b, 1_200);
+    await jumpFlapGlide(b, 1_200);
     const [there, here] = await Promise.all([seen, own]);
     // The other page draws it from the same states: as high, gliding, and as long in the air, give or take the network.
     expect(here.peak).toBeGreaterThan(200);
