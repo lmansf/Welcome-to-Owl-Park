@@ -256,18 +256,18 @@ const CSS = `
  * Touch screens: a pad like a handheld's (OP-082, OP-114). The thumbstick stays in the bottom-right
  * corner; on the left a diamond of four like a handheld's face buttons: Nest at the top (held to go
  * home), Interact on the right (nearer the middle), the Menu at the bottom (darker, a handheld's
- * Start) and on the left an empty place kept for Jump, dim and dead until flight makes it real
- * (OP-084). Four 56 px buttons whose centres sit 45.25 px from the diamond's middle (81.25 px in,
+ * Start) and outside the Map, which opens the Menu at its Map tab (Logan, 2026-10-27, until the pad
+ * has fewer buttons): the place Jump takes once flight makes it real (OP-084). Four 56 px buttons whose centres sit 45.25 px from the diamond's middle (81.25 px in,
  * 73.25 px up), so neighbours are 8 px apart; Emotes and Say, 44 px, sit in the two notches above,
  * 9 px clear of their neighbours. All see-through, like the stick.
  * TODO-DOCS (OP-114): docs/PLAYBOOK.md's controls (OP-099): the diamond, Nest held to go home, the
- * '!' for Interact, no hop until flight; docs/ACTIVITIES.md, talking to characters: the '!' over the
+ * '!' for Interact, the Map outside, no hop until flight; docs/ACTIVITIES.md, talking to characters: the '!' over the
  * one the owl can talk to now (game/Npc.ts), at the reach Interact talks from.
  */
 @media (pointer:coarse){
   #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}
   #hud .pad{display:block;position:absolute;left:0;bottom:0;width:161px;height:153px}
-  #hud .pad-btn,#hud .pad-slot{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
@@ -280,8 +280,8 @@ const CSS = `
   #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .pad-btn.jump{left:8px;bottom:45.25px}
-  #hud .pad-slot{left:8px;bottom:45.25px;opacity:.4;pointer-events:none}
-  #hud .pad.jumps .pad-slot{display:none}
+  #hud .pad-btn.map{left:8px;bottom:45.25px}
+  #hud .pad.jumps .pad-btn.map{display:none}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
   #hud .menu-btn{position:absolute;left:53.25px;bottom:0;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .menu-btn i{width:20px;height:14px}
@@ -338,7 +338,7 @@ const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 /** The Menu (on its Quests tab, for `quests`), the screens it leads to, and the wheels with buttons of their own. */
-type ScreenId = 'menu' | 'quests' | 'emotes' | 'say' | 'owl' | 'settings' | 'feedback' | 'home' | 'leave' | 'title';
+type ScreenId = 'menu' | 'quests' | 'map' | 'emotes' | 'say' | 'owl' | 'settings' | 'feedback' | 'home' | 'leave' | 'title';
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: SettingsStore): Hud {
   const style = document.createElement('style');
@@ -362,7 +362,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         <button class="pad-btn nest" data-pad-nest aria-label="Go home (hold)">${NEST_ICON}</button>
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}</button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" hidden>${JUMP_ICON}</button>
-        <div class="pad-slot" data-pad-slot aria-hidden="true"></div>
+        <button class="pad-btn map" data-pad-map aria-label="Map" aria-haspopup="dialog">${menuIcon('map')}</button>
       </div>
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
@@ -384,6 +384,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const nestBtn = $<HTMLButtonElement>('[data-pad-nest]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
+  const mapBtn = $<HTMLButtonElement>('[data-pad-map]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
   const notices = $<HTMLElement>('[data-notices]');
   const actionsEl = $<HTMLElement>('[data-actions]');
@@ -544,9 +545,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button); `mirror`: Your owl opened at a mirror. */
   function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn, mirror = false) {
     makeRoom();
-    if (id === 'menu' || id === 'quests') {
+    if (id === 'menu' || id === 'quests' || id === 'map') {
       if (id === 'quests') questUi?.resetJournal();
-      menu.open(id === 'quests' ? 'quests' : undefined, menuBtn);
+      menu.open(id === 'menu' ? undefined : id, menuBtn);
       menuBtn.setAttribute('aria-expanded', 'true');
     } else if (id === 'emotes' && wheel) {
       wheel.open(emotesBtn);
@@ -574,13 +575,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     else openScreen(id);
   };
   menuBtn.addEventListener('click', () => toggle('menu', () => menu.isOpen()));
+  mapBtn.addEventListener('click', () => toggle('map', () => menu.isOpen()));
   emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
   sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
   sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
   interactBtn.addEventListener('click', () => interactCb?.());
   jumpBtn.addEventListener('click', () => jumpCb?.());
   // A pressed look while the thumb is down (touch screens do not all show :active).
-  for (const b of [nestBtn, interactBtn, jumpBtn]) {
+  for (const b of [nestBtn, interactBtn, jumpBtn, mapBtn]) {
     b.addEventListener('pointerdown', () => b.classList.add('on'));
     for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) b.addEventListener(t, () => b.classList.remove('on'));
   }

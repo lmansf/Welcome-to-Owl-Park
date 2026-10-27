@@ -127,12 +127,12 @@ test.describe('busy nights (OP-075)', () => {
     await expect(ribbon(inside)).toContainText('The market is packed tonight');
     await phone.reload();
     await expect(ribbon(phone)).toContainText('The market is packed tonight');
-    // On a phone in a room, it keeps clear of the top line, the pad (Nest, Interact, the Menu, Emotes, Say) and the stick.
+    // On a phone in a room, it keeps clear of the top line, the pad (Nest, Interact, the Menu, the Map, Emotes, Say) and the stick.
     await phone.locator('[data-home-btn="play"]').click();
     await inPark(phone);
     await expect(ribbon(phone)).toContainText('The market is packed tonight');
     await showNotice(phone);
-    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-nest]', '[data-pad-interact]', '[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]', '#hud .stick']);
+    await ribbonClear(phone, ['[data-test-notice]', '[data-pad-nest]', '[data-pad-interact]', '[data-menu-btn]', '[data-pad-map]', '[data-emotes-btn]', '[data-say-btn]', '#hud .stick']);
     await phone.screenshot({ path: 'e2e-screenshots/ribbon-phone-room.png' });
     await dropNotice(phone);
     // Off: gone for everyone inside.
