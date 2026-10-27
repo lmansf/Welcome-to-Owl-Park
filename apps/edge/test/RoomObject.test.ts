@@ -755,7 +755,8 @@ describe('the climb in the room object (the stained-glass realm)', () => {
   const EASY = NIGHTS['easy']!;
   /** Walk an owl from the glass room's doorway to the portal at its far end and let the walk finish. */
   async function toPortal(obj: Obj, ws: FakeSocket) {
-    await send(obj, ws, { t: 'move', to: { x: 1200, y: 780 }, seq: 1 });
+    // In front of the idol's plinth (no floor itself, OP-127), then along the street.
+    await send(obj, ws, { t: 'move', to: { x: 1200, y: 850 }, seq: 1 });
     clock += 10_000;
     await send(obj, ws, { t: 'move', to: { x: 2885, y: 745 }, seq: 2 });
     clock += 10_000;

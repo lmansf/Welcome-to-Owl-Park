@@ -153,4 +153,18 @@ test.describe('the stained-glass climb through the room server', () => {
     await expect(page.locator('[data-toasts]')).toContainText('Pardon Our Feathers');
     await expect(page.locator('.climb-layer')).toBeHidden();
   });
+
+  test("while the realm is closed, an owl stops at the arch's blockade instead of walking in behind it (OP-127)", async ({ page }) => {
+    test.skip(!isEdge(), 'the room server only');
+    await openPark(page, { transport: 'edge' });
+    const settled = () => expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
+    // In front of the east arch (the hub's to-glass doorway), then straight on into it: the blockade's
+    // foot is at y 668 and the arch's floor runs back to y 604.
+    await page.evaluate(() => window.owlPark.walkTo(2665, 690));
+    await settled();
+    await page.evaluate(() => window.owlPark.walkTo(2665, 610));
+    await settled();
+    expect((await state(page)).pos.y).toBeGreaterThan(668);
+    await expect(page.locator('[data-toasts]')).toContainText('Hatching Soon');
+  });
 });

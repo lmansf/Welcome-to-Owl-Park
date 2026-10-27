@@ -12,7 +12,8 @@ export const PORTAL = { x: 2885, y: 745 };
 
 /** From the realm's doorway along the floor to the portal. */
 export async function toPortal(page: Page): Promise<void> {
-  await walkAndStop(page, 1200, 780);
+  // In front of the idol's plinth (no floor itself, OP-127), then along the street.
+  await walkAndStop(page, 1200, 850);
   await walkAndStop(page, PORTAL.x, PORTAL.y);
 }
 

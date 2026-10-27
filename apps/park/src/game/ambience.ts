@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ROOM_W, WAY_OUT_DOOR, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
+import { footOrigin, hitArea } from './fit';
 
 /** Generated helper textures shared by every room. */
 export function ensureFxTextures(scene: Phaser.Scene): void {
@@ -40,12 +41,28 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
   }
 }
 
-/** A set piece drawn at its logical size whatever the texture's resolution. */
+/**
+ * A set piece drawn at its logical size whatever the texture's resolution, standing on its anchor by
+ * what it draws rather than by its frame's padded bottom edge (OP-127).
+ */
 function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
   const spec = ART[key];
-  const img = scene.add.image(x, y, key).setOrigin(0.5, 1);
+  const foot = footOrigin(key);
+  const img = scene.add.image(x, y, key).setOrigin(foot.x, foot.y);
   if (spec) img.setDisplaySize(spec.w, spec.h);
   return img;
+}
+
+/**
+ * A tap area round the piece itself, not its frame (OP-127): an idol's glow fills most of its picture
+ * and a tap on that glow, over the shop or the street, should not walk the owl to the idol. In the
+ * texture's own pixels, which may be twice the logical size.
+ */
+function hugging(img: Phaser.GameObjects.Image, key: string): Phaser.Types.Input.InputConfiguration {
+  const res = img.frame.width / (ART[key]?.w ?? img.frame.width);
+  const area = hitArea(key, Math.abs(img.scaleX) * res);
+  if (!area) return { useHandCursor: true };
+  return { hitArea: new Phaser.Geom.Rectangle(area.x * res, area.y * res, area.w * res, area.h * res), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true };
 }
 
 /** Scale so a set piece anchored at its feet keeps its head inside the frame. */
@@ -83,7 +100,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
   const anchors = ANCHORS[room.id] ?? {};
   const pieces: SetPieces = {};
   const tappable = (img: Phaser.GameObjects.Image) => {
-    img.setInteractive({ useHandCursor: true });
+    img.setInteractive(hugging(img, img.texture.key));
     img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event));
   };
   if (room.id === 'grove' && anchors['guardian']) {

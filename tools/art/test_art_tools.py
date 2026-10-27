@@ -769,6 +769,11 @@ class TestSprites(unittest.TestCase):
         self.assertEqual(e["size"], [40, 30])
         self.assertEqual(e["drawn"], [10, 5, 11, 21], "10.5..20.5 -> 10..21, 5.5..25.5 -> 5..26")
         self.assertEqual(e["centre"], [15.5, 15.5])
+        self.assertEqual(e["solid"], e["drawn"], "drawn fully opaque, so the object is all of it")
+        # A glow round the object is drawn, but it is not the object.
+        ImageDraw.Draw(two).rectangle((0, 0, 79, 9), fill=(255, 220, 120, 60))
+        glow = sprites.measure(one, two)
+        self.assertEqual((glow["drawn"], glow["solid"]), ([0, 0, 40, 26], [10, 5, 11, 21]))
         # Without its 2x file, the 1x file is measured.
         self.assertEqual(sprites.measure(two.resize((40, 30)))["size"], [40, 30])
 

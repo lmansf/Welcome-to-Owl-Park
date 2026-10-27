@@ -66,6 +66,9 @@ export interface OwlAnchors {
   eyes: { x: number; y: number; w: number };
   /** The top of the chest: scarves, collars, pendants. */
   neck: { x: number; y: number; w: number };
+  /** The top of the eyes and the tip of the beak (rows): a hat stays above the one, a collar below the other (OP-127). */
+  brow: number;
+  chin: number;
 }
 
 /** Defaults for the 200 x 240 owl canvas when measuring is impossible (no pixels to read). */
@@ -73,6 +76,8 @@ export const DEFAULT_ANCHORS: OwlAnchors = {
   head: { x: 100, y: 34, w: 110 },
   eyes: { x: 100, y: 82, w: 92 },
   neck: { x: 100, y: 128, w: 100 },
+  brow: 64,
+  chin: 112,
 };
 
 /**
@@ -100,7 +105,8 @@ const median = (xs: number[]): number => {
  * Measure an owl from its layer masks (all the same size; coordinates are scaled to the
  * 200 x 240 canvas). The eyes are the widest rows of the face layer in the upper half; the
  * crown is the median top of the body's opaque columns across the middle third of the head
- * (a median, so ear tufts do not lift a hat into the air); the neck is the top of the belly.
+ * (a median, so ear tufts do not lift a hat into the air); the neck is the top of the belly; the
+ * brow and chin are the face's top and bottom rows (the feet, painted on the face layer too, aside).
  */
 export function measureAnchors(body: Mask, face: Mask, belly: Mask): OwlAnchors {
   const sx = 200 / body.width;
@@ -164,10 +170,12 @@ export function measureAnchors(body: Mask, face: Mask, belly: Mask): OwlAnchors 
   // Neck: the first belly row with a few opaque pixels below the face (eyes and beak), centred on
   // that row's span. Some owls' belly layer includes a pale face disc, so its top is the forehead;
   // searching below the lowest face pixel above the feet finds the chest instead.
+  let faceTop = -1;
   let faceBottom = -1;
   for (let y = 0; y < Math.floor(face.height * 0.8); y++) {
     for (let x = 0; x < face.width; x++) {
       if (at(face, x, y)) {
+        if (faceTop < 0) faceTop = y;
         faceBottom = y;
         break;
       }
@@ -204,5 +212,7 @@ export function measureAnchors(body: Mask, face: Mask, belly: Mask): OwlAnchors 
     head: { x: eyeX * sx, y: headTop * sy, w: (r - l + 1) * sx },
     eyes: { x: eyeX * sx, y: eyeY * sy, w: eyeW * sx },
     neck: Number.isNaN(neckY) ? { x: eyeX * sx, y: Math.min(240, (eyeY + eyeW * 0.75) * sy), w: (r - l + 1) * sx * 0.8 } : { x: ((nl + nr) / 2) * sx, y: neckY * sy, w: (nr - nl + 1) * sx },
+    brow: faceTop * sy,
+    chin: (faceBottom + 1) * sy,
   };
 }

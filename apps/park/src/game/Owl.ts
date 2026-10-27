@@ -1,19 +1,18 @@
 import Phaser from 'phaser';
-import { DEFAULT_SPECIES, JUMP_EMOTE, facing, hexToInt, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { DEFAULT_SPECIES, JUMP_EMOTE, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_LAYERS, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
 import { HOP_HEIGHT, HOP_MS, hopFlap, hopLift } from './hop';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
-import { ITEM_SIZES } from './itemArt';
+import { EYE_SPREAD, FEET, solidTop, wornAt } from './fit';
+import type { OwlFit } from './fitOverlay';
 import { ensureVariantTexture, owlAnchors } from './items';
 import { Pet } from './Pet';
 
 export { OWL_H, OWL_W };
 /** The 200 x 240 layer canvas is drawn at this scale in 1600-wide rooms. */
 export const OWL_SCALE = 0.5;
-/** Feet position inside the layer canvas: bottom-centre, per the art pipeline canon. */
-const FEET = { x: 100, y: 240 };
 
 const LAYERS = OWL_LAYERS;
 
@@ -27,10 +26,6 @@ function layersFor(scene: Phaser.Scene, look: OwlLook): readonly string[] {
   const own = SPECIES_LAYERS[sp.id];
   return own.every((k) => scene.textures.exists(k)) ? own : LAYERS;
 }
-
-/** The widths wearables are drawn for (owl canvas units); a bigger or smaller head scales them. */
-const REF = { head: 110, eyes: 92, neck: 100 };
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** A copy of a white layer multiplied by a colour, for renderers without tint support. */
 function tintedLayer(scene: Phaser.Scene, key: string, hex: string): string {
@@ -79,6 +74,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private readonly pledgeMark: Phaser.GameObjects.Image;
   private readonly art: Phaser.GameObjects.Container;
   private readonly wearImgs: Record<WearImageSlot, Phaser.GameObjects.Image>;
+  /** How far down its frame the worn hat's own top edge is (0..1), for the crown. */
+  private hatTop = 0;
   /** Where worn items sit, measured from the layers in use (each species' painting differs). */
   private anchors: OwlAnchors;
   /** Which way the painting itself is turned (1 right, -1 left): the art is mirrored when that differs from `dir`. */
@@ -98,6 +95,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private fxVariant: string | undefined;
   private pet: Pet | null = null;
   private petVariant: string | undefined;
+  /** Scratch matrices for drawnAnchor (it runs for every effect every frame). */
+  private readonly drawnTm = new Phaser.GameObjects.Components.TransformMatrix();
+  private readonly drawnParentTm = new Phaser.GameObjects.Components.TransformMatrix();
   private destroyed = false;
 
   constructor(
@@ -141,6 +141,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.pledgeMark.setAlpha(look.pledge ? 0.75 : 0);
     this.size = speciesOf(look).size;
     this.setScale(OWL_SCALE * this.size);
+    this.pet?.setOwlSize(this.size);
     const layers = layersFor(this.scene, look);
     if (layers !== this.layers) {
       this.layers = layers;
@@ -179,11 +180,6 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     // A texture that finishes loading is applied only if its slot still wants that variant, so
     // quick changes in any order settle on the latest look.
     const wanted = (slot: keyof Wear, variant: string) => !this.destroyed && this.look.wear?.[slot] === variant;
-    const place: Record<WearImageSlot, { x: number; y: number; s: number }> = {
-      head: { x: a.head.x - FEET.x, y: a.head.y - FEET.y + 8, s: clamp(a.head.w / REF.head, 0.75, 1.35) },
-      face: { x: a.eyes.x - FEET.x, y: a.eyes.y - FEET.y, s: clamp(a.eyes.w / REF.eyes, 0.7, 1.4) },
-      neck: { x: a.neck.x - FEET.x, y: a.neck.y - FEET.y - 4, s: clamp(a.neck.w / REF.neck, 0.7, 1.4) },
-    };
     for (const slot of ['head', 'face', 'neck'] as const) {
       const img = this.wearImgs[slot];
       const variant = wear?.[slot];
@@ -193,8 +189,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       }
       void ensureVariantTexture(this.scene, variant, this.textureScale).then((key) => {
         if (!wanted(slot, variant)) return;
-        const p = place[slot];
-        img.setTexture(key).setPosition(p.x, p.y).setDisplaySize(ITEM_SIZES[slot].w * p.s, ITEM_SIZES[slot].h * p.s).setVisible(true);
+        // Placed by what the item draws, not by its frame (OP-127).
+        const art = parseVariant(variant)?.item.art;
+        const p = wornAt(slot, a, art);
+        if (slot === 'head') this.hatTop = solidTop(art);
+        img.setTexture(key).setOrigin(p.origin.x, p.origin.y).setPosition(p.x, p.y).setDisplaySize(p.w, p.h).setVisible(true);
       });
     }
 
@@ -213,8 +212,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       } else {
         void ensureVariantTexture(this.scene, variant, this.textureScale).then((key) => {
           if (!wanted('pet', variant)) return;
-          if (this.pet) this.pet.setTexture(key);
-          else this.pet = new Pet(this.scene, key, this.pos);
+          const art = parseVariant(variant)?.item.art;
+          if (this.pet) this.pet.setTexture(key, art);
+          else this.pet = new Pet(this.scene, key, this.pos, art, this.size);
         });
       }
     }
@@ -298,9 +298,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       case 'eyes':
         return { x: a.eyes.x - FEET.x, y: a.eyes.y - FEET.y };
       case 'eyeL':
-        return { x: a.eyes.x - a.eyes.w * 0.27 - FEET.x, y: a.eyes.y - FEET.y };
+        return { x: a.eyes.x - a.eyes.w * EYE_SPREAD - FEET.x, y: a.eyes.y - FEET.y };
       case 'eyeR':
-        return { x: a.eyes.x + a.eyes.w * 0.27 - FEET.x, y: a.eyes.y - FEET.y };
+        return { x: a.eyes.x + a.eyes.w * EYE_SPREAD - FEET.x, y: a.eyes.y - FEET.y };
       case 'beak':
         return { x: a.eyes.x - FEET.x, y: a.eyes.y + a.eyes.w * 0.24 - FEET.y };
       case 'chest':
@@ -317,11 +317,48 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return { x: p.x * k * this.dir * this.drawnFacing, y: p.y * k };
   }
 
-  /** How far above its feet the owl reaches: the top of its head, or of the hat it wears (a world offset, negative). */
+  /**
+   * The same anchor where it is drawn right now, as a world offset from the feet: lifted by a hop,
+   * bobbing with the walk, turned by an emote (OP-127). Effects follow this one, so a halo stays on
+   * the head mid-hop; bubbles and marks keep the steady `anchor`, so they can be read.
+   */
+  drawnAnchor(name: AnchorName): { x: number; y: number } {
+    const p = this.localAnchor(name);
+    const m = this.pose.getWorldTransformMatrix(this.drawnTm, this.drawnParentTm);
+    return { x: m.getX(p.x, p.y) - this.x, y: m.getY(p.x, p.y) - this.y };
+  }
+
+  /** Its anchors and worn items in room pixels, for the fit overlay (OP-127). */
+  fitMarks(): OwlFit {
+    const k = OWL_SCALE * this.size;
+    const at = (p: { x: number; y: number }) => ({ x: this.x + p.x, y: this.y + p.y });
+    const neck = this.anchors.neck;
+    const worn = (['head', 'face', 'neck'] as const)
+      .map((slot) => this.wearImgs[slot])
+      .filter((img) => img.visible)
+      .map((img) => {
+        const b = img.getBounds();
+        return { x: b.x, y: b.y, w: b.width, h: b.height };
+      });
+    return {
+      feet: { x: this.x, y: this.y },
+      head: at(this.anchor('head')),
+      eyes: at(this.anchor('eyes')),
+      neck: at({ x: (neck.x - FEET.x) * k * this.dir * this.drawnFacing, y: (neck.y - FEET.y) * k }),
+      crown: this.crown(),
+      worn,
+    };
+  }
+
+  /**
+   * How far above its feet the owl reaches: the top of its head, or of the hat it wears (a world
+   * offset, negative). The hat's own top, not its frame's: a crown's frame is a third empty above it.
+   */
   crown(): number {
     const hat = this.wearImgs.head;
     const head = this.localAnchor('head').y;
-    return (hat.visible ? Math.min(head, hat.y - hat.displayHeight) : head) * OWL_SCALE * this.size;
+    const hatTop = hat.y - hat.displayHeight * (hat.originY - this.hatTop);
+    return (hat.visible ? Math.min(head, hatTop) : head) * OWL_SCALE * this.size;
   }
 
   // ---------- movement ----------

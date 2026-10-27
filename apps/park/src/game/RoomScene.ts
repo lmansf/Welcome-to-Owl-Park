@@ -58,6 +58,7 @@ import {
   type PlayerState,
   type QuestBoard,
   type QuestUpdate,
+  type Rect,
   type RoomDef,
   type Vec2,
   type Walk,
@@ -89,6 +90,7 @@ import { loadArt, releaseArt, roomArtKeys } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomScaleCap } from './artFiles';
 import { takesDoorway } from './doors';
+import { FitOverlay } from './fitOverlay';
 import { placeHints } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
@@ -239,6 +241,8 @@ export class RoomScene extends Phaser.Scene {
   private askingStreet = false;
   private streetSigns: StreetDoors | null = null;
   private decor: NestDecor | null = null;
+  /** The fit overlay (OP-127, `?boxes=1`). */
+  private fitOverlay: FitOverlay | null = null;
   /** In a nest, its mirror (OP-077); and while Your owl is open at it, the builder's stage, where the camera frames the owl. */
   private mirror: NestMirror | null = null;
   private mirrorFrame: PreviewFrame | null = null;
@@ -414,6 +418,22 @@ export class RoomScene extends Phaser.Scene {
     this.setupCamera();
     this.setupInput();
     if (this.cfg.debug) this.drawDebug();
+    if (this.cfg.boxes) {
+      this.fitOverlay = new FitOverlay(this, {
+        room,
+        shut: () => this.shutFloor(),
+        npcs: () => [...this.npcs.values()].map((n) => n.fit()),
+        owls: () => [this.me, ...this.peers.values()].map((o) => o.fitMarks()),
+        sprites: () => {
+          const out: Array<{ key: string; image: Phaser.GameObjects.Image }> = [];
+          const idol = this.pieces.idol?.image;
+          if (idol) out.push({ key: idol.texture.key, image: idol });
+          for (const arch of Object.values(this.pieces.arches ?? {})) if (arch.blockade) out.push({ key: arch.blockade.texture.key, image: arch.blockade });
+          out.push(...(this.decor?.fitSprites() ?? []));
+          return out;
+        },
+      });
+    }
 
     this.hud.setCount(1);
     this.hud.setActions([]);
@@ -444,6 +464,7 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const owl of this.peers.values()) owl.tick(now);
     this.bubbles?.tick(now);
+    this.fitOverlay?.draw();
     for (const npc of this.npcs.values()) npc.tick(now);
     for (const pile of this.piles.values()) pile.tick(now);
     this.play?.tick();
@@ -649,7 +670,7 @@ export class RoomScene extends Phaser.Scene {
     }
     if (this.keyTurns <= 0) return; // boxed in: wait for other keys
     this.keyTurns -= 1;
-    const target = steerTarget(this.me.pos, dir, this.room.walkable);
+    const target = steerTarget(this.me.pos, dir, this.room.walkable, undefined, this.shutFloor());
     if (!target) {
       this.keyTurns = 0;
       return;
@@ -1342,7 +1363,7 @@ export class RoomScene extends Phaser.Scene {
    */
   walkTo(target: Vec2, fromKeys = false): boolean {
     if (!this.built) return false;
-    const to = resolveTarget({ ...this.me.pos }, target, this.room.walkable);
+    const to = resolveTarget({ ...this.me.pos }, target, this.room.walkable, this.shutFloor());
     if (distance(to, this.me.pos) < 3) return false;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
     this.keyWalk = fromKeys;
@@ -1563,6 +1584,8 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async teardown(): Promise<void> {
+    this.fitOverlay?.destroy();
+    this.fitOverlay = null;
     this.endDecorating(false);
     this.decor?.destroy();
     this.decor = null;
@@ -1672,6 +1695,15 @@ export class RoomScene extends Phaser.Scene {
   /** A gated realm the keepers have not opened (the realms switch). Rooms without `gated` are never closed this way. */
   private realmClosed(roomId: string | undefined): boolean {
     return !!roomId && ROOMS[roomId]?.gated === true && !this.realms.open.includes(roomId);
+  }
+
+  /**
+   * The floor behind each closed realm's blockade (OP-127): the way into the arch is floor for when
+   * the realm opens, but while it is closed an owl stops at the blockade's foot (the door's marker)
+   * instead of walking in behind it.
+   */
+  private shutFloor(): Rect[] {
+    return this.room.doors.flatMap((d) => (d.marker && this.realmClosed(d.to?.room) ? [{ x: d.rect.x, y: 0, w: d.rect.w, h: d.marker.y + 2 }] : []));
   }
 
   /** The realms switch, as the welcome or a later frame said it: the hub's arches draw open or closed, and the Menu map agrees. */

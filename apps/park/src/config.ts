@@ -45,6 +45,12 @@ export interface ParkConfig {
    * a button must do something (OP-114). Only a build with VITE_PAD_JUMP=on hops; no address turns it on.
    */
   padJump: boolean;
+  /**
+   * The fit overlay (OP-127, `?boxes=1`): every interactable's trigger box, what each sprite draws,
+   * its centre and its marker's place, for checking the fit by eye. Development builds, and a build
+   * with VITE_BOXES=on (a preview for QA); never the live park, where players would see it.
+   */
+  boxes: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -84,5 +90,6 @@ export function readConfig(): ParkConfig {
     // Phones and tablets (a coarse pointer) keep what a one-screen room costs today; computers get three times that.
     roomArtBudget: (Number(env.VITE_ROOM_ART_BUDGET_MB) * 1024 * 1024) || PHONE_ROOM_BUDGET * (globalThis.matchMedia?.('(pointer: coarse)').matches ? 1 : 3),
     padJump: ((env.VITE_PAD_JUMP as string | undefined) ?? '').trim() === 'on',
+    boxes: q.get('boxes') === '1' && (env.DEV || ((env.VITE_BOXES as string | undefined) ?? '').trim() === 'on'),
   };
 }

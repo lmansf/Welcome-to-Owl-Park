@@ -21,6 +21,8 @@ export interface SpriteFit {
   drawn: readonly [number, number, number, number] | null;
   /** The middle of what it draws. */
   centre: readonly [number, number] | null;
+  /** The object itself: only its pixels at least half opaque, without the glow or haze painted round it. */
+  solid: readonly [number, number, number, number] | null;
 }
 
 // JSON reads its arrays as number[]; the art tools write them as these tuples.

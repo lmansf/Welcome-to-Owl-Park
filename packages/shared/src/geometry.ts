@@ -59,10 +59,11 @@ export function closestPointOnPolygon(p: Vec2, poly: Polygon): Vec2 {
 }
 
 /**
- * A point is walkable if it lies inside any of the room's walkable polygons.
+ * A point is walkable if it lies inside any of the room's walkable polygons, and outside every
+ * `shut` rect (floor closed for now, such as the way into an arch whose realm is closed).
  */
-export function isWalkable(p: Vec2, polys: Polygon[]): boolean {
-  return polys.some((poly) => pointInPolygon(p, poly));
+export function isWalkable(p: Vec2, polys: Polygon[], shut: readonly Rect[] = []): boolean {
+  return polys.some((poly) => pointInPolygon(p, poly)) && !shut.some((r) => pointInRect(p, r));
 }
 
 /**

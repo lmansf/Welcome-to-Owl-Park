@@ -9,6 +9,11 @@ describe('the sprite manifest (OP-127)', () => {
       expect(x >= 0 && y >= 0 && w > 0 && h > 0, key).toBe(true);
       expect(x + w <= fit.size[0] && y + h <= fit.size[1], key).toBe(true);
       expect(Math.abs(fit.centre[0] - (x + w / 2)) <= 1 && Math.abs(fit.centre[1] - (y + h / 2)) <= 1, key).toBe(true);
+      // The object sits inside what is drawn round it.
+      if (fit.solid) {
+        const [sx, sy, sw, sh] = fit.solid;
+        expect(sx >= x && sy >= y && sx + sw <= x + w && sy + sh <= y + h, key).toBe(true);
+      }
     }
   });
 });
