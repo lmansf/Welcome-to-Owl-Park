@@ -81,7 +81,8 @@ export function pilotInput(s: ClimbState, p: Pilot, layout: Layout, night: Night
   const vertical = move.kind === 'U' || (move.kind === 'pogo' && move.vertical);
   // Straight up a chain of lanterns: rise where the owl is (the chain zigzags, so the next one is beside the rise),
   // and once the double is spent, fall onto the nearest lantern below; past the last one, onto the target.
-  const chain = move.kind === 'pogo' && move.vertical ? layout.lanterns.filter((l) => l.y > from.y && l.y < target.y + 80 && Math.abs(l.x - cx) < 160).sort((a, b) => a.y - b.y) : [];
+  const chainX = move.at ?? cx;
+  const chain = move.kind === 'pogo' && move.vertical ? layout.lanterns.filter((l) => l.y > from.y && l.y < target.y + 80 && Math.abs(l.x - chainX) < 160).sort((a, b) => a.y - b.y) : [];
   const nextBob = () => {
     const below = chain.filter((l) => lanternBob(l, s.t, night.pace).y <= s.y + 12).sort((a, b) => b.y - a.y);
     return below[0] ? lanternBob(below[0], s.t, night.pace).x : cx;

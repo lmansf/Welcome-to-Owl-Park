@@ -189,7 +189,7 @@ export class ClimbScene extends Phaser.Scene {
     this.all = platforms(run.layout);
     const s = startState(run.layout, run.night);
     const y = bandLine(run.layout, run.banked);
-    this.state = { ...s, y, band: run.banked, bench: run.banked, safeY: y };
+    this.state = { ...s, y, band: run.banked, bench: run.banked, benchY: y, safeY: y };
     this.lastStep = null;
     this.freezeUntil = 0;
     this.lastWall = 0;
@@ -260,6 +260,7 @@ export class ClimbScene extends Phaser.Scene {
       glow.fillStyle(GLASS, 0.1).fillRect(left - 2, -w.y1, 18, w.y1 - w.y0);
     }
     for (const l of layout.ledges) {
+      if (l.bench) continue; // the landings are drawn as balconies below
       const key = l.w >= 240 ? 'climb-ledge-b' : 'climb-ledge-a';
       const h = ART[key]?.h ?? 40;
       const tint = l.frail ? FRAIL : l.road === 'high' ? HIGH_ROAD : GLASS;
@@ -299,8 +300,9 @@ export class ClimbScene extends Phaser.Scene {
       tower.add(g);
       glow.fillStyle(THORN, 0.14).fillRect(th.x, -th.y - th.h - 4, th.w, th.h + 8);
     }
-    layout.bandLines.forEach((y, i) => {
-      const last = i === BAND_COUNT - 1;
+    // The benches: the band lines' balconies (the last the cloud cap) and the landings halfway up each storey.
+    const benches = [...layout.bandLines.map((y, i) => ({ y, last: i === BAND_COUNT - 1 })), ...layout.ledges.filter((l) => l.bench).map((l) => ({ y: l.y, last: false }))];
+    benches.forEach(({ y, last }) => {
       const capKey = last ? 'climb-cloud-cap' : 'climb-balcony';
       const capH = ART[capKey]?.h ?? (last ? 220 : 120);
       const img = this.piece(capKey, 0, -y + capH - SURFACE[capKey]!, CLIMB_FIELD_W, capH);

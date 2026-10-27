@@ -90,7 +90,7 @@ const floorsFrom = (bandSteps: number[]) => bandSteps.map((n) => Math.floor((ms(
 const briskFrom = (layout: Layout, bandSteps: number[]) =>
   bandSteps.map((n, i) => {
     const lo = i === 0 ? 0 : layout.bandLines[i - 1]!;
-    const hasHigh = layout.ledges.some((l) => l.road === 'high' && l.y > lo && l.y < layout.bandLines[i]!);
+    const hasHigh = layout.routes.high.some((m) => m.to.y > lo && m.to.y <= layout.bandLines[i]!);
     const segment = ms(n) - (i === 0 ? 0 : ms(bandSteps[i - 1]!));
     return hasHigh ? Math.ceil((segment * CLIMB_BRISK_FACTOR) / 100) * 100 : 0;
   });
@@ -136,7 +136,7 @@ describe('the climb layout', () => {
     for (const l of layout.lanterns) expect(band(l.y), `lantern at ${l.y}`).toBeGreaterThanOrEqual(3);
     for (const m of layout.moths) expect(band(m.y), `moth at ${m.y}`).toBeGreaterThanOrEqual(2);
     for (const th of layout.thorns) expect(band(th.y), `thorns at ${th.y}`).toBeGreaterThanOrEqual(2);
-    for (let b = 2; b <= BAND_COUNT; b++) expect(layout.ledges.some((l) => l.road === 'high' && band(l.y) === b), `band ${b} has a high road`).toBe(true);
+    for (let b = 2; b <= BAND_COUNT; b++) expect(layout.routes.high.some((m) => band(m.to.y - 0.5) === b), `band ${b} has a high road`).toBe(true);
     expect(roadPlatforms(layout, 'high').length).toBeLessThan(roadPlatforms(layout, 'stairs').length);
   });
 
@@ -158,7 +158,7 @@ describe('the climb layout', () => {
     for (const m of layout.moths) {
       let touched: string | null = null;
       for (const p of platforms(layout)) {
-        if (Math.abs(p.y - m.y) > MOTH_R + OWL_H || (p.w === CLIMB_FIELD_W && !layout.bandLines.includes(p.y) && p.y !== layout.start.y)) continue;
+        if (Math.abs(p.y - m.y) > MOTH_R + OWL_H || (p.w === CLIMB_FIELD_W && !p.bench && !layout.bandLines.includes(p.y) && p.y !== layout.start.y)) continue;
         for (let x = p.x + OWL_W / 2; x <= p.x + p.w - OWL_W / 2 + 0.01 && !touched; x += 3) {
           for (const mx of [m.x0, m.x1, (m.x0 + m.x1) / 2]) if (circleTouches(mx, m.y, MOTH_R, x, p.y)) touched = `moth on ${m.y} touches an owl standing at (${x}, ${p.y})`;
         }
@@ -277,12 +277,12 @@ describe('the kit', () => {
   });
 
   it('sends an owl that touches thorns back to its last safe ground, a pane the poorer', () => {
-    const th = layout.thorns[0]!; // band 2's shaft foot
-    const safe = layout.ledges.find((l) => l.y === 1320)!;
+    const th = layout.thorns[0]!; // band 2, before the first shaft's foot
+    const safe = layout.ledges.find((l) => l.y === 1380)!;
     let s = at(safe.x + safe.w / 2, safe.y);
     s = hold({}, s, 2); // stands: safe ground
     expect([s.safeX, s.safeY]).toEqual([safe.x + safe.w / 2, safe.y]);
-    s = { ...s, x: th.x + th.w / 2, y: th.y + th.h + 20, grounded: false, coyoteMs: 0, vy: -100 };
+    s = { ...s, x: th.x + th.w / 2, y: th.y + th.h + 4, grounded: false, coyoteMs: 0, vy: -100 };
     for (let i = 0; i < 30 && s.event !== 'thorns'; i++) s = stepClimb(s, NO_INPUT, layout, night, all);
     expect(s.event).toBe('thorns');
     expect(s.panes).toBe(night.panes - 1);
@@ -338,7 +338,7 @@ describe('the kit', () => {
   });
 
   it('moves a moth there and back on its track, faster under a harder night', () => {
-    const m = layout.moths[0]!;
+    const m = layout.moths.find((moth) => !moth.phase)!;
     const a = mothAt(m, 0, 1);
     expect(a.x).toBe(m.x0);
     const span = Math.abs(m.x1 - m.x0);

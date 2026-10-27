@@ -961,6 +961,58 @@ of 50; the floors to the clouds (the faster road, less the margin) rose from 23.
 the wall and the pogo, none of which the first tower had. The routes, the floors and the brisk
 windows are in Appendix A.
 
+## Fourth pass: the intended path and the hard strand
+
+The owner's direction after the overhaul: design an intended path first, then a harder, secondary
+route that intertwines with it at checkpoints, and place the hazards to the routes rather than the
+other way round. The third tower had two roads a storey that met only at the storey's bench, in
+separate columns behind a dividing wall, and its hazards were tuned until both roads happened to
+pass.
+
+### The rules
+
+*   **Two checkpoints a storey.** From the second storey each storey has a *landing* halfway up (a
+    bench spanning the field, 600 px above the storey's floor, drawn as a balcony) as well as the
+    bench at its top. Thorns and the shade return the owl to the last bench it stood on, and a rest
+    on either relights the panes, so a failed half costs at most half a storey. That is what lets
+    the hard strand be meaner than the old high road.
+*   **One intended path.** The main road is the path a first-time climber should find: it starts
+    where the bench leaves the owl, climbs the left and middle of the field, asks for the storey's
+    verb once in each half with one hazard that teaches it, and zigzags through enough holds that
+    it is never the quick way.
+*   **One hard strand.** The high road is the shortcut: it leaves the intended path at every bench
+    and rejoins it at the next, up the right-hand edge of the field, with fewer and farther holds
+    (a wall climbed straight up, a chain of lanterns pogoed straight up, a column of doubles). It is
+    always in view beside the path, so a climber can switch at any bench, and it pays the brisk
+    feather for a storey climbed within the window.
+*   **Hazards belong to one strand.** Every lantern, moth and bed of thorns sits in one half of
+    one strand and reaches no other; where a moth's track or a lantern's swing would stray into the
+    other strand's air, a short dividing wall at x 300 fences it, starting above the bench below so
+    nothing blocks a hop off a bench. A hazard never hangs at the height where a move peaks (the
+    owl lingers there), and a wall climb's moth never covers the whole of the climber's column.
+    The layout test keeps both strands clean (no hazard touches an owl standing anywhere), and the
+    drive test climbs both strands under every night without losing a pane.
+*   **The storey's verb, both strands.** The walls (2), the lanterns and the pogo (3), the moths
+    under thorn ceilings (4), frail glass (5), everything (6). The foot (1) stays the lesson with
+    no hazards and one path.
+*   **The clock.** The scripted intended path must take at least a quarter again as long as the
+    brisk window in every storey (so it never earns the feather by accident), which in practice
+    means half again as long as the strand. The strand is kept quick by design rather than the
+    path slow by waiting: the path's extra time is extra holds, not extra standing still.
+
+### The storeys
+
+| Storey | Intended path, floor to landing | Hard strand, floor to landing | Intended path, landing to top | Hard strand, landing to top |
+| --- | --- | --- | --- | --- |
+| 2, the walls | three steps with a moth to time, a hop over a sliver of thorns to a shaft's foot, the shaft kicked wall to wall to a ledge, a hop to the landing | one high hold, then a climb straight up the tower's wall past a moth | two steps down to a second shaft's frail foot (no time to think), the shaft kicked to a ledge, a hop to the bench | a hold at the edge, then a climb up the tower's wall past a faster moth |
+| 3, the lanterns | a zigzag with a lantern to time over its second gap and a moth under the landing | a chain of two lanterns pogoed straight up from the bench | a hold, a gap only a pogo off a lantern reaches, a moth to time, two steps, the bench | a chain of two lanterns pogoed straight up |
+| 4, the moths | three steps, a corridor under a thorn ceiling with a moth, left out of its right-hand gap | a column of doubles up the right past a moth, through the corridor's floor, straight to the landing | a second corridor with two moths, crossed the other way and left out of its left-hand gap, two steps, the bench | along the corridor's floor to its right-hand gap, up it past two moths, the bench |
+| 5, frail glass | two steps, a staircase of three frail ledges crossed by dashes, moths across two gaps | a frail hold, a pogo off a lantern to a second, the landing | a sound hold, three frail ledges and a sound one by dashes, moths across two gaps | a frail hold, a pogo off a lantern, the bench |
+| 6, the clouds | three steps with a moth to time, a dash over thorns to a shaft's foot, the shaft kicked to a ledge, the landing | a hold, a climb up the tower's wall past a moth | three frail ledges and a sound one by dashes among two moths and a lantern, the clouds | a moth timed to a frail hold, a pogo off a lantern, the clouds |
+
+The coordinates, walls, hazards and both strands' moves are `CITY_2` in `climbCity.ts`; the
+floors and brisk windows are re-frozen from the drive in Appendix A.
+
 ## Appendix A: the simulation
 
 Everything both sides must agree on is in `packages/shared/src/climb.ts` (the rules) and
@@ -969,8 +1021,8 @@ them.
 
 ### Structs
 
-*   `Ledge { x, y, w, road?: 'high', frail?: true }`: a one-way platform, passed from below and
-    landed on from above at `y`.
+*   `Ledge { x, y, w, road?: 'high', frail?: true, bench?: true }`: a one-way platform, passed from
+    below and landed on from above at `y`; a `bench` ledge is a storey's landing.
 *   `Wall { x, y0, y1 }`: a vertical face the owl cannot pass and clings to in the air.
 *   `Thorns { x, y, w, h }`: a bed or ceiling of shards. Touched: a pane and the way back to the last
     safe ground; pogoed from above: safe.
@@ -983,8 +1035,8 @@ them.
 *   `ClimbInput { left, right, down, jumpPressed, jumpHeld, dashPressed }`.
 *   `ClimbState`: the owl (`x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising,
     facing`), the dash (`dashMs, dashCooldownMs, dashUsed`), the wall (`wall, wallLockMs`), the run
-    (`band, t, stoodMs`), the stakes (`panes, hurtMs, stunMs, shadeMs, bench, safeX, safeY,
-    shades`), and what the page shows (`crumbled, event`).
+    (`band, t, stoodMs`), the stakes (`panes, hurtMs, stunMs, shadeMs, bench, benchY, safeX,
+    safeY, shades`), and what the page shows (`crumbled, event`).
 
 ### Rules, applied in this order each step
 
@@ -1006,8 +1058,8 @@ them.
 8.  The cling: airborne, not dashing or locked, not rising fast, pressing into a wall the box
     touches. A cling refreshes the double and the dash.
 9.  Frail glass gives way after `FRAIL_MS` on it, leaving the double.
-10. The benches and the safe ground: a band line stood on is the bench; `REST_MS` on it relights the
-    panes; sound glass stood on while whole is the safe ground.
+10. The benches and the safe ground: a band line or a landing stood on is the bench (`benchY`);
+    `REST_MS` on it relights the panes; sound glass stood on while whole is the safe ground.
 11. The hazards, when the owl is touchable: with the talons down, falling, and the hazard's middle
     no higher than the owl's, a pogo (`POGO_IMPULSE` up, the double and the dash back, a moment
     untouchable). Otherwise a pane: the last one is the shade; thorns send the owl to its safe
@@ -1047,38 +1099,47 @@ them.
 ### The tower `city-2`
 
 Six storeys of 1,200 px (`bandLines` 1200 … 7200), each a set piece, each with a bench (the band
-line, a ledge spanning the field) at its top. From the second storey up every storey has a main
-road and a high road; the high road is the risky shortcut that pays the brisk feather. Where a
-storey's high road is a pogo chain, a dividing wall at x 300 keeps it apart from the main road, so
-neither road's hazards hang in the other's way.
+line, a ledge spanning the field) at its top and, from the second storey, a landing (a `bench`
+ledge spanning the field) halfway up. From the second storey each storey has the intended path
+(the main road) up the left and middle of the field and the hard strand (the high road) up its
+right-hand edge; both leave each bench and meet at the next. A dividing wall at x 300 fences the
+strand's lanterns and moths from the path where they would otherwise cross, starting above the
+bench below it.
 
 1.  **The foot** (0 to 1,200): nine ledges across the field: single jumps, then doubles, then three
-    gaps only a dash crosses, then a last step and the bench. No hazards; no high road.
-2.  **The walls**: a shaft between two walls (x 200 and 360) with thorns on the left half of its
-    foot, climbed by kicking from wall to wall; a step and a double to the bench. High road: a
-    single ledge at the tower's own wall, then one climb straight up it past a moth that crosses
-    the wall at 1,800.
-3.  **The lanterns**: a zigzag on the left of the dividing wall, a lantern over its first gap, two
-    moths across later gaps, and one gap (to the ledge at 3,160) that only a pogo off the lantern
-    under it reaches. High road: a chain of five lanterns zigzagging at x 420 and 360, pogoed one
-    after another to a ledge at 3,420.
-4.  **The moths**: two corridors (full-width floors at 3,840 and 4,200) under thorn ceilings that
-    forbid the double jump, each with a moth to hop, each left by a double up the right-hand gap over
-    the ceiling and a short hop (the jump cut) and dash back left; a moth crosses the high road's
-    column above the ceilings. High road: a column of doubles up the right-hand edge, sharing the
-    corridors' exit ledges.
-5.  **Frail glass**: a staircase of four frail ledges crossed by dashes, moths across its gaps,
-    sound glass to finish. High road: a frail column at the right with two lanterns to pogo
-    between its ledges; the lanterns hang beside each rise, not over it.
-6.  **The clouds**: a shaft between walls (x 160 and 320), a moth over its exit, two frail ledges
-    crossed by dashes among two moths, and the clouds. High road: a climb straight up the tower's
-    wall past two moths.
+    gaps only a dash crosses, then a last step and the bench. No hazards; one path.
+2.  **The walls**: the path steps up the left past a moth, hops over a sliver of thorns to a
+    shaft's foot (walls at x 200 and 360) and kicks up it to a ledge and the landing; above the
+    landing two steps lead down to a second shaft's frail foot (walls at x 0 and 160), kicked to a
+    ledge and the bench. The strand: one hold and a climb straight up the tower's wall past a moth,
+    to the landing; a hold at the edge and a second climb past a faster moth, to the bench.
+3.  **The lanterns**: the path zigzags with a lantern to time over its second gap and a moth under
+    the landing; above it, a hold, a gap (to the ledge at 3,360) only a pogo off the lantern under
+    it reaches, a moth to time and two steps to the bench. The strand: a chain of two lanterns
+    (x 420 and 360) pogoed straight up from the bench to the landing, and another from the
+    landing to the bench.
+4.  **The moths**: the path steps up to a corridor (a full-width floor at 3,920) under a thorn
+    ceiling that forbids the double jump, hops its moth, and leaves by a double up the right-hand
+    gap to the landing; above it a second corridor (4,320) with two moths, crossed the other way
+    and left by the left-hand gap, then two steps to the bench. The strand: a column of doubles up
+    the right past a moth, through the first corridor's floor, straight to the landing; then along
+    the second corridor's floor to its right-hand gap and up it past two moths.
+5.  **Frail glass**: the path takes two steps and a staircase of three frail ledges crossed by
+    dashes, moths across two gaps, to the landing; then a sound hold, three frail ledges and a sound
+    one by dashes, moths across two gaps, to the bench. The strand: a frail hold, a pogo off a
+    lantern hanging beside the rise to a second frail hold, the landing; the same again to the
+    bench.
+6.  **The clouds**: the path steps up past a moth, dashes over thorns to a shaft's foot (walls at
+    x 220 and 380), kicks to a ledge and the landing; above it four frail-glass dashes among a moth
+    and a lantern to time, a sound ledge and the clouds. The strand: a hold and a climb up the
+    tower's wall past a moth, to the landing; a moth timed to a frail hold, a pogo off a lantern
+    to a last hold, and the clouds.
 
 The ledges, walls, thorns, moths, lanterns and both roads' moves are `CITY_2` in `climbCity.ts`.
 `climb.test.ts` checks that no lantern or moth can touch an owl standing on any ledge at any
-moment (a moth may patrol a corridor floor, which the owl crosses), that no thorns lie on a
-standing surface, that band 1 has no hazards, and that every storey from the second has a high
-road.
+moment (a moth may patrol a corridor floor, which the owl crosses, never a landing), that no
+thorns lie on a standing surface, that band 1 has no hazards, and that every storey from the
+second has high-road moves.
 
 ### The scripted climber
 
@@ -1088,7 +1149,8 @@ target and jump straight up, steering back under it in the air), `dash` (the das
 then the double), `wall` (into the wall, kick when clinging, head for the other wall or back to
 the same one, and for the target's middle once a rise will top it), `pogo` (talons down over a
 hazard about to pass under the owl; straight up a chain it rises where it is and falls onto the
-nearest lantern below once the double is spent) and `cross` (along a corridor floor, hopping a
+nearest lantern below once the double is spent; the move's `at` names the x the chain hangs
+around) and `cross` (along a corridor floor, hopping a
 moth that is near). Before a move its dry run tries launches every 25 ms up to 3 s and takes the
 first that lands and can stand a moment where it landed. That is how it waits for a lantern to
 swing past or a moth to turn, as a player watching them would, and the waits are in the floors. A
@@ -1110,14 +1172,16 @@ by easy / medium / hard:
 
 | Band | Main road | High road | Floor | Brisk window |
 | --- | --- | --- | --- | --- |
-| 1 | 10,617 | 10,617 (the main road) | 8,400 | none |
-| 2 | 18,808 / 18,942 / 19,050 | 15,608 | 12,400 | 5,500 |
-| 3 | 29,817 / 29,033 / 29,992 | 22,292 / 22,467 / 22,058 | 17,800 / 17,900 / 17,600 | 7,400 / 7,600 / 7,100 |
-| 4 | 42,050 / 40,175 / 42,208 | 28,783 / 29,958 / 28,550 | 23,000 / 23,900 / 22,800 | 7,200 / 8,300 / 7,200 |
-| 5 | 53,417 / 51,450 / 56,533 | 36,792 / 38,042 / 36,042 | 29,400 / 30,400 / 28,800 | 8,900 / 8,900 / 8,300 |
-| 6 | 63,750 / 61,225 / 66,575 | 42,250 / 43,183 / 40,667 | 33,800 / 34,500 / 32,500 | 6,100 / 5,700 / 5,200 |
+| 1 | 11,000 | 11,000 (the main road) | 8,800 | none |
+| 2 | 21,708 / 21,833 / 21,258 | 17,533 / 17,533 / 18,133 | 14,000 / 14,000 / 14,500 | 7,200 / 7,200 / 7,900 |
+| 3 | 33,200 / 32,817 / 31,458 | 23,958 / 24,083 / 23,892 | 19,100 / 19,200 / 19,100 | 7,100 / 7,300 / 6,400 |
+| 4 | 45,892 / 45,017 / 44,067 | 31,233 / 31,067 / 30,633 | 24,900 / 24,800 / 24,500 | 8,100 / 7,700 / 7,500 |
+| 5 | 60,042 / 59,758 / 57,175 | 40,233 / 40,042 / 39,475 | 32,100 / 32,000 / 31,500 | 9,900 / 9,900 / 9,800 |
+| 6 | 72,875 / 73,583 / 70,158 | 48,542 / 49,717 / 48,467 | 38,800 / 39,700 / 38,700 | 9,200 / 10,700 / 9,900 |
 
-The scripted routes lose no pane on any night.
+The main road at scripted speed takes 70 to 74 s to the clouds and the strand 48 to 50 s; the
+main road is at least 1.43 times the strand's time in every storey from the second, so it never
+earns the brisk feather by accident.
 
 ### Art
 

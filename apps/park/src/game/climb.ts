@@ -7,6 +7,7 @@ import {
   NO_INPUT,
   OWL_W,
   PLAY_FEATHERS_PER_DAY,
+  isBench,
   leastClimbMs,
   pilotFor,
   pilotInput,
@@ -108,7 +109,7 @@ class Autopilot {
       const lost = s.hurtMs > 0 || s.shadeMs > 0 || (s.grounded && this.pilot.phase > 0 && !onTarget && s.stoodMs > 50);
       if (done || lost) {
         this.pilot = null;
-        if (done && to.w >= this.layout.start.w) this.restUntil = s.t + AUTO_REST_MS;
+        if (done && isBench(this.layout, to)) this.restUntil = s.t + AUTO_REST_MS;
       } else return pilotInput(s, this.pilot, this.layout, this.night);
     }
     if (!s.grounded || s.t < this.restUntil || s.hurtMs > 0) return NO_INPUT;

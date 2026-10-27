@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FURNITURE, LEAF_FEATHERS_PER_DAY, PRESENTS, STARTER_FURNITURE, STARTER_PACK, USE_COOLDOWN_MS, getNpc, shopRotation, type QuestBoard, type Vec2 } from '@owl-park/shared';
+import { FURNITURE, LEAF_FEATHERS_PER_DAY, PRESENTS, STARTER_FURNITURE, STARTER_PACK, USE_COOLDOWN_MS, getNpc, shopRotation, type QuestBoard, type Vec2, CLIMB_FLOORS } from '@owl-park/shared';
 
 /** What every collector holds from the start: the starter pack and the park's presents. */
 const EVERYONES = [...STARTER_PACK, ...PRESENTS.map((p) => p.variant)];
@@ -157,7 +157,7 @@ describe('LocalCollections', () => {
 
 describe('the stained-glass climb in the local mode', () => {
   const PORTAL = { x: 2885, y: 745 };
-  const FLOORS_EASY = [5700, 11300, 17500, 23900, 30200, 36800];
+  const FLOORS_EASY = CLIMB_FLOORS['city-2']!.easy;
 
   function climber(storage = new MemoryStorage(), clock = { now: at }) {
     const page = new LocalCollections(storage, { collector: 'c_climber', tz: 'America/New_York', now: () => clock.now, random: () => 0.1, night: 'easy' });

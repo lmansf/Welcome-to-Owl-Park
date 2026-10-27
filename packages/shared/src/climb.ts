@@ -99,6 +99,8 @@ export interface Ledge {
   road?: 'high';
   /** Frail glass: it gives way FRAIL_MS after the owl lands on it, and is whole again once the owl has gone. */
   frail?: true;
+  /** A bench short of a band line: the storey's landing, where the shade returns the owl and a rest relights the panes. */
+  bench?: true;
 }
 
 /** A wall: a vertical face at `x` between two heights. The owl cannot pass it, and clings to it in the air. */
@@ -163,11 +165,13 @@ export interface RouteMove {
   vertical?: true;
   /** How long the jump button is held, ms: a short hop under a ceiling. Absent: through the whole rise. */
   hold?: number;
+  /** `pogo` up a chain: the x the chain hangs around (the lanterns within 160 px of it are the chain). */
+  at?: number;
 }
 
 export interface Layout {
   id: string;
-  /** The six band lines, lowest first; the last is the cloud line. Each is a ledge spanning the field, and a bench. */
+  /** The six band lines, lowest first; the last is the cloud line. Each is a ledge spanning the field, and a bench; the landings (`bench` ledges) are the benches between them. */
   bandLines: readonly number[];
   start: Ledge;
   ledges: readonly Ledge[];
@@ -238,8 +242,10 @@ export interface ClimbState {
   stunMs: number;
   /** The shade: time left before the owl stands on its bench again (0 when not fading). */
   shadeMs: number;
-  /** The bench (band line) the shade returns the owl to: 0 is the start. */
+  /** The last band line stood on, as a band: 0 is the start. */
   bench: number;
+  /** The height of the last bench stood on (a band line or a landing): the shade returns the owl there. */
+  benchY: number;
   /** The last safe ground (sound glass, no hazard): thorns send the owl back here. */
   safeX: number;
   safeY: number;
@@ -279,6 +285,7 @@ export function startState(layout: Layout, night: Night): ClimbState {
     stunMs: 0,
     shadeMs: 0,
     bench: 0,
+    benchY: layout.start.y,
     safeX: x,
     safeY: layout.start.y,
     shades: 0,
@@ -291,6 +298,11 @@ export function startState(layout: Layout, night: Night): ClimbState {
 export function platforms(layout: Layout): Ledge[] {
   const lines = layout.bandLines.map((y): Ledge => ({ x: 0, y, w: CLIMB_FIELD_W }));
   return [layout.start, ...layout.ledges, ...lines].sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+/** A bench: a band line, or a landing (a ledge flagged `bench`). */
+export function isBench(layout: Layout, p: Ledge): boolean {
+  return p.bench === true || layout.bandLines.includes(p.y);
 }
 
 /** The band line a banked band stands on (0 for none). */
@@ -374,7 +386,7 @@ const wallInReach = (w: Wall, y: number) => y < w.y1 && y + OWL_H > w.y0;
 /** One fixed step, as designs/the-stained-glass-climb.md Appendix A orders it. A pure function of its inputs. */
 export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, night: Night, all: readonly Ledge[] = platforms(layout)): ClimbState {
   const dt = CLIMB_STEP_MS / 1000;
-  let { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, facing, dashMs, dashCooldownMs, dashUsed, wall, wallLockMs, band, stoodMs, panes, hurtMs, stunMs, shadeMs, bench, safeX, safeY, shades } = s;
+  let { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, facing, dashMs, dashCooldownMs, dashUsed, wall, wallLockMs, band, stoodMs, panes, hurtMs, stunMs, shadeMs, bench, benchY, safeX, safeY, shades } = s;
   const wasGrounded = grounded;
   let crumbled: Ledge | null = null;
   let event: ClimbEvent = null;
@@ -384,7 +396,7 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
     shadeMs = Math.max(0, shadeMs - CLIMB_STEP_MS);
     if (shadeMs > 0) return { ...s, t, shadeMs, crumbled: null, event: null };
     x = CLIMB_FIELD_W / 2;
-    y = bandLine(layout, bench);
+    y = benchY;
     return {
       ...s,
       x,
@@ -531,11 +543,12 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
       jumpsUsed = 1;
     }
   }
-  // 10. The benches and the safe ground: a band line stood on is the bench; sound glass is safe ground.
+  // 10. The benches and the safe ground: a band line or a landing stood on is the bench; sound glass is safe ground.
   if (grounded) {
     const lineIndex = layout.bandLines.findIndex((ly) => Math.abs(ly - y) < 0.5);
-    if (lineIndex >= 0) {
-      bench = lineIndex + 1;
+    if (lineIndex >= 0) bench = lineIndex + 1;
+    if (lineIndex >= 0 || all.some((p) => p.bench && Math.abs(p.y - y) < 0.5 && overlaps(x, p))) {
+      benchY = y;
       if (stoodMs >= REST_MS && panes < night.panes) {
         panes = night.panes;
         event = 'rest';
@@ -606,7 +619,7 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
       break;
     }
   }
-  return { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, facing, dashMs, dashCooldownMs, dashUsed, wall, wallLockMs, band, t, stoodMs, panes, hurtMs, stunMs, shadeMs, bench, safeX, safeY, shades, crumbled, event };
+  return { x, y, vx, vy, grounded, coyoteMs, bufferMs, jumpsUsed, rising, facing, dashMs, dashCooldownMs, dashUsed, wall, wallLockMs, band, t, stoodMs, panes, hurtMs, stunMs, shadeMs, bench, benchY, safeX, safeY, shades, crumbled, event };
 }
 
 // ---------- the floors ----------
@@ -617,9 +630,9 @@ export function stepClimb(s: ClimbState, input: ClimbInput, layout: Layout, nigh
  */
 export const CLIMB_FLOORS: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
   'city-2': {
-    easy: [8400, 12400, 17800, 23000, 29400, 33800],
-    medium: [8400, 12400, 17900, 23900, 30400, 34500],
-    hard: [8400, 12400, 17600, 22800, 28800, 32500],
+    easy: [8800, 14000, 19100, 24900, 32100, 38800],
+    medium: [8800, 14000, 19200, 24800, 32000, 39700],
+    hard: [8800, 14500, 19100, 24500, 31500, 38700],
   },
 };
 
@@ -631,9 +644,9 @@ export const CLIMB_FLOORS: Readonly<Record<string, Readonly<Record<Tier, readonl
  */
 export const CLIMB_BRISK: Readonly<Record<string, Readonly<Record<Tier, readonly number[]>>>> = {
   'city-2': {
-    easy: [0, 5500, 7400, 7200, 8900, 6100],
-    medium: [0, 5500, 7600, 8300, 8900, 5700],
-    hard: [0, 5500, 7100, 7200, 8300, 5200],
+    easy: [0, 7200, 7100, 8100, 9900, 9200],
+    medium: [0, 7200, 7300, 7700, 9900, 10700],
+    hard: [0, 7900, 6400, 7500, 9800, 9900],
   },
 };
 
