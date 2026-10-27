@@ -699,12 +699,10 @@ describe('flight in the room object (OP-084)', () => {
     // A page without a collection flies too: every owl has it.
     await send(obj, b, { t: 'air', air: up });
     expect(a.last('air')).toMatchObject({ t: 'air', id: 'v_b', air: up });
-    // Numbers the room cannot believe are dropped, the socket kept; a frame of the wrong shape is a broken page.
-    await send(obj, a, { t: 'air', air: { ...up, z: 5000 } });
+    // Air the room cannot believe is dropped, and never closes the socket (OP-084): too high, of a kind it does not know, or none.
+    for (const odd of [{ ...up, z: 5000 }, { ...up, s: 9 }, 'up', null]) await send(obj, a, { t: 'air', air: odd } as Record<string, unknown>);
     expect(b.of('air')).toHaveLength(1);
     expect(a.closed).toBeNull();
-    await send(obj, a, { t: 'air', air: { ...up, s: 9 } } as Record<string, unknown>);
-    expect(a.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
     // The old hop is gone with it.
     await send(obj, b, { t: 'emote', e: 'jump' });
     expect(b.closed?.code).toBe(CLOSE.BAD_PROTOCOL);

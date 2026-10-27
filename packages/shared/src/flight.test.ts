@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_CUT_SPEED, JUMP_IMPULSE } from './jump';
-import { AIRBORNE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, MAX_RISE, ON_GROUND, carryOn, checkAir, newFlier, stepFlier, type Flier, type FlightInput } from './flight';
+import { AIRBORNE, ALL_FLIGHT, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, MAX_RISE, ON_GROUND, carryOn, checkAir, newFlier, stepFlier, type Flier, type FlightAbilities, type FlightInput } from './flight';
 
 const NONE: FlightInput = { pressed: false, held: false };
 const PRESS: FlightInput = { pressed: true, held: true };
@@ -77,6 +77,25 @@ describe('flight (OP-084)', () => {
     // Over higher ground, a fall stops on it.
     const onLedge = run(newFlier(), [[PRESS, steps(300)], [NONE, steps(800)]], 40);
     expect(onLedge.at(-1)!.air).toEqual({ z: 40, vz: 0, s: GROUNDED, f: 0 });
+  });
+
+  it('does only what the owl can do in the air: each of the three can be held back (OP-115)', () => {
+    const can = (o: Partial<FlightAbilities>): FlightAbilities => ({ ...ALL_FLIGHT, ...o });
+    const go = (abilities: FlightAbilities, plan: Array<[FlightInput, number]>) => {
+      const out: Flier[] = [];
+      let fl = newFlier();
+      for (const [input, n] of plan) for (let i = 0; i < n; i++) out.push((fl = stepFlier(fl, i === 0 ? input : { ...input, pressed: false }, 0, abilities)));
+      return out;
+    };
+    // No jump: Jump does nothing at all.
+    expect(top(go(can({ jump: false }), [[PRESS, steps(400)]]))).toBe(0);
+    // No flap: the second press in the air does nothing, so it goes no higher than the jump.
+    const flapLess = go(can({ flap: false }), [[PRESS, steps(330)], [PRESS, steps(330)], [NONE, steps(1500)]]);
+    expect(top(flapLess)).toBeLessThan(top(go(ALL_FLIGHT, [[PRESS, steps(330)], [NONE, steps(800)]])) + 1);
+    // No glide: held on the way down it only falls.
+    const glideLess = go(can({ glide: false }), [[PRESS, steps(1200)]]);
+    expect(glideLess.some((p) => p.air.s === GLIDING)).toBe(false);
+    expect(glideLess.at(-1)!.air).toEqual(ON_GROUND);
   });
 
   it('carries another owl on from its last state as its own page moves it', () => {

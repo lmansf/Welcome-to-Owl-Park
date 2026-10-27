@@ -26,7 +26,6 @@ import {
   EDGE_PROTOCOL_VERSION,
   CLOSE,
   type ClientHello,
-  type Air,
   type AirAt,
   type ClientMove,
   type OwlLook,
@@ -424,11 +423,12 @@ export class Room {
   /**
    * The owl's air state changed (OP-084): kept on the visitor, so a newcomer carries it on, and told
    * to the others with the room's time. Movement is state, not events: nothing is logged, and the
-   * landing is never sent, since every page reckons it. Air the room cannot believe (past the room's
-   * top, or on the ground above the floor) is dropped, and so is air beyond the visitor's allowance;
-   * only that excess counts towards the flood limit, so jumping never closes a socket.
+   * landing is never sent, since every page reckons it. Air the room cannot believe (not an air state,
+   * past the room's top, on the ground above the floor) is dropped, never a reason to close the socket
+   * (OP-084), and so is air beyond the visitor's allowance; only that excess counts towards the flood
+   * limit, so jumping never closes a socket.
    */
-  air(id: string, a: Air): boolean {
+  air(id: string, a: unknown): boolean {
     const v = this.visitors.get(id);
     if (!v) return false;
     const now = this.now();

@@ -67,6 +67,19 @@ export interface Flier {
 
 export const newFlier = (): Flier => ({ air: ON_GROUND, bufferMs: 0, coyoteMs: 0, rising: false });
 
+/**
+ * What an owl can do in the air: each one of the keys of the lock-and-key game (OP-115), to be earned
+ * one day; all three on until then. Without the jump it stays on the ground, without the flap it has
+ * no second one, without the glide a held Jump only holds the jump.
+ */
+export interface FlightAbilities {
+  jump: boolean;
+  flap: boolean;
+  glide: boolean;
+}
+
+export const ALL_FLIGHT: Readonly<FlightAbilities> = { jump: true, flap: true, glide: true };
+
 export interface FlightInput {
   /** Jump went down since the last step. */
   pressed: boolean;
@@ -74,8 +87,8 @@ export interface FlightInput {
   held: boolean;
 }
 
-/** One step of the visitor's own owl (FLIGHT_STEP_MS). */
-export function stepFlier(fl: Flier, input: FlightInput, ground = 0): Flier {
+/** One step of the visitor's own owl (FLIGHT_STEP_MS), with what it can do in the air. */
+export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readonly<FlightAbilities> = ALL_FLIGHT): Flier {
   let { z, vz, s, f } = fl.air;
   let { bufferMs, coyoteMs, rising } = fl;
   // Off an edge: what was underfoot is lower now, so the owl falls, its flap still to come.
@@ -85,7 +98,7 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0): Flier {
   }
   coyoteMs = s === GROUNDED ? COYOTE_MS : Math.max(0, coyoteMs - FLIGHT_STEP_MS);
   bufferMs = input.pressed ? JUMP_BUFFER_MS : Math.max(0, bufferMs - FLIGHT_STEP_MS);
-  if (bufferMs > 0 && (s === GROUNDED || coyoteMs > 0)) {
+  if (bufferMs > 0 && can.jump && (s === GROUNDED || coyoteMs > 0)) {
     // Off the ground (or just after it): the climb's jump.
     vz = JUMP_IMPULSE;
     s = AIRBORNE;
@@ -93,7 +106,7 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0): Flier {
     rising = true;
     bufferMs = 0;
     coyoteMs = 0;
-  } else if (bufferMs > 0 && f === 1) {
+  } else if (bufferMs > 0 && can.flap && f === 1 && s !== GROUNDED) {
     // The second flap, in the air or out of a glide: the climb's double jump.
     vz = DOUBLE_JUMP_IMPULSE;
     s = AIRBORNE;
@@ -107,7 +120,7 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0): Flier {
     rising = false;
   }
   if (vz <= 0) rising = false;
-  if (s === AIRBORNE && input.held && vz <= 0) s = GLIDING;
+  if (s === AIRBORNE && can.glide && input.held && vz <= 0) s = GLIDING;
   else if (s === GLIDING && !input.held) s = AIRBORNE;
   const air = fall({ z, vz, s, f }, FLIGHT_STEP_MS, ground);
   return { air, bufferMs, coyoteMs, rising: air.s === GROUNDED ? false : rising };

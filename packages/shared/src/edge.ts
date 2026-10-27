@@ -26,7 +26,7 @@ import { PHRASE_NUMBER_MAX } from './phrases';
 import type { RealmsSettings } from './overflow';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
-import { isAirShape, type Air } from './flight';
+import type { Air } from './flight';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight), so a stale page reloads. */
@@ -111,11 +111,12 @@ export interface ClientRest {
 /**
  * The owl's air state changed (OP-084): off the ground, a flap, the cut, a glide begun or ended, the
  * landing. A state of the owl, not an event: the room keeps the last one for newcomers, tells the
- * others, and logs nothing.
+ * others, and logs nothing. Read as it comes: the room drops one it cannot believe, and never closes
+ * a socket over one (OP-084's rule), so its shape is the room's to check too.
  */
 export interface ClientAir {
   t: 'air';
-  air: Air;
+  air: unknown;
 }
 /** Play an owned emote for everyone in the room. */
 export interface ClientEmote {
@@ -494,11 +495,9 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       return { t: 'bye' };
     case 'rest':
       return typeof v['asleep'] === 'boolean' ? { t: 'rest', asleep: v['asleep'] } : null;
-    case 'air': {
-      // Its shape only: whether the room can believe it is the room's to decide (it drops it quietly).
-      const a = v['air'];
-      return isAirShape(a) ? { t: 'air', air: { z: a.z, vz: a.vz, s: a.s, f: a.f } } : null;
-    }
+    case 'air':
+      // Never a broken page's frame: whether the room can believe it is the room's to decide, and it drops it quietly.
+      return { t: 'air', air: v['air'] };
     case 'emote':
       return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
     case 'say': {

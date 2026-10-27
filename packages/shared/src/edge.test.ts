@@ -136,11 +136,9 @@ describe('parseClientFrame', () => {
   it('carries an owl’s air state each way (OP-084); a page drops one it cannot believe', () => {
     const air = { z: 120, vz: -86.7, s: 2, f: 1 };
     expect(parseClientFrame(JSON.stringify({ t: 'air', air }))).toEqual({ t: 'air', air });
-    expect(parseClientFrame(JSON.stringify({ t: 'air', air: { ...air, extra: 'x' } }))).toEqual({ t: 'air', air });
-    // The room server reads the shape; whether it can believe the numbers is the room's (Room.air drops them).
-    expect(parseClientFrame(JSON.stringify({ t: 'air', air: { z: MAX_RISE + 5, vz: 0, s: 1, f: 0 } }))).not.toBeNull();
-    for (const bad of [{ z: 30, vz: 0, s: 4, f: 0 }, { z: 30, vz: 0, s: 1, f: 2 }, { z: '30', vz: 0, s: 1, f: 0 }, null, 'high'])
-      expect(parseClientFrame(JSON.stringify({ t: 'air', air: bad })), JSON.stringify(bad)).toBeNull();
+    // The room server never closes a socket over air (OP-084): whatever comes is the room's to check (Room.air drops it).
+    for (const odd of [{ z: MAX_RISE + 5, vz: 0, s: 1, f: 0 }, { z: 30, vz: 0, s: 4, f: 0 }, null, 'high'])
+      expect(parseClientFrame(JSON.stringify({ t: 'air', air: odd })), JSON.stringify(odd)).toEqual({ t: 'air', air: odd });
     expect(parseServerFrame(JSON.stringify({ t: 'air', id: 'o1', air, at: 5 }))).toEqual({ t: 'air', id: 'o1', air, at: 5 });
     // Between pages on this device (and the Supabase transport): the same state, on the sender's clock.
     expect(isParkMessage({ t: 'air', id: 'p1', air, at: 5 })).toBe(true);

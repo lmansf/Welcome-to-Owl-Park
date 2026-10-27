@@ -69,6 +69,7 @@ import {
   type Wear,
   REALMS_DEFAULTS,
   type RealmsSettings,
+  ALL_FLIGHT,
   ON_GROUND,
   airChanged,
   fall,
@@ -76,6 +77,7 @@ import {
   stepFlier,
   type Air,
   type Flier,
+  type FlightAbilities,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -252,6 +254,8 @@ export class RoomScene extends Phaser.Scene {
   private saidAt = Number.NEGATIVE_INFINITY;
   /** The visitor's own flight (OP-084), stepped from Jump at the flight's step on this page's clock (Date.now). */
   private flier: Flier = newFlier();
+  /** What the owl can do in the air: all three until the lock-and-key game (OP-115) has them earned. */
+  private readonly abilities: Readonly<FlightAbilities> = ALL_FLIGHT;
   /** When the flight last stepped (ms; 0 before the first step in this room). */
   private flightClock = 0;
   /**
@@ -1488,7 +1492,7 @@ export class RoomScene extends Phaser.Scene {
       const pressed = down > this.jumpTaken && down <= at;
       if (pressed) this.jumpTaken = down;
       const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
-      this.flier = stepFlier(this.flier, { pressed, held });
+      this.flier = stepFlier(this.flier, { pressed, held }, 0, this.abilities);
       const air = this.flier.air;
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {
