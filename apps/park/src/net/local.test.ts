@@ -61,6 +61,19 @@ describe('LocalTransport', () => {
     expect(hb.onPeerSay).toHaveBeenCalledTimes(1);
   });
 
+  it('relays an owl’s air state with when it began (OP-084), and drops one it cannot believe', async () => {
+    const t = new LocalTransport();
+    const ha = mkHandlers();
+    const hb = { ...mkHandlers(), onPeerAir: vi.fn() };
+    const a = await t.join('hub', state('a'), ha);
+    await t.join('hub', state('b'), hb);
+    const air = { z: 7.2, vz: 858.3, s: 1 as const, f: 1 as const };
+    a.send({ t: 'air', id: 'a', air, at: 1234 });
+    expect(hb.onPeerAir).toHaveBeenCalledWith('a', air, 1234);
+    a.send({ t: 'air', id: 'a', air: { ...air, z: 9000 }, at: 1300 });
+    expect(hb.onPeerAir).toHaveBeenCalledTimes(1);
+  });
+
   it('does not hear other rooms', async () => {
     const t = new LocalTransport();
     const ha = mkHandlers();
