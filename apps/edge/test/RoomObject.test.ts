@@ -711,7 +711,8 @@ describe('the player stats from the room object (OP-111)', () => {
     const ws = await join(obj, 'hub', PASS, OWNER);
     await settle();
     const me = { cid: OWNER, pass: PASS, device: null, room: 'hub' };
-    expect(collections.seenCalls).toEqual([[me, { body: LOOK.body, species: 'barn' }]]);
+    // Its hello: it came into the room (OP-113).
+    expect(collections.seenCalls).toEqual([[{ ...me, entered: true }, { body: LOOK.body, species: 'barn' }]]);
     await send(obj, ws, { t: 'look', look: { ...LOOK, species: 'snowy' } });
     await settle();
     expect(collections.seenCalls.at(-1)).toEqual([me, { body: LOOK.body, species: 'snowy' }]);
@@ -722,6 +723,19 @@ describe('the player stats from the room object (OP-111)', () => {
     await obj.webSocketClose(ws as unknown as WebSocket);
     await settle();
     expect(collections.aliveCalls).toEqual([[me], [me]]);
+  });
+
+  it("says an owl coming into its own nest is home, and one coming into another's is not (OP-113)", async () => {
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    await join(obj, `nest-${nestId}`, PASS, OWNER);
+    await join(obj, `nest-${nestId}`, 'v_visitBBBB2', GUEST);
+    await settle();
+    expect(collections.seenCalls.map(([s]) => s)).toEqual([
+      { cid: OWNER, pass: PASS, device: null, room: `nest-${nestId}`, entered: true, own: true },
+      { cid: GUEST, pass: 'v_visitBBBB2', device: null, room: `nest-${nestId}`, entered: true },
+    ]);
   });
 
   it('asks nothing of the collections object for them while the log is off', async () => {

@@ -14,6 +14,8 @@
  *   closes its owl's current version and opens its own, unless the owl already looks so.
  * - `kind: "session"` (OP-111): visits that are over, into `game.fact_session`, each tied to the
  *   owl's version as it was when the visit began.
+ * - `kind: "realm_visit"` (OP-113): each room a visit went into, into `game.fact_realm_visit`, sent
+ *   after the visit's own row; one whose visit is not there is left out.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * The rows are anonymous by construction, and checked again here before anything is kept: the
@@ -38,6 +40,9 @@ export type CollectibleType = (typeof COLLECTIBLE_TYPES)[number];
 /** The park's owl kinds (its species list): a fixed list, never free text. */
 export const OWL_TYPES = ['great-horned', 'barn', 'burrowing', 'snowy', 'screech'] as const;
 export const CHANGE_REASONS = ['first', 'chosen', 'quest', 'seasonal'] as const;
+/** A room's kind of place, and how an owl came into it (OP-113). */
+export const REALM_KINDS = ['realm', 'hub', 'nest'] as const;
+export const ENTRY_SOURCES = ['walked', 'spawn', 'deep_link', 'reconnect'] as const;
 
 /** A row of `game.collect_log` as the park sends it, after the check. */
 export interface LogRow {
@@ -74,6 +79,19 @@ export interface SessionRow {
   collectibles_gained: number;
 }
 
+/** A time in one room, for `game.fact_realm_visit`. */
+export interface RealmVisitRow {
+  visit_id: string;
+  session_id: string;
+  collector_id: string;
+  realm: string;
+  realm_kind: (typeof REALM_KINDS)[number];
+  entered_at: string;
+  exited_at: string;
+  entry_source: (typeof ENTRY_SOURCES)[number];
+  collectibles_gained: number;
+}
+
 /** A row of `game.collectible_catalogue`. */
 export interface CatalogueRow {
   collectible_id: string;
@@ -94,6 +112,8 @@ export interface Tables {
   addPlayers(rows: PlayerRow[]): Promise<number>;
   /** Keeps the visits not there yet; returns how many those were. */
   addSessions(rows: SessionRow[]): Promise<number>;
+  /** Keeps the times in rooms not there yet whose visit is; returns how many those were. */
+  addRealmVisits(rows: RealmVisitRow[]): Promise<number>;
 }
 
 export interface Deps {
@@ -221,6 +241,34 @@ export function checkSession(v: unknown): SessionRow | string {
   };
 }
 
+/** A time in one room as the table takes it, or the reason it is left out. */
+export function checkRealmVisit(v: unknown): RealmVisitRow | string {
+  const r = obj(v);
+  if (typeof r['visit_id'] !== 'string' || !UUID.test(r['visit_id'])) return 'visit_id';
+  if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  if (typeof r['realm'] !== 'string' || !WORD.test(r['realm'])) return 'realm';
+  if (!REALM_KINDS.includes(r['realm_kind'] as RealmVisitRow['realm_kind'])) return 'realm_kind';
+  const entered = iso(r['entered_at']);
+  if (!entered) return 'entered_at';
+  const exited = iso(r['exited_at']);
+  if (!exited || exited < entered) return 'exited_at';
+  if (!ENTRY_SOURCES.includes(r['entry_source'] as RealmVisitRow['entry_source'])) return 'entry_source';
+  const gained = count(r['collectibles_gained'], 10_000);
+  if (gained === null) return 'collectibles_gained';
+  return {
+    visit_id: r['visit_id'],
+    session_id: r['session_id'],
+    collector_id: r['collector_id'],
+    realm: r['realm'],
+    realm_kind: r['realm_kind'] as RealmVisitRow['realm_kind'],
+    entered_at: entered,
+    exited_at: exited,
+    entry_source: r['entry_source'] as RealmVisitRow['entry_source'],
+    collectibles_gained: gained,
+  };
+}
+
 /** A catalogue entry as the table takes it (the park sends `id`), or null to leave it out. */
 export function checkItem(v: unknown): CatalogueRow | null {
   const i = obj(v);
@@ -282,7 +330,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json({ ok: true, dry_run: true, tables });
   }
   const kind = body['kind'];
-  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session') return json({ error: 'kind must be collect, catalogue, player or session' }, 400);
+  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit') {
+    return json({ error: 'kind must be collect, catalogue, player, session or realm_visit' }, 400);
+  }
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
   const tables = deps.tables;
   if (!tables) return json({ error: 'no tables' }, 503);
@@ -294,6 +344,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkPlayer, (rows) => tables.addPlayers(rows));
       case 'session':
         return await keepRows(kind, body, checkSession, (rows) => tables.addSessions(rows));
+      case 'realm_visit':
+        return await keepRows(kind, body, checkRealmVisit, (rows) => tables.addRealmVisits(rows));
       case 'catalogue':
         return await catalogue(body, tables);
     }
@@ -314,6 +366,7 @@ export interface Db {
 const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, realm, acquired_at, session_id, device_class, first_entry_at, backfill';
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
 const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained';
+const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, entered_at, exited_at, entry_source, collectibles_gained';
 
 /**
  * The park's tables in the `game` schema, over a direct connection to the project's database (the
@@ -368,6 +421,25 @@ export function gameTables(db: Db): Tables {
         from jsonb_populate_recordset(null::${SCHEMA}.fact_session, $1::text::jsonb) s
         on conflict (session_id) do nothing
         returning session_id`,
+        [JSON.stringify(rows)],
+      );
+      return Array.isArray(kept) ? kept.length : 0;
+    },
+    async addRealmVisits(rows) {
+      // The park sends a visit's rooms after the visit itself, so its row is here: one whose visit is
+      // not (refused, or lost) is left out rather than failing the batch and holding up the rest.
+      // Each tied to the owl's version as it was when it came into the room, as the visits are.
+      const kept = await db.unsafe(
+        `insert into ${SCHEMA}.fact_realm_visit (${REALM_VISIT_COLUMNS}, player_sk)
+        select ${REALM_VISIT_COLUMNS.split(', ').map((c) => `r.${c}`).join(', ')},
+          coalesce(
+            (select d.player_sk from ${SCHEMA}.dim_player d where d.collector_id = r.collector_id and d.valid_from <= r.entered_at order by d.valid_from desc limit 1),
+            (select d.player_sk from ${SCHEMA}.dim_player d where d.collector_id = r.collector_id order by d.valid_from limit 1)
+          )
+        from jsonb_populate_recordset(null::${SCHEMA}.fact_realm_visit, $1::text::jsonb) r
+        where exists (select 1 from ${SCHEMA}.fact_session s where s.session_id = r.session_id)
+        on conflict (visit_id) do nothing
+        returning visit_id`,
         [JSON.stringify(rows)],
       );
       return Array.isArray(kept) ? kept.length : 0;

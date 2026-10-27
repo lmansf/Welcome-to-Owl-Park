@@ -3,6 +3,7 @@ import {
   MAX_ROWS,
   checkItem,
   checkPlayer,
+  checkRealmVisit,
   checkRow,
   checkSession,
   gameTables,
@@ -11,6 +12,7 @@ import {
   type Db,
   type LogRow,
   type PlayerRow,
+  type RealmVisitRow,
   type SessionRow,
   type Tables,
 } from '../src/handler.ts';
@@ -35,16 +37,18 @@ const row = (i: number, extra: Record<string, unknown> = {}): Record<string, unk
 });
 
 /** The tables in memory, as the database keeps them: one row per event id, and per collector and collectible. */
-function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>; players: PlayerRow[]; sessions: SessionRow[] } {
+function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>; players: PlayerRow[]; sessions: SessionRow[]; realmVisits: RealmVisitRow[] } {
   const rows: LogRow[] = [];
   const catalogue = new Map<string, CatalogueRow & { in_catalogue: boolean }>();
   const players: PlayerRow[] = [];
   const sessions: SessionRow[] = [];
+  const realmVisits: RealmVisitRow[] = [];
   return {
     rows,
     catalogue,
     players,
     sessions,
+    realmVisits,
     async check() {},
     async addPlayers(batch) {
       let kept = 0;
@@ -54,6 +58,15 @@ function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, Catal
     async addSessions(batch) {
       let kept = 0;
       for (const v of batch) if (!sessions.some((x) => x.session_id === v.session_id) && sessions.push(v)) kept++;
+      return kept;
+    },
+    async addRealmVisits(batch) {
+      let kept = 0;
+      for (const v of batch) {
+        if (!sessions.some((x) => x.session_id === v.session_id) || realmVisits.some((x) => x.visit_id === v.visit_id)) continue;
+        realmVisits.push(v);
+        kept++;
+      }
       return kept;
     },
     async addRows(batch) {
@@ -227,6 +240,46 @@ describe('the player stats (OP-111)', () => {
   });
 });
 
+describe('time per room (OP-113)', () => {
+  const visit = { session_id: uuid(10), collector_id: A, started_at: '2026-10-19T16:00:00.000Z', ended_at: '2026-10-19T16:25:00.000Z', device_class: 'phone', realms_entered: 2, collectibles_gained: 1 };
+  const stay = (i: number, extra: Record<string, unknown> = {}) => ({
+    visit_id: uuid(i),
+    session_id: uuid(10),
+    collector_id: A,
+    realm: 'glass',
+    realm_kind: 'realm',
+    entered_at: '2026-10-19T16:05:00.000Z',
+    exited_at: '2026-10-19T16:25:00.000Z',
+    entry_source: 'walked',
+    collectibles_gained: 1,
+    ...extra,
+  });
+
+  it("keeps each time in a room once, under its visit, and leaves out one whose visit is not there", async () => {
+    const tables = memoryTables();
+    await post({ kind: 'session', rows: [visit] }, { tables });
+    expect(await (await post({ kind: 'realm_visit', rows: [stay(1), stay(1), stay(2, { session_id: uuid(11) })] }, { tables })).json()).toEqual({ ok: true, kept: 1, duplicates: 2, skipped: 0 });
+    expect(tables.realmVisits).toEqual([stay(1)]);
+  });
+
+  it('takes a room only as a neutral word, its kind and how the owl came in only from their lists, and a time only forwards', () => {
+    expect(checkRealmVisit(stay(1))).toEqual(stay(1));
+    expect(checkRealmVisit(stay(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
+    expect(checkRealmVisit(stay(1, { realm: null }))).toBe('realm');
+    expect(checkRealmVisit(stay(1, { realm_kind: 'castle' }))).toBe('realm_kind');
+    expect(checkRealmVisit(stay(1, { entry_source: 'teleport' }))).toBe('entry_source');
+    expect(checkRealmVisit(stay(1, { exited_at: '2026-10-19T16:04:59.000Z' }))).toBe('exited_at');
+    expect(checkRealmVisit(stay(1, { collectibles_gained: -1 }))).toBe('collectibles_gained');
+    expect(checkRealmVisit(stay(1, { visit_id: 'v_visitAAAA1' }))).toBe('visit_id');
+    expect(Object.keys(checkRealmVisit({ ...stay(1), room: 'nest-abcdefgh', ip: '203.0.113.9' }) as object)).toEqual(Object.keys(stay(1)));
+  });
+
+  it('refuses a kind it does not know', async () => {
+    const res = await post({ kind: 'realm_visits', rows: [stay(1)] });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("the game schema's tables", () => {
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
@@ -266,5 +319,18 @@ describe("the game schema's tables", () => {
     expect(s2.calls[0]!.query).toContain('insert into game.fact_session');
     expect(s2.calls[0]!.query).toContain('d.valid_from <= s.started_at');
     expect(s2.calls[0]!.query).toContain('on conflict (session_id) do nothing');
+  });
+
+  it("keeps a time in a room only under a visit that is there, tied to the owl's version when it came in (OP-113)", async () => {
+    const db = recorder([{ visit_id: uuid(1) }]);
+    const v = checkRealmVisit({ visit_id: uuid(1), session_id: uuid(9), collector_id: A, realm: 'hub', realm_kind: 'hub', entered_at: '2026-10-19T16:00:00Z', exited_at: '2026-10-19T16:01:00Z', entry_source: 'spawn', collectibles_gained: 0 }) as RealmVisitRow;
+    expect(await gameTables(db).addRealmVisits([v])).toBe(1);
+    const { query, params } = db.calls[0]!;
+    expect(query).toContain('insert into game.fact_realm_visit');
+    expect(query).toContain('where exists (select 1 from game.fact_session s where s.session_id = r.session_id)');
+    expect(query).toContain('d.valid_from <= r.entered_at');
+    expect(query).toContain('on conflict (visit_id) do nothing');
+    expect(params).toEqual([JSON.stringify([v])]);
+    expect(query).not.toContain(A);
   });
 });

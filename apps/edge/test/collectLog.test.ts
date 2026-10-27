@@ -9,10 +9,13 @@ import {
   furnitureId,
   logConfig,
   logRoom,
+  realmKind,
+  ROOM_KINDS,
   saltedHash,
   type LogConfig,
   type LogRow,
 } from '../src/collectLog';
+import { ROOMS } from '../src/rooms';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { SqlNestStore } from '../src/sqlNestStore';
 import type { Env } from '../src/env';
@@ -87,6 +90,13 @@ describe('the collection log (OP-107)', () => {
     expect(logRoom('nest-abc123def4')).toBe('nest');
     expect(logRoom('somewhere')).toBeNull();
     expect(logRoom(undefined)).toBeNull();
+  });
+
+  it('knows what kind of place every room is (OP-113)', () => {
+    expect(Object.keys(ROOMS).filter((id) => !Object.hasOwn(ROOM_KINDS, id))).toEqual([]);
+    expect(['grove', 'market', 'arcade', 'glass'].map(realmKind)).toEqual(['realm', 'realm', 'realm', 'realm']);
+    expect(['lobby', 'hub', 'homes'].map(realmKind)).toEqual(['hub', 'hub', 'hub']);
+    expect(realmKind(logRoom('nest-abc123def4')!)).toBe('nest');
   });
 
   it('names how each collectible came', () => {

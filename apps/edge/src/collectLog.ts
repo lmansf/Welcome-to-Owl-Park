@@ -3,7 +3,8 @@
  * or emote, or a piece of nest furniture), for the owner's analytics in the fraud pipeline's Supabase
  * project beside the park's orders: how much each owl collects and how fast. The player stats
  * (OP-111, parkStats.ts) send their rows the same way: a version of an owl's kind and colour
- * whenever either changes, and a row for each visit once it is over. The collections object
+ * whenever either changes, a row for each visit once it is over, and (OP-113) a row for each room
+ * the visit went into, from the moment the owl came in until it went on. The collections object
  * writes each one into its own SQLite as the collectible is granted (the outbox here), in the same
  * step as the grant, and sends it on at once, a batch at a time with a 1 s limit. A send that fails
  * or is slow leaves the rows for the object's alarm to retry, so a pickup never waits on the log and
@@ -98,6 +99,22 @@ export function logRoom(room: unknown): string | null {
   if (typeof room !== 'string') return null;
   if (room.startsWith('nest-')) return 'nest';
   return Object.prototype.hasOwnProperty.call(ROOMS, room) ? room : null;
+}
+
+/** What kind of place a row's room is (OP-113): one of the realms, the park's shared rooms, or an owl's nest. */
+export type RealmKind = 'realm' | 'hub' | 'nest';
+
+/**
+ * Each of the park's rooms by its kind of place: the realms (the arcade is the market's), and the
+ * rooms every owl passes through (the lobby, the hub, the street of nests). A new room goes in here:
+ * the tests hold every room to it.
+ */
+export const ROOM_KINDS: Readonly<Record<string, RealmKind>> = { lobby: 'hub', hub: 'hub', homes: 'hub', grove: 'realm', market: 'realm', arcade: 'realm', glass: 'realm' };
+
+/** The kind of place a room the log names (`logRoom`) is: every nest is `nest`. */
+export function realmKind(room: string): RealmKind {
+  if (room === 'nest') return 'nest';
+  return Object.hasOwn(ROOM_KINDS, room) ? ROOM_KINDS[room]! : 'hub';
 }
 
 /** A visit as the log keeps it, whatever was passed. */
@@ -310,11 +327,60 @@ async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
   };
 }
 
+/**
+ * How an owl came into a room (OP-113): walked in from another room of the same visit (a door, the
+ * way out, the turnstile, Go home), spawned as the page began (Play's nest, or the lobby), came
+ * straight in by the page's address, or came back into the same room after its line dropped.
+ */
+export type EntrySource = 'walked' | 'spawn' | 'deep_link' | 'reconnect';
+
+/** A time in one room, as the outbox keeps it: sent with its visit once the visit is over. */
+export interface RealmVisitData {
+  cid: string;
+  pass: string;
+  /** Its place in the visit: 1 for the first room. */
+  seq: number;
+  /** The room as the log names it (`logRoom`). */
+  room: string;
+  entered: number;
+  exited: number;
+  source: EntrySource;
+  gained: number;
+}
+
+/** A time in one room as the log takes it, under the session id of its visit. */
+export interface RealmVisitRow {
+  visit_id: string;
+  session_id: string;
+  collector_id: string;
+  realm: string;
+  realm_kind: RealmKind;
+  entered_at: string;
+  exited_at: string;
+  entry_source: EntrySource;
+  collectibles_gained: number;
+}
+
+async function realmVisitRow(salt: string, d: RealmVisitData): Promise<RealmVisitRow> {
+  return {
+    visit_id: await saltedUuid(salt, 'realm-visit', `${d.pass}|${d.seq}`),
+    session_id: await saltedUuid(salt, 'session', d.pass),
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    realm: d.room,
+    realm_kind: realmKind(d.room),
+    entered_at: iso(d.entered),
+    exited_at: iso(Math.max(d.entered, d.exited)),
+    entry_source: d.source,
+    collectibles_gained: d.gained,
+  };
+}
+
 /** Each kind of row the outbox holds, and how its data becomes the row the log takes. */
 const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   collect: collectRow,
   player: playerRow,
   session: sessionRow,
+  realm_visit: realmVisitRow,
 };
 
 export class CollectLog {
@@ -379,6 +445,11 @@ export class CollectLog {
   /** Keep a visit that is over to send (OP-111). */
   session(d: SessionData): void {
     if (this.config) this.keep('session', d);
+  }
+
+  /** Keep a time in one room to send (OP-113): after its visit's own row, which the log keeps first. */
+  realmVisit(d: RealmVisitData): void {
+    if (this.config) this.keep('realm_visit', d);
   }
 
   /**

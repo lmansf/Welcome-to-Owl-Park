@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CollectLog, saltedHash, type LogConfig, type PlayerRow, type SessionRow } from '../src/collectLog';
-import { ParkStats, VISIT_GRACE_MS } from '../src/parkStats';
+import { CollectLog, saltedHash, type LogConfig, type PlayerRow, type RealmVisitRow, type SessionRow } from '../src/collectLog';
+import { ParkStats, REALM_VISITS_MAX, VISIT_GRACE_MS, type Sighting } from '../src/parkStats';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { sqlStorage } from './sqlite';
 
@@ -16,6 +16,7 @@ function rig(config: LogConfig | null = CONFIG) {
   const sql = sqlStorage();
   new SqlCollectionStore(sql);
   const bodies: Array<{ kind: string; rows?: unknown[] }> = [];
+  const kinds = () => bodies.map((b) => b.kind);
   const log = new CollectLog(sql, config, {
     fetch: async (_url, init) => {
       bodies.push(JSON.parse(String(init.body)));
@@ -29,6 +30,7 @@ function rig(config: LogConfig | null = CONFIG) {
     sql,
     log,
     stats,
+    kinds,
     sent: async <T>(kind: string): Promise<T[]> => {
       await log.flush();
       return bodies.filter((b) => b.kind === kind).flatMap((b) => b.rows as T[]);
@@ -116,6 +118,95 @@ describe('the player stats (OP-111)', () => {
     expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_visits`).one()).toEqual({ n: 0 });
     expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_players`).one()).toEqual({ n: 0 });
     expect(t.stats.close(MON + 3600_000)).toBeNull();
+  });
+});
+
+describe('time per room (OP-113)', () => {
+  const MIN = 60_000;
+  const NEST = 'nest-abcdefgh';
+  /** The owl's hello in a room. */
+  const into = (room: string, extra: Partial<Sighting> = {}): Sighting => ({ ...ME, room, entered: true, ...extra });
+  const minutes = (r: RealmVisitRow) => (Date.parse(r.exited_at) - Date.parse(r.entered_at)) / MIN;
+
+  it("follows the owl from room to room without a gap, so the rooms' times add up to the visit's, and sends them after it", async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true }), BARN, MON);
+    t.stats.gained(PASS);
+    t.stats.seen(into('homes'), BARN, MON + 2 * MIN);
+    // The nest's socket closes a moment after the street's hello: it changes nothing here.
+    t.stats.alive([{ ...ME, room: NEST }], MON + 2 * MIN + 500);
+    t.stats.seen(into('hub'), BARN, MON + 3 * MIN);
+    t.stats.gained(PASS);
+    t.stats.gained(PASS);
+    // The line drops and the owl comes back into the hub: a new time there.
+    t.stats.seen(into('hub'), BARN, MON + 5 * MIN);
+    t.stats.seen({ ...ME, room: 'hub' }, { ...BARN, body: '#F2E1C1' }, MON + 6 * MIN); // a new look is no new room
+    t.stats.alive([{ ...ME, room: 'hub' }], MON + 10 * MIN); // its last socket closed
+    t.stats.close(MON + 10 * MIN + VISIT_GRACE_MS);
+    const [session] = await t.sent<SessionRow>('session');
+    const rows = await t.sent<RealmVisitRow>('realm_visit');
+    expect(rows.map((r) => [r.realm, r.realm_kind, r.entry_source, minutes(r), r.collectibles_gained])).toEqual([
+      ['nest', 'nest', 'spawn', 2, 1],
+      ['homes', 'hub', 'walked', 1, 0],
+      ['hub', 'hub', 'walked', 2, 2],
+      ['hub', 'hub', 'reconnect', 5, 0],
+    ]);
+    // One after another from the visit's start to its end, under its session id.
+    expect(rows[0]!.entered_at).toBe(session!.started_at);
+    expect(rows.at(-1)!.exited_at).toBe(session!.ended_at);
+    for (let i = 1; i < rows.length; i++) expect(rows[i]!.entered_at).toBe(rows[i - 1]!.exited_at);
+    expect(rows.reduce((n, r) => n + minutes(r), 0)).toBe(10);
+    expect(rows.reduce((n, r) => n + r.collectibles_gained, 0)).toBe(session!.collectibles_gained);
+    expect(new Set(rows.map((r) => r.session_id))).toEqual(new Set([session!.session_id]));
+    expect(new Set(rows.map((r) => r.visit_id)).size).toBe(4);
+    expect(rows[0]!.collector_id).toBe(await saltedHash(CONFIG.salt, 'collector', CID));
+    // The visit's row goes first, so the log has it when its rooms arrive; nothing names the owl, its pass or its nest.
+    expect(t.kinds().indexOf('session')).toBeLessThan(t.kinds().indexOf('realm_visit'));
+    for (const text of [CID, PASS, NEST]) expect(JSON.stringify(rows)).not.toContain(text);
+    expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_rooms`).one()).toEqual({ n: 0 });
+  });
+
+  it("tells how a visit's first room began: Play's nest or the lobby, else the page's address", async () => {
+    const t = rig();
+    const first = [
+      ['v_visitAAAA1', into(NEST, { own: true })],
+      ['v_visitBBBB2', into('lobby')],
+      ['v_visitCCCC3', into(NEST)], // another owl's nest
+      ['v_visitDDDD4', into('glass')],
+    ] as const;
+    first.forEach(([pass, s], i) => t.stats.seen({ ...s, pass }, BARN, MON + i));
+    t.stats.close(MON + VISIT_GRACE_MS + 10);
+    const rows = await t.sent<RealmVisitRow>('realm_visit');
+    expect(rows.map((r) => [r.realm, r.entry_source])).toEqual([
+      ['nest', 'spawn'],
+      ['lobby', 'spawn'],
+      ['nest', 'deep_link'],
+      ['glass', 'deep_link'],
+    ]);
+  });
+
+  it("walks from one nest into another, though the log names both the same: Go home from another owl's nest", async () => {
+    const t = rig();
+    t.stats.seen(into('nest-otherowl1'), BARN, MON);
+    t.stats.seen(into(NEST, { own: true }), BARN, MON + MIN);
+    t.stats.close(MON + MIN + VISIT_GRACE_MS);
+    expect((await t.sent<RealmVisitRow>('realm_visit')).map((r) => r.entry_source)).toEqual(['deep_link', 'walked']);
+  });
+
+  it(`keeps at most ${REALM_VISITS_MAX} times a visit, the last running on to its end`, async () => {
+    const t = rig();
+    for (let i = 0; i <= REALM_VISITS_MAX; i++) t.stats.seen(into(i % 2 ? 'hub' : 'grove'), BARN, MON + i * 1000);
+    t.stats.close(MON + 3600_000);
+    const rows = await t.sent<RealmVisitRow>('realm_visit');
+    expect(rows).toHaveLength(REALM_VISITS_MAX);
+    expect(rows.at(-1)!.exited_at).toBe(new Date(MON + REALM_VISITS_MAX * 1000).toISOString());
+  });
+
+  it('keeps no rooms while the log is off', () => {
+    const t = rig(null);
+    t.stats.seen(into('hub'), BARN, MON);
+    t.stats.gained(PASS);
+    expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_rooms`).one()).toEqual({ n: 0 });
   });
 });
 
