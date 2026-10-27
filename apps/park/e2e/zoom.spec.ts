@@ -74,6 +74,11 @@ test.describe('a touch never zooms the page (OP-104)', () => {
         { x: at.x - step, y: at.y + 40 },
         { x: at.x - step, y: at.y },
         { x: at.x - step, y: at.y - 30 },
+        // On a narrow phone the floor beside the owl can all be the pad's, the stick's or an owl's to talk
+        // to (its tap area reaches past it, OP-127): then nearer, a step behind.
+        { x: at.x + step / 2, y: at.y - 30 },
+        { x: at.x - step / 2, y: at.y - 30 },
+        { x: at.x, y: at.y - 50 },
       ]);
       const p = await toScreen(page, target.x, target.y);
       await quickTaps(page, p.x, p.y, taps);

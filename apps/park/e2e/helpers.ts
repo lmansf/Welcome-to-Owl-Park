@@ -131,16 +131,31 @@ export async function tapRoomPoint(page: Page, x: number, y: number): Promise<vo
 }
 
 /**
- * The first of these room points with nothing of the HUD over it on screen, so a tap there reaches
- * the room (on a touch screen the action buttons stand above the thumbstick, beside the owl).
+ * The first of these room points with nothing of the HUD over it on screen and nothing in the room
+ * that takes a tap there, so a tap there walks the owl to it (on a touch screen the action buttons
+ * stand above the thumbstick, beside the owl).
  */
 export async function openGround(page: Page, points: Array<{ x: number; y: number }>): Promise<{ x: number; y: number }> {
   for (const p of points) {
     const s = await toScreen(page, p.x, p.y);
     const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.tagName ?? '', [s.x, s.y]);
-    if (hit === 'CANVAS') return p;
+    if (hit === 'CANVAS' && !(await takesTap(page, s))) return p;
   }
-  throw new Error('every candidate point is under the HUD');
+  throw new Error('every candidate point is under the HUD or on something in the room that takes taps');
+}
+
+/**
+ * Whether something in the room takes a tap at this screen point (CSS pixels) rather than the ground:
+ * an owl to talk to, whose tap area reaches past it (OP-127), an idol, a set piece.
+ */
+async function takesTap(page: Page, s: { x: number; y: number }): Promise<boolean> {
+  return page.evaluate(([x, y]) => {
+    const cam = window.owlPark.camera();
+    const scene = window.owlPark.game.scene.getScene('room');
+    if (!cam || !scene) return false;
+    // Phaser's pointers are in game pixels: CSS pixels times the device ratio.
+    return scene.input.hitTestPointer({ x: x! * cam.dpr, y: y! * cam.dpr } as never).length > 0;
+  }, [s.x, s.y]);
 }
 
 export async function waitForArrival(page: Page, x: number, y: number, tolerance = 6): Promise<void> {

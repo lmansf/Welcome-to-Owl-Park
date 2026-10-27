@@ -45,6 +45,11 @@ test.describe('single visitor', () => {
       { x: before.pos.x - step, y: before.pos.y },
       { x: before.pos.x + step, y: before.pos.y - 30 },
       { x: before.pos.x - step, y: before.pos.y - 30 },
+      // On a narrow phone the floor beside the owl can all be the pad's, the stick's or an owl's to talk
+      // to (its tap area reaches past it, OP-127): then nearer, a step behind.
+      { x: before.pos.x + step / 2, y: before.pos.y - 30 },
+      { x: before.pos.x - step / 2, y: before.pos.y - 30 },
+      { x: before.pos.x, y: before.pos.y - 50 },
     ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
@@ -65,6 +70,11 @@ test.describe('single visitor', () => {
       { x: before.pos.x - step, y: before.pos.y },
       { x: before.pos.x + step, y: before.pos.y },
       { x: before.pos.x - step, y: before.pos.y - 30 },
+      // On a narrow phone the floor beside the owl can all be the pad's, the stick's or an owl's to talk
+      // to (its tap area reaches past it, OP-127): then nearer, a step behind.
+      { x: before.pos.x + step / 2, y: before.pos.y - 30 },
+      { x: before.pos.x - step / 2, y: before.pos.y - 30 },
+      { x: before.pos.x, y: before.pos.y - 50 },
     ]);
     await tapRoomPoint(page, target.x, target.y);
     await waitForArrival(page, target.x, target.y);
