@@ -270,7 +270,7 @@ const CSS = `
 @media (pointer:coarse){
   #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}
   #hud .pad{display:block;position:absolute;left:0;bottom:0;width:161px;height:153px}
-  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
