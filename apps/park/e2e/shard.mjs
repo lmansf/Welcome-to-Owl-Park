@@ -8,8 +8,11 @@
  * the form `playwright test --test-list` reads.
  *
  *   node e2e/shard.mjs <shard> <of>              this shard's test list, on stdout
- *   node e2e/shard.mjs durations <report.json>   rewrite durations.json from a full run's JSON report
+ *   node e2e/shard.mjs durations <report.json>   refresh durations.json from a full run's JSON report
  *                                                (playwright merge-reports --reporter json)
+ *
+ * Hosted runners differ in speed by up to two thirds, so one run's times are averaged with the
+ * table's rather than replacing them; a test the suite no longer has drops out.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -76,7 +79,10 @@ function shardList(shard, of) {
   process.stdout.write(mine.tests.map((t) => t.line).join('\n') + '\n');
 }
 
-/** durations.json from a JSON report: each test's seconds on its last try, keyed as `--list` prints it. */
+/**
+ * durations.json from a JSON report: each test's seconds on its last try, keyed as `--list` prints
+ * it, averaged with the table's time for the test where it has one.
+ */
 function durationsFrom(reportPath) {
   const report = JSON.parse(readFileSync(reportPath, 'utf8'));
   const seconds = {};
@@ -93,6 +99,10 @@ function durationsFrom(reportPath) {
     for (const child of suite.suites ?? []) walk(child, f, here);
   };
   for (const suite of report.suites ?? []) walk(suite, undefined, []);
+  const before = existsSync(DURATIONS) ? JSON.parse(readFileSync(DURATIONS, 'utf8')) : {};
+  for (const [k, s] of Object.entries(seconds)) {
+    if (s > 0 && before[k] > 0) seconds[k] = Math.round(((s + before[k]) / 2) * 10) / 10;
+  }
   const sorted = Object.fromEntries(Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b)));
   writeFileSync(DURATIONS, JSON.stringify(sorted, null, 1) + '\n');
   process.stderr.write(`${Object.keys(sorted).length} tests written to ${DURATIONS}\n`);

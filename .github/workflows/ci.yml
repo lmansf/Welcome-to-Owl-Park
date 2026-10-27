@@ -3,7 +3,7 @@ name: CI
 # Two tiers (OP-123). A push to a branch other than main runs the quick tier: typecheck, unit tests
 # and build as three jobs at once, then the browser smoke set (the tests tagged @smoke), in under
 # five minutes. A pull request, a push to main, the nightly run and a run by hand take the full
-# tier: the same three jobs, then the whole browser suite split across eight runners by the tests'
+# tier: the same three jobs, then the whole browser suite split across twelve runners by the tests'
 # measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push that changes
 # only docs or Markdown runs nothing. A failed typecheck or unit test run cancels the rest of the run.
 on:
@@ -133,16 +133,17 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: Browser suite ${{ matrix.shard }}/8
+    name: Browser suite ${{ matrix.shard }}/12
     if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    # A shard runs an eighth of the suite: 6 to 9 minutes on a hosted runner, about half again on a slow one.
+    # A shard runs a twelfth of the suite: about 4 minutes of tests on a quick runner, and up to 7 on the
+    # slowest seen (some runners are two thirds slower), so the run stays under ten minutes.
     timeout-minutes: 30
     strategy:
       fail-fast: true
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -173,10 +174,10 @@ jobs:
         run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
       - name: This shard's tests, shared out by their measured times (e2e/shard.mjs)
         working-directory: apps/park
-        run: node e2e/shard.mjs ${{ matrix.shard }} 8 > shard-tests.txt
+        run: node e2e/shard.mjs ${{ matrix.shard }} 12 > shard-tests.txt
         env:
           CI: 'true'
-      - name: End-to-end tests, shard ${{ matrix.shard }} of 8 (local transport on desktop and phone, and the room server)
+      - name: End-to-end tests, shard ${{ matrix.shard }} of 12 (local transport on desktop and phone, and the room server)
         run: pnpm e2e --test-list shard-tests.txt
         env:
           CI: 'true'
