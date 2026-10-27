@@ -138,6 +138,8 @@ export interface Hud {
   openClimb(view: ClimbView, handlers: ClimbHandlers): void;
   /** The climb screen's held controls right now (`jumpPressed` once per press). */
   climbInput(): ClimbInput;
+  /** The panes of glass left, of the night's. */
+  climbPanes(left: number, of: number): void;
   /** The climb's header: the banked band and the feathers from games left today. */
   climbHeader(banked: number, remainingCap: number): void;
   /** A band line reached and answered. */
@@ -707,6 +709,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       climb.open(view, handlers);
     },
     climbInput: () => climb.input(),
+    climbPanes: (left, of) => climb.panes(left, of),
     climbHeader: (banked, remainingCap) => climb.header(banked, remainingCap),
     climbBand: (b) => climb.band(b),
     climbHint: (line) => climb.hint(line),

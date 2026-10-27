@@ -10,31 +10,36 @@ import {
   CLIMB_RUN_MAX_MS,
   CLIMB_SLACK_MS,
   CLIMB_STEP_MS,
+  DASH_MS,
+  DASH_SPEED,
   FRAIL_MS,
-  GUST_PERIOD_MS,
+  HURT_MS,
+  JUMP_IMPULSE,
   KNOCK_STUN_MS,
   LANTERN_R,
-  LAYOUTS,
+  MOTH_R,
   NIGHTS,
   NO_INPUT,
   OWL_H,
   OWL_W,
-  ROUTES,
+  POGO_IMPULSE,
+  REST_MS,
+  SHADE_MS,
   TIERS,
+  WALL_KICK,
   bandLine,
   briskMs,
-  gusting,
+  circleTouches,
   lanternBob,
-  lanternTouches,
   layoutOf,
   leastClimbMs,
-  lullIn,
+  mothAt,
   platforms,
   plausibleBand,
-  roadPlatforms,
+  rectTouches,
   startState,
   stepClimb,
-  windAt,
+  type ClimbInput,
   type ClimbState,
   type Layout,
   type Ledge,
@@ -42,22 +47,25 @@ import {
   type Road,
   type RouteMove,
 } from './climb';
+import { LAYOUTS, roadPlatforms, routeOf } from './climbCity';
 import { pilotFor, playMove, waitToLaunch } from './climbPilot';
 
 /**
  * Drives a road's scripted route through the simulation with the shared pilot (climbPilot.ts): for
- * each move it waits for the first launch whose dry run lands (a lantern past, a lull), then plays
- * the move. Returns the step at which each band was first reached, and the platforms stood on.
+ * each move it waits for the first launch whose dry run lands (a lantern past, a moth turned), then
+ * plays the move. Returns the step at which each band was first reached, the platforms stood on, and
+ * the panes left (a clean route loses none).
  */
-function drive(night: Night, road: Road): { bandSteps: number[]; stood: Set<Ledge>; failed: string | null; waited: number } {
+function drive(night: Night, road: Road): { bandSteps: number[]; stood: Set<string>; failed: string | null; waited: number; panes: number } {
   const layout = layoutOf(night);
   const all = platforms(layout);
-  const route = ROUTES[layout.id]![road];
-  let s = startState(layout);
+  const route = routeOf(layout, road);
+  let s = startState(layout, night);
   let step = 0;
   let waited = 0;
   const bandSteps: number[] = [];
-  const stood = new Set<Ledge>([layout.start]);
+  const key = (p: Ledge) => `${p.x},${p.y},${p.w}`;
+  const stood = new Set<string>([key(layout.start)]);
   let standing: Ledge = layout.start;
   for (let i = 0; i < route.length; i++) {
     const move: RouteMove = route[i]!;
@@ -68,28 +76,35 @@ function drive(night: Night, road: Road): { bandSteps: number[]; stood: Set<Ledg
       while (bandSteps.length < next.band) bandSteps.push(step);
     });
     s = r.state;
-    const where = `${road} move ${i} (${move.toward} ${move.jump} to ${move.to.x},${move.to.y})`;
-    if (r.outcome !== 'landed') return { bandSteps, stood, failed: `${where} ${r.outcome} (at ${s.x.toFixed(0)},${s.y.toFixed(0)} grounded ${s.grounded}${wait === null ? ', no launch found' : ''})`, waited };
+    const where = `${road} move ${i} (${move.kind} ${move.toward} ${move.jump} to ${move.to.x},${move.to.y})`;
+    if (r.outcome !== 'landed') return { bandSteps, stood, failed: `${where} ${r.outcome} (at ${s.x.toFixed(0)},${s.y.toFixed(0)} grounded ${s.grounded}${wait === null ? ', no launch found' : ''})`, waited, panes: s.panes };
     standing = move.to;
-    stood.add(standing);
+    stood.add(key(standing));
   }
-  return { bandSteps, stood, failed: null, waited };
+  return { bandSteps, stood, failed: null, waited, panes: s.panes };
 }
 
 const ms = (steps: number) => steps * CLIMB_STEP_MS;
 const floorsFrom = (bandSteps: number[]) => bandSteps.map((n) => Math.floor((ms(n) * (1 - CLIMB_FLOOR_MARGIN)) / 100) * 100);
-/** The brisk window per band: the high road's time through the band times the factor, up to 100 ms; 0 where the band's high road needs no double jump (or there is none). */
+/** The brisk window per band: the high road's time through the band times the factor, up to 100 ms; 0 where the band has no high road. */
 const briskFrom = (layout: Layout, bandSteps: number[]) =>
   bandSteps.map((n, i) => {
     const lo = i === 0 ? 0 : layout.bandLines[i - 1]!;
-    const gamble = ROUTES[layout.id]!.high.some((m) => m.to.road === 'high' && m.to.y > lo && m.to.y < layout.bandLines[i]! && m.jump !== 'single');
+    const hasHigh = layout.routes.high.some((m) => m.to.y > lo && m.to.y <= layout.bandLines[i]!);
     const segment = ms(n) - (i === 0 ? 0 : ms(bandSteps[i - 1]!));
-    return gamble ? Math.ceil((segment * CLIMB_BRISK_FACTOR) / 100) * 100 : 0;
+    return hasHigh ? Math.ceil((segment * CLIMB_BRISK_FACTOR) / 100) * 100 : 0;
   });
 
-describe('the climb layout', () => {
-  const layout = LAYOUTS['city-1']!;
+const night = NIGHTS.medium!;
+const layout = LAYOUTS['city-2']!;
+const all = platforms(layout);
+const at = (x: number, y: number, more: Partial<ClimbState> = {}): ClimbState => ({ ...startState(layout, night), x, y, ...more });
+const hold = (input: Partial<ClimbInput>, s: ClimbState, steps: number, n: Night = night): ClimbState => {
+  for (let i = 0; i < steps; i++) s = stepClimb(s, { ...NO_INPUT, ...input }, layout, n, all);
+  return s;
+};
 
+describe('the climb layout', () => {
   it('has six band lines spanning the field, lowest first, and the start ledge at the bottom', () => {
     expect(layout.bandLines).toHaveLength(BAND_COUNT);
     for (let i = 1; i < layout.bandLines.length; i++) expect(layout.bandLines[i]!).toBeGreaterThan(layout.bandLines[i - 1]!);
@@ -98,8 +113,9 @@ describe('the climb layout', () => {
       expect(p.x).toBeGreaterThanOrEqual(0);
       expect(p.x + p.w).toBeLessThanOrEqual(CLIMB_FIELD_W);
     }
+    for (const w of layout.walls) expect(w.y1).toBeGreaterThan(w.y0);
     expect(bandLine(layout, 0)).toBe(0);
-    expect(bandLine(layout, 6)).toBe(5400);
+    expect(bandLine(layout, 6)).toBe(7200);
   });
 
   it('pays ten feathers in all, two per band at most', () => {
@@ -107,93 +123,207 @@ describe('the climb layout', () => {
     expect(BAND_FEATHERS.reduce((a, b) => a + b, 0)).toBe(10);
   });
 
-  it('names a layout for every night', () => {
+  it('names a layout for every night, and makes the harder nights meaner', () => {
     for (const n of Object.values(NIGHTS)) expect(LAYOUTS[n.layout]).toBeDefined();
     expect(TIERS.map((t) => NIGHTS[t]!.tier)).toEqual(TIERS);
+    expect(NIGHTS.easy!.panes).toBeGreaterThan(NIGHTS.medium!.panes);
+    expect(NIGHTS.medium!.panes).toBeGreaterThan(NIGHTS.hard!.panes);
+    expect(NIGHTS.easy!.pace).toBeLessThan(NIGHTS.hard!.pace);
   });
 
-  it('lets a glide from any airborne point above a ledge land on a ledge', () => {
-    // From 40 px steps above every platform, with no input but a held jump after two jumps spent,
-    // the owl must come to rest on some platform at or below the band it is in (never fall out).
-    const all = platforms(layout);
-    const night = NIGHTS.hard!;
-    for (const p of all.slice(0, -1)) {
-      for (let dy = 40; dy <= 240; dy += 40) {
-        let s: ClimbState = { ...startState(layout), x: p.x + p.w / 2, y: p.y + dy, grounded: false, coyoteMs: 0, jumpsUsed: 2 };
-        for (let i = 0; i < 3000 && !s.grounded; i++) s = stepClimb(s, { ...NO_INPUT, jumpHeld: true }, layout, night, all);
-        expect(s.grounded, `gliding down from ${dy} px above the platform at (${p.x}, ${p.y})`).toBe(true);
-        expect(s.y).toBeGreaterThanOrEqual(0);
+  it('keeps bands 1 clean of hazards, and gives every band from 2 a high road', () => {
+    const band = (y: number) => layout.bandLines.findIndex((line) => y < line) + 1;
+    for (const l of layout.lanterns) expect(band(l.y), `lantern at ${l.y}`).toBeGreaterThanOrEqual(3);
+    for (const m of layout.moths) expect(band(m.y), `moth at ${m.y}`).toBeGreaterThanOrEqual(2);
+    for (const th of layout.thorns) expect(band(th.y), `thorns at ${th.y}`).toBeGreaterThanOrEqual(2);
+    for (let b = 2; b <= BAND_COUNT; b++) expect(layout.routes.high.some((m) => band(m.to.y - 0.5) === b), `band ${b} has a high road`).toBe(true);
+    expect(roadPlatforms(layout, 'high').length).toBeLessThan(roadPlatforms(layout, 'stairs').length);
+  });
+
+  it('hangs no lantern and flies no moth where an owl can stand, at any moment', () => {
+    for (const l of layout.lanterns) {
+      let touched: string | null = null;
+      for (const p of platforms(layout)) {
+        if (Math.abs(p.y - l.y) > l.len + LANTERN_R + OWL_H) continue;
+        for (let x = p.x + OWL_W / 2; x <= p.x + p.w - OWL_W / 2 + 0.01 && !touched; x += 3) {
+          for (let t = 0; t < l.periodMs && !touched; t += 10) {
+            const b = lanternBob(l, t);
+            if (circleTouches(b.x, b.y, LANTERN_R, x, p.y)) touched = `lantern at (${l.x}, ${l.y}) touches an owl standing at (${x}, ${p.y}) at t ${t}`;
+          }
+        }
+      }
+      expect(touched).toBeNull();
+    }
+    // A moth may patrol a corridor floor (the full-width ledges the owl crosses), never a ledge an owl rests on.
+    for (const m of layout.moths) {
+      let touched: string | null = null;
+      for (const p of platforms(layout)) {
+        if (Math.abs(p.y - m.y) > MOTH_R + OWL_H || (p.w === CLIMB_FIELD_W && !p.bench && !layout.bandLines.includes(p.y) && p.y !== layout.start.y)) continue;
+        for (let x = p.x + OWL_W / 2; x <= p.x + p.w - OWL_W / 2 + 0.01 && !touched; x += 3) {
+          for (const mx of [m.x0, m.x1, (m.x0 + m.x1) / 2]) if (circleTouches(mx, m.y, MOTH_R, x, p.y)) touched = `moth on ${m.y} touches an owl standing at (${x}, ${p.y})`;
+        }
+      }
+      expect(touched).toBeNull();
+    }
+    // Thorns never lie on a standing surface either, except as the floor they replace.
+    for (const th of layout.thorns) {
+      for (const p of platforms(layout)) {
+        if (p.w === CLIMB_FIELD_W && p.y === layout.start.y) continue;
+        for (let x = p.x + OWL_W / 2; x <= p.x + p.w - OWL_W / 2 + 0.01; x += 3) expect(rectTouches(th.x, th.y, th.w, th.h, x, p.y), `thorns at (${th.x}, ${th.y}) touch an owl standing at (${x}, ${p.y})`).toBe(false);
       }
     }
   });
 });
 
-describe('the obstacles', () => {
-  const layout = LAYOUTS['city-1']!;
-  const night = NIGHTS.medium!;
-
-  it('hangs no lantern where an owl can stand, at any moment of its swing', () => {
-    for (const l of layout.lanterns) {
-      const reach = l.len + LANTERN_R + OWL_H;
-      let touched: string | null = null;
-      for (const p of platforms(layout)) {
-        if (Math.abs(p.y - l.y) > reach) continue;
-        for (let x = p.x + OWL_W / 2; x <= p.x + p.w - OWL_W / 2 + 0.01 && !touched; x += 3) {
-          for (let t = 0; t < l.periodMs && !touched; t += 10) {
-            const b = lanternBob(l, t);
-            if (lanternTouches(b.x, b.y, x, p.y)) touched = `lantern at (${l.x}, ${l.y}) touches an owl standing at (${x}, ${p.y}) at t ${t}`;
-          }
-        }
-      }
-      expect(touched).toBeNull();
-      expect(l.len * Math.sin(l.amp)).toBeGreaterThan(20);
-      expect(l.periodMs).toBeGreaterThanOrEqual(1500);
+describe('the kit', () => {
+  it('jumps short and heavy, cuts on release, and doubles once in the air', () => {
+    let s = hold({ jumpPressed: true, jumpHeld: true }, at(240, 0), 1);
+    expect(s.event).toBe('jump');
+    let top = s.y;
+    for (let i = 0; i < 200 && !s.grounded; i++) {
+      s = stepClimb(s, { ...NO_INPUT, jumpHeld: true }, layout, night, all);
+      top = Math.max(top, s.y);
     }
+    expect(top).toBeGreaterThan(140);
+    expect(top).toBeLessThan(160);
+    // Released at once: a hop.
+    s = hold({ jumpPressed: true, jumpHeld: true }, at(240, 0), 1);
+    let hop = s.y;
+    for (let i = 0; i < 200 && !s.grounded; i++) {
+      s = stepClimb(s, NO_INPUT, layout, night, all);
+      hop = Math.max(hop, s.y);
+    }
+    expect(hop).toBeLessThan(40);
+    // The double at the apex, once.
+    s = hold({ jumpPressed: true, jumpHeld: true }, at(240, 0), 1);
+    while (s.vy > 0) s = stepClimb(s, { ...NO_INPUT, jumpHeld: true }, layout, night, all);
+    s = stepClimb(s, { ...NO_INPUT, jumpPressed: true, jumpHeld: true }, layout, night, all);
+    expect(s.event).toBe('double');
+    expect(s.jumpsUsed).toBe(2);
+    const again = stepClimb(s, { ...NO_INPUT, jumpPressed: true, jumpHeld: true }, layout, night, all);
+    expect(again.event).toBeNull();
   });
 
-  it('keeps bands 1 and 2 clear of obstacles, and stacks them from band 3 up', () => {
-    const lo = (y: number) => layout.bandLines.findIndex((line) => y < line) + 1;
-    for (const l of layout.lanterns) expect(lo(l.y), `lantern at ${l.y}`).toBeGreaterThanOrEqual(3);
-    for (const w of layout.winds) expect(lo(w.y0 + 1), `wind from ${w.y0}`).toBeGreaterThanOrEqual(4);
-    for (const l of layout.ledges) if (l.frail) expect(lo(l.y), `frail ledge at ${l.y}`).toBeGreaterThanOrEqual(4);
-    // Frail glass is the high road's gamble, never the stairs'.
-    for (const l of layout.ledges) if (l.frail) expect(l.road).toBe('high');
-    // Every band from 3 has a lantern; from 4 a wind and frail glass; the winds alternate sides and grow.
-    for (let b = 3; b <= BAND_COUNT; b++) expect(layout.lanterns.some((l) => lo(l.y) === b), `band ${b} has a lantern`).toBe(true);
-    for (let b = 4; b <= BAND_COUNT; b++) {
-      expect(layout.winds.some((w) => lo(w.y0 + 1) === b), `band ${b} has a wind`).toBe(true);
-      expect(layout.ledges.some((l) => l.frail && lo(l.y) === b), `band ${b} has frail glass`).toBe(true);
-    }
-    for (let i = 1; i < layout.winds.length; i++) {
-      expect(Math.sign(layout.winds[i]!.drift)).toBe(-Math.sign(layout.winds[i - 1]!.drift));
-      expect(Math.abs(layout.winds[i]!.drift)).toBeGreaterThan(Math.abs(layout.winds[i - 1]!.drift));
-    }
+  it('dashes sideways with no fall, once in the air until it lands, with a cooldown', () => {
+    let s = hold({ jumpPressed: true, jumpHeld: true }, at(240, 0), 12);
+    const before = s;
+    s = stepClimb(s, { ...NO_INPUT, right: true, dashPressed: true }, layout, night, all);
+    expect(s.event).toBe('dash');
+    expect(s.vy).toBe(0);
+    const during = hold({ right: true }, s, Math.round(DASH_MS / CLIMB_STEP_MS) - 1);
+    expect(during.y).toBeCloseTo(before.y, 0);
+    expect(during.x - before.x).toBeGreaterThan(DASH_SPEED * (DASH_MS / 1000) * 0.9);
+    // A second press in the same flight does nothing; on the ground after the cooldown it dashes again.
+    const twice = stepClimb(during, { ...NO_INPUT, right: true, dashPressed: true }, layout, night, all);
+    expect(twice.event).not.toBe('dash');
+    let g = hold({}, twice, 200);
+    expect(g.grounded).toBe(true);
+    g = stepClimb(g, { ...NO_INPUT, left: true, dashPressed: true }, layout, night, all);
+    expect(g.event).toBe('dash');
+    expect(g.facing).toBe(-1);
   });
 
-  it('gusts and lulls on one clock, and carries only an airborne owl', () => {
-    expect(gusting(0)).toBe(true);
-    expect(gusting(GUST_PERIOD_MS - 1)).toBe(false);
-    expect(lullIn(0).wait).toBeGreaterThan(0);
-    expect(lullIn(GUST_PERIOD_MS - 100)).toEqual({ wait: 0, left: 100 });
-    const w = layout.winds[0]!;
-    expect(windAt(layout, w.y0 + 10, 0)).toBe(w.drift);
-    expect(windAt(layout, w.y0 - 10, 0)).toBe(0);
-    expect(windAt(layout, w.y0 + 10, GUST_PERIOD_MS - 1)).toBe(0);
-    const all = platforms(layout);
-    const line = layout.bandLines[3]!;
-    // Standing on the balcony in a gust: no carry. In the air above it: carried downwind.
-    let s: ClimbState = { ...startState(layout), x: 240, y: line, band: 4 };
-    for (let i = 0; i < 60; i++) s = stepClimb(s, NO_INPUT, layout, night, all);
-    expect(s.x).toBe(240);
-    s = { ...startState(layout), x: 240, y: line + 1, grounded: false, band: 4 };
-    s = stepClimb(s, NO_INPUT, layout, night, all);
-    expect(Math.sign(s.x - 240)).toBe(Math.sign(layout.winds[1]!.drift));
+  it('clings to a wall, slides, kicks off it, and keeps the double', () => {
+    const w = layout.walls.find((w) => w.x === 360)!; // band 2's shaft, right wall
+    // In the air against the wall, pressing into it.
+    let s = at(w.x - OWL_W / 2 - 1, w.y0 + 100, { grounded: false, vy: 0, coyoteMs: 0, jumpsUsed: 2, dashUsed: true });
+    s = stepClimb(s, { ...NO_INPUT, right: true }, layout, night, all);
+    s = stepClimb(s, { ...NO_INPUT, right: true }, layout, night, all);
+    expect(s.wall).toBe(1);
+    expect(s.jumpsUsed).toBe(0);
+    expect(s.dashUsed).toBe(false);
+    const slid = hold({ right: true }, s, 30);
+    expect(slid.vy).toBeGreaterThanOrEqual(-141);
+    expect(slid.wall).toBe(1);
+    const kicked = stepClimb(slid, { ...NO_INPUT, right: true, jumpPressed: true, jumpHeld: true }, layout, night, all);
+    expect(kicked.event).toBe('kick');
+    expect(kicked.vx).toBe(-WALL_KICK);
+    expect(kicked.vy).toBeGreaterThan(JUMP_IMPULSE * 0.9);
+    expect(kicked.wall).toBe(0);
+    expect(kicked.jumpsUsed).toBe(1);
+    // The owl cannot pass through the wall.
+    let through = at(w.x - OWL_W / 2 - 30, w.y0 + 100, { grounded: false, coyoteMs: 0 });
+    through = hold({ right: true }, through, 20);
+    expect(through.x + OWL_W / 2).toBeLessThanOrEqual(w.x + 0.01);
+  });
+
+  it('pogos off a hazard with the talons down, and is hurt by it without them', () => {
+    const l = layout.lanterns[0]!;
+    const b = lanternBob(l, 0, night.pace);
+    // Falling onto the glass from above.
+    let s = at(b.x, b.y + LANTERN_R + 30, { grounded: false, coyoteMs: 0, vy: -200, jumpsUsed: 2, dashUsed: true });
+    let p = s;
+    for (let i = 0; i < 30 && p.event !== 'pogo' && p.event !== 'hit'; i++) p = stepClimb(p, { ...NO_INPUT, down: true }, layout, night, all);
+    expect(p.event).toBe('pogo');
+    expect(p.vy).toBe(POGO_IMPULSE);
+    expect(p.jumpsUsed).toBe(1);
+    expect(p.dashUsed).toBe(false);
+    expect(p.panes).toBe(night.panes);
+    // The bounce is never cut by a released button.
+    const up = stepClimb(p, NO_INPUT, layout, night, all);
+    expect(up.vy).toBeGreaterThan(POGO_IMPULSE * 0.95);
+    // Without the talons: a pane cracked, thrown back and up, controls dead, untouchable for a while.
+    let h = s;
+    for (let i = 0; i < 30 && h.event !== 'pogo' && h.event !== 'hit'; i++) h = stepClimb(h, NO_INPUT, layout, night, all);
+    expect(h.event).toBe('hit');
+    expect(h.panes).toBe(night.panes - 1);
+    expect(h.hurtMs).toBe(HURT_MS);
+    expect(h.stunMs).toBe(KNOCK_STUN_MS);
+    expect(h.vy).toBeGreaterThan(0);
+    const dead = stepClimb(h, { ...NO_INPUT, left: true, jumpPressed: true, jumpHeld: true }, layout, night, all);
+    expect(dead.event).toBeNull();
+    expect(Math.sign(dead.vx)).toBe(Math.sign(h.vx));
+    void s;
+  });
+
+  it('sends an owl that touches thorns back to its last safe ground, a pane the poorer', () => {
+    const th = layout.thorns[0]!; // band 2, before the first shaft's foot
+    const safe = layout.ledges.find((l) => l.y === 1380)!;
+    let s = at(safe.x + safe.w / 2, safe.y);
+    s = hold({}, s, 2); // stands: safe ground
+    expect([s.safeX, s.safeY]).toEqual([safe.x + safe.w / 2, safe.y]);
+    s = { ...s, x: th.x + th.w / 2, y: th.y + th.h + 4, grounded: false, coyoteMs: 0, vy: -100 };
+    for (let i = 0; i < 30 && s.event !== 'thorns'; i++) s = stepClimb(s, NO_INPUT, layout, night, all);
+    expect(s.event).toBe('thorns');
+    expect(s.panes).toBe(night.panes - 1);
+    expect([s.x, s.y]).toEqual([safe.x + safe.w / 2, safe.y]);
+    expect(s.grounded).toBe(true);
+  });
+
+  it('takes the shade when the last pane goes, and brings the owl back to its bench relit', () => {
+    const l = layout.lanterns[0]!;
+    const b = lanternBob(l, 0, night.pace);
+    // Standing on the second bench first, then thrown at the glass with one pane left.
+    let s = at(240, layout.bandLines[1]!, { band: 2 });
+    s = hold({}, s, 2);
+    expect(s.bench).toBe(2);
+    s = { ...s, x: b.x, y: b.y - OWL_H / 2, grounded: false, coyoteMs: 0, vy: 100, panes: 1, t: 0 };
+    for (let i = 0; i < 30 && s.event !== 'shade'; i++) s = stepClimb(s, NO_INPUT, layout, night, all);
+    expect(s.event).toBe('shade');
+    expect(s.shadeMs).toBe(SHADE_MS);
+    expect(s.shades).toBe(1);
+    const stillThere = stepClimb(s, { ...NO_INPUT, right: true, jumpPressed: true }, layout, night, all);
+    expect([stillThere.x, stillThere.y]).toEqual([s.x, s.y]);
+    let back = s;
+    for (let i = 0; i < 200 && back.event !== 'respawn'; i++) back = stepClimb(back, NO_INPUT, layout, night, all);
+    expect(back.event).toBe('respawn');
+    expect(back.y).toBe(layout.bandLines[1]);
+    expect(back.panes).toBe(night.panes);
+    expect(back.grounded).toBe(true);
+  });
+
+  it('relights the panes after a rest on a bench', () => {
+    let s = at(240, layout.bandLines[2]!, { band: 3, panes: 1 });
+    s = hold({}, s, Math.round(REST_MS / CLIMB_STEP_MS) - 2);
+    expect(s.panes).toBe(1);
+    s = hold({}, s, 4);
+    expect(s.panes).toBe(night.panes);
+    expect(s.bench).toBe(3);
   });
 
   it('lets frail glass give way after FRAIL_MS, with one flap left', () => {
-    const all = platforms(layout);
     const weak = layout.ledges.find((l) => l.frail)!;
-    let s: ClimbState = { ...startState(layout), x: weak.x + weak.w / 2, y: weak.y, band: 3 };
+    let s = at(weak.x + weak.w / 2, weak.y, { band: 4 });
     let gave: ClimbState | null = null;
     for (let i = 0; i < 200 && !gave; i++) {
       s = stepClimb(s, NO_INPUT, layout, night, all);
@@ -201,132 +331,78 @@ describe('the obstacles', () => {
     }
     expect(gave?.crumbled).toBe(weak);
     expect(gave!.t).toBeGreaterThanOrEqual(FRAIL_MS);
-    expect(gave!.t).toBeLessThan(FRAIL_MS + 3 * CLIMB_STEP_MS);
     expect(gave!.grounded).toBe(false);
     expect(gave!.jumpsUsed).toBe(1);
-    // The flap: a press in the fall lifts the owl again.
     const flapped = stepClimb(gave!, { ...NO_INPUT, jumpPressed: true, jumpHeld: true }, layout, night, all);
     expect(flapped.vy).toBeGreaterThan(0);
-    expect(flapped.jumpsUsed).toBe(2);
-    // Sound glass under the owl too: it holds.
-    const sound = layout.ledges.find((l) => !l.frail)!;
-    s = { ...startState(layout), x: sound.x + sound.w / 2, y: sound.y };
-    for (let i = 0; i < 200; i++) s = stepClimb(s, NO_INPUT, layout, night, all);
-    expect(s.grounded).toBe(true);
   });
 
-  it('knocks an owl a lantern touches: down, aside, controls dead for KNOCK_STUN_MS, no jump left', () => {
-    const all = platforms(layout);
-    const l = layout.lanterns[0]!;
-    const b = lanternBob(l, 0);
-    // The owl in the air with its chest at the glass.
-    let s: ClimbState = { ...startState(layout), x: b.x + 10, y: b.y - OWL_H / 2, vy: 300, grounded: false, jumpsUsed: 1, band: 2 };
-    s = stepClimb(s, { left: true, right: false, jumpPressed: true, jumpHeld: true }, layout, night, all);
-    expect(s.stunMs).toBe(KNOCK_STUN_MS);
-    expect(s.vx).toBeGreaterThan(0);
-    expect(s.vy).toBeLessThan(0);
-    expect(s.jumpsUsed).toBe(2);
-    // Stunned: the keys do nothing, the owl keeps falling and drifting; the stun runs out.
-    const after = stepClimb(s, { left: true, right: false, jumpPressed: true, jumpHeld: true }, layout, night, all);
-    expect(after.vx).toBeGreaterThan(0);
-    expect(after.vy).toBeLessThan(s.vy);
-    expect(after.stunMs).toBeLessThan(s.stunMs);
-    let n = 0;
-    while (s.stunMs > 0 && n++ < 100) s = stepClimb(s, NO_INPUT, layout, night, all);
-    // The steps are 8.33 ms: the stun ends on the 54th, or the 55th when the arithmetic leaves a hair.
-    expect(n).toBeGreaterThanOrEqual(Math.round(KNOCK_STUN_MS / CLIMB_STEP_MS));
-    expect(n).toBeLessThanOrEqual(Math.round(KNOCK_STUN_MS / CLIMB_STEP_MS) + 1);
-  });
-
-  it('lets the pilot find a launch past a lantern from the ledge under it', () => {
-    const all = platforms(layout);
-    const from = layout.ledges.find((l) => l.x === 0 && l.y === 2340)!;
-    const to = layout.ledges.find((l) => l.x === 320 && l.y === 2520)!;
-    const move = ROUTES['city-1']!.stairs.find((m) => m.to === to)!;
-    let waits = 0;
-    for (let t0 = 0; t0 < 2400; t0 += 200) {
-      const s: ClimbState = { ...startState(layout), x: from.x + from.w / 2, y: from.y, t: t0, band: 2 };
-      const wait = waitToLaunch(s, from, move, layout, night, all);
-      expect(wait, `from t ${t0}`).not.toBeNull();
-      waits += wait!;
-      expect(playMove(s, pilotFor(from, move, wait!), layout, night, all).outcome).toBe('landed');
-    }
-    expect(waits).toBeGreaterThan(0);
+  it('moves a moth there and back on its track, faster under a harder night', () => {
+    const m = layout.moths.find((moth) => !moth.phase)!;
+    const a = mothAt(m, 0, 1);
+    expect(a.x).toBe(m.x0);
+    const span = Math.abs(m.x1 - m.x0);
+    const half = (span / m.speed) * 1000;
+    expect(mothAt(m, half, 1).x).toBeCloseTo(m.x1, 0);
+    expect(mothAt(m, 2 * half, 1).x).toBeCloseTo(m.x0, 0);
+    expect(Math.abs(mothAt(m, 300, NIGHTS.hard!.pace).x - m.x0)).toBeGreaterThan(Math.abs(mothAt(m, 300, NIGHTS.easy!.pace).x - m.x0));
   });
 });
 
 describe('the two roads, the floors and the brisk windows', () => {
-  const layout = LAYOUTS['city-1']!;
-
-  it('gives every band from the second up a high road, and keeps the stairs free of glides', () => {
-    for (let b = 0; b < BAND_COUNT; b++) {
-      const lo = b === 0 ? 0 : layout.bandLines[b - 1]!;
-      const highs = layout.ledges.filter((l) => l.road === 'high' && l.y > lo && l.y < layout.bandLines[b]!);
-      const stairs = layout.ledges.filter((l) => !l.road && l.y > lo && l.y < layout.bandLines[b]!);
-      expect(stairs.length, `band ${b + 1} has stairs`).toBeGreaterThan(0);
-      if (b > 0) expect(highs.length, `band ${b + 1} has a high road`).toBeGreaterThan(0);
-      if (b > 0) expect(highs.length, `band ${b + 1}'s high road is the shorter`).toBeLessThanOrEqual(stairs.length);
-      for (const h of highs) expect(h.w, 'high road ledges are the narrow ones').toBeLessThanOrEqual(100);
-      // The roads never share a column: a jump straight up from the stairs never lands on the high road.
-      for (const h of highs) for (const st of stairs) expect(h.x < st.x + st.w && h.x + h.w > st.x, `band ${b + 1}: ${JSON.stringify(h)} clear of ${JSON.stringify(st)}`).toBe(false);
-    }
-    // The stairs glide only in the top two bands (the move they teach there); the high road never does.
-    for (const m of ROUTES['city-1']!.stairs) if (m.to.y <= layout.bandLines[3]!) expect(m.jump, `the stairs to ${m.to.y} need no glide`).not.toBe('double-glide');
-    expect(ROUTES['city-1']!.stairs.some((m) => m.jump === 'double-glide')).toBe(true);
-    for (const m of ROUTES['city-1']!.high) expect(m.jump, 'the high road never glides').not.toBe('double-glide');
-    expect(roadPlatforms(layout, 'high').length).toBeLessThan(roadPlatforms(layout, 'stairs').length);
-  });
-
   for (const tier of TIERS) {
-    it(`stands on every platform of both roads under the ${tier} night, and freezes the floors and the brisk windows`, () => {
-      const night = NIGHTS[tier]!;
-      const stairs = drive(night, 'stairs');
-      const high = drive(night, 'high');
+    it(`stands on every platform of both roads under the ${tier} night without losing a pane, and freezes the floors and the brisk windows`, () => {
+      const n = NIGHTS[tier]!;
+      const stairs = drive(n, 'stairs');
+      const high = drive(n, 'high');
       expect(stairs.failed).toBeNull();
       expect(high.failed).toBeNull();
-      // The two drives make their own band-line objects: count platforms by place.
-      const stood = new Set([...stairs.stood, ...high.stood].map((p) => `${p.x},${p.y},${p.w}`));
-      expect(stood.size).toBe(platforms(layout).length);
+      expect(stairs.panes).toBe(n.panes);
+      expect(high.panes).toBe(n.panes);
+      const stood = new Set([...stairs.stood, ...high.stood]);
+      const key = (p: Ledge) => `${p.x},${p.y},${p.w}`;
+      for (const p of platforms(layout)) expect(stood.has(key(p)), `a road stands on ${key(p)}`).toBe(true);
       expect(stairs.bandSteps).toHaveLength(BAND_COUNT);
       expect(high.bandSteps).toHaveLength(BAND_COUNT);
+      // The main road at scripted speed takes a minute to the clouds (the first tower's took fifty seconds).
+      expect(ms(stairs.bandSteps[5]!)).toBeGreaterThan(60_000);
       // The high road is the faster way up every band it exists in.
       for (let b = 1; b < BAND_COUNT; b++) expect(high.bandSteps[b]! - high.bandSteps[b - 1]!, `band ${b + 1}: the high road is faster`).toBeLessThan(stairs.bandSteps[b]! - stairs.bandSteps[b - 1]!);
-      const fastest = stairs.bandSteps.map((n, i) => Math.min(n, high.bandSteps[i]!));
+      const fastest = stairs.bandSteps.map((k, i) => Math.min(k, high.bandSteps[i]!));
       const floors = floorsFrom(fastest);
       const brisk = briskFrom(layout, high.bandSteps);
-      const times = (r: number[]) => r.map((n) => Math.round(ms(n))).join(', ');
-      expect(CLIMB_FLOORS['city-1']![tier], `CLIMB_FLOORS['city-1'].${tier} must be [${floors.join(', ')}] (stairs ${times(stairs.bandSteps)} ms, waited ${Math.round(ms(stairs.waited))}; high road ${times(high.bandSteps)} ms, waited ${Math.round(ms(high.waited))})`).toEqual(floors);
-      expect(CLIMB_BRISK['city-1']![tier], `CLIMB_BRISK['city-1'].${tier} must be [${brisk.join(', ')}]`).toEqual(brisk);
-      // A brisk window is wider than the high road's own time, and the stairs do not make it even a
-      // quarter quicker than the script (a player need not wait to face a jump as the driver does).
-      for (let b = 2; b < BAND_COUNT; b++) {
+      const times = (r: number[]) => r.map((k) => Math.round(ms(k))).join(', ');
+      expect(CLIMB_FLOORS['city-2']![tier], `CLIMB_FLOORS['city-2'].${tier} must be [${floors.join(', ')}] (main road ${times(stairs.bandSteps)} ms, waited ${Math.round(ms(stairs.waited))}; high road ${times(high.bandSteps)} ms, waited ${Math.round(ms(high.waited))})`).toEqual(floors);
+      expect(CLIMB_BRISK['city-2']![tier], `CLIMB_BRISK['city-2'].${tier} must be [${brisk.join(', ')}]`).toEqual(brisk);
+      // A brisk window is wider than the high road's own time, and the main road does not make it even a quarter quicker than the script.
+      for (let b = 1; b < BAND_COUNT; b++) {
         expect(brisk[b]!).toBeGreaterThan(ms(high.bandSteps[b]! - high.bandSteps[b - 1]!));
-        expect(brisk[b]! * 1.25, `band ${b + 1}: the stairs are not brisk`).toBeLessThan(ms(stairs.bandSteps[b]! - stairs.bandSteps[b - 1]!));
+        expect(brisk[b]! * 1.25, `band ${b + 1}: the main road is not brisk`).toBeLessThan(ms(stairs.bandSteps[b]! - stairs.bandSteps[b - 1]!));
       }
       expect(brisk[0]).toBe(0);
-      expect(brisk[1], 'band 2: a column of single jumps is no gamble').toBe(0);
       expect(CLIMB_BRISK_FACTOR).toBeGreaterThan(1);
     });
   }
 
-  it('makes harder nights no slower to the clouds than easier ones', () => {
-    const f = CLIMB_FLOORS['city-1']!;
-    expect(f.hard[5]!).toBeLessThanOrEqual(f.easy[5]!);
+  it('is a longer climb than the first tower on both roads, and no night is a short cut', () => {
+    const f = CLIMB_FLOORS['city-2']!;
+    // The first tower's floors to the clouds (its faster road, less the margin) were 23.6 s on every night.
+    for (const tier of TIERS) expect(f[tier][5]!).toBeGreaterThan(32_000);
+    expect(f.hard[5]!).toBeLessThanOrEqual(f.easy[5]! * 1.1);
   });
 
   it('judges a band by its floor with the slack, inside the run limit, and names the brisk window', () => {
-    const night = NIGHTS.easy!;
-    const floor = leastClimbMs(night, 1);
-    expect(plausibleBand(night, 1, floor)).toBe(true);
-    expect(plausibleBand(night, 1, floor - CLIMB_SLACK_MS)).toBe(true);
-    expect(plausibleBand(night, 1, floor - CLIMB_SLACK_MS - 1)).toBe(false);
-    expect(plausibleBand(night, 0, 1e9)).toBe(false);
-    expect(plausibleBand(night, 7, 1e9)).toBe(false);
-    expect(plausibleBand(night, 6, CLIMB_RUN_MAX_MS + 1)).toBe(false);
-    expect(leastClimbMs({ ...night, layout: 'nowhere' }, 1)).toBe(Infinity);
-    expect(briskMs(night, 1)).toBe(0);
-    expect(briskMs(night, 2)).toBe(0);
-    expect(briskMs(night, 3)).toBeGreaterThan(0);
-    expect(briskMs({ ...night, layout: 'nowhere' }, 2)).toBe(0);
+    const n = NIGHTS.easy!;
+    const floor = leastClimbMs(n, 1);
+    expect(plausibleBand(n, 1, floor)).toBe(true);
+    expect(plausibleBand(n, 1, floor - CLIMB_SLACK_MS)).toBe(true);
+    expect(plausibleBand(n, 1, floor - CLIMB_SLACK_MS - 1)).toBe(false);
+    expect(plausibleBand(n, 0, 1e9)).toBe(false);
+    expect(plausibleBand(n, 7, 1e9)).toBe(false);
+    expect(plausibleBand(n, 6, CLIMB_RUN_MAX_MS + 1)).toBe(false);
+    expect(leastClimbMs({ ...n, layout: 'nowhere' }, 1)).toBe(Infinity);
+    expect(briskMs(n, 1)).toBe(0);
+    expect(briskMs(n, 2)).toBeGreaterThan(0);
+    expect(briskMs({ ...n, layout: 'nowhere' }, 2)).toBe(0);
   });
 });

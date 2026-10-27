@@ -7,12 +7,12 @@ import {
   NO_INPUT,
   OWL_W,
   PLAY_FEATHERS_PER_DAY,
+  isBench,
   leastClimbMs,
-  moveBetween,
   pilotFor,
   pilotInput,
   platforms,
-  roadPlatforms,
+  routeOf,
   waitToLaunch,
   type ClimbInput,
   type ClimbState,
@@ -22,6 +22,7 @@ import {
   type OwlLook,
   type Pilot,
   type RoomDef,
+  type RouteMove,
 } from '@owl-park/shared';
 import type { ActivityLink, ClimbReply } from '../collect/service';
 import type { Hud } from '../ui/hud';
@@ -71,6 +72,8 @@ interface Run {
   /** The scripted climber at the controls (the browser tests), or null for the visitor's own. */
   auto: Autopilot | null;
   hintTimer: ReturnType<typeof setTimeout> | null;
+  /** The panes as last shown. */
+  panes: number;
 }
 
 const COARSE = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -81,31 +84,50 @@ const AUTO_REST_MS = 1500;
 
 /**
  * The scripted climber at the controls, for the browser tests (window.owlPark.climbAuto): it takes
- * the stairs with the shared pilot, waiting out the lanterns and the gusts as the floor test does.
+ * the main road with the shared pilot, move by move along the authored route, waiting out the
+ * lanterns and the moths as the floor test does, and resting on each bench. After a knock or the
+ * shade it finds its place on the route again from the platform it stands on.
  */
 class Autopilot {
   private pilot: Pilot | null = null;
   private restUntil = 0;
-  constructor(private readonly layout: Layout, private readonly night: Night) {}
+  private readonly route: readonly RouteMove[];
+  private readonly all: readonly Ledge[];
+  constructor(private readonly layout: Layout, private readonly night: Night) {
+    this.route = routeOf(layout, 'stairs');
+    this.all = platforms(layout);
+  }
+  private standingOn(s: ClimbState): Ledge | null {
+    return this.all.find((p) => Math.abs(p.y - s.y) < 0.5 && s.x - OWL_W / 2 < p.x + p.w && s.x + OWL_W / 2 > p.x) ?? null;
+  }
   input(s: ClimbState): ClimbInput {
-    const all = platforms(this.layout);
     if (this.pilot) {
       const to = this.pilot.move.to;
       const onTarget = s.grounded && Math.abs(s.y - to.y) < 0.5 && s.x - OWL_W / 2 < to.x + to.w && s.x + OWL_W / 2 > to.x;
-      const lost = s.stunMs > 0 || (s.grounded && this.pilot.phase > 0 && Math.abs(s.y - to.y) >= 0.5);
-      if (onTarget || lost) {
+      const crossed = this.pilot.move.kind === 'cross' && onTarget && Math.abs(s.x - (this.pilot.move.toward === 'R' ? to.x + to.w - OWL_W / 2 - 6 : to.x + OWL_W / 2 + 6)) < 10;
+      const done = this.pilot.move.kind === 'cross' ? crossed : onTarget;
+      const lost = s.hurtMs > 0 || s.shadeMs > 0 || (s.grounded && this.pilot.phase > 0 && !onTarget && s.stoodMs > 50);
+      if (done || lost) {
         this.pilot = null;
-        if (onTarget && to.w >= this.layout.start.w) this.restUntil = s.t + AUTO_REST_MS;
-      } else return pilotInput(s, this.pilot);
+        if (done && isBench(this.layout, to)) this.restUntil = s.t + AUTO_REST_MS;
+      } else return pilotInput(s, this.pilot, this.layout, this.night);
     }
-    if (!s.grounded || s.t < this.restUntil) return NO_INPUT;
-    const standing = all.find((p) => Math.abs(p.y - s.y) < 0.5 && s.x - OWL_W / 2 < p.x + p.w && s.x + OWL_W / 2 > p.x);
-    const road = roadPlatforms(this.layout, 'stairs');
-    const next = road.find((p) => p.y > s.y + 0.5);
-    if (!standing || !next) return NO_INPUT;
-    const move = moveBetween(standing, next);
-    this.pilot = pilotFor(standing, move, waitToLaunch(s, standing, move, this.layout, this.night, all) ?? 0);
-    return pilotInput(s, this.pilot);
+    if (!s.grounded || s.t < this.restUntil || s.hurtMs > 0) return NO_INPUT;
+    const standing = this.standingOn(s);
+    if (!standing) return NO_INPUT;
+    // The next move: the one after the route's last move onto this platform (a corridor is entered
+    // and then crossed: the crossing itself while the owl is short of its far end), or the first
+    // move that climbs from here.
+    let here = -1;
+    this.route.forEach((m, i) => {
+      if (m.to.x === standing.x && m.to.y === standing.y && m.to.w === standing.w) here = i;
+    });
+    const last = here >= 0 ? this.route[here]! : null;
+    const farEnd = last?.kind === 'cross' ? (last.toward === 'R' ? last.to.x + last.to.w - OWL_W / 2 - 6 : last.to.x + OWL_W / 2 + 6) : null;
+    const next = last && farEnd !== null && Math.abs(s.x - farEnd) >= 10 ? last : here >= 0 ? this.route[here + 1] : this.route.find((m) => m.to.y > s.y + 0.5);
+    if (!next) return NO_INPUT;
+    this.pilot = pilotFor(standing, next, waitToLaunch(s, standing, next, this.layout, this.night, this.all) ?? 0);
+    return pilotInput(s, this.pilot, this.layout, this.night);
   }
 }
 
@@ -149,7 +171,7 @@ export class Climb {
     const night = NIGHTS[reply.night] ?? NIGHTS[reply.tier]!;
     const layout = LAYOUTS[night.layout]!;
     this.run?.retry && clearTimeout(this.run.retry);
-    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, ref: null, over: false, taught: new Set(), auto: null, hintTimer: null };
+    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, ref: null, over: false, taught: new Set(), auto: null, hintTimer: null, panes: night.panes };
     this.host.hud.openClimb(
       { tier: reply.tier, night: reply.night, banked: reply.banked, remainingCap: reply.remainingCap, cap: PLAY_FEATHERS_PER_DAY, bestBandToday: reply.bestBandToday, resumed: reply.resumed, previousForgotten: reply.previousForgotten },
       { frame: (rect) => this.frame(rect), start: () => this.start() },
@@ -168,13 +190,16 @@ export class Climb {
       look: this.host.look(),
       input: () => {
         const auto = this.run?.auto;
-        const s = auto ? (this.host.scene.scene.get('climb') as ClimbScene | null)?.snapshot() : null;
-        return auto && s ? auto.input(s) : this.host.hud.climbInput();
+        const s = auto ? view.snapshot() : null;
+        const input = auto && s ? auto.input(s) : this.host.hud.climbInput();
+        view.held(input);
+        return input;
       },
       onStep: (s) => this.step(s),
       calm: this.host.calm(),
     });
     if (this.frameRect) view.frame(this.frameRect);
+    this.host.hud.climbPanes(run.night.panes, run.night.panes);
     this.teach('run', COARSE() ? 'Push the stick to run, tap Jump to jump' : 'Arrows run, Space jumps');
   }
 
@@ -227,24 +252,29 @@ export class Climb {
     (this.host.scene.scene.get('climb') as ClimbScene | null)?.frame(rect);
   }
 
-  /** Every frame of the climb: the hints as the owl learns, and each new band line to the room. */
+  /** Every frame of the climb: the panes, the hints as the owl learns, and each new band line to the room. */
   private step(s: ClimbState): void {
     const run = this.run;
     if (!run || run.over) return;
+    if (s.panes !== run.panes) {
+      run.panes = s.panes;
+      this.host.hud.climbPanes(s.panes, run.night.panes);
+    }
+    const coarse = COARSE();
+    // The verbs, each taught once as the tower first asks for it.
     if (s.jumpsUsed >= 1 && run.taught.has('run') && !run.taught.has('double')) {
       this.host.hud.climbHint('');
-      if (s.band >= 2) this.teach('double', 'Jump again in the air');
+      if (s.y >= 300) this.teach('double', 'Jump again in the air', HINT_MS);
     }
-    if (s.jumpsUsed === 2 && run.taught.has('double') && !run.taught.has('glide')) {
-      this.host.hud.climbHint('');
-      if (s.band >= 4) this.teach('glide', 'Hold Jump after the double jump to glide');
-    }
-    if (s.gliding && run.taught.has('glide')) this.host.hud.climbHint('');
-    // The obstacles, each explained once as it first matters: the lanterns from band 3, the gusts from band 4, frail glass when stood on, a knock when it lands.
-    if (s.band >= 2 && run.taught.has('double')) this.teach('lantern', 'Lanterns swing across the gaps: jump as one passes', HINT_MS);
-    if (s.band >= 3 && run.taught.has('lantern')) this.teach('gust', 'The wind gusts here: jump in a lull, or lean into it', HINT_MS);
-    if (s.grounded && s.stoodMs > 0 && run.layout.ledges.some((l) => l.frail && Math.abs(l.y - s.y) < 0.5 && s.x - OWL_W / 2 < l.x + l.w && s.x + OWL_W / 2 > l.x)) this.teach('frail', 'Frail glass: jump again before it gives', HINT_MS);
-    if (s.stunMs > 0) this.teach('knock', 'Knocked down! Let the lantern swing past next time', HINT_MS);
+    if (s.y >= 560 && s.band === 0) this.teach('dash', coarse ? 'Tap Dash in the air to cross a wide gap' : 'Shift (or X) dashes: cross the wide gap in the air', HINT_MS);
+    if (s.band === 1 && s.y >= 1400) this.teach('wall', coarse ? 'Push into a wall to cling; tap Jump to kick off it' : 'Hold into a wall to cling; Space kicks off it', HINT_MS);
+    if (s.band >= 1 && run.taught.has('wall')) this.teach('panes', 'Your panes are your glass: a hazard cracks one, a bench relights them', HINT_MS);
+    if (s.band === 2 && s.y >= 2500) this.teach('lantern', coarse ? 'Lanterns swing: pass as one swings away, or hold the stick down to bounce off its glass' : 'Lanterns swing: time your jump, or hold Down to bounce off their glass', HINT_MS);
+    if (s.band === 2 && s.y >= 3000) this.teach('pogo', coarse ? 'This gap needs the bounce: talons down (stick down) on the lantern' : 'This gap needs the bounce: hold Down over the lantern', HINT_MS);
+    if (s.band === 3 && s.y >= 3800) this.teach('moth', 'Glass moths patrol: hop them, and mind the thorn ceiling', HINT_MS);
+    if (s.grounded && s.stoodMs > 0 && run.layout.ledges.some((l) => l.frail && Math.abs(l.y - s.y) < 0.5 && s.x - OWL_W / 2 < l.x + l.w && s.x + OWL_W / 2 > l.x)) this.teach('frail', 'Frail glass: move on before it gives', HINT_MS);
+    if (s.event === 'thorns') this.teach('thorns', 'Thorn glass: back to your last safe ground', HINT_MS);
+    if (s.event === 'shade') this.teach('shade', 'Your last pane cracked: the bench takes you back', HINT_MS);
     if (s.band > run.sent) void this.ascend(s.band);
   }
 

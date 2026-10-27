@@ -113,13 +113,15 @@ describe('the climb book: bands', () => {
   it('pays a brisk feather for a storey climbed within the high road’s window, judged from the storey below', () => {
     const { climb, store } = setup();
     climb.start(CID, AT, MON);
-    // Bands 1 and 2 pay no brisk feather: no high road, and a high road that is no gamble.
+    // Band 1 pays no brisk feather (no high road); band 2 dawdled past its window: the table value alone.
     expect(briskMs(EASY, 1)).toBe(0);
-    expect(briskMs(EASY, 2)).toBe(0);
+    expect(briskMs(EASY, 2)).toBeGreaterThan(0);
     expect(climb.band(CID, 7, 1, reach(1))).toMatchObject({ ok: true, added: 1, brisk: 0 });
-    expect(climb.band(CID, 7, 2, reach(2))).toMatchObject({ ok: true, added: 1, brisk: 0 });
+    const dawdled = Math.max(reach(2), reach(1) + briskMs(EASY, 2) + 1000);
+    expect(climb.band(CID, 7, 2, dawdled)).toMatchObject({ ok: true, added: 1, brisk: 0 });
     // Band 3 within its window of band 2's arrival: a feather more, recorded on the row.
-    const quick = reach(2) + briskMs(EASY, 3) - 500;
+    const quick = Math.max(dawdled + briskMs(EASY, 3) - 500, MON + leastClimbMs(EASY, 3) + 250);
+    expect(quick - dawdled).toBeLessThanOrEqual(briskMs(EASY, 3));
     expect(climb.band(CID, 7, 3, quick)).toMatchObject({ ok: true, banked: 3, added: BAND_FEATHERS[2]! + BRISK_FEATHERS, total: 5, brisk: 1 });
     expect(store.bands(CID, 7)[2]).toMatchObject({ band: 3, brisk: true, due: BAND_FEATHERS[2]! + BRISK_FEATHERS, added: 3 });
     // Band 4 dawdled: the table value alone.
