@@ -183,6 +183,28 @@ def open_raw(path: Path) -> Image.Image:
     return img
 
 
+def open_base(ctx: Ctx, key: str, flag: str | None) -> tuple[Image.Image, str, dict | None]:
+    """The image ``cut`` and ``patch`` work on, its name and its sidecar: the key's picked candidate,
+    a raw file, or several files laid side by side, left to right (``a,b``: a room's screens, for an
+    edit across their join; they must be one height)."""
+    if flag and "," in flag:
+        paths = [Path(p) for p in flag.split(",")]
+        for p in paths:
+            if not p.exists():
+                raise ArtError(f"raw file {p} does not exist")
+        imgs = [open_raw(p).convert("RGB") for p in paths]
+        if len({i.height for i in imgs}) != 1:
+            raise ArtError(f"files laid side by side must be one height: {', '.join(f'{p.name} {i.width}x{i.height}' for p, i in zip(paths, imgs))}")
+        row = Image.new("RGB", (sum(i.width for i in imgs), imgs[0].height))
+        x = 0
+        for i in imgs:
+            row.paste(i, (x, 0))
+            x += i.width
+        return row, "+".join(p.name for p in paths), None
+    raw, sc = resolve_raw(ctx, key, flag)
+    return open_raw(raw), raw.name, sc
+
+
 def sidecar_subset(sc: dict | None) -> dict | None:
     """The sidecar fields the post record and the provenance line carry (result URL without its query)."""
     if not sc:
@@ -353,8 +375,11 @@ def patch_lines(sc: dict | None) -> list[str]:
     if not p:
         return []
     base, edit, bb = p["base"], p["edit"], p["patch_bbox"]
-    return [f"patch: {edit['key']} seed {edit['seed']} ({edit['file']}) pasted into {base['key']} seed {base['seed']} ({base['file']}) "
-            f"at x {bb[0]}..{bb[2]}, y {bb[1]}..{bb[3]} ({p['patched_px']} px changed, tone shift {p['tone_shift']})"]
+    # Screens laid side by side have no candidate of their own: the files name them.
+    into = f"{base['key']} seed {base['seed']} ({base['file']})" if base.get("key") else base["file"]
+    joins = f", joined along cuts in x {p['join_columns'][0][0]}..{p['join_columns'][0][1]} and {p['join_columns'][1][0]}..{p['join_columns'][1][1]}" if p.get("join_columns") else ""
+    return [f"patch: {edit['key']} seed {edit['seed']} ({edit['file']}) pasted into {into} "
+            f"at x {bb[0]}..{bb[2]}, y {bb[1]}..{bb[3]} ({p['patched_px']} px changed, tone shift {p['tone_shift']}{joins})"]
 
 
 def cmd_room(ctx: Ctx, a: argparse.Namespace) -> int:
@@ -726,14 +751,18 @@ def parse_ints(s: str, n: int, what: str) -> tuple[int, ...]:
 def cmd_cut(ctx: Ctx, a: argparse.Namespace) -> int:
     """A crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)."""
     key = validate_key(a.key, assets=ctx.assets)
-    raw, _ = resolve_raw(ctx, a.base_key, a.base)
+    img, name, _ = open_base(ctx, a.base_key, a.base)
     box = parse_ints(a.box, 4, "--box")
     out = ctx.work / "canvas" / f"{key}.png"
     try:
-        n = pngmeta.save(cut_crop(open_raw(raw), box), out)
+        crop = cut_crop(img, box)
     except ValueError as e:
         raise ArtError(str(e)) from None
-    note(f"cut {key}: {rel_to_repo(out)} ({n} bytes; {raw.name} at x {box[0]}..{box[2]}, y {box[1]}..{box[3]})")
+    if a.half:
+        # Sent at half size, as a wing's canvas is: the edit job still asks for the crop's own size.
+        crop = crop.resize((crop.width // 2, crop.height // 2), Image.Resampling.LANCZOS)
+    n = pngmeta.save(crop, out)
+    note(f"cut {key}: {rel_to_repo(out)} ({n} bytes; {name} at x {box[0]}..{box[2]}, y {box[1]}..{box[3]}{', at half size' if a.half else ''})")
     return 0
 
 
@@ -741,25 +770,25 @@ def cmd_patch(ctx: Ctx, a: argparse.Namespace) -> int:
     """A picked candidate with an edit of one of its crops pasted back where the edit changed it,
     written as a new raw candidate of the key (select it with generate.mjs select)."""
     key = validate_key(a.key, assets=ctx.assets)
-    base, base_sc = resolve_raw(ctx, a.base_key, a.base)
+    base_img, base_name, base_sc = open_base(ctx, a.base_key, a.base)
     edit, edit_sc = resolve_raw(ctx, a.edit_key, a.edit)
     at = parse_ints(a.at, 2, "--at")
     box = parse_ints(a.box, 4, "--box") if a.box else None
     try:
-        img, rep = patch_edit(open_raw(base), open_raw(edit), at, box, threshold=a.threshold, grow=a.grow, close=a.close, feather=a.feather)
+        img, rep = patch_edit(base_img, open_raw(edit), at, box, threshold=a.threshold, grow=a.grow, close=a.close, feather=a.feather, join=a.join)
     except ValueError as e:
         raise ArtError(str(e)) from None
     data = pngmeta.encode(img, compress_level=6, optimize=False)
     h = sha256_bytes(data)[:16]
     d = ctx.work / "raw" / key
     pngmeta.write_bytes(d / f"{h}.png", data)
-    src = lambda p, sc: {"key": (sc or {}).get("key"), "file": p.name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
+    src = lambda name, sc: {"key": (sc or {}).get("key"), "file": name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
     b = base_sc or {}
     sc = {"schema": 1, "key": key, "kind": b.get("kind", ctx.assets.get(key, {}).get("kind")), "realm": b.get("realm"), "provider": b.get("provider"), "model": b.get("model"),
           "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
           "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
           "key_colour": b.get("key_colour"), "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "patch", "cost_estimate_usd": 0, "provider_meta": {},
-          "patched": {"base": src(base, base_sc), "edit": src(edit, edit_sc), **rep}}
+          "patched": {"base": src(base_name, base_sc), "edit": src(edit.name, edit_sc), **rep}}
     (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
     note(f"patch {key}: {rel_to_repo(d / f'{h}.png')}, {rep['patched_px']} px from {edit.name} in x {rep['patch_bbox'][0]}..{rep['patch_bbox'][2]}, "
          f"y {rep['patch_bbox'][1]}..{rep['patch_bbox'][3]}, tone shift {rep['tone_shift']}; select it with: node tools/art/generate.mjs select {key} {h}")
@@ -1255,15 +1284,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("cut", help="a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)")
     sp.add_argument("key", help="the edit job's key (the crop is written to <work>/canvas/<key>.png)")
     sp.add_argument("--base-key", required=True, help="the key whose candidate is cut (its SELECTED one unless --base)")
-    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b: a room's screens, to edit across their join)")
     sp.add_argument("--box", required=True, help="x0,y0,x1,y1 in the candidate's pixels")
+    sp.add_argument("--half", action="store_true", help="write the crop at half size, for a crop whose PNG is over the generator's inline limit (the edit job asks for the full size)")
     add_common(sp)
     sp.set_defaults(fn=cmd_cut)
 
     sp = sub.add_parser("patch", help="paste an edit of a crop back into the picked candidate, only where it changed; writes a new raw candidate of <key>")
     sp.add_argument("key", help="the key the patched candidate is for")
     sp.add_argument("--base-key", required=True, help="the key whose candidate is patched (its SELECTED one unless --base)")
-    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b: a room's screens; finish each with room --crop left|right)")
     sp.add_argument("--edit-key", required=True, help="the edit job's key (its SELECTED candidate unless --edit)")
     sp.add_argument("--edit", default=None, help="a raw candidate file instead of the SELECTED one")
     sp.add_argument("--at", required=True, help="x,y: where the edited crop's top-left corner sits in the candidate (the cut box's x0,y0)")
@@ -1272,6 +1302,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--grow", type=int, default=6, help="px the patch grows past the changed pixels")
     sp.add_argument("--close", type=int, default=8, help="px of gaps bridged inside the patch")
     sp.add_argument("--feather", type=float, default=2.5, help="blur radius of the patch's edge")
+    sp.add_argument("--join", type=int, default=0, help="px at the box's left and right sides within which the edit joins the painting along the cheapest top-to-bottom cut (a band across a seam; with --threshold 0 the whole box)")
     add_common(sp)
     sp.set_defaults(fn=cmd_patch)
 

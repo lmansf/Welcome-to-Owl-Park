@@ -307,6 +307,21 @@ test("the arcade: its painting in the market's style, and an edit of the street'
   assert.match(door.prompt, /no letters/);
 });
 
+test("the stained-glass realm's seam (OP-125): an edit of a crop across the join, patched into both screens, never published itself", () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  const seam = jobs.get('glass-seam');
+  assert.ok(P.HELPER_KEYS.includes('glass-seam'), 'the edit is a helper, never published');
+  assert.ok(!('glass-seam' in ASSETS.keys), 'no asset of its own');
+  assert.deepEqual([seam.kind, seam.size, seam.variants, seam.derives], ['anchor', '1280x1800', 4, ['glass', 'glass-east']]);
+  assert.deepEqual(seam.refs.map((r) => [r.ref, r.optional]), [['@canvas:glass-seam', false]]);
+  assert.match(seam.prompt, /^Edit this painting/);
+  assert.match(seam.prompt, /Repaint only the middle half of the frame/);
+  assert.match(seam.prompt, /No text, letters or numbers anywhere/);
+  // Under the 1536 x 1536 pixel count, so each candidate costs the lower price.
+  const [w, h] = seam.size.split('x').map(Number);
+  assert.ok(w * h <= 1536 * 1536);
+});
+
 test("the arcade's bays: an edit of the published hall, each hall candidate's two east wings, three titles; the picks are the arcade's own", () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   const halls = [1, 2, 3].flatMap((n) => [`arcade-bays-b${n}`, `arcade-bays-c${n}`]);

@@ -345,16 +345,23 @@ export const ROOMS: Record<string, RoomDef> = {
     foregrounds: [],
     mood: 'dusk',
     // The floor as painted (OP-127): it starts at the arch back into the tree (the trunk left of it is
-    // bark) and goes round the idol's plinth, which stands on it and is no floor itself.
+    // bark) and goes round the idol's plinth, which stands on it and is no floor itself. Past the
+    // plinth it keeps to the pavement where the two screens join (repainted, OP-125): the pink
+    // shopfront's stone base, into its lit doorway porch, along the next building's ledge, then the
+    // plaza's far edge.
     walkable: [
       [
         { x: 140, y: 690 },
         { x: 1140, y: 690 },
         { x: 1140, y: 815 },
         { x: 1380, y: 815 },
-        { x: 1380, y: 690 },
-        { x: 1500, y: 690 },
-        { x: 1520, y: 705 },
+        { x: 1380, y: 758 },
+        { x: 1600, y: 758 },
+        { x: 1612, y: 732 },
+        { x: 1745, y: 732 },
+        { x: 1757, y: 748 },
+        { x: 1960, y: 748 },
+        { x: 1990, y: 705 },
         { x: 2400, y: 705 },
         { x: 2420, y: 690 },
         { x: 3200, y: 690 },
