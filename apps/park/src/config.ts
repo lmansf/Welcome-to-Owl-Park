@@ -60,6 +60,12 @@ export interface ParkConfig {
   sleepAfterMs: number;
   awayAskMs: number;
   awayAnswerMs: number;
+  /**
+   * The fit overlay (OP-127, `?boxes=1`): every interactable's trigger box, what each sprite draws,
+   * its centre and its marker's place, for checking the fit by eye. Development builds, and a build
+   * with VITE_BOXES=on (a preview for QA); never the live park, where players would see it.
+   */
+  boxes: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -102,5 +108,6 @@ export function readConfig(): ParkConfig {
     sleepAfterMs: seconds(q.get('sleep'), 45) * 1000,
     awayAskMs: seconds(q.get('away'), 10 * 60) * 1000,
     awayAnswerMs: seconds(q.get('answer'), 60) * 1000,
+    boxes: q.get('boxes') === '1' && (env.DEV || ((env.VITE_BOXES as string | undefined) ?? '').trim() === 'on'),
   };
 }

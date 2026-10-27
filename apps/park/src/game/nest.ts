@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { NEST_SPOTS, getFurniture, type NestLayout, type NestSpot, type NestSpotId } from '@owl-park/shared';
 import { ensurePlaceholder } from './art';
+import { footOrigin } from './fit';
 import { pieceDepth } from './nestPlan';
 
 /** The rings that mark the spots while the owner decorates: above every piece and owl, below the HUD's own. */
@@ -32,7 +33,9 @@ export class NestDecor {
       const piece = item ? getFurniture(item) : null;
       if (!piece || piece.place !== spot.place) continue;
       ensurePlaceholder(this.scene, piece.art);
-      const image = this.scene.add.image(spot.x, spot.y, piece.art).setOrigin(0.5, 1).setDisplaySize(piece.size.w, piece.size.h).setDepth(pieceDepth(spot, piece));
+      // Stood on its spot by what it draws, not by its frame's padding (OP-127).
+      const foot = footOrigin(piece.art);
+      const image = this.scene.add.image(spot.x, spot.y, piece.art).setOrigin(foot.x, foot.y).setDisplaySize(piece.size.w, piece.size.h).setDepth(pieceDepth(spot, piece));
       // A piece arriving settles into place.
       const sx = image.scaleX;
       const sy = image.scaleY;
@@ -40,6 +43,11 @@ export class NestDecor {
       this.scene.tweens.add({ targets: image, scaleX: sx, scaleY: sy, alpha: 1, duration: 260, ease: 'Back.easeOut' });
       this.pieces.set(spot.id, { item: piece.id, image });
     }
+  }
+
+  /** The pieces standing in the nest, by art key, for the fit overlay (OP-127). */
+  fitSprites(): Array<{ key: string; image: Phaser.GameObjects.Image }> {
+    return [...this.pieces.values()].map((p) => ({ key: getFurniture(p.item)?.art ?? p.item, image: p.image }));
   }
 
   /** Decorate mode: a ring on every spot, `selected` in gold; a tap on a spot (or on its piece) picks it. */

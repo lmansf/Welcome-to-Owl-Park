@@ -37,7 +37,7 @@ from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
                           synth_overlay, synth_owl_master, synth_room)
-from artlib import patch, wings  # noqa: E402
+from artlib import patch, sprites, wings  # noqa: E402
 import owl_layers  # noqa: E402
 import postprocess  # noqa: E402
 
@@ -746,6 +746,56 @@ class TestWings(unittest.TestCase):
         ImageDraw.Draw(blocker).rectangle((780, 740, 820, 780), fill=(10, 10, 10, 255))
         self.assertTrue(any("stage marker" in v for v in check_overlay(blocker, view, "market")["violations"]))
         self.assertFalse(any("stage" in v for v in check_overlay(blocker, tile_view(geom, "market", 0, 0), "market")["violations"]))
+
+
+class TestSprites(unittest.TestCase):
+    """The sprite manifest (OP-127): what each published sprite draws, trimmed of its padding."""
+
+    def test_the_drawn_box_skips_transparent_padding_and_faint_fringe(self):
+        img = Image.new("RGBA", (40, 30), (0, 0, 0, 0))
+        ImageDraw.Draw(img).rectangle((10, 5, 19, 24), fill=(200, 100, 50, 255))
+        img.putpixel((2, 2), (255, 255, 255, sprites.ALPHA))  # an export's fringe: not drawn
+        self.assertEqual(sprites.drawn_box(img), (10, 5, 10, 20))
+        self.assertEqual(sprites.drawn_box(Image.new("RGB", (8, 6))), (0, 0, 8, 6), "no alpha: drawn edge to edge")
+        self.assertIsNone(sprites.drawn_box(Image.new("RGBA", (8, 6), (0, 0, 0, 0))))
+        # A palette image keeps its transparency in the palette.
+        self.assertEqual(sprites.drawn_box(img.convert("P")), (10, 5, 10, 20))
+
+    def test_measured_on_the_2x_file_rounded_outward_with_a_half_pixel_centre(self):
+        one = Image.new("RGBA", (40, 30), (0, 0, 0, 0))
+        two = Image.new("RGBA", (80, 60), (0, 0, 0, 0))
+        ImageDraw.Draw(two).rectangle((21, 11, 40, 50), fill=(0, 0, 0, 255))  # x 21..41, y 11..51 at 2x
+        e = sprites.measure(one, two)
+        self.assertEqual(e["size"], [40, 30])
+        self.assertEqual(e["drawn"], [10, 5, 11, 21], "10.5..20.5 -> 10..21, 5.5..25.5 -> 5..26")
+        self.assertEqual(e["centre"], [15.5, 15.5])
+        self.assertEqual(e["solid"], e["drawn"], "drawn fully opaque, so the object is all of it")
+        # A glow round the object is drawn, but it is not the object.
+        ImageDraw.Draw(two).rectangle((0, 0, 79, 9), fill=(255, 220, 120, 60))
+        glow = sprites.measure(one, two)
+        self.assertEqual((glow["drawn"], glow["solid"]), ([0, 0, 40, 26], [10, 5, 11, 21]))
+        # Without its 2x file, the 1x file is measured.
+        self.assertEqual(sprites.measure(two.resize((40, 30)))["size"], [40, 30])
+
+    def test_the_manifest_has_one_line_per_sprite_and_is_the_same_twice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pub = Path(tmp)
+            a = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+            ImageDraw.Draw(a).rectangle((5, 5, 9, 9), fill=(1, 2, 3, 255))
+            a.save(pub / "b-thing.png")
+            a.resize((40, 40), Image.Resampling.NEAREST).save(pub / "b-thing@2x.png")
+            Image.new("RGB", (10, 10)).save(pub / "a-flat.png")
+            (pub / "room.webp").write_bytes(b"")  # rooms are not sprites
+            text = sprites.dumps(sprites.build(pub))
+            self.assertEqual(text, sprites.dumps(sprites.build(pub)))
+            m = json.loads(text)
+            self.assertEqual(list(m["sprites"]), ["a-flat", "b-thing"])
+            self.assertEqual(m["sprites"]["b-thing"]["drawn"], [5, 5, 5, 5])
+            self.assertEqual(sum(1 for line in text.splitlines() if '"size"' in line), 2)
+
+    def test_the_committed_manifest_matches_the_published_art(self):
+        with mock.patch("sys.stderr", new=io.StringIO()) as err:
+            self.assertEqual(postprocess.main(["sprites", "--check"]), 0, err.getvalue())
 
 
 class TestPatch(unittest.TestCase):

@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
-import type { NpcDef } from '@owl-park/shared';
+import { FIT, SPRITES, speciesOf, type NpcDef } from '@owl-park/shared';
 import type { NpcMark } from '../collect/quests';
-import { Owl } from './Owl';
+import { SPECIES_LAYERS } from './art';
+import type { NpcFit } from './fitOverlay';
+import { OWL_SCALE, Owl } from './Owl';
 import { symbolTexture, type SymbolName } from './symbols';
 
 /** The marker over an NPC owl: gold "!" for a new quest, gold "?" for one to hand back, pale "?" when a step asks for it. */
@@ -12,8 +14,25 @@ const MARKS: Record<Exclude<NpcMark, null>, { symbol: SymbolName; tint: number }
 };
 /** How often an NPC plays one of its idle emotes (ms, random in between). */
 const IDLE_MS: readonly [number, number] = [7_000, 16_000];
-/** The marker floats this far above the feet (room pixels), clear of hats. */
-const MARK_Y = -168;
+/** Owls to talk to are easier to tap than things (OP-127): this much more round them, in room pixels. */
+export const NPC_TAP_EXTRA = 20;
+/** The owl canvas' feet (as Owl draws it). */
+const FEET = { x: 100, y: 240 };
+
+/**
+ * The tap area round an NPC owl, in its own units (origin at the feet, before its scale): its body as
+ * drawn, grown by the fit rules' margin plus NPC_TAP_EXTRA, as wide each side of the feet so it holds
+ * whichever way the owl looks (OP-127).
+ */
+export function npcHitArea(def: NpcDef): Phaser.Geom.Rectangle {
+  const sp = speciesOf(def.look);
+  const k = OWL_SCALE * sp.size;
+  const body = SPRITES[SPECIES_LAYERS[sp.id]?.[0] ?? 'owl-body']?.solid ?? SPRITES['owl-body']?.solid ?? [0, 0, 200, 240];
+  const grow = (FIT.margin + NPC_TAP_EXTRA) / k;
+  const half = Math.max(FEET.x - body[0], body[0] + body[2] - FEET.x) + grow;
+  const top = body[1] - FEET.y - grow;
+  return new Phaser.Geom.Rectangle(-half, top, 2 * half, -top + grow);
+}
 /**
  * The '!' over the owl the visitor can talk to now (OP-114): Interact's mark (a cream stroke and a
  * gold dot) on a dark pill, one colour in every realm. It pops in, bobs once a second (still under
@@ -53,14 +72,14 @@ export class NpcOwl {
     this.owl = new Owl(scene, `npc:${def.id}`, def.look, def.pos, textureScale);
     this.owl.face(def.facing);
     // The hit area is in the owl's own units (origin at the feet, before its scale).
-    this.owl.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-95, -235, 190, 245), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
+    this.owl.setInteractive({ hitArea: npcHitArea(def), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
     this.owl.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onTap(this, pointer, event));
     this.label = scene.add
       .text(x, y + 16, def.name, { fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', fontSize: '17px', fontStyle: '700', color: '#F6F1E3', stroke: '#0C1E36', strokeThickness: 4, resolution: 2 })
       .setOrigin(0.5, 0)
       .setDepth(y + 1);
-    this.markGlow = scene.add.image(x, y + MARK_Y, 'fx-glow').setScale(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(y + 2).setVisible(false);
-    this.mark = scene.add.image(x, y + MARK_Y, symbolTexture(scene, 'bang')).setScale(1.15).setDepth(y + 3).setVisible(false);
+    this.markGlow = scene.add.image(x, this.markFoot(), 'fx-glow').setScale(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(y + 2).setVisible(false);
+    this.mark = scene.add.image(x, this.markFoot(), symbolTexture(scene, 'bang')).setScale(1.15).setDepth(y + 3).setVisible(false);
     // Drawn as shapes, so it stays crisp however the room is scaled; tapping it talks, as tapping the owl does.
     const { w, h } = APPROACH;
     const pill = scene.add.graphics();
@@ -68,10 +87,33 @@ export class NpcOwl {
     pill.lineStyle(2, 0xf6f1e3, 0.55).strokeRoundedRect(-w / 2, -h / 2, w, h, w / 2);
     pill.fillStyle(0xf6f1e3, 1).fillRoundedRect(-3.2, -14, 6.4, 19, 3.2);
     pill.fillStyle(0xffd36a, 1).fillCircle(0, 11, 3.6);
-    this.approach = scene.add.container(x, y + MARK_Y, [pill]).setDepth(y + 4).setVisible(false).setAlpha(0);
+    this.approach = scene.add.container(x, this.markFoot() - h / 2, [pill]).setDepth(y + 4).setVisible(false).setAlpha(0);
     this.approach.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
     this.approach.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onTap(this, pointer, event));
     this.nextIdleAt = Date.now() + IDLE_MS[0] * Math.random();
+  }
+
+  /**
+   * Where a marker over this owl stands (OP-127): its foot FIT.markerGap above the top of the owl as
+   * drawn, its hat included, whatever its kind and size, and over the middle of its head.
+   */
+  private markFoot(): number {
+    return this.def.pos.y + this.owl.crown() - FIT.markerGap;
+  }
+
+  private markX(): number {
+    return this.def.pos.x + this.owl.anchor('head').x;
+  }
+
+  /** Where it stands, its tap area and its marker's foot, in room pixels, for the fit overlay (OP-127). */
+  fit(): NpcFit {
+    const k = this.owl.scaleX;
+    const r = npcHitArea(this.def);
+    return {
+      pos: { ...this.def.pos },
+      tap: { x: this.owl.x + r.x * k, y: this.owl.y + r.y * k, w: r.width * k, h: r.height * k },
+      mark: { x: this.markX(), y: this.markFoot() },
+    };
   }
 
   /** Whether its '!' says the visitor can talk to it now. */
@@ -128,11 +170,17 @@ export class NpcOwl {
   tick(now: number): void {
     this.owl.tick(now);
     this.lift += ((this.near ? APPROACH.lift : 0) - this.lift) * 0.25;
-    if (this.approach.visible) this.approach.y = this.def.pos.y + MARK_Y + (this.calm ? 0 : Math.sin((now / 1000) * Math.PI * 2) * APPROACH.bob);
+    const foot = this.markFoot();
+    const mx = this.markX();
+    if (this.approach.visible) {
+      this.approach.x = mx;
+      this.approach.y = foot - APPROACH.h / 2 + (this.calm ? 0 : Math.sin((now / 1000) * Math.PI * 2) * APPROACH.bob);
+    }
     if (this.shown) {
       const bob = Math.sin(now / 320) * 5;
-      this.mark.y = this.def.pos.y + MARK_Y + bob - this.lift;
-      this.markGlow.y = this.mark.y;
+      this.mark.x = mx;
+      this.mark.y = foot - this.mark.displayHeight / 2 + bob - this.lift;
+      this.markGlow.setPosition(mx, this.mark.y);
       this.markGlow.setAlpha(0.55 + Math.sin(now / 420) * 0.2);
     }
     if (now >= this.nextIdleAt) {

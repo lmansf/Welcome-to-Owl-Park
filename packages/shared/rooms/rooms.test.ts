@@ -379,7 +379,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       const [a, b] = [through(e, 0), through(e, 1)];
       return a.x !== b.x || a.y !== b.y;
     });
-    expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual(['grove:to-hub', 'homes:to-lobby', 'hub:to-grove', 'hub:to-lobby', 'lobby:gate', 'lobby:to-homes']);
+    // The stained-glass street's way back is its painted arch in the far wall (OP-127), as the hub's east arch is.
+    expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual(['glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'lobby:gate', 'lobby:to-homes']);
   });
 
   it("takes the owl through the gate's left turnstile, between the plinth and the first post, onto the hub's path at its left", () => {

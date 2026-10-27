@@ -3,8 +3,9 @@
  * colourway. Cheap by design (a few emitters capped at a couple of dozen live particles, no
  * shaders), so a room full of sparkling owls still runs on a phone.
  *
- * Emitters sit at (0, 0) and follow the owl, so trails stay where they were dropped in the
- * world; glows and orbiting rigs live in the owl's own containers and turn and bob with it.
+ * Emitters sit at (0, 0) and follow the owl's drawn anchors (through hops, bobs and emotes), so
+ * trails stay where they were dropped in the world; glows and orbiting rigs live in the owl's own
+ * containers and turn and bob with it.
  */
 import Phaser from 'phaser';
 import { hexToInt, parseVariant } from '@owl-park/shared';
@@ -22,6 +23,8 @@ export interface FxHost {
   facing(): 1 | -1;
   isWalking(): boolean;
   anchor(name: AnchorName): { x: number; y: number };
+  /** The same anchor where it is drawn right now: lifted by a hop, bobbing with the walk, turned by an emote. */
+  drawnAnchor(name: AnchorName): { x: number; y: number };
   /** The same anchor in owl canvas units inside the owl's containers (origin at the feet, as painted). */
   localAnchor(name: AnchorName): { x: number; y: number };
   /** Containers inside the owl (owl canvas units, origin at the feet): behind and in front of the layers. */
@@ -69,7 +72,7 @@ class Rig implements FxHandle {
   emitter(symbol: SymbolName, at: Parameters<FxHost['anchor']>[0], config: EmitterConfig, opts: { dx?: number; dy?: number; mirror?: boolean; behind?: boolean } = {}): Emitter {
     const scene = this.host.scene;
     const e = scene.add.particles(0, 0, symbolTexture(scene, symbol), { maxAliveParticles: 24, ...config });
-    const a = this.host.anchor(at);
+    const a = this.host.drawnAnchor(at);
     e.startFollow(this.host as unknown as Phaser.Types.Math.Vector2Like, a.x + (opts.dx ?? 0), a.y + (opts.dy ?? 0));
     e.setDepth(this.host.depth + (opts.behind ? -0.5 : 0.5));
     this.emitters.push({ e, at, ...(opts.dx !== undefined ? { dx: opts.dx } : {}), ...(opts.dy !== undefined ? { dy: opts.dy } : {}), ...(opts.mirror !== undefined ? { mirror: opts.mirror } : {}) });
@@ -90,7 +93,7 @@ class Rig implements FxHandle {
   tick(now: number): void {
     const dir = this.host.facing();
     for (const it of this.emitters) {
-      const a = this.host.anchor(it.at);
+      const a = this.host.drawnAnchor(it.at);
       it.e.followOffset.set(a.x + (it.dx ?? 0) * (it.mirror === false ? 1 : dir), a.y + (it.dy ?? 0));
       it.e.setDepth(this.host.depth + 0.5);
     }

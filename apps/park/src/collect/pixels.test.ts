@@ -85,6 +85,9 @@ describe('owl anchors', () => {
     expect(a.neck.y).toBeGreaterThanOrEqual(114);
     expect(a.neck.y).toBeLessThan(122);
     expect(a.neck.w).toBeGreaterThan(20);
+    // The face's top and bottom: the tops of the eyes (y 64) and the beak's tip (y 112).
+    expect(a.brow).toBe(64);
+    expect(a.chin).toBe(113);
   });
 
   it('puts the neck below the beak when the belly layer also covers the face disc', () => {
@@ -102,6 +105,8 @@ describe('owl anchors', () => {
     const a = measureAnchors(body, face, belly);
     expect(a.neck.y).toBeGreaterThanOrEqual(139);
     expect(a.neck.y).toBeLessThan(150);
+    // The chin is the beak's tip, not the feet painted on the same layer.
+    expect(a.chin).toBe(139);
   });
 
   it('centres on the eyes of an owl drawn in a three-quarter turn', () => {
@@ -134,6 +139,8 @@ describe('owl anchors', () => {
     expect(two.eyes.y).toBeCloseTo(one.eyes.y, 0);
     expect(two.head.y).toBeCloseTo(one.head.y, 0);
     expect(two.neck.y).toBeCloseTo(one.neck.y, 0);
+    expect(two.brow).toBeCloseTo(one.brow, 0);
+    expect(two.chin).toBeCloseTo(one.chin, 0);
   });
 
   it('falls back to defaults when the face layer is empty', () => {

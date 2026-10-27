@@ -25,6 +25,8 @@ DEFAULT_WORK_DIR = REPO_ROOT / "work" / "art"
 PALETTES_DIR = TOOLS_ART_DIR / "palettes"
 CONFIG_DIR = TOOLS_ART_DIR / "config"
 PROVENANCE_PATH = TOOLS_ART_DIR / "provenance.jsonl"
+#: The sprite manifest (OP-127): every published sprite's drawn area, read by the park and the room server.
+SPRITES_PATH = REPO_ROOT / "packages" / "shared" / "src" / "sprites.json"
 LOCAL_DIR = TOOLS_ART_DIR / ".local"
 
 #: Every shipped file must encode under this many bytes (the "about 200 KB" rule).

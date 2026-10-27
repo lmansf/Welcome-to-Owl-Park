@@ -36,6 +36,25 @@ describe('resolveTarget', () => {
   });
 });
 
+describe('floor shut for now', () => {
+  // The way into a closed arch: floor, but not while its realm is closed.
+  const shut = [{ x: 40, y: 0, w: 20, h: 60 }];
+  it('stops a walk at its edge', () => {
+    const r = resolveTarget({ x: 50, y: 90 }, { x: 50, y: 20 }, [left], shut);
+    expect(r.x).toBe(50);
+    expect(r.y).toBeGreaterThan(60);
+    expect(r.y).toBeLessThan(70);
+  });
+  it('keeps keyboard walking out of it', () => {
+    expect(walkableReach({ x: 50, y: 90 }, { x: 0, y: -1 }, [left], undefined, shut).y).toBeGreaterThan(60);
+    const t = steerTarget({ x: 50, y: 66 }, { x: 0, y: -1 }, [left], 12, shut);
+    expect(t === null || t.y > 60 || t.x < 40 || t.x > 60).toBe(true);
+  });
+  it('is floor again once it opens', () => {
+    expect(resolveTarget({ x: 50, y: 90 }, { x: 50, y: 20 }, [left])).toEqual({ x: 50, y: 20 });
+  });
+});
+
 describe('walkableReach', () => {
   it('walks to the last walkable sample before the edge', () => {
     const r = walkableReach({ x: 10, y: 50 }, { x: 1, y: 0 }, [left]);

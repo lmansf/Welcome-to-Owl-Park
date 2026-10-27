@@ -343,9 +343,15 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
     foregrounds: [],
     mood: 'dusk',
+    // The floor as painted (OP-127): it starts at the arch back into the tree (the trunk left of it is
+    // bark) and goes round the idol's plinth, which stands on it and is no floor itself.
     walkable: [
       [
-        { x: 0, y: 690 },
+        { x: 140, y: 690 },
+        { x: 1140, y: 690 },
+        { x: 1140, y: 815 },
+        { x: 1380, y: 815 },
+        { x: 1380, y: 690 },
         { x: 1500, y: 690 },
         { x: 1520, y: 705 },
         { x: 2400, y: 705 },
@@ -355,13 +361,15 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 280, y: 888 },
         { x: 250, y: 830 },
         { x: 170, y: 760 },
-        { x: 0, y: 760 },
+        { x: 140, y: 760 },
       ],
     ],
     spawns: { 'default': { x: 330, y: 740 }, 'from-hub': { x: 330, y: 740 } },
     doors: [
-      { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-glass' }, marker: { x: 70, y: 580 } },
-      { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
+      // The painted arch's threshold (x 150 to 290), not the trunk beside it; its glow at the arch's foot.
+      { id: 'to-hub', rect: { x: 150, y: 690, w: 140, h: 75 }, to: { room: 'hub', spawn: 'from-glass' }, marker: { x: 220, y: 728 } },
+      // In front of the plinth: an owl votes standing on the floor before the idol, not on its plinth.
+      { id: 'idol', rect: { x: 1150, y: 816, w: 220, h: 64 }, marker: { x: 1260, y: 848 } },
       // The portal: standing here offers the climb (the client's `interactions` table).
       // The foot of the tall window in the east screen's painting.
       { id: 'portal', rect: { x: 2785, y: 700, w: 200, h: 90 }, marker: { x: 2885, y: 640 } },
