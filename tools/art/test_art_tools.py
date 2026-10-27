@@ -791,6 +791,28 @@ class TestPatch(unittest.TestCase):
         with self.assertRaises(ValueError):
             patch.patch(self.base, self.edit, self.at, box=(0, 0, 12, 12))
 
+    def test_a_band_across_a_seam_joins_each_screen_where_they_agree(self):
+        # Two flat "screens" meeting at x 200, and an edit of a crop across the join (x 100..300)
+        # that paints it grey, except for two narrow strips where it kept the screens as they were
+        # (x 155..165 and 235..245). With every pixel counted (threshold 0) and 40 px joins, the
+        # band takes over from each screen along those strips, where the two agree.
+        base = Image.new("RGB", (400, 60), (200, 40, 40))
+        base.paste((40, 40, 200), (200, 0, 400, 60))
+        edit = Image.new("RGB", (200, 60), (120, 120, 120))
+        edit.paste((200, 40, 40), (55, 0, 65, 60))
+        edit.paste((40, 40, 200), (135, 0, 145, 60))
+        out, rep = patch.patch(base, edit, (100, 0), box=(40, 0, 160, 60), threshold=0, join=40)
+        a, b = np.asarray(base).astype(int), np.asarray(out).astype(int)
+        self.assertTrue((a[:, :140] == b[:, :140]).all() and (a[:, 260:] == b[:, 260:]).all(), "outside the box, the screens' own pixels")
+        self.assertTrue(155 <= rep["join_columns"][0][0] <= rep["join_columns"][0][1] < 165, rep["join_columns"])
+        self.assertTrue(235 <= rep["join_columns"][1][0] <= rep["join_columns"][1][1] < 245, rep["join_columns"])
+        self.assertLessEqual(np.abs(b[30, 145:155] - [200, 40, 40]).max(), 2, "the west screen up to the cut")
+        self.assertLessEqual(np.abs(b[30, 172:228] - [120, 120, 120]).max(), 2, "the edit between the cuts")
+        self.assertLessEqual(np.abs(b[30, 246:260] - [40, 40, 200]).max(), 2, "the east screen after the cut")
+        self.assertEqual(rep["join"], 40)
+        with self.assertRaises(ValueError):
+            patch.patch(base, edit, (100, 0), box=(40, 0, 160, 60), threshold=0, join=70)
+
 
 class TestForbiddenAndProvenance(unittest.TestCase):
     def setUp(self):
@@ -1083,6 +1105,57 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(postprocess.main(["publish", "owl-barn", "--provenance", str(provp)] + common), 0, err.getvalue())
                 self.assertEqual(len(prov.read_lines(provp)), 10)
                 self.assertEqual(postprocess.main(["check", "--all", "--provenance", str(provp)] + common), 0, err.getvalue())
+
+    def test_a_seam_between_two_screens_is_cut_across_patched_and_finished_per_screen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "work"
+            west, east = Path(tmp) / "w.webp", Path(tmp) / "e.webp"
+            west.write_bytes(webpmeta.encode(Image.new("RGB", (640, 360), (200, 40, 40)), 90))
+            east.write_bytes(webpmeta.encode(Image.new("RGB", (640, 360), (40, 40, 200)), 90))
+            common = ["--work", str(work), "--now", "2026-10-27T09:00:00Z"]
+            pair = f"{west},{east}"
+            # The realm as the room server sees it: one room two screens wide.
+            geom = fixture_geometry()
+            geom["rooms"]["glass"] = {"size": {"w": 3200, "h": 900}, "background": "glass", "walkable": [[{"x": 0, "y": 690}, {"x": 3200, "y": 690}, {"x": 3200, "y": 888}, {"x": 0, "y": 888}]],
+                                      "spawns": {"default": {"x": 330, "y": 740}}, "doors": [], "backgrounds": [{"key": "glass", "x": 0, "y": 0}, {"key": "glass-east", "x": 1600, "y": 0}]}
+            work.mkdir()
+            (work / "geometry.json").write_text(json.dumps(geom), encoding="utf-8")
+            with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()):
+                # The crop spans the join at x 640: half of it from each screen.
+                self.assertEqual(postprocess.main(["cut", "glass-seam", "--base-key", "glass", "--base", pair, "--box", "512,0,768,360"] + common), 0, err.getvalue())
+                crop = np.asarray(Image.open(work / "canvas" / "glass-seam.png")).astype(int)
+                self.assertEqual(crop.shape, (360, 256, 3))
+                self.assertLess(np.abs(crop[180, 100] - [200, 40, 40]).max(), 8)
+                self.assertLess(np.abs(crop[180, 156] - [40, 40, 200]).max(), 8)
+                # A crop too big to send whole goes at half size.
+                self.assertEqual(postprocess.main(["cut", "glass-seam", "--base-key", "glass", "--base", pair, "--box", "512,0,768,360", "--half"] + common), 0, err.getvalue())
+                self.assertEqual(Image.open(work / "canvas" / "glass-seam.png").size, (128, 180))
+                # Screens of two heights cannot be laid side by side.
+                tall = Path(tmp) / "t.webp"
+                tall.write_bytes(webpmeta.encode(Image.new("RGB", (640, 400), (0, 0, 0)), 90))
+                self.assertEqual(postprocess.main(["cut", "glass-seam", "--base-key", "glass", "--base", f"{west},{tall}", "--box", "0,0,10,10"] + common), 1)
+                # The edit paints the crop grey; its middle half goes in, joined within 16 px of each side.
+                edits = work / "raw" / "glass-seam"
+                edits.mkdir(parents=True)
+                pngmeta.save(Image.new("RGB", (256, 360), (120, 120, 120)), edits / "e1.png")
+                self.assertEqual(postprocess.main(["patch", "glass", "--base-key", "glass", "--base", pair, "--edit-key", "glass-seam", "--edit", str(edits / "e1.png"),
+                                                   "--at", "512,0", "--box", "64,0,192,360", "--threshold", "0", "--join", "16"] + common), 0, err.getvalue())
+                [patched] = (work / "raw" / "glass").glob("*.png")
+                sc = json.loads(patched.with_suffix(".json").read_text(encoding="utf-8"))
+                self.assertEqual((sc["patched"]["base"]["file"], sc["patched"]["join"], sc["width"], sc["height"]), ("w.webp+e.webp", 16, 1280, 360))
+                # Each screen is finished from its half of the patched pair.
+                self.assertEqual(postprocess.main(["room", "glass", "--raw", str(patched), "--crop", "left", "--grade", "none"] + common), 0, err.getvalue())
+                self.assertEqual(postprocess.main(["room", "glass-east", "--raw", str(patched), "--crop", "right", "--grade", "none"] + common), 0, err.getvalue())
+            w1 = np.asarray(Image.open(work / "final" / "glass.webp").convert("RGB")).astype(int)
+            e1 = np.asarray(Image.open(work / "final" / "glass-east.webp").convert("RGB")).astype(int)
+            self.assertEqual((w1.shape, e1.shape), ((900, 1600, 3), (900, 1600, 3)))
+            self.assertLess(np.abs(w1[450, 100] - [200, 40, 40]).max(), 10, "the west screen as it was")
+            self.assertLess(np.abs(e1[450, 1500] - [40, 40, 200]).max(), 10, "the east screen as it was")
+            self.assertLess(np.abs(w1[450, 1595] - [120, 120, 120]).max(), 10, "both screens meet in the edit")
+            self.assertLess(np.abs(e1[450, 4] - [120, 120, 120]).max(), 10)
+            rec = json.loads((work / "final" / "glass-east.post.json").read_text(encoding="utf-8"))
+            self.assertTrue(any(t.startswith("patch: None seed None (e1.png) pasted into w.webp+e.webp") and "joined along cuts in x" in t for t in rec["tools"]), rec["tools"])
+            self.assertIn("room: crop=right", " ".join(rec["tools"]))
 
     def test_the_street_of_nests_paints_its_west_wing_from_its_painting(self):
         with tempfile.TemporaryDirectory() as tmp:

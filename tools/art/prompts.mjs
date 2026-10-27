@@ -1185,3 +1185,33 @@ const GLASS_JOBS = [
 export const GLASS_KEYS = Object.keys(GLASS_PROMPTS);
 Object.assign(PROMPTS, GLASS_PROMPTS);
 JOBS.push(...GLASS_JOBS);
+
+// The seam between the realm's two screens (OP-125). They were painted apart, the east one with the
+// west one only as a style reference, so at the join the buildings and the pavement do not continue.
+// The edit is a crop across the join of the two published screens laid side by side (`pnpm
+// art:finish cut glass-seam --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --box
+// 2560,0,3840,1800 --half`); its middle half is repainted, `patch --threshold 0 --join` joins that
+// band to each screen where the two agree, and `room glass --crop left` and `room glass-east --crop
+// right` finish each screen.
+// TODO-DOCS (OP-125): docs/ART-PIPELINE.md's "cut and patch" section gets this recipe for a seam between
+// two screens (`--base a,b` laid side by side, `cut --half`, `patch --join`, `room --crop left|right`),
+// and the rule that a realm's second screen is painted out from the first's edge, as the wings were.
+const GLASS_SEAM_PROMPT = `Edit this painting, a tall strip of a city street at dusk in a realm of mosaic skyscrapers whose walls are leaded stained glass lit from within. It was made from two paintings set side by side, and they meet in a hard vertical line down the exact middle of the frame where nothing continues: on the left a shopfront of glowing rose and blue stained-glass panes under a hanging lantern, standing on blue cobblestones; on the right the foot of a tall tower of large lit glass panes in gold, rose and mint, standing on smooth dark paving with a low kerb. Repaint only the middle half of the frame, a quarter of the width either side of that line, so the two sides become one continuous street with no line, seam or change of style anywhere: the shopfront ends in a slim pilaster of dark stone and lead; beside it a narrow shadowed gap between the two buildings rises to a sliver of violet evening sky with a first star; on the far side of the gap the tower begins, its lit panes as they are now. At the bottom the street runs on unbroken across the whole width at one level: the blue cobblestones give way to the smooth dark paving along a plain pale stone edge, so the ground reads as one walkable floor at the same height, open and uncluttered. Keep the left and right quarters of the frame exactly as they are, and match their colours, light and brushwork in the repainted middle: the same framing, straight side-on with no perspective tilt, a hand-painted 2D game background with clean cel-shaded shapes and soft painted gradients. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+
+export const GLASS_SEAM_JOB = {
+  key: 'glass-seam',
+  // A detail edit, not a screen of a room: a helper, patched into both screens.
+  kind: 'anchor',
+  derives: ['glass', 'glass-east'],
+  realm: 'glass',
+  optional: true,
+  size: '1280x1800',
+  seed: 7125,
+  variants: 4,
+  refs: [{ ref: '@canvas:glass-seam', role: "a crop across the join of the realm's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: GLASS_SEAM_PROMPT,
+};
+PROMPTS['glass-seam'] = GLASS_SEAM_PROMPT;
+HELPER_KEYS.push('glass-seam');
+JOBS.push(GLASS_SEAM_JOB);
