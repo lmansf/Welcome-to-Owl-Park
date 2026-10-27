@@ -99,6 +99,20 @@ test.describe('room server', () => {
     await b.context().close();
   });
 
+  test('an idle owl sleeps for everyone in the room: a late joiner sees it asleep, and the others see it wake and doze off again', async ({ browser }) => {
+    const a = await visitor(browser, { sleep: '3' });
+    await expect.poll(async () => (await state(a)).asleep, { timeout: 15_000 }).toBe(true);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers[0]?.asleep, { timeout: 15_000 }).toBe(true);
+    await a.keyboard.press('Shift');
+    await expect.poll(async () => (await state(a)).asleep, { timeout: 5_000 }).toBe(false);
+    await expect.poll(async () => (await state(b)).peers[0]?.asleep, { timeout: 5_000, intervals: [50] }).toBe(false);
+    await expect.poll(async () => (await state(b)).peers[0]?.asleep, { timeout: 15_000 }).toBe(true);
+    expect((await state(a)).asleep).toBe(true);
+    await a.context().close();
+    await b.context().close();
+  });
+
   test('the server clamps a walk that leaves the walkable area', async ({ browser }) => {
     const a = await visitor(browser);
     await a.evaluate(() => window.owlPark.walkTo(2400, 50));

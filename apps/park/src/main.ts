@@ -23,6 +23,7 @@ import { announcePresents } from './ui/presents';
 import type { PreviewFrame } from './ui/owlBuilder';
 import { linkToast } from './ui/tickets';
 import { createRibbon } from './ui/ribbon';
+import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
 
 const cfg = readConfig();
@@ -33,6 +34,13 @@ const settings = deviceSettings();
 const hud = createHud(document.body, look, settings);
 // The busy ribbon (OP-075) across the top of the home screen and every room.
 const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);
+// An owl asleep a long while (OP-126): "Still here?", and the way back once it has left.
+const away = createAway(document.getElementById('hud') as HTMLElement);
+/** When the visitor last did anything on the page: a key, a touch, a click or a scroll (OP-126). */
+const idle = { at: Date.now() };
+for (const type of ['keydown', 'pointerdown', 'wheel', 'touchstart'] as const) {
+  window.addEventListener(type, () => (idle.at = Date.now()), { capture: true, passive: true });
+}
 let storage: Storage | null = null;
 try {
   storage = localStorage;
@@ -102,6 +110,8 @@ game.registry.set('collection', collection);
 game.registry.set('quests', quests);
 game.registry.set('tasks', tasks);
 game.registry.set('ribbon', ribbon);
+game.registry.set('away', away);
+game.registry.set('idle', idle);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
 // touch screens; E interacts (the pad's Interact on touch screens), M opens the Menu, T the Say wheel
@@ -217,6 +227,8 @@ declare global {
       climbAuto(on: boolean): boolean;
       /** The busy ribbon's words as shown (null while it is off or hidden), OP-075. */
       ribbon(): string | null;
+      /** "Still here?" up, the way back after the owl left, or neither (OP-126). */
+      away(): 'ask' | 'gone' | null;
       /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
       scan(id?: string): Promise<ScanReply>;
     };
@@ -511,5 +523,6 @@ window.owlPark = {
   climb: () => roomScene()?.climbRun() ?? null,
   climbAuto: (on) => roomScene()?.climbAuto(on) ?? false,
   ribbon: () => ribbon.shown(),
+  away: () => away.shown(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };

@@ -6,6 +6,12 @@ import { PHONE_ROOM_BUDGET } from './game/artFiles';
 
 export type TransportKind = 'local' | 'supabase' | 'edge';
 
+/** A count of seconds from the page's address, or the default when it is missing or not a positive number. */
+function seconds(v: string | null, fallback: number): number {
+  const n = Number(v);
+  return v !== null && Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 export interface ParkConfig {
   transport: TransportKind;
   supabaseUrl: string;
@@ -45,6 +51,15 @@ export interface ParkConfig {
    * a button must do something (OP-114). Only a build with VITE_PAD_JUMP=on hops; no address turns it on.
    */
   padJump: boolean;
+  /**
+   * An idle owl (OP-126): how long with no key, touch, click, scroll, walk or held stick before it
+   * falls asleep; how long asleep before "Still here?" (never in its own nest); how long that waits
+   * for an answer before the owl leaves the room. Milliseconds; `?sleep=`, `?away=` and `?answer=`
+   * (seconds) set them for a visit, as the browser tests do.
+   */
+  sleepAfterMs: number;
+  awayAskMs: number;
+  awayAnswerMs: number;
 }
 
 export function readConfig(): ParkConfig {
@@ -84,5 +99,8 @@ export function readConfig(): ParkConfig {
     // Phones and tablets (a coarse pointer) keep what a one-screen room costs today; computers get three times that.
     roomArtBudget: (Number(env.VITE_ROOM_ART_BUDGET_MB) * 1024 * 1024) || PHONE_ROOM_BUDGET * (globalThis.matchMedia?.('(pointer: coarse)').matches ? 1 : 3),
     padJump: ((env.VITE_PAD_JUMP as string | undefined) ?? '').trim() === 'on',
+    sleepAfterMs: seconds(q.get('sleep'), 45) * 1000,
+    awayAskMs: seconds(q.get('away'), 10 * 60) * 1000,
+    awayAnswerMs: seconds(q.get('answer'), 60) * 1000,
   };
 }

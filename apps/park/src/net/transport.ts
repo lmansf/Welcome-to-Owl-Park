@@ -26,6 +26,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onPeerEmote?(id: string, emote: string): void;
   /** A peer said a prewritten phrase (its number in the phrase list). */
   onPeerSay?(id: string, phrase: number): void;
+  /** A peer's owl fell asleep or woke (OP-126). */
+  onPeerRest?(id: string, asleep: boolean): void;
   /** The park has a line (OP-075) and this owl has not come through it: it waits on the home screen. */
   onQueued?(): void;
   /** The busy ribbon's words (OP-075), or null when it goes off. */

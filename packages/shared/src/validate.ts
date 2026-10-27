@@ -78,6 +78,8 @@ export function isParkMessage(value: unknown): value is ParkMessage {
     case 'say':
       // A phrase this page does not know is dropped: there is nothing to show for it.
       return isId(value['id']) && isPhrase(value['n']);
+    case 'rest':
+      return isId(value['id']) && typeof value['asleep'] === 'boolean';
     default:
       return false;
   }

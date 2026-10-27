@@ -13,9 +13,13 @@ export interface ParkState {
     emote: string | null;
     /** How high this owl is drawn above the floor (a hop), in room pixels. */
     height: number;
+    /** Asleep where it stands, its visitor idle a while (OP-126). */
+    asleep: boolean;
   }>;
   /** How high this visitor's owl is drawn above the floor (a hop), in room pixels; `pos` stays on the floor. */
   height: number;
+  /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */
+  asleep: boolean;
   /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
   bubbles: Array<{ id: string; n: number }>;
   connected: boolean;

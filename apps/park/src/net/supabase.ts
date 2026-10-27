@@ -92,6 +92,9 @@ export class SupabaseTransport implements ParkTransport {
           case 'say':
             if (known.has(payload.id)) handlers.onPeerSay?.(payload.id, payload.n);
             break;
+          case 'rest':
+            if (known.has(payload.id)) handlers.onPeerRest?.(payload.id, payload.asleep);
+            break;
           case 'hello':
           case 'bye':
             break; // never sent by this transport; presence join/leave is the roster

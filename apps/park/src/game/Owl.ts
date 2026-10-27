@@ -17,6 +17,10 @@ const FEET = { x: 100, y: 240 };
 
 const LAYERS = OWL_LAYERS;
 
+/** Asleep (OP-126): a breath this long, a 'z' this often, and the blink a waking owl gives. */
+const SLEEP = { breathMs: 1500, zEveryMs: 2600, zRiseMs: 700, zFadeMs: 1100, wakeBlinkMs: 150 };
+const Z_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
 /**
  * The layer textures for a look's species: its own (`owl-<species>-body` and so on) once that art
  * is approved and loaded, otherwise the great horned owl's.
@@ -89,6 +93,12 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private layers: readonly string[] = LAYERS;
   private nextBlinkAt = 0;
   private eyesClosedUntil = 0;
+  /** Asleep since (ms), its visitor idle (OP-126); 0 awake. */
+  private asleepSince = 0;
+  /** Calm motion: asleep, it neither heaves nor sends its 'z' drifting. */
+  private calmSleep = false;
+  private nextZAt = 0;
+  private readonly zs: Phaser.GameObjects.Text[] = [];
   private jitter = 0;
   /** When the last hop began (ms): a hop lifts the drawn owl, never its place in the room. */
   private hopAt = Number.NEGATIVE_INFINITY;
@@ -258,6 +268,57 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.eyesClosedUntil = Date.now() + ms;
   }
 
+  /**
+   * Asleep where it stands (OP-126): eyes shut, slow deep breaths, a small 'z' off its head every few
+   * seconds, no sound. Woken, it blinks once and is itself again.
+   */
+  setAsleep(on: boolean, calm = false): void {
+    if (on === this.asleep) return;
+    const now = Date.now();
+    if (on) {
+      this.asleepSince = now;
+      this.calmSleep = calm;
+      this.nextZAt = now + SLEEP.zRiseMs;
+      return;
+    }
+    this.asleepSince = 0;
+    this.eyesClosedUntil = now + SLEEP.wakeBlinkMs;
+    for (const z of this.zs.splice(0)) {
+      this.scene.tweens.killTweensOf(z);
+      z.destroy();
+    }
+  }
+
+  get asleep(): boolean {
+    return this.asleepSince > 0;
+  }
+
+  /** One small 'z' off the head, rising and fading (in calm motion it fades where it is). */
+  private puffZ(): void {
+    const head = this.localAnchor('head');
+    // The z sits on this container, which the owl's turn does not mirror (only its art is), so it
+    // turns with the art by hand and rises from the same side of the head either way.
+    const side = this.dir * this.drawnFacing;
+    const z = this.scene.add
+      .text((head.x + 34) * side, head.y - 4, 'z', { fontFamily: Z_FONT, fontSize: '40px', fontStyle: '800', color: '#F6F1E3', stroke: '#0C1E36', strokeThickness: 8 })
+      .setOrigin(0.5, 1)
+      .setAlpha(0);
+    this.add(z);
+    this.zs.push(z);
+    const drift = this.calmSleep ? 0 : 1;
+    this.scene.tweens.chain({
+      targets: z,
+      tweens: [
+        { alpha: 0.95, x: z.x + 10 * drift * side, y: z.y - 30 * drift, duration: SLEEP.zRiseMs, ease: 'Sine.easeOut' },
+        { alpha: 0, x: z.x + 26 * drift * side, y: z.y - 80 * drift, duration: SLEEP.zFadeMs, ease: 'Sine.easeIn' },
+      ],
+      onComplete: () => {
+        this.zs.splice(this.zs.indexOf(z), 1);
+        z.destroy();
+      },
+    });
+  }
+
   facing(): 1 | -1 {
     return this.dir;
   }
@@ -373,6 +434,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       y = -bob * 10;
       sy = 1 - bob * 0.04;
       shadow = 1 - bob * 0.08;
+    } else if (this.asleep && !this.calmSleep) {
+      // Asleep: slow, deep breaths.
+      const breath = Math.sin((now / SLEEP.breathMs) * Math.PI);
+      sy = 1 + breath * 0.03;
+      sx = 1 - breath * 0.01;
     } else {
       // Idle breathing.
       sy = 1 + Math.sin(now / 900) * 0.012;
@@ -397,8 +463,13 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
     if (this.look.pledge) this.pledgeMark.setAlpha(0.6 + Math.sin(now / 500) * 0.15);
 
-    // Blink now and then (and keep the eyes shut while an emote wants them closed).
-    const closed = now < this.eyesClosedUntil;
+    if (this.asleep && now >= this.nextZAt) {
+      this.puffZ();
+      this.nextZAt = now + SLEEP.zEveryMs;
+    }
+
+    // Blink now and then (and keep the eyes shut while an emote wants them closed, or the owl sleeps).
+    const closed = this.asleep || now < this.eyesClosedUntil;
     if (closed) {
       this.blinkImg.setVisible(true);
       this.faceImg.setVisible(false);
@@ -422,6 +493,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
   override destroy(fromScene?: boolean): void {
     this.destroyed = true;
+    for (const z of this.zs.splice(0)) this.scene?.tweens.killTweensOf(z);
     this.fx?.destroy();
     this.fx = null;
     this.pet?.destroy();

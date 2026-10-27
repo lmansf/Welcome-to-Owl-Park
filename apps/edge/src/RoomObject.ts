@@ -426,6 +426,8 @@ export class RoomObject extends DurableObject<Env> {
         return ws.close(CLOSE.BAD_PROTOCOL, 'duplicate hello');
       case 'move':
         return room.move(att.id, frame);
+      case 'rest':
+        return room.rest(att.id, frame.asleep);
       case 'look': {
         const { look, recheck } = this.vetLook(att, frame.look);
         room.look(att.id, look);
