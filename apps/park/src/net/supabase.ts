@@ -1,4 +1,4 @@
-import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { isParkMessage, isPlayerState, type ParkMessage, type PlayerState } from '@owl-park/shared';
 import type { ParkTransport, RoomConnection, RoomHandlers } from './transport';
 
@@ -13,25 +13,36 @@ const MAX_PEERS = 128;
  * Internet multiplayer on Supabase Realtime, with no server code of our own:
  *  - Presence: who is in the room and their last tracked state (join/leave/sync).
  *  - Broadcast: `move` messages the moment an owl starts walking.
- * One channel per room, named `room:<id>`. Public channels for v1 presence.
+ * One channel per room, named `room:<id>`. Public channels for v1 presence. The Supabase library is
+ * fetched the first time a room is joined, so a page on the room server never downloads it (OP-129).
  */
 export class SupabaseTransport implements ParkTransport {
   readonly kind = 'supabase' as const;
-  private readonly client: SupabaseClient;
+  private readonly url: string;
+  private readonly anonKey: string;
+  private client: Promise<SupabaseClient> | null = null;
 
   constructor(url: string, anonKey: string) {
-    this.client = createClient(url, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      realtime: { params: { eventsPerSecond: 10 } },
-    });
+    this.url = url;
+    this.anonKey = anonKey;
+  }
+
+  private connect(): Promise<SupabaseClient> {
+    this.client ??= import('@supabase/supabase-js').then(({ createClient }) =>
+      createClient(this.url, this.anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        realtime: { params: { eventsPerSecond: 10 } },
+      }),
+    );
+    return this.client;
   }
 
   async join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection> {
     handlers.onStatus('connecting');
-    const channel: RealtimeChannel = this.client.channel(`room:${roomId}`, {
+    const client = await this.connect();
+    const channel: RealtimeChannel = client.channel(`room:${roomId}`, {
       config: { presence: { key: self.id }, broadcast: { self: false, ack: false } },
     });
-    const client = this.client;
     let current = self;
     let lastTrack = 0;
     let pendingTrack: ReturnType<typeof setTimeout> | null = null;
