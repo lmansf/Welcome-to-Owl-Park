@@ -4,7 +4,7 @@ import { cabinetFace } from './cabinets';
 
 describe("the arcade's cabinets", () => {
   it('carry their game’s name while it is live, and read Hatching Soon when switched off', () => {
-    expect(CABINETS.map((c) => cabinetFace(c).text)).toEqual(['Hoot & Hop', 'Moon Flap', 'Nest Knockdown']);
+    expect(CABINETS.map((c) => cabinetFace(c).text)).toEqual(['Hoot & Hop', 'Moon Flap', 'Talon Toss']);
     expect(cabinetFace({ ...CABINETS[1]!, live: false })).toEqual({ off: true, text: 'Hatching\nSoon' });
   });
 });

@@ -27,7 +27,7 @@ function bestShot(g: KnockGame): { angle: number; power: number; left: number } 
   return best;
 }
 
-describe('Nest Knockdown', () => {
+describe('Talon Toss', () => {
   it('stands every crate on a stand or on crates, inside the field', () => {
     for (const plan of STACKS) {
       for (const c of standingCrates(plan)) {

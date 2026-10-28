@@ -7,7 +7,7 @@
  *   one is quicker); a hit ends the run. The score is the crossings.
  * - Moon Flap: tap to flap through the gaps between neon branches on a night flight. The score is
  *   the gaps passed.
- * - Nest Knockdown: pull back and launch at stacked neon crates, ten stacks, three shots each; a
+ * - Talon Toss: pull back and launch at stacked neon crates, ten stacks, three shots each; a
  *   stack knocked down in fewer shots scores more. The score is the points.
  *
  * The page plays; the room server starts each run, checks the score against the time the run took,
@@ -23,6 +23,10 @@
  * score, the `wall` frame), and the page's arcade/ modules and ArcadeScene. The write-up drafted with
  * OP-038 is in commit c342d60 (its docs/ACTIVITIES.md and docs/ARCHITECTURE.md) to start from; the
  * hall and the paintings are noted in apps/park/src/game/arcade.ts.
+ *
+ * TODO-DOCS (OP-137): the slingshot game is Talon Toss (the owner renamed it from Nest Knockdown on
+ * 2026-10-28, its title sign repainted): docs/ACTIVITIES.md and docs/CHANGELOG.md still name it Nest
+ * Knockdown.
  */
 import { CLOSED_SIGNS } from '../rooms';
 import type { OwlLook } from './protocol';
@@ -47,7 +51,7 @@ export interface CabinetDef {
   live: boolean;
 }
 
-/** The cabinets from west to east: Hoot & Hop, Moon Flap, Nest Knockdown. */
+/** The cabinets from west to east: Hoot & Hop, Moon Flap, Talon Toss. */
 export const CABINETS: readonly CabinetDef[] = [
   { spot: 'cabinet-crossing', game: 'crossing', live: true },
   { spot: 'cabinet-flight', game: 'flight', live: true },
@@ -78,7 +82,7 @@ export const FLAP_SPEED = 200;
 export const FLAP_SPACING = 300;
 /** How far ahead of the owl the first branch starts. */
 export const FLAP_FIRST = 420;
-/** Nest Knockdown: stacks in a run, shots for each, and the least time a shot takes (aim, flight, fall). */
+/** Talon Toss: stacks in a run, shots for each, and the least time a shot takes (aim, flight, fall). */
 export const KNOCK_LEVELS = 10;
 export const KNOCK_SHOTS = 3;
 export const KNOCK_SHOT_MS = 1200;
@@ -103,7 +107,7 @@ export interface GameRules {
 export const GAMES: Readonly<Record<ArcadeGame, GameRules>> = {
   crossing: { game: 'crossing', name: 'Hoot & Hop', bands: [1, 3, 5, 8, 12, 17], maxScore: null },
   flight: { game: 'flight', name: 'Moon Flap', bands: [2, 5, 10, 15, 25, 40], maxScore: null },
-  sling: { game: 'sling', name: 'Nest Knockdown', bands: [2, 5, 9, 14, 20, 26], maxScore: KNOCK_LEVELS * knockPoints(1) },
+  sling: { game: 'sling', name: 'Talon Toss', bands: [2, 5, 9, 14, 20, 26], maxScore: KNOCK_LEVELS * knockPoints(1) },
 };
 
 /** Feathers for a run: 0 to 6, one for each band its score reaches. */
@@ -118,7 +122,7 @@ export const DAY_BEST_FEATHERS = 3;
 export interface RunResult {
   game: ArcadeGame;
   score: number;
-  /** Nest Knockdown: every shot taken, the last stack's included. */
+  /** Talon Toss: every shot taken, the last stack's included. */
   shots?: number;
 }
 

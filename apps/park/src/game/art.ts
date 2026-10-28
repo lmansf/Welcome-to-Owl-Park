@@ -52,7 +52,7 @@ export const ART: Record<string, ArtSpec> = {
   // cabinets, and each game's painted field and pieces at the size the game draws them.
   'arcade-title-hoot-hop': { w: 364, h: 114, kind: 'arcade' },
   'arcade-title-moon-flap': { w: 251, h: 115, kind: 'arcade' },
-  'arcade-title-nest-knockdown': { w: 280, h: 110, kind: 'arcade' },
+  'arcade-title-talon-toss': { w: 280, h: 110, kind: 'arcade' },
   ...Object.fromEntries(Object.values(GAME_ART).flatMap((art) => Object.entries(art).map(([key, size]): [string, ArtSpec] => [key, { ...size, kind: 'arcade' }]))),
   // The climb's tower (designs/the-stained-glass-climb.md, Appendix A): a band's sky, its ledges, the balcony on each band line, the cloud cap.
   'climb-sky': { w: 480, h: 900, kind: 'climb' },

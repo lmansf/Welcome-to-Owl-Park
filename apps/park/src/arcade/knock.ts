@@ -1,5 +1,5 @@
 /**
- * Nest Knockdown (C40): pull the owl back in the slingshot and let go at stacks of neon crates
+ * Talon Toss (C40): pull the owl back in the slingshot and let go at stacks of neon crates
  * standing on stands. A crate the owl strikes is knocked off, and so is everything that stood on it
  * alone; the owl flies on, slower, through what else it meets. Ten stacks, three shots each: a stack
  * knocked down in one shot scores 3, in two 2, in three 1, and a stack left standing ends the run.

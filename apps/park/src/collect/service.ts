@@ -142,7 +142,7 @@ export interface ActivityLink {
   tasks(): Promise<TaskView | null>;
   /** Start a run of an arcade game, standing at its cabinet. */
   run(game: ArcadeGame): Promise<RunReply>;
-  /** End the run with this seed: its score (and for Nest Knockdown, its shots). */
+  /** End the run with this seed: its score (and for Talon Toss, its shots). */
   score(result: RunResult, seed: number): Promise<ScoreReply>;
   /** As the run with this seed goes: its score so far, kept as the owl's best when it beats it (OP-137). */
   record(result: RunResult, seed: number): Promise<RecordReply>;

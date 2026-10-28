@@ -42,7 +42,7 @@ interface Box {
 const CABINET_ART: Readonly<Record<string, { screen: Box; title: { key: string } & Box; ink: string; glow: string }>> = {
   'cabinet-crossing': { screen: { x: 594, y: 428, w: 116, h: 106 }, title: { key: 'arcade-title-hoot-hop', x: 618, y: 176, w: 364, h: 114 }, ink: '#FF8AD0', glow: '#FF2AA1' },
   'cabinet-flight': { screen: { x: 1798, y: 450, w: 128, h: 92 }, title: { key: 'arcade-title-moon-flap', x: 1813, y: 143, w: 251, h: 115 }, ink: '#8AF4FF', glow: '#00E5FF' },
-  'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-nest-knockdown', x: 3900, y: 146, w: 280, h: 110 }, ink: '#CDB0FF', glow: '#8A4DFF' },
+  'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-talon-toss', x: 3900, y: 146, w: 280, h: 110 }, ink: '#CDB0FF', glow: '#8A4DFF' },
 };
 
 /** The score wall: inside the frame of the board on the hall's middle wall (room pixels), one column per game. */

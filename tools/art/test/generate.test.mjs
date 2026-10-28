@@ -325,7 +325,7 @@ test("the stained-glass realm's seam (OP-125): an edit of a crop across the join
 test("the arcade's bays: an edit of the published hall, each hall candidate's two east wings, three titles; the picks are the arcade's own", () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   const halls = [1, 2, 3].flatMap((n) => [`arcade-bays-b${n}`, `arcade-bays-c${n}`]);
-  const titles = { 'arcade-title-hoot-hop': 'Hoot & Hop', 'arcade-title-moon-flap': 'Moon Flap', 'arcade-title-nest-knockdown': 'Nest Knockdown' };
+  const titles = { 'arcade-title-hoot-hop': 'Hoot & Hop', 'arcade-title-moon-flap': 'Moon Flap', 'arcade-title-talon-toss': 'Talon Toss' };
   assert.deepEqual(P.ARCADE_BAYS_KEYS, ['arcade-bays-a', ...halls, ...Object.keys(titles)]);
   assert.deepEqual(P.ARCADE_TITLE_KEYS, Object.keys(titles));
   for (const key of P.ARCADE_BAYS_KEYS) {

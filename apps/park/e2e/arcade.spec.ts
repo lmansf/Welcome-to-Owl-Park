@@ -130,7 +130,7 @@ test.describe('the arcade (this device)', () => {
     await expect(interact).toBeHidden();
   });
 
-  test('Nest Knockdown: the first stack down in one shot, out of shots at the second, paid; and back out to the street', async ({ page }) => {
+  test('Talon Toss: the first stack down in one shot, out of shots at the second, paid; and back out to the street', async ({ page }) => {
     const before = await intoArcade(page, `e2e-knock-${test.info().project.name}`);
     await playAt(page, 'sling');
     await paintedAsShipped(page, 'sling');

@@ -324,7 +324,7 @@ export class ArcadeScene extends Phaser.Scene {
     });
   }
 
-  /** Nest Knockdown in its painting: the stack's stands, each cut in nine to its size, and its crates as they stand or fly. */
+  /** Talon Toss in its painting: the stack's stands, each cut in nine to its size, and its crates as they stand or fly. */
   private paintKnock(sim: KnockGame): void {
     const crates = this.crates;
     const layers = this.layers;
@@ -424,7 +424,7 @@ export class ArcadeScene extends Phaser.Scene {
     this.placeOwl(FLAP_X, sim.y + FLAP_R + 6, tilt, 1);
   }
 
-  /** Nest Knockdown in neon, or over its painting just the band pulled back and the path it will fly; and the owl. */
+  /** Talon Toss in neon, or over its painting just the band pulled back and the path it will fly; and the owl. */
   private drawKnock(g: Phaser.GameObjects.Graphics, sim: KnockGame): void {
     const c = ARCADE_INK.sling;
     if (!this.painted) {

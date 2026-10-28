@@ -56,7 +56,7 @@ export async function pastHowTo(page: Page): Promise<void> {
   await expect(page.locator('.arcade [data-howto]')).toBeHidden();
 }
 
-/** The run as it stands: its score, whether it is over, and for Nest Knockdown its stack and phase. */
+/** The run as it stands: its score, whether it is over, and for Talon Toss its stack and phase. */
 export async function run(page: Page): Promise<{ score: number; over: boolean; level: number | null; phase: string | null } | null> {
   return page.evaluate(() => {
     const r = window.owlPark.arcade();
@@ -241,7 +241,7 @@ export async function untilOver(page: Page): Promise<void> {
   await expect.poll(async () => (await run(page))?.over ?? null, { timeout: 30_000, intervals: [100] }).toBe(true);
 }
 
-/** Nest Knockdown, by the keys: the first stack in one shot, then the second missed three times. */
+/** Talon Toss, by the keys: the first stack in one shot, then the second missed three times. */
 export async function knockByKeys(page: Page): Promise<void> {
   const press = async (key: string, n: number) => {
     for (let i = 0; i < n; i++) await page.keyboard.press(key);
@@ -254,7 +254,7 @@ export async function knockByKeys(page: Page): Promise<void> {
   await missThrice(page);
 }
 
-/** Nest Knockdown, by a pull on the screen: back and a little down, and let go; then the second stack missed. */
+/** Talon Toss, by a pull on the screen: back and a little down, and let go; then the second stack missed. */
 export async function knockByPull(page: Page): Promise<void> {
   const box = await page.locator('.arcade [data-stage]').boundingBox();
   if (!box) throw new Error('no stage');

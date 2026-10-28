@@ -57,7 +57,7 @@ describe('the arcade', () => {
 
 describe('the arcade’s games', () => {
   it('names each game, and knows them by id only', () => {
-    expect(ARCADE_GAMES.map((g) => GAMES[g].name)).toEqual(['Hoot & Hop', 'Moon Flap', 'Nest Knockdown']);
+    expect(ARCADE_GAMES.map((g) => GAMES[g].name)).toEqual(['Hoot & Hop', 'Moon Flap', 'Talon Toss']);
     expect(ARCADE_GAMES.every((g) => cabinetOf(g).game === g)).toBe(true);
     expect(isArcadeGame('flight')).toBe(true);
     expect(isArcadeGame('Moon Flap')).toBe(false);
@@ -105,7 +105,7 @@ describe('the arcade’s games', () => {
   it('refuses a result that cannot be', () => {
     expect(plausibleRun({ game: 'crossing', score: -1 }, 60_000)).toBe(false);
     expect(plausibleRun({ game: 'crossing', score: 2.5 }, 60_000)).toBe(false);
-    // Nest Knockdown: the shots come with the points, at most three points a shot and thirty a run.
+    // Talon Toss: the shots come with the points, at most three points a shot and thirty a run.
     expect(plausibleRun({ game: 'sling', score: 9 }, 60_000)).toBe(false);
     expect(plausibleRun({ game: 'sling', score: 9, shots: 3 }, 60_000)).toBe(true);
     expect(plausibleRun({ game: 'sling', score: 10, shots: 3 }, 60_000)).toBe(false);

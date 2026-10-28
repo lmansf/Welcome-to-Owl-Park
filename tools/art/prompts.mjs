@@ -1052,7 +1052,8 @@ const titlePrompt = (title, neon, backdrop, motif) => {
 const TITLES = [
   ['arcade-title-hoot-hop', 'Hoot & Hop', 'magenta #FF2AA1', '#00FF00', 'a little traffic signal with three round lamps and a short row of crosswalk stripes'],
   ['arcade-title-moon-flap', 'Moon Flap', 'cyan #00E5FF', '#FF00FF', 'a crescent moon and a curling branch'],
-  ['arcade-title-nest-knockdown', 'Nest Knockdown', 'violet #6E3AFF', '#00FF00', 'a Y-shaped slingshot and a small stack of crates'],
+  // The slingshot game was Nest Knockdown until the owner named it Talon Toss (OP-137, 2026-10-28).
+  ['arcade-title-talon-toss', 'Talon Toss', 'violet #6E3AFF', '#00FF00', 'a Y-shaped slingshot and a small stack of crates'],
 ];
 
 const bayWing = (key, seed, prompt, variants = 2) => ({

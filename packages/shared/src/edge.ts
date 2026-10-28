@@ -162,7 +162,7 @@ export interface ClientGather {
  * An activity (activities.ts): light a lantern, cast or reel in at the pond, start the robot owl's
  * copy game or play it a note (`e`, an emote the owl owns), or ask for today's tasks. In the arcade
  * (arcade.ts): start a run of a game (`g`) at its cabinet, end the run whose seed is `k` with its
- * score `s` (and for Nest Knockdown its shots, `n`), or, as the run goes, keep its score so far as the
+ * score `s` (and for Talon Toss its shots, `n`), or, as the run goes, keep its score so far as the
  * owl's best (`record`, the same fields; OP-137). Answered with `act`.
  */
 export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks' | 'run' | 'score' | 'record' | 'climb' | 'ascent';

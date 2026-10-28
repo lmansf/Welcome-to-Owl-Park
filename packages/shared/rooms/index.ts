@@ -413,7 +413,7 @@ export const ROOMS: Record<string, RoomDef> = {
       [
         // The wet tiled floor: out through the open doorway on the west onto the street beyond its
         // threshold, along the foot of the back wall and around the front of each cabinet (Hoot & Hop,
-        // then Moon Flap past the passage with the chrome pillar, then Nest Knockdown on its crate in
+        // then Moon Flap past the passage with the chrome pillar, then Talon Toss on its crate in
         // the purple alcove's light), to the last chrome pillar at the east end.
         { x: 0, y: 700 },
         { x: 195, y: 700 },

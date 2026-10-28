@@ -11,7 +11,7 @@
     "arcade-knock-stand": {"size": [72, 72], "drawn": [0, 2, 72, 68], "centre": [36, 36], "solid": [0, 2, 72, 68]},
     "arcade-title-hoot-hop": {"size": [364, 114], "drawn": [0, 0, 364, 114], "centre": [182, 57], "solid": [0, 0, 364, 114]},
     "arcade-title-moon-flap": {"size": [251, 115], "drawn": [0, 0, 251, 115], "centre": [125.5, 57.5], "solid": [0, 0, 251, 115]},
-    "arcade-title-nest-knockdown": {"size": [280, 110], "drawn": [0, 0, 280, 110], "centre": [140, 55], "solid": [0, 0, 280, 110]},
+    "arcade-title-talon-toss": {"size": [280, 110], "drawn": [22, 0, 237, 110], "centre": [140, 55], "solid": [22, 0, 237, 110]},
     "blockade-hatching-soon": {"size": [300, 300], "drawn": [8, 6, 285, 294], "centre": [150, 153], "solid": [15, 6, 278, 294]},
     "blockade-not-yet-fledged": {"size": [300, 300], "drawn": [27, 6, 246, 294], "centre": [150, 153], "solid": [27, 6, 246, 294]},
     "climb-balcony": {"size": [480, 120], "drawn": [0, 10, 480, 110], "centre": [240, 65], "solid": [0, 11, 480, 109]},
