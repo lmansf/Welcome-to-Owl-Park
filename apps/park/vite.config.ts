@@ -1,9 +1,56 @@
 /// <reference types="vitest/config" />
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { defineConfig, type Connect, type Plugin } from 'vite';
+import { build, defineConfig, type Connect, type Plugin } from 'vite';
 import { earlyArtScript } from './src/game/artNames';
+
+// The park's game engine (OP-129): Phaser built from its own source with only the parts the park
+// uses (src/engine/phaser.cjs), a good third less script than Phaser's ready-made build, and what
+// 'phaser' means to the dev server, the unit tests and the build alike. It is built once for each
+// Phaser version and engine entry into node_modules/.cache, where later starts find it.
+const ENGINE_ENTRY = resolve(import.meta.dirname, 'src/engine/phaser.cjs');
+const ENGINE_CACHE = resolve(import.meta.dirname, 'node_modules/.cache/park-engine');
+// Phaser's build switches (`typeof WEBGL_RENDERER` and the like in its source), set as its own
+// ready-made build sets them, but with no sound.
+const ENGINE_FLAGS: Record<string, boolean> = {
+  CANVAS_RENDERER: true,
+  WEBGL_RENDERER: true,
+  WEBGL_DEBUG: false,
+  EXPERIMENTAL: false,
+  PLUGIN_3D: false,
+  PLUGIN_CAMERA3D: false,
+  PLUGIN_FBINSTANT: false,
+  FEATURE_SOUND: false,
+};
+async function parkEngine(): Promise<string> {
+  const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'node_modules/phaser/package.json'), 'utf8')) as { version: string };
+  const key = createHash('sha1').update(version).update(JSON.stringify(ENGINE_FLAGS)).update(readFileSync(ENGINE_ENTRY)).digest('hex').slice(0, 10);
+  const file = resolve(ENGINE_CACHE, `phaser-${key}.js`);
+  if (existsSync(file)) return file;
+  // Built in a folder of its own and moved into place: a dev server and a build starting together
+  // (the browser tests start both) each build it, and neither reads the other's half-written file.
+  const tmp = resolve(ENGINE_CACHE, `build-${process.pid}-${Date.now()}`);
+  mkdirSync(tmp, { recursive: true });
+  const flags = new RegExp(`typeof (${Object.keys(ENGINE_FLAGS).join('|')})\\b`, 'g');
+  await build({
+    configFile: false,
+    logLevel: 'warn',
+    root: import.meta.dirname,
+    plugins: [
+      {
+        name: 'phaser-flags',
+        transform: (code, id) => (/[\\/]phaser[\\/]src[\\/]/.test(id) ? code.replace(flags, (_, flag: string) => String(ENGINE_FLAGS[flag])) : null),
+      },
+    ],
+    build: { lib: { entry: ENGINE_ENTRY, formats: ['es'], fileName: () => 'phaser.js' }, outDir: tmp, minify: false, target: 'es2022', copyPublicDir: false, reportCompressedSize: false },
+  });
+  renameSync(resolve(tmp, 'phaser.js'), file);
+  rmSync(tmp, { recursive: true, force: true });
+  // Builds for another Phaser or entry are not asked for again.
+  for (const f of readdirSync(ENGINE_CACHE)) if (f.startsWith('phaser-') && resolve(ENGINE_CACHE, f) !== file) rmSync(resolve(ENGINE_CACHE, f), { force: true });
+  return file;
+}
 
 // Link previews need an absolute image URL on some sites: VITE_SITE_URL (the park's origin, set by
 // the deploy workflows from a repository variable) fills __SITE_URL__ in index.html; without it the
@@ -88,9 +135,10 @@ function plainArtNames(base: string): Connect.NextHandleFunction {
 }
 
 // For GitHub Pages the site lives under /<repo>/; CI sets BASE_PATH accordingly.
-export default defineConfig({
+export default defineConfig(async () => ({
   base: process.env['BASE_PATH'] ?? '/',
-  plugins: [{ name: 'site-url', transformIndexHtml: (html) => html.replaceAll('__SITE_URL__', siteUrl) }, artFiles()],
+  plugins: [{ name: 'site-url', transformIndexHtml: (html: string) => html.replaceAll('__SITE_URL__', siteUrl) }, artFiles()],
+  resolve: { alias: [{ find: /^phaser$/, replacement: await parkEngine() }] },
   server: { port: 5173, strictPort: true },
   preview: { port: 4173, strictPort: true },
   build: {
@@ -100,4 +148,4 @@ export default defineConfig({
   },
   // The unit tests read the same art list as the client.
   test: { include: ['src/**/*.test.ts'], environment: 'node' },
-});
+}));
