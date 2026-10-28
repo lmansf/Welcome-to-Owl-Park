@@ -84,4 +84,18 @@ test.describe('the load screen (OP-129)', () => {
     await expect(loader(page)).toBeHidden();
     await fast();
   });
+
+  test('walking to a doorway fetches the next room’s art on the way, before the owl is through', async ({ page }) => {
+    await openPark(page);
+    const fetched: string[] = [];
+    page.on('request', (r) => {
+      if (/\/art\/grove[^/]*\.(webp|png)/.test(r.url())) fetched.push(r.url());
+    });
+    // Across the hall to the grove's arch: a couple of seconds' walk.
+    await walkToDoor(page, 'to-grove');
+    await expect.poll(() => fetched.length, { timeout: 5_000 }).toBeGreaterThan(0);
+    // Asked for while the owl was still on its way, in the hub.
+    expect(await page.evaluate(() => window.owlPark.state()?.room ?? null)).toBe('hub');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
+  });
 });

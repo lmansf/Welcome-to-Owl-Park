@@ -102,10 +102,9 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
-import { loadArt, releaseArt, roomArtKeys, roomOpeningArt } from './art';
+import { loadArt, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt } from './art';
 import { SpeechBubbles } from './bubbles';
-import { roomScaleCap } from './artFiles';
-import { takesDoorway } from './doors';
+import { roomsAhead, takesDoorway } from './doors';
 import { FitOverlay } from './fitOverlay';
 import { placeHints } from './hints';
 import { itemScale } from './items';
@@ -214,6 +213,8 @@ export class RoomScene extends Phaser.Scene {
   private keyTurns = 0;
   /** The hint chips last sent to the HUD, so an unchanged frame touches no DOM. */
   private hintsShown = '';
+  /** When to look again for doorways to fetch the next room's art through. */
+  private prefetchAt = 0;
   private voting = false;
   /** Set when the visitor tapped the idol from afar: vote as soon as the owl arrives. */
   private pendingVote = false;
@@ -411,9 +412,7 @@ export class RoomScene extends Phaser.Scene {
     if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
     const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
     screen?.show('Opening…');
-    // A room of several tiles keeps to the same memory budget as a one-screen room, at 1x if need be.
-    const textures = backgroundTiles(this.room).length + foregroundTiles(this.room).length;
-    const cap = roomScaleCap(textures, this.cfg.pixelRatio, this.cfg.artScaleMax, this.cfg.roomArtBudget);
+    const cap = roomArtCap(this.room, this.cfg);
     this.artCap = cap;
     await loadArt(this, roomOpeningArt(this.room.id), this.cfg.pixelRatio, cap, (done, total) => {
       if (gen === this.gen) screen?.progress(done, total);
@@ -543,6 +542,7 @@ export class RoomScene extends Phaser.Scene {
       this.checkItems(now);
       this.updateHints();
       this.rest(now);
+      this.prefetchNear(now);
     }
     for (const owl of this.peers.values()) owl.tick(now);
     this.bubbles?.tick(now);
@@ -771,6 +771,13 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false; // walking away cancels a walk to the idol
     this.errand = null;
     this.walkTo(target, true);
+  }
+
+  /** Twice a second at most: the art of the rooms the owl is heading into, fetched ahead so going through finds it in the browser (OP-129). */
+  private prefetchNear(now: number): void {
+    if (now < this.prefetchAt) return;
+    this.prefetchAt = now + 500;
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, (id) => this.realmClosed(id))) prefetchRoomArt(this, to, this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */

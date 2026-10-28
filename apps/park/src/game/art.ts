@@ -8,11 +8,11 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type SpeciesId } from '@owl-park/shared';
+import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
-import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, rasterNames } from './artFiles';
+import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
 
@@ -138,8 +138,7 @@ export function blockadeKey(phrase: string): string {
 }
 
 /** Art that belongs to one room (released when it closes; roomOpeningArt is what loads as it opens). */
-export function roomArtKeys(roomId: string): string[] {
-  const room = roomFor(roomId);
+export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(roomId)): string[] {
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
   for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
@@ -158,8 +157,36 @@ const FURNITURE_ART = new Set(FURNITURE.map((f) => f.art));
  * which loads as the nest puts it out or its owner decorates (OP-129: the sixteen pieces were over
  * a megabyte on a phone before the owl could move, most of them in nobody's nest).
  */
-export function roomOpeningArt(roomId: string): string[] {
-  return roomArtKeys(roomId).filter((k) => !FURNITURE_ART.has(k));
+export function roomOpeningArt(roomId: string, room: RoomDef | undefined = roomFor(roomId)): string[] {
+  return roomArtKeys(roomId, room).filter((k) => !FURNITURE_ART.has(k));
+}
+
+/** How sharp a room's art loads (texture pixels per room pixel at most): a room of several screens keeps to one screen's memory budget, at 1x if need be. */
+export function roomArtCap(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): number {
+  const textures = backgroundTiles(room).length + foregroundTiles(room).length;
+  return roomScaleCap(textures, cfg.pixelRatio, cfg.artScaleMax, cfg.roomArtBudget);
+}
+
+const prefetched = new Set<string>();
+
+/**
+ * Fetch a room's opening art ahead (OP-129), as an owl nears a doorway into it or the home screen
+ * waits on Play: the very files its opening will ask for, at the same sharpness, into the browser's
+ * cache (where the art keeps a year), not drawn. Each file once a page; art already drawn is left out.
+ */
+export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): void {
+  if (typeof fetch !== 'function') return;
+  const cap = roomArtCap(room, cfg);
+  for (const key of roomOpeningArt(room.id, room)) {
+    const spec = ART[key];
+    if (!spec || scene.textures.exists(key)) continue;
+    const name = firstFile(key, artScale(spec.kind, cfg.pixelRatio, cap));
+    if (!name || prefetched.has(name)) continue;
+    prefetched.add(name);
+    void fetch(`${baseUrl()}${versioned(name)}`, { priority: 'low' })
+      .then((res) => res.arrayBuffer())
+      .catch(() => prefetched.delete(name));
+  }
 }
 
 /**
@@ -273,10 +300,15 @@ export interface LoadReport {
   missing: string[];
 }
 
-/** The bytes loading `key` at `scale` downloads: its first shipped file's size (none when its texture is here already). */
+/** The file loading `key` at `scale` asks for first: its SVG when the build ships one, else its best picture. */
+function firstFile(key: string, scale: number): string | undefined {
+  return PUBLISHED_ART.has(`${key}.svg`) ? `${key}.svg` : rasterNames(key, scale, PUBLISHED_ART)[0];
+}
+
+/** The bytes loading `key` at `scale` downloads: its first file's size (none when its texture is here already). */
 function artBytes(scene: Phaser.Scene, key: string, scale: number): number {
   if (scene.textures.exists(key)) return 0;
-  const name = PUBLISHED_ART.has(`${key}.svg`) ? `${key}.svg` : rasterNames(key, scale, PUBLISHED_ART)[0];
+  const name = firstFile(key, scale);
   return name ? (ART_BYTES.get(name) ?? 0) : 0;
 }
 

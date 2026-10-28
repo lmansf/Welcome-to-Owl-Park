@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import { loadArtCopy, releaseArt } from './art';
+import type { ParkConfig } from '../config';
+import { NEST_ROOM } from '../rooms';
+import { loadArtCopy, prefetchRoomArt, releaseArt } from './art';
 
 /** The game event the home scene sends as it comes up (main.ts shows the home screen's buttons then). */
 export const HOME_SHOWN = 'owl-park:home';
@@ -41,7 +43,10 @@ export class HomeScene extends Phaser.Scene {
     });
     this.layout();
     void loadArtCopy(this, 'lobby', BACKDROP).then((ok) => {
-      if (!ok || gen !== this.gen) return;
+      if (gen !== this.gen) return;
+      // Then, while the home screen waits on Play, the nest's art comes ahead (OP-129): Play goes to the owl's own nest, and every nest has the same.
+      prefetchRoomArt(this, NEST_ROOM, this.registry.get('config') as ParkConfig);
+      if (!ok) return;
       this.art = this.add.image(0, 0, BACKDROP).setDepth(0);
       this.layout();
     });
