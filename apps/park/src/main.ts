@@ -99,6 +99,11 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.NONE, zoom: 1 / dpr },
   input: { activePointers: 2 },
   render: { antialias: true, pixelArt: false, roundPixels: false },
+  // No game object uses Phaser's FX (bloom, glow, blur and the like). Left on, they make the renderer
+  // build about a hundred render targets as it starts, some 180 MB of GPU memory on a phone, before
+  // the first frame (OP-129).
+  disablePreFX: true,
+  disablePostFX: true,
   // The owl builder's preview draws over the room (which keeps running underneath) or the home screen;
   // the arcade's games draw over the room.
   scene: [BootScene, RoomScene, HomeScene, BuilderScene, ArcadeScene, ClimbScene],
