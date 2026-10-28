@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Plugin } from 'vite';
+import type { Connect, Plugin } from 'vite';
 
 const ID = 'virtual:art-files';
 
@@ -25,6 +25,7 @@ export function artFiles(dir: string): Plugin {
       return `export default ${JSON.stringify(Object.fromEntries(files))};`;
     },
     configureServer(server) {
+      server.middlewares.use(plainArtNames(server.config.base));
       server.watcher.add(dir);
       const changed = (file: string) => {
         if (!resolve(file).startsWith(dir)) return;
@@ -35,5 +36,30 @@ export function artFiles(dir: string): Plugin {
       server.watcher.on('unlink', changed);
       server.watcher.on('change', changed);
     },
+    configurePreviewServer(server) {
+      server.middlewares.use(plainArtNames(server.config.base));
+    },
+  };
+}
+
+/**
+ * The client asks for each art file by its name percent-encoded (`owl-body%402x.png`), as Cloudflare's
+ * asset server has it; Vite's own servers know a public file only by its plain name, and would answer
+ * every 2x picture with the page instead. This hands them the plain name (the query as it was).
+ */
+function plainArtNames(base: string): Connect.NextHandleFunction {
+  const art = `${base.replace(/\/?$/, '/')}art/`;
+  return (req, _res, next) => {
+    const url = req.url ?? '';
+    const q = url.indexOf('?');
+    const path = q < 0 ? url : url.slice(0, q);
+    if (path.startsWith(art) && path.includes('%')) {
+      try {
+        req.url = decodeURIComponent(path) + (q < 0 ? '' : url.slice(q));
+      } catch {
+        /* not a name this park ships: asked for as it was */
+      }
+    }
+    next();
   };
 }
