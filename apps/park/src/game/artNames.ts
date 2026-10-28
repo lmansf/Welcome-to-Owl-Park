@@ -15,9 +15,9 @@ export const BOOT_ART = [...OWL_LAYERS, 'owl-wing-body', 'owl-wing-accent'] as c
 
 /**
  * The raster files the loader tries for a key once there is no SVG, in order. WebP comes before
- * PNG (painted rooms ship as WebP, everything else as PNG), and on a dense screen the 2x copies
- * come before the 1x ones. Given the files the build ships (`published`: each name in the art
- * folder and its content's hash), only those are tried, so a key costs one request, not a miss or
+ * PNG (painted rooms and the nests' furniture ship as WebP, the rest as PNG), and on a dense
+ * screen the 2x copies come before the 1x ones. Given the files the build ships (`published`: each
+ * name in the art folder and its content's hash), only those are tried, so a key costs one request, not a miss or
  * two first, and each is asked for with its hash (OP-129). Names are sent percent-encoded: the asset
  * server answers `owl-body@2x.png` with a redirect to `owl-body%402x.png`, a round trip for nothing.
  */

@@ -11,6 +11,7 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   guide <room>|--all   layout guides from work/art/geometry.json (text-free, used as references)
   room <key>           crop/resize to 1600x900 (and opt-in 3200x1800), grade, WebP under budget, review
   piece <key>          chroma key, fit into the logical canvas at 2x, downsample, grade, budget
+  webp <key...>        a published cut-out's PNGs re-encoded as its WebP finals (keys the table marks webp)
   overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
   cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
   patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
@@ -26,7 +27,8 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   demo                 run the whole chain on synthetic (or mock) input in a temp dir and assert it
 
 Outputs: finals in work/art/final/<key>.png (and <key>@2x.png; rooms as <key>.webp and
-<key>@2x.webp, since a painted room cannot meet the budget as PNG), a review composite in
+<key>@2x.webp, since a painted room cannot meet the budget as PNG, and so the cut-outs the table
+marks ``"format": "webp"``, the nests' furniture, with their alpha exact), a review composite in
 work/art/review/<key>.png with the room geometry drawn over it, and a work/art/final/<key>.post.json
 record of the parameters, from which ``publish`` writes the committed provenance line. Finals are
 re-encoded by Pillow with no ancillary chunks (no EXIF, XMP or ICC in a WebP), re-read, and checked
@@ -262,10 +264,12 @@ def encode_final(img: Image.Image, budget: int, relaxed: int | None, dither: str
     return data, info
 
 
-def save_post_record(ctx: Ctx, key: str, record: dict) -> Path:
+def save_post_record(ctx: Ctx, key: str, record: dict, earlier_edits: list[str] | None = None) -> Path:
+    """Write the finish record; its human edits are ``earlier_edits`` (art finished again from
+    published art keeps its notes) followed by this run's --note entries."""
     record = dict(record)
     record["finished_at"] = ctx.now
-    record["human_edits"] = list(ctx.notes)
+    record["human_edits"] = list(earlier_edits or []) + list(ctx.notes)
     p = ctx.out / f"{key}.post.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(record, indent=2), encoding="utf-8")
@@ -363,6 +367,29 @@ def finish_room(ctx: Ctx, key: str, img: Image.Image, crop: str, shift_y: int, p
     return outputs, tools
 
 
+def finish_cutout_webp(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None) -> tuple[dict, list[str]]:
+    """The WebP finals of a cut-out the table marks ``"format": "webp"`` from its RGBA at 1x (and
+    2x): (outputs, budget lines). The colour is lossy, at the first quality under the budget; the
+    alpha, the cut-out's edge and what the sprite manifest measures, is kept exact."""
+    W, H = logical_size(key, ctx.assets)
+    fields = ("format", "quality", "colors", "mode", "budget_relaxed")
+    outputs: dict = {}
+    tools: list[str] = []
+    for logical, img, size in (("1x", one, (W, H)), ("2x", two, (2 * W, 2 * H))):
+        if img is None:
+            continue
+        img = img.convert("RGBA")
+        name = f"{key}.webp" if logical == "1x" else f"{key}@2x.webp"
+        data, info = webpmeta.encode_under_budget(img, ctx.budget)
+        if not webpmeta.same_alpha(data, img):
+            raise ArtError(f"{name}: the encoder changed the alpha; a cut-out's edge must stay exact")
+        outputs[logical] = {**write_final(ctx, name, data, size, ctx.budget), **{k: info.get(k) for k in fields}}
+        tools.append(budget_line(info) if logical == "1x" else "budget@2x: " + budget_line(info)[8:])
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    return outputs, tools
+
+
 def room_review(ctx: Ctx, key: str, img: Image.Image) -> Image.Image:
     """``img`` with its room's geometry over it (the screen's own view of a wider room), or as it is
     when no room draws the key."""
@@ -436,17 +463,22 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (f" solid={a.solid}" if a.solid else "") + (" flip" if a.flip else "") + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "") + glow]
     if gline:
         tools.append(gline)
-    outputs = {}
-    data, info = encode_final(one, ctx.budget, None, a.dither, f"{key}.png")
-    outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
-    tools.append(budget_line(info))
-    if not a.no_2x:
-        data2, info2 = encode_final(canvas2x, ctx.budget, None, a.dither, f"{key}@2x.png")
-        outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), ctx.budget), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
-        tools.append("budget@2x: " + budget_line(info2)[8:])
-    elif (ctx.out / f"{key}@2x.png").exists():
-        (ctx.out / f"{key}@2x.png").unlink()
-    remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
+    if ships_as_webp(key, ctx.assets):
+        # The table marks it WebP (the nests' furniture): no palette, the alpha exact.
+        outputs, lines = finish_cutout_webp(ctx, key, one, None if a.no_2x else canvas2x)
+        tools.extend(lines)
+    else:
+        outputs = {}
+        data, info = encode_final(one, ctx.budget, None, a.dither, f"{key}.png")
+        outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
+        tools.append(budget_line(info))
+        if not a.no_2x:
+            data2, info2 = encode_final(canvas2x, ctx.budget, None, a.dither, f"{key}@2x.png")
+            outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), ctx.budget), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
+            tools.append("budget@2x: " + budget_line(info2)[8:])
+        elif (ctx.out / f"{key}@2x.png").exists():
+            (ctx.out / f"{key}@2x.png").unlink()
+        remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
     # Review: the piece in its room at the anchor, scaled as ambience.ts does (on the room's painted
     # screen, as that screen sees the room when the room is wider than one).
     room, anchor = PIECE_ANCHOR.get(key, (None, None))
@@ -456,13 +488,57 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
         ax, ay = (room_of(geom, room)["anchors"][anchor][k] for k in ("x", "y"))
         k = fit_below_top(H, ay)
         bg = background_for(ctx, room).convert("RGBA")
-        piece_img = Image.open(ctx.out / f"{key}.png").convert("RGBA").resize((max(1, int(round(W * k))), max(1, int(round(H * k)))), Image.Resampling.LANCZOS)
+        piece_img = Image.open(ctx.out / outputs["1x"]["file"]).convert("RGBA").resize((max(1, int(round(W * k))), max(1, int(round(H * k)))), Image.Resampling.LANCZOS)
         bg.alpha_composite(piece_img, (int(round(ax - piece_img.width / 2)), int(round(ay - piece_img.height))))
         rv = write_review(ctx, f"{key}.png", review_composite(bg, geom, room, 0.4, ctx.assets))
         note(f"review: {rel_to_repo(rv)}")
     save_post_record(ctx, key, {"key": key, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo})
     for k2, o in outputs.items():
-        note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" P{o['colors']}" if o.get("colors") else " truecolour"))
+        note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" WebP q{o['quality']}" if o.get("format") == "webp" else f" P{o['colors']}" if o.get("colors") else " truecolour"))
+    return 0
+
+
+# TODO-DOCS (OP-129): docs/ART-PIPELINE.md says everything but the room backgrounds ships as PNG.
+# The nests' furniture (decor-*) ships as WebP now, marked "format": "webp" in config/assets.json:
+# `piece` finishes such a key as WebP (lossy colour, the alpha exact), `webp` re-encodes one already
+# published as PNG keeping its provenance, and `check` refuses a PNG published for a key marked webp.
+def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Published cut-outs the table has since marked ``"format": "webp"``, re-encoded from their
+    PNGs (the pixels approved and live, checked against their provenance lines) as WebP finals with
+    the alpha exact. The finish record keeps the PNGs' provenance (the candidate, the tools, the
+    notes) and adds what was re-encoded; publish then ships the WebPs and removes the PNGs."""
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    for key in a.keys:
+        validate_key(key, allow_helpers=False, assets=ctx.assets)
+        if is_room_background(key, ctx.assets) or not ships_as_webp(key, ctx.assets):
+            raise ArtError(f"{key!r} is not a cut-out the table marks \"format\": \"webp\" (mark it in config/assets.json; a painting is finished as WebP by `room`)")
+        W, H = logical_size(key, ctx.assets)
+        imgs: list[Image.Image] = []
+        sources: list[str] = []
+        for path, size in ((ctx.public / f"{key}.png", (W, H)), (ctx.public / f"{key}@2x.png", (2 * W, 2 * H))):
+            if not path.exists():
+                if not imgs:
+                    raise ArtError(f"no published {path.name} to re-encode (`piece` finishes {key} as WebP itself)")
+                continue
+            data = path.read_bytes()
+            line = latest.get(path.name)
+            if not line or line.get("sha256") != sha256_bytes(data):
+                raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+            v = pngmeta.verify_file(path, size, None)
+            if not v["ok"]:
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            with Image.open(path) as im:
+                imgs.append(im.convert("RGBA"))
+            sources.append(f"{path.name} (sha256 {line['sha256'][:16]})")
+        outputs, lines = finish_cutout_webp(ctx, key, imgs[0], imgs[1] if len(imgs) > 1 else None)
+        base = latest[f"{key}.png"]
+        tools = list(base.get("tools") or []) + [f"webp: re-encoded from the published {' and '.join(sources)}, the alpha exact"] + lines
+        save_post_record(ctx, key, {"key": key, "kind": ctx.assets[key].get("kind"), "raw": rel_to_repo(ctx.public / f"{key}.png"), "raw_sidecar": prov.sidecar_of(prov_path, f"{key}.png"),
+                                    "outputs": outputs, "tools": tools}, earlier_edits=list(base.get("human_edits") or []))
+        for k2, o in outputs.items():
+            note(f"{key} {k2}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
+    note(f"publish: pnpm art:finish publish {' '.join(a.keys)}")
     return 0
 
 
@@ -1040,7 +1116,9 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
         if len(formats) > 1:
             problems.append(f"{key}: both PNG and WebP files are published; the loader uses the WebP, so the PNG is stale (republish {key})")
         if "webp" in formats and not ships_as_webp(key, ctx.assets):
-            problems.append(f"{key}: published as WebP, but only room backgrounds and the paintings marked webp ship as WebP")
+            problems.append(f"{key}: published as WebP, but only room backgrounds and the art the table marks webp ship as WebP")
+        elif "png" in formats and ctx.assets[key].get("format") == "webp":
+            problems.append(f"{key}: published as PNG, but the table marks it webp (`pnpm art:finish webp {key}`, then publish it)")
         for ext in RASTER_EXTS:
             one_name, two_name = f"{key}.{ext}", f"{key}@2x.{ext}"
             if two_name in rasters and one_name not in rasters:
@@ -1298,6 +1376,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_piece)
+
+    sp = sub.add_parser("webp", help="published cut-outs the table marks webp: their PNGs re-encoded as WebP finals, the alpha exact")
+    sp.add_argument("keys", nargs="+")
+    sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_webp)
 
     sp = sub.add_parser("overlay", help="foreground overlay -> chroma key, 1600x900 RGBA")
     sp.add_argument("key")

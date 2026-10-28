@@ -176,7 +176,7 @@ against the published provenance.
 
 Reference slots (`refs`) point at `refs/<file>` (committed anchors in `tools/art/refs/`, 1024 px
 and 200 KB at most, chosen by the art director), `@guide:<room>` (the post stage's layout guide),
-`@final:<key>` (a published PNG), `@raw:<key>` (another job's SELECTED candidate) or
+`@final:<key>` (a published PNG, or the WebP of a room or a key marked webp), `@raw:<key>` (another job's SELECTED candidate) or
 `@canvas:<key>` (a wing's outpaint canvas, `work/art/canvas/<key>.png`, written by
 `pnpm art:finish canvas <key>`). Slots marked
 `optional` are skipped with a notice until the file exists, which is why the first runs work

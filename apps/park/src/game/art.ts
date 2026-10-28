@@ -2,7 +2,7 @@
  * Art loading. Every piece of art has a key, a logical size in room pixels, and a kind.
  * For each key the loader takes, in order: `<key>.svg` (rasterized at the device's scale),
  * then `<key>@2x.webp` and `<key>@2x.png` when a sharper copy is wanted, then `<key>.webp` and
- * `<key>.png` (painted rooms ship as WebP, everything else as PNG), asking only for the files the
+ * `<key>.png` (painted rooms and the nests' furniture ship as WebP, the rest as PNG), asking only for the files the
  * build ships (PUBLISHED_ART), so each key is one request, with its content's hash. Whatever resolution the file has, the
  * game draws it at the logical size, so artists can hand in SVG, WebP or PNG. Missing or broken
  * files fall back to generated placeholders and never stop the park.

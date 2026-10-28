@@ -693,6 +693,16 @@ def edge_overlay(w: int, h: int) -> Image.Image:
     return img
 
 
+def cutout(w: int, h: int, seed: int = 5) -> Image.Image:
+    """A cut-out like the nests' furniture: a textured ellipse with a soft edge, zeroed RGB where clear."""
+    big = Image.new("L", (4 * w, 4 * h), 0)
+    ImageDraw.Draw(big).ellipse((4 * w // 10, 4 * h // 10, 36 * w // 10, 36 * h // 10), fill=255)
+    alpha = np.asarray(big.resize((w, h), Image.Resampling.BOX))
+    rgb = np.random.default_rng(seed).integers(60, 200, (h, w, 3))
+    rgba = np.dstack([np.where(alpha[..., None] > 0, rgb, 0), alpha]).astype(np.uint8)
+    return Image.fromarray(rgba, "RGBA")
+
+
 class TestWings(unittest.TestCase):
     def test_wing_keys_name_a_room_and_a_side(self):
         self.assertEqual(wings.wing_of("hub-west"), ("hub", "west"))
@@ -824,13 +834,15 @@ class TestSprites(unittest.TestCase):
             a.save(pub / "b-thing.png")
             a.resize((40, 40), Image.Resampling.NEAREST).save(pub / "b-thing@2x.png")
             Image.new("RGB", (10, 10)).save(pub / "a-flat.png")
-            (pub / "room.webp").write_bytes(b"")  # rooms are not sprites
+            (pub / "room.webp").write_bytes(webpmeta.encode(Image.new("RGB", (16, 9), (40, 60, 80)), 80))  # opaque: a room, not a sprite
+            (pub / "ab-cut.webp").write_bytes(webpmeta.encode(a, 90))  # a cut-out shipped as WebP is one
             text = sprites.dumps(sprites.build(pub))
             self.assertEqual(text, sprites.dumps(sprites.build(pub)))
             m = json.loads(text)
-            self.assertEqual(list(m["sprites"]), ["a-flat", "b-thing"])
+            self.assertEqual(list(m["sprites"]), ["a-flat", "ab-cut", "b-thing"], "in the order of the file names, whatever their format")
             self.assertEqual(m["sprites"]["b-thing"]["drawn"], [5, 5, 5, 5])
-            self.assertEqual(sum(1 for line in text.splitlines() if '"size"' in line), 2)
+            self.assertEqual(m["sprites"]["ab-cut"], m["sprites"]["b-thing"] | {"drawn": [5, 5, 5, 5]})
+            self.assertEqual(sum(1 for line in text.splitlines() if '"size"' in line), 3)
 
     def test_the_committed_manifest_matches_the_published_art(self):
         with mock.patch("sys.stderr", new=io.StringIO()) as err:
@@ -1132,7 +1144,7 @@ class TestCli(unittest.TestCase):
             with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
                 self.assertEqual(postprocess.main(["check", "hub", "guardian"] + common), 1)
             self.assertIn("hub.webp: disallowed WebP chunks: EXIF", out.getvalue())
-            self.assertIn("guardian: published as WebP, but only room backgrounds and the paintings marked webp ship as WebP", out.getvalue())
+            self.assertIn("guardian: published as WebP, but only room backgrounds and the art the table marks webp ship as WebP", out.getvalue())
 
     def test_check_takes_webp_for_a_painting_the_table_marks_webp(self):
         # The arcade's game fields are opaque paintings, not rooms: the table marks them "format": "webp".
@@ -1147,6 +1159,74 @@ class TestCli(unittest.TestCase):
             with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
                 postprocess.main(["check", "arcade-hop-bg"] + common)
             self.assertNotIn("published as WebP", out.getvalue())
+
+    def test_a_published_cutout_the_table_marks_webp_is_reencoded_keeping_its_provenance(self):
+        # The nests' furniture shipped as PNG before the table marked it webp (OP-129).
+        self.assertEqual(load_assets()["decor-rug"].get("format"), "webp")
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            final = work / "final"
+            final.mkdir(parents=True)
+            public.mkdir()
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--provenance", str(provp), "--now", "2026-10-28T09:00:00Z"]
+            one, two = cutout(240, 100), cutout(480, 200)
+            pngmeta.save(one, final / "decor-rug.png")
+            pngmeta.save(two, final / "decor-rug@2x.png")
+            sc = {"hash16": "00000000000000aa", "provider": "mock", "model": "m", "prompt_sha256": "ab" * 32, "seed": 7, "size": "960x400", "source_url": None, "generated_at": "t"}
+            (final / "decor-rug.post.json").write_text(json.dumps({"key": "decor-rug", "kind": "piece", "raw_sidecar": sc, "outputs": {}, "tools": ["piece: key=#00FF00"], "human_edits": ["picked B"]}), encoding="utf-8")
+            with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()) as out:
+                self.assertEqual(postprocess.main(["publish", "decor-rug"] + common), 0)
+                drawn = sprites.build(public)["sprites"]["decor-rug"]
+                # Published as PNG, but the table says it ships as WebP.
+                self.assertEqual(postprocess.main(["check", "decor-rug"] + common), 1)
+                self.assertIn("decor-rug: published as PNG, but the table marks it webp (`pnpm art:finish webp decor-rug`", out.getvalue())
+                # Only the pixels its provenance describes are re-encoded.
+                published = (public / "decor-rug.png").read_bytes()
+                pngmeta.save(cutout(240, 100, seed=6), public / "decor-rug.png")
+                self.assertEqual(postprocess.main(["webp", "decor-rug"] + common), 1)
+                self.assertIn("decor-rug.png: not the file its latest provenance line describes", err.getvalue())
+                (public / "decor-rug.png").write_bytes(published)
+                # WebP finals only, the alpha exact, and a record that keeps the PNGs' provenance.
+                self.assertEqual(postprocess.main(["webp", "decor-rug"] + common), 0)
+                self.assertEqual(sorted(p.name for p in final.glob("decor-rug*") if p.suffix != ".json"), ["decor-rug.webp", "decor-rug@2x.webp"])
+                for name, src in (("decor-rug.webp", one), ("decor-rug@2x.webp", two)):
+                    self.assertTrue(webpmeta.same_alpha((final / name).read_bytes(), src), name)
+                rec = json.loads((final / "decor-rug.post.json").read_text(encoding="utf-8"))
+                self.assertEqual([rec["outputs"][k]["format"] for k in ("1x", "2x")], ["webp", "webp"])
+                self.assertEqual((rec["raw_sidecar"]["seed"], rec["human_edits"], rec["tools"][0]), (7, ["picked B"], "piece: key=#00FF00"))
+                self.assertTrue(any(t.startswith("webp: re-encoded from the published decor-rug.png (sha256 ") and "decor-rug@2x.png" in t for t in rec["tools"]), rec["tools"])
+                # Publishing ships the WebPs, removes the PNGs and names the candidate the art came from.
+                self.assertEqual(postprocess.main(["publish", "decor-rug"] + common), 0)
+                self.assertEqual(sorted(p.name for p in public.iterdir()), ["decor-rug.webp", "decor-rug@2x.webp"])
+                last = prov.read_lines(provp)[-1]
+                self.assertEqual((last["asset"], last["seed"], last["human_edits"]), ("decor-rug@2x.webp", 7, ["picked B"]))
+                self.assertEqual(postprocess.main(["check", "--all"] + common), 0)
+                # The sprite manifest measures the WebP to the same box as the PNG.
+                self.assertEqual(sprites.build(public)["sprites"]["decor-rug"], drawn)
+                # Nothing is left to re-encode, and only cut-outs the table marks webp are.
+                self.assertEqual(postprocess.main(["webp", "decor-rug"] + common), 1)
+                self.assertIn("no published decor-rug.png to re-encode", err.getvalue())
+                self.assertEqual(postprocess.main(["webp", "guardian"] + common), 1)
+                self.assertIn("'guardian' is not a cut-out the table marks", err.getvalue())
+
+    def test_piece_finishes_a_key_the_table_marks_webp_as_webp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "work"
+            subj, _ = synth_keyed_subject(480, 400, "#00FF00", (150, 110, 70), 0.4)
+            postprocess._write_raw(work, "decor-rug", subj, 11, "#00FF00", None, "2026-10-28T09:00:00Z", "piece", "nest")
+            # An earlier PNG finish of the key goes: publish would refuse both formats side by side.
+            (work / "final").mkdir(parents=True)
+            pngmeta.save(cutout(240, 100), work / "final" / "decor-rug.png")
+            with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(postprocess.main(["piece", "decor-rug", "--grade", "none", "--work", str(work), "--now", "2026-10-28T09:00:00Z"]), 0)
+            final = work / "final"
+            self.assertEqual(sorted(p.name for p in final.iterdir() if p.suffix != ".json"), ["decor-rug.webp", "decor-rug@2x.webp"])
+            rec = json.loads((final / "decor-rug.post.json").read_text(encoding="utf-8"))
+            self.assertEqual([rec["outputs"][k]["format"] for k in ("1x", "2x")], ["webp", "webp"])
+            self.assertIn("budget@2x: webp q90", rec["tools"])
+            with Image.open(final / "decor-rug@2x.webp") as im:
+                self.assertEqual((im.size, im.mode), ((480, 200), "RGBA"))
 
     def test_demo_runs_the_whole_chain(self):
         with tempfile.TemporaryDirectory() as tmp:

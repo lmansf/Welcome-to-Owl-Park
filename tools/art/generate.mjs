@@ -445,7 +445,7 @@ export function refLocation(ref, { workDir, toolsDir = TOOLS_DIR, publicArtDir =
   // A wing's outpaint canvas, written by the post stage (`pnpm art:finish canvas <key>`).
   if (ref.startsWith('@canvas:')) return { kind: 'file', file: path.join(workDir, 'canvas', `${ref.slice(8)}.png`) };
   if (ref.startsWith('@final:')) {
-    // Rooms publish as WebP, everything else as PNG.
+    // Rooms and the art the table marks webp (the nests' furniture) publish as WebP, the rest as PNG.
     const png = path.join(publicArtDir, `${ref.slice(7)}.png`);
     const webp = path.join(publicArtDir, `${ref.slice(7)}.webp`);
     return { kind: 'file', file: !fs.existsSync(png) && fs.existsSync(webp) ? webp : png };

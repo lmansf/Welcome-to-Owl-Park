@@ -2,12 +2,14 @@
 padding most image exports carry, so the park places boxes and markers on what is drawn rather
 than on the file's frame, and nobody types pixel values in by hand again.
 
-For each PNG in the public art folder (its 1x file; the 2x file, when there is one, is measured
-instead and halved, which is twice as exact): the logical ``size`` it is drawn at, the ``drawn``
-box ``[x, y, w, h]`` in those pixels (rounded outward), the ``centre`` of that box, and the
-``solid`` box: only the pixels at least half opaque, the object itself without the soft glow or
-haze painted round it (an idol's light, a lamp's halo), which is what a finger aims at. A pixel
-counts as drawn when its alpha is over ``ALPHA``; a file with no alpha is drawn edge to edge.
+For each PNG in the public art folder, and each WebP with an alpha channel (a cut-out shipped as
+WebP, the nests' furniture; an opaque WebP is a painted room or field, not a sprite), its 1x file
+(the 2x file, when there is one, is measured instead and halved, which is twice as exact): the
+logical ``size`` it is drawn at, the ``drawn`` box ``[x, y, w, h]`` in those pixels (rounded
+outward), the ``centre`` of that box, and the ``solid`` box: only the pixels at least half opaque,
+the object itself without the soft glow or haze painted round it (an idol's light, a lamp's halo),
+which is what a finger aims at. A pixel counts as drawn when its alpha is over ``ALPHA``; a file
+with no alpha is drawn edge to edge.
 Deterministic: the same files give the same manifest, byte for byte.
 """
 
@@ -68,14 +70,18 @@ def _num(v: float) -> int | float:
 
 
 def build(public: Path) -> dict:
-    """The manifest of every sprite in ``public``: its 1x PNGs, keyed by name without the extension."""
+    """The manifest of every sprite in ``public``: its 1x PNGs and cut-out WebPs, keyed by name
+    without the extension, in the order of the file names (a WebP beside a PNG of the same name wins,
+    as in the loader)."""
     sprites: dict[str, dict] = {}
-    for path in sorted(public.glob("*.png")):
+    for path in sorted([*public.glob("*.png"), *public.glob("*.webp")]):
         if path.stem.endswith("@2x"):
             continue
-        two = public / f"{path.stem}@2x.png"
+        two = public / f"{path.stem}@2x{path.suffix}"
         with Image.open(path) as one:
             one.load()
+            if path.suffix == ".webp" and "A" not in one.getbands():
+                continue
             if two.exists():
                 with Image.open(two) as big:
                     big.load()

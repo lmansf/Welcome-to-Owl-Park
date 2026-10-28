@@ -262,6 +262,7 @@
       "w": 240,
       "h": 100,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -269,6 +270,7 @@
       "w": 150,
       "h": 150,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -276,6 +278,7 @@
       "w": 150,
       "h": 230,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -283,6 +286,7 @@
       "w": 120,
       "h": 210,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -290,6 +294,7 @@
       "w": 130,
       "h": 150,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#FF00FF",
       "with_2x": true
     },
@@ -297,6 +302,7 @@
       "w": 120,
       "h": 100,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -304,6 +310,7 @@
       "w": 260,
       "h": 170,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -311,6 +318,7 @@
       "w": 120,
       "h": 90,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -318,6 +326,7 @@
       "w": 170,
       "h": 140,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -325,6 +334,7 @@
       "w": 100,
       "h": 140,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -332,6 +342,7 @@
       "w": 110,
       "h": 140,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -339,6 +350,7 @@
       "w": 180,
       "h": 110,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#FF00FF",
       "with_2x": true
     },
@@ -346,6 +358,7 @@
       "w": 180,
       "h": 100,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -353,6 +366,7 @@
       "w": 220,
       "h": 100,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#FF00FF",
       "with_2x": true
     },
@@ -360,6 +374,7 @@
       "w": 160,
       "h": 120,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -367,6 +382,7 @@
       "w": 110,
       "h": 160,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },

@@ -149,7 +149,7 @@ export const OWL_LAYER_KEYS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face'
  * Reference-image slots. `ref` is one of:
  *   refs/<file>        a committed anchor in tools/art/refs/ (chosen by the art director)
  *   @guide:<room>      the layout guide rendered by the post stage, work/art/guides/<room>.png
- *   @final:<key>       the published asset apps/park/public/art/<key>.png
+ *   @final:<key>       the published asset apps/park/public/art/<key>.png (or .webp)
  *   @raw:<key>         the SELECTED raw candidate of another job
  *   @canvas:<key>      a wing's outpaint canvas from the post stage, work/art/canvas/<key>.png
  *   https://...        a hosted image, passed through as a URL

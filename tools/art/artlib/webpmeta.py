@@ -1,9 +1,11 @@
-"""WebP encoding and inspection for room backgrounds.
+"""WebP encoding and inspection for room backgrounds and the cut-outs the table marks webp.
 
 A painted 1600 x 900 room cannot meet the 200 KB budget as PNG (even at 64 colours), so rooms
-ship as lossy WebP. Finals are encoded by Pillow from a copy whose ``info`` has been cleared, with
-no EXIF, XMP or ICC profile, and every write is read back and checked: a RIFF/WEBP container whose
-chunks are all in the allowlist VP8 / VP8L / VP8X / ALPH, the expected size and the byte budget.
+ship as lossy WebP; so does a cut-out marked ``"format": "webp"`` (the nests' furniture), whose
+colour is lossy but whose alpha libwebp keeps exact (``same_alpha`` proves it per file). Finals
+are encoded by Pillow from a copy whose ``info`` has been cleared, with no EXIF, XMP or ICC
+profile, and every write is read back and checked: a RIFF/WEBP container whose chunks are all in
+the allowlist VP8 / VP8L / VP8X / ALPH, the expected size and the byte budget.
 
 The quality ladder is deterministic (libwebp is, for one input and one set of parameters): the
 first quality from ``QUALITIES`` whose encoding fits the budget wins and is recorded.
@@ -79,6 +81,12 @@ def encode_under_budget(img: Image.Image, budget: int, qualities: tuple[int, ...
     from .budget import BudgetError
 
     raise BudgetError(f"nothing fits: smallest WebP encoding (quality {qualities[-1]}) is {smallest} bytes against a {budget} byte budget")
+
+
+def same_alpha(data: bytes, img: Image.Image) -> bool:
+    """Whether the WebP ``data`` decodes to exactly ``img``'s alpha (opaque when ``img`` has none)."""
+    with Image.open(io.BytesIO(data)) as back:
+        return back.convert("RGBA").getchannel("A").tobytes() == img.convert("RGBA").getchannel("A").tobytes()
 
 
 def verify_file(path: Path, expect_size: tuple[int, int] | None = None, budget: int | None = None) -> dict:

@@ -116,8 +116,9 @@ def is_room_background(key: str, assets: dict) -> bool:
 
 
 def ships_as_webp(key: str, assets: dict) -> bool:
-    """Art published as WebP: a room's painted screen, or another opaque painting the table marks
-    ``"format": "webp"`` (the arcade's game fields); everything cut out ships as PNG."""
+    """Art published as WebP: a room's painted screen, or other art the table marks ``"format":
+    "webp"`` (the arcade's game fields, opaque, and the nests' furniture, cut out with its alpha kept
+    exact); everything else ships as PNG."""
     return is_room_background(key, assets) or assets.get(key, {}).get("format") == "webp"
 
 

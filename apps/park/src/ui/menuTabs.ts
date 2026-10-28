@@ -1,6 +1,7 @@
 import { ARCADE_NAME, NEST_WORDS, WAY_OUT_WORDS, allVariants, parseVariant, setProgress, type ItemKind, type SetProgress } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
-import { versioned } from '../game/publishedArt';
+import { rasterNames } from '../game/artNames';
+import { PUBLISHED_ART, versioned } from '../game/publishedArt';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { HOME_WORDS } from './home';
@@ -139,8 +140,12 @@ export function renderCollection(panel: HTMLElement, state: CollectionState | nu
   panel.appendChild(note('Quests and the shop bring new things. Wear them at the mirror in your nest.'));
 }
 
-/** A piece of furniture's painted art as the page serves it, with its content's hash (the game's loader, game/art.ts, reads the same files). */
-const pieceArt = (art: string, x2: boolean): string => `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}art/${versioned(`${art}${x2 ? '@2x' : ''}.png`)}`;
+/**
+ * A piece of furniture's painted art as the page serves it: the file the build ships (its WebP or PNG,
+ * the 2x when asked for and there is one), with its content's hash, as the game's loader (game/art.ts) reads it.
+ */
+const pieceArt = (art: string, x2: boolean): string =>
+  `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}art/${versioned(rasterNames(art, x2 ? 2 : 1, PUBLISHED_ART)[0] ?? `${art}.png`)}`;
 
 /**
  * The style sets (OP-110): for each, how many of its pieces the owl has and which (a tick, not a
