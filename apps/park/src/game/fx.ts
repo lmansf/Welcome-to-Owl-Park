@@ -30,7 +30,7 @@ export interface FxHost {
   /** Containers inside the owl (owl canvas units, origin at the feet): behind and in front of the layers. */
   readonly back: Phaser.GameObjects.Container;
   readonly front: Phaser.GameObjects.Container;
-  /** The body layer's texture, for outline effects. */
+  /** The body layer's texture as drawn right now (its flight body while the wings are out), for outline effects. */
   bodyTexture(): string;
   /** A horizontal jolt of the whole owl (glitch), in owl canvas units. */
   setJitter(dx: number): void;
@@ -231,6 +231,11 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
     case 'neon-outline': {
       const outline = rig.image('back', 0, 6, host.bodyTexture(), tint, 0.65).setOrigin(0.5, 1).setDisplaySize(216, 254);
       rig.tween({ targets: outline, alpha: 0.95, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      // It outlines the body worn: in flight the one without folded wings (OP-136).
+      rig.onTick = () => {
+        const key = host.bodyTexture();
+        if (outline.texture.key !== key) outline.setTexture(key).setDisplaySize(216, 254);
+      };
       break;
     }
     case 'shadow-aura': {

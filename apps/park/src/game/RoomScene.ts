@@ -447,6 +447,10 @@ export class RoomScene extends Phaser.Scene {
     const live = () => gen === this.gen && this.scene.isActive();
     const scale = artScale('room', this.cfg.pixelRatio, this.artCap);
     const copies = [...this.soft].map((key) => [key, sharpCopy(key, scale)] as const);
+    // The owl's flight body (OP-136) loads once these have come, so it never slows what the room opens with.
+    void Promise.all(copies.map(([, copy]) => copy)).then(() => {
+      if (live()) this.me.readyForFlight();
+    });
     for (const [key, copy] of copies) {
       if (!live()) return;
       if (await sharpenArt(this, key, await copy, live, () => this.still())) this.soft.delete(key);
@@ -1117,7 +1121,7 @@ export class RoomScene extends Phaser.Scene {
      * The others, with how high each is drawn, whether on the ground (0), in the air (1) or gliding (2),
      * and its take-offs as this page carried them on from the states it was told (as `flown` is for the own owl).
      */
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean }>;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string }>;
     /** Asleep, its visitor idle (OP-126). */
     asleep: boolean;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
@@ -1128,6 +1132,10 @@ export class RoomScene extends Phaser.Scene {
     eyes: number;
     /** The owl's body layer in use: `owl-body`, or its species' own (`owl-barn-body`). */
     owlArt: string;
+    /** The body layer drawn right now: `owlArt`, or with the wings out its flight copy (`owl-flight-body`), the folded wings taken away (OP-136). */
+    owlWorn: string;
+    /** Whether the owl's wings are open (OP-084); only ever over its flight body. */
+    wings: boolean;
     /** NPC owls in this room, the quest marker each shows, and whether its '!' says the owl can talk to it now (OP-114). */
     npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
     /** Interactables in this room; `here` is false while a leaf pile is used up. */
@@ -1161,12 +1169,14 @@ export class RoomScene extends Phaser.Scene {
       height: this.me.flightHeight(),
       air: { ...this.flier.air },
       flown: { ...this.flown },
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep })),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey })),
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
       eyes: this.me.anchor('eyes').x,
       owlArt: this.me.artKey,
+      owlWorn: this.me.wornKey,
+      wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y })),
