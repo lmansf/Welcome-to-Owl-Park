@@ -102,7 +102,7 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
-import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpenArt } from './art';
+import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomsAhead, takesDoorway } from './doors';
 import { FitOverlay } from './fitOverlay';
@@ -438,13 +438,24 @@ export class RoomScene extends Phaser.Scene {
     void this.sharpen(gen);
   }
 
-  /** Swap each painting that opened at 1x for its 2x copy as it comes, one after another (OP-129); one whose copy fails stays soft. */
+  /**
+   * Swap each painting that opened at 1x for its 2x copy (OP-129). The copies download together,
+   * whatever the owl does; they swap in one after another, each at a moment the owl stands still.
+   * One whose copy fails stays soft.
+   */
   private async sharpen(gen: number): Promise<void> {
     const live = () => gen === this.gen && this.scene.isActive();
-    for (const key of [...this.soft]) {
+    const scale = artScale('room', this.cfg.pixelRatio, this.artCap);
+    const copies = [...this.soft].map((key) => [key, sharpCopy(key, scale)] as const);
+    for (const [key, copy] of copies) {
       if (!live()) return;
-      if (await sharpenArt(this, key, artScale('room', this.cfg.pixelRatio, this.artCap), live)) this.soft.delete(key);
+      if (await sharpenArt(this, key, await copy, live, () => this.still())) this.soft.delete(key);
     }
+  }
+
+  /** Whether the owl stands still: no walk under way, no key or stick held, on the ground. */
+  private still(): boolean {
+    return !this.me.walking && !this.keys?.direction() && this.flier.air.s === GROUNDED;
   }
 
   private build(): void {
@@ -904,7 +915,7 @@ export class RoomScene extends Phaser.Scene {
   private rest(now: number): void {
     const idle = this.registry.get('idle') as { at: number } | undefined;
     if (!idle || this.goingAway) return;
-    if (this.me.walking || this.keys?.direction() || this.flier.air.s !== GROUNDED) idle.at = now;
+    if (!this.still()) idle.at = now;
     if (!this.sleptAt) {
       if (now - idle.at >= this.cfg.sleepAfterMs && this.maySleep()) this.fallAsleep(now);
       return;

@@ -253,6 +253,9 @@ export async function opensSoft(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio
   return new Set(keys.filter((_, i) => !have[i]));
 }
 
+/** How often a sharp painting that has come asks whether the owl stands still yet. */
+const STILL_POLL_MS = 200;
+
 /** The images in this display list (and the containers in it) that show texture `key`. */
 function imagesShowing(list: Phaser.GameObjects.GameObject[], key: string, out: Phaser.GameObjects.Image[] = []): Phaser.GameObjects.Image[] {
   for (const o of list) {
@@ -262,16 +265,23 @@ function imagesShowing(list: Phaser.GameObjects.GameObject[], key: string, out: 
   return out;
 }
 
-/**
- * Sharpen a painting that opened soft (OP-129): load its 2x copy, then replace the texture under the
- * same key, every image showing it keeping its size on screen. Nothing changes when `live` says the
- * room has gone meanwhile, or its texture was released.
- */
-export async function sharpenArt(scene: Phaser.Scene, key: string, scale: number, live: () => boolean): Promise<boolean> {
+/** A painting's 2x copy, for sharpenArt (OP-129): null when the build has none or it fails to load. */
+export function sharpCopy(key: string, scale: number): Promise<HTMLImageElement | null> {
   const name = rasterNames(key, scale, PUBLISHED_ART)[0];
-  if (!name?.includes('@2x')) return false;
-  const img = await loadImage(`${baseUrl()}${versioned(name)}`);
-  if (!img || !live() || !scene.textures.exists(key)) return false;
+  return name?.includes('@2x') ? loadImage(`${baseUrl()}${versioned(name)}`) : Promise.resolve(null);
+}
+
+/**
+ * Sharpen a painting that opened soft (OP-129): replace its texture with the 2x copy (sharpCopy)
+ * under the same key, every image showing it keeping its size on screen. The swap holds up a frame
+ * or two while the browser decodes the picture for the GPU (a tenth of a second or more on a phone),
+ * so it waits for a moment the owl stands still, where nobody feels it. Nothing changes when `live`
+ * says the room has gone meanwhile, or its texture was released.
+ */
+export async function sharpenArt(scene: Phaser.Scene, key: string, img: HTMLImageElement | null, live: () => boolean, still: () => boolean = () => true): Promise<boolean> {
+  if (!img) return false;
+  while (live() && !still()) await new Promise((r) => setTimeout(r, STILL_POLL_MS));
+  if (!live() || !scene.textures.exists(key)) return false;
   const shown = imagesShowing(scene.children.list, key);
   const sizes = shown.map((o) => [o.displayWidth, o.displayHeight] as const);
   scene.textures.remove(key);
