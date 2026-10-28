@@ -18,14 +18,21 @@ export const STEP_MS = 1000 / 120;
  */
 export const MAX_CATCH_UP_MS = 100;
 
-/** A run's own random numbers, from its seed. */
-export function runRandom(seed: number): () => number {
-  return rotationRandom(`arcade:${seed}`);
+/** A run's own random numbers, from its seed (and a part of the run, for a game laid out a part at a time). */
+export function runRandom(seed: number, part?: string): () => number {
+  return rotationRandom(part === undefined ? `arcade:${seed}` : `arcade:${seed}:${part}`);
 }
 
 /** Steps a game's fixed-slice clock through `ms` of real time, calling `step` for each slice. */
 export class StepClock {
   private carry = 0;
+
+  /** A clock at the same point, for a copy of a game to look ahead with. */
+  copy(): StepClock {
+    const c = new StepClock();
+    c.carry = this.carry;
+    return c;
+  }
 
   advance(ms: number, step: () => boolean): void {
     this.carry = Math.min(this.carry + Math.max(0, ms), MAX_CATCH_UP_MS);

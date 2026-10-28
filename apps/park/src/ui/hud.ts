@@ -1,4 +1,5 @@
 import { NEST_WORDS, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import type { HopDir } from '../arcade/hop';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -290,6 +291,8 @@ const CSS = `
   #hud.arcade-pad .pad{visibility:visible;z-index:25}
   #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud.arcade-pad .pad-btn.jump{display:none}
+  /* Hoot & Hop on the pad (OP-137): the stick over the arcade screen, each flick a hop (even with the stick off for walking). */
+  #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
 }
 /* The '!' that stands for Interact, before the first action (what E and the pad's Interact do). */
 #hud .actions .bang{display:inline-flex;width:18px;height:18px;margin:0 6px 0 -4px;vertical-align:-3px}
@@ -513,13 +516,18 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   };
   // The arcade's game screen covers the whole park while a run is played, like the owl builder.
   const arcade = createArcadeScreen(root);
-  /** A game played on the pad has it over the arcade screen while the run goes, and not after. */
+  /** A game played on the pad has it over the arcade screen while the run goes, and not after: Interact, or the stick's flicks. */
   const arcadePad = (tap: (() => void) | null) => {
     arcadeTap = tap;
     root.classList.toggle('arcade-pad', tap !== null);
   };
+  const arcadeStick = (hop: ((dir: HopDir) => void) | null) => {
+    root.classList.toggle('arcade-stick', hop !== null);
+    stick.flicks(hop && ((v) => hop(v.y < 0 ? 'up' : v.y > 0 ? 'down' : v.x < 0 ? 'left' : 'right')));
+  };
   arcade.onClose(() => {
     arcadePad(null);
+    arcadeStick(null);
     root.classList.remove('covered');
   });
   // So does the climb screen (the stained-glass climb), which owns its controls while it is up.
@@ -763,12 +771,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       if (!arcade.isOpen()) makeRoom();
       root.classList.add('covered');
       arcade.open(view, handlers);
-      // Moon Flap plays on the pad as well as on the field: Interact flaps (OP-137).
+      // Moon Flap plays on the pad as well as on the field: Interact flaps; Hoot & Hop hops by the stick's flicks (OP-137).
       arcadePad(view.game === 'flight' ? () => arcade.padTap() : null);
+      arcadeStick(view.game === 'crossing' ? (dir) => arcade.padHop(dir) : null);
     },
     arcadePlaying: (score, banner) => arcade.playing(score, banner),
     arcadeResult: (r) => {
       arcadePad(null);
+      arcadeStick(null);
       arcade.result(r);
     },
     closeArcade: () => arcade.close(),

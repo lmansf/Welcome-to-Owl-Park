@@ -1,4 +1,5 @@
 import { FIELD_H, FIELD_W } from '../arcade/field';
+import type { HopDir } from '../arcade/hop';
 import type { PreviewRect } from '../game/BuilderScene';
 import { createModal, modalHeader } from './modal';
 
@@ -29,7 +30,7 @@ export interface ArcadeResultView {
 }
 
 /** What the player does on the field, in field pixels where it matters. */
-export type ArcadeInput = { kind: 'tap' } | { kind: 'aim'; dx: number; dy: number } | { kind: 'release' } | { kind: 'nudge'; angle: number; power: number };
+export type ArcadeInput = { kind: 'tap' } | { kind: 'hop'; dir: HopDir } | { kind: 'aim'; dx: number; dy: number } | { kind: 'release' } | { kind: 'nudge'; angle: number; power: number };
 
 export interface ArcadeHandlers {
   input(i: ArcadeInput): void;
@@ -43,6 +44,8 @@ export interface ArcadeScreen {
   open(view: ArcadeView, handlers: ArcadeHandlers): void;
   /** The pad's Interact in a game played on the pad: it puts the how-to card away first, then plays (OP-137). */
   padTap(): void;
+  /** A flick of the pad's stick in Hoot & Hop: the how-to card away first, then a hop that way (OP-137). */
+  padHop(dir: HopDir): void;
   /** The score and the line of the moment ("Cleared in 2 shots!"), as the run goes. */
   playing(score: number, banner: string): void;
   result(r: ArcadeResultView): void;
@@ -81,6 +84,11 @@ const CSS = `
 `;
 
 let styled = false;
+
+/** Hoot & Hop's keys: the arrows and WASD hop their ways, the space bar and Enter hop up (OP-137). */
+const HOP_KEYS: Readonly<Record<string, HopDir>> = { arrowup: 'up', w: 'up', ' ': 'up', enter: 'up', arrowdown: 'down', s: 'down', arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right' };
+/** A press on Hoot & Hop's field that moves this far (CSS pixels) is a swipe, a hop its way. */
+const SWIPE_PX = 24;
 
 /** The games whose how-to card this device has shown: each shows once, before its first run here (OP-137). */
 const HOW_TO_KEY = 'owl-park:arcade-how-to';
@@ -144,6 +152,8 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   let view: ArcadeView | null = null;
   let handlers: ArcadeHandlers | null = null;
   let drag: { x: number; y: number } | null = null;
+  /** Hoot & Hop: a press on the field, a hop up when it lifts, or a hop the way it swipes (OP-137). */
+  let swipe: { id: number; x: number; y: number } | null = null;
   let shown = { score: -1, banner: '' };
   $<HTMLButtonElement>('[data-again]').addEventListener('click', () => handlers?.again());
   $<HTMLButtonElement>('[data-done]').addEventListener('click', () => modal.close());
@@ -181,12 +191,25 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   stage.addEventListener('pointerdown', (e) => {
     if (!view || over() || howToUp() || (e.target as Element).closest('button')) return;
     e.preventDefault();
+    if (view.game === 'crossing') {
+      swipe = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      stage.setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (view.game !== 'sling') return handlers?.input({ kind: 'tap' });
     const f = fit();
     drag = { x: (e.clientX - f.x0) / f.k, y: (e.clientY - f.y0) / f.k };
     stage.setPointerCapture?.(e.pointerId);
   });
   stage.addEventListener('pointermove', (e) => {
+    if (swipe && e.pointerId === swipe.id) {
+      const dx = e.clientX - swipe.x;
+      const dy = e.clientY - swipe.y;
+      if (Math.hypot(dx, dy) < SWIPE_PX) return;
+      swipe = null;
+      handlers?.input({ kind: 'hop', dir: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up' });
+      return;
+    }
     if (!drag) return;
     const f = fit();
     handlers?.input({ kind: 'aim', dx: (e.clientX - f.x0) / f.k - drag.x, dy: (e.clientY - f.y0) / f.k - drag.y });
@@ -196,8 +219,18 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
     drag = null;
     handlers?.input({ kind: 'release' });
   };
-  stage.addEventListener('pointerup', letGo);
-  stage.addEventListener('pointercancel', () => (drag = null));
+  stage.addEventListener('pointerup', (e) => {
+    if (swipe && e.pointerId === swipe.id) {
+      swipe = null;
+      if (view && !over()) handlers?.input({ kind: 'hop', dir: 'up' });
+      return;
+    }
+    letGo();
+  });
+  stage.addEventListener('pointercancel', () => {
+    drag = null;
+    swipe = null;
+  });
   // The keys: a hop or a flap; for the slingshot, aim higher or lower, more or less power, and let go.
   box.addEventListener('keydown', (e) => {
     if (!view || over() || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -219,6 +252,9 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       else if (k === 'arrowright' || k === 'd') input = { kind: 'nudge', angle: 0, power: 0.04 };
       else if (k === 'arrowleft' || k === 'a') input = { kind: 'nudge', angle: 0, power: -0.04 };
       else if (k === ' ' || k === 'enter') input = { kind: 'release' };
+    } else if (view.game === 'crossing') {
+      const dir = HOP_KEYS[k];
+      if (dir) input = { kind: 'hop', dir };
     } else if (k === ' ' || k === 'arrowup' || k === 'w' || k === 'enter') input = { kind: 'tap' };
     if (!input) return;
     e.preventDefault();
@@ -262,6 +298,10 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
     padTap() {
       if (howToUp()) howToDone();
       else if (view && !over()) handlers?.input({ kind: 'tap' });
+    },
+    padHop(dir) {
+      if (howToUp()) howToDone();
+      else if (view && !over()) handlers?.input({ kind: 'hop', dir });
     },
     playing(score, banner) {
       if (score !== shown.score) {

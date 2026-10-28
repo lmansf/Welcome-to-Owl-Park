@@ -52,19 +52,33 @@ const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 /** A run past the owl's best tells the room its score at most this often (OP-137). */
 const RECORD_EVERY_MS = 1000;
 
-/** How to play, under each game's field. Visitor-facing. */
-const HINTS: Readonly<Record<ArcadeGame, string>> = {
-  crossing: 'Tap to hop',
-  flight: 'Tap to flap',
-  sling: 'Pull back and let go',
+const HOP_GOAL = 'Hop to the top of the street, level after level. Mind the carts, the drones and the bats, and cross the rivers on the logs.';
+
+/** How to play, under each game's field, on a touch screen and on a keyboard. Visitor-facing. */
+const HINTS: Readonly<Record<ArcadeGame, { touch: string; keys: string }>> = {
+  crossing: { touch: 'Flick the stick to hop', keys: 'Arrow keys to hop' },
+  flight: { touch: 'Tap to flap', keys: 'Tap to flap' },
+  sling: { touch: 'Pull back and let go', keys: 'Pull back and let go' },
 };
 
 /** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
-const HOW_TO: Readonly<Record<ArcadeGame, readonly string[]>> = {
-  crossing: ['Hop across the lanes to the far kerb, then back again.', 'Tap to hop. Mind the carts and the drones.'],
-  flight: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
-  sling: ['Knock the crates off their stands: ten stacks, three shots each.', 'Pull back and let go to launch.'],
+const HOW_TO: Readonly<Record<ArcadeGame, { touch: readonly string[]; keys: readonly string[] }>> = {
+  crossing: {
+    touch: [HOP_GOAL, 'Flick the stick to hop up, down, left or right, or swipe the screen. Three lives.'],
+    keys: [HOP_GOAL, 'The arrow keys or WASD hop up, down, left or right. Three lives.'],
+  },
+  flight: {
+    touch: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+    keys: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+  },
+  sling: {
+    touch: ['Knock the crates off their stands: ten stacks, three shots each.', 'Pull back and let go to launch.'],
+    keys: ['Knock the crates off their stands: ten stacks, three shots each.', 'Pull back and let go to launch.'],
+  },
 };
+
+/** Whether this device plays by touch (a phone or a tablet): its hints and how-to say so. */
+const byTouch = () => typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
 
 /** What the arcade needs of the room it is in. */
 export interface ArcadeHost {
@@ -224,7 +238,7 @@ export class Arcade {
     this.run = { game, seed: reply.seed, sim, sent: false, recorded: 0, recordedAt: 0 };
     const top = this.walls.get(game)?.top[0]?.score ?? null;
     this.host.hud.openArcade(
-      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game], howTo: HOW_TO[game], top, best: this.mine[game] ?? null },
+      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game][byTouch() ? 'touch' : 'keys'], howTo: HOW_TO[game][byTouch() ? 'touch' : 'keys'], top, best: this.mine[game] ?? null },
       {
         input: (i) => this.input(i),
         frame: (rect) => this.frame(rect),
@@ -269,6 +283,10 @@ export class Arcade {
   private input(i: ArcadeInput): void {
     const sim = this.run?.sim;
     if (!sim || sim.over) return;
+    if (i.kind === 'hop') {
+      if (sim.game === 'crossing') sim.hopTo(i.dir);
+      return;
+    }
     if (i.kind === 'tap') {
       if (sim.game !== 'sling') sim.tap();
       return;
@@ -283,7 +301,7 @@ export class Arcade {
   private step(sim: ArcadeSim): void {
     const run = this.run;
     if (!run || run.sim !== sim) return;
-    this.host.hud.arcadePlaying(sim.score, sim.game === 'sling' ? sim.banner : '');
+    this.host.hud.arcadePlaying(sim.score, sim.game === 'flight' ? '' : sim.banner);
     if (sim.over && !run.sent) {
       run.sent = true;
       void this.finish(run);

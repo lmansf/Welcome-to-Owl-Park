@@ -82,7 +82,10 @@ describe('the arcade’s games', () => {
   });
 
   it('knows the least time a result can take', () => {
-    expect(leastRunMs({ game: 'crossing', score: 3 })).toBe(3 * (HOP_LANES + 1) * HOP_MS);
+    // Hoot & Hop: a hop a point, and the perch's hop two (seven points a level of six hops).
+    expect(leastRunMs({ game: 'crossing', score: 3 })).toBe(3 * HOP_MS);
+    expect(leastRunMs({ game: 'crossing', score: HOP_LANES + 2 })).toBe((HOP_LANES + 1) * HOP_MS);
+    expect(leastRunMs({ game: 'crossing', score: 2 * (HOP_LANES + 2) + 2 })).toBe((2 * (HOP_LANES + 1) + 2) * HOP_MS);
     expect(leastRunMs({ game: 'flight', score: 0 })).toBe(0);
     expect(leastRunMs({ game: 'flight', score: 1 })).toBe((FLAP_FIRST / FLAP_SPEED) * 1000);
     expect(leastRunMs({ game: 'flight', score: 11 })).toBe(((FLAP_FIRST + 10 * FLAP_SPACING) / FLAP_SPEED) * 1000);
@@ -90,7 +93,7 @@ describe('the arcade’s games', () => {
   });
 
   it('takes a result only when the run lasted long enough for it', () => {
-    const hop = { game: 'crossing', score: 3 } as const;
+    const hop = { game: 'crossing', score: 21 } as const;
     expect(plausibleRun(hop, leastRunMs(hop))).toBe(true);
     expect(plausibleRun(hop, leastRunMs(hop) - 900)).toBe(true);
     expect(plausibleRun(hop, leastRunMs(hop) - 1100)).toBe(false);

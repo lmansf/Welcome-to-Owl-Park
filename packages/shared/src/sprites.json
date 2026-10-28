@@ -4,8 +4,10 @@
   "sprites": {
     "arcade-flap-branch": {"size": [128, 575], "drawn": [0, 0, 128, 575], "centre": [64, 287.5], "solid": [0, 0, 128, 575]},
     "arcade-flap-ground": {"size": [180, 40], "drawn": [0, 0, 180, 40], "centre": [90, 20], "solid": [0, 0, 180, 40]},
+    "arcade-hop-bat": {"size": [40, 34], "drawn": [2, 9, 36, 24], "centre": [20, 21], "solid": [2, 9, 36, 24]},
     "arcade-hop-cart": {"size": [96, 84], "drawn": [3, 4, 89, 76], "centre": [47, 42], "solid": [4, 4, 87, 75]},
     "arcade-hop-drone": {"size": [44, 36], "drawn": [4, 3, 37, 27], "centre": [22, 16.5], "solid": [4, 3, 36, 27]},
+    "arcade-hop-log": {"size": [112, 40], "drawn": [7, 6, 99, 29], "centre": [56, 20.5], "solid": [7, 7, 98, 27]},
     "arcade-knock-crate": {"size": [36, 36], "drawn": [0, 0, 36, 36], "centre": [18, 18], "solid": [0, 0, 36, 35]},
     "arcade-knock-sling": {"size": [60, 120], "drawn": [0, 15, 60, 90], "centre": [30, 60], "solid": [0, 15, 60, 90]},
     "arcade-knock-stand": {"size": [72, 72], "drawn": [0, 2, 72, 68], "centre": [36, 36], "solid": [0, 2, 72, 68]},

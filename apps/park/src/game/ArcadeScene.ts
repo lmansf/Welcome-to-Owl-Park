@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import { FLAP_SPEED, type ArcadeGame, type OwlLook } from '@owl-park/shared';
+import { FLAP_SPEED, SPRITES, type ArcadeGame, type OwlLook } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
 import { FIELD_H, FIELD_W, runRandom } from '../arcade/field';
 import { BRANCH_W, FLAP_R, FLAP_X, GROUND_Y as FLAP_GROUND, type Branch, type FlapGame } from '../arcade/flap';
-import { HOP_ROWS, HOP_X, rowY, type HopGame, type Vehicle } from '../arcade/hop';
+import { HOP_ROWS, rowY, type HopGame, type Item, type Lane } from '../arcade/hop';
 import { CRATE, GROUND_Y as KNOCK_GROUND, SLING, type Crate, type KnockGame, type Stand } from '../arcade/knock';
-import { GAME_ART, GROUND_TILE_W, STAND_ART, branchHalves, groundTiles, paintable, standPieces } from '../arcade/paint';
+import { GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, standPieces } from '../arcade/paint';
 import type { PreviewRect } from './BuilderScene';
 import { Owl } from './Owl';
 
@@ -19,16 +19,23 @@ export const ARCADE_INK: Readonly<Record<ArcadeSim['game'], { ink: number; glow:
   sling: { ink: 0xcdb0ff, glow: 0x8a4dff, css: '#8A4DFF' },
 };
 const AMBER = 0xffc46a;
+const BARK = 0xc98a4a;
+const WATER = 0x8af4ff;
 const NIGHT = 0x05060d;
 /** The owl is drawn at this share of its size in the rooms: the field is a small world. */
 const OWL_IN_FIELD = 0.5;
 
 /** Each game's painted field. */
 const FIELD_ART: Readonly<Record<ArcadeGame, string>> = { crossing: 'arcade-hop-bg', flight: 'arcade-flap-bg', sling: 'arcade-knock-bg' };
+/** Hoot & Hop's river water is laid twice across a lane, the second copy mirrored (OP-137). */
+const WATER_W = GAME_ART.crossing[HOP_WATER]!.w;
+/** A log's painting is stretched so the log itself (not the glow round it) is as long as the log the game plays. */
+const LOG_ART = GAME_ART.crossing[HOP_PIECES.log]!;
+const LOG_STRETCH = LOG_ART.w / (SPRITES[HOP_PIECES.log]?.solid?.[2] ?? LOG_ART.w);
 /** The ground strip needs this many tiles to cover the field at any scroll. */
 const GROUND_TILES = Math.ceil(FIELD_W / GROUND_TILE_W) + 1;
 
-/** One image for each moving thing of a painted game (a vehicle, a half of a branch, a crate): made when it first shows, dropped once it is gone. */
+/** One image for each moving thing of a painted game (a cart, a log, a half of a branch, a crate): made when it first shows, dropped once it is gone. */
 class Pieces<T extends object> {
   private readonly images = new Map<T, Phaser.GameObjects.Image>();
   private seen = new Set<T>();
@@ -85,14 +92,19 @@ export class ArcadeScene extends Phaser.Scene {
   private stars: Array<{ x: number; y: number; r: number }> = [];
   /**
    * The run's painting, clipped to the field like the lines: the field and what stands still on it,
-   * then what moves (vehicles, branches, stands and crates), then the flight's ground over the
-   * branches' feet. Empty while the run is drawn in neon.
+   * then what moves (carts, drones, bats and logs, branches, stands and crates), then the flight's
+   * ground over the branches' feet. Empty while the run is drawn in neon.
    */
   private layers: { field: Phaser.GameObjects.Container; moving: Phaser.GameObjects.Container; front: Phaser.GameObjects.Container } | null = null;
   /** The painting's root, hidden while the run is in neon (so its mask costs nothing). */
   private art: Phaser.GameObjects.Container | null = null;
   private painted = false;
-  private vehicles: Pieces<Vehicle> | null = null;
+  private hopItems: Pieces<Item> | null = null;
+  /** Hoot & Hop's pavements and rivers laid over the street, and the level's lanes they were laid for. */
+  private strips: Phaser.GameObjects.Image[] = [];
+  private stripsShown: Lane[] | null = null;
+  /** Which way the hopping owl faces: the way of its last hop sideways. */
+  private hopFacing: 1 | -1 = 1;
   private branchTops: Pieces<Branch> | null = null;
   private branchFeet: Pieces<Branch> | null = null;
   private crates: Pieces<Crate> | null = null;
@@ -178,8 +190,11 @@ export class ArcadeScene extends Phaser.Scene {
     const layers = this.layers;
     if (!layers) return;
     for (const layer of Object.values(layers)) layer.removeAll(true);
-    this.vehicles = this.branchTops = this.branchFeet = this.crates = null;
+    this.hopItems = this.branchTops = this.branchFeet = this.crates = null;
     this.ground = [];
+    this.strips = [];
+    this.stripsShown = null;
+    this.hopFacing = 1;
     this.standImages = [];
     this.standsShown = null;
     this.painted = paintable(game, (key) => this.textures.exists(key));
@@ -192,11 +207,17 @@ export class ArcadeScene extends Phaser.Scene {
       return image;
     };
     if (game === 'crossing') {
-      this.vehicles = new Pieces((v) => {
-        const image = this.piece(v.kind === 'drone' ? 'arcade-hop-drone' : 'arcade-hop-cart');
+      this.hopItems = new Pieces((it) => {
+        const image = this.piece(HOP_PIECES[it.kind]);
         layers.moving.add(image);
         return image;
       });
+      // The street's near kerb, cut from its painting for the pavements and the rivers' banks (a texture loaded again needs them again).
+      const street = this.textures.get(FIELD_ART.crossing);
+      const k = street.getSourceImage().width / FIELD_W;
+      for (const [name, band] of [['hop-kerb', HOP_KERB], ['hop-bank', HOP_BANK]] as const) {
+        if (!street.has(name)) street.add(name, 0, 0, band.y * k, FIELD_W * k, band.h * k);
+      }
     } else if (game === 'flight') {
       // Both halves of a branch mirrored (paint.ts), the top half upside down too, its knobbly end at the gap.
       this.branchTops = new Pieces(moving('arcade-flap-branch', true));
@@ -286,21 +307,48 @@ export class ArcadeScene extends Phaser.Scene {
     this.neon(g, c.glow, () => g.strokeRoundedRect(4, 4, FIELD_W - 8, FIELD_H - 8, 18), 3);
   }
 
-  /** Hoot & Hop in its painting: each vehicle in its lane, facing the way the lane goes. */
+  /**
+   * Hoot & Hop in its painting: the level's pavements and rivers over the street, laid again when a
+   * new level comes, and each cart, drone, bat and log in its lane, facing the way the lane goes (a
+   * log at its length, a bat's wings beating).
+   */
   private paintHop(sim: HopGame): void {
-    const vehicles = this.vehicles;
-    if (!vehicles) return;
+    const items = this.hopItems;
+    const layers = this.layers;
+    if (!items || !layers) return;
+    if (sim.lanes !== this.stripsShown) {
+      for (const image of this.strips) image.destroy();
+      this.strips = sim.lanes.flatMap((lane, i) => {
+        const y = rowY(i + 1);
+        const water = lane.kind === 'river' ? [0, 1].map((n) => this.piece(HOP_WATER, n * WATER_W, y).setOrigin(0, 0.5).setFlipX(n === 1)) : [];
+        const cuts = laneCuts(lane.kind, y).map(({ cut, y: top, flip }) =>
+          this.add
+            .image(0, top, FIELD_ART.crossing, `hop-${cut}`)
+            .setOrigin(0)
+            .setDisplaySize(FIELD_W, (cut === 'kerb' ? HOP_KERB : HOP_BANK).h)
+            .setFlipY(flip),
+        );
+        return [...water, ...cuts];
+      });
+      layers.field.add(this.strips);
+      this.stripsShown = sim.lanes;
+    }
     sim.lanes.forEach((lane, i) => {
       const y = rowY(i + 1);
-      for (const v of lane.vehicles) {
-        vehicles
-          .for(v)
-          .setPosition(v.x, y)
+      for (const it of lane.items) {
+        const image = items
+          .for(it)
+          .setPosition(it.x, y)
           .setFlipX(lane.dir < 0)
-          .setVisible(v.x + v.w / 2 >= -10 && v.x - v.w / 2 <= FIELD_W + 10);
+          .setVisible(it.x + it.w / 2 >= -10 && it.x - it.w / 2 <= FIELD_W + 10);
+        if (it.kind === 'log') image.setDisplaySize(it.w * LOG_STRETCH, LOG_ART.h);
+        else if (it.kind === 'bat') {
+          const size = GAME_ART.crossing[HOP_PIECES.bat]!;
+          image.setDisplaySize(size.w, size.h * (0.8 + 0.2 * Math.abs(Math.sin(sim.time / 90 + it.x / 40))));
+        }
       }
     });
-    vehicles.sweep();
+    items.sweep();
   }
 
   /** Moon Flap in its painting: each branch's two halves at its gap, and the ground going by under the flight. */
@@ -349,51 +397,88 @@ export class ArcadeScene extends Phaser.Scene {
     crates.sweep();
   }
 
+  /** Hoot & Hop in neon: the kerb, the level's pavements, roads and rivers, the top of the street, and what goes along them. */
   private drawHop(g: Phaser.GameObjects.Graphics, sim: HopGame): void {
     const c = ARCADE_INK.crossing;
-    // The two kerbs, and the lane markings between them.
-    for (const row of [0, HOP_ROWS - 1]) this.neon(g, c.ink, () => g.strokeRect(16, rowY(row) - 30, FIELD_W - 32, 60));
-    for (let row = 1; row < HOP_ROWS - 1; row++) {
-      const y = rowY(row) + 40;
-      if (row === HOP_ROWS - 2) continue;
-      g.lineStyle(2, c.ink, 0.35);
-      for (let x = 16; x < FIELD_W - 16; x += 36) g.lineBetween(x, y, x + 18, y);
-    }
+    const band = (row: number) => this.neon(g, c.ink, () => g.strokeRect(16, rowY(row) - 30, FIELD_W - 32, 60));
+    band(0);
+    band(HOP_ROWS - 1);
+    const street = (lane: Lane | undefined) => lane?.kind === 'road' || lane?.kind === 'air';
     sim.lanes.forEach((lane, i) => {
       const y = rowY(i + 1);
-      for (const v of lane.vehicles) {
-        if (v.x + v.w / 2 < -10 || v.x - v.w / 2 > FIELD_W + 10) continue;
-        if (v.kind === 'drone') {
-          // A drone: a body, four rotors and a light that blinks.
-          this.neon(g, 0x8af4ff, () => {
-            g.strokeCircle(v.x, y, 10);
-            for (const dx of [-16, 16]) for (const dy of [-12, 12]) g.strokeCircle(v.x + dx, y + dy, 6);
-          });
-          if (Math.floor(sim.time / 300 + v.x) % 2 === 0) g.fillStyle(0xff2aa1, 1).fillCircle(v.x, y, 3);
-        } else {
-          // A noodle cart: its box, two wheels, and a steaming bowl on top.
-          this.neon(g, AMBER, () => {
-            g.strokeRoundedRect(v.x - v.w / 2, y - 18, v.w, 30, 6);
-            g.strokeCircle(v.x - v.w / 3, y + 16, 7);
-            g.strokeCircle(v.x + v.w / 3, y + 16, 7);
-            g.beginPath();
-            g.arc(v.x, y - 18, 12, 0, Math.PI, false);
-            g.strokePath();
-          });
-          g.lineStyle(2, 0xffffff, 0.45);
-          for (const dx of [-5, 4]) g.lineBetween(v.x + dx, y - 34, v.x + dx + 3 * Math.sin(sim.time / 200 + dx), y - 44);
+      if (lane.kind === 'safe') band(i + 1);
+      else if (lane.kind === 'river') {
+        // Water: ripples drifting the river's way.
+        g.lineStyle(2, WATER, 0.35);
+        const drift = ((sim.time / 1000) * lane.speed * lane.dir) % 48;
+        for (const dy of [-22, 0, 22]) {
+          for (let x = -48 + drift + (dy === 0 ? 24 : 0); x < FIELD_W; x += 48) g.lineBetween(x, y + dy, x + 20, y + dy - 3);
         }
+      }
+      // Lane lines between two lanes of the street.
+      if (street(lane) && street(sim.lanes[i + 1])) {
+        g.lineStyle(2, c.ink, 0.35);
+        for (let x = 16; x < FIELD_W - 16; x += 36) g.lineBetween(x, y - 40, x + 18, y - 40);
+      }
+    });
+    sim.lanes.forEach((lane, i) => {
+      const y = rowY(i + 1);
+      for (const it of lane.items) {
+        if (it.x + it.w / 2 < -10 || it.x - it.w / 2 > FIELD_W + 10) continue;
+        this.drawHopItem(g, it, y, sim.time);
       }
     });
   }
 
-  /** The hopping owl, mid-hop on an arc between rows. */
+  private drawHopItem(g: Phaser.GameObjects.Graphics, it: Item, y: number, time: number): void {
+    const kind = it.kind;
+    if (kind === 'drone') {
+      // A drone: a body, four rotors and a light that blinks.
+      this.neon(g, 0x8af4ff, () => {
+        g.strokeCircle(it.x, y, 10);
+        for (const dx of [-16, 16]) for (const dy of [-12, 12]) g.strokeCircle(it.x + dx, y + dy, 6);
+      });
+      if (Math.floor(time / 300 + it.x) % 2 === 0) g.fillStyle(0xff2aa1, 1).fillCircle(it.x, y, 3);
+    } else if (kind === 'bat') {
+      // A bat: a body and two wings, beating.
+      const lift = 10 * Math.sin(time / 90 + it.x / 40);
+      this.neon(g, 0xcdb0ff, () => {
+        g.strokeCircle(it.x, y, 7);
+        for (const side of [-1, 1]) g.strokePoints([{ x: it.x + side * 6, y }, { x: it.x + side * 14, y: y - 6 - lift }, { x: it.x + side * 20, y: y + 2 - lift / 2 }], false);
+      });
+    } else if (kind === 'log') {
+      // A log: its length of bark and a ring at each end.
+      this.neon(g, BARK, () => {
+        g.strokeRoundedRect(it.x - it.w / 2, y - 15, it.w, 30, 14);
+        for (const end of [-1, 1]) g.strokeEllipse(it.x + end * (it.w / 2 - 10), y, 10, 22);
+      });
+    } else {
+      // A noodle cart: its box, two wheels, and a steaming bowl on top.
+      this.neon(g, AMBER, () => {
+        g.strokeRoundedRect(it.x - it.w / 2, y - 18, it.w, 30, 6);
+        g.strokeCircle(it.x - it.w / 3, y + 16, 7);
+        g.strokeCircle(it.x + it.w / 3, y + 16, 7);
+        g.beginPath();
+        g.arc(it.x, y - 18, 12, 0, Math.PI, false);
+        g.strokePath();
+      });
+      g.lineStyle(2, 0xffffff, 0.45);
+      for (const dx of [-5, 4]) g.lineBetween(it.x + dx, y - 34, it.x + dx + 3 * Math.sin(time / 200 + dx), y - 44);
+    }
+  }
+
+  /**
+   * The hopping owl, on an arc between two places mid-hop, facing the way it last hopped sideways. A
+   * hit shows by the owl blinking where it was hit; a level cleared, by the owl bouncing on the perch.
+   */
   private placeHopOwl(sim: HopGame): void {
-    const from = rowY(sim.row);
-    const to = sim.hop ? rowY(sim.hop.to) : from;
+    const { x, row } = sim.at;
     const t = sim.hop?.t ?? 0;
-    const y = from + (to - from) * t - Math.sin(Math.PI * t) * 18;
-    this.placeOwl(HOP_X, y + 22, 0, sim.heading === 1 ? 1 : -1);
+    if (sim.hop && sim.hop.toX !== sim.hop.fromX && sim.hop.toRow === sim.hop.fromRow) this.hopFacing = sim.hop.toX > sim.hop.fromX ? 1 : -1;
+    const bounce = sim.waiting === 'fanfare' ? Math.abs(Math.sin(sim.time / 130)) * 12 : 0;
+    const y = rowY(row) - Math.sin(Math.PI * t) * 18 - bounce;
+    this.placeOwl(x, y + 22, 0, this.hopFacing);
+    this.owl?.setVisible(sim.waiting !== 'respawn' || Math.floor(sim.time / 110) % 2 === 0);
   }
 
   private drawFlap(g: Phaser.GameObjects.Graphics, sim: FlapGame): void {

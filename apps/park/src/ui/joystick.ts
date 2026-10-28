@@ -3,7 +3,8 @@ import type { Vec2 } from '@owl-park/shared';
 /**
  * The thumbstick on touch screens: a see-through stick in the bottom-right corner that walks the
  * owl while held, the way WASD does on a keyboard, so a thumb never has to tap the floor between the
- * buttons. It points one of eight ways, like the keys.
+ * buttons. It points one of eight ways, like the keys. In a game played by flicks (Hoot & Hop,
+ * OP-137) it points one of four, and each push into a way is one flick.
  */
 
 const D = Math.SQRT1_2;
@@ -23,21 +24,27 @@ const DEAD_ZONE = 0.25;
 /** A way is kept this far past the edge of its sector, so a thumb on a boundary does not flip between two. */
 const HOLD_RAD = (10 * Math.PI) / 180;
 
-/** The way (index into STICK_WAYS) for a knob pushed (dx, dy) on a stick of `radius`; `prev` is the way it points now. */
-export function stickWay(dx: number, dy: number, radius: number, prev: number | null): number | null {
+/**
+ * The way (index into STICK_WAYS) for a knob pushed (dx, dy) on a stick of `radius`; `prev` is the way
+ * it points now. With `ways` 4 only right, down, left and up (0, 2, 4, 6).
+ */
+export function stickWay(dx: number, dy: number, radius: number, prev: number | null, ways: 4 | 8 = 8): number | null {
   if (Math.hypot(dx, dy) < radius * DEAD_ZONE) return null;
   const a = Math.atan2(dy, dx);
+  const sector = (2 * Math.PI) / ways;
   if (prev !== null) {
     let off = Math.abs(a - (prev * Math.PI) / 4) % (2 * Math.PI);
     if (off > Math.PI) off = 2 * Math.PI - off;
-    if (off <= Math.PI / 8 + HOLD_RAD) return prev;
+    if (off <= sector / 2 + HOLD_RAD) return prev;
   }
-  return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+  return (((Math.round(a / sector) * (8 / ways)) % 8) + 8) % 8;
 }
 
 export interface Joystick {
   /** Where the stick points: one of eight unit vectors, or null while it rests. */
   direction(): Vec2 | null;
+  /** While `cb` is set the stick points four ways, and calls it once for each push into one (null: eight ways again). */
+  flicks(cb: ((dir: Vec2) => void) | null): void;
   detach(): void;
 }
 
@@ -80,6 +87,7 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
 
   let pointer: number | null = null;
   let way: number | null = null;
+  let flick: ((dir: Vec2) => void) | null = null;
 
   const aim = (e: PointerEvent) => {
     const r = stick.getBoundingClientRect();
@@ -93,7 +101,9 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       dy *= reach / len;
     }
     knob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
-    way = stickWay(dx, dy, radius, way);
+    const was = way;
+    way = stickWay(dx, dy, radius, way, flick ? 4 : 8);
+    if (flick && way !== null && way !== was) flick(STICK_WAYS[way]!);
   };
   const rest = () => {
     pointer = null;
@@ -132,6 +142,10 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
 
   return {
     direction: () => (way === null ? null : STICK_WAYS[way]!),
+    flicks(cb) {
+      flick = cb;
+      rest();
+    },
     detach() {
       window.removeEventListener('blur', rest);
       document.removeEventListener('visibilitychange', onHide);

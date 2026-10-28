@@ -363,13 +363,16 @@ test("the arcade's bays: an edit of the published hall, each hall candidate's tw
 test("the arcade's games: each background over its field guide at 2x, each piece alone on a chroma backdrop, each the arcade's own key", () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   const pieces = { hop: ['drone', 'cart'], flap: ['branch', 'ground'], knock: ['sling', 'crate', 'stand'] };
-  assert.deepEqual(P.ARCADE_GAME_KEYS, Object.entries(pieces).flatMap(([game, ps]) => [`arcade-${game}-bg`, ...ps.map((p) => `arcade-${game}-${p}`)]));
+  // Hoot & Hop's levels came after (OP-137): its bat, log and river, at the end so the others keep their seeds.
+  const levels = ['bat', 'log', 'river'].map((p) => `arcade-hop-${p}`);
+  assert.deepEqual(P.ARCADE_GAME_KEYS, [...Object.entries(pieces).flatMap(([game, ps]) => [`arcade-${game}-bg`, ...ps.map((p) => `arcade-${game}-${p}`)]), ...levels]);
   for (const key of P.ARCADE_GAME_KEYS) {
     const j = jobs.get(key);
     assert.ok(key in ASSETS.keys && !P.HELPER_KEYS.includes(key), `${key}: the pick is the arcade's own key`);
     assert.ok(j.variants >= 3, key);
     assert.equal(j.providers.fal.output_format, 'png', key);
-    assert.match(j.prompt, /owls, birds, animals, people, robots, faces or characters/, `${key}: no owl or character`);
+    // The bat is the one animal among the pieces: nothing else alive with it.
+    assert.match(j.prompt, key === 'arcade-hop-bat' ? /owls, birds, people, robots or other animals/ : /owls, birds, animals, people, robots, faces or characters/, `${key}: no owl or character`);
     if (key.endsWith('-bg')) {
       assert.deepEqual([j.kind, j.size, j.key_colour], ['anchor', '960x1280', undefined], key);
       assert.deepEqual(j.refs.map((r) => [r.ref, r.optional]), [[`@canvas:${key}`, false]], `${key}: painted over its field guide`);

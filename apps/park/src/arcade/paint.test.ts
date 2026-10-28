@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { FIELD_H, FIELD_W } from './field';
 import { BRANCH_W, GROUND_Y as FLAP_GROUND } from './flap';
-import { HopGame } from './hop';
+import { runRandom } from './field';
+import { levelLanes } from './hop';
 import { CRATE } from './knock';
-import { BRANCH_ART, GAME_ART, GROUND_TILE_W, STAND_ART, branchHalves, groundTiles, paintable, standPieces } from './paint';
+import { BRANCH_ART, GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, standPieces } from './paint';
 
 describe("the arcade's games in their paintings", () => {
   it('paint each field whole, and each piece at the size the game plays it', () => {
@@ -11,17 +12,46 @@ describe("the arcade's games in their paintings", () => {
       const field = Object.values(GAME_ART).find((g) => key in g)![key];
       expect(field, key).toEqual({ w: FIELD_W, h: FIELD_H });
     }
-    const vehicles = [1, 2, 3, 4, 5].flatMap((seed) => new HopGame(seed).lanes.flatMap((l) => l.vehicles));
-    expect(new Set(vehicles.filter((v) => v.kind === 'drone').map((v) => v.w))).toEqual(new Set([GAME_ART.crossing['arcade-hop-drone']!.w]));
-    expect(new Set(vehicles.filter((v) => v.kind === 'cart').map((v) => v.w))).toEqual(new Set([GAME_ART.crossing['arcade-hop-cart']!.w]));
+    // Hoot & Hop's carts, drones and bats as wide as the game plays them; its logs stretched to theirs.
+    const lanes = [1, 2, 3, 4, 5].flatMap((seed) => [1, 4, 8, 12, 20].flatMap((level) => levelLanes(level, runRandom(seed, `level ${level}`))));
+    const items = lanes.flatMap((l) => l.items);
+    for (const kind of ['cart', 'drone', 'bat'] as const) {
+      expect(new Set(items.filter((it) => it.kind === kind).map((it) => it.w)), kind).toEqual(new Set([GAME_ART.crossing[HOP_PIECES[kind]]!.w]));
+    }
+    expect(items.some((it) => it.kind === 'log')).toBe(true);
+    expect(GAME_ART.crossing[HOP_PIECES.log]).toBeDefined();
+    // A river's water, twice across its lane (the second mirrored), covers a row of the field.
+    expect(GAME_ART.crossing[HOP_WATER]!.h).toBe(80);
+    expect(2 * GAME_ART.crossing[HOP_WATER]!.w).toBeGreaterThanOrEqual(FIELD_W);
+    expect(new Set(lanes.map((l) => l.kind))).toEqual(new Set(['safe', 'road', 'air', 'river']));
     expect(GAME_ART.sling['arcade-knock-crate']).toEqual({ w: CRATE, h: CRATE });
     // Two crates wide, the stand's painting is stretched (cut in nine) to every stand.
     expect(STAND_ART.w).toBe(2 * CRATE);
   });
 
+  it("lay a level's pavements and rivers' banks from the street's own kerb, mirrored at a lane's foot (OP-137)", () => {
+    expect(laneCuts('safe', 300)).toEqual([
+      { cut: 'kerb', y: 260, flip: false },
+      { cut: 'kerb', y: 300, flip: true },
+    ]);
+    expect(laneCuts('river', 300)).toEqual([
+      { cut: 'bank', y: 260, flip: false },
+      { cut: 'bank', y: 330, flip: true },
+    ]);
+    expect(laneCuts('road', 300)).toEqual([]);
+    expect(laneCuts('air', 300)).toEqual([]);
+    // A pavement's two halves make its lane; a river's banks leave its logs the water between them.
+    expect(2 * HOP_KERB.h).toBe(80);
+    expect(80 - 2 * HOP_BANK.h).toBeGreaterThanOrEqual(GAME_ART.crossing[HOP_PIECES.log]!.h);
+    // Both cuts are of the street's near kerb, on the painted field.
+    for (const band of [HOP_KERB, HOP_BANK]) expect(band.y + band.h).toBeLessThanOrEqual(FIELD_H);
+  });
+
   it('paint a game only once all of its pieces are there', () => {
-    const loaded = new Set(['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart', 'arcade-flap-bg', 'arcade-flap-branch']);
+    const loaded = new Set([...Object.keys(GAME_ART.crossing), 'arcade-flap-bg', 'arcade-flap-branch']);
     expect(paintable('crossing', (k) => loaded.has(k))).toBe(true);
+    // The street alone, before the level's pieces (OP-137) ship: Hoot & Hop stays in neon.
+    expect(paintable('crossing', (k) => ['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart'].includes(k))).toBe(false);
     expect(paintable('flight', (k) => loaded.has(k))).toBe(false);
     expect(paintable('sling', (k) => loaded.has(k))).toBe(false);
   });

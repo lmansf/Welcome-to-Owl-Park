@@ -21,7 +21,7 @@ export async function alongTheHall(page: Page, x: number, y: number): Promise<vo
 
 /** Each game's paintings (arcade/paint.ts): once all of them ship with the park, its runs are drawn from them. */
 const GAME_ART: Readonly<Record<Game, readonly string[]>> = {
-  crossing: ['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart'],
+  crossing: ['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart', 'arcade-hop-bat', 'arcade-hop-log', 'arcade-hop-river'],
   flight: ['arcade-flap-bg', 'arcade-flap-branch', 'arcade-flap-ground'],
   sling: ['arcade-knock-bg', 'arcade-knock-sling', 'arcade-knock-crate', 'arcade-knock-stand'],
 };
@@ -56,7 +56,7 @@ export async function pastHowTo(page: Page): Promise<void> {
   await expect(page.locator('.arcade [data-howto]')).toBeHidden();
 }
 
-/** The run as it stands: its score, whether it is over, and for Talon Toss its stack and phase. */
+/** The run as it stands: its score, whether it is over, its level (Hoot & Hop, Talon Toss's stack) and Talon Toss's phase. */
 export async function run(page: Page): Promise<{ score: number; over: boolean; level: number | null; phase: string | null } | null> {
   return page.evaluate(() => {
     const r = window.owlPark.arcade();
@@ -73,97 +73,142 @@ export async function run(page: Page): Promise<{ score: number; over: boolean; l
 const LATE_FRAMES = [0, 3, 6];
 
 /**
- * Hoot & Hop: one crossing. Looks ahead on a copy of the game for the first moment a dash all the way
- * across is sure, with each hop after a landing coming up to 100 ms late; waits at the kerb for that
- * moment, checks the dash again on the spot (the tap itself can come a frame or two after it), and
- * dashes, or looks again. Looks up to 20 s of play ahead; a course with no such moment by then is
- * 'no chance to cross'. Says how it went: 'across', or how it ended.
+ * Hoot & Hop: a level cleared, by the keys (OP-137). The owl dashes up from one safe row (the kerb, a
+ * pavement) to the next, or to the top of the street: it looks ahead on a copy of the game for the
+ * first moment a dash is sure, with each hop after a landing coming up to 100 ms late; waits on its
+ * safe row for that moment, checks the dash again on the spot (the key itself can come a frame or two
+ * after it), and dashes, or looks again. Looks up to 20 s of play ahead each time. Says how it went:
+ * 'cleared', or how it ended.
  */
-export async function crossOnce(page: Page): Promise<string> {
-  const outcome = await page.evaluate(async (late) => {
+export async function clearLevel(page: Page): Promise<string> {
+  return page.evaluate(async (late) => {
     interface Hop {
       score: number;
       over: boolean;
       time: number;
+      row: number;
+      lives: number;
+      cleared: number;
       hop: unknown;
-      tap(): void;
+      waiting: string | null;
+      laneAt(row: number): { kind: string } | null;
+      hopTo(dir: string): void;
       advance(ms: number): void;
       clone(): Hop;
     }
     const g = window.owlPark.arcade()?.sim as unknown as Hop | undefined;
     if (!g) return 'no run';
     const stage = document.querySelector('.arcade [data-stage]') as HTMLElement;
-    const tap = () => stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
+    const up = () => stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
     const FRAME = 1000 / 60;
-    const banked = g.score + 1;
-    /** A dash from `from`: a hop at once, then another `lag` frames after each landing. */
+    const TOP = 6;
+    const safe = (c: Hop, row: number) => row === 0 || row >= TOP || c.laneAt(row)?.kind === 'safe';
+    /** A dash from `from`: a hop up at once, then another `lag` frames after each landing, to the next safe row. */
     const dash = (from: Hop, lag: number) => {
       const c = from.clone();
-      c.tap();
-      for (let i = 0; i < 3000 && !c.over && c.score < banked; i++) {
+      const { lives, cleared, row } = c;
+      c.hopTo('up');
+      for (let i = 0; i < 3000; i++) {
         c.advance(FRAME);
+        if (c.lives < lives || c.over) return false;
+        if (c.cleared > cleared) return true;
         if (c.hop) continue;
-        for (let k = 0; k < lag && !c.over; k++) c.advance(FRAME);
-        c.tap();
+        if (c.row > row && safe(c, c.row)) return true;
+        for (let k = 0; k < lag; k++) c.advance(FRAME);
+        if (c.lives < lives) return false;
+        c.hopTo('up');
       }
-      return !c.over;
+      return false;
     };
-    /** A dash from `from` gets across however late each hop after a landing comes. */
+    /** A dash from `from` gets there however late each hop after a landing comes. */
     const sure = (from: Hop) => late.every((lag) => dash(from, lag));
     /** The game time of the first sure moment from here, within 20 s of play, or null. */
     const find = (): number | null => {
       const probe = g.clone();
       for (let f = 0; f < 1200 && !probe.over; f++) {
-        if (sure(probe)) return probe.time;
+        if (!probe.hop && !probe.waiting && sure(probe)) return probe.time;
         probe.advance(FRAME);
       }
       return null;
     };
-    let at = find();
-    if (at === null) return 'no chance to cross';
-    let started = false;
+    const cleared = g.cleared;
+    let lives = g.lives;
+    let at: number | null = null;
+    let from: number | null = null;
+    let lost = false;
     const t0 = performance.now();
     await new Promise<void>((done) => {
       const tick = () => {
-        if (g.over || g.score >= banked || at === null || performance.now() - t0 > 75_000) return done();
-        if (!g.hop) {
-          if (started) tap();
-          else if (g.time >= at) {
-            // The moment has come, or a frame or two ago: dash if it is still sure from here, else look again.
-            if (sure(g)) {
-              started = true;
-              tap();
-            } else at = find();
+        if (g.over || g.cleared > cleared || lost || performance.now() - t0 > 90_000) return done();
+        if (g.lives < lives) {
+          // Bumped on the way: give this run up (the caller ends it and plays again).
+          lives = g.lives;
+          lost = true;
+          return done();
+        }
+        if (!g.hop && !g.waiting) {
+          if (from !== null) {
+            if (g.row > from && safe(g, g.row)) from = at = null;
+            else up();
+          }
+          if (from === null) {
+            at ??= find();
+            if (at !== null && g.time >= at) {
+              // The moment has come, or a frame or two ago: dash if it is still sure from here, else look again.
+              if (sure(g)) {
+                from = g.row;
+                up();
+              } else at = null;
+            }
           }
         }
         requestAnimationFrame(tick);
       };
       tick();
     });
-    return g.over ? `bumped at ${g.score}` : g.score >= banked ? 'across' : 'no chance to cross';
+    return g.cleared > cleared ? 'cleared' : g.over || lost ? `bumped at ${g.score}` : 'no chance to cross';
   }, LATE_FRAMES);
-  return outcome;
 }
 
-/** Hoot & Hop: hop into the next lane as a vehicle comes, until the owl is bumped. */
-export async function getBumped(page: Page): Promise<void> {
+/** Hoot & Hop: hop up into the lanes as a hazard comes, until the last life is lost. */
+export async function loseLives(page: Page): Promise<void> {
   const over = await page.evaluate(async () => {
     interface Hop {
       over: boolean;
-      row: number;
-      heading: number;
+      lives: number;
       hop: unknown;
-      clearFor(lane: number, ms: number): boolean;
+      waiting: string | null;
+      hopTo(dir: string): void;
+      advance(ms: number): void;
+      clone(): Hop;
     }
     const g = window.owlPark.arcade()?.sim as unknown as Hop | undefined;
     if (!g) return false;
     const stage = document.querySelector('.arcade [data-stage]') as HTMLElement;
-    const tap = () => stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
+    const up = () => stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+    /** A hop up now loses a life within the next half second, or leads nowhere it could be lost. */
+    const worth = () => {
+      const c = g.clone();
+      const lives = c.lives;
+      c.hopTo('up');
+      if (!c.hop) return false;
+      for (let i = 0; i < 30; i++) {
+        c.advance(1000 / 60);
+        if (c.lives < lives) return true;
+      }
+      return false;
+    };
     const t0 = performance.now();
+    let idleSince = performance.now();
     await new Promise<void>((done) => {
       const tick = () => {
-        if (g.over || performance.now() - t0 > 40_000) return done();
-        if (!g.hop && !g.clearFor(g.row + g.heading, 260)) tap();
+        if (g.over || performance.now() - t0 > 60_000) return done();
+        if (g.hop || g.waiting) idleSince = performance.now();
+        // A hop into a hazard as it comes; or, standing safe too long, a hop on up the street.
+        else if (worth() || performance.now() - idleSince > 1500) {
+          up();
+          idleSince = performance.now();
+        }
         requestAnimationFrame(tick);
       };
       tick();

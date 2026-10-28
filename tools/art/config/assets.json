@@ -180,6 +180,29 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "arcade-hop-bat": {
+      "w": 40,
+      "h": 34,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-log": {
+      "w": 112,
+      "h": 40,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-hop-river": {
+      "w": 320,
+      "h": 80,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
     "arcade-flap-bg": {
       "w": 480,
       "h": 640,
