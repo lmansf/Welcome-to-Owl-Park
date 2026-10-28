@@ -22,10 +22,10 @@ describe('rasterCandidates', () => {
     expect(rasterCandidates('/art/', 'hub', 1.25)).toEqual(['/art/hub.webp', '/art/hub.png']);
   });
 
-  it('tries the 2x copies first on dense screens, WebP before PNG in each', () => {
+  it('tries the 2x copies first on dense screens, WebP before PNG in each, the @ sent encoded (no redirect)', () => {
     expect(rasterCandidates('/base/art/', 'owl-body', 2)).toEqual([
-      '/base/art/owl-body@2x.webp',
-      '/base/art/owl-body@2x.png',
+      '/base/art/owl-body%402x.webp',
+      '/base/art/owl-body%402x.png',
       '/base/art/owl-body.webp',
       '/base/art/owl-body.png',
     ]);
@@ -41,7 +41,7 @@ describe('rasterCandidates with the files the build ships', () => {
       ['nest@2x.webp', 'd4'],
       ['nest.webp', 'e5'],
     ]);
-    expect(rasterCandidates('/art/', 'owl-body', 2, shipped)).toEqual(['/art/owl-body@2x.png?v=a1', '/art/owl-body.png?v=b2']);
+    expect(rasterCandidates('/art/', 'owl-body', 2, shipped)).toEqual(['/art/owl-body%402x.png?v=a1', '/art/owl-body.png?v=b2']);
     expect(rasterCandidates('/art/', 'hub', 2, shipped)).toEqual(['/art/hub.webp?v=c3']);
     expect(rasterCandidates('/art/', 'nest', 1, shipped)).toEqual(['/art/nest.webp?v=e5']);
     expect(rasterCandidates('/art/', 'missing', 2, shipped)).toEqual([]);

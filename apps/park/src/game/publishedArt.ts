@@ -7,8 +7,11 @@ import files from 'virtual:art-files';
  */
 export const PUBLISHED_ART: ReadonlyMap<string, string> = new Map(Object.entries(files));
 
-/** An art file's name as it is asked for: with its content's hash when the build ships it. */
+/**
+ * An art file's name as it is asked for: percent-encoded (the asset server redirects `@2x` to
+ * `%402x`, a round trip for nothing) and with its content's hash when the build ships it.
+ */
 export function versioned(name: string): string {
   const v = PUBLISHED_ART.get(name);
-  return v ? `${name}?v=${v}` : name;
+  return v ? `${encodeURIComponent(name)}?v=${v}` : encodeURIComponent(name);
 }
