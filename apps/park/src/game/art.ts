@@ -1,10 +1,11 @@
 /**
  * Art loading. Every piece of art has a key, a logical size in room pixels, and a kind.
- * For each key the loader tries, in order: `<key>.svg` (rasterized at the device's scale),
+ * For each key the loader takes, in order: `<key>.svg` (rasterized at the device's scale),
  * then `<key>@2x.webp` and `<key>@2x.png` when a sharper copy is wanted, then `<key>.webp` and
- * `<key>.png` (painted rooms ship as WebP, everything else as PNG). Whatever resolution the
- * file has, the game draws it at the logical size, so artists can hand in SVG, WebP or PNG.
- * Missing or broken files fall back to generated placeholders and never stop the park.
+ * `<key>.png` (painted rooms ship as WebP, everything else as PNG), asking only for the files the
+ * build ships (PUBLISHED_ART), so each key is one request. Whatever resolution the file has, the
+ * game draws it at the logical size, so artists can hand in SVG, WebP or PNG. Missing or broken
+ * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
 import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type SpeciesId } from '@owl-park/shared';
@@ -12,6 +13,7 @@ import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
 import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
+import { PUBLISHED_ART } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
 
 export const ART_PATH = 'art/';
@@ -181,8 +183,8 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   const spec = ART[key];
   if (!spec) return false;
   const url = baseUrl();
-  if (await loadSvgTexture(scene, key, `${url}${key}.svg`, Math.round(spec.w * scale), Math.round(spec.h * scale))) return true;
-  for (const c of rasterCandidates(url, key, scale)) {
+  if (PUBLISHED_ART.has(`${key}.svg`) && (await loadSvgTexture(scene, key, `${url}${key}.svg`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
+  for (const c of rasterCandidates(url, key, scale, PUBLISHED_ART)) {
     const img = await loadImage(c);
     if (img) {
       if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
@@ -199,7 +201,7 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
 export async function loadArtCopy(scene: Phaser.Scene, key: string, as: string): Promise<boolean> {
   if (scene.textures.exists(as)) return true;
   if (!ART[key]) return false;
-  for (const c of rasterCandidates(baseUrl(), key, 1)) {
+  for (const c of rasterCandidates(baseUrl(), key, 1, PUBLISHED_ART)) {
     const img = await loadImage(c);
     if (img) {
       if (!scene.textures.exists(as)) scene.textures.addImage(as, img);

@@ -1,7 +1,7 @@
 /**
  * Collectible art, drawn once per variant onto canvases that serve both the game (as Phaser
  * textures) and the HUD (as icons). Real art is `art/item-<id>` (svg, then 2x/1x webp or png,
- * like every other key); until it exists every wearable and pet has a drawn placeholder, so the
+ * like every other key, asked for only as the build ships it); until it exists every wearable and pet has a drawn placeholder, so the
  * whole mechanic works before the art pipeline delivers. Colourways rotate the hue of the art
  * (pixels.ts: by hand, because Safari's canvas has no `filter`).
  *
@@ -14,6 +14,7 @@
 import { CATALOGUE, parseVariant, type ItemDef } from '@owl-park/shared';
 import { rotateHue } from '../collect/pixels';
 import { rasterCandidates } from './artFiles';
+import { PUBLISHED_ART } from './publishedArt';
 
 export type ItemSlot = 'head' | 'face' | 'neck' | 'pet';
 
@@ -64,7 +65,7 @@ function loadRealArt(key: string, scale: number): Promise<HTMLImageElement | nul
   if (!p) {
     p = (async () => {
       const base = artBase();
-      for (const url of [`${base}${key}.svg`, ...rasterCandidates(base, key, scale)]) {
+      for (const url of [...(PUBLISHED_ART.has(`${key}.svg`) ? [`${base}${key}.svg`] : []), ...rasterCandidates(base, key, scale, PUBLISHED_ART)]) {
         const img = await loadImage(url);
         if (img) return img;
       }

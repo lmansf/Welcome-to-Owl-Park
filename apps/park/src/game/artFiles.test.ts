@@ -32,6 +32,16 @@ describe('rasterCandidates', () => {
   });
 });
 
+describe('rasterCandidates with the files the build ships', () => {
+  it('asks only for what is there: one request a key, not a miss first', () => {
+    const shipped = new Set(['owl-body@2x.png', 'owl-body.png', 'hub.webp', 'nest@2x.webp', 'nest.webp']);
+    expect(rasterCandidates('/art/', 'owl-body', 2, shipped)).toEqual(['/art/owl-body@2x.png', '/art/owl-body.png']);
+    expect(rasterCandidates('/art/', 'hub', 2, shipped)).toEqual(['/art/hub.webp']);
+    expect(rasterCandidates('/art/', 'nest', 1, shipped)).toEqual(['/art/nest.webp']);
+    expect(rasterCandidates('/art/', 'missing', 2, shipped)).toEqual([]);
+  });
+});
+
 describe('roomScaleCap', () => {
   it('keeps the 2x art of a one-screen room (background and overlay) on a dense phone', () => {
     expect(roomScaleCap(2, 2, 1.5, PHONE_ROOM_BUDGET)).toBe(1.5);
