@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Connect, type Plugin } from 'vite';
+import { earlyArtScript } from './src/game/artNames';
 
 // Link previews need an absolute image URL on some sites: VITE_SITE_URL (the park's origin, set by
 // the deploy workflows from a repository variable) fills __SITE_URL__ in index.html; without it the
@@ -13,29 +14,44 @@ const siteUrl = (process.env['VITE_SITE_URL'] ?? '').trim().replace(/\/+$/, '');
 // hash of its content, as the module `virtual:art-files`: the loader asks for each piece by the one
 // name it has, never a guess that misses, and with the hash (?v=), so a changed picture is a new
 // address and the art can be cached for a year (public/_headers; OP-129). Each file's size comes
-// too (`sizes`), for the load screen's progress. The dev server reloads the list when art comes,
-// goes or changes.
+// too (`sizes`), for the load screen's progress, and the page asks for the boot's art alongside
+// the script (earlyArtScript). The dev server reloads the list when art comes, goes or changes.
 const ART_DIR = resolve(import.meta.dirname, 'public/art');
 const ART_FILES_ID = 'virtual:art-files';
 function artFiles(): Plugin {
   const resolved = `\0${ART_FILES_ID}`;
+  let base = '/';
+  // The art folder, read once (each file's content hash and size) and again after art comes, goes or changes.
+  let art: Array<{ f: string; hash: string; size: number }> | null = null;
+  const read = () =>
+    (art ??= readdirSync(ART_DIR)
+      .sort()
+      .map((f) => {
+        const data = readFileSync(resolve(ART_DIR, f));
+        return { f, hash: createHash('sha1').update(data).digest('hex').slice(0, 8), size: data.length };
+      }));
   return {
     name: 'art-files',
+    configResolved: (config) => {
+      base = config.base;
+    },
     resolveId: (id) => (id === ART_FILES_ID ? resolved : undefined),
     load(id) {
       if (id !== resolved) return undefined;
-      const files = readdirSync(ART_DIR)
-        .sort()
-        .map((f) => ({ f, data: readFileSync(resolve(ART_DIR, f)) }));
-      const hashes = Object.fromEntries(files.map(({ f, data }) => [f, createHash('sha1').update(data).digest('hex').slice(0, 8)]));
-      const sizes = Object.fromEntries(files.map(({ f, data }) => [f, data.length]));
+      const files = read();
+      const hashes = Object.fromEntries(files.map(({ f, hash }) => [f, hash]));
+      const sizes = Object.fromEntries(files.map(({ f, size }) => [f, size]));
       return `export default ${JSON.stringify(hashes)};\nexport const sizes = ${JSON.stringify(sizes)};`;
     },
+    transformIndexHtml: () => [
+      { tag: 'script', injectTo: 'head', children: earlyArtScript(`${base.replace(/\/?$/, '/')}art/`, new Map(read().map(({ f, hash }) => [f, hash]))) },
+    ],
     configureServer(server) {
       server.middlewares.use(plainArtNames(server.config.base));
       server.watcher.add(ART_DIR);
       const changed = (file: string) => {
         if (!resolve(file).startsWith(ART_DIR)) return;
+        art = null;
         const mod = server.moduleGraph.getModuleById(resolved);
         if (mod) server.moduleGraph.invalidateModule(mod);
       };

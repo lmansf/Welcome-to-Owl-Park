@@ -215,14 +215,23 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
+/** The page's own download of this address, begun before the script came (index.html; artNames.ts's earlyArtScript), taken once. */
+function earlyArt(url: string): Promise<Response | null> | undefined {
+  const early = (globalThis as { __owlParkArt?: Record<string, Promise<Response | null>> }).__owlParkArt;
+  const res = early?.[url];
+  if (res) delete early![url];
+  return res;
+}
+
 /**
  * Load an image reading it as it comes, each piece's bytes told to `onBytes` (the load screen's
- * progress, OP-129); a browser that cannot read a download as it comes loads it whole.
+ * progress, OP-129), or the rest of it when the page began the download itself; a browser that
+ * cannot read a download as it comes loads it whole.
  */
 async function streamImage(url: string, onBytes: (n: number) => void): Promise<HTMLImageElement | null> {
   if (typeof fetch !== 'function' || typeof URL.createObjectURL !== 'function') return loadImage(url);
   try {
-    const res = await fetch(url);
+    const res = (await earlyArt(url)) ?? (await fetch(url));
     if (!res.ok) return null;
     if (!res.body) return loadImage(url);
     const reader = res.body.getReader();

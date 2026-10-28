@@ -85,6 +85,22 @@ test.describe('the load screen (OP-129)', () => {
     await fast();
   });
 
+  test('the page itself asks for the owl’s art, each piece once, and the park takes those downloads instead of asking again', async ({ page }) => {
+    const asked: string[] = [];
+    page.on('request', (r) => {
+      const u = new URL(r.url());
+      if (/^\/art\/owl-(body|belly|accent|face|blink|wing-body|wing-accent)(%402x)?\.(png|webp)$/.test(u.pathname)) asked.push(`${u.pathname}${u.search}`);
+    });
+    await openPark(page);
+    // The page's own downloads (index.html, before the game's script): every one taken by the art loader.
+    expect(await page.evaluate(() => Object.keys((window as { __owlParkArt?: object }).__owlParkArt ?? { none: true }))).toEqual([]);
+    // Seven pieces, each asked for once, at the screen's density.
+    expect(asked).toHaveLength(7);
+    expect(new Set(asked).size).toBe(7);
+    const dense = await page.evaluate(() => window.devicePixelRatio >= 1.375);
+    for (const a of asked) expect(a.includes('%402x')).toBe(dense);
+  });
+
   test('walking to a doorway fetches the next room’s art on the way, before the owl is through', async ({ page }) => {
     await openPark(page);
     const fetched: string[] = [];
