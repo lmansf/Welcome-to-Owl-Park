@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { alongTheHall, crossOnce, flyThrough, getBumped, knockByKeys, knockByPull, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
-import { openPark, state, walkToDoor } from './helpers';
+import { CABINET, alongTheHall, crossOnce, flyThrough, getBumped, knockByKeys, knockByPull, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
+import { doAction, openPark, state, walkToDoor } from './helpers';
 
 async function inRoom(page: Page, room: string): Promise<void> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe(room);
@@ -78,6 +78,56 @@ test.describe('the arcade (this device)', () => {
     await flyThrough(page, 3);
     await untilOver(page);
     await paidAndOnTheWall(page, 'flight', /^(Touched down|Clipped a branch) at \d+\.$/, before);
+  });
+
+  test('a game’s first run on a device opens on how to play it, and only that once (OP-137)', async ({ page }) => {
+    await intoArcade(page, `e2e-howto-${test.info().project.name}`);
+    await alongTheHall(page, CABINET.flight.x, CABINET.flight.y);
+    await doAction(page, 'cabinet-flight');
+    const card = page.locator('.arcade [data-howto]');
+    await expect(card).toBeVisible();
+    await expect(card.locator('h3')).toHaveText('Moon Flap');
+    await expect(card).toContainText('Fly through the gaps between the branches.');
+    // Nothing reaches the game while it is up: neither a tap on the field nor the space bar flaps.
+    await page.locator('.arcade [data-stage]').dispatchEvent('pointerdown');
+    expect(await page.evaluate(() => (window.owlPark.arcade()!.sim as unknown as { flying: boolean }).flying)).toBe(false);
+    await page.keyboard.press('Space');
+    await expect(card).toBeHidden();
+    expect(await page.evaluate(() => (window.owlPark.arcade()!.sim as unknown as { flying: boolean }).flying)).toBe(false);
+    await flyThrough(page, 1);
+    await untilOver(page);
+    // The next run, and the next visit: no card.
+    await page.locator('.arcade [data-result] [data-again]').click();
+    await expect.poll(async () => (await run(page))?.over).toBe(false);
+    await expect(card).toBeHidden();
+    await page.reload();
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
+    await walkToDoor(page, 'to-arcade');
+    await inRoom(page, 'arcade');
+    await alongTheHall(page, CABINET.flight.x, CABINET.flight.y);
+    await doAction(page, 'cabinet-flight');
+    await expect.poll(() => page.evaluate(() => window.owlPark.arcade()?.game ?? null), { timeout: 10_000 }).toBe('flight');
+    await expect(card).toBeHidden();
+  });
+
+  test('Moon Flap on a phone: the pad’s Interact flaps, over the game, and goes with the run (OP-137)', async ({ page }) => {
+    test.skip(test.info().project.name !== 'phone', 'the pad is a touch screen’s');
+    await intoArcade(page, 'e2e-flap-pad');
+    await playAt(page, 'flight');
+    const interact = page.locator('[data-pad-interact]');
+    await expect(interact).toBeVisible();
+    await expect(page.locator('[data-pad-jump]')).toBeHidden();
+    // The pad's Interact is on top of the game screen, where a thumb finds it.
+    expect(
+      await interact.evaluate((b) => {
+        const r = b.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('[data-pad-interact]') === b;
+      }),
+    ).toBe(true);
+    await flyThrough(page, 2, '[data-pad-interact]');
+    await untilOver(page);
+    await expect(page.locator('.arcade [data-result]')).toBeVisible();
+    await expect(interact).toBeHidden();
   });
 
   test('Nest Knockdown: the first stack down in one shot, out of shots at the second, paid; and back out to the street', async ({ page }) => {

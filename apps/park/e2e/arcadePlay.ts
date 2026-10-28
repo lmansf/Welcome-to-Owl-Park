@@ -46,6 +46,14 @@ export async function playAt(page: Page, game: Game): Promise<void> {
   await alongTheHall(page, CABINET[game].x, CABINET[game].y);
   await doAction(page, `cabinet-${game}`);
   await expect.poll(() => page.evaluate(() => window.owlPark.arcade()?.game ?? null), { timeout: 10_000 }).toBe(game);
+  await pastHowTo(page);
+}
+
+/** A game's first run on a device opens on its how-to card (OP-137): Play puts it away. */
+export async function pastHowTo(page: Page): Promise<void> {
+  const go = page.locator('.arcade [data-howto-go]');
+  if (await go.isVisible()) await go.click();
+  await expect(page.locator('.arcade [data-howto]')).toBeHidden();
 }
 
 /** The run as it stands: its score, whether it is over, and for Nest Knockdown its stack and phase. */
@@ -170,10 +178,11 @@ export async function getBumped(page: Page): Promise<void> {
  * flight: flap when the owl has sunk below the next gap's middle and a flap is safe, or when not
  * flapping would end the run. A page cannot act between its frames, and the game steps up to 100 ms
  * at once (MAX_CATCH_UP_MS in arcade/field.ts), so a choice must hold through 100 ms with no say;
- * when none does, the one that holds frame by frame.
+ * when none does, the one that holds frame by frame. Each flap is a press on `target`: the field, or
+ * on a phone the pad's Interact (OP-137).
  */
-export async function flyThrough(page: Page, gaps: number): Promise<void> {
-  const { score, slowest } = await page.evaluate(async (gaps) => {
+export async function flyThrough(page: Page, gaps: number, target = '.arcade [data-stage]'): Promise<void> {
+  const { score, slowest } = await page.evaluate(async ([gaps, target]) => {
     interface Flap {
       score: number;
       over: boolean;
@@ -186,7 +195,7 @@ export async function flyThrough(page: Page, gaps: number): Promise<void> {
     }
     const g = window.owlPark.arcade()?.sim as unknown as Flap | undefined;
     if (!g) return { score: -1, slowest: 0 };
-    const stage = document.querySelector('.arcade [data-stage]') as HTMLElement;
+    const stage = document.querySelector(target) as HTMLElement;
     const tap = () => stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
     const FRAME = 1000 / 60;
     /** The most the game steps at once, and a step more. */
@@ -224,7 +233,7 @@ export async function flyThrough(page: Page, gaps: number): Promise<void> {
       tick();
     });
     return { score: g.score, slowest: Math.round(slowest) };
-  }, gaps);
+  }, [gaps, target] as const);
   expect(score, `the slowest frame took ${slowest} ms`).toBeGreaterThanOrEqual(gaps);
 }
 

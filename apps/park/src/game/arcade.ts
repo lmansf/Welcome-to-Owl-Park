@@ -59,6 +59,13 @@ const HINTS: Readonly<Record<ArcadeGame, string>> = {
   sling: 'Pull back and let go',
 };
 
+/** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
+const HOW_TO: Readonly<Record<ArcadeGame, readonly string[]>> = {
+  crossing: ['Hop across the lanes to the far kerb, then back again.', 'Tap to hop. Mind the carts and the drones.'],
+  flight: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+  sling: ['Knock the crates off their stands: ten stacks, three shots each.', 'Pull back and let go to launch.'],
+};
+
 /** What the arcade needs of the room it is in. */
 export interface ArcadeHost {
   scene: Phaser.Scene;
@@ -117,7 +124,8 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
  * connection; past the owl's best, the page sends `act` `record` (the score so far, at most once a
  * second) and the room keeps it as the owl's best and shows it on the wall, paying nothing, so a run
  * cut short keeps its best; the end pays as before, a new best and the day's best judged against the
- * standings as the run started.
+ * standings as the run started. Moon Flap flaps with the pad's Interact on a touch screen, and each
+ * game opens on a how-to card before its first run on a device.
  */
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();
@@ -216,7 +224,7 @@ export class Arcade {
     this.run = { game, seed: reply.seed, sim, sent: false, recorded: 0, recordedAt: 0 };
     const top = this.walls.get(game)?.top[0]?.score ?? null;
     this.host.hud.openArcade(
-      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game], top, best: this.mine[game] ?? null },
+      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game], howTo: HOW_TO[game], top, best: this.mine[game] ?? null },
       {
         input: (i) => this.input(i),
         frame: (rect) => this.frame(rect),
