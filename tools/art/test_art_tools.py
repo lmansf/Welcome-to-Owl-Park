@@ -24,8 +24,8 @@ if str(HERE) not in sys.path:
 import numpy as np  # noqa: E402
 from PIL import Image, ImageDraw, ImageOps, PngImagePlugin  # noqa: E402
 
-from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, OWL_SPECIES, ArtError, load_assets, owl_layer_base, owl_master_of, parse_hex,  # noqa: E402
-                    species_layers)
+from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, FLIGHT_LAYERS, OWL_SPECIES, ArtError, flight_layers, flight_master, load_assets,  # noqa: E402
+                    owl_layer_base, owl_master_of, parse_hex, species_layers)
 from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out, solidify  # noqa: E402
@@ -405,6 +405,28 @@ class TestOwlSplit(unittest.TestCase):
             self.assertAlmostEqual(xs.mean(), w / 2, delta=1.5, msg="the feet stay at the horizontal centre")
             cols = np.nonzero((a >= 128).any(0))[0]
             self.assertLess(cols[0], w / 2 - 95, "the wing reaches almost to the left edge without crossing it")
+
+    def test_a_split_like_another_is_placed_and_shaded_as_it(self):
+        # In flight (OP-136): the owl with its folded wing taken away, split like its master, is drawn
+        # at the master's size and place, so what the two share comes out the same.
+        folded, _ = synth_owl_master(800, 960, wing_left=0.25)
+        wingless, _ = synth_owl_master(800, 960)
+        with mock.patch("sys.stderr", new=io.StringIO()):
+            base = owl_layers.split(folded, self.keys)
+            alone = owl_layers.split(wingless, self.keys)
+            like = owl_layers.split(wingless, self.keys, like=base.info)
+        self.assertGreater(alone.info["registration"]["scale_logical"], base.info["registration"]["scale_logical"], "on its own the narrower owl is drawn bigger")
+        reg, was = like.info["registration"], base.info["registration"]
+        self.assertTrue(reg["like"])
+        self.assertEqual((reg["exact"], reg["bottom"], reg["feet_x"]), (was["exact"], was["bottom"], was["feet_x"]))
+        self.assertEqual(like.info["vref"], base.info["vref"])
+        for tag, h in (("1x", 240), ("2x", 480)):
+            for name in ("owl-belly", "owl-accent", "owl-face"):
+                self.assertEqual(np.asarray(getattr(like, f"layers_{tag}")[name]).tolist(), np.asarray(getattr(base, f"layers_{tag}")[name]).tolist(), f"{name} {tag}")
+            a, b = (np.asarray(getattr(r, f"layers_{tag}")["owl-body"]) for r in (like, base))
+            rows = np.nonzero((a != b).any(axis=(1, 2)))[0]
+            self.assertGreater(rows.min(), h // 2, f"the body at {tag} is the same down to the wing")
+            self.assertLess(int((a[..., 1] > 0).sum()), int((b[..., 1] > 0).sum()), "and has no wing")
 
     def test_review_sheet_and_composite(self):
         sheet = owl_layers.review_sheet(self.res)
@@ -1273,6 +1295,47 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(json.loads((work / "final" / "owl-barn-master.post.json").read_text())["key"], "owl-barn-master")
                 self.assertEqual(postprocess.main(["publish", "owl-barn", "--provenance", str(provp)] + common), 0, err.getvalue())
                 self.assertEqual(len(prov.read_lines(provp)), 10)
+                self.assertEqual(postprocess.main(["check", "--all", "--provenance", str(provp)] + common), 0, err.getvalue())
+
+    def test_a_flight_master_finishes_as_its_kinds_flight_layers_placed_as_its_master(self):
+        # In flight (OP-136) a kind wears its flight body, belly and accent: its master with the folded wings taken away.
+        self.assertEqual(flight_layers("barn"), ("owl-barn-flight-body", "owl-barn-flight-belly", "owl-barn-flight-accent"))
+        self.assertEqual((flight_layers(None), flight_master(None), flight_master("snowy")), (FLIGHT_LAYERS, "owl-flight-master", "owl-snowy-flight-master"))
+        self.assertEqual((owl_layer_base("owl-barn-flight-belly"), owl_master_of("owl-screech-flight-accent"), owl_master_of("owl-flight-body")),
+                         ("owl-belly", "owl-screech-flight-master", "owl-flight-master"))
+        with tempfile.TemporaryDirectory() as tmp:
+            work, public = Path(tmp) / "work", Path(tmp) / "public"
+            public.mkdir()
+            folded, _ = synth_owl_master(800, 960, wing_left=0.25)
+            wingless, _ = synth_owl_master(800, 960)
+            for key, img, h in (("owl-barn-master", folded, "00000000000000b1"), ("owl-barn-flight-master", wingless, "00000000000000f1")):
+                d = work / "raw" / key
+                d.mkdir(parents=True)
+                (d / f"{h}.png").write_bytes(pngmeta.encode(img))
+                (d / f"{h}.json").write_text(json.dumps({"schema": 1, "key": key, "kind": "owl-edit", "provider": "mock", "model": "m", "hash16": h, "prompt_sha256": "ab" * 32,
+                                                         "seed": 1711, "size": "800x960", "generated_at": "t", "key_colour": "#FF00FF",
+                                                         "regions": {"body": "#FF0000", "belly": "#00FF00", "accent": "#0000FF"}}), encoding="utf-8")
+                (d / "SELECTED").write_text(h + "\n", encoding="utf-8")
+            provp = Path(tmp) / "p.jsonl"
+            common = ["--work", str(work), "--public", str(public), "--now", "2026-10-28T09:00:00Z"]
+            flight = ["owl", "--species", "barn", "--flight"] + common
+            with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(postprocess.main(flight), 1, "nothing published to place it against yet")
+                self.assertIn("publish owl-barn-master's layers first", err.getvalue())
+                self.assertEqual(postprocess.main(["owl", "--species", "barn"] + common), 0, err.getvalue())
+                self.assertEqual(postprocess.main(["publish", "owl-barn", "--provenance", str(provp)] + common), 0, err.getvalue())
+                # Split with other flags than its layers were finished with, the master is not the one the park draws.
+                self.assertEqual(postprocess.main(flight + ["--flip"]), 1)
+                self.assertIn("does not give the published owl-barn-body@2x.png", err.getvalue())
+                self.assertEqual(postprocess.main(flight), 0, err.getvalue())
+                body = np.asarray(Image.open(public / "owl-barn-body@2x.png").convert("LA"))
+                flown = np.asarray(Image.open(work / "final" / "owl-barn-flight-body@2x.png").convert("LA"))
+                self.assertGreater(np.nonzero((body != flown).any(axis=(1, 2)))[0].min(), 240, "the same owl down to its wing")
+                rec = json.loads((work / "final" / "owl-barn-flight-master.post.json").read_text())
+                self.assertTrue(rec["split"]["registration"]["like"])
+                self.assertTrue(any(t.startswith("owl: species=barn flight, placed and shaded as owl-barn-master") for t in rec["tools"]), rec["tools"])
+                self.assertEqual(postprocess.main(["publish", *flight_layers("barn"), "--provenance", str(provp)] + common), 0, err.getvalue())
+                self.assertEqual(len(prov.read_lines(provp)), 16)
                 self.assertEqual(postprocess.main(["check", "--all", "--provenance", str(provp)] + common), 0, err.getvalue())
 
     def test_a_seam_between_two_screens_is_cut_across_patched_and_finished_per_screen(self):

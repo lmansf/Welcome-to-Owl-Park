@@ -12,7 +12,7 @@ import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTile
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
-import { DENSE_SCALE, OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
+import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
 
@@ -117,9 +117,26 @@ export const ART: Record<string, ArtSpec> = {
   // twice behind the body (the left one mirrored) and turned at the shoulder, so it loads at boot.
   'owl-wing-body': { w: WING_W, h: WING_H, kind: 'owl' },
   'owl-wing-accent': { w: WING_W, h: WING_H, kind: 'owl' },
+  // In flight (OP-136) an owl wears its kind's flight body, belly and accent, its folded wings taken
+  // away, so the wing above opens alone. Loaded once an owl may fly (loadFlightArt), never at boot.
+  'owl-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-flight-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-flight-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-flight-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-barn-flight-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-flight-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-burrowing-flight-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-flight-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-snowy-flight-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-flight-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  'owl-screech-flight-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
 };
 
-export { OWL_LAYERS, SPECIES_LAYERS };
+export { FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS };
 
 /** The climb's pieces, loaded by its scene when a climb opens and released when it closes. */
 export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'climb');
@@ -129,8 +146,8 @@ for (const room of Object.values(ROOMS)) {
   for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
 }
 
-/** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up. */
-export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k));
+/** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up, flight layers until one may fly. */
+export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k) && !isFlightLayer(k));
 
 /** The blockade standing in a closed doorway that shows `phrase` ("Not Yet Fledged" -> blockade-not-yet-fledged). */
 export function blockadeKey(phrase: string): string {
@@ -402,6 +419,29 @@ export function loadSpeciesArt(scene: Phaser.Scene, species: SpeciesId): Promise
     const scale = artScale('owl', cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1);
     load = Promise.all(keys.map((k) => loadArtKey(scene, k, scale))).then((ok) => ok.every(Boolean));
     speciesLoads.set(species, load);
+  }
+  return load;
+}
+
+const flightLoads = new Map<SpeciesId, Promise<boolean>>();
+
+/**
+ * Load a kind's flight layers (OP-136), once per page; resolves true when all three are there. An
+ * owl keeps its wings folded until they are, so it never shows four. A load that fails is tried
+ * again the next time it is asked for.
+ */
+export function loadFlightArt(scene: Phaser.Scene, species: SpeciesId): Promise<boolean> {
+  const keys = SPECIES_FLIGHT_LAYERS[species];
+  if (keys.every((k) => scene.textures.exists(k))) return Promise.resolve(true);
+  let load = flightLoads.get(species);
+  if (!load) {
+    const cfg = scene.registry.get('config') as ParkConfig | undefined;
+    const scale = artScale('owl', cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1);
+    load = Promise.all(keys.map((k) => loadArtKey(scene, k, scale))).then((ok) => {
+      if (!ok.every(Boolean)) flightLoads.delete(species);
+      return ok.every(Boolean);
+    });
+    flightLoads.set(species, load);
   }
   return load;
 }

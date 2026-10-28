@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OWL_LAYERS, PHONE_ROOM_BUDGET, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, roomScaleCap } from './artFiles';
+import { FLIGHT_LAYERS, OWL_LAYERS, PHONE_ROOM_BUDGET, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, roomScaleCap } from './artFiles';
 
 describe('species layers', () => {
   it('name each species its own five layers, the great horned owl keeping the plain ones', () => {
@@ -13,6 +13,22 @@ describe('species layers', () => {
     expect(isSpeciesLayer('owl-face')).toBe(false);
     expect(isSpeciesLayer('owl-master')).toBe(false);
     expect(isSpeciesLayer('robot-owl')).toBe(false);
+  });
+});
+
+describe('flight layers (OP-136)', () => {
+  it('name each kind its flight body, belly and accent, the great horned owl keeping the plain ones', () => {
+    expect(SPECIES_FLIGHT_LAYERS['great-horned']).toEqual(FLIGHT_LAYERS);
+    expect(FLIGHT_LAYERS).toEqual(['owl-flight-body', 'owl-flight-belly', 'owl-flight-accent']);
+    expect(SPECIES_FLIGHT_LAYERS.barn).toEqual(['owl-barn-flight-body', 'owl-barn-flight-belly', 'owl-barn-flight-accent']);
+  });
+
+  it('tells a flight layer from the ground layers and the wing', () => {
+    expect(isFlightLayer('owl-flight-body')).toBe(true);
+    expect(isFlightLayer('owl-snowy-flight-accent')).toBe(true);
+    expect(isFlightLayer('owl-body')).toBe(false);
+    expect(isFlightLayer('owl-wing-body')).toBe(false);
+    expect(isSpeciesLayer('owl-barn-flight-body')).toBe(false);
   });
 });
 

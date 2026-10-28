@@ -70,6 +70,10 @@ OWL_SPECIES = ("barn", "burrowing", "snowy", "screech")
 #: Flight (OP-084): the owls' wing, split from one painted right wing into two tintable layers (wing_layers.py).
 WING_MASTER = "owl-wing-right"
 WING_LAYERS = ("owl-wing-body", "owl-wing-accent")
+#: In flight (OP-136) each kind's body, belly and accent are drawn without the folded wings painted on
+#: them, so the open wings are the only ones: split from ``owl-flight-master`` (``owl-<species>-flight-master``,
+#: an edit of the kind's master with the folded wings taken away) with that master's own registration.
+FLIGHT_LAYERS = ("owl-flight-body", "owl-flight-belly", "owl-flight-accent")
 
 
 def species_layers(species: str) -> tuple[str, ...]:
@@ -77,19 +81,37 @@ def species_layers(species: str) -> tuple[str, ...]:
     return tuple(name.replace("owl-", f"owl-{species}-", 1) for name in OWL_LAYERS)
 
 
+def flight_layers(species: str | None) -> tuple[str, ...]:
+    """A kind's three flight layer keys, in TINTED_LAYERS order (``owl-flight-body``, ``owl-barn-flight-body``, ...)."""
+    return FLIGHT_LAYERS if not species else tuple(name.replace("owl-", f"owl-{species}-", 1) for name in FLIGHT_LAYERS)
+
+
+def flight_master(species: str | None) -> str:
+    """The helper key a kind's flight layers are split from (``owl-flight-master``, ``owl-barn-flight-master``)."""
+    return f"owl-{species}-flight-master" if species else "owl-flight-master"
+
+
 def owl_layer_base(key: str) -> str | None:
-    """The great horned owl layer a key is or stands in for (``owl-barn-body`` -> ``owl-body``); None for any other key."""
+    """The great horned owl layer a key is or stands in for (``owl-barn-body`` -> ``owl-body``, and a
+    flight layer such as ``owl-barn-flight-body`` -> ``owl-body``); None for any other key."""
     if key in OWL_LAYERS:
         return key
     for sp in OWL_SPECIES:
         layers = species_layers(sp)
         if key in layers:
             return OWL_LAYERS[layers.index(key)]
+    for sp in (None, *OWL_SPECIES):
+        layers = flight_layers(sp)
+        if key in layers:
+            return TINTED_LAYERS[layers.index(key)]
     return None
 
 
 def owl_master_of(key: str) -> str:
-    """The helper key a layer is split from: ``owl-master``, or ``owl-<species>-master``."""
+    """The helper key a layer is split from: ``owl-master``, ``owl-<species>-master``, or a kind's flight master."""
+    for sp in (None, *OWL_SPECIES):
+        if key in flight_layers(sp):
+            return flight_master(sp)
     for sp in OWL_SPECIES:
         if key in species_layers(sp):
             return f"owl-{sp}-master"
@@ -97,6 +119,7 @@ def owl_master_of(key: str) -> str:
 
 #: Helper keys used by the generator for anchors and masters; never published as art.
 HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master", "owl-wing-right",
+               "owl-flight-master", "owl-barn-flight-master", "owl-burrowing-flight-master", "owl-snowy-flight-master", "owl-screech-flight-master",
                "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door", "glass-seam",
                "arcade-bays-a", "arcade-bays-b1", "arcade-bays-c1", "arcade-bays-b2", "arcade-bays-c2", "arcade-bays-b3", "arcade-bays-c3")
 PUBLIC_ROOMS = ("hub", "grove", "market", "lobby", "homes")

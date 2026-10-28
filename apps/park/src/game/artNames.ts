@@ -8,6 +8,15 @@
 export const OWL_LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'owl-blink'] as const;
 
 /**
+ * What the great horned owl wears in place of its body, belly and accent while its wings are out
+ * (OP-136): the same painting with its folded wings taken away, so a flying owl shows two wings.
+ * TODO-DOCS (OP-136): docs/ARCHITECTURE.md's sprite section: an owl's wings open only over its
+ * kind's flight layers, which load once the room's own art is in (never at boot); until they have,
+ * the wings stay folded.
+ */
+export const FLIGHT_LAYERS = ['owl-flight-body', 'owl-flight-belly', 'owl-flight-accent'] as const;
+
+/**
  * The art the boot loads before the home screen (art.ts's GLOBAL_ART): the great horned owl's
  * layers and the wing every owl flies with. The page asks for it alongside the script (OP-129).
  */

@@ -453,10 +453,23 @@ test('validateJobs rejects invalid or non-public keys, bad sizes and missing key
   assert.equal(ok[0].prompt, 'A on #00FF00');
 });
 
+test('each kind has a flight job: an edit of its master sent as the post stage\'s cut, deriving its three flight layers', () => {
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.deepEqual(Object.values(P.FLIGHT_MASTERS), ['owl-master', ...P.SPECIES_MASTER_KEYS]);
+  for (const key of Object.keys(P.FLIGHT_MASTERS)) {
+    const job = jobs.get(key);
+    assert.equal(job.kind, 'owl-edit', key);
+    assert.deepEqual(job.refs.map((r) => r.ref), [`@canvas:${key}`]);
+    assert.deepEqual(job.derives, ['body', 'belly', 'accent'].map((part) => key.replace(/flight-master$/, `flight-${part}`)));
+    for (const k of job.derives) assert.equal(ASSETS.keys[k].from, key, `${k} comes from ${key}`);
+  }
+});
+
 test('selectJobs supports lists and globs and rejects unmatched patterns', () => {
   const jobs = G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS });
-  assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, 'owl-wing-right']);
-  assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), P.SPECIES_MASTER_KEYS);
+  const flight = Object.keys(P.FLIGHT_MASTERS);
+  assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, ...flight, 'owl-wing-right']);
+  assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), [...P.SPECIES_MASTER_KEYS, ...flight]);
   assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }), [10, 11, 12]);

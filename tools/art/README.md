@@ -168,8 +168,9 @@ Everything the art director edits is in one data file: the hub brief, the three 
 blocks, the `PROMPTS` (one per key), the `NEGATIVE_PROMPT`, and `JOBS` with kind, realm,
 generation size, base seed, variant count, key colour, owl region colours and reference slots.
 Keys are validated against `config/assets.json` (mirrored from `art.ts`, guarded by a test) plus
-the helper keys `tree-master`, `owl-master`, `owl-blink-src` and the four species masters
-(`owl-barn-master`, `owl-burrowing-master`, `owl-snowy-master`, `owl-screech-master`). The five
+the helper keys `tree-master`, `owl-master`, `owl-blink-src`, the four species masters
+(`owl-barn-master`, `owl-burrowing-master`, `owl-snowy-master`, `owl-screech-master`) and each
+kind's flight master (`owl-flight-master`, `owl-barn-flight-master` and so on). The five
 `wing` jobs (`hub-west`, `hub-east`, `grove-west`, `grove-east`, `market-east`) paint a room a
 screen wider; they hold the prompts the approved wings were painted from, and a test checks those
 against the published provenance.
@@ -177,8 +178,8 @@ against the published provenance.
 Reference slots (`refs`) point at `refs/<file>` (committed anchors in `tools/art/refs/`, 1024 px
 and 200 KB at most, chosen by the art director), `@guide:<room>` (the post stage's layout guide),
 `@final:<key>` (a published PNG, or the WebP of a room or a key marked webp), `@raw:<key>` (another job's SELECTED candidate) or
-`@canvas:<key>` (a wing's outpaint canvas, `work/art/canvas/<key>.png`, written by
-`pnpm art:finish canvas <key>`). Slots marked
+`@canvas:<key>` (`work/art/canvas/<key>.png`: a wing's outpaint canvas, written by
+`pnpm art:finish canvas <key>`, or a crop of a picked candidate, written by `cut <key>`). Slots marked
 `optional` are skipped with a notice until the file exists, which is why the first runs work
 before any anchor is chosen; a job marked `optional` (the blink edit) is skipped when its required
 reference is missing. References travel as data URLs by default (2 MB each at most, 14 per
@@ -189,7 +190,13 @@ the rooms, then `pnpm art:geometry` and the post stage's guides, publish a room,
 and set piece with the published room as a style reference, then `owl-master`, `select` it, then
 `owl-blink-src`. The species masters are edits of the selected `owl-master` too, so each keeps its
 pose and colour code and changes only its species' shape and markings. Their jobs ask fal for
-PNG, since its edit endpoint otherwise answers in JPEG. A wing comes after its room is published:
+PNG, since its edit endpoint otherwise answers in JPEG. Each kind's flight master is an edit of its
+selected master with the folded wings taken away (an owl in flight wears it while its wings are
+out): `cut <kind>-flight-master --base-key <kind>-master --box 0,0,1040,1248` writes the whole
+master as the job's reference (the same pixels, small enough to send), the job paints the edit,
+`patch` pastes back only what it changed below the face, and `owl --flight [--species <kind>]`
+splits it into the kind's flight body, belly and accent, placed and shaded exactly as the kind's
+published layers. A wing comes after its room is published:
 `canvas` puts the painting's edge on grey, the job paints the grey (3040 x 1368, PNG), and the post
 stage's `wing <room>` stitches the selected wing back onto the painting (`docs/ART-PIPELINE.md`).
 
@@ -201,7 +208,7 @@ work/art/raw/<key>/<hash16>.json      its sidecar
 work/art/raw/<key>/SELECTED           the hash16 of the chosen candidate (written by `select`)
 work/art/log.jsonl                    one line per attempt (ok | cached | failed)
 work/art/geometry.json                rooms (with their art tiles), doors, spawns, anchors, closed signs, assets table
-work/art/canvas/<key>.png             a wing's outpaint canvas (written by the post stage, read as @canvas:<key>)
+work/art/canvas/<key>.png             a wing's outpaint canvas or a cut (written by the post stage, read as @canvas:<key>)
 ```
 
 `hash16` is the first 16 hex digits of `sha256(provider + "\n" + model + "\n" + canonical JSON of
