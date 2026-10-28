@@ -20,7 +20,6 @@ import {
   STREET_ROOM,
   USE_COOLDOWN_MS,
   distance,
-  endRun,
   getInteractable,
   getNpc,
   getQuest,
@@ -35,7 +34,6 @@ import {
   randomNestId,
   secureNestId,
   startRun,
-  type ArcadeRun,
   type BuyResult,
   type GiftResult,
   type Inventory,
@@ -459,8 +457,6 @@ export class LocalCollections implements CollectionService {
       const wall = this.arcade((a) => ({ walls: a.walls(this.now()), mine: a.mine(cid, this.now()) }));
       later(() => pushes.onWall?.(wall.walls, wall.mine));
     }
-    /** The run started at a cabinet and not yet scored. */
-    let run: ArcadeRun | null = null;
     return {
       parkNow: () => this.now(),
       light: async () => {
@@ -513,19 +509,20 @@ export class LocalCollections implements CollectionService {
         }
       },
       tasks: async () => this.use(({ book }) => book.tasks(cid, this.now())),
+      // The run is kept in this browser's score book, as the room server keeps it in its own (OP-137).
       run: async (game) => {
         const r = startRun(room, where(), game, runSeed(), this.now());
         if (!r.ok) return r;
-        run = r.run;
-        return { ok: true, game, seed: r.run.seed, startedAt: r.run.startedAt };
+        const started = this.arcade((a) => a.start(cid, game, r.run.seed, this.now()));
+        return { ok: true, game, seed: started.seed, startedAt: started.startedAt };
+      },
+      record: async (result, seed) => {
+        const kept = this.arcade((a) => a.record(cid, result, seed, portraitLook(look()), this.now()));
+        return kept.ok ? { ok: true, wall: kept.wall, mine: kept.mine } : kept;
       },
       score: async (result, seed) => {
-        const verdict = endRun(run, result, seed, this.now());
-        if (verdict === 'idle') return { ok: false, reason: 'idle' };
-        // One result per run, whether or not it holds up.
-        run = null;
-        if (verdict === 'unknown') return { ok: false, reason: 'unknown' };
-        const settled = this.arcade((a) => a.finish(cid, result, portraitLook(look()), this.now()));
+        const settled = this.arcade((a) => a.finish(cid, result, seed, portraitLook(look()), this.now()));
+        if (!settled.ok) return settled;
         const t = settled.tasks;
         if (t) later(() => pushes.onTasks?.(t.tasks, t.finished, t.paid, t.total));
         return { ok: true, paid: settled.paid };

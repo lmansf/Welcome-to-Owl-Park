@@ -33,7 +33,7 @@ import {
   type QuizRound,
   type QuizZone,
 } from './activities';
-import { ARCADE_ROOM, CABINETS, cabinetOf, plausibleRun, type ArcadeGame, type CabinetDef, type RunResult } from './arcade';
+import { ARCADE_ROOM, CABINETS, cabinetOf, type ArcadeGame, type CabinetDef } from './arcade';
 import type { ServerLanterns } from './edge';
 import { distance, distanceToRect } from './geometry';
 import type { Vec2 } from './protocol';
@@ -206,13 +206,4 @@ export function startRun(roomId: string, pos: Vec2 | null, game: ArcadeGame, see
   if (!cabinet.live || !spot) return { ok: false, reason: 'unknown' };
   if (!pos || distanceToRect(pos, spot.rect) > ACT_SLACK) return { ok: false, reason: 'far' };
   return { ok: true, run: { game, seed, startedAt: now } };
-}
-
-/**
- * A run ends with its result: `idle` when it is not the run the room keeps (another game, another
- * seed, or none), `unknown` when the result could not be true for the time the run took.
- */
-export function endRun(run: ArcadeRun | null | undefined, result: RunResult, seed: number, now: number): 'ok' | 'idle' | 'unknown' {
-  if (!run || run.game !== result.game || run.seed !== seed) return 'idle';
-  return plausibleRun(result, now - run.startedAt) ? 'ok' : 'unknown';
 }

@@ -49,6 +49,9 @@ const CABINET_ART: Readonly<Record<string, { screen: Box; title: { key: string }
 const BOARD: Box = { x: 2322, y: 182, w: 466, h: 206 };
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
+/** A run past the owl's best tells the room its score at most this often (OP-137). */
+const RECORD_EVERY_MS = 1000;
+
 /** How to play, under each game's field. Visitor-facing. */
 const HINTS: Readonly<Record<ArcadeGame, string>> = {
   crossing: 'Tap to hop',
@@ -74,6 +77,9 @@ interface Run {
   sim: ArcadeSim;
   /** Sent to the room (once). */
   sent: boolean;
+  /** The best score this run told the room as it went, and when (OP-137). */
+  recorded: number;
+  recordedAt: number;
 }
 
 /** A shrunken owl's face in its own colours: the portraits on the score wall (no names anywhere). */
@@ -105,6 +111,13 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
  * arcade-mid, arcade-end) entered from the street at its west end, a bay per game with the game's
  * title sign over its cabinet, the score wall on the board in the middle; each game is drawn from its
  * painted field and pieces (arcade/paint.ts) once every piece has loaded, in neon lines until then.
+ *
+ * TODO-DOCS (OP-137): docs/ACTIVITIES.md (Neon Roost) and docs/ARCHITECTURE.md section 4: a run is
+ * kept by its collector in the collections object (not on the socket), so it outlasts a dropped
+ * connection; past the owl's best, the page sends `act` `record` (the score so far, at most once a
+ * second) and the room keeps it as the owl's best and shows it on the wall, paying nothing, so a run
+ * cut short keeps its best; the end pays as before, a new best and the day's best judged against the
+ * standings as the run started.
  */
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();
@@ -200,7 +213,7 @@ export class Arcade {
       return;
     }
     const sim: ArcadeSim = game === 'crossing' ? new HopGame(reply.seed) : game === 'flight' ? new FlapGame(reply.seed) : new KnockGame();
-    this.run = { game, seed: reply.seed, sim, sent: false };
+    this.run = { game, seed: reply.seed, sim, sent: false, recorded: 0, recordedAt: 0 };
     const top = this.walls.get(game)?.top[0]?.score ?? null;
     this.host.hud.openArcade(
       { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game], top, best: this.mine[game] ?? null },
@@ -258,7 +271,7 @@ export class Arcade {
     else sim.release();
   }
 
-  /** Every frame of a run: the score on the screen, and once it is over, its result to the room. */
+  /** Every frame of a run: the score on the screen, a new best kept as it comes, and once it is over, its result to the room. */
   private step(sim: ArcadeSim): void {
     const run = this.run;
     if (!run || run.sim !== sim) return;
@@ -266,7 +279,27 @@ export class Arcade {
     if (sim.over && !run.sent) {
       run.sent = true;
       void this.finish(run);
-    }
+    } else if (!sim.over) this.keepBest(run);
+  }
+
+  /**
+   * A run past the owl's best of the day tells the room its score as it goes (at most once a
+   * RECORD_EVERY_MS), so the best is on the wall even if this page never sees the run end (OP-137).
+   */
+  private keepBest(run: Run): void {
+    const score = run.sim.score;
+    const now = Date.now();
+    if (score <= (this.mine[run.game] ?? 0) || score <= run.recorded || now - run.recordedAt < RECORD_EVERY_MS) return;
+    run.recorded = score;
+    run.recordedAt = now;
+    const result: RunResult = run.sim.game === 'sling' ? { game: run.game, score, shots: run.sim.shots } : { game: run.game, score };
+    void this.host
+      .acts()
+      ?.record(result, run.seed)
+      .then((reply) => {
+        if (reply.ok && !this.destroyed) this.onWall([reply.wall], reply.mine);
+      })
+      .catch(() => undefined);
   }
 
   private async finish(run: Run): Promise<void> {
@@ -293,7 +326,7 @@ export class Arcade {
   }
 
   /** The run as tests see it (the game itself, to play it by its rules), and whether it is drawn from its paintings. */
-  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; painted: boolean } | null {
+  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; recorded: number; painted: boolean } | null {
     const view = this.host.scene.scene.get('arcade') as ArcadeScene | null;
     return this.run ? { ...this.run, painted: view?.isPainted() ?? false } : null;
   }

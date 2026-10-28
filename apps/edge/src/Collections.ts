@@ -24,6 +24,7 @@ import {
   secureNestId,
   type AbandonResult,
   type AcceptResult,
+  type ArcadeGame,
   type AscentResult,
   type ClimbFlags,
   type ClimbLookup,
@@ -31,6 +32,8 @@ import {
   type GameWall,
   type OwnBests,
   type PortraitLook,
+  type RunRecorded,
+  type RunRefused,
   type RunResult,
   type RunSettled,
   type BuyResult,
@@ -264,9 +267,22 @@ export class Collections extends DurableObject<Env> {
 
   // ---------- the arcade: no answer carries a collector id ----------
 
-  /** A run the room server checked against its time: its pay under the activities' cap, the wall, the tasks. */
-  async arcadeRun(cid: string, run: RunResult, look: PortraitLook): Promise<RunSettled> {
-    return this.arcade.finish(cid, run, look, Date.now());
+  /**
+   * A run started at its cabinet (the room server checked the owl stands there). It is kept here by
+   * the collector, not on the visitor's socket, so a page back from a dropped connection still has it (OP-137).
+   */
+  async arcadeStart(cid: string, game: ArcadeGame, seed: number): Promise<{ startedAt: number }> {
+    return { startedAt: this.arcade.start(cid, game, seed, Date.now()).startedAt };
+  }
+
+  /** A run's score so far, checked against its time: kept as the owl's best when it beats it, paying nothing. */
+  async arcadeRecord(cid: string, run: RunResult, seed: number, look: PortraitLook): Promise<RunRecorded | RunRefused> {
+    return this.arcade.record(cid, run, seed, look, Date.now());
+  }
+
+  /** A run's end, checked against its time: its pay under the activities' cap, the wall, the tasks. */
+  async arcadeRun(cid: string, run: RunResult, seed: number, look: PortraitLook): Promise<({ ok: true } & RunSettled) | RunRefused> {
+    return this.arcade.finish(cid, run, seed, look, Date.now());
   }
 
   /** Today's score wall, and this collector's own bests (none for a page without a collection). */

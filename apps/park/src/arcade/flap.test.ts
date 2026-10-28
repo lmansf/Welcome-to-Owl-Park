@@ -66,6 +66,45 @@ describe('Moon Flap', () => {
     expect(FLAP_X).toBeGreaterThan(0);
   });
 
+  it('flies 500 gaps with nothing in the game growing and no step getting slower (OP-137)', () => {
+    const g = new FlapGame(26);
+    const FRAME = 1000 / 60;
+    /** Whether the flight lasts the next second, flapping now or not, with steady flaps after. */
+    const lasts = (flapNow: boolean) => {
+      const c = g.clone();
+      if (flapNow) c.tap();
+      for (let i = 0; i < 60 && !c.over; i++) {
+        c.advance(FRAME);
+        if (c.y > (c.ahead()?.gapY ?? 320) + 18 && c.vy > 0) c.tap();
+      }
+      return !c.over;
+    };
+    const steady = () => g.y > (g.ahead()?.gapY ?? 320) + 18 && g.vy > 0;
+    /** Wall time for each hundred gaps, and the most branches the game held at once. */
+    const per100: number[] = [];
+    let most = 0;
+    let since = performance.now();
+    g.tap();
+    while (!g.over && g.score < 500) {
+      // A flap when the steady rule asks for one and it is safe, or when only a flap saves the flight.
+      if (steady() ? lasts(true) : !lasts(false) && lasts(true)) g.tap();
+      const before = g.score;
+      g.advance(FRAME);
+      most = Math.max(most, g.branches.length);
+      if (g.score !== before && g.score % 100 === 0) {
+        per100.push(performance.now() - since);
+        since = performance.now();
+      }
+    }
+    expect(g.over, `down at ${g.score}`).toBe(false);
+    expect(g.score).toBe(500);
+    // Four branches ahead, and one going by: never more.
+    expect(most).toBeLessThanOrEqual(5);
+    expect(JSON.stringify(g.clone()).length).toBeLessThan(2_000);
+    // The last hundred gaps play no slower than the first (with room for a busy test machine).
+    expect(per100[4]!).toBeLessThan(per100[0]! * 3 + 50);
+  }, 60_000);
+
   it('lays out the same flight for the same seed', () => {
     const a = new FlapGame(42);
     const b = new FlapGame(42);

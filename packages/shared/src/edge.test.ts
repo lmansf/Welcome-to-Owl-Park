@@ -38,6 +38,9 @@ describe('protocol v9, the arcade', () => {
   it('reads a run’s result: the game, a whole score, the run’s seed, and shots only when sent', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 99, r: 2 }))).toEqual({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 99, r: 2 });
     expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'sling', s: 9, n: 4, k: 0, r: 3 }))).toEqual({ t: 'act', a: 'score', g: 'sling', s: 9, n: 4, k: 0, r: 3 });
+    // A run's best so far (OP-137) carries what a score does.
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'record', g: 'flight', s: 26, k: 5, r: 5 }))).toEqual({ t: 'act', a: 'record', g: 'flight', s: 26, k: 5, r: 5 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'record', g: 'flight', s: -1, k: 5, r: 6 }))).toBeNull();
     for (const bad of [{ s: -1 }, { s: 1.5 }, { s: '7' }, { s: 2e6 }, { k: undefined }, { k: -1 }, { n: 1.5 }, { g: 'golf' }])
       expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 1, r: 4, ...bad })), JSON.stringify(bad)).toBeNull();
   });
