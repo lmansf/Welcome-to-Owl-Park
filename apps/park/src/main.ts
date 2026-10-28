@@ -19,6 +19,7 @@ import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
 import { createHud } from './ui/hud';
 import { attachKeyboard, type Keys } from './ui/keyboard';
+import { createLoadScreen, type LoadScreenState } from './ui/loader';
 import { announcePresents } from './ui/presents';
 import type { PreviewFrame } from './ui/owlBuilder';
 import { linkToast } from './ui/tickets';
@@ -31,6 +32,9 @@ const playerId = loadPlayerId(cfg);
 const look = loadLook(cfg, playerId);
 const parent = document.getElementById('game') as HTMLElement;
 const settings = deviceSettings();
+// The load screen (OP-129), up since the page's first paint: the boot and every room show their art coming on it.
+const loadScreen = createLoadScreen({ sound: () => settings.get().sound, calm: () => settings.get().calm });
+loadScreen.colour(look);
 const hud = createHud(document.body, look, settings);
 // The busy ribbon (OP-075) across the top of the home screen and every room.
 const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);
@@ -105,6 +109,8 @@ game.registry.set('playerId', playerId);
 game.registry.set('look', look);
 game.registry.set('hud', hud);
 game.registry.set('settings', settings);
+game.registry.set('loadScreen', loadScreen);
+game.registry.events.on('changedata-look', (_parent: unknown, next: OwlLook) => loadScreen.colour(next));
 game.registry.set('transport', transport);
 game.registry.set('collection', collection);
 game.registry.set('quests', quests);
@@ -230,6 +236,8 @@ declare global {
       ribbon(): string | null;
       /** "Still here?" up, the way back after the owl left, or neither (OP-126). */
       away(): 'ask' | 'gone' | null;
+      /** The load screen (OP-129): up or not, its progress, the fact showing and the owl's hoots. */
+      loadScreen(): LoadScreenState;
       /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
       scan(id?: string): Promise<ScanReply>;
     };
@@ -439,6 +447,7 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
 // The home scene came up (at the start, or from the Menu): its buttons, and the owl beside them.
 game.events.on(HOME_SHOWN, () => {
   atHome = true;
+  loadScreen.hide();
   hud.setHome(true);
   hud.closePanels();
   // Turned away by the line from a room: the owl is this device's, and it takes its place in the line.
@@ -526,5 +535,6 @@ window.owlPark = {
   climbAuto: (on) => roomScene()?.climbAuto(on) ?? false,
   ribbon: () => ribbon.shown(),
   away: () => away.shown(),
+  loadScreen: () => loadScreen.state(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
 };

@@ -95,6 +95,7 @@ import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
 import type { Keys } from '../ui/keyboard';
+import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { gateCard, gateRefusal } from '../ui/tickets';
 import { ActivityLayer } from './activities';
@@ -403,21 +404,23 @@ export class RoomScene extends Phaser.Scene {
     void this.open();
   }
 
-  /** Load this room's art (releasing the previous room's), then build the scene. */
+  /** Load this room's art (releasing the previous room's) under the load screen (OP-129), then build the scene. */
   private async open(): Promise<void> {
     const gen = this.gen;
     const previous = this.registry.get('loadedRoom') as string | undefined;
     if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
-    const { width, height } = this.scale.gameSize;
-    const label = this.add.text(width / 2, height / 2, 'Opening…', { fontSize: '26px', color: '#F6F1E3', fontFamily: 'system-ui, sans-serif' }).setOrigin(0.5).setScrollFactor(0).setDepth(1e6);
+    const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
+    screen?.show('Opening…');
     // A room of several tiles keeps to the same memory budget as a one-screen room, at 1x if need be.
     const textures = backgroundTiles(this.room).length + foregroundTiles(this.room).length;
     const cap = roomScaleCap(textures, this.cfg.pixelRatio, this.cfg.artScaleMax, this.cfg.roomArtBudget);
     this.artCap = cap;
-    await loadArt(this, roomOpeningArt(this.room.id), this.cfg.pixelRatio, cap);
+    await loadArt(this, roomOpeningArt(this.room.id), this.cfg.pixelRatio, cap, (done, total) => {
+      if (gen === this.gen) screen?.progress(done, total);
+    });
     if (gen !== this.gen || !this.scene.isActive()) return; // the scene moved on while we loaded
     this.registry.set('loadedRoom', this.room.id);
-    label.destroy();
+    screen?.hide();
     this.build();
   }
 

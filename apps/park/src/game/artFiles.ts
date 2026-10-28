@@ -29,11 +29,15 @@ export const RASTER_EXTS = ['webp', 'png'] as const;
 /** Above this scale a `@2x` copy is worth fetching. */
 export const DENSE_SCALE = 1.25;
 
-export function rasterCandidates(baseUrl: string, key: string, scale: number, published?: ReadonlyMap<string, string>): string[] {
+/** The file names a key is looked for under at `scale`, best first; with `published`, only those the build ships. */
+export function rasterNames(key: string, scale: number, published?: ReadonlyMap<string, string>): string[] {
   const one = RASTER_EXTS.map((ext) => `${key}.${ext}`);
   const names = scale <= DENSE_SCALE ? one : [...RASTER_EXTS.map((ext) => `${key}@2x.${ext}`), ...one];
-  if (!published) return names.map((n) => `${baseUrl}${encodeURIComponent(n)}`);
-  return names.filter((n) => published.has(n)).map((n) => `${baseUrl}${encodeURIComponent(n)}?v=${published.get(n)}`);
+  return published ? names.filter((n) => published.has(n)) : names;
+}
+
+export function rasterCandidates(baseUrl: string, key: string, scale: number, published?: ReadonlyMap<string, string>): string[] {
+  return rasterNames(key, scale, published).map((n) => `${baseUrl}${encodeURIComponent(n)}${published ? `?v=${published.get(n)}` : ''}`);
 }
 
 /** Decoded bytes of one 1600 x 900 room texture at 1x (RGBA). */

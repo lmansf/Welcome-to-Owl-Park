@@ -12,8 +12,9 @@ const siteUrl = (process.env['VITE_SITE_URL'] ?? '').trim().replace(/\/+$/, '');
 // The art files the client ships (public/art), read when it is built, served or tested, each with a
 // hash of its content, as the module `virtual:art-files`: the loader asks for each piece by the one
 // name it has, never a guess that misses, and with the hash (?v=), so a changed picture is a new
-// address and the art can be cached for a year (public/_headers; OP-129). The dev server reloads the
-// list when art comes, goes or changes.
+// address and the art can be cached for a year (public/_headers; OP-129). Each file's size comes
+// too (`sizes`), for the load screen's progress. The dev server reloads the list when art comes,
+// goes or changes.
 const ART_DIR = resolve(import.meta.dirname, 'public/art');
 const ART_FILES_ID = 'virtual:art-files';
 function artFiles(): Plugin {
@@ -25,8 +26,10 @@ function artFiles(): Plugin {
       if (id !== resolved) return undefined;
       const files = readdirSync(ART_DIR)
         .sort()
-        .map((f) => [f, createHash('sha1').update(readFileSync(resolve(ART_DIR, f))).digest('hex').slice(0, 8)]);
-      return `export default ${JSON.stringify(Object.fromEntries(files))};`;
+        .map((f) => ({ f, data: readFileSync(resolve(ART_DIR, f)) }));
+      const hashes = Object.fromEntries(files.map(({ f, data }) => [f, createHash('sha1').update(data).digest('hex').slice(0, 8)]));
+      const sizes = Object.fromEntries(files.map(({ f, data }) => [f, data.length]));
+      return `export default ${JSON.stringify(hashes)};\nexport const sizes = ${JSON.stringify(sizes)};`;
     },
     configureServer(server) {
       server.middlewares.use(plainArtNames(server.config.base));

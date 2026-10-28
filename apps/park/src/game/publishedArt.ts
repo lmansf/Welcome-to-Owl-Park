@@ -1,4 +1,4 @@
-import files from 'virtual:art-files';
+import files, { sizes } from 'virtual:art-files';
 
 /**
  * The art this build ships (file names in public/art) and a hash of each one's content, so a piece
@@ -6,6 +6,9 @@ import files from 'virtual:art-files';
  * browser and Cloudflare keep the art for a year (public/_headers; OP-129).
  */
 export const PUBLISHED_ART: ReadonlyMap<string, string> = new Map(Object.entries(files));
+
+/** Each shipped art file's size in bytes: what the load screen counts its progress against (OP-129). */
+export const ART_BYTES: ReadonlyMap<string, number> = new Map(Object.entries(sizes));
 
 /**
  * An art file's name as it is asked for: percent-encoded (the asset server redirects `@2x` to

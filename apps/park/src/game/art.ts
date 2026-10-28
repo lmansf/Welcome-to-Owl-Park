@@ -12,8 +12,8 @@ import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTile
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
-import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
-import { PUBLISHED_ART, versioned } from './publishedArt';
+import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, rasterNames } from './artFiles';
+import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
 
 export const ART_PATH = 'art/';
@@ -188,15 +188,42 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
-/** Load one key. Returns true when a texture now exists for it (fresh or already present). */
-export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number): Promise<boolean> {
+/**
+ * Load an image reading it as it comes, each piece's bytes told to `onBytes` (the load screen's
+ * progress, OP-129); a browser that cannot read a download as it comes loads it whole.
+ */
+async function streamImage(url: string, onBytes: (n: number) => void): Promise<HTMLImageElement | null> {
+  if (typeof fetch !== 'function' || typeof URL.createObjectURL !== 'function') return loadImage(url);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    if (!res.body) return loadImage(url);
+    const reader = res.body.getReader();
+    const parts: BlobPart[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      onBytes(value.byteLength);
+    }
+    const src = URL.createObjectURL(new Blob(parts, { type: res.headers.get('content-type') ?? '' }));
+    const img = await loadImage(src);
+    URL.revokeObjectURL(src);
+    return img;
+  } catch {
+    return null;
+  }
+}
+
+/** Load one key. Returns true when a texture now exists for it (fresh or already present). With `onBytes`, its download is counted as it comes. */
+export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number, onBytes?: (n: number) => void): Promise<boolean> {
   if (scene.textures.exists(key)) return true;
   const spec = ART[key];
   if (!spec) return false;
   const url = baseUrl();
   if (PUBLISHED_ART.has(`${key}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${key}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
   for (const c of rasterCandidates(url, key, scale, PUBLISHED_ART)) {
-    const img = await loadImage(c);
+    const img = await (onBytes ? streamImage(c, onBytes) : loadImage(c));
     if (img) {
       if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
       return true;
@@ -246,19 +273,43 @@ export interface LoadReport {
   missing: string[];
 }
 
-/** Load several keys concurrently; whatever is missing gets a placeholder so the scene can build. */
+/** The bytes loading `key` at `scale` downloads: its first shipped file's size (none when its texture is here already). */
+function artBytes(scene: Phaser.Scene, key: string, scale: number): number {
+  if (scene.textures.exists(key)) return 0;
+  const name = PUBLISHED_ART.has(`${key}.svg`) ? `${key}.svg` : rasterNames(key, scale, PUBLISHED_ART)[0];
+  return name ? (ART_BYTES.get(name) ?? 0) : 0;
+}
+
+/**
+ * Load several keys concurrently; whatever is missing gets a placeholder so the scene can build.
+ * `onProgress` hears the bytes downloaded of the bytes expected, as they come (the load screen's
+ * progress, OP-129).
+ */
 export async function loadArt(scene: Phaser.Scene, keys: string[], pixelRatio: number, roomMax: number, onProgress?: (done: number, total: number) => void): Promise<LoadReport> {
   const missing: string[] = [];
+  const plan = keys.map((key) => {
+    const spec = ART[key];
+    const scale = spec ? artScale(spec.kind, pixelRatio, roomMax) : 1;
+    return { key, spec, scale, bytes: spec ? artBytes(scene, key, scale) : 0 };
+  });
+  const total = plan.reduce((sum, p) => sum + p.bytes, 0);
   let done = 0;
+  const tell = () => onProgress?.(Math.min(done, total), total);
   await Promise.all(
-    keys.map(async (key) => {
-      const spec = ART[key];
-      const ok = spec ? await loadArtKey(scene, key, artScale(spec.kind, pixelRatio, roomMax)) : false;
+    plan.map(async ({ key, spec, scale, bytes }) => {
+      let got = 0;
+      const count = (n: number) => {
+        got += n;
+        done += n;
+        tell();
+      };
+      const ok = spec ? await loadArtKey(scene, key, scale, onProgress ? count : undefined) : false;
       if (!ok) missing.push(key);
-      done += 1;
-      onProgress?.(done, keys.length);
+      // A piece that came some other way (an SVG, the browser's cache whole) or not at all counts as come.
+      if (got < bytes) count(bytes - got);
     }),
   );
+  tell();
   for (const key of missing) ensurePlaceholder(scene, key);
   if (missing.length) console.info(`[owl-park] placeholder art for: ${missing.join(', ')}`);
   return { missing };

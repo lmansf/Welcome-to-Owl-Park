@@ -34,3 +34,4 @@ export * from './climbCity';
 export * from './climbPilot';
 export * from './flight';
 export * from './sprites';
+export * from './owlFacts';

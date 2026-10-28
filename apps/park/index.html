@@ -47,9 +47,99 @@
       :where(body *) { touch-action: pan-x pan-y; }
       #game { position: fixed; inset: 0; }
       #game canvas { display: block; }
+      /* The load screen (OP-129): an owl on a branch that grows as the park loads. It shows with the
+         page, before the script has come; src/ui/loader.ts then sets its progress (--p, 0 to 1), its
+         words and facts, and the owl's hoot, and hides it. Calm motion or a reduced-motion device
+         stills everything but the branch. */
+      .lo { --p: 0; --lo-body: #8B5A2B; --lo-belly: #F6F1E3; --lo-accent: #C9A227; position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; background: #0C1E36; transition: opacity .3s ease; }
+      .lo[hidden] { display: none; }
+      .lo.out { opacity: 0; pointer-events: none; }
+      .lo-scene { position: relative; width: min(380px, 86vw); }
+      .lo-scene svg { display: block; width: 100%; height: auto; overflow: visible; }
+      .lo-wood { fill: none; stroke: #B07A4A; stroke-width: 7; stroke-linecap: round; }
+      .lo-track { fill: none; stroke: rgba(246, 241, 227, .14); stroke-width: 7; stroke-linecap: round; }
+      .lo-grown { stroke-dasharray: 100 120; stroke-dashoffset: calc(100 - var(--p) * 100); transition: stroke-dashoffset .35s ease-out; }
+      .lo-leaf { --on: clamp(0, (var(--p) - var(--at)) * 30, 1); fill: #7FB069; opacity: var(--on); transform: scale(var(--on)); transform-box: fill-box; transform-origin: 0 50%; transition: transform .45s cubic-bezier(.3, 1.6, .5, 1), opacity .3s; }
+      .lo-head { transform: rotate(calc(var(--p) * 22deg - 6deg)); transform-box: fill-box; transform-origin: 50% 90%; transition: transform .8s ease; }
+      .lo-eyes { transform: translateX(calc(var(--p) * 2px)); transition: transform .8s ease; }
+      .lo-lid { fill: var(--lo-body); transform: scaleY(0); transform-box: fill-box; transform-origin: 50% 0; animation: lo-blink 4.8s infinite; }
+      @keyframes lo-blink { 0%, 93%, 100% { transform: scaleY(0); } 96% { transform: scaleY(1); } }
+      .lo-tap { position: absolute; left: 0; top: 6%; width: 25%; height: 84%; padding: 0; border: 0; border-radius: 40%; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+      .lo-tap:focus-visible { outline: 3px solid #FFD36A; outline-offset: 2px; }
+      .lo-hoo { position: absolute; left: 13%; top: -16%; padding: 4px 10px; border-radius: 12px; background: #F6F1E3; color: #0C1E36; font-size: 15px; font-weight: 700; white-space: nowrap; opacity: 0; transform: translate(-50%, 6px); pointer-events: none; }
+      .lo.hoot .lo-owl { animation: lo-hop .6s ease; }
+      .lo.hoot .lo-hoo { animation: lo-say 1.1s ease; }
+      @keyframes lo-hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } 60% { transform: translateY(0); } }
+      @keyframes lo-say { 0% { opacity: 0; transform: translate(-50%, 6px); } 20%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -4px); } }
+      .lo-words { margin: 0; font-size: 18px; color: #F6F1E3; }
+      .lo-fact { margin: 0; max-width: min(420px, 90vw); min-height: 2.8em; font-size: 15px; line-height: 1.4; text-align: center; color: rgba(246, 241, 227, .78); transition: opacity .4s ease; }
+      .lo-fact.fade { opacity: 0; }
+      .lo.calm *, .lo.calm { animation: none !important; transition: none !important; }
+      .lo.calm .lo-head, .lo.calm .lo-eyes { transform: none; }
+      @media (prefers-reduced-motion: reduce) {
+        .lo *, .lo { animation: none !important; transition: none !important; }
+        .lo-head, .lo-eyes { transform: none; }
+      }
     </style>
   </head>
   <body>
+    <div id="loader" class="lo">
+      <div class="lo-scene">
+        <svg viewBox="0 8 326 106" role="progressbar" aria-label="Opening the park" aria-valuemin="0" aria-valuemax="100">
+          <path class="lo-wood" d="M4 96C24 94 50 95 74 94" />
+          <path class="lo-track" d="M74 94C134 88 214 100 318 84" />
+          <path class="lo-wood lo-grown" pathLength="100" d="M74 94C134 88 214 100 318 84" />
+          <g transform="translate(98 92) rotate(-44)"><path class="lo-leaf" style="--at: .1" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(133 92) rotate(42)"><path class="lo-leaf" style="--at: .24" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(167 93) rotate(-41)"><path class="lo-leaf" style="--at: .38" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(201 93) rotate(42)"><path class="lo-leaf" style="--at: .52" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(235 92) rotate(-44)"><path class="lo-leaf" style="--at: .66" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(269 90) rotate(37)"><path class="lo-leaf" style="--at: .8" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(303 86) rotate(-50)"><path class="lo-leaf" style="--at: .94" d="M0 0C4-6 12-6 17 0C12 6 4 6 0 0Z" /></g>
+          <g transform="translate(6 20)">
+            <g class="lo-owl">
+              <ellipse cx="10" cy="52" rx="7" ry="16" transform="rotate(12 10 52)" fill="var(--lo-accent)" />
+              <ellipse cx="54" cy="52" rx="7" ry="16" transform="rotate(-12 54 52)" fill="var(--lo-accent)" />
+              <ellipse cx="32" cy="50" rx="24" ry="26" fill="var(--lo-body)" />
+              <ellipse cx="32" cy="57" rx="14" ry="17" fill="var(--lo-belly)" />
+              <path d="M25 52l3 3 3-3M32 60l3 3 3-3M25 64l3 3 3-3" fill="none" stroke="var(--lo-body)" stroke-opacity=".45" stroke-width="1.5" stroke-linecap="round" />
+              <path d="M20 74l3-3 3 3M38 74l3-3 3 3" fill="none" stroke="#E2A93B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+              <g class="lo-head">
+                <path d="M14 20L10 2 24 13ZM50 20L54 2 40 13Z" fill="var(--lo-accent)" />
+                <circle cx="32" cy="28" r="19" fill="var(--lo-body)" />
+                <circle cx="24" cy="27" r="9" fill="var(--lo-belly)" fill-opacity=".55" />
+                <circle cx="40" cy="27" r="9" fill="var(--lo-belly)" fill-opacity=".55" />
+                <circle cx="24" cy="27" r="6" fill="#FFD36A" />
+                <circle cx="40" cy="27" r="6" fill="#FFD36A" />
+                <g class="lo-eyes">
+                  <circle cx="24.5" cy="27.5" r="3" fill="#1B1B2F" />
+                  <circle cx="40.5" cy="27.5" r="3" fill="#1B1B2F" />
+                  <circle cx="23.5" cy="26.3" r="1" fill="#FFF" />
+                  <circle cx="39.5" cy="26.3" r="1" fill="#FFF" />
+                </g>
+                <ellipse class="lo-lid" cx="24" cy="27" rx="6.6" ry="6.6" />
+                <ellipse class="lo-lid" cx="40" cy="27" rx="6.6" ry="6.6" />
+                <path d="M32 30L28.5 34 32 40 35.5 34Z" fill="#E2A93B" />
+              </g>
+            </g>
+          </g>
+        </svg>
+        <button class="lo-tap" type="button" aria-label="Hoot"></button>
+        <span class="lo-hoo" aria-hidden="true">Hoot hoot!</span>
+      </div>
+      <p class="lo-words" role="status">Opening the park…</p>
+      <p class="lo-fact"></p>
+    </div>
+    <script>
+      // The visitor's own owl on the load screen from its first paint: the colours kept on this device.
+      try {
+        var kept = JSON.parse(localStorage.getItem('owl-park:look') || 'null');
+        var lo = document.getElementById('loader').style;
+        ['body', 'belly', 'accent'].forEach(function (k) {
+          if (kept && /^#[0-9a-fA-F]{6}$/.test(kept[k])) lo.setProperty('--lo-' + k, kept[k]);
+        });
+      } catch (_) {}
+    </script>
     <div id="game"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
