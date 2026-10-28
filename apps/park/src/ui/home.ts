@@ -108,12 +108,12 @@ export interface HomeScreen {
 /** Width over height of what the builder's preview keeps in view around the owl, a hat above and a pet behind (VIEW in game/BuilderScene.ts). */
 const OWL_VIEW = 204 / 222;
 
-/** The mascot's medallion in the link-preview card (og-image.jpg, 1200 x 630): its box, in the card's pixels. */
-const MEDALLION = { x: 67, y: 130, size: 310, cardW: 1200 };
-
+/**
+ * The mascot is the link-preview card's medallion (og-image.jpg, 1200 x 630: the 310 px square at 67,
+ * 130), cut out as home-mascot.webp, so the home screen fetches 17 kB rather than the whole card (OP-129).
+ */
 function css(): string {
   const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-  const m = MEDALLION;
   return `
 #hud .home{position:absolute;inset:0;z-index:4;display:grid;grid-template-columns:minmax(0,min(440px,56vw)) minmax(0,1fr);pointer-events:none}
 #hud .home[hidden]{display:none}
@@ -123,8 +123,7 @@ function css(): string {
   background:linear-gradient(90deg,rgba(12,30,54,.9),rgba(12,30,54,.62) 72%,rgba(12,30,54,0))}
 #hud .home .h-brand{display:flex;align-items:center;gap:clamp(10px,2vw,16px);margin-bottom:clamp(4px,2.4vh,20px)}
 #hud .home .h-mascot{--m:clamp(56px,13vh,112px);flex:none;width:var(--m);height:var(--m);border-radius:50%;
-  background:url(${base}og-image.jpg) no-repeat;background-size:calc(var(--m) * ${m.cardW / m.size}) auto;
-  background-position:calc(var(--m) * ${-m.x / m.size}) calc(var(--m) * ${-m.y / m.size});box-shadow:0 0 22px rgba(255,211,106,.35)}
+  background:url(${base}home-mascot.webp) center/cover no-repeat;box-shadow:0 0 22px rgba(255,211,106,.35)}
 #hud .home h1{margin:0;font-size:clamp(28px,5.6vh,46px);line-height:1.05;color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
 #hud .home .h-side button{width:100%}
 #hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
