@@ -117,6 +117,30 @@ test.describe('the load screen (OP-129)', () => {
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
   });
 
+  test('on a dense screen a room opens on its 1x painting while the 2x is on its way, then sharpens in place', async ({ page }, info) => {
+    test.skip(info.project.name !== 'phone', 'only a dense screen asks for the 2x paintings');
+    // The stained-glass realm's 2x paintings held back until let go.
+    let letGo!: () => void;
+    const held = new Promise<void>((r) => (letGo = r));
+    const hold = async (route: Parameters<Parameters<Page['route']>[1]>[0]) => {
+      await held;
+      await route.continue().catch(() => undefined);
+    };
+    await page.route(/\/art\/glass(-east)?%402x\.webp/, hold);
+    await openPark(page, { room: 'glass' });
+    // The owl can move already, on the 1x paintings.
+    const s = await state(page);
+    expect(s.connected).toBe(true);
+    expect(s.soft.sort()).toEqual(['glass', 'glass-east']);
+    expect(await page.evaluate(() => window.owlPark.textureSize('glass'))).toEqual({ w: 1600, h: 900 });
+    // The 2x copies come: each painting swaps in place, the same size in the room.
+    letGo();
+    await expect.poll(async () => (await state(page)).soft, { timeout: 15_000 }).toEqual([]);
+    expect(await page.evaluate(() => window.owlPark.textureSize('glass'))).toEqual({ w: 3200, h: 1800 });
+    expect(await page.evaluate(() => window.owlPark.textureSize('glass-east'))).toEqual({ w: 3200, h: 1800 });
+    await page.unroute(/\/art\/glass(-east)?%402x\.webp/, hold);
+  });
+
   test('a tapped walk past one realm’s arch on its way to another fetches only the room it goes into', async ({ page }) => {
     await openPark(page);
     const fetched: string[] = [];

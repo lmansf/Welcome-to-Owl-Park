@@ -102,7 +102,7 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
-import { loadArt, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt } from './art';
+import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomsAhead, takesDoorway } from './doors';
 import { FitOverlay } from './fitOverlay';
@@ -318,6 +318,8 @@ export class RoomScene extends Phaser.Scene {
   private readonly thumbs = new Map<string, string>();
   /** How sharp this room's art is drawn (pixels per room pixel at most): a nest's furniture loads at it too. */
   private artCap = 1;
+  /** This room's paintings opened at 1x, waiting on their sharp copies (OP-129). */
+  private soft = new Set<string>();
 
   constructor() {
     super('room');
@@ -363,6 +365,7 @@ export class RoomScene extends Phaser.Scene {
     this.airTokens = AIR_SEND_BURST;
     this.airRefilledAt = 0;
     this.gen += 1;
+    this.soft = new Set();
     this.lastStatus = null;
     this.collection = this.registry.get('collection') as CollectionState;
     this.quests = this.registry.get('quests') as QuestState;
@@ -414,13 +417,34 @@ export class RoomScene extends Phaser.Scene {
     screen?.show('Opening…');
     const cap = roomArtCap(this.room, this.cfg);
     this.artCap = cap;
-    await loadArt(this, roomOpeningArt(this.room.id), this.cfg.pixelRatio, cap, (done, total) => {
-      if (gen === this.gen) screen?.progress(done, total);
-    });
+    // On a dense screen, the paintings whose sharp copies the browser does not have yet open at 1x,
+    // a third of the bytes, and sharpen once those come.
+    const soft = await opensSoft(this.room, this.cfg);
+    await loadArt(
+      this,
+      roomOpeningArt(this.room.id),
+      this.cfg.pixelRatio,
+      cap,
+      (done, total) => {
+        if (gen === this.gen) screen?.progress(done, total);
+      },
+      soft,
+    );
     if (gen !== this.gen || !this.scene.isActive()) return; // the scene moved on while we loaded
     this.registry.set('loadedRoom', this.room.id);
     screen?.hide();
     this.build();
+    this.soft = soft;
+    void this.sharpen(gen);
+  }
+
+  /** Swap each painting that opened at 1x for its 2x copy as it comes, one after another (OP-129); one whose copy fails stays soft. */
+  private async sharpen(gen: number): Promise<void> {
+    const live = () => gen === this.gen && this.scene.isActive();
+    for (const key of [...this.soft]) {
+      if (!live()) return;
+      if (await sharpenArt(this, key, artScale('room', this.cfg.pixelRatio, this.artCap), live)) this.soft.delete(key);
+    }
   }
 
   private build(): void {
@@ -1110,6 +1134,8 @@ export class RoomScene extends Phaser.Scene {
     nest: { id: string; mine: boolean; open: boolean; layout: NestLayout; drawn: NestLayout; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: NestSpotId } | null;
     /** In a nest, its mirror (OP-077): where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
     mirror: { x: number; y: number; stage: PreviewFrame | null } | null;
+    /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
+    soft: string[];
   } | null {
     if (!this.built) return null;
     return {
@@ -1139,6 +1165,7 @@ export class RoomScene extends Phaser.Scene {
         ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, drawn: this.decor?.drawn() ?? {}, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
         : null,
       mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
+      soft: [...this.soft],
     };
   }
 

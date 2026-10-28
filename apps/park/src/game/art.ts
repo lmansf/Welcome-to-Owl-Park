@@ -12,7 +12,7 @@ import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTile
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
-import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
+import { DENSE_SCALE, OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
 
@@ -190,6 +190,77 @@ export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<Pa
 }
 
 /**
+ * A room's paintings that may open soft on this screen (OP-129). On a dense screen a room wants its
+ * 2x copies, about three times the bytes of the 1x ones, so a painting whose 2x copy the browser does
+ * not have yet opens at 1x and sharpens once the 2x comes (sharpenArt). These are the tiles that can:
+ * the room wants them at 2x, and the build ships both copies.
+ */
+export function softTiles(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>, published: ReadonlyMap<string, string> = PUBLISHED_ART): string[] {
+  const scale = artScale('room', cfg.pixelRatio, roomArtCap(room, cfg));
+  if (scale <= DENSE_SCALE) return [];
+  return [...backgroundTiles(room), ...foregroundTiles(room)]
+    .map((t) => t.key)
+    .filter((key) => !published.has(`${key}.svg`) && (rasterNames(key, scale, published)[0]?.includes('@2x') ?? false) && rasterNames(key, 1, published).length > 0);
+}
+
+/** How long the browser's cache gets to say whether it has a file (an answer from it takes a few ms). */
+const CACHE_ASK_MS = 150;
+
+/**
+ * Whether the browser has this file already, asking its cache and not the server. A browser that
+ * would go to the server instead (or anything else slow) counts as not having it: the room opens soft.
+ */
+async function inCache(url: string): Promise<boolean> {
+  if (typeof fetch !== 'function' || typeof AbortController !== 'function') return false;
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), CACHE_ASK_MS);
+  try {
+    const res = await fetch(url, { cache: 'only-if-cached', mode: 'same-origin', signal: stop.signal });
+    void res.body?.cancel().catch(() => undefined);
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Of a room's soft tiles, those that open at 1x now: the ones whose 2x copies the browser does not have (fetched ahead, or kept from a visit before). */
+export async function opensSoft(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): Promise<Set<string>> {
+  const keys = softTiles(room, cfg);
+  const scale = artScale('room', cfg.pixelRatio, roomArtCap(room, cfg));
+  const have = await Promise.all(keys.map((key) => inCache(`${baseUrl()}${versioned(rasterNames(key, scale, PUBLISHED_ART)[0]!)}`)));
+  return new Set(keys.filter((_, i) => !have[i]));
+}
+
+/** The images in this display list (and the containers in it) that show texture `key`. */
+function imagesShowing(list: Phaser.GameObjects.GameObject[], key: string, out: Phaser.GameObjects.Image[] = []): Phaser.GameObjects.Image[] {
+  for (const o of list) {
+    if (o instanceof Phaser.GameObjects.Container) imagesShowing(o.list, key, out);
+    else if (o instanceof Phaser.GameObjects.Image && o.texture.key === key) out.push(o);
+  }
+  return out;
+}
+
+/**
+ * Sharpen a painting that opened soft (OP-129): load its 2x copy, then replace the texture under the
+ * same key, every image showing it keeping its size on screen. Nothing changes when `live` says the
+ * room has gone meanwhile, or its texture was released.
+ */
+export async function sharpenArt(scene: Phaser.Scene, key: string, scale: number, live: () => boolean): Promise<boolean> {
+  const name = rasterNames(key, scale, PUBLISHED_ART)[0];
+  if (!name?.includes('@2x')) return false;
+  const img = await loadImage(`${baseUrl()}${versioned(name)}`);
+  if (!img || !live() || !scene.textures.exists(key)) return false;
+  const shown = imagesShowing(scene.children.list, key);
+  const sizes = shown.map((o) => [o.displayWidth, o.displayHeight] as const);
+  scene.textures.remove(key);
+  scene.textures.addImage(key, img);
+  shown.forEach((o, i) => o.setTexture(key).setDisplaySize(sizes[i]![0], sizes[i]![1]));
+  return true;
+}
+
+/**
  * How many texture pixels per room pixel to rasterize at. Owls are small, and the arcade's games
  * fill the screen, so they get the full device ratio (up to 2); rooms and big set pieces are capped
  * to keep GPU memory bounded
@@ -324,13 +395,13 @@ function artBytes(scene: Phaser.Scene, key: string, scale: number): number {
 /**
  * Load several keys concurrently; whatever is missing gets a placeholder so the scene can build.
  * `onProgress` hears the bytes downloaded of the bytes expected, as they come (the load screen's
- * progress, OP-129).
+ * progress, OP-129). The keys in `soft` load at 1x, to be sharpened later (sharpenArt).
  */
-export async function loadArt(scene: Phaser.Scene, keys: string[], pixelRatio: number, roomMax: number, onProgress?: (done: number, total: number) => void): Promise<LoadReport> {
+export async function loadArt(scene: Phaser.Scene, keys: string[], pixelRatio: number, roomMax: number, onProgress?: (done: number, total: number) => void, soft?: ReadonlySet<string>): Promise<LoadReport> {
   const missing: string[] = [];
   const plan = keys.map((key) => {
     const spec = ART[key];
-    const scale = spec ? artScale(spec.kind, pixelRatio, roomMax) : 1;
+    const scale = spec && !soft?.has(key) ? artScale(spec.kind, pixelRatio, roomMax) : 1;
     return { key, spec, scale, bytes: spec ? artBytes(scene, key, scale) : 0 };
   });
   const total = plan.reduce((sum, p) => sum + p.bytes, 0);

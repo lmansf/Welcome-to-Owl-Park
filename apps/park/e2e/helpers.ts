@@ -29,6 +29,8 @@ export interface ParkState {
   /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
   bubbles: Array<{ id: string; n: number }>;
   connected: boolean;
+  /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
+  soft: string[];
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
   eyes: number;
