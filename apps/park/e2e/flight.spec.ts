@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { flightOf, holdSpace, jumpFlapGlide, openPark, state, steppedFlight } from './helpers';
+import { holdSpace, jumpFlapGlide, openPark, state, steppedFlight, steppedPeerFlight } from './helpers';
 
 /**
  * Flight (OP-084): Jump (the space bar, the pad's Jump on a phone) jumps the climb's jump, pressed
  * again in the air flaps once more, and held on the way down glides. These run on the local
- * transport, tab to tab; the room server's side is in edge.spec.ts. The owl's own flights are read as
- * its page stepped them (steppedFlight), exact however few frames a runner draws; another tab's, as
- * that tab draws them.
+ * transport, tab to tab; the room server's side is in edge.spec.ts. Flights are read as each page
+ * stepped them, the owl's own (steppedFlight) and another tab's from the states it was told
+ * (steppedPeerFlight), exact however few frames a runner draws.
  */
 
 /** Press the pad's Jump with a thumb and keep it down for `ms`, as a hold. */
@@ -85,12 +85,12 @@ test.describe('flight (OP-084)', () => {
     await expect.poll(async () => (await state(a)).peers.map((p) => p.id)).toEqual(['owl-b']);
     await expect.poll(async () => (await state(b)).peers.map((p) => p.id)).toEqual(['owl-a']);
     const stood = (await state(a)).pos;
-    const seen = flightOf(b, 'peer', 12_000);
-    const own = flightOf(a, 'own', 12_000);
-    await jumpFlapGlide(a, 1_200);
-    const [there, here] = await Promise.all([seen, own]);
-    // The same states, so the same flight, give or take a frame on each page (runners draw few frames a second).
+    const before = (await state(b)).peers[0]!.flown.n;
+    const here = await steppedFlight(a, () => jumpFlapGlide(a, 1_200));
+    const there = await steppedPeerFlight(b, before);
+    // The same states, so the same flight: one take-off, as high, gliding, as long in the air.
     expect(here.peak).toBeGreaterThan(200);
+    expect(there.takeoffs).toBe(1);
     expect(there.peak).toBeGreaterThan(here.peak - 25);
     expect(there.peak).toBeLessThan(here.peak + 25);
     expect(there.glided).toBe(true);

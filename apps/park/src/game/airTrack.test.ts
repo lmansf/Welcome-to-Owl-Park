@@ -41,6 +41,35 @@ describe('an owl’s flight as a page draws it (OP-084)', () => {
     expect(soon.at(2900)).toEqual(ON_GROUND);
   });
 
+  it('keeps each flight as it is carried on, step by step: its top however seldom it is drawn, whether it glided, how long it was up', () => {
+    // Drawn every frame, or only three times in the whole flight: the same record.
+    const often = new AirTrack();
+    const seldom = new AirTrack();
+    often.tell(up, 1000);
+    seldom.tell(up, 1000);
+    for (let now = 1000; now <= 4000; now += 16) often.at(now);
+    for (const now of [1000, 1400, 4000]) seldom.at(now);
+    expect(seldom.flown).toEqual(often.flown);
+    // The top is the highest step of the arc, which no frame need land on.
+    let top = 0;
+    for (let ms = 0; ms <= 3000; ms += FLIGHT_STEP_MS) top = Math.max(top, carryOn(up, ms).z);
+    expect(often.flown.n).toBe(1);
+    expect(often.flown.peak).toBeCloseTo(top, 6);
+    expect(often.flown.glided).toBe(false);
+    expect(often.flown.ms).toBeGreaterThan(0);
+    // A glide told on the way up is the same flight, and it glided; the next jump is another flight.
+    const track = new AirTrack();
+    track.tell(up, 1000);
+    track.tell({ z: 120, vz: -GLIDE_SINK, s: GLIDING, f: 1 }, 1200);
+    track.at(1100);
+    track.at(20_000);
+    expect(track.flown).toMatchObject({ n: 1, glided: true });
+    expect(track.at(20_000)).toEqual(ON_GROUND);
+    track.tell(up, 30_000);
+    track.at(30_050);
+    expect(track.flown).toMatchObject({ n: 2, glided: false, ms: 0 });
+  });
+
   it('beats the wings for a jump or a flap, spreads them in a glide, raises them a little in a fall, and folds them away on the ground', () => {
     const track = new AirTrack();
     track.tell(up, 1000);

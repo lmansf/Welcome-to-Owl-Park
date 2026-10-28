@@ -1113,8 +1113,11 @@ export class RoomScene extends Phaser.Scene {
      * so `height` may never show it.
      */
     flown: { n: number; peak: number; glided: boolean; ms: number };
-    /** The others, with how high each is drawn and whether on the ground (0), in the air (1) or gliding (2). */
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; asleep: boolean }>;
+    /**
+     * The others, with how high each is drawn, whether on the ground (0), in the air (1) or gliding (2),
+     * and its take-offs as this page carried them on from the states it was told (as `flown` is for the own owl).
+     */
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean }>;
     /** Asleep, its visitor idle (OP-126). */
     asleep: boolean;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
@@ -1158,7 +1161,7 @@ export class RoomScene extends Phaser.Scene {
       height: this.me.flightHeight(),
       air: { ...this.flier.air },
       flown: { ...this.flown },
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, asleep: o.asleep })),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep })),
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,

@@ -1,6 +1,6 @@
 import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, flightOf, jumpFlapGlide, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -358,13 +358,13 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     const stood = (await state(b)).pos;
     // A jump held to its top, the flap at the top, and the flap held on the way down: a glide.
-    const seen = flightOf(a, 'peer', 12_000);
-    const own = flightOf(b, 'own', 12_000);
-    await jumpFlapGlide(b, 1_200);
-    const [there, here] = await Promise.all([seen, own]);
-    // The other page draws it from the same states: as high, gliding, and as long in the air, give or
-    // take the network and a frame on each page (runners draw few frames a second).
+    const before = (await state(a)).peers[0]!.flown.n;
+    const here = await steppedFlight(b, () => jumpFlapGlide(b, 1_200));
+    const there = await steppedPeerFlight(a, before);
+    // The other page steps it from the same states: one take-off, as high, gliding, and as long in
+    // the air, give or take the network.
     expect(here.peak).toBeGreaterThan(200);
+    expect(there.takeoffs).toBe(1);
     expect(there.peak).toBeGreaterThan(here.peak - 25);
     expect(there.peak).toBeLessThan(here.peak + 25);
     expect(there.glided).toBe(true);

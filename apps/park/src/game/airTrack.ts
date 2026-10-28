@@ -25,6 +25,14 @@ export class AirTrack {
   private carried: { air: Air; at: number } | null = null;
   /** When the wings last beat for a jump or a flap (this page's ms). */
   flapAt = Number.NEGATIVE_INFINITY;
+  /**
+   * Its take-offs as this page carries them on, step by step, as RoomScene's `flown` is for the own
+   * owl: how many, the last one's top (room px), whether it glided and how long it was up (ms, once
+   * down). Exact however few frames the page draws, where the drawn height can miss a top between two.
+   */
+  readonly flown = { n: 0, peak: 0, glided: false, ms: 0 };
+  /** When the flight under way took off (this page's ms); null on the ground. */
+  private flownFrom: number | null = null;
 
   /** A new state from `at` on. One told for a time not before it never happened: this one overtook it. */
   tell(air: Air, at: number): void {
@@ -44,11 +52,15 @@ export class AirTrack {
     if (!head || head.at > now) return ON_GROUND;
     if (!this.carried) {
       this.carried = head;
+      this.record(head);
       // Rising faster than a cut leaves it: a jump or a flap, and the wings beat.
       if (head.air.s === AIRBORNE && head.air.vz > JUMP_CUT_SPEED + 1) this.flapAt = head.at;
     }
     let c = this.carried;
-    while (c.air.s !== GROUNDED && now - c.at >= FLIGHT_STEP_MS) c = { air: fall(c.air, FLIGHT_STEP_MS), at: c.at + FLIGHT_STEP_MS };
+    while (c.air.s !== GROUNDED && now - c.at >= FLIGHT_STEP_MS) {
+      c = { air: fall(c.air, FLIGHT_STEP_MS), at: c.at + FLIGHT_STEP_MS };
+      this.record(c);
+    }
     this.carried = c;
     if (c.air.s === GROUNDED) {
       // Down, with nothing more told: done with this flight.
@@ -59,6 +71,21 @@ export class AirTrack {
       return c.air;
     }
     return now > c.at ? fall(c.air, now - c.at) : c.air;
+  }
+
+  /** A state carried to (a step, or one just told) into `flown`. */
+  private record(c: { air: Air; at: number }): void {
+    if (c.air.s === GROUNDED) {
+      if (this.flownFrom !== null) this.flown.ms = c.at - this.flownFrom;
+      this.flownFrom = null;
+      return;
+    }
+    if (this.flownFrom === null) {
+      this.flownFrom = c.at;
+      Object.assign(this.flown, { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 });
+    }
+    this.flown.peak = Math.max(this.flown.peak, c.air.z);
+    if (c.air.s === GLIDING) this.flown.glided = true;
   }
 }
 

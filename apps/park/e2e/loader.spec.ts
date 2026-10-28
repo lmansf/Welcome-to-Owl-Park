@@ -43,7 +43,8 @@ function watchProgress(page: Page): Promise<number[]> {
 
 test.describe('the load screen (OP-129)', () => {
   test('up from the first paint: the branch grows with the art, a fact after two seconds, a hoot at a tap, gone with the home screen', async ({ page }) => {
-    await slowArt(page, 1_500, 250);
+    // The owl's seven pictures come from 2.5 s on, so the screen is up well past its first fact.
+    await slowArt(page, 2_500, 250);
     // Looked at as the page comes, not once it has loaded: a dev server's first page (its modules not
     // bundled yet) can take longer to load than the art takes to come.
     await page.goto('/?transport=local', { waitUntil: 'commit' });
@@ -52,8 +53,9 @@ test.describe('the load screen (OP-129)', () => {
     await expect(page.locator('.lo-words')).toHaveText('Opening the park…');
     await page.waitForFunction(() => !!window.owlPark?.loadScreen);
     const progress = watchProgress(page);
-    // Two seconds in, an owl fact.
-    await expect.poll(async () => (await loadScreen(page)).fact, { timeout: 5_000 }).toMatch(/^[A-Z].*\.$/);
+    // Two seconds in, an owl fact, looked for every 100 ms (the poll's own back-off waits up to a
+    // second between looks, which can run past the art and the screen).
+    await expect.poll(async () => (await loadScreen(page)).fact, { timeout: 5_000, intervals: [100] }).toMatch(/^[A-Z].*\.$/);
     // The owl hoots at a tap (a hop and a soft sound; the sound is the park's, on here).
     await page.locator('.lo-tap').click();
     expect((await loadScreen(page)).hoots).toBe(1);

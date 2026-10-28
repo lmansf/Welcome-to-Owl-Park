@@ -294,6 +294,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return this.air.s;
   }
 
+  /** Its take-offs as this page carried them on (AirTrack's `flown`): how many, the last one's top, whether it glided, how long it was up. */
+  get flown(): { n: number; peak: number; glided: boolean; ms: number } {
+    return { ...this.flight.flown };
+  }
+
   /** Flop into a leaf pile. */
   flop(): void {
     playFlop(this);

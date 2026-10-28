@@ -15,6 +15,8 @@ export interface ParkState {
     height: number;
     /** On the ground (0), in the air (1) or gliding (2), as drawn. */
     air: 0 | 1 | 2;
+    /** Its take-offs as this page stepped them from the states it was told, as `flown` is for this visitor's own owl. */
+    flown: { n: number; peak: number; glided: boolean; ms: number };
     /** Asleep where it stands, its visitor idle a while (OP-126). */
     asleep: boolean;
   }>;
@@ -205,51 +207,33 @@ export async function walkAndStop(page: Page, x: number, y: number): Promise<{ x
   return (await state(page)).pos;
 }
 
-/** An owl's flight as a page drew it: how high it went (room px), how long it was off the floor, and whether it glided. */
+/** An owl's flight as a page stepped it: how high it went (room px), how long it was off the floor, and whether it glided. */
 export type FlightSeen = { peak: number; airMs: number; glided: boolean };
-
-/**
- * The next flight a page draws (OP-084: its own owl's, or the first other owl's), sampled every
- * frame, too quick for polling. Done once the owl is back on the floor after leaving it, or after
- * `ms` with no flight.
- */
-export function flightOf(page: Page, whose: 'own' | 'peer', ms = 8000): Promise<FlightSeen> {
-  return page.evaluate(
-    ({ whose, ms }) =>
-      new Promise<{ peak: number; airMs: number; glided: boolean }>((resolve) => {
-        let peak = 0;
-        let up = 0;
-        let glided = false;
-        const start = performance.now();
-        const tick = () => {
-          const s = window.owlPark.state();
-          const now = performance.now();
-          const h = (whose === 'own' ? s?.height : s?.peers[0]?.height) ?? 0;
-          const mode = whose === 'own' ? s?.air.s : s?.peers[0]?.air;
-          if (h > 0 && !up) up = now;
-          if (mode === 2) glided = true;
-          peak = Math.max(peak, h);
-          if ((up && h === 0) || now - start >= ms) resolve({ peak, airMs: up ? now - up : 0, glided });
-          else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }),
-    { whose, ms },
-  );
-}
 
 /**
  * Do `act`, then this visitor's owl's flight that follows as its page stepped it (OP-084), once the
  * owl is back on the floor: how many take-offs, how high it went (room px), whether it glided and how
  * long it was up. Exact however few frames a runner draws: a tap let go at once hops a few pixels for
- * a fraction of a second, which a slow runner can step through between two frames, so flightOf,
- * reading the drawn owl each frame, may miss it or see a jump's top a frame early.
+ * a fraction of a second, which a slow runner can step through between two frames, so the drawn owl,
+ * read each frame, may miss it or show a jump's top a frame early.
  */
 export async function steppedFlight(page: Page, act: () => Promise<unknown>): Promise<FlightSeen & { takeoffs: number }> {
   const before = (await state(page)).flown.n;
   await act();
   await expect.poll(async () => { const s = await state(page); return s.flown.n > before && s.air.s === 0; }, { timeout: 15_000, intervals: [50] }).toBe(true);
   const { n, peak, glided, ms } = (await state(page)).flown;
+  return { takeoffs: n - before, peak, airMs: ms, glided };
+}
+
+/**
+ * The first other owl's flight after the `before` take-offs this page had seen it make, as this page
+ * stepped it from the states it was told (OP-084), once that owl is down: the same record as
+ * steppedFlight's, so two pages' flights compare exactly however few frames a runner draws.
+ */
+export async function steppedPeerFlight(page: Page, before: number): Promise<FlightSeen & { takeoffs: number }> {
+  const peer = async () => (await state(page)).peers[0];
+  await expect.poll(async () => { const p = await peer(); return !!p && p.flown.n > before && p.air === 0; }, { timeout: 15_000, intervals: [50] }).toBe(true);
+  const { n, peak, glided, ms } = (await peer())!.flown;
   return { takeoffs: n - before, peak, airMs: ms, glided };
 }
 
