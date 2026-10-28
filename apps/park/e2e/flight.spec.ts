@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { flightOf, holdSpace, jumpFlapGlide, openPark, state } from './helpers';
+import { flightOf, holdSpace, jumpFlapGlide, openPark, state, steppedFlight } from './helpers';
 
 /**
  * Flight (OP-084): Jump (the space bar, the pad's Jump on a phone) jumps the climb's jump, pressed
  * again in the air flaps once more, and held on the way down glides. These run on the local
- * transport, tab to tab; the room server's side is in edge.spec.ts.
+ * transport, tab to tab; the room server's side is in edge.spec.ts. The owl's own flights are read as
+ * its page stepped them (steppedFlight), exact however few frames a runner draws; another tab's, as
+ * that tab draws them.
  */
 
 /** Press the pad's Jump with a thumb and keep it down for `ms`, as a hold. */
@@ -20,21 +22,18 @@ test.describe('flight (OP-084)', () => {
     await openPark(page);
     const stood = (await state(page)).pos;
     // Held to the top: about 150 px up (a park owl is 120 tall), and back down.
-    let seen = flightOf(page, 'own');
-    await holdSpace(page, 300);
-    const held = await seen;
+    const held = await steppedFlight(page, () => holdSpace(page, 300));
+    expect(held.takeoffs).toBe(1);
     expect(held.peak).toBeGreaterThan(120);
     expect(held.peak).toBeLessThan(175);
     // A quick tap (60 ms, set in the page so a slow runner cannot stretch it): let go on the way up and the rise is cut short.
-    seen = flightOf(page, 'own');
-    expect(await page.evaluate(() => window.owlPark.jump(60))).toBe(true);
-    const tap = await seen;
+    const tap = await steppedFlight(page, async () => expect(await page.evaluate(() => window.owlPark.jump(60))).toBe(true));
+    expect(tap.takeoffs).toBe(1);
     expect(tap.peak).toBeGreaterThan(0);
     expect(tap.peak).toBeLessThan(held.peak - 10);
     // Pressed again near the top: the one flap more, higher than the jump alone.
-    seen = flightOf(page, 'own');
-    await jumpFlapGlide(page, 200);
-    const flapped = await seen;
+    const flapped = await steppedFlight(page, () => jumpFlapGlide(page, 200));
+    expect(flapped.takeoffs).toBe(1);
     expect(flapped.peak).toBeGreaterThan(held.peak + 60);
     // Flight is a height over the floor: the owl never left its spot, and stands on the floor again.
     const now = await state(page);
@@ -45,19 +44,19 @@ test.describe('flight (OP-084)', () => {
 
   test('held on the way down it glides, longer in the air than a fall, falling at a third of the walk; let go and it drops', async ({ page }) => {
     await openPark(page);
-    let seen = flightOf(page, 'own');
-    await holdSpace(page, 300);
-    const jumped = await seen;
-    seen = flightOf(page, 'own');
-    await page.keyboard.down('Space');
-    await expect.poll(async () => (await state(page)).air.s, { timeout: 5_000, intervals: [50] }).toBe(2);
-    // Gliding: falling slowly, at a third of the walk's pace.
-    const mid = (await state(page)).air;
-    expect(mid.vz).toBeLessThan(0);
-    expect(mid.vz).toBeGreaterThan(-120);
-    await page.waitForTimeout(400);
-    await page.keyboard.up('Space');
-    const glided = await seen;
+    // A jump let go before its top (300 ms, set in the page so a slow runner cannot stretch it into a glide): up and straight down.
+    const jumped = await steppedFlight(page, async () => expect(await page.evaluate(() => window.owlPark.jump(300))).toBe(true));
+    expect(jumped.glided).toBe(false);
+    const glided = await steppedFlight(page, async () => {
+      await page.keyboard.down('Space');
+      await expect.poll(async () => (await state(page)).air.s, { timeout: 5_000, intervals: [50] }).toBe(2);
+      // Gliding: falling slowly, at a third of the walk's pace.
+      const mid = (await state(page)).air;
+      expect(mid.vz).toBeLessThan(0);
+      expect(mid.vz).toBeGreaterThan(-120);
+      await page.waitForTimeout(400);
+      await page.keyboard.up('Space');
+    });
     expect(glided.glided).toBe(true);
     expect(glided.airMs).toBeGreaterThan(jumped.airMs + 300);
   });
@@ -65,14 +64,13 @@ test.describe('flight (OP-084)', () => {
   test('on a phone the pad’s Jump does it: a tap jumps, a hold glides', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page);
-    let seen = flightOf(page, 'own');
-    await page.locator('[data-pad-jump]').tap();
-    const tapped = await seen;
+    // A tap is a press let go at once: the jump is cut short at once, a hop of a few pixels.
+    const tapped = await steppedFlight(page, () => page.locator('[data-pad-jump]').tap());
+    expect(tapped.takeoffs).toBe(1);
     expect(tapped.peak).toBeGreaterThan(0);
     expect(tapped.glided).toBe(false);
-    seen = flightOf(page, 'own');
-    await holdPadJump(page, 1_400);
-    const held = await seen;
+    const held = await steppedFlight(page, () => holdPadJump(page, 1_400));
+    expect(held.takeoffs).toBe(1);
     expect(held.peak).toBeGreaterThan(120);
     expect(held.glided).toBe(true);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-flight-pad.png` });

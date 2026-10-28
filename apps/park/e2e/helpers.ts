@@ -22,6 +22,8 @@ export interface ParkState {
   height: number;
   /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1) or gliding (2), and flaps left. */
   air: { z: number; vz: number; s: 0 | 1 | 2; f: 0 | 1 };
+  /** Its take-offs as the flight steps them: how many on this page, and the last one's top (room px), whether it glided and how long it was up (ms, once down). */
+  flown: { n: number; peak: number; glided: boolean; ms: number };
   /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */
   asleep: boolean;
   /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
@@ -232,6 +234,21 @@ export function flightOf(page: Page, whose: 'own' | 'peer', ms = 8000): Promise<
       }),
     { whose, ms },
   );
+}
+
+/**
+ * Do `act`, then this visitor's owl's flight that follows as its page stepped it (OP-084), once the
+ * owl is back on the floor: how many take-offs, how high it went (room px), whether it glided and how
+ * long it was up. Exact however few frames a runner draws: a tap let go at once hops a few pixels for
+ * a fraction of a second, which a slow runner can step through between two frames, so flightOf,
+ * reading the drawn owl each frame, may miss it or see a jump's top a frame early.
+ */
+export async function steppedFlight(page: Page, act: () => Promise<unknown>): Promise<FlightSeen & { takeoffs: number }> {
+  const before = (await state(page)).flown.n;
+  await act();
+  await expect.poll(async () => { const s = await state(page); return s.flown.n > before && s.air.s === 0; }, { timeout: 15_000, intervals: [50] }).toBe(true);
+  const { n, peak, glided, ms } = (await state(page)).flown;
+  return { takeoffs: n - before, peak, airMs: ms, glided };
 }
 
 /** Hold the space bar down for `ms`, then let it go (OP-084: a jump held, a flap, a glide). */
