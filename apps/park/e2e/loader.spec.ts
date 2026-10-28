@@ -44,7 +44,9 @@ function watchProgress(page: Page): Promise<number[]> {
 test.describe('the load screen (OP-129)', () => {
   test('up from the first paint: the branch grows with the art, a fact after two seconds, a hoot at a tap, gone with the home screen', async ({ page }) => {
     await slowArt(page, 1_500, 250);
-    await page.goto('/?transport=local');
+    // Looked at as the page comes, not once it has loaded: a dev server's first page (its modules not
+    // bundled yet) can take longer to load than the art takes to come.
+    await page.goto('/?transport=local', { waitUntil: 'commit' });
     // Up before the script has drawn anything, with the park's words.
     await expect(loader(page)).toBeVisible();
     await expect(page.locator('.lo-words')).toHaveText('Opening the park…');
