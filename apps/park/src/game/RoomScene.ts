@@ -7,6 +7,7 @@ import {
   EMOTE_IDS,
   FLIGHT_STEP_MS,
   GAMES,
+  GLIDING,
   GROUNDED,
   LEFT_PARK_SPAWN,
   LOBBY_ROOM,
@@ -278,6 +279,9 @@ export class RoomScene extends Phaser.Scene {
   /** Air states this page may still send now, a little under the room server's allowance so a late frame is never dropped there. */
   private airTokens = AIR_SEND_BURST;
   private airRefilledAt = 0;
+  /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
+  private flown = { n: 0, peak: 0, glided: false, ms: 0 };
+  private flownFrom = 0;
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
@@ -1053,6 +1057,13 @@ export class RoomScene extends Phaser.Scene {
     height: number;
     /** Its flight as it steps (on the ground, in the air or gliding; flaps left). */
     air: Air;
+    /**
+     * Its take-offs as the flight steps them: how many on this page, and the last one's top (room px),
+     * whether it glided and how long it was up (ms, once down). A tap let go at once hops a few pixels
+     * for a fraction of a second, which a slow machine can step through between two frames it draws,
+     * so `height` may never show it.
+     */
+    flown: { n: number; peak: number; glided: boolean; ms: number };
     /** The others, with how high each is drawn and whether on the ground (0), in the air (1) or gliding (2). */
     peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; asleep: boolean }>;
     /** Asleep, its visitor idle (OP-126). */
@@ -1095,6 +1106,7 @@ export class RoomScene extends Phaser.Scene {
       look: this.look,
       height: this.me.flightHeight(),
       air: { ...this.flier.air },
+      flown: { ...this.flown },
       peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, asleep: o.asleep })),
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
@@ -1499,8 +1511,17 @@ export class RoomScene extends Phaser.Scene {
       const pressed = down > this.jumpTaken && down <= at;
       if (pressed) this.jumpTaken = down;
       const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
+      const grounded = this.flier.air.s === GROUNDED;
       this.flier = stepFlier(this.flier, { pressed, held }, 0, this.abilities);
       const air = this.flier.air;
+      if (air.s !== GROUNDED) {
+        if (grounded) {
+          this.flown = { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 };
+          this.flownFrom = at;
+        }
+        this.flown.peak = Math.max(this.flown.peak, air.z);
+        if (air.s === GLIDING) this.flown.glided = true;
+      } else if (!grounded) this.flown.ms = at - this.flownFrom;
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {
         this.drawnAir = air;
