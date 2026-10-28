@@ -169,24 +169,44 @@ export function roomArtCap(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | '
 
 const prefetched = new Set<string>();
 
+/** Fetch one art file into the browser's cache, once a page, at low priority; resolves when it has come (or failed). */
+function fetchAhead(name: string): Promise<void> {
+  if (prefetched.has(name)) return Promise.resolve();
+  prefetched.add(name);
+  return fetch(`${baseUrl()}${versioned(name)}`, { priority: 'low' })
+    .then((res) => res.arrayBuffer())
+    .then(
+      () => undefined,
+      () => void prefetched.delete(name),
+    );
+}
+
 /**
  * Fetch a room's opening art ahead (OP-129), as an owl nears a doorway into it or the home screen
  * waits on Play: the very files its opening will ask for, at the same sharpness, into the browser's
- * cache (where the art keeps a year), not drawn. Each file once a page; art already drawn is left out.
+ * cache (where the art keeps a year), not drawn. A painting that may open soft (softTiles) has its 1x
+ * copy fetched with the rest, unless the browser has its 2x copy already, and its 2x copy after the
+ * rest, so a room entered quickly finds what it opens on. Each file once a page; art already drawn is
+ * left out.
  */
 export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): void {
   if (typeof fetch !== 'function') return;
   const cap = roomArtCap(room, cfg);
+  const could = new Set(softTiles(room, cfg));
+  const rest: string[] = [];
+  const soft: Array<{ one: string; two: string }> = [];
   for (const key of roomOpeningArt(room.id, room)) {
     const spec = ART[key];
     if (!spec || scene.textures.exists(key)) continue;
     const name = firstFile(key, artScale(spec.kind, cfg.pixelRatio, cap));
     if (!name || prefetched.has(name)) continue;
-    prefetched.add(name);
-    void fetch(`${baseUrl()}${versioned(name)}`, { priority: 'low' })
-      .then((res) => res.arrayBuffer())
-      .catch(() => prefetched.delete(name));
+    if (could.has(key)) soft.push({ one: firstFile(key, 1)!, two: name });
+    else rest.push(name);
   }
+  const ones = soft.map(async ({ one, two }) => {
+    if (!(await inCache(`${baseUrl()}${versioned(two)}`))) await fetchAhead(one);
+  });
+  void Promise.all([...rest.map(fetchAhead), ...ones]).then(() => Promise.all(soft.map(({ two }) => fetchAhead(two))));
 }
 
 /**
