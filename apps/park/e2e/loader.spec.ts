@@ -114,4 +114,18 @@ test.describe('the load screen (OP-129)', () => {
     expect(await page.evaluate(() => window.owlPark.state()?.room ?? null)).toBe('hub');
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
   });
+
+  test('a tapped walk past one realm’s arch on its way to another fetches only the room it goes into', async ({ page }) => {
+    await openPark(page);
+    const fetched: string[] = [];
+    page.on('request', (r) => {
+      const path = new URL(r.url()).pathname;
+      if (/^\/art\/(glass|market)/.test(path)) fetched.push(path);
+    });
+    // From the hub's middle to the market's arch, right by the stained-glass realm's.
+    await walkToDoor(page, 'to-market');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('market');
+    expect(fetched.some((p) => p.startsWith('/art/market'))).toBe(true);
+    expect(fetched.filter((p) => p.startsWith('/art/glass'))).toEqual([]);
+  });
 });

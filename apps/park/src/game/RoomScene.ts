@@ -777,7 +777,7 @@ export class RoomScene extends Phaser.Scene {
   private prefetchNear(now: number): void {
     if (now < this.prefetchAt) return;
     this.prefetchAt = now + 500;
-    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, (id) => this.realmClosed(id))) prefetchRoomArt(this, to, this.cfg);
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id))) prefetchRoomArt(this, to, this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */

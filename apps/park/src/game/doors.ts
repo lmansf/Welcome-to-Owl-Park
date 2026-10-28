@@ -18,20 +18,26 @@ export function takesDoorway(rect: Rect, walkTo: Vec2 | null, fromKeys: boolean,
   return fromKeys || walkTo === null || distanceToRect(walkTo, rect) <= DOOR_AIM_PX;
 }
 
-/** A walking owl this near a doorway may be going through it (the held keys have no other sign). */
+/** An owl walking on the held keys this near a doorway may be going through it (the keys have no other sign). */
 export const AHEAD_PX = 100;
 
 /**
  * The rooms an owl looks to be heading into, whose art is worth fetching ahead (OP-129): through a
- * doorway its walk ends at, or one it walks within AHEAD_PX of. An owl standing still is going
- * nowhere. Behind the street's nest doors is a nest (every nest has the same art); a doorway into a
- * room that is `closed` (a realm not open yet) or back into this room leads nowhere new.
+ * doorway its walk ends at, or, walking on the held keys or the thumbstick (`fromKeys`, which go
+ * through any doorway they walk into), one it comes within AHEAD_PX of. A tapped walk goes through
+ * only the doorway it ends at, so the ones it passes on the way are not fetched: a phone tapped
+ * across the hub to the market would otherwise fetch the realm whose arch it walks by. An owl
+ * standing still is going nowhere. Behind the street's nest doors is a nest (every nest has the same
+ * art); a doorway into a room that is `closed` (a realm not open yet) or back into this room leads
+ * nowhere new.
  */
-export function roomsAhead(room: RoomDef, pos: Vec2, walkTo: Vec2 | null, closed: (roomId: string) => boolean): RoomDef[] {
+export function roomsAhead(room: RoomDef, pos: Vec2, walkTo: Vec2 | null, fromKeys: boolean, closed: (roomId: string) => boolean): RoomDef[] {
   const out: RoomDef[] = [];
   if (!walkTo) return out;
   for (const door of room.doors) {
-    if (distanceToRect(walkTo, door.rect) > 2 * DOOR_AIM_PX && distanceToRect(pos, door.rect) > AHEAD_PX) continue;
+    const aimed = distanceToRect(walkTo, door.rect) <= 2 * DOOR_AIM_PX;
+    const near = fromKeys && distanceToRect(pos, door.rect) <= AHEAD_PX;
+    if (!aimed && !near) continue;
     const to = door.to ? (closed(door.to.room) ? undefined : roomFor(door.to.room)) : room.id === STREET_ROOM && nestDoorIndex(door.id) !== null ? NEST_ROOM : undefined;
     if (to && to.id !== room.id && !out.includes(to)) out.push(to);
   }
