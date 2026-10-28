@@ -376,8 +376,9 @@ export class EdgeTransport implements ParkTransport {
           backoff = BACKOFF_MIN_MS;
           clearPending();
           clearQueue();
-          handlers.onSelf?.(f.you.pos);
+          // Where the room has the owl now; the scene then tells the room where the owl really is (OP-138).
           current = { ...current, pos: f.you.pos, walk: null };
+          handlers.onSelf?.(f.you.pos);
           // A new socket is a new visitor to the room: an owl still asleep says so again (OP-126).
           if (current.asleep) sendFrame({ t: 'rest', asleep: true });
           const seen = new Set<string>();
@@ -417,6 +418,7 @@ export class EdgeTransport implements ParkTransport {
           // largest value seen is the closest to the true skew.
           if (offsetKnown) offset = Math.max(offset, f.at - Date.now());
           if (f.id === selfId) {
+            handlers.onSelfEcho?.(f.from, f.to);
             if (f.seq !== undefined) {
               const predicted = pending.get(f.seq)?.to;
               clearPending(f.seq);

@@ -23,6 +23,7 @@ import {
   positionAlongWalk,
   resolveTarget,
   distance,
+  WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
   CLOSE,
   type ClientHello,
@@ -250,7 +251,10 @@ export class Room {
     if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !inExit(this.def, hello.pos)) {
       const recent = this.leavers.get(id);
       const nearSpawn = distance(hello.pos, spawn) <= LIMITS.resumeRadius;
-      const nearLeave = recent !== undefined && this.now() - recent.leftAt <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius;
+      // Back soon after it left: near where it left, or as far from there as it could have walked
+      // since (a page walks on while its connection is down, and comes back where its owl is, OP-138).
+      const away = recent === undefined ? Infinity : this.now() - recent.leftAt;
+      const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius + (WALK_SPEED * away) / 1000;
       if ((nearSpawn || nearLeave) && !this.occupied(hello.pos)) pos = hello.pos;
     }
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);

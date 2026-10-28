@@ -61,6 +61,11 @@ export interface ParkConfig {
    * with VITE_BOXES=on (a preview for QA); never the live park, where players would see it.
    */
   boxes: boolean;
+  /**
+   * The position overlay (OP-138, `?pos=1`): where the room says the own owl stands beside where it is
+   * drawn, and every jump. It shows only once the keepers' key it asks for checks out with the room server.
+   */
+  pos: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -103,5 +108,6 @@ export function readConfig(): ParkConfig {
     awayAskMs: seconds(q.get('away'), 10 * 60) * 1000,
     awayAnswerMs: seconds(q.get('answer'), 60) * 1000,
     boxes: q.get('boxes') === '1' && (env.DEV || ((env.VITE_BOXES as string | undefined) ?? '').trim() === 'on'),
+    pos: q.get('pos') === '1',
   };
 }

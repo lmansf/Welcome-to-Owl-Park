@@ -249,6 +249,25 @@ describe('Room', () => {
     expect(a2.last('welcome')!.you.pos).toEqual({ x: 1290, y: 790 });
   });
 
+  it('lets a page back from a dropped connection resume as far off as its owl could have walked meanwhile (OP-138)', () => {
+    for (const [id, downMs, kept] of [['a', 2_000, true], ['b', 100, false]] as const) {
+      const p = new FakePeer();
+      room.join(p, id, hello());
+      room.move(id, { t: 'move', to: { x: 1450, y: 850 }, seq: 1 });
+      now += 60_000;
+      room.leave(id);
+      now += downMs;
+      // 450 px from where it left and away from the spawn: two seconds on foot cover that, a tenth of one does not.
+      const back = new FakePeer();
+      room.join(back, id, hello({ pos: { x: 1000, y: 850 } }));
+      const pos = back.last('welcome')!.you.pos;
+      if (kept) expect(pos).toEqual({ x: 1000, y: 850 });
+      else expect(Math.hypot(pos.x - 800, pos.y - 700)).toBeLessThanOrEqual(LIMITS.scatterDefault * 1.5);
+      room.leave(id);
+    }
+    expect(LIMITS.resumeRadius + WALK_SPEED * 0.1).toBeLessThan(450);
+  });
+
   it('does not honour a resume position far from the spawn for a stranger', () => {
     const a = new FakePeer();
     room.join(a, 'a', hello({ pos: { x: 1400, y: 850 } }));

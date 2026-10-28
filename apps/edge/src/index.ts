@@ -264,6 +264,12 @@ export default {
       return json({ gate: (await gateOf(env)).mode, admitted: pass.adm });
     }
 
+    // ---- Whether a key is the keepers' (the position overlay asks before it shows, OP-138) ----
+    if (url.pathname === '/api/admin/ping') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      return json({ ok: true });
+    }
     // ---- Collectibles (the collector comes from the pass) ----
     if (url.pathname === '/api/admin/grant') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
