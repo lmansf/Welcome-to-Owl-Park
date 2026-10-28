@@ -33,11 +33,17 @@ describe('rasterCandidates', () => {
 });
 
 describe('rasterCandidates with the files the build ships', () => {
-  it('asks only for what is there: one request a key, not a miss first', () => {
-    const shipped = new Set(['owl-body@2x.png', 'owl-body.png', 'hub.webp', 'nest@2x.webp', 'nest.webp']);
-    expect(rasterCandidates('/art/', 'owl-body', 2, shipped)).toEqual(['/art/owl-body@2x.png', '/art/owl-body.png']);
-    expect(rasterCandidates('/art/', 'hub', 2, shipped)).toEqual(['/art/hub.webp']);
-    expect(rasterCandidates('/art/', 'nest', 1, shipped)).toEqual(['/art/nest.webp']);
+  it('asks only for what is there, with its hash: one request a key, not a miss first', () => {
+    const shipped = new Map([
+      ['owl-body@2x.png', 'a1'],
+      ['owl-body.png', 'b2'],
+      ['hub.webp', 'c3'],
+      ['nest@2x.webp', 'd4'],
+      ['nest.webp', 'e5'],
+    ]);
+    expect(rasterCandidates('/art/', 'owl-body', 2, shipped)).toEqual(['/art/owl-body@2x.png?v=a1', '/art/owl-body.png?v=b2']);
+    expect(rasterCandidates('/art/', 'hub', 2, shipped)).toEqual(['/art/hub.webp?v=c3']);
+    expect(rasterCandidates('/art/', 'nest', 1, shipped)).toEqual(['/art/nest.webp?v=e5']);
     expect(rasterCandidates('/art/', 'missing', 2, shipped)).toEqual([]);
   });
 });

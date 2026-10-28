@@ -1,0 +1,7 @@
+# OP-129: the script bundles are named by their content, and the art is asked for with its content's
+# hash (?v=, from vite.config.ts), so both are kept a year; a changed file is a new address. The page
+# itself is never kept (the Worker serves it uncached: apps/edge/src/page.ts).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/art/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -14,7 +14,7 @@
 import { CATALOGUE, parseVariant, type ItemDef } from '@owl-park/shared';
 import { rotateHue } from '../collect/pixels';
 import { rasterCandidates } from './artFiles';
-import { PUBLISHED_ART } from './publishedArt';
+import { PUBLISHED_ART, versioned } from './publishedArt';
 
 export type ItemSlot = 'head' | 'face' | 'neck' | 'pet';
 
@@ -65,7 +65,7 @@ function loadRealArt(key: string, scale: number): Promise<HTMLImageElement | nul
   if (!p) {
     p = (async () => {
       const base = artBase();
-      for (const url of [...(PUBLISHED_ART.has(`${key}.svg`) ? [`${base}${key}.svg`] : []), ...rasterCandidates(base, key, scale, PUBLISHED_ART)]) {
+      for (const url of [...(PUBLISHED_ART.has(`${key}.svg`) ? [`${base}${versioned(`${key}.svg`)}`] : []), ...rasterCandidates(base, key, scale, PUBLISHED_ART)]) {
         const img = await loadImage(url);
         if (img) return img;
       }

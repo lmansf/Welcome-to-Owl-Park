@@ -3,7 +3,7 @@
  * For each key the loader takes, in order: `<key>.svg` (rasterized at the device's scale),
  * then `<key>@2x.webp` and `<key>@2x.png` when a sharper copy is wanted, then `<key>.webp` and
  * `<key>.png` (painted rooms ship as WebP, everything else as PNG), asking only for the files the
- * build ships (PUBLISHED_ART), so each key is one request. Whatever resolution the file has, the
+ * build ships (PUBLISHED_ART), so each key is one request, with its content's hash. Whatever resolution the file has, the
  * game draws it at the logical size, so artists can hand in SVG, WebP or PNG. Missing or broken
  * files fall back to generated placeholders and never stop the park.
  */
@@ -13,7 +13,7 @@ import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, roomFor } from '../rooms';
 import { OWL_LAYERS, SPECIES_LAYERS, isSpeciesLayer, rasterCandidates } from './artFiles';
-import { PUBLISHED_ART } from './publishedArt';
+import { PUBLISHED_ART, versioned } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
 
 export const ART_PATH = 'art/';
@@ -183,7 +183,7 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   const spec = ART[key];
   if (!spec) return false;
   const url = baseUrl();
-  if (PUBLISHED_ART.has(`${key}.svg`) && (await loadSvgTexture(scene, key, `${url}${key}.svg`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
+  if (PUBLISHED_ART.has(`${key}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${key}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
   for (const c of rasterCandidates(url, key, scale, PUBLISHED_ART)) {
     const img = await loadImage(c);
     if (img) {
