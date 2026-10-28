@@ -137,7 +137,7 @@ export function blockadeKey(phrase: string): string {
   return `blockade-${phrase.toLowerCase().replace(/\s+/g, '-')}`;
 }
 
-/** Art that belongs to one room (loaded when the room opens, released when it closes). */
+/** Art that belongs to one room (released when it closes; roomOpeningArt is what loads as it opens). */
 export function roomArtKeys(roomId: string): string[] {
   const room = roomFor(roomId);
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
@@ -149,6 +149,17 @@ export function roomArtKeys(roomId: string): string[] {
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
   return keys.filter((k) => k in ART);
+}
+
+const FURNITURE_ART = new Set(FURNITURE.map((f) => f.art));
+
+/**
+ * The art a room waits for before it opens: all of its own but a nest's furniture, each piece of
+ * which loads as the nest puts it out or its owner decorates (OP-129: the sixteen pieces were over
+ * a megabyte on a phone before the owl could move, most of them in nobody's nest).
+ */
+export function roomOpeningArt(roomId: string): string[] {
+  return roomArtKeys(roomId).filter((k) => !FURNITURE_ART.has(k));
 }
 
 /**

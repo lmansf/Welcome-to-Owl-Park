@@ -101,7 +101,7 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
-import { loadArt, releaseArt, roomArtKeys } from './art';
+import { loadArt, releaseArt, roomArtKeys, roomOpeningArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { roomScaleCap } from './artFiles';
 import { takesDoorway } from './doors';
@@ -312,7 +312,10 @@ export class RoomScene extends Phaser.Scene {
   private decorSpot: NestSpotId = 'f1';
   /** CSS pixels the Decorate sheet covers at the bottom of the screen. */
   private sheetPx = 0;
-  private readonly thumbs = new Map<string, string | null>();
+  /** The Decorate sheet's pictures of pieces, drawn once each from their textures. */
+  private readonly thumbs = new Map<string, string>();
+  /** How sharp this room's art is drawn (pixels per room pixel at most): a nest's furniture loads at it too. */
+  private artCap = 1;
 
   constructor() {
     super('room');
@@ -410,7 +413,8 @@ export class RoomScene extends Phaser.Scene {
     // A room of several tiles keeps to the same memory budget as a one-screen room, at 1x if need be.
     const textures = backgroundTiles(this.room).length + foregroundTiles(this.room).length;
     const cap = roomScaleCap(textures, this.cfg.pixelRatio, this.cfg.artScaleMax, this.cfg.roomArtBudget);
-    await loadArt(this, roomArtKeys(this.room.id), this.cfg.pixelRatio, cap);
+    this.artCap = cap;
+    await loadArt(this, roomOpeningArt(this.room.id), this.cfg.pixelRatio, cap);
     if (gen !== this.gen || !this.scene.isActive()) return; // the scene moved on while we loaded
     this.registry.set('loadedRoom', this.room.id);
     label.destroy();
@@ -464,7 +468,7 @@ export class RoomScene extends Phaser.Scene {
       this.streetSigns.show(this.street, nestLook(this.look));
     }
     if (isNestRoom(room.id)) {
-      this.decor = new NestDecor(this);
+      this.decor = new NestDecor(this, (keys) => loadArt(this, keys, this.cfg.pixelRatio, this.artCap));
       this.mirror = new NestMirror(this, NEST_MIRROR);
     }
     for (const t of foregroundTiles(room)) {
@@ -1092,8 +1096,8 @@ export class RoomScene extends Phaser.Scene {
     wall: ReturnType<Arcade['wall']> | null;
     /** On the street: who lives behind each door for this visitor (door 0 is its own). */
     street: StreetDoor[] | null;
-    /** In a nest: which, whether it is this visitor's, how it stands, and Decorate mode. */
-    nest: { id: string; mine: boolean; open: boolean; layout: NestLayout; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: NestSpotId } | null;
+    /** In a nest: which, whether it is this visitor's, how it stands (and which pieces are drawn yet: their pictures load as they are put out), and Decorate mode. */
+    nest: { id: string; mine: boolean; open: boolean; layout: NestLayout; drawn: NestLayout; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: NestSpotId } | null;
     /** In a nest, its mirror (OP-077): where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
     mirror: { x: number; y: number; stage: PreviewFrame | null } | null;
   } | null {
@@ -1122,7 +1126,7 @@ export class RoomScene extends Phaser.Scene {
       wall: this.arcade?.wall() ?? null,
       street: this.room.id === STREET_ROOM ? this.street : null,
       nest: this.nestView
-        ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
+        ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, drawn: this.decor?.drawn() ?? {}, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
         : null,
       mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
     };
@@ -1919,7 +1923,7 @@ export class RoomScene extends Phaser.Scene {
   private showNest(nest: NestView): void {
     this.nestView = nest;
     this.decor?.apply(nest.layout);
-    if (this.decorating) this.hud.updateDecorate(this.decorateView());
+    if (this.decorating) this.refreshDecorate();
   }
 
   /** The nest turned the visitor away (closed to visitors, or no such nest) or closed while it was inside. */
@@ -1989,6 +1993,7 @@ export class RoomScene extends Phaser.Scene {
         this.lookAtSpot();
       },
     });
+    this.loadThumbs();
   }
 
   /** Back to walking about: the spots go, the sheet closes and (unless the room is closing) the camera follows the owl again. */
@@ -2051,13 +2056,29 @@ export class RoomScene extends Phaser.Scene {
         if (spot) this.pickSpot(spot.id, true);
       } else this.hud.toast(`+${res.feathers} feathers! ${NEST_WORDS.everyPiece}`, 4000, '#FFD36A');
     }
-    this.hud.updateDecorate(this.decorateView());
+    this.refreshDecorate();
   }
 
-  /** A piece's picture for the Decorate sheet, drawn once per room. */
+  /** The Decorate sheet shows the nest as it stands now, and the pictures of any pieces new to it load. */
+  private refreshDecorate(): void {
+    this.hud.updateDecorate(this.decorateView());
+    this.loadThumbs();
+  }
+
+  /** The owner's pieces' pictures load as Decorate opens (OP-129: not with the nest), and the sheet shows them once they are here. */
+  private loadThumbs(): void {
+    const arts = this.owned.flatMap((id) => getFurniture(id)?.art ?? []);
+    if (!this.decor || arts.every((art) => this.textures.exists(art))) return;
+    void this.decor.load(arts).then(() => this.decorating && this.hud.updateDecorate(this.decorateView()));
+  }
+
+  /** A piece's picture for the Decorate sheet, drawn once per room (none while it loads). */
   private thumb(art: string): string | null {
-    if (!this.thumbs.has(art)) this.thumbs.set(art, pieceThumb(this, art));
-    return this.thumbs.get(art) ?? null;
+    const had = this.thumbs.get(art);
+    if (had) return had;
+    const src = pieceThumb(this, art);
+    if (src) this.thumbs.set(art, src);
+    return src;
   }
 
   // ---------- camera ----------

@@ -14,16 +14,28 @@ const HIT = { floor: { w: 170, up: 190, down: 30 }, wall: { w: 160, up: 160, dow
 /**
  * A nest's furniture: each piece drawn with its bottom centre on its spot, sorted in depth with the
  * owls (wall pieces and rugs behind them). In Decorate mode the twelve spots show as rings the
- * owner taps to choose one; the chosen one is gold.
+ * owner taps to choose one; the chosen one is gold. The pieces' pictures are not loaded with the
+ * room (OP-129): each loads as the nest puts it out (`load`, the room's loader at the room's scale).
  */
 export class NestDecor {
   private readonly pieces = new Map<NestSpotId, { item: string; image: Phaser.GameObjects.Image }>();
   private readonly rings = new Map<NestSpotId, { ring: Phaser.GameObjects.Graphics; hit: Phaser.GameObjects.Zone; label: Phaser.GameObjects.Text }>();
+  /** Each picture's loading, once (one that cannot load ends with a placeholder), and which have finished. */
+  private readonly loads = new Map<string, Promise<unknown>>();
+  private readonly loaded = new Set<string>();
+  /** The layout last asked for, shown again as late pictures arrive. */
+  private layout: NestLayout = {};
+  private gone = false;
 
-  constructor(private readonly scene: Phaser.Scene) {}
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly loadArt: (keys: string[]) => Promise<unknown>,
+  ) {}
 
-  /** Show this layout: pieces that moved or arrived pop in, pieces taken away go. */
+  /** Show this layout: pieces that moved or arrived pop in (once their pictures are here), pieces taken away go. */
   apply(layout: NestLayout): void {
+    this.layout = layout;
+    const waiting: string[] = [];
     for (const spot of NEST_SPOTS) {
       const item = layout[spot.id] ?? null;
       const had = this.pieces.get(spot.id);
@@ -32,6 +44,10 @@ export class NestDecor {
       this.pieces.delete(spot.id);
       const piece = item ? getFurniture(item) : null;
       if (!piece || piece.place !== spot.place) continue;
+      if (!this.scene.textures.exists(piece.art) && !this.loaded.has(piece.art)) {
+        waiting.push(piece.art);
+        continue;
+      }
       ensurePlaceholder(this.scene, piece.art);
       // Stood on its spot by what it draws, not by its frame's padding (OP-127).
       const foot = footOrigin(piece.art);
@@ -43,6 +59,29 @@ export class NestDecor {
       this.scene.tweens.add({ targets: image, scaleX: sx, scaleY: sy, alpha: 1, duration: 260, ease: 'Back.easeOut' });
       this.pieces.set(spot.id, { item: piece.id, image });
     }
+    if (waiting.length) void this.load(waiting).then(() => !this.gone && this.apply(this.layout));
+  }
+
+  /** Load these pieces' pictures (the Decorate sheet's too), each once; resolves when all have finished. */
+  load(keys: readonly string[]): Promise<void> {
+    const pending = [...new Set(keys)]
+      .filter((k) => !this.scene.textures.exists(k))
+      .map((k) => {
+        let p = this.loads.get(k);
+        if (!p) {
+          p = this.loadArt([k])
+            .catch(() => undefined)
+            .finally(() => this.loaded.add(k));
+          this.loads.set(k, p);
+        }
+        return p;
+      });
+    return Promise.all(pending).then(() => undefined);
+  }
+
+  /** The pieces standing in the nest with their pictures drawn, by spot (the test hook's). */
+  drawn(): NestLayout {
+    return Object.fromEntries([...this.pieces].map(([spot, p]) => [spot, p.item]));
   }
 
   /** The pieces standing in the nest, by art key, for the fit overlay (OP-127). */
@@ -113,6 +152,7 @@ export class NestDecor {
   }
 
   destroy(): void {
+    this.gone = true;
     this.hideSpots();
     for (const p of this.pieces.values()) p.image.destroy();
     this.pieces.clear();

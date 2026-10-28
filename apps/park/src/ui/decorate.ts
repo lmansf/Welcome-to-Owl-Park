@@ -104,6 +104,9 @@ export function createDecorateSheet(root: HTMLElement, actions: DecorateActions,
   let busy = false;
 
   const render = () => {
+    // Drawn again (a change, or pictures arriving late: OP-129), the list stays where it was scrolled and on the piece that had focus.
+    const scrolled = pieces.scrollLeft;
+    const focused = pieces.contains(document.activeElement) ? ((document.activeElement as HTMLElement).dataset['piece'] ?? null) : null;
     const h = spotHeading(spot);
     where.textContent = `${h.n} / ${h.of} · ${h.where}`;
     pieces.setAttribute('aria-label', `Pieces for spot ${h.n}`);
@@ -141,6 +144,8 @@ export function createDecorateSheet(root: HTMLElement, actions: DecorateActions,
       });
       pieces.appendChild(b);
     }
+    pieces.scrollLeft = scrolled;
+    if (focused) pieces.querySelector<HTMLButtonElement>(`[data-piece="${focused}"]`)?.focus();
     take.disabled = busy || !view.layout[spot];
     openBtn.textContent = view.open ? NEST_WORDS.openToVisitors : NEST_WORDS.closedToVisitors;
     openBtn.setAttribute('aria-pressed', String(view.open));

@@ -44,6 +44,8 @@ test.describe('the nests (this device)', () => {
     expect(nest.mine).toBe(true);
     expect(nest.open).toBe(true);
     expect(Object.values(nest.layout).sort()).toEqual(['lamp', 'potted-fern', 'rug', 'stump-table']);
+    // Their pictures load as the nest puts them out, not before the room opens (OP-129); then each is drawn.
+    await expect.poll(async () => (await state(page)).nest?.drawn).toEqual(nest.layout);
     expect(nest.gift).toEqual({ taken: false });
     await expect(page.locator('[data-action="decorate"]')).toBeVisible();
 
@@ -53,6 +55,8 @@ test.describe('the nests (this device)', () => {
     await expect.poll(async () => (await state(page)).nest?.decorating).toBe(true);
     await expect(sheet(page).locator('[data-where]')).toHaveText('1 / 12 · On the floor');
     await expect(sheet(page).locator('[data-piece="lamp"]')).toHaveAttribute('aria-pressed', 'true');
+    // The owl's own pieces have their pictures on the sheet.
+    await expect(sheet(page).locator('[data-piece] img')).toHaveCount(await sheet(page).locator('[data-piece]').count());
     // The bottom bar gives way to the sheet and the room.
     await expect(page.locator('[data-menu-btn]')).toBeHidden();
 
@@ -90,6 +94,9 @@ test.describe('the nests (this device)', () => {
     await expect(sheet(page).locator('[data-gift]')).toHaveText('Next gift tomorrow');
     await expect(sheet(page).locator('[data-gift]')).toBeDisabled();
     expect((await state(page)).nest?.owned).toHaveLength(5);
+    // The new piece's picture loads for the sheet too: its spot shows it.
+    await expect(sheet(page).locator('[data-piece]')).not.toHaveCount(0);
+    await expect(sheet(page).locator('[data-piece] img')).toHaveCount(await sheet(page).locator('[data-piece]').count());
 
     // Closed to visitors, then Done: the sheet goes and the bottom bar comes back.
     await sheet(page).locator('[data-open]').click();
