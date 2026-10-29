@@ -23,3 +23,6 @@ __pycache__/
 # EGM briefs, drafts and review reports (EGM/README.md); never committed
 EGM/*
 !EGM/README.md
+# Mutation testing (OP-131): each package's report, its incremental file and Stryker's sandbox
+reports/
+.stryker-tmp/

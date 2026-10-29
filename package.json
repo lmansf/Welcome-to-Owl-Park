@@ -14,6 +14,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "e2e": "pnpm --filter @owl-park/park e2e",
+    "mutate": "pnpm --filter @owl-park/shared mutate && pnpm --filter @owl-park/edge mutate",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
     "build:edge": "node tools/build-edge.mjs",
