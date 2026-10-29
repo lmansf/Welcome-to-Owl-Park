@@ -470,6 +470,33 @@ test.describe('room server', () => {
     await b.context().close();
   });
 
+  test('an owl standing on a perch is up there for the room server: the other owl sees it there, and so does one that comes in later (OP-084)', async ({ browser }) => {
+    test.slow(); // live parks drawn with software WebGL on CI runners, and the walk across the hub
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
+    // The other owl's id, as the first page knows it.
+    const id = (await state(a)).peers[0]!.id;
+    // Up on the hub's root bench: walked to its face, then a jump, the walk carrying on over its top.
+    await walkAndStop(b, 900, 760);
+    await b.evaluate(() => window.owlPark.walkTo(900, 696));
+    await expect.poll(async () => (await state(b)).walking, { intervals: [50] }).toBe(false);
+    await b.keyboard.down('Space');
+    await b.waitForTimeout(320);
+    await b.keyboard.up('Space');
+    await expect.poll(async () => { const s = await state(b); return [s.air.s, s.air.z, s.height]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 80, 80]);
+    const seen = async (page: Page) => (await state(page)).peers.find((p) => p.id === id) ?? null;
+    await expect.poll(async () => (await seen(a))?.height ?? -1, { timeout: 5_000 }).toBe(80);
+    expect(dist((await seen(a))!.pos, { x: 900, y: 696 })).toBeLessThan(4);
+    // A newcomer is told by the room the owl stands up there.
+    const c = await visitor(browser);
+    await expect.poll(async () => (await seen(c))?.height ?? -1, { timeout: 15_000 }).toBe(80);
+    // Off the front of the seat: down on the floor for everyone.
+    await b.evaluate(() => window.owlPark.walkTo(900, 800));
+    for (const page of [a, c]) await expect.poll(async () => (await seen(page))?.height ?? -1, { timeout: 5_000 }).toBe(0);
+    for (const page of [a, b, c]) await page.context().close();
+  });
+
   test('the shop and the collection live on the server, for this collector only', async ({ browser, request }) => {
     const a = await visitor(browser);
     const out = await a.evaluate(async () => {
