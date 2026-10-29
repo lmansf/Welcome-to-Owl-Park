@@ -22,6 +22,7 @@ import type {
   RunResult,
   ShopView,
   TaskView,
+  TravelState,
   Vec2,
 } from '@owl-park/shared';
 import type { StreetView } from '../game/nestPlan';
@@ -241,8 +242,15 @@ export interface CollectionService {
   nestLink(room: string, conn: RoomConnection | null, pushes: NestPushes, look: () => NestLook): NestLink | null;
   /** Today's furniture gift for the visitor's nest (once a park day). */
   claimFurnitureGift(): Promise<FurnitureGiftReply>;
-  /** The id of the visitor's own nest, for "Go home" (made on first sight, as on the street); null when it cannot be had. */
+  /** The id of the visitor's own nest, for travel home (made on first sight, as on the street); null when it cannot be had. */
   homeNest(): Promise<string | null>;
+  /**
+   * Travel from the map (OP-130): the places the owl has walked into, and whether it has walked
+   * through the front gate since it was last outside the park; null when that cannot be had just now.
+   */
+  travel(): Promise<TravelState | null>;
+  /** The owl joined a room at a spawn: this browser keeps it when no server does (the room server keeps its own). */
+  travelEntered(room: string, spawn: string | undefined): void;
 }
 
 /** This device's IANA time zone, if the browser reports a usable one. */

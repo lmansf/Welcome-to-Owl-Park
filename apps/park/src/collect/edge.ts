@@ -1,4 +1,4 @@
-import { isNestId, type BuyResult, type FurnitureGiftResult, type GiftResult, type Inventory, type ShopView } from '@owl-park/shared';
+import { isNestId, parseTravelState, type BuyResult, type FurnitureGiftResult, type GiftResult, type Inventory, type ShopView, type TravelState } from '@owl-park/shared';
 import type { EdgeTransport } from '../net/edge';
 import type { RoomConnection } from '../net/transport';
 import type { ActivityLink, CollectionService, FurnitureGiftReply, NestLink, QuestLink } from './service';
@@ -63,5 +63,17 @@ export class EdgeCollections implements CollectionService {
     } catch {
       return null;
     }
+  }
+
+  async travel(): Promise<TravelState | null> {
+    try {
+      return parseTravelState(await this.json<unknown>('/api/travel'));
+    } catch {
+      return null;
+    }
+  }
+
+  travelEntered(): void {
+    // The room server keeps it, from the rooms it lets the owl into.
   }
 }

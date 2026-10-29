@@ -30,7 +30,7 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
   [['E'], 'Do what you are standing at'],
   [['Space'], 'Jump; again in the air to flap, held on the way down to glide'],
-  [['M'], 'Menu'],
+  [['M'], 'Map, in the Menu'],
   [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],
   [['Q'], 'Your owl: to the mirror in your nest'],

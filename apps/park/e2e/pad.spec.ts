@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openPark, state } from './helpers';
+import { mapCard, openPark, state } from './helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -77,14 +77,12 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await expect(page.locator('[data-booth="say"]')).toContainText('coming soon');
   });
 
-  test('Go home, at the top of the Menu’s Nest tab, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {
+  test('travel home, on the Menu’s map, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {
     test.slow(); // two rooms drawn with software WebGL on CI runners
     await openPark(page, { collector: `e2e-go-home-${test.info().project.name}` });
-    await page.locator('[data-menu-btn]').click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    await menu.locator('[data-tab="nest"]').click();
-    const home = menu.locator('[data-screen="home"]');
-    await expect(home).toHaveText('Go home');
+    const home = (await mapCard(page, 'nest')).locator('[data-travel="nest"]');
+    await expect(home).toHaveText('Travel home');
     // Pressed and let go in one go in the page (a busy runner's round trips would otherwise stretch a
     // quick tap past the hold): filling while pressed, empty once let go.
     const tap = () =>
@@ -96,7 +94,7 @@ test.describe('the pad (OP-082, OP-114)', () => {
       });
     // Let go before it is full: the owl stays where it is, and the Menu says to hold it.
     expect(await tap()).toEqual([true, false]);
-    await expect(menu.getByText('Hold to go home.')).toBeVisible();
+    await expect(menu.getByText('Hold to travel.')).toBeVisible();
     await page.waitForTimeout(900);
     expect((await state(page)).room).toBe('hub');
     await expect(menu).toBeVisible();
@@ -107,10 +105,10 @@ test.describe('the pad (OP-082, OP-114)', () => {
     const at = await state(page);
     expect(at.nest?.mine).toBe(true);
     expect(Math.hypot(at.pos.x - at.mirror!.x, at.pos.y - at.mirror!.y)).toBeLessThan(160);
-    // Home already: the Nest tab offers no way home.
-    await page.locator('[data-menu-btn]').click();
-    await menu.locator('[data-tab="nest"]').click();
-    await expect(home).toHaveCount(0);
+    // Home already: the map says so, and offers no travel home.
+    const here = await mapCard(page, 'nest');
+    await expect(here).toContainText('You are here.');
+    await expect(here.locator('[data-travel]')).toHaveCount(0);
   });
 
   test("a '!' shows over the one owl Interact would talk to, from as far as it reaches, and goes as the visitor walks away", async ({ page }) => {
