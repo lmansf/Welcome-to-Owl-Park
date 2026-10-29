@@ -177,6 +177,19 @@ class FakeCollections {
     this.seenCalls.push([sighting, look]);
     return this.answer(undefined);
   }
+  /** The accounts' calls (OP-139): the device each owl is on (none: any holds it), and the looks sent. */
+  readonly devices = new Map<string, string>();
+  readonly lookCalls: unknown[][] = [];
+  readonly holdsCalls: unknown[][] = [];
+  accountHolds(cid: string, dev: string | null) {
+    this.holdsCalls.push([cid, dev]);
+    const d = this.devices.get(cid);
+    return this.answer(d === undefined || d === dev);
+  }
+  accountLook(cid: string, look: unknown) {
+    this.lookCalls.push([cid, look]);
+    return this.answer(undefined);
+  }
   alive(sightings: unknown) {
     this.aliveCalls.push(sightings);
     return this.answer(undefined);
@@ -188,17 +201,17 @@ let state: FakeState;
 let collections: FakeCollections;
 let sockets = 0;
 
-function roomObject(caps?: Record<string, number>) {
-  const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...(caps ? { ROOM_CAPS: JSON.stringify(caps) } : {}) } as unknown as Env;
+function roomObject(caps?: Record<string, number>, more: Record<string, string> = {}) {
+  const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...(caps ? { ROOM_CAPS: JSON.stringify(caps) } : {}), ...more } as unknown as Env;
   return new RoomObject(state as unknown as DurableObjectState, env);
 }
 type Obj = ReturnType<typeof roomObject>;
 
 /** A socket the Worker sent to a room (what fetch() does, without the platform's socket pair). */
-function connect(room: string, id: string, cid?: string): FakeSocket {
+function connect(room: string, id: string, cid?: string, dev?: string): FakeSocket {
   const ws = new FakeSocket();
-  ws.serializeAttachment({ room, id, sid: `sid${++sockets}`, ip: '192.0.2.1', joinedAt: clock, state: null, ...(cid ? { cid } : {}) });
-  state.acceptWebSocket(ws, [`id:${id}`, 'ip:192.0.2.1', `room:${room}`]);
+  ws.serializeAttachment({ room, id, sid: `sid${++sockets}`, ip: '192.0.2.1', joinedAt: clock, state: null, ...(cid ? { cid } : {}), ...(dev ? { dev } : {}) });
+  state.acceptWebSocket(ws, [`id:${id}`, 'ip:192.0.2.1', `room:${room}`, ...(cid ? [`cid:${cid}`] : [])]);
   return ws;
 }
 
@@ -847,5 +860,72 @@ describe('the climb in the room object (the stained-glass realm)', () => {
     await send(obj, again, { t: 'act', a: 'climb', r: 9 });
     await settle();
     expect(act(again, 9)).toMatchObject({ a: 'climb', ok: false, reason: 'offline' });
+  });
+});
+
+describe('an owl restored on another screen (OP-139)', () => {
+  const ACCOUNTS = { ACCOUNTS: 'on' };
+  const moved = (obj: Obj, cid: string, dev: string) => obj.fetch(new Request('https://park/moved', { method: 'POST', body: JSON.stringify({ cid, dev }) }));
+
+  it('sends the moved card at once to the owl’s sockets from every other screen, and leaves the rest', async () => {
+    const obj = roomObject(undefined, ACCOUNTS);
+    const old = connect('hub', 'v_oldscreen', OWNER, 'd_oldscreen1');
+    await hello(obj, old);
+    const legacy = await join(obj, 'hub', 'v_legacytab', OWNER);
+    const fresh = connect('hub', 'v_newscreen', OWNER, 'd_newscreen1');
+    await hello(obj, fresh);
+    const other = connect('hub', 'v_someoneel', GUEST, 'd_guestscrn1');
+    await hello(obj, other);
+    await settle();
+    expect((await moved(obj, OWNER, 'd_newscreen1')).status).toBe(200);
+    expect(old.closed?.code).toBe(CLOSE.MOVED);
+    expect(legacy.closed?.code).toBe(CLOSE.MOVED);
+    expect(fresh.closed).toBeNull();
+    expect(other.closed).toBeNull();
+    // Gone from the room for everyone still in it.
+    expect(fresh.of('leave').map((f) => f.id)).toEqual(expect.arrayContaining(['v_oldscreen', 'v_legacytab']));
+    // A notice that is not one changes nothing.
+    await obj.fetch(new Request('https://park/moved', { method: 'POST', body: JSON.stringify({ cid: GUEST, dev: 'no' }) }));
+    expect(other.closed).toBeNull();
+  });
+
+  it('turns away at its hello a page from a screen its owl has moved from', async () => {
+    collections.devices.set(OWNER, 'd_newscreen1');
+    const obj = roomObject(undefined, ACCOUNTS);
+    const old = connect('hub', 'v_oldscreen', OWNER, 'd_oldscreen1');
+    await hello(obj, old);
+    const fresh = connect('hub', 'v_newscreen', OWNER, 'd_newscreen1');
+    await hello(obj, fresh);
+    await settle();
+    expect(collections.holdsCalls).toEqual([
+      [OWNER, 'd_oldscreen1'],
+      [OWNER, 'd_newscreen1'],
+    ]);
+    expect(old.closed?.code).toBe(CLOSE.MOVED);
+    expect(fresh.closed).toBeNull();
+  });
+
+  it('keeps the owl’s colours and kind for its picture, sent again only when they change', async () => {
+    const obj = roomObject(undefined, ACCOUNTS);
+    const ws = connect('hub', 'v_ownerpage', OWNER, 'd_oldscreen1');
+    await hello(obj, ws);
+    await send(obj, ws, { t: 'look', look: { ...LOOK, pledge: 'neon' } });
+    await send(obj, ws, { t: 'look', look: { ...LOOK, body: '#111111' } });
+    await settle();
+    expect(collections.lookCalls).toEqual([
+      [OWNER, { body: LOOK.body, belly: LOOK.belly, accent: LOOK.accent, species: 'barn' }],
+      [OWNER, { body: '#111111', belly: LOOK.belly, accent: LOOK.accent, species: 'barn' }],
+    ]);
+  });
+
+  it('asks nothing of the accounts while they are off', async () => {
+    collections.devices.set(OWNER, 'd_newscreen1');
+    const obj = roomObject();
+    const old = connect('hub', 'v_oldscreen', OWNER, 'd_oldscreen1');
+    await hello(obj, old);
+    await settle();
+    expect(old.closed).toBeNull();
+    expect(collections.holdsCalls).toEqual([]);
+    expect(collections.lookCalls).toEqual([]);
   });
 });

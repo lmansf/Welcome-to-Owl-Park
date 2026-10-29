@@ -58,6 +58,8 @@ export const CLOSE = {
   QUEUED: 4012,
   /** A gated realm is closed (the realms setting): turned away at the hello, or sent out when it closed. */
   REALM_CLOSED: 4013,
+  /** The owl was restored on another screen (OP-139): this one shows the moved card. */
+  MOVED: 4014,
   TOO_LARGE: 1009,
 } as const;
 

@@ -48,7 +48,7 @@ import {
   type RealmsSettings,
 } from '@owl-park/shared';
 import { GATED_ROOMS } from '@owl-park/shared/rooms';
-import { copiesIn, copyObjectName, withCopy } from './copies';
+import { roomObjectNames, withCopy } from './copies';
 import { Line, type LineEntry } from './line';
 import { ROOMS } from './rooms';
 import type { Env } from './env';
@@ -148,15 +148,7 @@ export class Overflow extends DurableObject<Env> {
 
   /** The room objects of the park as it runs: the one object, or every room and copy in its own. */
   private roomObjects(): string[] {
-    if (this.env.ROOM_SHARDING !== 'room') return ['park'];
-    const copies = this.settings.copies();
-    const names: string[] = [];
-    for (const room of Object.keys(ROOMS)) {
-      names.push(copyObjectName(room, 1));
-      const { open, draining } = copiesIn(copies, room);
-      for (const n of [...open, ...draining]) names.push(copyObjectName(room, n));
-    }
-    return names;
+    return roomObjectNames(this.env.ROOM_SHARDING, Object.keys(ROOMS), this.settings.copies());
   }
 
   private stub(name: string): DurableObjectStub {

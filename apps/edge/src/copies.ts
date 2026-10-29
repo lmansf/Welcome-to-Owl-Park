@@ -16,6 +16,22 @@ export function copyObjectName(room: string, copy: number): string {
   return copy > 1 ? `room:${room}~${copy}` : `room:${room}`;
 }
 
+/**
+ * Every room object there is now: the park's one (`single`), or each room's own and its copies'
+ * (`room`). Nests are not among them: with one object per room each nest is an object of its own,
+ * made when an owl first walks in.
+ */
+export function roomObjectNames(sharding: string | undefined, rooms: readonly string[], copies: Copies): string[] {
+  if (sharding !== 'room') return ['park'];
+  const names: string[] = [];
+  for (const room of rooms) {
+    names.push(copyObjectName(room, 1));
+    const { open, draining } = copiesIn(copies, room);
+    for (const n of [...open, ...draining]) names.push(copyObjectName(room, n));
+  }
+  return names;
+}
+
 /** A room's copies beside itself, by state, in copy order. */
 export function copiesIn(copies: Copies, room: string): { open: number[]; draining: number[] } {
   const open: number[] = [];
