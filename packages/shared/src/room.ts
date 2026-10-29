@@ -1,4 +1,5 @@
 import type { Polygon, Rect } from './geometry';
+import type { Perch } from './perches';
 import type { Vec2 } from './protocol';
 
 /**
@@ -27,6 +28,11 @@ export interface RoomDef {
   foregrounds?: RoomTile[];
   /** Union of polygons the owl may stand on. */
   walkable: Polygon[];
+  /**
+   * What an owl can land on above the floor (OP-084, perches.ts): each a top on the floor plan and its
+   * height. Reached by jumping; a room without has only its floor.
+   */
+  perches?: Perch[];
   /** Named spawn points; `default` is required. */
   spawns: Record<string, Vec2>;
   /**

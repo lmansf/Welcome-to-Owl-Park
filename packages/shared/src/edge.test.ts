@@ -22,8 +22,8 @@ describe('protocol v10, the climb', () => {
 });
 
 describe('protocol v9, the arcade', () => {
-  it('is version 13 (travel from the map, OP-130), and a page speaking the version before is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(13);
+  it('is version 14 (owls standing on perches, OP-084), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(14);
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);

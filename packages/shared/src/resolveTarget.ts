@@ -1,4 +1,4 @@
-import { distance, isWalkable, snapToWalkable, type Polygon, type Rect } from './geometry';
+import { distance, isWalkable, snapToWalkable, type Polygon, type Shut } from './geometry';
 import type { Vec2 } from './protocol';
 
 /** Sampling step, in room pixels, when checking a straight walk for blocked ground. */
@@ -12,7 +12,7 @@ export const WALK_SAMPLE_PX = 6;
  * Client and server both run this, so the server's echo normally matches the client's guess. The
  * client also passes the floor that is `shut` for now (isWalkable), and stops at its edge.
  */
-export function resolveTarget(from: Vec2, to: Vec2, walkable: Polygon[], shut: readonly Rect[] = []): Vec2 {
+export function resolveTarget(from: Vec2, to: Vec2, walkable: Polygon[], shut: readonly Shut[] = []): Vec2 {
   const snapped = snapToWalkable(to, walkable);
   const len = distance(from, snapped);
   if (len <= WALK_SAMPLE_PX) return isWalkable(snapped, walkable, shut) ? snapped : from;
@@ -33,7 +33,7 @@ export function resolveTarget(from: Vec2, to: Vec2, walkable: Polygon[], shut: r
  * ends, at most `max` room pixels: the last walkable sample on that line. An owl standing on the
  * area's edge may start just outside it, so the first two samples may be off the area.
  */
-export function walkableReach(from: Vec2, dir: Vec2, walkable: Polygon[], max = 2400, shut: readonly Rect[] = []): Vec2 {
+export function walkableReach(from: Vec2, dir: Vec2, walkable: Polygon[], max = 2400, shut: readonly Shut[] = []): Vec2 {
   let last = from;
   for (let d = WALK_SAMPLE_PX; d <= max; d += WALK_SAMPLE_PX) {
     const p = { x: from.x + dir.x * d, y: from.y + dir.y * d };
@@ -52,7 +52,7 @@ const SLIDE_DEGREES = [15, 30, 45];
  * degrees that gets furthest in the asked direction, so the owl slides along the edge. Null when
  * every bearing is blocked. Floor `shut` for now counts as blocked.
  */
-export function steerTarget(from: Vec2, dir: Vec2, walkable: Polygon[], minStep = 12, shut: readonly Rect[] = []): Vec2 | null {
+export function steerTarget(from: Vec2, dir: Vec2, walkable: Polygon[], minStep = 12, shut: readonly Shut[] = []): Vec2 | null {
   const reach = (deg: number) => {
     const a = (deg * Math.PI) / 180;
     const d = { x: dir.x * Math.cos(a) - dir.y * Math.sin(a), y: dir.x * Math.sin(a) + dir.y * Math.cos(a) };
