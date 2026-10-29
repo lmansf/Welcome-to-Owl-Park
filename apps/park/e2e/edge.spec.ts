@@ -503,9 +503,8 @@ test.describe('room server', () => {
     const a = await visitor(browser, { room: 'arcade' });
     const b = await visitor(browser, { room: 'arcade' }, { width: 640, height: 400 });
     await playAt(a, 'flight');
-    await flyThrough(a, 3);
     // The run is held where it is, never to end, and the page dies (a reload): no score is ever sent.
-    await a.evaluate(() => window.owlPark.game.loop.sleep());
+    await flyThrough(a, 3, { hold: true });
     await expect.poll(async () => (await state(a)).wall?.mine.flight ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(3);
     const kept = (await state(a)).wall!.mine.flight!;
     expect((await run(a))!.over).toBe(false);
@@ -525,9 +524,10 @@ test.describe('room server', () => {
     await a.context().setOffline(true);
     expect(await a.evaluate(() => window.owlPark.drop())).toBe(true);
     await flyThrough(a, 2);
+    // Back online, the run plays on while the page finds the room again, until it is there and a gap further on.
     await a.context().setOffline(false);
-    await a.waitForFunction(() => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout: 30_000 });
-    await flyThrough(a, 3);
+    await flyThrough(a, 3, { untilOnline: true });
+    expect(await a.evaluate(() => document.querySelector('[data-dot]')?.getAttribute('data-status'))).toBe('online');
     await untilOver(a);
     await expect(a.locator('.arcade [data-result] [data-paid]')).toHaveText(/^\+\d+ feathers?$/);
     await expect(a.locator('.arcade [data-result] [data-new]')).toHaveText('New best!');

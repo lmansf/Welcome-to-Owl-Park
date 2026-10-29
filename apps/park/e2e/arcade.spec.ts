@@ -173,7 +173,7 @@ test.describe('the arcade (this device)', () => {
         return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('[data-pad-interact]') === b;
       }),
     ).toBe(true);
-    await flyThrough(page, 2, '[data-pad-interact]');
+    await flyThrough(page, 2, { target: '[data-pad-interact]' });
     await untilOver(page);
     await expect(page.locator('.arcade [data-result]')).toBeVisible();
     await expect(interact).toBeHidden();
@@ -184,7 +184,7 @@ test.describe('the arcade (this device)', () => {
     const before = await intoArcade(page, `e2e-knock-${test.info().project.name}`);
     await playAt(page, 'sling');
     await paintedAsShipped(page, 'sling');
-    await expect(page.locator('.arcade [data-hint]')).toHaveText(phone ? 'Pull the stick back and let go' : 'Pull back and let go, or arrows and space');
+    await expect(page.locator('.arcade [data-hint]')).toHaveText(phone ? 'Pull the stick, let go' : 'Pull back and let go, or arrows and space');
     await expect(page.locator('.arcade [data-banner]')).toHaveText('The stack · 5 shots left');
     // On a phone the owl is pulled back on the pad's stick; on a computer it is aimed with the keys.
     if (phone) await knockByStick(page);

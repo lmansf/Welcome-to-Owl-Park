@@ -218,16 +218,25 @@ export async function loseLives(page: Page): Promise<void> {
   expect(over).toBe(true);
 }
 
+/** How Moon Flap is flown: where the taps go, on until the page is back online too, and the game held still at the end. */
+export interface FlyOptions {
+  target?: string;
+  untilOnline?: boolean;
+  hold?: boolean;
+}
+
 /**
  * Moon Flap: through `gaps` gaps, then let the owl fall. Each frame looks ahead on a copy of the
  * flight: flap when the owl has sunk below the next gap's middle and a flap is safe, or when not
  * flapping would end the run. A page cannot act between its frames, and the game steps up to 100 ms
  * at once (MAX_CATCH_UP_MS in arcade/field.ts), so a choice must hold through 100 ms with no say;
  * when none does, the one that holds frame by frame. Each flap is a press on `target`: the field, or
- * on a phone the pad's Interact (OP-137).
+ * on a phone the pad's Interact (OP-137). With `untilOnline` it flies on until the page is back online
+ * as well; with `hold` the game is held still in the frame that is done (the page's game loop sleeps).
  */
-export async function flyThrough(page: Page, gaps: number, target = '.arcade [data-stage]'): Promise<void> {
-  const { score, slowest } = await page.evaluate(async ([gaps, target]) => {
+export async function flyThrough(page: Page, gaps: number, how: FlyOptions = {}): Promise<void> {
+  const { target = '.arcade [data-stage]', untilOnline = false, hold = false } = how;
+  const { score, slowest } = await page.evaluate(async ([gaps, target, untilOnline, hold]) => {
     interface Flap {
       score: number;
       over: boolean;
@@ -246,6 +255,7 @@ export async function flyThrough(page: Page, gaps: number, target = '.arcade [da
     /** The most the game steps at once, and a step more. */
     const BLIND = 100 + 1000 / 120;
     const steady = (f: Flap) => f.y > (f.ahead()?.gapY ?? 320) + 18 && f.vy > 0;
+    const online = () => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online';
     /** Whether the flight lasts the next second, flapping now or not, with no say for `blind` ms and steady flaps after. */
     const lasts = (flapNow: boolean, blind: number) => {
       const c = g.clone();
@@ -265,7 +275,12 @@ export async function flyThrough(page: Page, gaps: number, target = '.arcade [da
         const now = performance.now();
         slowest = Math.max(slowest, now - last);
         last = now;
-        if (g.over || g.score >= gaps || now - t0 > 60_000) return done();
+        if (g.over || now - t0 > 60_000) return done();
+        if (g.score >= gaps && (!untilOnline || online())) {
+          // Held there: the game's clock stops with the frame that reached the gap, so nothing more happens to the run.
+          if (hold) (window as unknown as { owlPark: { game: { loop: { sleep(): void } } } }).owlPark.game.loop.sleep();
+          return done();
+        }
         for (const blind of [BLIND, 0]) {
           const flap = lasts(true, blind);
           const wait = lasts(false, blind);
@@ -278,7 +293,7 @@ export async function flyThrough(page: Page, gaps: number, target = '.arcade [da
       tick();
     });
     return { score: g.score, slowest: Math.round(slowest) };
-  }, [gaps, target] as const);
+  }, [gaps, target, untilOnline, hold] as const);
   expect(score, `the slowest frame took ${slowest} ms`).toBeGreaterThanOrEqual(gaps);
 }
 

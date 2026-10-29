@@ -290,8 +290,10 @@ const CSS = `
   #hud.arcade-pad .pad{visibility:visible;z-index:25}
   #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud.arcade-pad .pad-btn.jump{display:none}
-  /* Hoot & Hop on the pad (OP-137): the stick over the arcade screen, each flick a hop (even with the stick off for walking). */
+  /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
   #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
+  /* The line on how to play keeps to the left of the stick or the Interact the game is played with. */
+  #hud.arcade-stick .arcade .a-hint,#hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
 }
 /* The '!' that stands for Interact, before the first action (what E and the pad's Interact do). */
 #hud .actions .bang{display:inline-flex;width:18px;height:18px;margin:0 6px 0 -4px;vertical-align:-3px}

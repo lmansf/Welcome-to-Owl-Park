@@ -61,7 +61,7 @@ const KNOCK_GOAL = `Knock the crates and the nest to the ground: three targets, 
 const HINTS: Readonly<Record<ArcadeGame, { touch: string; keys: string }>> = {
   crossing: { touch: 'Flick the stick to hop', keys: 'Arrow keys to hop' },
   flight: { touch: 'Tap to flap', keys: 'Tap to flap' },
-  sling: { touch: 'Pull the stick back and let go', keys: 'Pull back and let go, or arrows and space' },
+  sling: { touch: 'Pull the stick, let go', keys: 'Pull back and let go, or arrows and space' },
 };
 
 /** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
