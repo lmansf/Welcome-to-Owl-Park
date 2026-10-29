@@ -94,6 +94,7 @@ test.describe('accounts without passwords (OP-139)', () => {
   });
 
   test('another screen brings the owl over by a link and a tap; the first screen is told it moved, and can take it back', async ({ browser }) => {
+    test.slow(); // two live parks and eight page loads between them: 58 s here, about 100 s on a CI runner
     // Phone A: an owl in its own colours, protected by the family's email.
     const LOOK = { look: '#2F3E5C,#E0D4F0,#FF2AA1' };
     const phone = await screen(browser, LOOK);
