@@ -19,6 +19,7 @@ import {
   STARTER_LAYOUT,
   STREET_DOORS,
   climbRef,
+  hashForLog,
   leastClimbMs,
   leastRunMs,
   runFeathers,
@@ -32,7 +33,10 @@ import {
   type Vec2,
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
+import { captureLogs, loggerFor } from '../src/logs';
+import { roomDef } from '../src/rooms';
 import { TravelBook } from '../src/travelBook';
+import { eventsOf, logged } from './logged';
 import { sqlStorage } from './sqlite';
 
 // The Workers runtime is not here: its Durable Object base class and the two globals the room object
@@ -50,7 +54,7 @@ vi.mock('cloudflare:workers', () => ({
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
 const { RoomObject } = await import('../src/RoomObject');
-const { LIMITS } = await import('../src/Room');
+const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
 const MON = Date.UTC(2026, 9, 19, 16, 0, 0);
@@ -208,8 +212,7 @@ class FakeCollections {
   /** Travel from the map (OP-130): the real travel book, on an SQLite of its own. */
   readonly travel = new TravelBook(sqlStorage());
   travelEntered(cid: string, room: string, spawn: string | null) {
-    this.travel.entered(cid, room, spawn ?? undefined, Date.now());
-    return this.answer(undefined);
+    return this.answer(this.travel.entered(cid, room, spawn ?? undefined, Date.now()));
   }
   travelThroughGate(cid: string) {
     return this.answer(this.travel.throughGate(cid));
@@ -744,7 +747,8 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
     clock += 6_000;
     await lost(obj, a);
-    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock } } });
+    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134).
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
     // The object sleeps with the other owl's socket open, and wakes on the same storage.
     clock += 2_000;
     const woken = roomObject();
@@ -757,7 +761,7 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     await lost(woken, back);
     clock += LIMITS.leaverMemoryMs + 1;
     await lost(woken, b);
-    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_b: { pos: expect.any(Object), leftAt: clock } } });
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_b: { pos: expect.any(Object), leftAt: clock, dropped: true } } });
     const late = connect('hub', 'v_a');
     await helloAt(roomObject(), late, { x: 3300, y: 780 });
     expect(late.last('welcome')?.you.pos).not.toEqual({ x: 3300, y: 780 });
@@ -1141,5 +1145,161 @@ describe('travel from the map (OP-130)', () => {
       ['hub', false],
       ['grove', true],
     ]);
+  });
+});
+
+describe('the room server’s log (OP-134)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+  });
+  afterEach(() => cap.restore());
+  /** How a socket's owl shows on its lines: hashed, never as it is. */
+  const owl = (id: string, cid?: string) => ({ session_id: hashForLog(id), ...(cid ? { collector_hash: hashForLog(cid) } : {}) });
+  const count = (event: string) => eventsOf(cap.lines).filter((e) => e === event).length;
+
+  it('tells an owl joining and leaving and why: a goodbye, a page that closed, and a goodbye said asleep (afk), never a collector id', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', GUEST);
+    logged(cap.lines, 'room_join_ok', { component: 'room.join', room: 'hub', ...owl('v_a', GUEST), owls: 1 });
+    await send(obj, a, { t: 'bye' });
+    logged(cap.lines, 'room_leave', { room: 'hub', ...owl('v_a', GUEST), reason: 'user' });
+    const b = await join(obj, 'hub', 'v_b');
+    await obj.webSocketClose(b as unknown as WebSocket, 1001);
+    logged(cap.lines, 'room_leave', { ...owl('v_b'), reason: 'user' });
+    // Asleep (OP-126), and away half a minute before its page leaves.
+    const c = await join(obj, 'hub', 'v_c', OTHER);
+    await send(obj, c, { t: 'rest', asleep: true });
+    logged(cap.lines, 'afk_sleep', { component: 'room.rest', room: 'hub', ...owl('v_c', OTHER) });
+    clock += 30_000;
+    await send(obj, c, { t: 'bye' });
+    logged(cap.lines, 'room_leave', { ...owl('v_c', OTHER), reason: 'afk', stayed_ms: 30_000 });
+    logged(cap.lines, 'afk_leave', { ...owl('v_c', OTHER), asleep_ms: 30_000 });
+    expect(JSON.stringify(cap.lines)).not.toContain(GUEST);
+    expect(JSON.stringify(cap.lines)).not.toContain(OTHER);
+  });
+
+  it('tells a dropped connection, and the gap once its owl is back on a new socket; a goodbye and a walk back in is no reconnect', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', GUEST);
+    await obj.webSocketClose(a as unknown as WebSocket, 1006);
+    logged(cap.lines, 'room_leave', { ...owl('v_a', GUEST), reason: 'dropped', detail: 'code 1006' });
+    clock += 4_000;
+    await join(obj, 'hub', 'v_a', GUEST);
+    logged(cap.lines, 'reconnect_ok', { ...owl('v_a', GUEST), gap_ms: 4_000 });
+    // Back before the room saw its old socket go.
+    await join(obj, 'hub', 'v_a', GUEST);
+    logged(cap.lines, 'reconnect_ok', { ...owl('v_a', GUEST), gap_ms: 0, replaced: true });
+    const before = count('reconnect_ok');
+    const b = await join(obj, 'hub', 'v_b');
+    await send(obj, b, { t: 'bye' });
+    await join(obj, 'hub', 'v_b');
+    expect(count('reconnect_ok')).toBe(before);
+  });
+
+  it('tells why it sent an owl away: a frame it cannot read, a socket silent too long, and one that never said hello', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a');
+    await obj.webSocketMessage(a as unknown as WebSocket, 'not a frame');
+    expect(a.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
+    await obj.webSocketClose(a as unknown as WebSocket, CLOSE.BAD_PROTOCOL);
+    logged(cap.lines, 'room_leave', { ...owl('v_a'), reason: 'kick', detail: 'malformed frame' });
+    await join(obj, 'hub', 'v_quiet');
+    connect('hub', 'v_mute');
+    clock += 90_001;
+    await obj.alarm();
+    logged(cap.lines, 'room_leave', { ...owl('v_quiet'), reason: 'timeout' });
+    logged(cap.lines, 'room_join_refused', { ...owl('v_mute'), reason: 'no-hello' });
+  });
+
+  it('tells each owl it turned away and why: a full room, a closed realm, a closed nest, a travel before the gate', async () => {
+    const full = roomObject({ hub: 1 });
+    await join(full, 'hub', 'v_a');
+    await join(full, 'hub', 'v_b');
+    logged(cap.lines, 'room_join_refused', { room: 'hub', ...owl('v_b'), reason: 'cap', cap: 1 });
+    const obj = roomObject();
+    await join(obj, 'glass', 'v_c');
+    logged(cap.lines, 'room_join_refused', { room: 'glass', ...owl('v_c'), reason: 'realm' });
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    collections.nests.setOpen(OWNER, false, clock);
+    await join(obj, `nest-${nestId}`, 'v_d', GUEST);
+    await settle();
+    logged(cap.lines, 'room_join_refused', { ...owl('v_d', GUEST), reason: 'nest', detail: 'closed' });
+    const travel = connect('grove', 'v_e', GUEST);
+    await send(obj, travel, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, via: 'travel' });
+    await settle();
+    logged(cap.lines, 'room_join_refused', { room: 'grove', ...owl('v_e', GUEST), reason: 'gate' });
+  });
+
+  it('tells the front gate walked through, and the flag cleared once the owl is outside the park again (OP-130)', async () => {
+    const obj = roomObject();
+    const ws = connect('hub', 'v_a', GUEST);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: 'default' });
+    await settle();
+    logged(cap.lines, 'gate_crossed', { component: 'collections.travel', room: 'hub', ...owl('v_a', GUEST) });
+    await send(obj, ws, { t: 'bye' });
+    await join(obj, 'lobby', 'v_a', GUEST);
+    await settle();
+    logged(cap.lines, 'gate_flag_cleared', { room: 'lobby', ...owl('v_a', GUEST) });
+  });
+
+  it('tells emotes dropped for coming too fast, with how many, and those still untold as the owl leaves', async () => {
+    (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['hoot'];
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a', GUEST);
+    for (let i = 0; i < 3; i++) await send(obj, ws, { t: 'emote', e: 'hoot' });
+    logged(cap.lines, 'emote_throttled', { component: 'room.emote', ...owl('v_a', GUEST), count: 1 });
+    await send(obj, ws, { t: 'bye' });
+    expect(cap.lines.filter((l) => l.event === 'emote_throttled').map((l) => l['count'])).toEqual([1, 1]);
+  });
+
+  it('tells a band of the climb it refused, by the run’s reference', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a', OWNER);
+    await send(obj, ws, { t: 'act', a: 'ascent', k: 7, band: 1, r: 1 });
+    await settle();
+    logged(cap.lines, 'climb_band_refused', { component: 'collections.climb', climb_ref: climbRef(OWNER, 7), band: 1, reason: 'idle' });
+  });
+
+  it('samples how long a room’s frames take, every ten seconds', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    await send(obj, ws, { t: 'move', to: { x: 2450, y: 740 }, seq: 1 });
+    expect(count('tick_latency_p95')).toBe(0);
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to: { x: 2400, y: 730 }, seq: 2 });
+    logged(cap.lines, 'tick_latency_p95', { component: 'room.tick', room: 'hub', p95_ms: 0, frames: 3, window_ms: 10_000 });
+  });
+
+  it('tells a call to the collections object that failed, and lets the owl in all the same', async () => {
+    collections.down = true;
+    const obj = roomObject();
+    const ws = connect('grove', 'v_a', GUEST);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, via: 'travel' });
+    await settle();
+    logged(cap.lines, 'read_failed', { component: 'collections.travel', level: 'warn', ...owl('v_a', GUEST) });
+    logged(cap.lines, 'write_failed', { component: 'collections.travel', level: 'error', ...owl('v_a', GUEST) });
+    expect(ws.last('welcome')).toBeDefined();
+  });
+
+  it('carries the chaos run’s id on every line about a socket opened under one', async () => {
+    const obj = roomObject();
+    const ws = new FakeSocket();
+    ws.serializeAttachment({ room: 'hub', id: 'v_run', sid: 'sid-run', ip: '192.0.2.1', joinedAt: clock, state: null, run: 'chaos-7' });
+    state.acceptWebSocket(ws, ['id:v_run', 'ip:192.0.2.1', 'room:hub']);
+    await hello(obj, ws);
+    logged(cap.lines, 'room_join_ok', { run_id: 'chaos-7', ...owl('v_run') });
+  });
+
+  it('tells a frame the room could not send, and goes on', () => {
+    const room = new Room(roomDef('hub')!, { now: () => clock, cap: 10, log: loggerFor({}) });
+    const gone = {
+      send: () => {
+        throw new Error('the socket is gone');
+      },
+      close: () => {},
+    };
+    expect(room.join(gone, 'v_a', { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK }, 'sid')).toBe('ok');
+    logged(cap.lines, 'send_failed', { component: 'room.tick', room: 'hub', frame: 'welcome' });
   });
 });

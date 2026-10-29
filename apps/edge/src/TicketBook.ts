@@ -325,11 +325,17 @@ export class TicketBook {
     };
   }
 
+  /** The emailed link's live tickets as they stand, before a claim moves them. Null for an unknown secret. */
+  async claimable(claimSecret: string): Promise<TicketRecord[] | null> {
+    const o = this.store.orderByClaim(await this.hash(claimSecret));
+    return o ? this.store.ticketsOf(o.order).filter((t) => t.revoked === null) : null;
+  }
+
   /** The emailed link: the order's live tickets move onto this device. Null for an unknown secret. */
   async claim(claimSecret: string, device: string): Promise<TicketRecord[] | null> {
-    const o = this.store.orderByClaim(await this.hash(claimSecret));
-    if (!o) return null;
-    const out = this.store.ticketsOf(o.order).filter((t) => t.revoked === null).map((t) => ({ ...t, device, shareHash: null }));
+    const live = await this.claimable(claimSecret);
+    if (!live) return null;
+    const out = live.map((t) => ({ ...t, device, shareHash: null }));
     for (const t of out) this.store.putTicket(t);
     return out;
   }

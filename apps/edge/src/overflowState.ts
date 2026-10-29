@@ -5,6 +5,7 @@
  * the last answer stands, and before any there is no line: a fault here never keeps owls out.
  */
 import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS } from '@owl-park/shared';
+import { moduleLog } from './logs';
 import type { OverflowState } from './Overflow';
 
 /** How long a Worker keeps what it read while anything is on: a keeper's change reaches every visitor within this. */
@@ -26,7 +27,7 @@ export async function overflowNow(read: () => Promise<OverflowState>, now = Date
     kept = { state, until: now + (quiet(state) ? OVERFLOW_QUIET_KEEP_MS : OVERFLOW_KEEP_MS) };
     return state;
   } catch (e) {
-    console.error('[owl-park] the overflow object could not be read:', e instanceof Error ? e.message : e);
+    moduleLog.error('overflow', 'read_failed', 'The overflow object could not be read: the last answer stands, and before any there is no line.', { error: e });
     const state = kept?.state ?? QUIET;
     kept = { state, until: now + OVERFLOW_KEEP_MS };
     return state;
@@ -48,8 +49,8 @@ export async function countIn(name: string, read: () => Promise<Record<string, n
   let n = k?.n ?? 0;
   try {
     n = Object.values(await read()).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
-  } catch {
-    /* the last count stands */
+  } catch (e) {
+    moduleLog.warn('overflow', 'read_failed', 'A room object did not say how many owls it holds: the last count stands.', { object: name, error: e });
   }
   counted.set(name, { n, until: now + COPY_COUNT_KEEP_MS });
   return n;

@@ -4,7 +4,7 @@
  * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type OwlAccount, type TravelState } from '@owl-park/shared';
+import { CLOSE, RIBBON_WORDS, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type TravelState } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
 import { capacityPage } from './capacityPage';
@@ -15,9 +15,10 @@ import { countIn, countedOneMore, forgetOverflow, overflowNow } from './overflow
 import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
 import { feedbackPage } from './feedbackPage';
 import { walletVoter } from './Ledger';
+import { loggerFor } from './logs';
 import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
-import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintEntry, mintPass, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyPass, type PassPayload } from './pass';
+import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintEntry, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
@@ -28,7 +29,7 @@ import { GATED_ROOMS } from '@owl-park/shared/rooms';
 import { NIGHTS } from '@owl-park/shared';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
-import { claimLink, mirrorTickets, storeWebhook, type Desk, type HookDeps } from './storeHooks';
+import { claimLink, mirrorTickets, orderIdOf, storeWebhook, type Desk, type HookDeps } from './storeHooks';
 import { DEFAULT_LENGTH_MS, HOUR_MS, OPENING_NIGHT_MS, windowed, type TicketKind } from './tickets';
 import type { Env } from './env';
 
@@ -78,7 +79,7 @@ const TURN_AWAY_WAIT_MS = 5_000;
  * page surely holds its end: closed before that, the connection is lost instead of closed, and the
  * runtime reports an uncaught error for every owl turned away.
  */
-function turnedAway(ctx: ExecutionContext, code: number, reason: string): Response {
+function turnedAway(ctx: ExecutionContext, log: Logger, code: number, reason: string): Response {
   const pair = new WebSocketPair();
   const [client, server] = [pair[0], pair[1]];
   server.accept();
@@ -87,10 +88,13 @@ function turnedAway(ctx: ExecutionContext, code: number, reason: string): Respon
       const timer = setTimeout(close, TURN_AWAY_WAIT_MS);
       function close() {
         clearTimeout(timer);
-        try {
-          server.close(code, reason);
-        } catch {
-          /* closed already */
+        // The page may have closed its end first: only a socket still open is closed here.
+        if (server.readyState === WebSocket.READY_STATE_OPEN) {
+          try {
+            server.close(code, reason);
+          } catch (e) {
+            log.warn('room.queue', 'send_failed', 'A socket the line turned away could not be closed.', { code, error: e });
+          }
         }
         done();
       }
@@ -118,17 +122,27 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-function isAdmin(request: Request, env: Env): boolean {
+/** Whether the request carries the keepers' key: logged either way with its route and, refused, why (never the key). */
+function isAdmin(request: Request, env: Env, log: Logger): boolean {
   const key = env.ADMIN_KEY;
   const given = request.headers.get('X-Admin-Key') ?? '';
-  return !!key && key.length >= 16 && given === key;
+  const route = new URL(request.url).pathname;
+  const reason = !key || key.length < 16 ? 'no-key-set' : !given ? 'no-key-given' : given !== key ? 'wrong-key' : null;
+  if (reason) log.warn('worker.admin', 'admin_denied', 'A keepers’ route was asked without the keepers’ key.', { route, reason });
+  else log.info('worker.admin', 'admin_ok', 'A keepers’ route was asked with the keepers’ key.', { route });
+  return reason === null;
 }
 
-/** The pass from the Authorization header (Bearer) or the query string. */
-async function passFrom(request: Request, env: Env) {
+/** The pass from the Authorization header (Bearer) or the query string; a refused one is logged with why. */
+async function passFrom(request: Request, env: Env, log: Logger) {
   const auth = request.headers.get('Authorization') ?? '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : new URL(request.url).searchParams.get('pass');
-  return verifyPass(signingSecret(env), token);
+  const url = new URL(request.url);
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : url.searchParams.get('pass');
+  const secret = signingSecret(env);
+  const pass = await verifyPass(secret, token);
+  if (pass) log.debug('worker.pass', 'pass_verified', 'A pass was taken.', { route: url.pathname, session_id: hashForLog(pass.id), adm: pass.adm });
+  else log.info('worker.pass', 'pass_rejected', 'A pass was refused.', { route: url.pathname, reason: await passRefusal(secret, token) });
+  return pass;
 }
 
 /** The client's address. Local load tests set TRUST_FORWARDED_FOR so each bot can claim its own; never in production. */
@@ -142,16 +156,19 @@ function clientIp(request: Request, env: Env): string {
  * the owl's sockets from any other device at once (with one object per room, a nest's object hears
  * nothing: its owl is sent the card at its next hello).
  */
-async function tellMoved(env: Env, cid: string, dev: string): Promise<void> {
+async function tellMoved(env: Env, log: Logger, cid: string, dev: string): Promise<void> {
   const copies = await overflowOf(env)
     .then((o) => o.copies)
-    .catch(() => ({}));
+    .catch((e: unknown) => {
+      log.error('overflow', 'read_failed', 'The overflow object did not say which copies of rooms are open: only the rooms themselves are told the owl moved.', { error: e });
+      return {};
+    });
   const body = JSON.stringify({ cid, dev });
   await Promise.all(
     roomObjectNames(env.ROOM_SHARDING, Object.keys(ROOMS), copies).map((name) =>
       env.ROOMS.get(env.ROOMS.idFromName(name))
         .fetch('https://park/moved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
-        .catch(() => undefined),
+        .catch((e: unknown) => log.error('worker.accounts', 'write_failed', 'A room object was not told an owl moved to another screen: its page there learns at its next hello.', { object: name, collector_hash: hashForLog(cid), error: e })),
     ),
   );
 }
@@ -161,7 +178,7 @@ async function tellMoved(env: Env, cid: string, dev: string): Promise<void> {
  * says whose order it was, after the page has its answer. A ticket the park gave away has no order in
  * the store, and an owl whose email the store will not tell stays as it was.
  */
-async function protectByOrder(env: Env, cid: string, order: string): Promise<void> {
+async function protectByOrder(env: Env, log: Logger, cid: string, order: string): Promise<void> {
   const keys = accountsOn(env) ? emailKeys(env) : null;
   const store = storeConfig(env);
   if (!keys || !store || order.startsWith('comp-')) return;
@@ -170,7 +187,7 @@ async function protectByOrder(env: Env, cid: string, order: string): Promise<voi
   const k = await keys;
   await collections(env)
     .accountProtectByOrder(cid, await keyed(k, 'e', email), await seal(k, email))
-    .catch(() => undefined);
+    .catch((e: unknown) => log.error('worker.accounts', 'write_failed', 'An owl was not protected by its ticket order’s email: it stays as it was.', { collector_hash: hashForLog(cid), order_hash: hashForLog(order), error: e }));
 }
 
 /** The visit a call comes in, for the collection log (OP-107): its pass's id (one per page load) and the device's class. */
@@ -204,14 +221,16 @@ function storeDeps(env: Env, origin: string): HookDeps | null {
 }
 
 /** Brings the store's copy of a ticket (or of an order's tickets) up to date after answering. */
-function mirrorLater(ctx: ExecutionContext, env: Env, origin: string, which: { id: string } | { order: string }): void {
+function mirrorLater(ctx: ExecutionContext, env: Env, log: Logger, origin: string, which: { id: string } | { order: string }): void {
   const deps = storeDeps(env, origin);
   if (!deps) return;
   ctx.waitUntil(
     (async () => {
       const r = await deps.desk('/tickets/mirror', which);
       if (r.status === 200) await mirrorTickets(deps, r.body['tickets'] as TicketMirror[], 'order' in which);
-    })().catch((e: unknown) => console.error('[owl-park] store copy of tickets failed:', e instanceof Error ? e.message : e)),
+    })().catch((e: unknown) =>
+      log.error('worker.store', 'store_unreachable', 'The store’s copy of tickets was not brought up to date.', { ...('order' in which ? { order_hash: hashForLog(which.order) } : { ticket_hash: hashForLog(which.id) }), error: e }),
+    ),
   );
 }
 
@@ -279,9 +298,11 @@ async function roomsNow(env: Env, copies: OverflowState['copies']) {
   );
 }
 
-export default {
+const park = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    // One logger per request (OP-134): the deployment's level, and the chaos run's id when the request names one.
+    const log = loggerFor(env, request);
 
     if (url.pathname === '/api/pass') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -298,7 +319,10 @@ export default {
       if (accountsOn(env)) {
         const stand = await collections(env)
           .accountStand(cid, dev)
-          .catch(() => null);
+          .catch((e: unknown) => {
+            log.error('worker.accounts', 'read_failed', 'The collections object did not say which screen holds the owl: the pass goes out as before.', { collector_hash: hashForLog(cid), error: e });
+            return null;
+          });
         if (stand === 'moved') return json({ error: 'moved' }, 409);
         if (stand) {
           if (stand.dev !== dev) collector = null;
@@ -314,6 +338,7 @@ export default {
       if (isTimeZone(tz)) payload.tz = tz;
       if (accountsOn(env) && dev) payload.dev = dev;
       const pass = await mintPass(secret, payload);
+      log.info('worker.pass', 'pass_issued', 'A guest pass went out.', { session_id: hashForLog(payload.id), collector_hash: hashForLog(cid), new_collector: !known });
       // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
       return Response.json({ pass, exp, collector, gate: (await gateOf(env)).mode, adm: payload.adm, ...(account ? { account } : {}) }, { headers: CORS });
     }
@@ -321,7 +346,7 @@ export default {
     if (url.pathname === '/api/entry') {
       // The front gate as it is now, for this pass: the booth's words and the turnstiles ask before they act.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       return json({ gate: (await gateOf(env)).mode, admitted: pass.adm });
     }
@@ -329,25 +354,29 @@ export default {
     if (url.pathname === '/api/travel') {
       // The map's places (OP-130): where this pass's owl has walked, and whether it is through the front gate.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ places: [], gate: false } satisfies TravelState);
+      const cid = pass.cid;
       const state = await collections(env)
-        .travelState(pass.cid)
-        .catch(() => null);
+        .travelState(cid)
+        .catch((e: unknown) => {
+          log.error('collections.travel', 'read_failed', 'The collections object did not say where the owl has walked: the page is asked to try later.', { collector_hash: hashForLog(cid), error: e });
+          return null;
+        });
       return state ? json(state) : json({ error: 'try-later' }, 503);
     }
 
     // ---- Whether a key is the keepers' (the position overlay asks before it shows, OP-138) ----
     if (url.pathname === '/api/admin/ping') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method !== 'GET' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       return json({ ok: true });
     }
     // ---- Collectibles (the collector comes from the pass) ----
     if (url.pathname === '/api/admin/grant') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (request.method !== 'POST' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       const body = await readJson(request);
       const source = (body?.['source'] ?? 'granted') as Source;
       if (!body || !isCollectorId(body['cid']) || !isVariantId(body['variant']) || !SOURCES.includes(source)) return json({ error: 'bad request' }, 400);
@@ -356,7 +385,7 @@ export default {
     // ---- The stained-glass climb: a run by the reference a visitor quotes (never a collector id) ----
     if (url.pathname === '/api/admin/climb') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method !== 'GET' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       const ref = url.searchParams.get('ref');
       if (!isClimbRef(ref)) return json({ error: 'bad request' }, 400);
       const found = await collections(env).climbLookup(ref);
@@ -366,7 +395,7 @@ export default {
       // The collection log (OP-107): GET says whether it is set up and how many rows wait to be sent;
       // POST queues every collectible the collections hold now, once (the backfill).
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (!isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       if (request.method === 'GET') return json(await collections(env).logState());
       if (request.method === 'POST') return json(await collections(env).backfillLog());
       return json({ error: 'not found' }, 404);
@@ -375,13 +404,13 @@ export default {
       // The owner's check of the store setup: which of its secrets are set (never their values),
       // whether the app signs in, the scopes it still lacks, and whether it may read orders.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method !== 'GET' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       return json(await storeCheck(env));
     }
     if (url.pathname === '/api/admin/tickets') {
       // Tickets the park gives away or tests with: no store order behind them, so nothing is copied to the store.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (request.method !== 'POST' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       const line = compLine((await readJson(request)) ?? {});
       if (!line) return json({ error: 'bad request' }, 400);
       const order = `comp-${crypto.randomUUID().slice(0, 13)}`;
@@ -403,10 +432,10 @@ export default {
         keys: emailKeys(env),
         mail: mailSender(env),
         origin: url.origin,
-        pass: await passFrom(request, env),
+        pass: await passFrom(request, env, log),
         collector: request.headers.get('X-Collector'),
         ip: clientIp(request, env),
-        moved: (cid, dev) => tellMoved(env, cid, dev),
+        moved: (cid, dev) => tellMoved(env, log, cid, dev),
         now: Date.now(),
       });
       return r ? json(r.body, r.status) : json({ error: 'not found' }, 404);
@@ -416,7 +445,7 @@ export default {
     if (url.pathname === '/api/feedback') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       // A few lines of words: refuse anything far larger before reading it.
@@ -429,7 +458,7 @@ export default {
     }
     if (url.pathname === '/api/admin/feedback') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (!isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       const isStatus = (v: unknown): v is FeedbackStatus => typeof v === 'string' && (FEEDBACK_STATUSES as readonly string[]).includes(v);
       if (request.method === 'GET') {
         const status = url.searchParams.get('status') ?? 'open';
@@ -451,7 +480,7 @@ export default {
     // ---- Opening night's count for the keepers (C42): order numbers and ticket IDs only ----
     if (url.pathname === '/api/admin/opening') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (request.method !== 'GET' || !isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (request.method !== 'GET' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       if (url.searchParams.has('csv')) {
         const r = await deskOf(env)('/tickets/opening?csv');
         if (r.status !== 200) return json(r.body, r.status);
@@ -466,16 +495,19 @@ export default {
     // ---- The opening switch (OP-067): the front gate open to everyone, or taking tickets, with no deploy ----
     if (url.pathname === '/api/admin/gate') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (!isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       const deployed = gateMode(env.GATE);
       if (request.method === 'POST') {
         const mode = (await readJson(request))?.['mode'];
         if (mode !== 'open' && mode !== 'ticket' && mode !== 'deployed') return json({ error: 'bad request' }, 400);
         const r = await votes(env).fetch('https://park/gate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode === 'deployed' ? null : mode }) });
-        if (!r.ok) return json({ error: 'the switch did not take' }, 502);
+        if (!r.ok) {
+          log.error('worker.admin', 'write_failed', 'The opening switch did not take: the vote ledger refused it.', { status: r.status });
+          return json({ error: 'the switch did not take' }, 502);
+        }
         forgetGate();
         const set = ((await r.json()) as { gate: GateSet }).gate;
-        console.log(`[owl-park] the opening switch: the gate is now ${gateFrom(set, env.GATE).mode} (${set ? 'set by the switch' : 'as deployed'})`);
+        log.info('worker.admin', 'gate_switched', 'The opening switch was changed.', { gate: gateFrom(set, env.GATE).mode, by: set ? 'switch' : 'deployed' });
         return json({ ...gateFrom(set, env.GATE), set, deployed });
       }
       if (request.method !== 'GET') return json({ error: 'not found' }, 404);
@@ -488,7 +520,7 @@ export default {
     if (url.pathname === '/api/line') {
       // A visitor's place in the line: POST takes one (or goes straight in), GET ?n= asks where it stands.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       const secret = signingSecret(env);
       const who = whoOf(pass);
@@ -526,16 +558,19 @@ export default {
     if (url.pathname === '/api/admin/capacity') {
       // The keepers' busy-night controls: read them (with every room's owls, copy by copy), or change one.
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+      if (!isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       let st: OverflowState;
       if (request.method === 'POST') {
         const body = await readJson(request);
         if (!body) return json({ error: 'bad request' }, 400);
         const r = await overflow(env).fetch('https://park/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!r.ok) return json(await r.json().catch(() => ({ error: 'the change did not take' })), r.status);
+        if (!r.ok) {
+          log.warn('worker.admin', 'write_failed', 'A change to the busy-night settings did not take.', { status: r.status });
+          return json(await r.json().catch(() => ({ error: 'the change did not take' })), r.status);
+        }
         forgetOverflow();
         st = (await r.json()) as OverflowState;
-        console.log(`[owl-park] capacity: line ${st.line.mode} at ${st.line.threshold}, ribbon ${st.ribbon.on ? 'on' : 'off'}, copies ${JSON.stringify(st.copies)}, realms ${JSON.stringify(st.realms)}`);
+        log.info('worker.admin', 'capacity_set', 'The busy-night settings were changed.', { line: st.line.mode, threshold: st.line.threshold, ribbon: st.ribbon.on, copies: st.copies, realms: st.realms.open });
       } else if (request.method === 'GET') {
         st = await readOverflow(env);
       } else return json({ error: 'not found' }, 404);
@@ -547,28 +582,37 @@ export default {
     // ---- The store's webhooks (C35): checked against the store's signature before anything is read ----
     if (url.pathname === '/api/store/webhook') {
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+      const topic = request.headers.get('X-Shopify-Topic') ?? '';
+      const rejected = (reason: string, status: number, error: string) => {
+        log.warn('worker.store', 'webhook_rejected', 'A store webhook was turned away.', { topic, reason });
+        return json({ error }, status);
+      };
       const raw = await request.arrayBuffer();
       const signed = await webhookSigned([env.SHOPIFY_WEBHOOK_SECRET, env.SHOPIFY_CLIENT_SECRET], raw, request.headers.get('X-Shopify-Hmac-Sha256'));
-      if (!signed) return json({ error: 'bad signature' }, 401);
+      if (!signed) return rejected('signature', 401, 'bad signature');
       const deps = storeDeps(env, url.origin);
-      if (!deps) return json({ error: 'store not set up' }, 503);
+      if (!deps) return rejected('not-set-up', 503, 'store not set up');
       const shop = request.headers.get('X-Shopify-Shop-Domain');
-      if (shop && shop !== deps.store.shop) return json({ error: 'not this store' }, 401);
+      if (shop && shop !== deps.store.shop) return rejected('other-store', 401, 'not this store');
       let payload: unknown;
       try {
         payload = JSON.parse(new TextDecoder().decode(raw));
       } catch {
-        return json({ error: 'bad request' }, 400);
+        return rejected('bad-body', 400, 'bad request');
       }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return json({ error: 'bad request' }, 400);
-      const topic = request.headers.get('X-Shopify-Topic') ?? '';
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return rejected('bad-body', 400, 'bad request');
+      const order = orderIdOf(payload as Record<string, unknown>, topic);
+      const about = { topic, ...(order ? { order_hash: hashForLog(order) } : {}) };
+      const t0 = Date.now();
       try {
-        const r = await storeWebhook(topic, payload as Record<string, unknown>, deps);
-        if (r.mirror) mirrorLater(ctx, env, url.origin, { order: r.mirror });
+        const r = await storeWebhook(topic, payload as Record<string, unknown>, { ...deps, log });
+        log.info('worker.store', 'webhook_received', 'A store webhook was taken.', { ...about, status: r.status, duration_ms: Date.now() - t0 });
+        if (r.repeat) log.info('worker.store', 'webhook_duplicate', 'A store webhook came again for work an earlier delivery already did.', about);
+        if (r.recorded) log.info('worker.store', 'order_recorded', 'A paid order’s tickets were made.', { ...about, tickets: r.recorded.tickets, held: r.recorded.held });
+        if (r.mirror) mirrorLater(ctx, env, log, url.origin, { order: r.mirror });
         return json(r.body, r.status);
       } catch (e) {
-        // The store sends the webhook again later; every step is safe to repeat.
-        console.error('[owl-park] store webhook failed:', topic, e instanceof Error ? e.message : e);
+        log.error('worker.store', 'webhook_failed', 'A store webhook failed: the store sends it again later, and every step is safe to repeat.', { ...about, duration_ms: Date.now() - t0, error: e });
         return json({ error: 'try again' }, 500);
       }
     }
@@ -576,7 +620,7 @@ export default {
     // ---- Tickets (C35): the wallet on this device, the emailed and shared links, and the gate ----
     if (url.pathname === '/api/tickets' || url.pathname.startsWith('/api/tickets/')) {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       // A ticket lives on one device: the collector this browser keeps.
@@ -596,9 +640,19 @@ export default {
       if (!body) return json({ error: 'bad request' }, 400);
       if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') {
         const { status, body: answer } = await desk(url.pathname.slice(4), { secret: body['secret'], device });
-        // The claimed order stays with the Worker: its email protects this owl (OP-139).
-        const { order, ...rest } = answer;
-        if (status === 200 && typeof order === 'string') ctx.waitUntil(protectByOrder(env, device, order));
+        // The claimed order stays with the Worker: its email protects this owl (OP-139). How many tickets moved is the log's.
+        const { order, moved, claimed, ...rest } = answer;
+        if (status === 200) {
+          const share = url.pathname === '/api/tickets/take';
+          log.info('worker.tickets', 'claim_moved', share ? 'A share link moved a ticket onto this device.' : 'A claim link moved its order’s tickets onto this device.', {
+            via: share ? 'share' : 'claim',
+            collector_hash: hashForLog(device),
+            device_class: deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile')),
+            ...(typeof order === 'string' ? { order_hash: hashForLog(order) } : {}),
+            ...(share ? { tickets: 1 } : { tickets: claimed, from_other_device: moved }),
+          });
+        }
+        if (status === 200 && typeof order === 'string') ctx.waitUntil(protectByOrder(env, log, device, order));
         return json(rest, status);
       }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
@@ -622,7 +676,7 @@ export default {
         const until = r.body['validUntil'];
         const exp = Math.min(nowS + GUEST_PASS_TTL_S, typeof until === 'number' ? Math.floor(until / 1000) : Infinity);
         const admittedPass = await mintPass(signingSecret(env), { ...pass, exp, adm: true, tid });
-        if (r.body['started'] === true) mirrorLater(ctx, env, url.origin, { id: tid });
+        if (r.body['started'] === true) mirrorLater(ctx, env, log, url.origin, { id: tid });
         return json({ ...r.body, pass: admittedPass, exp, gate: (await gateOf(env)).mode, adm: true });
       }
       return json({ error: 'not found' }, 404);
@@ -630,7 +684,7 @@ export default {
 
     if (url.pathname === '/api/collection' || url.pathname === '/api/shop' || url.pathname === '/api/shop/buy' || url.pathname === '/api/shop/gift') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       // The collection shows anywhere; the shop is inside the park, past the turnstiles.
@@ -653,7 +707,7 @@ export default {
     if (url.pathname === '/api/nest') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'GET') return json({ error: 'not found' }, 404);
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       // Only the nest's id: whose it is never leaves the collections object.
@@ -662,7 +716,7 @@ export default {
     if (url.pathname === '/api/nest/gift') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'POST') return json({ error: 'not found' }, 404);
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
       if (!pass.cid) return json({ error: 'no-collector' }, 401);
       return json(await collections(env).claimFurnitureGift(pass.cid, visitOf(pass, request)));
@@ -672,16 +726,16 @@ export default {
     if (url.pathname.startsWith('/api/vote')) {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (url.pathname === '/api/vote/tally') {
-        if (env.VOTE_TALLY_PUBLIC !== 'true' && !isAdmin(request, env)) return Response.json({ error: 'private' }, { status: 403, headers: CORS });
+        if (env.VOTE_TALLY_PUBLIC !== 'true' && !isAdmin(request, env, log)) return Response.json({ error: 'private' }, { status: 403, headers: CORS });
         const r = await votes(env).fetch(`https://park/tally${url.search}`);
         return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
       }
       if (url.pathname === '/api/vote/close') {
-        if (request.method !== 'POST' || !isAdmin(request, env)) return Response.json({ error: 'forbidden' }, { status: 403, headers: CORS });
+        if (request.method !== 'POST' || !isAdmin(request, env, log)) return Response.json({ error: 'forbidden' }, { status: 403, headers: CORS });
         const r = await votes(env).fetch(`https://park/close${url.search}`, { method: 'POST' });
         return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
       }
-      const pass = await passFrom(request, env);
+      const pass = await passFrom(request, env, log);
       if (!pass) return Response.json({ error: 'bad-pass' }, { status: 401, headers: CORS });
       // Only ticket-holders vote: a guest pass is refused until the ticket gate admits the visitor.
       if (!pass.adm) return Response.json({ error: 'tickets-required' }, { status: 403, headers: CORS });
@@ -703,7 +757,7 @@ export default {
         }
         if (!/^[a-z][a-z0-9-]{0,23}$/.test(realm)) return Response.json({ error: 'bad request' }, { status: 400, headers: CORS });
         const r = await votes(env).fetch('https://park/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visitor: voter, realm, ticket }) });
-        if (pass.tid && r.ok) mirrorLater(ctx, env, url.origin, { id: pass.tid });
+        if (pass.tid && r.ok) mirrorLater(ctx, env, log, url.origin, { id: pass.tid });
         return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
       }
       return Response.json({ error: 'not found' }, { status: 404, headers: CORS });
@@ -719,6 +773,9 @@ export default {
         tickets: () => readGate(env),
         collections: () => collections(env).ping(),
       });
+      const fields = { ok: h.ok, parts: h.parts, duration_ms: h.ms };
+      if (h.ok) log.info('worker.health', 'health_check', 'The park answered its health check.', fields);
+      else log.error('worker.health', 'health_check', 'A part of the park did not answer its health check in time.', fields);
       return json(h, h.ok ? 200 : 503);
     }
 
@@ -751,14 +808,25 @@ export default {
       if (!isRoomId(roomId)) return new Response('unknown room', { status: 404 });
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
       const secret = signingSecret(env);
-      const pass = await verifyPass(secret, url.searchParams.get('pass'));
-      if (!pass) return new Response('bad pass', { status: 401 });
-      if (!mayEnter(await gateOf(env), pass, roomId)) return new Response('not admitted', { status: 403 });
+      const given = url.searchParams.get('pass');
+      const pass = await verifyPass(secret, given);
+      if (!pass) {
+        log.info('room.join', 'room_join_refused', 'A room socket was refused: its pass was not taken.', { room: roomId, reason: 'pass', pass: await passRefusal(secret, given) });
+        return new Response('bad pass', { status: 401 });
+      }
+      const seen = { room: roomId, session_id: hashForLog(pass.id), ...(pass.cid ? { collector_hash: hashForLog(pass.cid) } : {}) };
+      if (!mayEnter(await gateOf(env), pass, roomId)) {
+        log.info('room.join', 'room_join_refused', 'A room socket was refused: the pass is not admitted past the front gate.', { ...seen, reason: 'gate' });
+        return new Response('not admitted', { status: 403 });
+      }
       // The line (OP-075): while the park has one, only an owl that was inside lately, or came
       // through it, opens a room; a newcomer is sent to wait on the home screen.
       const busy = await overflowOf(env);
       const who = whoOf(pass);
-      if (busy.active && !(await verifyEntry(secret, url.searchParams.get('entry'), who))) return turnedAway(ctx, CLOSE.QUEUED, 'line');
+      if (busy.active && !(await verifyEntry(secret, url.searchParams.get('entry'), who))) {
+        log.info('room.join', 'room_join_refused', 'A room socket was sent to wait in the line.', { ...seen, reason: 'queue' });
+        return turnedAway(ctx, log, CLOSE.QUEUED, 'line');
+      }
       // Copies of the room (OP-075): to the one it was in, or the one with the most free places.
       const askedCopy = Number(url.searchParams.get('copy'));
       const copy = await copyFor(env, roomId, busy.copies, Number.isInteger(askedCopy) && askedCopy > 0 ? askedCopy : null);
@@ -787,5 +855,28 @@ export default {
   /** Month-end: decide the previous park month's Realm Vote. */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     await votes(env).fetch('https://park/close', { method: 'POST' });
+  },
+} satisfies ExportedHandler<Env>;
+
+/**
+ * The Worker as the platform calls it: an error no route handled is logged as one line (OP-134),
+ * then thrown on as before, so what the visitor gets does not change.
+ */
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
+      return await park.fetch(request, env, ctx);
+    } catch (e) {
+      loggerFor(env, request).error('worker', 'unhandled_error', 'A request failed with an error no route handled.', { route: new URL(request.url).pathname, error: e });
+      throw e;
+    }
+  },
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    try {
+      await park.scheduled(controller, env);
+    } catch (e) {
+      loggerFor(env).error('worker', 'unhandled_error', 'The month-end close of the Realm Vote failed.', { job: 'vote-close', error: e });
+      throw e;
+    }
   },
 } satisfies ExportedHandler<Env>;

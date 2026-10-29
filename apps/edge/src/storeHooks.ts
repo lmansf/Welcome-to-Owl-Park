@@ -12,6 +12,7 @@
  * Opening Night Ticket it names and what its passes sold for, and a pass bought with the night's
  * code but without the link is counted apart.
  */
+import { hashForLog, type Logger } from '@owl-park/shared';
 import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
 import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, usedCode, type AdminOrder } from './shopify';
 
@@ -31,6 +32,8 @@ export interface HookDeps {
   wait?: (ms: number) => Promise<void>;
   /** Opening night's discount code for the annual pass (C42), to count passes bought with it. */
   openingCode?: string;
+  /** Where a step that fails without failing the webhook says so (OP-134). */
+  log?: Logger;
 }
 
 export interface HookResult {
@@ -38,6 +41,10 @@ export interface HookResult {
   body: Record<string, unknown>;
   /** An order whose tickets changed: the Worker refreshes the store's copy after answering. */
   mirror?: string;
+  /** Tickets made for a paid order just now, and whether they wait for the owner's fraud check (OP-134's order_recorded). */
+  recorded?: { tickets: number; held: boolean };
+  /** The webhook came again for work an earlier delivery already did (OP-134's webhook_duplicate). */
+  repeat?: true;
 }
 
 /** The link the shipping email carries; the page reads the secret from the fragment. */
@@ -121,12 +128,16 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
   }
   const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !clears(order) });
   const tickets = issued['tickets'] as string[];
+  // Made just now, or by an earlier delivery of this webhook: then a held order, or one whose link went out, has nothing left to do.
+  const existed = issued['existed'] === true;
+  const made = existed ? {} : { recorded: { tickets: tickets.length, held: issued['held'] === true } };
+  const again = existed && (issued['held'] === true || issued['sent'] === true) ? { repeat: true as const } : {};
   // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one, with what it sold for.
   const from = fromTicketOf(order);
   if (lines.some((l) => l.kind === 'annual') && (from || usedCode(order, deps.openingCode))) await deskOk(deps, '/tickets/link-pass', { order: id, from, cents: paidFor(order, lines, 'annual') });
-  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id };
+  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id, ...made, ...again };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
-  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id };
+  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id, ...made, ...again };
 }
 
 /** A held order changed or got a new rating: release it if the owner tagged it or the store now rates it low. */
@@ -181,7 +192,7 @@ async function oneAtATime(deps: HookDeps, id: string, work: () => Promise<HookRe
   try {
     return await work();
   } finally {
-    await deps.desk('/tickets/unlease', { order: id }).catch(() => undefined);
+    await deps.desk('/tickets/unlease', { order: id }).catch((e: unknown) => deps.log?.warn('worker.store', 'write_failed', 'An order’s webhook lease was not let go: it runs out on its own within 20 seconds.', { order_hash: hashForLog(id), error: e }));
   }
 }
 

@@ -46,10 +46,13 @@ import {
   sameRealms,
   withRealmsChanges,
   type RealmsSettings,
+  hashForLog,
+  type Logger,
 } from '@owl-park/shared';
 import { GATED_ROOMS } from '@owl-park/shared/rooms';
 import { roomObjectNames, withCopy } from './copies';
 import { Line, type LineEntry } from './line';
+import { loggerFor, moduleLog } from './logs';
 import { ROOMS } from './rooms';
 import type { Env } from './env';
 
@@ -57,6 +60,8 @@ import type { Env } from './env';
 export const COUNT_FRESH_MS = 5_000;
 /** The line moves on this often while anyone is in it or has a place held. */
 export const TICK_MS = 5_000;
+/** While the line is in front of the park, its depth is logged this often (OP-134's queue_depth). */
+export const DEPTH_EVERY_MS = 10_000;
 
 /** What the Worker reads (and keeps for a few seconds). */
 export interface OverflowState {
@@ -92,7 +97,8 @@ class Settings {
     if (!r) return fallback;
     try {
       return { ...fallback, ...(JSON.parse(r.value) as T) };
-    } catch {
+    } catch (e) {
+      moduleLog.error('overflow', 'read_failed', 'A busy-night setting in storage could not be read: its default is used.', { key, error: e });
       return fallback;
     }
   }
@@ -135,9 +141,15 @@ export class Overflow extends DurableObject<Env> {
   private count: { n: number; at: number } | null = null;
   /** The ribbon's words and the realms switch as last sent to the room objects, as JSON (undefined: not sent since waking). */
   private sent: string | undefined = undefined;
+  /** The overflow object's log (OP-134). */
+  private readonly log: Logger;
+  /** When the line's depth was last logged, and whether anyone was in it then. */
+  private depthAt = Number.NEGATIVE_INFINITY;
+  private depthBusy = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.log = loggerFor(env);
     this.settings = new Settings(ctx.storage.sql);
     this.line = new Line(ctx.storage.sql);
   }
@@ -173,7 +185,7 @@ export class Overflow extends DurableObject<Env> {
     try {
       this.count = { n: await this.parkCount(), at: now };
     } catch (e) {
-      console.error('[owl-park] the rooms could not be counted:', e instanceof Error ? e.message : e);
+      this.log.error('overflow', 'read_failed', 'The rooms could not be counted: the last count stands.', { error: e });
       this.count = { n: this.count?.n ?? 0, at: now };
     }
     return this.count.n;
@@ -200,7 +212,20 @@ export class Overflow extends DurableObject<Env> {
     const count = busy ? await this.freshCount(now) : (this.count?.n ?? 0);
     const free = s.mode === 'off' ? 0 : s.threshold - count - this.line.outstanding(now, hold);
     this.line.tick(now, hold, free);
-    if (this.line.waiting() > 0 || this.line.outstanding(now, hold) > 0) await this.wakeIn(TICK_MS);
+    const waiting = this.line.waiting();
+    const held = this.line.outstanding(now, hold);
+    this.sampleDepth(now, waiting, held, count);
+    if (waiting > 0 || held > 0) await this.wakeIn(TICK_MS);
+  }
+
+  /** The line's depth, every DEPTH_EVERY_MS while anyone is in it or has a place held, and once more as it empties (OP-134). */
+  private sampleDepth(now: number, waiting: number, held: number, count: number): void {
+    const busy = waiting > 0 || held > 0;
+    if (!busy && !this.depthBusy) return;
+    if (busy && this.depthBusy && now - this.depthAt < DEPTH_EVERY_MS) return;
+    this.depthAt = now;
+    this.depthBusy = busy;
+    this.log.info('room.queue', 'queue_depth', 'How the line in front of the park stands.', { waiting, held, front: this.line.front(), owls: count, rate: lineRate(this.line.calledTimes(now), now) });
   }
 
   private async wakeIn(ms: number): Promise<void> {
@@ -236,7 +261,7 @@ export class Overflow extends DurableObject<Env> {
       this.roomObjects().map((name) =>
         this.stub(name)
           .fetch('https://park/notice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
-          .catch(() => undefined),
+          .catch((e: unknown) => this.log.warn('overflow', 'write_failed', 'A room object was not told the ribbon or the realms switch: it asks again within a minute.', { object: name, error: e })),
       ),
     );
   }
@@ -260,7 +285,12 @@ export class Overflow extends DurableObject<Env> {
   private take(n: number, who: string, now: number): LineAnswer {
     const hold = this.holdMs();
     const e = this.line.status(n, who, now, hold);
-    if (e.state === 'called') return this.line.claim(n, who, now, hold) ? this.answer(n, e, now) : { state: 'expired' };
+    if (e.state === 'called') {
+      if (!this.line.claim(n, who, now, hold)) return { state: 'expired' };
+      const joined = this.line.joinedAt(n);
+      this.log.info('room.queue', 'queue_admit', 'An owl’s turn came, and it went in from the line.', { n, who_hash: hashForLog(who), ...(joined !== null ? { waited_ms: now - joined } : {}) });
+      return this.answer(n, e, now);
+    }
     if (e.state === 'claimed') return { state: 'go' };
     return this.answer(n, e, now);
   }
@@ -282,7 +312,7 @@ export class Overflow extends DurableObject<Env> {
       if (body['realms'] !== undefined) {
         const next = withRealmsChanges(realms, body['realms'], (r) => GATED_ROOMS.includes(r), isNightKey);
         if (!next) return Response.json({ error: 'bad realms' }, { status: 400 });
-        if (!sameRealms(next, realms)) console.log(`[owl-park] realms: open [${next.open.join(', ')}], portal ${next.portal ? 'on' : 'off'}, night ${next.night ?? 'moon'}`);
+        if (!sameRealms(next, realms)) this.log.info('overflow', 'realms_set', 'The keepers changed the realms switch.', { open: next.open, portal: next.portal, night: next.night ?? 'moon' });
         realms = next;
       }
       if (body['line'] !== undefined) {
@@ -322,7 +352,10 @@ export class Overflow extends DurableObject<Env> {
     if (typeof who !== 'string' || who.length < 3 || who.length > 40) return Response.json({ error: 'bad request' }, { status: 400 });
     if (url.pathname === '/line/join') {
       if (!(await this.isActive(now))) return Response.json({ state: 'go' } satisfies LineAnswer);
+      // A number taken just now, or the one this browser already held (a page loaded again).
+      const again = this.line.held(who, now, this.holdMs()) !== null;
       const n = this.line.join(who, now, this.holdMs());
+      this.log.info('room.queue', 'queue_enter', 'An owl arrived while the line is in front of the park, and holds a number.', { n, who_hash: hashForLog(who), again, waiting: this.line.waiting() });
       // A place may be free already: the line moves before answering, and a newcomer called at once takes its turn now.
       await this.step(now);
       await this.sendNotice(ribbonNow(this.settings.ribbon(), true));
