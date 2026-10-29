@@ -7,6 +7,13 @@ name: CI
 # measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push that changes
 # only docs or Markdown runs nothing. A failed typecheck or unit test run cancels the rest of the run.
 #
+# Beside the browser suite, mutation testing (OP-131) checks that the unit tests catch real bugs, in
+# three scopes (the room server, the Worker, the shared rules) run as four shards side by side: on a
+# pull request that touches a shard's code, on main and on a run by hand, only the mutants of what
+# changed since the results kept from the last run; every mutant each night. The scores job puts each
+# scope's score in the run's summary and fails the run when one is under the break threshold; the
+# reports and the scores are kept with the run.
+#
 # TODO-DOCS (OP-123): docs/DEPLOY.md gains a CI section: the two tiers and what each runs, tagging a
 # test @smoke, refreshing the shard timings (apps/park/e2e/durations.json) when tests are added, and
 # that browser tests wait on the park's own state (or frames), never on fixed sleeps.
@@ -85,6 +92,121 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+
+  mutation:
+    name: Mutation testing (${{ matrix.shard }})
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    needs: unit
+    runs-on: ubuntu-latest
+    # Every mutant of a shard, the nightly run, takes the longest; the incremental runs take minutes.
+    timeout-minutes: 60
+    # Third-party code runs here (Stryker and its plugins): the job reads the repository and nothing more.
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { shard: room, scope: room, package: '@owl-park/edge', dir: apps/edge, touches: '^apps/edge/|^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: worker, scope: worker, package: '@owl-park/edge', dir: apps/edge, touches: '^apps/edge/|^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: climb, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: rules, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+    steps:
+      - uses: actions/checkout@v4
+      - id: scope
+        name: Whether this pull request touches the shard's code
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          if git diff --name-only FETCH_HEAD HEAD | grep -qE "$TOUCHES"; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+        env:
+          BASE: ${{ github.base_ref }}
+          TOUCHES: ${{ matrix.touches }}
+      - uses: pnpm/action-setup@v4
+        if: steps.scope.outputs.run != 'false'
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        if: steps.scope.outputs.run != 'false'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.scope.outputs.run != 'false'
+        run: pnpm install --frozen-lockfile
+      - name: The results kept from the last run (Stryker's incremental file)
+        if: steps.scope.outputs.run != 'false'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ matrix.dir }}/reports/${{ matrix.shard }}/stryker-incremental.json
+          key: mutation-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-${{ matrix.shard }}-
+      - name: Stryker on ${{ github.event_name == 'schedule' && 'every mutant' || 'the mutants of what changed' }}
+        if: steps.scope.outputs.run != 'false'
+        run: pnpm --filter ${{ matrix.package }} mutate ${{ github.event_name == 'schedule' && '--force' || '' }}
+        env:
+          MUTATION_SHARD: ${{ matrix.shard }}
+      - name: Keep the results for the next run
+        if: ${{ !cancelled() && steps.scope.outputs.run != 'false' && hashFiles(format('{0}/reports/{1}/stryker-incremental.json', matrix.dir, matrix.shard)) != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ matrix.dir }}/reports/${{ matrix.shard }}/stryker-incremental.json
+          key: mutation-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Upload the shard's report
+        if: ${{ !cancelled() && steps.scope.outputs.run != 'false' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ matrix.scope }}-${{ matrix.shard }}
+          path: ${{ matrix.dir }}/reports/${{ matrix.shard }}/mutation
+          if-no-files-found: ignore
+          # A job run again replaces its report.
+          overwrite: true
+          retention-days: 14
+
+  mutation-report:
+    name: Mutation scores
+    # After every shard, failed ones too, but not when the run was cancelled.
+    if: ${{ !cancelled() && needs.mutation.result != 'skipped' }}
+    needs: mutation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: mutation
+          pattern: mutation-*
+      - name: The summary script's own tests
+        run: node --test "tools/mutation/*.test.mjs"
+      - name: Each scope's score, in the summary, against the break threshold
+        run: |
+          status=0
+          for scope in room worker shared; do
+            case "$scope" in
+              room) name="the room server" ;;
+              worker) name="the Worker" ;;
+              shared) name="the shared rules" ;;
+            esac
+            reports=$(find mutation -path "mutation/mutation-$scope-*" -name mutation.json | sort)
+            # A pull request that does not touch a scope runs none of its shards.
+            [ -n "$reports" ] || continue
+            node tools/mutation/summary.mjs "$name" $reports --json "mutation/score-$scope.json" --break 50 >> "$GITHUB_STEP_SUMMARY" || status=1
+          done
+          exit $status
+      - name: Upload the scores
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-scores
+          path: mutation/score-*.json
+          if-no-files-found: ignore
+          overwrite: true
+          # The nightly scores are the ones compared over time.
+          retention-days: ${{ github.event_name == 'schedule' && 90 || 14 }}
 
   smoke:
     name: Browser smoke set
