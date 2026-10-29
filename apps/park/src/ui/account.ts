@@ -260,6 +260,8 @@ export function createAccountScreens(root: HTMLElement, link: AccountLink, deps:
     if (r === 'gone') return deps.toast(ACCOUNT_WORDS.protectGone, 6000);
     if (r === 'no-owl') return deps.toast(ACCOUNT_WORDS.protectNoOwl, 6000);
     if (r === 'offline') return deps.toast(ACCOUNT_WORDS.refused.offline, 6000);
+    // The "check your email" box still open on this screen has done its work.
+    if (modal.isOpen() && box.dataset['account'] === 'protect') modal.close();
     deps.toast(r.mine ? ACCOUNT_WORDS.protectedNow : ACCOUNT_WORDS.protectedThat, 6000);
     if (r.mine) deps.changed();
   };

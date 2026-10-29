@@ -510,14 +510,18 @@ if (accounts && accountScreens) {
   void accounts.account().then((a) => home.setAccounts(a !== null));
 }
 // An account link carries its token in the address's fragment, as a ticket link does: out of the
-// address bar at once, then the owls it brings (restore) or the owl it protects (protect).
-const accountLink = readAccountLink(location.hash);
-if (accountLink) {
+// address bar at once, then the owls it brings (restore) or the owl it protects (protect). One opened
+// in the tab the park is already in changes only the fragment, so the page listens for that too.
+const takeAccountLink = () => {
+  const link = readAccountLink(location.hash);
+  if (!link) return;
   history.replaceState(history.state, '', withoutAccountLink(location.href));
   if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
-  else if (accountLink.kind === 'restore') accountScreens.openPictures(accountLink.token);
-  else void accountScreens.confirm(accountLink.token);
-}
+  else if (link.kind === 'restore') accountScreens.openPictures(link.token);
+  else void accountScreens.confirm(link.token);
+};
+takeAccountLink();
+window.addEventListener('hashchange', takeAccountLink);
 // The Menu's Settings tab says which tickets this device holds (OP-108), where the park's server keeps them.
 hud.attachTickets(() => (transport.tickets ? transport.tickets.wallet() : Promise.resolve(null)));
 // The collection loads in the background, once there is an owl to collect for.
