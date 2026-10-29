@@ -40,6 +40,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onRealms?(realms: RealmsSettings): void;
   /** The realm this owl is in (or was entering) is closed: the page walks it back to the hub and shows the phrase. */
   onRealmClosed?(sign: string): void;
+  /** A travel into the park was turned away (OP-130): the owl has not walked through the front gate since it was last outside. */
+  onNotThroughGate?(): void;
 }
 
 export interface RoomConnection {

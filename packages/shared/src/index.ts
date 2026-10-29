@@ -26,6 +26,7 @@ export * from './arcade';
 export * from './arcadebook';
 export * from './phrases';
 export * from './wayout';
+export * from './travel';
 export * from './doorways';
 export * from './overflow';
 export * from './climb';

@@ -32,6 +32,8 @@ import {
   type Vec2,
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
+import { TravelBook } from '../src/travelBook';
+import { sqlStorage } from './sqlite';
 
 // The Workers runtime is not here: its Durable Object base class and the two globals the room object
 // touches stand in, and each socket is a fake that keeps its attachment and what was sent to it.
@@ -202,6 +204,15 @@ class FakeCollections {
   alive(sightings: unknown) {
     this.aliveCalls.push(sightings);
     return this.answer(undefined);
+  }
+  /** Travel from the map (OP-130): the real travel book, on an SQLite of its own. */
+  readonly travel = new TravelBook(sqlStorage());
+  travelEntered(cid: string, room: string, spawn: string | null) {
+    this.travel.entered(cid, room, spawn ?? undefined, Date.now());
+    return this.answer(undefined);
+  }
+  travelThroughGate(cid: string) {
+    return this.answer(this.travel.throughGate(cid));
   }
 }
 
@@ -1025,5 +1036,107 @@ describe('an owl restored on another screen (OP-139)', () => {
     expect(old.closed).toBeNull();
     expect(collections.holdsCalls).toEqual([]);
     expect(collections.lookCalls).toEqual([]);
+  });
+});
+
+describe('travel from the map (OP-130)', () => {
+  /** A page's hello: through a doorway (its spawn) or, `travel`, from the map. */
+  const helloFrom = (obj: Obj, ws: FakeSocket, spawn?: string, travel = false) =>
+    send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, ...(spawn ? { spawn } : {}), ...(travel ? { via: 'travel' } : {}) });
+  /** An owl into a room, through a doorway or by travel; its socket. */
+  const into = async (obj: Obj, room: string, spawn?: string, travel = false) => {
+    clock += 1000;
+    const ws = connect(room, `v_${room}${++sockets}`, OWNER);
+    await helloFrom(obj, ws, spawn, travel);
+    await settle();
+    return ws;
+  };
+
+  it('turns a travel into the park away until the owl has walked through the gate, and lets it in once it has', async () => {
+    const obj = roomObject();
+    await into(obj, 'lobby', 'from-homes');
+    const early = await into(obj, 'grove', 'default', true);
+    expect(early.frames.map((f) => f.t)).toEqual(['closed']);
+    expect(early.last('closed')).toEqual({ t: 'closed', room: 'grove', why: 'gate' });
+    expect(early.closed?.code).toBe(CLOSE.NOT_THROUGH_GATE);
+    // In by the turnstiles: the hub at its default spawn.
+    await into(obj, 'hub', 'default');
+    const later = await into(obj, 'grove', 'default', true);
+    expect(later.closed).toBeNull();
+    expect(later.last('welcome')?.room).toBe('grove');
+    // And on from there, realm to realm.
+    expect((await into(obj, 'market', 'default', true)).last('welcome')?.room).toBe('market');
+  });
+
+  it('counts only the turnstiles as the gate: not the hub by its address or another room’s doorway', async () => {
+    const obj = roomObject();
+    await into(obj, 'hub');
+    await into(obj, 'hub', 'from-grove');
+    expect((await into(obj, 'grove', 'default', true)).closed?.code).toBe(CLOSE.NOT_THROUGH_GATE);
+  });
+
+  it('forgets the gate once the owl is outside again, by the way out, the street or its nest', async () => {
+    for (const [room, spawn] of [['lobby', 'from-hub'], ['homes', 'from-lobby']] as const) {
+      collections = new FakeCollections();
+      const obj = roomObject();
+      await into(obj, 'hub', 'default');
+      await into(obj, room, spawn);
+      expect((await into(obj, 'grove', 'default', true)).closed?.code, room).toBe(CLOSE.NOT_THROUGH_GATE);
+    }
+    collections = new FakeCollections();
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    const obj = roomObject();
+    await into(obj, 'hub', 'default');
+    await into(obj, `nest-${nestId}`, 'mirror', true);
+    expect((await into(obj, 'grove', 'default', true)).closed?.code).toBe(CLOSE.NOT_THROUGH_GATE);
+  });
+
+  it('lets a travel outside the park in without the gate', async () => {
+    const obj = roomObject();
+    expect((await into(obj, 'lobby', 'default', true)).last('welcome')?.room).toBe('lobby');
+    expect((await into(obj, 'homes', 'default', true)).last('welcome')?.room).toBe('homes');
+  });
+
+  it('keeps every place an owl walks or travels into for its map, but not one it was turned away from', async () => {
+    const obj = roomObject();
+    await into(obj, 'homes', 'from-nest-0');
+    await into(obj, 'lobby', 'from-homes');
+    await into(obj, 'market', 'default', true);
+    await into(obj, 'hub', 'default');
+    await into(obj, 'grove', 'default', true);
+    expect(collections.travel.state(OWNER)).toEqual({ places: ['homes', 'lobby', 'hub', 'grove'], gate: true });
+  });
+
+  it('holds a page’s frames behind its travel hello while the gate is asked, and answers them in order', async () => {
+    const obj = roomObject();
+    await into(obj, 'hub', 'default');
+    const ws = connect('grove', 'v_quick', OWNER);
+    const hello = helloFrom(obj, ws, 'default', true);
+    const moved = send(obj, ws, { t: 'move', to: { x: 2500, y: 850 }, seq: 1 });
+    await Promise.all([hello, moved]);
+    await settle();
+    expect(ws.closed).toBeNull();
+    expect(ws.frames.map((f) => f.t).filter((t) => t === 'welcome' || t === 'move')).toEqual(['welcome', 'move']);
+  });
+
+  it('lets a travel in when the collections object does not answer: the gate welcomes, it does not lock', async () => {
+    const obj = roomObject();
+    collections.down = true;
+    const ws = await into(obj, 'grove', 'default', true);
+    expect(ws.closed).toBeNull();
+    expect(ws.last('welcome')?.room).toBe('grove');
+  });
+
+  it('tells the player stats a room was come into by travel (OP-113)', async () => {
+    const LOGGED = { PARK_LOG_URL: 'https://log.example/functions/v1/owl-park-log', FRAUD_SCORE_KEY: 'k'.repeat(32), FRAUD_HASH_SALT: 's'.repeat(24) };
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    await into(obj, 'hub', 'default');
+    await into(obj, 'grove', 'default', true);
+    const entered = collections.seenCalls.map(([s]) => s as { room: string; entered?: boolean; travel?: boolean }).filter((s) => s.entered);
+    expect(entered.map((s) => [s.room, s.travel ?? false])).toEqual([
+      ['hub', false],
+      ['grove', true],
+    ]);
   });
 });

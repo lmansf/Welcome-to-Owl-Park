@@ -74,6 +74,8 @@ stay anonymous even if they are ever joined to the store by accident.
    then `sql/players.sql` as `game_player_stats`. OP-113 adds `sql/realms.sql` as `game_realm_visits`,
    applied (and the function deployed again, so it knows `realm_visit`) before the Worker that sends
    those rows goes live: a kind the function does not know is refused, and those rows are not sent again.
+   OP-130 adds `sql/travel.sql` as `game_realm_visit_travel` (a room come into by travel from the map),
+   applied with the function deployed again before the Worker that sends `travel` goes live, for the same reason.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,

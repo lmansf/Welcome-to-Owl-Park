@@ -4,7 +4,7 @@
  * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type OwlAccount } from '@owl-park/shared';
+import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type OwlAccount, type TravelState } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
 import { capacityPage } from './capacityPage';
@@ -326,6 +326,18 @@ export default {
       return json({ gate: (await gateOf(env)).mode, admitted: pass.adm });
     }
 
+    if (url.pathname === '/api/travel') {
+      // The map's places (OP-130): where this pass's owl has walked, and whether it is through the front gate.
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      const pass = await passFrom(request, env);
+      if (!pass) return json({ error: 'bad-pass' }, 401);
+      if (!pass.cid) return json({ places: [], gate: false } satisfies TravelState);
+      const state = await collections(env)
+        .travelState(pass.cid)
+        .catch(() => null);
+      return state ? json(state) : json({ error: 'try-later' }, 503);
+    }
+
     // ---- Whether a key is the keepers' (the position overlay asks before it shows, OP-138) ----
     if (url.pathname === '/api/admin/ping') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -636,7 +648,7 @@ export default {
       return json({ error: 'not found' }, 404);
     }
 
-    // ---- Nests: the owl's own (for "Go home", made on first sight as on the street) and the day's
+    // ---- Nests: the owl's own (for travel home, made on first sight as on the street) and the day's
     // furniture gift. The nests are outside the turnstiles, so neither needs a ticket. ----
     if (url.pathname === '/api/nest') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });

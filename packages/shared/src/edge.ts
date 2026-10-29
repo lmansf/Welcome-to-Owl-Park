@@ -29,8 +29,8 @@ import type { QuestBoard, QuestUpdate } from './quests';
 import type { Air } from './flight';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 12;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 13;
 // TODO-DOCS: docs/ARCHITECTURE.md section 4 says protocol v8; it is v11 (the arcade, then the climb's `climb` and `ascent` acts, `realms` in the welcome and the `realms` frame, then `rest` both ways and `asleep` on an owl, OP-126).
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
@@ -60,6 +60,8 @@ export const CLOSE = {
   REALM_CLOSED: 4013,
   /** The owl was restored on another screen (OP-139): this one shows the moved card. */
   MOVED: 4014,
+  /** Travel into the park before the owl walked through the front gate (OP-130): the page offers the gate. */
+  NOT_THROUGH_GATE: 4015,
   TOO_LARGE: 1009,
 } as const;
 
@@ -92,6 +94,8 @@ export interface ClientHello {
   spawn?: string;
   /** Resume hint (last drawn position); honoured only when close to the spawn or a recent leave. */
   pos?: Vec2;
+  /** Come by travel from the map (OP-130): into the park, only once the owl has walked through the gate. */
+  via?: 'travel';
 }
 export interface ClientMove {
   t: 'move';
@@ -416,8 +420,11 @@ export interface ServerNotice {
 export interface ServerClosed {
   t: 'closed';
   room: string;
-  /** `realm`: a gated realm is closed; the socket closes with 4013 next, and `sign` is its approved phrase. */
-  why: 'closed' | 'gone' | 'realm';
+  /**
+   * `realm`: a gated realm is closed; the socket closes with 4013 next, and `sign` is its approved phrase.
+   * `gate`: travel into the park before the owl walked through the front gate (OP-130); 4015 next.
+   */
+  why: 'closed' | 'gone' | 'realm' | 'gate';
   sign?: string;
 }
 /** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
@@ -485,6 +492,10 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (v['pos'] !== undefined) {
         if (!isVec2(v['pos'])) return null;
         out.pos = { x: Math.round(v['pos'].x), y: Math.round(v['pos'].y) };
+      }
+      if (v['via'] !== undefined) {
+        if (v['via'] !== 'travel') return null;
+        out.via = 'travel';
       }
       return out;
     }
