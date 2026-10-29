@@ -37,3 +37,4 @@ export * from './flight';
 export * from './sprites';
 export * from './owlFacts';
 export * from './accounts';
+export * from './log';
