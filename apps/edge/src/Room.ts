@@ -13,6 +13,10 @@ import {
   MAX_RISE,
   carryOn,
   checkAir,
+  footing,
+  highestTop,
+  onSomeFooting,
+  standingHeights,
   USE_COOLDOWN_MS,
   REACH_SLACK,
   SAY_EVERY_MS,
@@ -32,6 +36,7 @@ import {
   type ClientMove,
   type OwlLook,
   type OwlSnapshot,
+  type Polygon,
   type RoomDef,
   type ServerFrame,
   type ServerWalk,
@@ -112,8 +117,8 @@ export const LIMITS = {
   /** Air states (OP-084): a burst, then this many more a second; more are dropped quietly, and only those count towards the flood. */
   airBurst: AIR_BURST,
   airRefillPerS: AIR_REFILL_PER_S,
-  /** The highest an owl can be above the floor (a jump and a flap at its top, flight.ts): rooms have no upper levels yet. */
-  maxAirZ: MAX_RISE,
+  /** How far above the room's highest perch an owl can be (a jump and a flap at its top, flight.ts). */
+  maxRise: MAX_RISE,
   /** One prewritten phrase per visitor this often; faster ones are dropped quietly. */
   sayEveryMs: SAY_EVERY_MS,
   /** One use of an interactable per visitor this often. */
@@ -139,10 +144,17 @@ export class Room {
   private readonly opts: RoomOptions;
   /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
   private readonly objects = new Map<string, number>();
+  /** The highest an owl can be here, the heights it can stand at, and where it can be at some height (OP-084, perches.ts). */
+  private readonly airTop: number;
+  private readonly standing: number[];
+  private readonly anyFooting: Polygon[];
 
   constructor(def: RoomDef, opts: RoomOptions) {
     this.def = def;
     this.opts = opts;
+    this.airTop = highestTop(def) + LIMITS.maxRise;
+    this.standing = standingHeights(def);
+    this.anyFooting = footing(def, Number.POSITIVE_INFINITY).walkable;
   }
 
   get id(): string {
@@ -266,7 +278,8 @@ export class Room {
     const isDoorEntry = hello.spawn !== undefined;
     const spawn = findSpawn(this.def, hello.spawn);
     let pos: Vec2 | null = null;
-    if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !inExit(this.def, hello.pos)) {
+    // Back on a perch it stood on is back where it was: its page tells the room the height (OP-084).
+    if (hello.pos && onSomeFooting(this.def, hello.pos) && !inExit(this.def, hello.pos)) {
       const recent = this.leavers.get(id);
       const nearSpawn = distance(hello.pos, spawn) <= LIMITS.resumeRadius;
       // Back soon after it left: near where it left, or as far from there as it could have walked
@@ -377,7 +390,8 @@ export class Room {
     if (msg.seq <= v.seq) return; // stale or replayed
     v.seq = msg.seq;
     const from = this.currentPos(v);
-    const to = resolveTarget(from, msg.to, this.def.walkable);
+    // The page has the owl's height and the footing for it (OP-084): a walk may go wherever an owl can be at some height.
+    const to = resolveTarget(from, msg.to, this.anyFooting);
     const target = { x: Math.round(to.x), y: Math.round(to.y) };
     if (distance(from, target) < LIMITS.minMovePx) {
       // Asking to walk to where the owl already is means stop (letting go of the arrow keys): a walk
@@ -510,9 +524,10 @@ export class Room {
       return false;
     }
     v.airTokens -= 1;
-    const air = checkAir(a, LIMITS.maxAirZ);
+    const air = checkAir(a, this.airTop, this.standing);
     if (!air) return false;
-    if (air.s === GROUNDED) delete v.st.air;
+    // On the floor the owl has no air to keep; on a perch it is told, and kept, as standing up there.
+    if (air.s === GROUNDED && air.z === 0) delete v.st.air;
     else v.st.air = { ...air, at: now };
     // An owl that jumps is awake, for everyone (OP-126).
     const woke = v.st.asleep === true;
@@ -524,11 +539,14 @@ export class Room {
     return true;
   }
 
-  /** A visitor's air state as a newcomer should have it: none once its last state has come down to the floor. */
+  /**
+   * A visitor's air state as a newcomer should have it: none once its last state has come down to the
+   * floor, and standing on a perch until its page says otherwise (OP-084).
+   */
   private airOf(v: Visitor): AirAt | undefined {
     const a = v.st.air;
     if (!a) return undefined;
-    if (carryOn(a, this.now() - a.at).s !== GROUNDED) return a;
+    if (a.s === GROUNDED || carryOn(a, this.now() - a.at).s !== GROUNDED) return a;
     delete v.st.air;
     return undefined;
   }
