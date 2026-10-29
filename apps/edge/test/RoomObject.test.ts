@@ -725,7 +725,10 @@ describe('an owl back from a dropped connection (OP-138)', () => {
   it('resumes where its owl walked on to, though the room object slept meanwhile, and keeps only the last two minutes', async () => {
     state = new KeepingState();
     const obj = roomObject();
-    const a = await join(obj, 'hub', 'v_a');
+    // On the spawn, as its page says: from there the walk east is clear. Scattered north of the
+    // spawn, it would meet the wall beside the east arch and stop short.
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
     const b = await join(obj, 'hub', 'v_b');
     await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
     clock += 6_000;
