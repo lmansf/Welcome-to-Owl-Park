@@ -188,9 +188,14 @@ function withWear(look: OwlLook, wear: Wear | undefined): OwlLook {
 
 function peerOf(ws: WebSocket): Peer {
   return {
-    // A socket closed meanwhile is the close handler's to clean up: nothing goes to it.
+    // A socket closed meanwhile is the close handler's to clean up: a send to it failing is no news,
+    // and one that fails on an open socket goes on to the room, which logs it.
     send: (text) => {
-      if (ws.readyState === WebSocket.READY_STATE_OPEN) ws.send(text);
+      try {
+        ws.send(text);
+      } catch (e) {
+        if (ws.readyState === WebSocket.READY_STATE_OPEN) throw e;
+      }
     },
     close: (code, reason) => {
       // The room closes a socket for its rate limits; a replaced session's owl stays, on its new socket.
@@ -1270,12 +1275,11 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   private send(ws: WebSocket, frame: ServerFrame): void {
-    // Closed meanwhile: its close handler cleans up, and nothing goes to it.
-    if (ws.readyState !== WebSocket.READY_STATE_OPEN) return;
     try {
       ws.send(JSON.stringify(frame));
     } catch (e) {
-      this.log.warn('room.tick', 'send_failed', 'A frame could not be sent to an open socket.', { frame: frame.t, error: e });
+      // A socket closed meanwhile is its close handler's to clean up; one that is open and still refuses is news.
+      if (ws.readyState === WebSocket.READY_STATE_OPEN) this.log.warn('room.tick', 'send_failed', 'A frame could not be sent to an open socket.', { frame: frame.t, error: e });
     }
   }
 

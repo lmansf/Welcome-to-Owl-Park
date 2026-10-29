@@ -88,13 +88,11 @@ function turnedAway(ctx: ExecutionContext, log: Logger, code: number, reason: st
       const timer = setTimeout(close, TURN_AWAY_WAIT_MS);
       function close() {
         clearTimeout(timer);
-        // The page may have closed its end first: only a socket still open is closed here.
-        if (server.readyState === WebSocket.READY_STATE_OPEN) {
-          try {
-            server.close(code, reason);
-          } catch (e) {
-            log.warn('room.queue', 'send_failed', 'A socket the line turned away could not be closed.', { code, error: e });
-          }
+        try {
+          server.close(code, reason);
+        } catch (e) {
+          // The page may have closed its end first; a socket still open that will not close is news.
+          if (server.readyState === WebSocket.READY_STATE_OPEN) log.warn('room.queue', 'send_failed', 'A socket the line turned away could not be closed.', { code, error: e });
         }
         done();
       }
