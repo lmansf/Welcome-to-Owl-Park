@@ -35,6 +35,8 @@ export class FlapGame {
   flying = false;
   y = FIELD_H / 2;
   vy = 0;
+  /** Flaps so far: the owl's wings beat at each (OP-135). */
+  flaps = 0;
   score = 0;
   over = false;
   /** How the run ended: on a branch or on the ground. */
@@ -75,6 +77,7 @@ export class FlapGame {
     if (this.over) return;
     this.flying = true;
     this.vy = KICK;
+    this.flaps += 1;
   }
 
   advance(ms: number): void {

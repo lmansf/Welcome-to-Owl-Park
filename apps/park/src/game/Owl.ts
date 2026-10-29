@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, loadFlightArt, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
-import { AirTrack, WING_TURN, shadowFade, wingTurn } from './airTrack';
+import { AirTrack, WING_TURN, shadowFade, wingTurn, type WingBeat } from './airTrack';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { EYE_SPREAD, FEET, solidTop, wornAt } from './fit';
 import type { OwlFit } from './fitOverlay';
@@ -31,6 +31,19 @@ const WING = { root: { x: 12, y: 72 }, scale: 0.85, shoulder: 0.24, drop: 10, ea
 
 /** How long an owl waits before asking again for flight layers that failed to load (ms, OP-136). */
 const FLIGHT_ASK_MS = 2000;
+
+/**
+ * An owl held aloft by a game (Moon Flap, OP-135) rather than by its own flight: its wings beat from
+ * `flapAt` (this page's ms) as `beat` says, then spread as in a glide; tumbling, they are raised as in
+ * a fall. It is drawn where the game puts it, with no height of its own.
+ */
+export interface Held {
+  flapAt: number;
+  beat?: WingBeat;
+  tumbling?: boolean;
+}
+const HELD_GLIDING: Air = { z: 0, vz: 0, s: GLIDING, f: 0 };
+const HELD_FALLING: Air = { z: 0, vz: 0, s: AIRBORNE, f: 0 };
 
 /** Asleep (OP-126): a breath this long, a 'z' this often, and the blink a waking owl gives. */
 const SLEEP = { breathMs: 1500, zEveryMs: 2600, zRiseMs: 700, zFadeMs: 1100, wakeBlinkMs: 150 };
@@ -117,6 +130,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private readonly flight = new AirTrack();
   /** Its air as last drawn: how high above the floor (room px), and on the ground, in the air or gliding. */
   private air: Air = ON_GROUND;
+  /** Held aloft by a game (OP-135); null, its own flight draws it. */
+  private held: Held | null = null;
   /** How high the owl is drawn above its feet right now (owl canvas units). */
   private lift = 0;
   /** The wings (OP-084): behind the body, a side for each shoulder; folded away on the ground. */
@@ -323,6 +338,14 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
    */
   fly(air: Air, at: number): void {
     this.flight.tell(air, at);
+  }
+
+  /**
+   * Held aloft by a game (Moon Flap, OP-135): drawn with its wings out over its flight body, as its own
+   * flight draws it, wherever the game places it. Null hands it back to its own flight.
+   */
+  holdAloft(held: Held | null): void {
+    this.held = held;
   }
 
   /** How high the owl is drawn above the floor right now, in room pixels (0 on the ground). */
@@ -561,8 +584,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     let shadow = 1;
     this.art.x = this.jitter;
 
-    // In the air (OP-084): carried on from the last state told, as every page does.
-    const air = this.flight.at(now);
+    // In the air (OP-084): carried on from the last state told, as every page does; or held there by a game (OP-135).
+    const held = this.held;
+    const air = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
     this.air = air;
     const flying = air.s !== GROUNDED;
 
@@ -589,7 +613,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.lift = air.z / (OWL_SCALE * this.size);
     const dt = this.drawnAt ? Math.min(0.1, Math.max(0, now - this.drawnAt) / 1000) : 0;
     this.drawnAt = now;
-    const wingPose = wingTurn(air, now - this.flight.flapAt);
+    const wingPose = held ? wingTurn(air, now - held.flapAt, held.beat) : wingTurn(air, now - this.flight.flapAt);
     // Wings out, the owl wears its flight body, its folded wings taken away (OP-136); until that has
     // loaded, its wings stay folded, so it never shows four.
     const flightSet = wingPose ? this.flightSet(now) : null;
