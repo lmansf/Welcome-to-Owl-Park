@@ -14,12 +14,14 @@ const KEY_STORE = 'owl-park:keepers-key';
 /** Further than this between two frames is a jump (room px): about an owl's width. */
 export const JUMP_PX = 60;
 const SHOWN = 5;
+/** How each thing the room said is listed: its welcome, the echo of a walk, and the owl moved to the room's spot (it could not follow, OP-138). */
+const SAID = { welcome: 'room', echo: 'walk', moved: 'moved' } as const;
 const FLASH_MS = 1200;
 const REDRAW_MS = 250;
 
 export interface PosOverlay {
-  /** The room says the own owl stands at `to` (its welcome), or walks from `from` to `to` (an echo). */
-  told(kind: 'welcome' | 'echo', to: Vec2, from?: Vec2): void;
+  /** The room says the own owl stands at `to` (its welcome), or walks from `from` to `to` (an echo); or the owl was moved from `from` to the room's `to`, the room unable to walk it over. */
+  told(kind: keyof typeof SAID, to: Vec2, from?: Vec2): void;
   /** The own owl as drawn this frame in `room`, at `now` (ms); going into another room is no jump. */
   frame(pos: Vec2, now: number, room: string): void;
   /** Jumps seen so far. */
@@ -93,14 +95,14 @@ export function mountPosOverlay(): PosOverlay {
   panel.setAttribute('aria-hidden', 'true');
   document.head.append(style);
   document.body.append(panel);
-  const said: Array<{ kind: string; to: Vec2; from?: Vec2; at: number }> = [];
+  const said: Array<{ kind: keyof typeof SAID; to: Vec2; from?: Vec2; at: number }> = [];
   const watch = jumpWatch();
   let flashUntil = 0;
   let drawnAt = 0;
   let here: Vec2 = { x: 0, y: 0 };
   const draw = (now: number) => {
     drawnAt = now;
-    const lines = [`owl  ${xy(here)}`, `jumps ${watch.count}`, ...said.map((s) => `${s.kind === 'welcome' ? 'room' : 'walk'} ${s.from ? `${xy(s.from)} > ` : ''}${xy(s.to)}  ${((now - s.at) / 1000).toFixed(1)}s`)];
+    const lines = [`owl  ${xy(here)}`, `jumps ${watch.count}`, ...said.map((s) => `${SAID[s.kind]} ${s.from ? `${xy(s.from)} > ` : ''}${xy(s.to)}  ${((now - s.at) / 1000).toFixed(1)}s`)];
     panel.textContent = lines.join('\n');
     panel.classList.toggle('jumped', now < flashUntil);
   };

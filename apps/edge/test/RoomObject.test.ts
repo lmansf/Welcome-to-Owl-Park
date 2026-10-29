@@ -28,6 +28,7 @@ import {
   type PortraitLook,
   type RunResult,
   type ServerFrame,
+  type Vec2,
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
 
@@ -46,6 +47,7 @@ vi.mock('cloudflare:workers', () => ({
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
 const { RoomObject } = await import('../src/RoomObject');
+const { LIMITS } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
 const MON = Date.UTC(2026, 9, 19, 16, 0, 0);
@@ -638,6 +640,59 @@ class KeepingState extends FakeState {
     setAlarm: async () => undefined,
   };
 }
+
+describe('an owl back from a dropped connection (OP-138)', () => {
+  /** A page's hello from where its owl stands now. */
+  const helloAt = (obj: Obj, ws: FakeSocket, pos: Vec2) => send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos });
+  const lost = async (obj: Obj, ws: FakeSocket) => {
+    ws.close(1006, 'network gone');
+    await obj.webSocketClose(ws as unknown as WebSocket);
+  };
+
+  it('resumes where its owl walked on to, though its empty nest was let go meanwhile', async () => {
+    const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
+    const room = `nest-${nestId}`;
+    const obj = roomObject();
+    const owner = await join(obj, room, 'v_owner', OWNER);
+    await send(obj, owner, { t: 'move', to: { x: 1250, y: 800 }, seq: 1 });
+    clock += 5_000;
+    await lost(obj, owner);
+    expect((obj as unknown as { rooms: Map<string, unknown> }).rooms.has(room)).toBe(false);
+    // Back two seconds on, a little further along: there, not by the door.
+    clock += 2_000;
+    const back = connect(room, 'v_owner', OWNER);
+    await helloAt(obj, back, { x: 1300, y: 800 });
+    await settle();
+    expect(back.last('welcome')?.you.pos).toEqual({ x: 1300, y: 800 });
+  });
+
+  it('resumes where its owl walked on to, though the room object slept meanwhile, and keeps only the last two minutes', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a');
+    const b = await join(obj, 'hub', 'v_b');
+    await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    clock += 6_000;
+    await lost(obj, a);
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock } } });
+    // The object sleeps with the other owl's socket open, and wakes on the same storage.
+    clock += 2_000;
+    const woken = roomObject();
+    await settle(); // the constructor reads its storage
+    const back = connect('hub', 'v_a');
+    await helloAt(woken, back, { x: 3300, y: 780 });
+    expect(back.last('welcome')?.you.pos).toEqual({ x: 3300, y: 780 });
+    expect(b.last('enter')?.owl).toMatchObject({ id: 'v_a', pos: { x: 3300, y: 780 } });
+    // An owl gone longer than the room remembers is let in by the door like any other.
+    await lost(woken, back);
+    clock += LIMITS.leaverMemoryMs + 1;
+    await lost(woken, b);
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_b: { pos: expect.any(Object), leftAt: clock } } });
+    const late = connect('hub', 'v_a');
+    await helloAt(roomObject(), late, { x: 3300, y: 780 });
+    expect(late.last('welcome')?.you.pos).not.toEqual({ x: 3300, y: 780 });
+  });
+});
 
 describe('the realms switch (the stained-glass climb)', () => {
   const tell = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));

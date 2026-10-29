@@ -705,9 +705,12 @@ export class RoomScene extends Phaser.Scene {
   /**
    * The room let the own owl in at `roomHas` (its welcome, on joining and on every reconnect): where
    * the owl stood as the page joined, or another spot when that one was taken or the room would not
-   * have it there. The owl never jumps to it (OP-138). Still standing where it came in, it walks over
+   * have it there. The owl does not jump to it (OP-138). Still standing where it came in, it walks over
    * if that is a step aside; otherwise it stays where its visitor put it, walking on where it was
-   * going, and the room is told, so the room's copy walks over to it.
+   * going, and the room is told, so the room's copy walks over to it. Only when the room's copy cannot
+   * walk straight over (a wall, a plinth or a gap between: the room forgot the owl, or it came back
+   * further than it could have walked) does the owl go to the room's spot, faded in there as an owl
+   * arriving is; told instead, the room's copy would stop short and pull the owl after it.
    *
    * TODO-DOCS (OP-138): docs/ARCHITECTURE.md's client rules: a welcome never moves the local owl (it
    * walks over a step aside or the room is told where it is), and a page back from a dropped
@@ -718,12 +721,31 @@ export class RoomScene extends Phaser.Scene {
     this.roomHas = null;
     if (!at) return;
     const target = this.me.walk?.to;
+    if (distance(at, this.me.pos) >= 3 && !this.roomCanFollow(at)) {
+      this.moveTo(at);
+      if (target) this.walkTo(target, this.keyWalk);
+      return;
+    }
     if (target && this.walkTo(target, this.keyWalk)) return;
     const off = distance(at, this.me.pos);
     if (off < 3) return;
     const untouched = !this.me.walk && distance(this.me.pos, this.arrivedAt) < 3;
     if (untouched && off <= STEP_ASIDE_PX && this.walkTo(at)) return;
     this.stop();
+  }
+
+  /** Whether the room's copy of the own owl, at `from`, can walk straight to where the owl is. */
+  private roomCanFollow(from: Vec2): boolean {
+    return distance(resolveTarget(from, this.me.pos, this.room.walkable, this.shutFloor()), this.me.pos) < 3;
+  }
+
+  /** The own owl to where the room has it, faded in there: the one move of it that is not a walk (OP-138). */
+  private moveTo(at: Vec2): void {
+    this.posOverlay?.told('moved', at, this.me.pos);
+    this.me.place(at);
+    this.me.setAlpha(0);
+    this.tweens.add({ targets: this.me, alpha: 1, duration: 200 });
+    this.conn?.track(this.snapshot());
   }
 
   private onStatus(s: ConnectionStatus): void {

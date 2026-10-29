@@ -268,6 +268,45 @@ describe('Room', () => {
     expect(LIMITS.resumeRadius + WALK_SPEED * 0.1).toBeLessThan(450);
   });
 
+  it('hands over where owls left lately, and a room made again from them lets one back resume there (OP-138)', () => {
+    for (const [id, x] of [['a', 1450], ['b', 300], ['c', 1400]] as const) {
+      room.join(new FakePeer(), id, hello());
+      room.move(id, { t: 'move', to: { x, y: 850 }, seq: 1 });
+    }
+    now += 60_000;
+    room.leave('a');
+    now += 30_000;
+    room.leave('b');
+    // Only the window's leavers, as copies: 'a' falls out of it, 'c' never left.
+    now += LIMITS.leaverMemoryMs - 30_000 + 1;
+    const kept = room.leaversNow();
+    expect(kept).toEqual({ b: { pos: { x: 300, y: 850 }, leftAt: now - LIMITS.leaverMemoryMs + 29_999 } });
+    kept['b']!.pos.x = 0;
+    expect(room.leaversNow()['b']!.pos.x).toBe(300);
+    // A room made again (an empty nest let go, the object woken) knows them from what was kept.
+    const again = new Room(def, { now: () => now, random: () => 0.5, cap: 3 });
+    again.join(new FakePeer(), 'c', hello());
+    again.restoreLeavers({
+      ...room.leaversNow(),
+      c: { pos: { x: 1400, y: 850 }, leftAt: now - 1_000 }, // in the room now: its own counts
+      d: { pos: { x: 1400, y: 850 }, leftAt: now - LIMITS.leaverMemoryMs - 1 }, // too long ago
+    });
+    expect(Object.keys(again.leaversNow())).toEqual(['b']);
+    // The newer of two records stands, whichever side has it.
+    again.restoreLeavers({ b: { pos: { x: 900, y: 850 }, leftAt: now - 100_000 } });
+    expect(again.leaversNow()['b']!.pos).toEqual({ x: 300, y: 850 });
+    again.restoreLeavers({ b: { pos: { x: 280, y: 850 }, leftAt: now - 80_000 } });
+    expect(again.leaversNow()['b']!.pos).toEqual({ x: 280, y: 850 });
+    const back = new FakePeer();
+    again.join(back, 'b', hello({ pos: { x: 320, y: 840 } }));
+    expect(back.last('welcome')!.you.pos).toEqual({ x: 320, y: 840 });
+    expect(again.leaversNow()).toEqual({});
+    // Without them it would have been a stranger far from the spawn.
+    const stranger = new FakePeer();
+    new Room(def, { now: () => now, random: () => 0.5, cap: 3 }).join(stranger, 'b', hello({ pos: { x: 320, y: 840 } }));
+    expect(stranger.last('welcome')!.you.pos).not.toEqual({ x: 320, y: 840 });
+  });
+
   it('does not honour a resume position far from the spawn for a stranger', () => {
     const a = new FakePeer();
     room.join(a, 'a', hello({ pos: { x: 1400, y: 850 } }));

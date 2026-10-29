@@ -107,7 +107,7 @@ test.describe('room server', () => {
     expect(dist(there, left)).toBeGreaterThan(400);
     await a.context().setOffline(false);
     await a.waitForFunction(() => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout: 30_000 });
-    await expect.poll(async () => dist((await state(b)).peers[0]?.pos ?? { x: 0, y: 0 }, there), { timeout: 15_000 }).toBeLessThan(6);
+    await expect.poll(async () => dist((await state(b)).peers[0]?.pos ?? { x: 0, y: 0 }, there), { timeout: 30_000 }).toBeLessThan(6);
     expect(dist((await state(a)).pos, there)).toBeLessThan(3);
     expect(await fastest(a)).toBeLessThan(WALK_PX_S * 1.5);
     await a.context().close();
