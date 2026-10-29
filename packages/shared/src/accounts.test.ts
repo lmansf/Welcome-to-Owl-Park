@@ -32,8 +32,15 @@ describe('accounts without passwords (OP-139)', () => {
     }
   });
 
+  it('takes an email of 254 characters, the most an address may have, and none longer (OP-131)', () => {
+    const longest = `${'a'.repeat(64)}@${'b'.repeat(61)}.${'c'.repeat(61)}.${'d'.repeat(61)}.com`;
+    expect(longest).toHaveLength(254);
+    expect(normalEmail(longest)).toBe(longest);
+    expect(normalEmail(`${'a'.repeat(64)}@${'b'.repeat(62)}.${'c'.repeat(61)}.${'d'.repeat(61)}.com`)).toBeNull();
+  });
+
   it('knows a device id', () => {
     expect(isDeviceId('d_abcDEF1234')).toBe(true);
-    expect(['d_short', 'x_abcDEF1234', 'd_abcDEF12345', null].some(isDeviceId)).toBe(false);
+    expect(['d_short', 'x_abcDEF1234', 'd_abcDEF12345', 'xd_abcDEF1234', null].some(isDeviceId)).toBe(false);
   });
 });

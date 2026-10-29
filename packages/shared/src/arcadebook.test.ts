@@ -163,6 +163,17 @@ describe('the arcade’s book', () => {
     expect(arcade.finish('c_a', result, 9, look('#111111'), T0 + leastRunMs(result))).toMatchObject({ ok: true });
   });
 
+  it('takes a run that ends at its limit, and an equal score as no new best and no day’s best (OP-131)', () => {
+    const { arcade } = setup();
+    arcade.start('c_a', 'flight', 7, T0);
+    expect(arcade.finish('c_a', { game: 'flight', score: 0 }, 7, look('#111111'), T0 + RUN_MAX_MS)).toMatchObject({ ok: true });
+    ran(arcade, 'c_b', { game: 'crossing', score: 6 }, T0 + 1_000, '#222222');
+    ran(arcade, 'c_a', { game: 'crossing', score: 4 }, T0 + 2_000);
+    // Equal to its own best: no new best. Equal to the day's best, another owl's: a new best of its own, no bonus.
+    expect(ran(arcade, 'c_a', { game: 'crossing', score: 4 }, T0 + 3_000).paid).toMatchObject({ best: false, top: false, added: runFeathers('crossing', 4) });
+    expect(ran(arcade, 'c_a', { game: 'crossing', score: 6 }, T0 + 4_000).paid).toMatchObject({ best: true, top: false, added: runFeathers('crossing', 6) });
+  });
+
   it('keeps the runs under way in its snapshot, so the local mode’s next call still has them', () => {
     const { scores, arcade } = setup();
     arcade.start('c_a', 'sling', 12, T0);

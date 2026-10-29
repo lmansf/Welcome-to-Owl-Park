@@ -105,6 +105,10 @@ describe('the arcade’s games', () => {
     expect(plausibleRun({ game: 'flight', score: 0 }, 0)).toBe(true);
     // Too long: a run left open is forgotten.
     expect(plausibleRun({ game: 'flight', score: 0 }, RUN_MAX_MS + 1)).toBe(false);
+    // On each edge exactly (OP-131): a second of slack, as long as the limit, and no time before it began.
+    expect(plausibleRun(hop, leastRunMs(hop) - 1000)).toBe(true);
+    expect(plausibleRun({ game: 'flight', score: 0 }, RUN_MAX_MS)).toBe(true);
+    expect(plausibleRun({ game: 'flight', score: 0 }, -1)).toBe(false);
   });
 
   it('refuses a result that cannot be', () => {
@@ -118,6 +122,7 @@ describe('the arcade’s games', () => {
     expect(plausibleRun({ game: 'sling', score: 31, shots: 15 }, 600_000)).toBe(false);
     expect(plausibleRun({ game: 'sling', score: 30, shots: 15 }, 600_000)).toBe(true);
     expect(plausibleRun({ game: 'sling', score: 0, shots: KNOCK_LEVELS * KNOCK_SHOTS + 1 }, 600_000)).toBe(false);
+    expect(plausibleRun({ game: 'sling', score: 0, shots: -1 }, 600_000)).toBe(false);
     expect(plausibleRun({ game: 'sling', score: 3, shots: 1 }, 300)).toBe(true);
     expect(plausibleRun({ game: 'sling', score: 6, shots: 4 }, 2_000)).toBe(false);
   });
