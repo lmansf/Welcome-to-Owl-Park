@@ -36,6 +36,8 @@ function answer(op, variables) {
   switch (op) {
     case 'OwlParkOrder':
       return { order: orders.get(id) ?? null };
+    case 'OwlParkOrderEmail':
+      return { order: orders.has(id) ? { email: orders.get(id).email ?? null } : null };
     case 'OwlParkFulfillmentOrders': {
       const order = orders.get(id);
       if (!order) return { order: null };

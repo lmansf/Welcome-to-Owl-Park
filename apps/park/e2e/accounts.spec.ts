@@ -1,4 +1,5 @@
-import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
+import { createHmac } from 'node:crypto';
+import { expect, test, type APIRequestContext, type Browser, type Locator, type Page } from '@playwright/test';
 import { E2E_STORE, openPark, state } from './helpers';
 
 /**
@@ -43,10 +44,18 @@ async function mailTo(page: Page, email: string): Promise<Mail> {
 }
 
 /** The link in a mail, opened on this page with the room server's transport (the live park's build uses it by default). */
-async function openLink(page: Page, mail: Mail, kind: 'protect' | 'restore'): Promise<void> {
+async function openLink(page: Page, mail: Mail, kind: 'protect' | 'restore', params: Record<string, string> = {}): Promise<void> {
   const token = new RegExp(`#${kind}=([A-Za-z0-9_.-]+)`).exec(mail.text)?.[1];
   expect(token, mail.text).toBeTruthy();
-  await page.goto(`/?transport=edge&room=hub#${kind}=${token}`);
+  await page.goto(`/?${new URLSearchParams({ transport: 'edge', room: 'hub', ...params }).toString()}#${kind}=${token}`);
+}
+
+/** A tap on an owl's picture: the page starts again holding that owl, and is in the park again. */
+async function pick(page: Page, code: string): Promise<void> {
+  const owl = page.locator(`.modal.account [data-owl="${code}"]`);
+  await expect(owl).toBeVisible({ timeout: 15_000 });
+  await Promise.all([page.waitForEvent('load', { timeout: 30_000 }), owl.click()]);
+  await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
 }
 
 /** A grown-up types an email in the open account box and sends the link. */
@@ -85,15 +94,16 @@ test.describe('accounts without passwords (OP-139)', () => {
   });
 
   test('another screen brings the owl over by a link and a tap; the first screen is told it moved, and can take it back', async ({ browser }) => {
-    // Phone A: an owl, protected by the family's email.
-    const phone = await screen(browser, { look: '#2F3E5C,#E0D4F0,#FF2AA1' });
+    // Phone A: an owl in its own colours, protected by the family's email.
+    const LOOK = { look: '#2F3E5C,#E0D4F0,#FF2AA1' };
+    const phone = await screen(browser, LOOK);
     const code = await friendCodeOf(phone);
     await phone.getByRole('dialog', { name: 'Menu' }).locator('[data-protect]').click();
     const email = freshEmail('family');
     await sendLink(phone, email);
-    await openLink(phone, await mailTo(phone, email), 'protect');
+    await openLink(phone, await mailTo(phone, email), 'protect', LOOK);
     await expect(phone.getByText('This owl is protected now.')).toBeVisible({ timeout: 15_000 });
-    await openPark(phone, { transport: 'edge' });
+    await openPark(phone, { transport: 'edge', ...LOOK });
 
     // Tablet B, from its home screen: I already have an owl, the family's email, the link, the owl's picture.
     const tabletCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -105,11 +115,8 @@ test.describe('accounts without passwords (OP-139)', () => {
     const mail = await mailTo(tablet, email);
     expect(mail.subject).toBe('Bring your owl to this screen');
     await openLink(tablet, mail, 'restore');
-    const owl = tablet.locator(`.modal.account [data-owl="${code}"]`);
-    await expect(owl).toBeVisible({ timeout: 15_000 });
-    await owl.click();
     // The tablet starts again holding the owl: the same friend code, the same colours.
-    await tablet.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
+    await pick(tablet, code!);
     expect(await friendCodeOf(tablet)).toBe(code);
     expect((await state(tablet)).look.body).toBe('#2F3E5C');
 
@@ -121,8 +128,7 @@ test.describe('accounts without passwords (OP-139)', () => {
     await phone.locator('[data-moved-back]').click();
     await sendLink(phone, email);
     await openLink(phone, await mailTo(phone, email), 'restore');
-    await phone.locator(`.modal.account [data-owl="${code}"]`).click();
-    await phone.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
+    await pick(phone, code!);
     expect(await friendCodeOf(phone)).toBe(code);
     await expect(tablet.locator('[data-moved]')).toBeVisible({ timeout: 15_000 });
     await phone.context().close();
@@ -146,5 +152,32 @@ test.describe('accounts without passwords (OP-139)', () => {
     await expect(menu.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', before!);
     await expect(menu.locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
     await a.context().close();
+  });
+
+  test('the email on a ticket’s order protects the owl that claims the ticket, with no link to open', async ({ browser, request }) => {
+    // A free day ticket in the stand-in store, bought with the family's email; the store's webhook sends its claim link.
+    const order = String(Date.now() * 100 + 42);
+    const email = freshEmail('buyer');
+    const line = { id: 'gid://shopify/LineItem/1', quantity: 1, product: { productType: 'Ticket', kind: { value: 'day' }, hours: null, start: null, end: null } };
+    await request.post(`${E2E_STORE.origin}/test/orders`, { data: { id: order, order: { id: `gid://shopify/Order/${order}`, cancelledAt: null, email, totalPriceSet: { shopMoney: { amount: '0.0' } }, lineItems: { nodes: [line] } } } });
+    const hook = JSON.stringify({ id: Number(order), admin_graphql_api_id: `gid://shopify/Order/${order}` });
+    const sent = await request.post('/api/store/webhook', {
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Topic': 'orders/paid', 'X-Shopify-Hmac-Sha256': createHmac('sha256', E2E_STORE.webhookKey).update(hook).digest('base64'), 'X-Shopify-Shop-Domain': E2E_STORE.shop },
+      data: hook,
+    });
+    expect(sent.status(), await sent.text()).toBe(200);
+    const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string };
+    // The claim link opened on a new screen: the ticket lands, and the owl there is protected by the order's email.
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    const claimed = page.waitForResponse((r) => r.url().endsWith('/api/tickets/claim'));
+    await page.goto(`/?transport=edge&home=0${new URL(link).hash}`);
+    await expect(page.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 20_000 });
+    // The order stays with the room server: the page is told its tickets only.
+    expect(Object.keys((await (await claimed).json()) as object)).toEqual(['tickets']);
+    const token = await page.evaluate(() => localStorage.getItem('owl-park:collector'));
+    await expect
+      .poll(async () => ((await (await request.get('/api/pass', { headers: { 'X-Collector': token! } })).json()) as { account?: { protected: boolean } }).account?.protected, { timeout: 15_000 })
+      .toBe(true);
+    await page.context().close();
   });
 });

@@ -62,7 +62,9 @@ export default defineConfig({
       // The admin key lets the ticket tests issue tickets without a store, and the store is the
       // stand-in above; these settings exist only on this test server. The client is built with the
       // store's ticket page, which the booth offers while the gate takes tickets.
-      command: `VITE_TICKETS_URL=${E2E_STORE.ticketsUrl} pnpm build && pnpm --filter @owl-park/edge dev ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
+      // Each run starts the room server empty, as CI does: in a storage folder of its own, so what an
+      // earlier run (or `pnpm dev:edge`) left behind, such as the day's best scores, never decides a test.
+      command: `VITE_TICKETS_URL=${E2E_STORE.ticketsUrl} pnpm build && rm -rf ../edge/.wrangler/e2e && pnpm --filter @owl-park/edge dev --persist-to .wrangler/e2e ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
       url: 'http://localhost:8787/api/counts',
       reuseExistingServer: true,
       timeout: 180_000,

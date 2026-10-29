@@ -214,6 +214,12 @@ export class AccountBook {
     return stand === 'moved' ? stand : { dev: stand.dev, account: accountView(this.account(cid, now)) };
   }
 
+  /** A ticket's order email protects the owl that claimed it (no link: the store already knows the buyer's email). */
+  protectByOrder(cid: string, emailHash: string, emailSeal: string, now: number): Account {
+    this.protect(cid, emailHash, emailSeal, now);
+    return this.account(cid, now);
+  }
+
   /** A protect link for the owl, if the limits allow: its expiry (ms), or null. */
   protectLink(cid: string, emailHash: string, emailSeal: string, ipHash: string, nonce: string, now: number): number | null {
     if (!this.maySend(emailHash, ipHash, now)) return null;

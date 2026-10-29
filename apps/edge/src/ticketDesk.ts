@@ -150,7 +150,8 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       const secret = str(body['secret'], 64);
       if (!secret || !device) return bad();
       const r = await book.claim(secret, device);
-      return r ? json({ tickets: wallet(device) }) : json({ error: 'unknown link' }, 404);
+      // The order, for the Worker alone (OP-139: its email protects the owl that claimed it).
+      return r ? json({ tickets: wallet(device), order: r[0]?.order ?? null }) : json({ error: 'unknown link' }, 404);
     }
     case '/take': {
       const secret = str(body['secret'], 64);

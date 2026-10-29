@@ -372,6 +372,10 @@ export class Collections extends DurableObject<Env> {
     this.accounts.setLook(cid, look, Date.now());
   }
 
+  async accountProtectByOrder(cid: string, emailHash: string, emailSeal: string): Promise<void> {
+    this.accounts.protectByOrder(cid, emailHash, emailSeal, Date.now());
+  }
+
   async accountProtectLink(cid: string, emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<number | null> {
     return this.accounts.protectLink(cid, emailHash, emailSeal, ipHash, nonce, Date.now());
   }

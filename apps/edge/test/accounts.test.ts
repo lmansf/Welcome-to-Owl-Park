@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LINKS_PER_EMAIL_PER_HOUR, MAGIC_LINK_MS, isFriendCode } from '@owl-park/shared';
 import { AccountBook } from '../src/accountBook';
-import { accountRoute, accountsOn, emailKeys, keyed, mailSender, seal, unseal, type AccountDeps, type AccountRpc, type Mail } from '../src/accounts';
+import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal, unseal, type AccountDeps, type AccountRpc, type Mail } from '../src/accounts';
 import { mintCollector, mintLink, readCollector, verifyCollector, verifyLink, type PassPayload } from '../src/pass';
 import { sqlStorage } from './sqlite';
 
@@ -239,5 +239,33 @@ describe('accounts without passwords, the Worker’s half (OP-139)', () => {
     expect((calls[1]!.init.headers as Record<string, string>)['Authorization']).toBeUndefined();
     const failing = (async () => new Response('no', { status: 422 })) as unknown as typeof fetch;
     expect(await mailSender({ RESEND_API_KEY: 're_test', MAIL_FROM: 'owls@park.test' }, failing)!(mail)).toBe(false);
+  });
+
+  it('reads a ticket order’s email from the store, as the park keys it, and nothing when the store will not say', async () => {
+    const asked: string[] = [];
+    const store = (answer: unknown, status = 200) =>
+      (async (_url: string, init: RequestInit) => {
+        asked.push(JSON.parse(init.body as string).variables.id);
+        return new Response(JSON.stringify(answer), { status });
+      }) as unknown as typeof fetch;
+    const cfg = { shop: 'owl-test.myshopify.com', token: 'test-token' };
+    expect(await orderEmail(cfg, '1001', store({ data: { order: { email: ' Buyer@Example.com ' } } }))).toBe('buyer@example.com');
+    expect(asked).toEqual(['gid://shopify/Order/1001']);
+    expect(await orderEmail(cfg, '1002', store({ data: { order: { email: null } } }))).toBeNull();
+    expect(await orderEmail(cfg, '1003', store({ data: { order: null } }))).toBeNull();
+    // An app the store does not let read customers' emails: the owl stays as it was.
+    expect(await orderEmail(cfg, '1004', store({ errors: [{ message: 'Access denied for email field.' }] }))).toBeNull();
+    expect(await orderEmail(cfg, '1005', store({}, 503))).toBeNull();
+  });
+
+  it('protects the owl that claimed a ticket with its order’s email, beside any it already had', async () => {
+    const p = park();
+    const keys = (await emailKeys({ ACCOUNT_SECRET }))!;
+    const hash = await keyed(keys, 'e', 'buyer@example.com');
+    expect(p.book.protectByOrder('c_buyer0000000', hash, await seal(keys, 'buyer@example.com'), T0).protected).toBe(true);
+    expect(p.book.owlsOf(hash).map((a) => a.cid)).toEqual(['c_buyer0000000']);
+    // A sibling's owl claims the next order on the same email: both are the family's.
+    p.book.protectByOrder('c_sibling00000', hash, await seal(keys, 'buyer@example.com'), T0 + 1000);
+    expect(p.book.owlsOf(hash).map((a) => a.cid)).toEqual(['c_buyer0000000', 'c_sibling00000']);
   });
 });

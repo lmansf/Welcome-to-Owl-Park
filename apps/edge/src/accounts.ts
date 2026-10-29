@@ -21,6 +21,7 @@
 import { MAGIC_LINK_MS, isFriendCode, normalEmail, type OwlPicture } from '@owl-park/shared';
 import type { LinkKind, Protected, Restored } from './accountBook';
 import { mintCollector, mintLink, randomNonce, readCollector, verifyLink, type PassPayload } from './pass';
+import { adminQuery, type StoreConfig } from './storeApi';
 
 export interface AccountEnv {
   ACCOUNTS?: string;
@@ -102,6 +103,29 @@ export async function unseal(keys: EmailKeys, sealed: string): Promise<string | 
   try {
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12), additionalData: SEAL_AAD }, keys.seal, raw.slice(12));
     return new TextDecoder().decode(pt);
+  } catch {
+    return null;
+  }
+}
+
+// ---------- a ticket's order email ----------
+
+/** An order's email, which the store holds for every order (the buyer's). */
+export const ORDER_EMAIL_QUERY = `query OwlParkOrderEmail($id: ID!) {
+  order(id: $id) {
+    email
+  }
+}`;
+
+/**
+ * The email of a store order, as the park keys it: the buyer's, which protects the owl that claims the
+ * order's tickets. Null for none, and when the store will not say (an app not allowed to read
+ * customers' emails, or the store out of reach): the owl then simply stays as it was.
+ */
+export async function orderEmail(cfg: StoreConfig, order: string, fetchFn: typeof fetch = fetch): Promise<string | null> {
+  try {
+    const r = await adminQuery<{ order: { email?: string | null } | null }>(cfg, ORDER_EMAIL_QUERY, { id: `gid://shopify/Order/${order}` }, fetchFn);
+    return normalEmail(r.order?.email);
   } catch {
     return null;
   }

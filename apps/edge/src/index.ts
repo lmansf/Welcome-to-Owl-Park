@@ -6,7 +6,7 @@
  */
 import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type OwlAccount } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
-import { accountRoute, accountsOn, emailKeys, mailSender } from './accounts';
+import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
 import { copiesIn, copyObjectName, pickCopy, roomObjectNames } from './copies';
@@ -154,6 +154,23 @@ async function tellMoved(env: Env, cid: string, dev: string): Promise<void> {
         .catch(() => undefined),
     ),
   );
+}
+
+/**
+ * A ticket's order email protects the owl that claimed its tickets (OP-139, with ACCOUNTS on): the store
+ * says whose order it was, after the page has its answer. A ticket the park gave away has no order in
+ * the store, and an owl whose email the store will not tell stays as it was.
+ */
+async function protectByOrder(env: Env, cid: string, order: string): Promise<void> {
+  const keys = accountsOn(env) ? emailKeys(env) : null;
+  const store = storeConfig(env);
+  if (!keys || !store || order.startsWith('comp-')) return;
+  const email = await orderEmail(store, order);
+  if (!email) return;
+  const k = await keys;
+  await collections(env)
+    .accountProtectByOrder(cid, await keyed(k, 'e', email), await seal(k, email))
+    .catch(() => undefined);
 }
 
 /** The visit a call comes in, for the collection log (OP-107): its pass's id (one per page load) and the device's class. */
@@ -559,7 +576,13 @@ export default {
       }
       const body = request.method === 'POST' ? await readJson(request) : null;
       if (!body) return json({ error: 'bad request' }, 400);
-      if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') return reply(await desk(url.pathname.slice(4), { secret: body['secret'], device }));
+      if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') {
+        const { status, body: answer } = await desk(url.pathname.slice(4), { secret: body['secret'], device });
+        // The claimed order stays with the Worker: its email protects this owl (OP-139).
+        const { order, ...rest } = answer;
+        if (status === 200 && typeof order === 'string') ctx.waitUntil(protectByOrder(env, device, order));
+        return json(rest, status);
+      }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
       if (url.pathname === '/api/tickets/pass') {
         // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
