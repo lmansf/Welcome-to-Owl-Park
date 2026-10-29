@@ -23,6 +23,7 @@ import {
   positionAlongWalk,
   resolveTarget,
   distance,
+  WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
   CLOSE,
   type ClientHello,
@@ -118,10 +119,16 @@ export const LIMITS = {
   reachSlackPx: REACH_SLACK,
 } as const;
 
+/** Where an owl left a room, and when: one back soon resumes near there (OP-138). */
+export interface Leaver {
+  pos: Vec2;
+  leftAt: number;
+}
+
 export class Room {
   readonly def: RoomDef;
   private readonly visitors = new Map<string, Visitor>();
-  private readonly leavers = new Map<string, { pos: Vec2; leftAt: number }>();
+  private readonly leavers = new Map<string, Leaver>();
   private readonly opts: RoomOptions;
   /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
   private readonly objects = new Map<string, number>();
@@ -250,7 +257,10 @@ export class Room {
     if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !inExit(this.def, hello.pos)) {
       const recent = this.leavers.get(id);
       const nearSpawn = distance(hello.pos, spawn) <= LIMITS.resumeRadius;
-      const nearLeave = recent !== undefined && this.now() - recent.leftAt <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius;
+      // Back soon after it left: near where it left, or as far from there as it could have walked
+      // since (a page walks on while its connection is down, and comes back where its owl is, OP-138).
+      const away = recent === undefined ? Infinity : this.now() - recent.leftAt;
+      const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius + (WALK_SPEED * away) / 1000;
       if ((nearSpawn || nearLeave) && !this.occupied(hello.pos)) pos = hello.pos;
     }
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
@@ -282,6 +292,27 @@ export class Room {
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
     this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0 });
+  }
+
+  /**
+   * The owls that left within the memory window, for the room object to keep past this room: an empty
+   * nest is let go, and the object itself sleeps once no socket is left (OP-138).
+   */
+  leaversNow(): Record<string, Leaver> {
+    const now = this.now();
+    const out: Record<string, Leaver> = {};
+    for (const [id, l] of this.leavers) if (now - l.leftAt <= LIMITS.leaverMemoryMs) out[id] = { pos: { ...l.pos }, leftAt: l.leftAt };
+    return out;
+  }
+
+  /** Owls that left lately as the room object kept them: an owl in the room now, or one this room saw leave later, keeps its own. */
+  restoreLeavers(kept: Record<string, Leaver>): void {
+    const now = this.now();
+    for (const [id, l] of Object.entries(kept)) {
+      if (this.visitors.has(id) || now - l.leftAt > LIMITS.leaverMemoryMs) continue;
+      const mine = this.leavers.get(id);
+      if (!mine || mine.leftAt < l.leftAt) this.leavers.set(id, { pos: { ...l.pos }, leftAt: l.leftAt });
+    }
   }
 
   /** Which session currently owns a visitor id (used by the adapter to ignore stale closes). */

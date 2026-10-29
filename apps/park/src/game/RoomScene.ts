@@ -88,6 +88,7 @@ import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
+import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
 import { GATED_ROOMS, NEST_MIRROR, ROOMS, getRoom } from '../rooms';
@@ -141,6 +142,12 @@ const AIR_SEND_BURST = AIR_BURST - 2;
 const AIR_SEND_PER_S = AIR_REFILL_PER_S - 1;
 /** Back from a hidden tab, the flight catches up this much at most (a flight is down well within it). */
 const FLIGHT_CATCH_UP_MS = 10_000;
+/**
+ * An owl still standing where it came in walks over to where the room puts it, this far at most (the
+ * room spreads arrivals so owls coming in together do not stand in one spot); any other owl keeps its
+ * place and the room is told (OP-138).
+ */
+const STEP_ASIDE_PX = 240;
 
 const sameWalk = (a: Walk, b: Walk): boolean => a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
 /** Ask again after a failed pickup this long later (the owl may still be walking up). */
@@ -284,6 +291,12 @@ export class RoomScene extends Phaser.Scene {
   /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
   private flown = { n: 0, peak: 0, glided: false, ms: 0 };
   private flownFrom = 0;
+  /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
+  private roomHas: Vec2 | null = null;
+  /** Where the owl came into this room. */
+  private arrivedAt: Vec2 = { x: 0, y: 0 };
+  /** The position overlay (OP-138, `?pos=1`), once the keepers' key checks out. */
+  private posOverlay: PosOverlay | null = null;
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
@@ -335,6 +348,8 @@ export class RoomScene extends Phaser.Scene {
     this.peers = new Map();
     this.built = false;
     this.conn = null;
+    this.roomHas = null;
+    this.posOverlay = null;
     this.leaving = false;
     this.atIdol = false;
     this.passingGate = false;
@@ -518,6 +533,19 @@ export class RoomScene extends Phaser.Scene {
 
     const spawn = arrivalPoint(room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
+    this.arrivedAt = { ...spawn };
+    if (this.cfg.pos && this.transport.kind === 'edge') {
+      // Asked for once a tab; every room after shows it at once.
+      let overlay = this.registry.get('posOverlay') as Promise<PosOverlay | null> | undefined;
+      if (!overlay) {
+        overlay = openPosOverlay(this.cfg.edgeUrl);
+        this.registry.set('posOverlay', overlay);
+      }
+      const gen = this.gen;
+      void overlay.then((o) => {
+        if (gen === this.gen) this.posOverlay = o;
+      });
+    }
     // Come in to stand before the mirror (Play, OP-105), the owl faces it.
     if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
     this.addResidents();
@@ -575,6 +603,7 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     this.fly(now);
     const finished = this.me.tick(now);
+    this.posOverlay?.frame(this.me.pos, now, this.room.id);
     if (!this.leaving) {
       this.steer();
       this.checkDoors(finished);
@@ -630,12 +659,13 @@ export class RoomScene extends Phaser.Scene {
       onStatus: (s) => live() && this.onStatus(s),
       onSelf: (pos) => {
         if (!live()) return;
-        // The server decided where we stand. A walk already under way restarts from there.
-        const target = this.me.walk?.to;
-        this.me.place(pos);
-        if (target) this.walkTo(target, this.keyWalk);
+        this.posOverlay?.told('welcome', pos);
+        this.roomHas = pos;
+        // On joining, the room is caught up once this page holds the connection (below).
+        if (this.conn) this.catchUpRoom();
       },
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
+      onSelfEcho: (from, to) => live() && this.posOverlay?.told('echo', to, from),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
       onPeerRest: (id, asleep) => live() && this.peers.get(id)?.setAsleep(asleep, this.calm()),
       onPeerAir: (id, air, at) => live() && this.peers.get(id)?.fly(air, this.peerTime(at)),
@@ -665,6 +695,7 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     this.conn = conn;
+    this.catchUpRoom();
     this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
@@ -673,6 +704,52 @@ export class RoomScene extends Phaser.Scene {
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
+  }
+
+  /**
+   * The room let the own owl in at `roomHas` (its welcome, on joining and on every reconnect): where
+   * the owl stood as the page joined, or another spot when that one was taken or the room would not
+   * have it there. The owl does not jump to it (OP-138). Still standing where it came in, it walks over
+   * if that is a step aside; otherwise it stays where its visitor put it, walking on where it was
+   * going, and the room is told, so the room's copy walks over to it. Only when the room's copy cannot
+   * walk straight over (a wall, a plinth or a gap between: the room forgot the owl, or it came back
+   * further than it could have walked) does the owl go to the room's spot, faded in there as an owl
+   * arriving is; told instead, the room's copy would stop short and pull the owl after it.
+   *
+   * TODO-DOCS (OP-138): docs/ARCHITECTURE.md's client rules: a welcome never moves the local owl (it
+   * walks over a step aside or the room is told where it is), and a page back from a dropped
+   * connection resumes as far from where it left as its owl could have walked since.
+   */
+  private catchUpRoom(): void {
+    const at = this.roomHas;
+    this.roomHas = null;
+    if (!at) return;
+    const target = this.me.walk?.to;
+    if (distance(at, this.me.pos) >= 3 && !this.roomCanFollow(at)) {
+      this.moveTo(at);
+      if (target) this.walkTo(target, this.keyWalk);
+      return;
+    }
+    if (target && this.walkTo(target, this.keyWalk)) return;
+    const off = distance(at, this.me.pos);
+    if (off < 3) return;
+    const untouched = !this.me.walk && distance(this.me.pos, this.arrivedAt) < 3;
+    if (untouched && off <= STEP_ASIDE_PX && this.walkTo(at)) return;
+    this.stop();
+  }
+
+  /** Whether the room's copy of the own owl, at `from`, can walk straight to where the owl is. */
+  private roomCanFollow(from: Vec2): boolean {
+    return distance(resolveTarget(from, this.me.pos, this.room.walkable, this.shutFloor()), this.me.pos) < 3;
+  }
+
+  /** The own owl to where the room has it, faded in there: the one move of it that is not a walk (OP-138). */
+  private moveTo(at: Vec2): void {
+    this.posOverlay?.told('moved', at, this.me.pos);
+    this.me.place(at);
+    this.me.setAlpha(0);
+    this.tweens.add({ targets: this.me, alpha: 1, duration: 200 });
+    this.conn?.track(this.snapshot());
   }
 
   private onStatus(s: ConnectionStatus): void {

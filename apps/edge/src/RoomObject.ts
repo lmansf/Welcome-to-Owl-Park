@@ -68,7 +68,7 @@ import {
 import type { Collections } from './Collections';
 import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectLog';
 import type { Sighting } from './parkStats';
-import { Room, type Peer, type VisitorState } from './Room';
+import { LIMITS, Room, type Leaver, type Peer, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
 import { isCollectorId } from './pass';
 import type { Env } from './env';
@@ -131,6 +131,29 @@ const QUIZ_KEY = 'quiz';
 const NOTICE_FRESH_MS = 60_000;
 /** Storage key for the realms switch as last heard (the stained-glass climb): a woken object starts from it, not from closed. */
 const REALMS_KEY = 'realms';
+/**
+ * Storage key for where owls left each room lately (room id -> owl id -> where and when), so an owl back
+ * from a dropped connection resumes where it was though its empty nest was let go or this object slept
+ * meanwhile (OP-138). Only the room's memory window is kept.
+ */
+const LEAVERS_KEY = 'leavers';
+/** The most owls kept there, the latest to leave first: the stored value stays small on a busy night. */
+const LEAVERS_KEPT = 500;
+
+/** Stored leavers as they should be: anything else is dropped. */
+function cleanLeavers(v: unknown): Record<string, Record<string, Leaver>> {
+  const out: Record<string, Record<string, Leaver>> = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const [room, owls] of Object.entries(v as Record<string, unknown>)) {
+    if (!owls || typeof owls !== 'object') continue;
+    for (const [id, l] of Object.entries(owls as Record<string, unknown>)) {
+      const { pos, leftAt } = (l ?? {}) as Partial<Leaver>;
+      if (typeof leftAt !== 'number' || typeof pos?.x !== 'number' || typeof pos.y !== 'number') continue;
+      (out[room] ??= {})[id] = { pos: { x: pos.x, y: pos.y }, leftAt };
+    }
+  }
+  return out;
+}
 /** The phrase a closed realm's door shows when none is set on it. */
 const REALM_CLOSED_SIGN = 'Pardon Our Feathers';
 
@@ -201,6 +224,8 @@ export class RoomObject extends DurableObject<Env> {
   /** The player stats are kept only while the analytics log is set up (OP-111): without it, no calls for them. */
   private readonly statsOn: boolean;
   private noticeAt = 0;
+  /** Where owls left each room lately, kept past the rooms themselves (OP-138). */
+  private readonly leftBehind = new Map<string, Record<string, Leaver>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -233,6 +258,12 @@ export class RoomObject extends DurableObject<Env> {
       // The realms switch as last heard, so a wake from hibernation does not close an open realm.
       const realms = await ctx.storage.get<unknown>(REALMS_KEY);
       if (realms) this.realms = cleanRealms(realms);
+      // Where owls left lately, so one back from a dropped connection resumes where it was (OP-138).
+      for (const [id, kept] of Object.entries(cleanLeavers(await ctx.storage.get<unknown>(LEAVERS_KEY)))) {
+        if (!roomDef(id)) continue;
+        this.leftBehind.set(id, kept);
+        this.rooms.get(id)?.restoreLeavers(kept);
+      }
     });
   }
 
@@ -252,6 +283,8 @@ export class RoomObject extends DurableObject<Env> {
         counts: () => this.counts(),
       });
       this.rooms.set(id, r);
+      const kept = this.leftBehind.get(id);
+      if (kept) r.restoreLeavers(kept);
     }
     return r;
   }
@@ -440,6 +473,7 @@ export class RoomObject extends DurableObject<Env> {
       }
       case 'bye':
         room.leave(att.id, att.sid);
+        this.keepLeavers(att.room);
         this.acts.get(att.room)?.forget(att.id);
         ws.serializeAttachment({ ...att, state: null } satisfies Attachment);
         ws.close(1000, 'bye');
@@ -599,6 +633,24 @@ export class RoomObject extends DurableObject<Env> {
     } catch {
       refuse('offline');
     }
+  }
+
+  /**
+   * Keep where owls left a room past the room (an empty nest is let go below) and past this object's
+   * sleep, in storage: the room's memory window only (OP-138).
+   */
+  private keepLeavers(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    if (room) this.leftBehind.set(roomId, room.leaversNow());
+    const now = Date.now();
+    const fresh: Array<[string, string, Leaver]> = [];
+    for (const [id, kept] of this.leftBehind) for (const [owl, l] of Object.entries(kept)) if (now - l.leftAt <= LIMITS.leaverMemoryMs) fresh.push([id, owl, l]);
+    fresh.sort((a, b) => b[2].leftAt - a[2].leftAt);
+    const all: Record<string, Record<string, Leaver>> = {};
+    for (const [id, owl, l] of fresh.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
+    this.leftBehind.clear();
+    for (const [id, kept] of Object.entries(all)) this.leftBehind.set(id, kept);
+    void this.ctx.storage.put(LEAVERS_KEY, all);
   }
 
   /** A nest nobody is in or at the door of is let go: its room, and the view kept while owls were there. */
@@ -1058,8 +1110,10 @@ export class RoomObject extends DurableObject<Env> {
     if (att.state) {
       // Only the session that owns the visitor may remove it; a replaced socket's close is ignored.
       const room = this.rooms.get(att.room);
-      if (room?.sessionOf(att.id) === att.sid) this.acts.get(att.room)?.forget(att.id);
+      const owns = room?.sessionOf(att.id) === att.sid;
+      if (owns) this.acts.get(att.room)?.forget(att.id);
       room?.leave(att.id, att.sid);
+      if (owns) this.keepLeavers(att.room);
     }
     this.forget(att.room);
     this.emitCounts();

@@ -13,10 +13,12 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   /** A peer left the room or timed out. */
   onPeerLeave(id: string): void;
   onStatus(status: ConnectionStatus): void;
-  /** Authoritative transports place the local owl where the server put it. */
+  /** Authoritative transports: where the room let the own owl in (its welcome, on joining and on every reconnect). */
   onSelf?(pos: Vec2): void;
   /** The server corrected one of our walks (clamped, or started from a different point). */
   onSelfWalk?(walk: Walk): void;
+  /** The room echoed one of our walks, as it walks it (the position overlay shows them, OP-138). */
+  onSelfEcho?(from: Vec2, to: Vec2): void;
   onPeerLook?(id: string, look: OwlLook): void;
   /** Park-wide room populations, when the transport knows them. */
   onCounts?(rooms: Record<string, number>): void;

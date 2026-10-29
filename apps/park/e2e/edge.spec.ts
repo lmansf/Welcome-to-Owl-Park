@@ -13,6 +13,31 @@ async function visitor(browser: Browser, params: Record<string, string> = {}, vi
   return page;
 }
 
+/** An owl's walking pace (room px a second, shared/walk.ts WALK_SPEED). */
+const WALK_PX_S = 260;
+
+/**
+ * From now on, the fastest the page's own owl moves between two frames it draws (room px a second):
+ * a walk keeps to its pace, a jump across the room is many times faster (OP-138). Read it with `fastest`.
+ */
+async function watchForJumps(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { fastest: number };
+    w.fastest = 0;
+    let last: { x: number; y: number; t: number } | null = null;
+    const look = () => {
+      const pos = window.owlPark.state()?.pos;
+      const t = performance.now();
+      if (pos && last && t > last.t) w.fastest = Math.max(w.fastest, (Math.hypot(pos.x - last.x, pos.y - last.y) * 1000) / (t - last.t));
+      if (pos) last = { ...pos, t };
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
+}
+
+const fastest = (page: Page) => page.evaluate(() => (window as unknown as { fastest: number }).fastest);
+
 test.describe('room server', () => {
   test('the page is never cached, so a deploy cannot leave it pointing at a bundle that is gone', async ({ request }) => {
     for (const path of ['/', '/index.html']) {
@@ -36,6 +61,77 @@ test.describe('room server', () => {
     expect(s.pos.y).toBeGreaterThan(560); // scattered onto the walkable floor
     await expect(a.getByText('1 owl here')).toBeVisible();
     await a.context().close();
+  });
+
+  test('an owl that walks off before its page has joined the room is not pulled back as it joins (OP-138)', async ({ browser }) => {
+    test.slow(); // two parks, one of them on a slow network
+    const b = await visitor(browser);
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // A slow network: the pass the room's socket waits on comes only once the owl has crossed the
+    // hub, so it joins further from where it came in (the hub's middle) than the room lets a
+    // newcomer start.
+    let passCame!: () => void;
+    const passHeld = new Promise<void>((r) => (passCame = r));
+    await a.route('**/api/pass**', async (route) => {
+      await passHeld;
+      await route.continue();
+    });
+    await a.goto('/?transport=edge&room=hub');
+    await a.waitForFunction(() => window.owlPark?.state() != null, null, { timeout: 30_000 });
+    expect((await state(a)).connected).toBe(false);
+    await watchForJumps(a);
+    const there = await walkAndStop(a, 3400, 780);
+    passCame();
+    await a.waitForFunction(() => window.owlPark.state()?.connected === true, null, { timeout: 30_000 });
+    // Where its visitor took it, never back at the door, and the other owl sees it there.
+    await expect.poll(async () => dist((await state(b)).peers[0]?.pos ?? { x: 0, y: 0 }, there), { timeout: 15_000 }).toBeLessThan(6);
+    expect(dist((await state(a)).pos, there)).toBeLessThan(3);
+    expect(await fastest(a)).toBeLessThan(WALK_PX_S * 1.5);
+    await a.context().close();
+    await b.context().close();
+  });
+
+  test('a page whose connection drops keeps its owl where it walks: back online it never jumps, and the other owl sees it there (OP-138)', async ({ browser }) => {
+    test.slow(); // two parks, and a reconnect
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    // Off to the east wing, far from where owls come into the hub, and seen there.
+    const left = await walkAndStop(a, 3800, 780);
+    await expect.poll(async () => dist((await state(b)).peers[0]!.pos, left), { timeout: 15_000 }).toBeLessThan(6);
+    await watchForJumps(a);
+    // The network goes and the owl walks on, further from where it left than the room lets a stranger come back.
+    await a.context().setOffline(true);
+    expect(await a.evaluate(() => window.owlPark.drop())).toBe(true);
+    const there = await walkAndStop(a, 3200, 780);
+    expect(dist(there, left)).toBeGreaterThan(400);
+    await a.context().setOffline(false);
+    await a.waitForFunction(() => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout: 30_000 });
+    await expect.poll(async () => dist((await state(b)).peers[0]?.pos ?? { x: 0, y: 0 }, there), { timeout: 30_000 }).toBeLessThan(6);
+    expect(dist((await state(a)).pos, there)).toBeLessThan(3);
+    expect(await fastest(a)).toBeLessThan(WALK_PX_S * 1.5);
+    await a.context().close();
+    await b.context().close();
+  });
+
+  test('the position overlay shows for the keepers’ key only, with the room’s echoes and no jump on a walk (OP-138)', async ({ browser, request }) => {
+    expect((await request.get('/api/admin/ping')).status()).toBe(403);
+    expect((await request.get('/api/admin/ping', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY } })).status()).toBe(200);
+    const stranger = await (await browser.newContext()).newPage();
+    stranger.on('dialog', (d) => void d.accept('not-the-keepers-key'));
+    await openPark(stranger, { transport: 'edge', pos: '1' });
+    await stranger.waitForTimeout(1_000);
+    await expect(stranger.locator('[data-pos-overlay]')).toHaveCount(0);
+    await stranger.context().close();
+    const keeper = await (await browser.newContext()).newPage();
+    keeper.on('dialog', (d) => void d.accept(E2E_ADMIN_KEY));
+    await openPark(keeper, { transport: 'edge', pos: '1' });
+    const overlay = keeper.locator('[data-pos-overlay]');
+    await expect(overlay).toContainText('jumps 0');
+    await walkAndStop(keeper, 3000, 780);
+    await expect(overlay).toContainText(/walk \d+,\d+ > \d+,\d+/);
+    await expect(overlay).toContainText('jumps 0');
+    await keeper.context().close();
   });
 
   test('two visitors in separate contexts see each other appear, walk, and leave', { tag: '@smoke' }, async ({ browser }) => {
