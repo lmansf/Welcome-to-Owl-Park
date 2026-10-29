@@ -10,7 +10,10 @@ import {
   type ClientFrame,
   type FeedbackDraft,
   type LineStatus,
+  type OwlAccount,
+  type OwlPicture,
   type OwlSnapshot,
+  type PortraitLook,
   type ParkMessage,
   type PlayerState,
   type QuestBoard,
@@ -24,7 +27,7 @@ import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, Qu
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { MoveBudget } from './budget';
-import { OPEN_ENTRY, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
+import { OPEN_ENTRY, type AccountConfirm, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -54,6 +57,15 @@ interface Pass {
   /** The front gate (`ticket` once the park takes tickets) and whether this pass goes through it. */
   gate?: 'open' | 'ticket';
   adm?: boolean;
+  /** The owl's account (OP-139), while the park has accounts on. */
+  account?: OwlAccount;
+}
+
+/** The park says this screen's owl is on another screen now (OP-139). */
+class MovedError extends Error {
+  constructor() {
+    super('the owl is on another screen');
+  }
 }
 
 function readCollector(): string | null {
@@ -112,6 +124,17 @@ export class EdgeTransport implements ParkTransport {
   /** The latest entry (OP-075): every room's welcome renews it, and the line gives one to an owl it calls. */
   private entryToken: string | null = readEntry();
 
+  /** This screen's owl is on another screen now (OP-139): no pass, no socket, until it is brought back. */
+  private moved = false;
+  private readonly movedCbs: Array<() => void> = [];
+
+  private markMoved(): void {
+    if (this.moved) return;
+    this.moved = true;
+    this.pass = null;
+    for (const cb of this.movedCbs) cb();
+  }
+
   private keepEntry(token: unknown): void {
     if (typeof token !== 'string' || !token) return;
     this.entryToken = token;
@@ -154,6 +177,10 @@ export class EdgeTransport implements ParkTransport {
     const tz = deviceTimeZone();
     const token = readCollector();
     const res = await fetch(`${this.base}/api/pass${tz ? `?tz=${encodeURIComponent(tz)}` : ''}`, { cache: 'no-store', headers: token ? { 'X-Collector': token } : {} });
+    if (res.status === 409) {
+      this.markMoved();
+      throw new MovedError();
+    }
     if (!res.ok) throw new Error(`pass refused (${res.status})`);
     this.pass = (await res.json()) as Pass;
     saveCollector(this.pass.collector);
@@ -211,6 +238,76 @@ export class EdgeTransport implements ParkTransport {
       const res = await this.api('/api/tickets/pass', { method: 'POST', body: JSON.stringify({ id }) });
       const body = res.ok ? ((await res.json()) as { url?: unknown }) : {};
       return typeof body.url === 'string' && body.url.startsWith('https://') ? body.url : null;
+    },
+  };
+
+  /**
+   * One account call (OP-139): with the pass, for this screen's own owl, or with only the collector
+   * token, which a screen whose owl has moved can still send. Null when the park cannot be reached.
+   */
+  private async accountPost(path: string, body: Record<string, unknown>, withPass: boolean): Promise<{ status: number; body: Record<string, unknown> } | null> {
+    try {
+      const init: RequestInit = { method: 'POST', body: JSON.stringify(body) };
+      const token = readCollector();
+      const res =
+        withPass && !this.moved
+          ? await this.api(`/api/account/${path}`, init)
+          : await fetch(`${this.base}/api/account/${path}`, { ...init, cache: 'no-store', headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Collector': token } : {}) } });
+      const answer = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      return { status: res.status, body: answer };
+    } catch {
+      return null;
+    }
+  }
+
+  readonly accounts: AccountLink = {
+    account: async () => {
+      try {
+        return (await this.getPass()).account ?? null;
+      } catch {
+        return null;
+      }
+    },
+    onMoved: (cb) => {
+      this.movedCbs.push(cb);
+      if (this.moved) queueMicrotask(cb);
+    },
+    send: async (kind, email) => {
+      const r = await this.accountPost(kind, { email }, kind === 'protect');
+      if (!r) return 'offline';
+      if (r.status === 200) return 'sent';
+      if (r.status === 400) return 'bad-email';
+      if (r.status === 429) return 'try-later';
+      return r.status === 401 ? 'offline' : 'not-ready';
+    },
+    confirm: async (token): Promise<AccountConfirm> => {
+      const r = await this.accountPost('confirm', { token }, true);
+      if (!r) return 'offline';
+      if (r.status === 200) {
+        const account = r.body['account'] as OwlAccount;
+        // This screen's own owl is protected now: its pass says so from here on.
+        if (r.body['mine'] === true && this.pass) this.pass = { ...this.pass, account };
+        return { account, look: (r.body['look'] as PortraitLook | null | undefined) ?? null, mine: r.body['mine'] === true };
+      }
+      if (r.status === 410) return 'gone';
+      return r.status === 401 ? 'no-owl' : 'offline';
+    },
+    owls: async (token) => {
+      const r = await this.accountPost('owls', { token }, false);
+      if (!r) return 'offline';
+      if (r.status === 200 && Array.isArray(r.body['owls'])) return r.body['owls'] as OwlPicture[];
+      return r.status === 410 ? 'gone' : 'offline';
+    },
+    bind: async (token, code) => {
+      const r = await this.accountPost('bind', { token, code }, false);
+      if (!r) return 'offline';
+      if (r.status === 200 && typeof r.body['collector'] === 'string') {
+        saveCollector(r.body['collector']);
+        this.pass = null;
+        return 'bound';
+      }
+      if (r.status === 410) return 'gone';
+      return r.status === 404 ? 'no-owl' : 'offline';
     },
   };
 
@@ -692,9 +789,10 @@ export class EdgeTransport implements ParkTransport {
       let pass: Pass;
       try {
         pass = await this.getPass(forcePass);
-      } catch {
+      } catch (e) {
         handlers.onStatus('offline');
-        scheduleReconnect();
+        // The owl is on another screen: the page shows the moved card, and nothing reconnects.
+        if (!(e instanceof MovedError)) scheduleReconnect();
         return;
       }
       if (closed) return;
@@ -734,6 +832,12 @@ export class EdgeTransport implements ParkTransport {
         if (ws === socket) ws = null;
         failWaiters();
         if (closed) return;
+        if (ev.code === CLOSE.MOVED) {
+          // Restored on another screen (OP-139): the page shows the moved card, and nothing reconnects.
+          this.markMoved();
+          handlers.onStatus('offline');
+          return;
+        }
         if (ev.code === CLOSE.QUEUED) {
           // The scene leaves for the line first, so going offline here tells nobody the park could not connect.
           handlers.onQueued?.();
