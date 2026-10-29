@@ -56,7 +56,11 @@
     // The park's calendar for the Realm Vote (one vote per person per park day).
     "PARK_TZ": "America/New_York",
     // Standings stay private until the owner decides otherwise; admin routes need: wrangler secret put ADMIN_KEY
-    "VOTE_TALLY_PUBLIC": "false"
+    "VOTE_TALLY_PUBLIC": "false",
+    // Accounts without passwords (OP-139): friend codes, one screen at a time, an owl protected by an
+    // email and restored by a magic link. "on" once the owner has set ACCOUNT_SECRET, RESEND_API_KEY and
+    // MAIL_FROM (secrets, below) and approved the words; "off" leaves every page as it was.
+    "ACCOUNTS": "off"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },
@@ -66,8 +70,8 @@
   // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
   // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
   // the same way once the store's app exists; until then the ticket webhooks are refused. So is
-  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062). All are typed as optional
-  // in src/env.ts.
+  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062), and the
+  // accounts' ACCOUNT_SECRET, RESEND_API_KEY and MAIL_FROM (OP-139). All are typed as optional in src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {
     "enabled": true,

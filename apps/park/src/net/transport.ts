@@ -1,4 +1,4 @@
-import type { Air, FeedbackDraft, LineStatus, OwlLook, ParkMessage, PlayerState, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
+import type { Air, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -80,6 +80,30 @@ export interface ParkTransport {
   readonly tickets?: TicketWallet;
   /** The line in front of the park on busy nights (OP-075); only the room server has one. */
   readonly line?: LineLink;
+  /** The owl's account (OP-139): only the room server keeps them, and only with ACCOUNTS on. */
+  readonly accounts?: AccountLink;
+}
+
+/** What sending a link to a grown-up's email came to. */
+export type AccountSend = 'sent' | 'bad-email' | 'try-later' | 'not-ready' | 'offline';
+
+/** A protect link opened: the owl it protects now (`mine`: this screen's own), or why not. */
+export type AccountConfirm = { account: OwlAccount; look: PortraitLook | null; mine: boolean } | 'gone' | 'no-owl' | 'offline';
+
+/** The owl's account (OP-139), as the page uses it. */
+export interface AccountLink {
+  /** The owl's account, as its pass said; null while accounts are off or the park is out of reach. */
+  account(): Promise<OwlAccount | null>;
+  /** Called once this screen's owl turns out to be on another screen now (at once, if it already has). */
+  onMoved(cb: () => void): void;
+  /** A link to this email: one that protects this screen's owl, or one that brings an owl it protects to this screen. */
+  send(kind: 'protect' | 'restore', email: string): Promise<AccountSend>;
+  /** A protect link opened on this screen. */
+  confirm(token: string): Promise<AccountConfirm>;
+  /** A restore link's owls, as pictures to tap; the link stays good. */
+  owls(token: string): Promise<OwlPicture[] | 'gone' | 'offline'>;
+  /** The tap: this screen holds that owl from now on (the page starts again with it). */
+  bind(token: string, code: string): Promise<'bound' | 'gone' | 'no-owl' | 'offline'>;
 }
 
 /** The line in front of the park (OP-075), as the home screen uses it. */

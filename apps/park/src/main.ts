@@ -12,9 +12,10 @@ import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
 import { NEST_FADE_MS, NEST_SPAWN, RoomScene, type RoomStart } from './game/RoomScene';
-import { holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
+import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
+import { readAccountLink, withoutAccountLink } from './net/accountLinks';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
 import { createHud } from './ui/hud';
@@ -444,6 +445,7 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   },
   play: () => startPlay(),
   settings: (opener) => hud.openSettings(opener),
+  restore: (opener) => accountScreens?.openEmail('restore', opener),
   stage: (frame) => {
     if (atHome && loggedIn && !hud.isBlocking()) drawOwl(frame, false);
   },
@@ -485,6 +487,41 @@ hud.attachQuests(quests, {
 }, tasks);
 // Feedback goes to the park's keepers through the room server (kept in this browser without one).
 hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
+
+// Accounts (OP-139, with the park's ACCOUNTS on): the Menu's friend code and Protect this owl, the
+// home screen's I already have an owl, the links the park's mail carries, and the card a screen gets
+// when its owl was brought back on another one.
+const accounts = transport.accounts;
+const accountScreens = accounts
+  ? hud.attachAccount(accounts, {
+      restart: (picked) => {
+        // The owl this screen holds now, in its own colours from the first frame; then the page starts again with it.
+        if (picked) saveLook({ ...picked });
+        location.reload();
+      },
+      startOver: () => {
+        forgetOwl(storage);
+        location.reload();
+      },
+    })
+  : null;
+if (accounts && accountScreens) {
+  accounts.onMoved(() => accountScreens.showMoved());
+  void accounts.account().then((a) => home.setAccounts(a !== null));
+}
+// An account link carries its token in the address's fragment, as a ticket link does: out of the
+// address bar at once, then the owls it brings (restore) or the owl it protects (protect). One opened
+// in the tab the park is already in changes only the fragment, so the page listens for that too.
+const takeAccountLink = () => {
+  const link = readAccountLink(location.hash);
+  if (!link) return;
+  history.replaceState(history.state, '', withoutAccountLink(location.href));
+  if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
+  else if (link.kind === 'restore') accountScreens.openPictures(link.token);
+  else void accountScreens.confirm(link.token);
+};
+takeAccountLink();
+window.addEventListener('hashchange', takeAccountLink);
 // The Menu's Settings tab says which tickets this device holds (OP-108), where the park's server keeps them.
 hud.attachTickets(() => (transport.tickets ? transport.tickets.wallet() : Promise.resolve(null)));
 // The collection loads in the background, once there is an owl to collect for.

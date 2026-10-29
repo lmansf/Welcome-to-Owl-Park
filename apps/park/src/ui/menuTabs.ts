@@ -4,6 +4,7 @@ import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
+import { ACCOUNT_WORDS } from './account';
 import { HOME_WORDS } from './home';
 import { settingsRows, syncSettings } from './settingsScreen';
 import { walletLine } from './tickets';
@@ -180,6 +181,8 @@ export function setsCard(sets: readonly SetProgress[]): HTMLElement {
 export interface NestTabState {
   /** Away from the owl's own nest: "Go home" takes it there. */
   canGoHome: boolean;
+  /** The owl's account (OP-139): its friend code and whether an email protects it. Null while accounts are off. */
+  account?: HTMLElement[] | null;
 }
 
 export function renderNest(panel: HTMLElement, nest: NestTabState, goHome: () => void): void {
@@ -200,6 +203,11 @@ export function renderNest(panel: HTMLElement, nest: NestTabState, goHome: () =>
     panel.appendChild(c);
   } else {
     panel.appendChild(card(NEST_WORDS.yourNest, note('You are home. Tap Decorate to arrange your furniture and open your nest to visitors, or stand at the mirror to change how your owl looks.')));
+  }
+  if (nest.account) {
+    const owl = card(ACCOUNT_WORDS.friendCode, ...nest.account);
+    owl.dataset['account'] = '';
+    panel.appendChild(owl);
   }
   panel.appendChild(card('Today’s furniture gift', note('A new piece for your nest every day: open Decorate in your nest to take it.')));
   panel.appendChild(card('Visiting', note('An open nest shows its owl’s flag on a door of the nests’ street: walk in to visit.')));
@@ -285,6 +293,8 @@ export interface SettingsTabDeps {
   feedback(): void;
   title(): void;
   leave(): void;
+  /** The owl's account (OP-139): where a grown-up protects the owl. Null while accounts are off. */
+  account?: HTMLElement[] | null;
 }
 
 /** The tickets on this device, in a line each: for an owl asking the keepers about a ticket (OP-086). */
@@ -319,6 +329,12 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
       lines.appendChild(note('The tickets could not be checked just now.'));
     },
   );
+
+  if (deps.account) {
+    const owl = card(ACCOUNT_WORDS.friendCode, ...deps.account);
+    owl.dataset['account'] = '';
+    panel.appendChild(owl);
+  }
 
   const help = card('Something wrong? An idea?', note('Tell the park’s keepers: they read every note.'));
   const helpRow = el('div', 'mrow');

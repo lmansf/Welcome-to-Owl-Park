@@ -1,14 +1,15 @@
 /**
  * The Worker: serves the built client as static assets, mints guest passes and collector
- * tokens, answers the collection, shop, furniture gift and ticket API, keeps visitors' feedback for
+ * tokens, answers the collection, shop, furniture gift, ticket and (with ACCOUNTS on) account API, keeps visitors' feedback for
  * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus } from '@owl-park/shared';
+import { CLOSE, RIBBON_WORDS, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type OwlAccount } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
+import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
-import { copiesIn, copyObjectName, pickCopy } from './copies';
+import { copiesIn, copyObjectName, pickCopy, roomObjectNames } from './copies';
 import type { LineAnswer, OverflowState } from './Overflow';
 import { countIn, countedOneMore, forgetOverflow, overflowNow } from './overflowState';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
@@ -16,7 +17,7 @@ import { feedbackPage } from './feedbackPage';
 import { walletVoter } from './Ledger';
 import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
-import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintEntry, mintPass, randomCollectorId, randomVisitorId, signingSecret, verifyCollector, verifyEntry, verifyPass, type PassPayload } from './pass';
+import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintEntry, mintPass, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
@@ -105,6 +106,8 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 
 /** A feedback request body is a few lines of words: anything past this is refused unread. */
 const FEEDBACK_BODY_MAX = 16_384;
+/** An account request is an email or a link's token: anything past this is refused unread. */
+const ACCOUNT_BODY_MAX = 2_048;
 
 async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   try {
@@ -126,6 +129,48 @@ async function passFrom(request: Request, env: Env) {
   const auth = request.headers.get('Authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : new URL(request.url).searchParams.get('pass');
   return verifyPass(signingSecret(env), token);
+}
+
+/** The client's address. Local load tests set TRUST_FORWARDED_FOR so each bot can claim its own; never in production. */
+function clientIp(request: Request, env: Env): string {
+  const forwarded = env.TRUST_FORWARDED_FOR === 'true' ? request.headers.get('X-Forwarded-For') : null;
+  return forwarded ?? request.headers.get('CF-Connecting-IP') ?? 'unknown';
+}
+
+/**
+ * An owl restored on another screen (OP-139): every room object hears it, and sends the moved card to
+ * the owl's sockets from any other device at once (with one object per room, a nest's object hears
+ * nothing: its owl is sent the card at its next hello).
+ */
+async function tellMoved(env: Env, cid: string, dev: string): Promise<void> {
+  const copies = await overflowOf(env)
+    .then((o) => o.copies)
+    .catch(() => ({}));
+  const body = JSON.stringify({ cid, dev });
+  await Promise.all(
+    roomObjectNames(env.ROOM_SHARDING, Object.keys(ROOMS), copies).map((name) =>
+      env.ROOMS.get(env.ROOMS.idFromName(name))
+        .fetch('https://park/moved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+        .catch(() => undefined),
+    ),
+  );
+}
+
+/**
+ * A ticket's order email protects the owl that claimed its tickets (OP-139, with ACCOUNTS on): the store
+ * says whose order it was, after the page has its answer. A ticket the park gave away has no order in
+ * the store, and an owl whose email the store will not tell stays as it was.
+ */
+async function protectByOrder(env: Env, cid: string, order: string): Promise<void> {
+  const keys = accountsOn(env) ? emailKeys(env) : null;
+  const store = storeConfig(env);
+  if (!keys || !store || order.startsWith('comp-')) return;
+  const email = await orderEmail(store, order);
+  if (!email) return;
+  const k = await keys;
+  await collections(env)
+    .accountProtectByOrder(cid, await keyed(k, 'e', email), await seal(k, email))
+    .catch(() => undefined);
 }
 
 /** The visit a call comes in, for the collection log (OP-107): its pass's id (one per page load) and the device's class. */
@@ -243,17 +288,34 @@ export default {
       const secret = signingSecret(env);
       // The collector token the browser keeps; a missing or forged one starts a new collection.
       const given = request.headers.get('X-Collector') ?? url.searchParams.get('collector');
-      const known = await verifyCollector(secret, given);
-      const cid = known ?? randomCollectorId();
-      const collector = known && given ? given : await mintCollector(secret, cid);
+      const known = await readCollector(secret, given);
+      const cid = known?.cid ?? randomCollectorId();
+      let collector = known && given ? given : null;
+      // With accounts on (OP-139) the token names this screen's device: the first to ask holds the
+      // owl, and a screen it has moved from is told so. Should the account be out of reach, the pass goes out as before.
+      let dev = known?.dev ?? null;
+      let account: OwlAccount | null = null;
+      if (accountsOn(env)) {
+        const stand = await collections(env)
+          .accountStand(cid, dev)
+          .catch(() => null);
+        if (stand === 'moved') return json({ error: 'moved' }, 409);
+        if (stand) {
+          if (stand.dev !== dev) collector = null;
+          dev = stand.dev;
+          account = stand.account;
+        }
+      }
+      collector ??= await mintCollector(secret, cid, dev);
       const iat = Math.floor(Date.now() / 1000);
       const exp = iat + GUEST_PASS_TTL_S;
       const payload: PassPayload = { id: randomVisitorId(), exp, iat, adm: false, cid };
       const tz = url.searchParams.get('tz');
       if (isTimeZone(tz)) payload.tz = tz;
+      if (accountsOn(env) && dev) payload.dev = dev;
       const pass = await mintPass(secret, payload);
       // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
-      return Response.json({ pass, exp, collector, gate: (await gateOf(env)).mode, adm: payload.adm }, { headers: CORS });
+      return Response.json({ pass, exp, collector, gate: (await gateOf(env)).mode, adm: payload.adm, ...(account ? { account } : {}) }, { headers: CORS });
     }
 
     if (url.pathname === '/api/entry') {
@@ -314,6 +376,28 @@ export default {
       const r = await deskOf(env)('/tickets/issue', { order, lines: [line], held: false });
       if (r.status !== 200) return json(r.body, r.status);
       return json({ order, tickets: r.body['tickets'], link: claimLink(url.origin, r.body['claim'] as string) });
+    }
+
+    // ---- Accounts without passwords (OP-139, with ACCOUNTS on): protect an owl by email, restore it by a link ----
+    if (url.pathname.startsWith('/api/account/')) {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (!accountsOn(env) || request.method !== 'POST') return json({ error: 'not found' }, 404);
+      if (Number(request.headers.get('Content-Length') ?? 0) > ACCOUNT_BODY_MAX) return json({ error: 'too large' }, 413);
+      const body = await readJson(request);
+      if (!body) return json({ error: 'bad request' }, 400);
+      const r = await accountRoute(url.pathname.slice('/api/account/'.length), body, {
+        rpc: collections(env),
+        secret: signingSecret(env),
+        keys: emailKeys(env),
+        mail: mailSender(env),
+        origin: url.origin,
+        pass: await passFrom(request, env),
+        collector: request.headers.get('X-Collector'),
+        ip: clientIp(request, env),
+        moved: (cid, dev) => tellMoved(env, cid, dev),
+        now: Date.now(),
+      });
+      return r ? json(r.body, r.status) : json({ error: 'not found' }, 404);
     }
 
     // ---- Feedback: visitors send it with their pass; the keepers read it with the admin key ----
@@ -498,7 +582,13 @@ export default {
       }
       const body = request.method === 'POST' ? await readJson(request) : null;
       if (!body) return json({ error: 'bad request' }, 400);
-      if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') return reply(await desk(url.pathname.slice(4), { secret: body['secret'], device }));
+      if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') {
+        const { status, body: answer } = await desk(url.pathname.slice(4), { secret: body['secret'], device });
+        // The claimed order stays with the Worker: its email protects this owl (OP-139).
+        const { order, ...rest } = answer;
+        if (status === 200 && typeof order === 'string') ctx.waitUntil(protectByOrder(env, device, order));
+        return json(rest, status);
+      }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
       if (url.pathname === '/api/tickets/pass') {
         // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
@@ -667,14 +757,14 @@ export default {
       // A fresh entry with every room, so an owl inside goes on from room to room while there is a line.
       headers.set('X-Entry', await mintEntry(secret, who));
       headers.set('X-Visitor-Id', pass.id);
-      // Only the pass says whose collection (and nest) this is: whatever the page sent under these names goes.
+      // Only the pass says whose collection (and nest) this is, and on which device: whatever the page sent under these names goes.
       headers.delete('X-Collector-Id');
       headers.delete('X-Collector-Tz');
+      headers.delete('X-Collector-Dev');
       if (pass.cid) headers.set('X-Collector-Id', pass.cid);
       if (pass.tz) headers.set('X-Collector-Tz', pass.tz);
-      // Local load tests set TRUST_FORWARDED_FOR so each bot can claim its own address; never in production.
-      const forwarded = env.TRUST_FORWARDED_FOR === 'true' ? request.headers.get('X-Forwarded-For') : null;
-      headers.set('X-Visitor-Ip', forwarded ?? request.headers.get('CF-Connecting-IP') ?? 'unknown');
+      if (pass.dev) headers.set('X-Collector-Dev', pass.dev);
+      headers.set('X-Visitor-Ip', clientIp(request, env));
       return objectFor(env, roomId, copy).fetch(new Request(request, { headers }));
     }
 

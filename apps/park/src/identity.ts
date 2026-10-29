@@ -48,6 +48,18 @@ export function loadLook(cfg: ParkConfig, playerId: string): OwlLook {
   return cfg.look ? DEFAULT_LOOK : lookFromSeed(playerId);
 }
 
+/**
+ * This screen lets its owl go (OP-139: it moved to another screen, and a new one is made here): the
+ * collector token and the kept look go, and the next pass starts a new owl.
+ */
+export function forgetOwl(storage: Pick<Storage, 'removeItem'> | null): void {
+  try {
+    for (const k of [COLLECTOR_KEY, LOOK_KEY]) storage?.removeItem(k);
+  } catch {
+    /* nothing kept to forget */
+  }
+}
+
 export function saveLook(look: OwlLook): void {
   try {
     // Colours persist; a pledge is today's state and comes back from the server, not storage.

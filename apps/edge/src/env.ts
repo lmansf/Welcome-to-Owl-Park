@@ -46,4 +46,16 @@ export interface Env extends Cloudflare.Env {
   PARK_LOG_URL?: string;
   FRAUD_SCORE_KEY?: string;
   FRAUD_HASH_SALT?: string;
+  /**
+   * Accounts without passwords (OP-139), with ACCOUNTS on (wrangler.jsonc). ACCOUNT_SECRET (32+ random
+   * characters) keys the hash an email is found by and seals the copy the park writes to; it must
+   * never change once owls are protected, or their emails are lost to the park. The magic links go
+   * out through Resend: RESEND_API_KEY, from MAIL_FROM (a sender on a domain verified there). Without
+   * all three no email is kept and no link is sent; friend codes and one screen at a time still work.
+   */
+  ACCOUNT_SECRET?: string;
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
+  /** Browser tests only: a stand-in mail sender on this machine (http://localhost:<port>). Never set in production. */
+  MAIL_TEST_ORIGIN?: string;
 }

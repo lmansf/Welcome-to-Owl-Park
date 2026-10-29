@@ -15,6 +15,7 @@
  * device, gone at a tap).
  */
 import type { Entry, WalletEntry } from '../net';
+import { ACCOUNT_WORDS } from './account';
 import type { PreviewFrame } from './owlBuilder';
 import { KIND_LABEL, timeLeft } from './tickets';
 
@@ -84,6 +85,8 @@ export interface HomeActions {
   /** Into the owl's own nest (OP-105), through the line while the park has one. */
   play(): void;
   settings(button: HTMLElement): void;
+  /** I already have an owl (OP-139): a grown-up's email brings an owl it protects to this screen. */
+  restore(button: HTMLElement): void;
   /** Where the owl stands moved (the screen came up, or its size changed). */
   stage(frame: PreviewFrame): void;
   /** A screen is open over the home screen (the builder, Settings): Enter is theirs. */
@@ -103,6 +106,8 @@ export interface HomeScreen {
   line(view: LineView | null): void;
   /** Whether the owl is waiting in the line. */
   inLine(): boolean;
+  /** Whether the park keeps accounts (OP-139): I already have an owl is shown only then. */
+  setAccounts(on: boolean): void;
 }
 
 /** Width over height of what the builder's preview keeps in view around the owl, a hat above and a pet behind (VIEW in game/BuilderScene.ts). */
@@ -180,6 +185,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
         <p class="h-small-note" data-line-auto></p>
       </div>
       <p class="h-wallet" data-home-wallet hidden></p>
+      <button class="ghost h-small" data-home-btn="restore" hidden></button>
       <button class="ghost h-small" data-home-btn="settings"></button>
     </div>
     <div class="h-stage" data-home-stage></div>`;
@@ -189,6 +195,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   const login = $<HTMLButtonElement>('[data-home-btn="login"]');
   const play = $<HTMLButtonElement>('[data-home-btn="play"]');
   const settings = $<HTMLButtonElement>('[data-home-btn="settings"]');
+  const restore = $<HTMLButtonElement>('[data-home-btn="restore"]');
   const wallet = $<HTMLElement>('[data-home-wallet]');
   const noteEl = $<HTMLElement>('[data-home-note]');
   const stage = $<HTMLElement>('[data-home-stage]');
@@ -205,10 +212,12 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   login.textContent = HOME_WORDS.logIn;
   play.textContent = HOME_WORDS.play;
   settings.textContent = HOME_WORDS.settings;
+  restore.textContent = ACCOUNT_WORDS.restore;
   // Logged in, Make your owl goes: the builder hands the focus back to Play.
   login.addEventListener('click', () => actions.logIn(play));
   play.addEventListener('click', () => actions.play());
   settings.addEventListener('click', () => actions.settings(settings));
+  restore.addEventListener('click', () => actions.restore(restore));
 
   let shown = false;
   let loggedIn = false;
@@ -292,5 +301,8 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       lineAuto.textContent = LINE_WORDS.auto;
     },
     inLine: () => waiting,
+    setAccounts(on) {
+      restore.hidden = !on;
+    },
   };
 }

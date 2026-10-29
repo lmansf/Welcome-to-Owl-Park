@@ -5,7 +5,9 @@
  * holds the street of nests and every nest with owls in it, each nest a room of its own made
  * from NEST_ROOM; whose nest it is and how it stands come from the collections object. An arcade
  * run lives in the collections object, keyed by the collector, like the climb's: it outlasts the
- * object's sleep and the visitor's socket (OP-137).
+ * object's sleep and the visitor's socket (OP-137). With accounts on (OP-139) a socket from a
+ * screen its owl has moved from is sent the moved card, at its hello or at once when the Worker
+ * says the owl was restored elsewhere.
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -30,6 +32,7 @@ import {
   getInteractable,
   getNpc,
   getQuest,
+  isDeviceId,
   isEmoteId,
   isNestRoom,
   isTimeZone,
@@ -64,6 +67,7 @@ import {
   type ServerNest,
   type Wear,
 } from '@owl-park/shared';
+import { accountsOn } from './accounts';
 import type { Collections } from './Collections';
 import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectLog';
 import type { Sighting } from './parkStats';
@@ -91,6 +95,8 @@ interface Attachment {
   entry?: string;
   /** Phone or desktop, from the browser's own words at the upgrade: for the collection log (OP-107), nothing else. */
   device?: DeviceClass;
+  /** The device the pass's collector token names (OP-139): the owl's other screens are sent the moved card. */
+  dev?: string;
 }
 
 /** The visit a socket's owl is on, as the collection log takes it: its pass's id, its device and its room. */
@@ -214,6 +220,8 @@ export class RoomObject extends DurableObject<Env> {
   private readonly admitting = new Map<string, { room: string; done: Promise<void> }>();
   /** The latest view of each nest with owls in it or at its door, by nest id: the owner's changes land here first. */
   private readonly nestViews = new Map<string, NestView>();
+  /** Each owl's colours and kind as last sent to its account (OP-139), so an unchanged look is not sent again. */
+  private readonly looksSent = new Map<string, string>();
   /** The busy ribbon's words (OP-075), null while it is off, and when they were last asked for. */
   private notice: string | null = null;
   /** The realms switch as last heard from the overflow object (its notice, its poll, or this object's storage). */
@@ -350,6 +358,52 @@ export class RoomObject extends DurableObject<Env> {
     for (const roomId of before.open) if (!next.open.includes(roomId) && roomDef(roomId)?.gated) this.sendRealmAway(roomId);
   }
 
+  // ---------- accounts (OP-139) ----------
+
+  /** A socket whose owl is on another screen now: closed with the code that shows the moved card. */
+  private sendMoved(ws: WebSocket): void {
+    closeSocket(ws, CLOSE.MOVED, 'moved');
+    this.drop(ws);
+  }
+
+  /** An owl restored on another screen: its sockets here from every other device are sent the moved card. */
+  private sendMovedAway(cid: string, dev: string): void {
+    for (const ws of this.ctx.getWebSockets(`cid:${cid}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att && att.dev !== dev) this.sendMoved(ws);
+    }
+  }
+
+  /** At a hello, with accounts on: a page on a screen its owl has moved from is sent the moved card (the owl walks in meanwhile). */
+  private checkDevice(ws: WebSocket, att: Attachment): void {
+    if (!att.cid || !accountsOn(this.env)) return;
+    const sid = att.sid;
+    this.ctx.waitUntil(
+      this.collections()
+        .accountHolds(att.cid, att.dev ?? null)
+        .then((holds) => {
+          if (!holds && (ws.deserializeAttachment() as Attachment | null)?.sid === sid) this.sendMoved(ws);
+        })
+        .catch(() => undefined),
+    );
+  }
+
+  /** With accounts on: the owl's colours and kind, for its picture when it is restored on another screen (sent only when they changed). */
+  private accountLook(att: Attachment, look: OwlLook): void {
+    if (!att.cid || !accountsOn(this.env)) return;
+    const cid = att.cid;
+    const portrait = portraitLook(look);
+    const key = JSON.stringify(portrait);
+    if (this.looksSent.get(cid) === key) return;
+    if (this.looksSent.size >= 2000) this.looksSent.clear();
+    this.looksSent.set(cid, key);
+    this.ctx.waitUntil(
+      this.collections()
+        .accountLook(cid, portrait)
+        .catch(() => void this.looksSent.delete(cid)),
+    );
+  }
+
   /** A realm just closed: every owl in it is told so and sent back to the hub by its own page. */
   private sendRealmAway(roomId: string): void {
     const sign = this.realmSign(roomId);
@@ -375,11 +429,18 @@ export class RoomObject extends DurableObject<Env> {
       if (body?.realms !== undefined) this.setRealms(body.realms);
       return Response.json({ ok: true });
     }
+    if (url.pathname === '/moved' && request.method === 'POST') {
+      // The Worker's word that an owl was restored on another screen (OP-139).
+      const body = (await request.json().catch(() => null)) as { cid?: unknown; dev?: unknown } | null;
+      if (isCollectorId(body?.cid) && isDeviceId(body?.dev)) this.sendMovedAway(body.cid, body.dev);
+      return Response.json({ ok: true });
+    }
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
     const roomId = request.headers.get('X-Room') ?? '';
     const id = request.headers.get('X-Visitor-Id') ?? '';
     const ip = request.headers.get('X-Visitor-Ip') ?? 'unknown';
     const cid = request.headers.get('X-Collector-Id');
+    const dev = request.headers.get('X-Collector-Dev');
     const tz = request.headers.get('X-Collector-Tz');
     if (!isRoomId(roomId) || !id) return new Response('bad room', { status: 400 });
     const perIp = Number(this.env.MAX_SOCKETS_PER_IP) || DEFAULT_MAX_SOCKETS_PER_IP;
@@ -387,9 +448,10 @@ export class RoomObject extends DurableObject<Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
-    this.ctx.acceptWebSocket(server, [`id:${id}`, `ip:${ip}`, `room:${roomId}`]);
+    this.ctx.acceptWebSocket(server, [`id:${id}`, `ip:${ip}`, `room:${roomId}`, ...(isCollectorId(cid) ? [`cid:${cid}`] : [])]);
     const att: Attachment = { room: roomId, id, sid: randomSid(), ip, joinedAt: Date.now(), state: null };
     if (isCollectorId(cid)) att.cid = cid;
+    if (isDeviceId(dev)) att.dev = dev;
     if (isTimeZone(tz)) att.tz = tz;
     // Which copy of the room this is, and the entry for the welcome (OP-075): the Worker's word only.
     const copy = Number(request.headers.get('X-Room-Copy'));
@@ -464,6 +526,7 @@ export class RoomObject extends DurableObject<Env> {
         const { look, recheck } = this.vetLook(att, frame.look);
         room.look(att.id, look);
         this.statsSeen(att, look);
+        this.accountLook(att, look);
         if (recheck) void this.recheckLook(att, frame.look);
         else this.rememberEquipped(att, look.wear);
         return;
@@ -526,6 +589,8 @@ export class RoomObject extends DurableObject<Env> {
     }
     this.emitCounts();
     this.statsSeen(att, look, true);
+    this.accountLook(att, look);
+    this.checkDevice(ws, att);
     if (recheck) void this.recheckLook(att, hello.look);
     // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
     if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());

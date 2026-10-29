@@ -73,6 +73,12 @@ export const E2E_ADMIN_KEY = 'e2e-only-admin-key-not-a-secret';
  * The stand-in store the local room server reaches in these tests (e2e/standInStore.mjs), and the
  * store settings it runs with (playwright.config.ts): test values, not secrets.
  */
+/** Accounts in the browser tests (OP-139): the key emails are kept under there, and who the mail is from. */
+export const E2E_ACCOUNTS = {
+  secret: 'e2e-only-account-secret-not-a-secret',
+  from: 'owls@e2e.test',
+};
+
 export const E2E_STORE = {
   port: 8790,
   origin: 'http://localhost:8790',

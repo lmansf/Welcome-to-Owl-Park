@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
-import { E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
+import { E2E_ACCOUNTS, E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
 
-/** The room server's test settings: the admin key, and a store that is the stand-in on this machine. */
+/**
+ * The room server's test settings: the admin key, a store that is the stand-in on this machine, and
+ * accounts on (OP-139), their mail kept by the same stand-in.
+ */
 const EDGE_VARS = {
   ADMIN_KEY: E2E_ADMIN_KEY,
   SHOPIFY_SHOP: E2E_STORE.shop,
@@ -9,6 +12,10 @@ const EDGE_VARS = {
   SHOPIFY_WEBHOOK_SECRET: E2E_STORE.webhookKey,
   SHOPIFY_TEST_ORIGIN: E2E_STORE.origin,
   OPENING_PASS_CODE: E2E_STORE.passCode,
+  ACCOUNTS: 'on',
+  ACCOUNT_SECRET: E2E_ACCOUNTS.secret,
+  MAIL_FROM: E2E_ACCOUNTS.from,
+  MAIL_TEST_ORIGIN: E2E_STORE.origin,
 };
 
 export default defineConfig({
@@ -35,7 +42,7 @@ export default defineConfig({
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
-    { name: 'edge', testMatch: /(edge|opening|gate|overflow|climb)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    { name: 'edge', testMatch: /(edge|opening|gate|overflow|climb|accounts)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {

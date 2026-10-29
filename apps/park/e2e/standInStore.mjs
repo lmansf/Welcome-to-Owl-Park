@@ -2,12 +2,14 @@
  * A stand-in for the store's Admin API in the browser tests (the room server reaches it through
  * SHOPIFY_TEST_ORIGIN, never a real store). It answers the park's queries from orders the tests
  * put in it, keeps the claim link each fulfillment would have emailed, and lists the ticket
- * products on sale: an annual pass, and an Opening Night Ticket whose night is on.
+ * products on sale: an annual pass, and an Opening Night Ticket whose night is on. It stands in for
+ * the park's mail sender too (MAIL_TEST_ORIGIN, OP-139): it keeps each mail instead of sending it.
  *
  * Tests use:
  *   POST /test/orders  {id, order}  an order, as the Admin API would answer for it
  *   GET  /test/sent?order=<id>      the claim link the store would have emailed
  *   POST /test/night   {on}         the Opening Night Ticket on sale, its night on (off at first)
+ *   GET  /test/mail?to=<email>      the last mail the park sent to that address, or null
  */
 import { createServer } from 'node:http';
 
@@ -15,6 +17,8 @@ const port = Number(process.argv[2] ?? 8790);
 const HOUR = 3_600_000;
 const orders = new Map();
 const sent = new Map();
+/** The last mail to each address, as the park sent it to the mail sender's API. */
+const mails = new Map();
 const fulfilled = new Set();
 let night = false;
 
@@ -32,6 +36,8 @@ function answer(op, variables) {
   switch (op) {
     case 'OwlParkOrder':
       return { order: orders.get(id) ?? null };
+    case 'OwlParkOrderEmail':
+      return { order: orders.has(id) ? { email: orders.get(id).email ?? null } : null };
     case 'OwlParkFulfillmentOrders': {
       const order = orders.get(id);
       if (!order) return { order: null };
@@ -88,6 +94,12 @@ createServer(async (req, res) => {
       night = (await body(req)).on === true;
       return send(res, 200, { night });
     }
+    if (req.method === 'POST' && url.pathname === '/emails') {
+      const mail = await body(req);
+      for (const to of mail.to ?? []) mails.set(String(to), mail);
+      return send(res, 200, { id: `mail-${mails.size}` });
+    }
+    if (req.method === 'GET' && url.pathname === '/test/mail') return send(res, 200, { mail: mails.get(url.searchParams.get('to') ?? '') ?? null });
     if (url.pathname === '/health') return send(res, 200, { ok: true });
     send(res, 404, { error: 'not found' });
   } catch (e) {

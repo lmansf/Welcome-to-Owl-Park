@@ -7,7 +7,8 @@
  * live in the portable `CollectionBook`, `QuestBook`, `NestBook`, `ArcadeBook` and `ClimbBook`
  * (packages/shared) over the SQL stores in sqlStore.ts, sqlNestStore.ts, sqlScoreStore.ts and
  * sqlClimbStore.ts. Rewards, nest ids and run seeds draw from the platform's cryptographic random source.
- * Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts). Every collectible
+ * Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts), and every owl's account
+ * (OP-139, accountBook.ts): its friend code, the device it is on and the email that protects it. Every collectible
  * granted goes to the collection log (collectLog.ts, OP-107) in the same step, and on to the owner's
  * analytics once the call is done; the object's alarm retries what could not be sent.
  */
@@ -48,6 +49,8 @@ import {
   type NestEditResult,
   type NestLook,
   type NestVisit,
+  type OwlAccount,
+  type OwlPicture,
   type QuestBoard,
   type QuestEvent,
   type QuestUpdate,
@@ -60,9 +63,11 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
+import { AccountBook, type LinkKind, type Protected, type Restored } from './accountBook';
 import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
+import { randomDeviceId } from './pass';
 import { ROOMS } from './rooms';
 import { SqlClimbStore } from './sqlClimbStore';
 import { SqlNestStore } from './sqlNestStore';
@@ -98,6 +103,7 @@ export class Collections extends DurableObject<Env> {
   private readonly arcade: ArcadeBook;
   private readonly climb: ClimbBook;
   private readonly feedbackBox: FeedbackBox;
+  private readonly accounts: AccountBook;
   private readonly log: CollectLog;
   private readonly stats: ParkStats;
   /** The visit the call in progress came in, as its caller said (`during`), for the log's rows. */
@@ -116,6 +122,7 @@ export class Collections extends DurableObject<Env> {
     this.arcade = new ArcadeBook(new SqlScoreStore(sql), this.book);
     this.climb = new ClimbBook(new SqlClimbStore(sql), this.book, () => crypto.getRandomValues(new Uint32Array(1))[0]!);
     this.feedbackBox = new FeedbackBox(sql);
+    this.accounts = new AccountBook(sql, randomBytes);
   }
 
   // ---------- the collection log (OP-107) ----------
@@ -365,5 +372,43 @@ export class Collections extends DurableObject<Env> {
 
   async setFeedbackStatus(id: number, status: FeedbackStatus): Promise<boolean> {
     return this.feedbackBox.setStatus(id, status);
+  }
+
+  // ---------- accounts (OP-139; the Worker calls these only with ACCOUNTS on; the rules are accountBook.ts) ----------
+
+  async accountStand(cid: string, dev: string | null): Promise<{ dev: string; account: OwlAccount } | 'moved'> {
+    return this.accounts.standing(cid, dev, randomDeviceId, Date.now());
+  }
+
+  async accountHolds(cid: string, dev: string | null): Promise<boolean> {
+    return this.accounts.holds(cid, dev);
+  }
+
+  async accountLook(cid: string, look: PortraitLook): Promise<void> {
+    this.accounts.setLook(cid, look, Date.now());
+  }
+
+  async accountProtectByOrder(cid: string, emailHash: string, emailSeal: string): Promise<void> {
+    this.accounts.protectByOrder(cid, emailHash, emailSeal, Date.now());
+  }
+
+  async accountProtectLink(cid: string, emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<number | null> {
+    return this.accounts.protectLink(cid, emailHash, emailSeal, ipHash, nonce, Date.now());
+  }
+
+  async accountRestoreLink(emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<{ exp: number; kind: LinkKind } | null> {
+    return this.accounts.restoreLink(emailHash, emailSeal, ipHash, nonce, Date.now());
+  }
+
+  async accountConfirm(nonce: string, opener: string | null): Promise<Protected | 'gone' | 'no-owl'> {
+    return this.accounts.confirm(nonce, opener, Date.now());
+  }
+
+  async accountOwls(nonce: string): Promise<OwlPicture[] | null> {
+    return this.accounts.pictures(nonce, Date.now());
+  }
+
+  async accountBind(nonce: string, code: string, here: { cid: string; dev: string | null } | null): Promise<Restored | 'gone' | 'no-owl'> {
+    return this.accounts.restore(nonce, code, here, randomDeviceId, Date.now());
   }
 }

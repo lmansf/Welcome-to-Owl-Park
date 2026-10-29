@@ -1,11 +1,12 @@
-import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
-import type { ConnectionStatus } from '../net';
+import type { AccountLink, ConnectionStatus } from '../net';
 import type { FeedbackOutcome } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
+import { accountCard, createAccountScreens, type AccountScreenDeps, type AccountScreens } from './account';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
 import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbResultView, type ClimbView } from './climbScreen';
@@ -79,6 +80,8 @@ export interface Hud {
   attachCollection(state: CollectionState, actions: CollectionActions): void;
   /** Feedback in the Menu; each note goes with the room the owl is in and the screen's size. */
   attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
+  /** The owl's account (OP-139): its card in the Menu's Nest and Settings tabs, and the screens that protect and bring back an owl. */
+  attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
   /** The Menu's ways out: what "Leave the park" and "Go home" do. */
   attachWayOut(actions: WayOutActions): void;
   /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
@@ -408,6 +411,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let roomId = '';
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
+  let accountScreens: AccountScreens | null = null;
+  /** The owl's account as the park last said (OP-139); null while accounts are off. */
+  let account: OwlAccount | null = null;
   let builder: OwlBuilder | null = null;
   let collectionActions: CollectionActions | null = null;
   let wayOut: WayOutActions | null = null;
@@ -486,7 +492,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         },
       },
       { id: 'collection', label: 'Collection', render: (panel) => renderCollection(panel, collectionState) },
-      { id: 'nest', label: 'Nest', render: (panel) => renderNest(panel, { canGoHome: waysOut.home }, () => openScreen('home')) },
+      { id: 'nest', label: 'Nest', render: (panel) => renderNest(panel, { canGoHome: waysOut.home, account: accountCards() }, () => openScreen('home')) },
       // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
       { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms) },
       {
@@ -495,7 +501,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         render: (panel) =>
           renderSettings(
             panel,
-            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave') },
+            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards() },
             () => menu.refresh(),
           ),
       },
@@ -545,9 +551,19 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     builder?.close();
     settingsScreen.close();
     feedback?.close();
+    accountScreens?.close();
     leaveCard.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  /** The account's cards for the Menu (OP-139): none while accounts are off. */
+  function accountCards(): HTMLElement[] | null {
+    if (!account || !accountScreens) return null;
+    const screens = accountScreens;
+    return accountCard(account, (button) => {
+      menu.close();
+      screens.openEmail('protect', button.isConnected ? button : menuBtn);
+    });
+  }
   /** Before a sheet or a screen opens on its own (a dialogue, the shop): close the rest. */
   const makeRoom = () => {
     closeSheets();
@@ -700,6 +716,16 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         toast,
         () => openScreen('menu'),
       );
+    },
+    attachAccount(link, deps) {
+      const refresh = () =>
+        void link.account().then((a) => {
+          account = a;
+          menu.refresh();
+        });
+      accountScreens = createAccountScreens(root, link, { ...deps, toast, changed: refresh });
+      refresh();
+      return accountScreens;
     },
     attachWayOut(actions) {
       wayOut = actions;
