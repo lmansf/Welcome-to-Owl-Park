@@ -594,6 +594,43 @@ test.describe('room server', () => {
     for (const p of [a, b]) await p.context().close();
   });
 
+  test('a run’s best goes up on the wall as the run goes, and is still there when the page dies before the run ends (OP-137)', async ({ browser }) => {
+    test.slow(); // two parks, a run, and a reload
+    const a = await visitor(browser, { room: 'arcade' });
+    const b = await visitor(browser, { room: 'arcade' }, { width: 640, height: 400 });
+    await playAt(a, 'flight');
+    // The run is held where it is, never to end, and the page dies (a reload): no score is ever sent.
+    await flyThrough(a, 3, { hold: true });
+    await expect.poll(async () => (await state(a)).wall?.mine.flight ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(3);
+    const kept = (await state(a)).wall!.mine.flight!;
+    expect((await run(a))!.over).toBe(false);
+    await a.reload();
+    await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
+    // Back as the same collector: its best as the run reached it, and the other owl saw it go up.
+    await expect.poll(async () => (await state(a)).wall?.mine.flight ?? null, { timeout: 15_000 }).toBe(kept);
+    await expect.poll(async () => (await state(b)).wall?.walls.find((w) => w.game === 'flight')?.top[0]?.score ?? 0, { timeout: 10_000 }).toBe(kept);
+    for (const p of [a, b]) await p.context().close();
+  });
+
+  test('a run outlives a dropped connection: back online, its end is paid and is a new best (OP-137)', async ({ browser }) => {
+    test.slow(); // a run, and a reconnect in the middle of it
+    const a = await visitor(browser, { room: 'arcade' });
+    await playAt(a, 'flight');
+    // The network goes mid-run; the run plays on in the page.
+    await a.context().setOffline(true);
+    expect(await a.evaluate(() => window.owlPark.drop())).toBe(true);
+    await flyThrough(a, 2);
+    // Back online, the run plays on while the page finds the room again, until it is there and a gap further on.
+    await a.context().setOffline(false);
+    await flyThrough(a, 3, { untilOnline: true });
+    expect(await a.evaluate(() => document.querySelector('[data-dot]')?.getAttribute('data-status'))).toBe('online');
+    await untilOver(a);
+    await expect(a.locator('.arcade [data-result] [data-paid]')).toHaveText(/^\+\d+ feathers?$/);
+    await expect(a.locator('.arcade [data-result] [data-new]')).toHaveText('New best!');
+    await expect(a.locator('.arcade [data-result] [data-note]')).toHaveText('');
+    await a.context().close();
+  });
+
   test('nests through the room server: an owner decorating, a visitor watching, and a nest that closes on it', async ({ browser }) => {
     // The host comes onto the street: the server makes its nest, behind door 0.
     const host = await visitor(browser, { room: 'homes', look: '#2F3E5C,#E0D4F0,#00E5FF' });

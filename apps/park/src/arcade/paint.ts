@@ -9,6 +9,8 @@
  */
 import type { ArcadeGame } from '@owl-park/shared';
 import { FIELD_H, FIELD_W } from './field';
+import type { ItemKind, LaneKind } from './hop';
+import type { PieceKind } from './knock';
 
 /** A painting's size on the field. */
 export interface ArtSize {
@@ -18,18 +20,62 @@ export interface ArtSize {
 
 /**
  * Each game's painted field and pieces (art keys), at the size each is drawn: all of them, or the game
- * stays in neon. A drone and a cart are as wide as the hop plays them, a crate is CRATE square.
+ * stays in neon. A cart, a drone and a bat are as wide as the hop plays them, a log is stretched to
+ * its length, a river's water is laid twice across its lane, the second mirrored; a crate, the plank
+ * and the nest are the size the game plays them (PIECE_SIZE).
  */
 export const GAME_ART: Readonly<Record<ArcadeGame, Readonly<Record<string, ArtSize>>>> = {
-  crossing: { 'arcade-hop-bg': { w: FIELD_W, h: FIELD_H }, 'arcade-hop-drone': { w: 44, h: 36 }, 'arcade-hop-cart': { w: 96, h: 84 } },
+  crossing: {
+    'arcade-hop-bg': { w: FIELD_W, h: FIELD_H },
+    'arcade-hop-drone': { w: 44, h: 36 },
+    'arcade-hop-cart': { w: 96, h: 84 },
+    'arcade-hop-bat': { w: 40, h: 34 },
+    'arcade-hop-log': { w: 112, h: 40 },
+    'arcade-hop-river': { w: 320, h: 80 },
+  },
   flight: { 'arcade-flap-bg': { w: FIELD_W, h: FIELD_H }, 'arcade-flap-branch': { w: 128, h: 575 }, 'arcade-flap-ground': { w: 180, h: 40 } },
   sling: {
     'arcade-knock-bg': { w: FIELD_W, h: FIELD_H },
     'arcade-knock-sling': { w: 60, h: 120 },
     'arcade-knock-crate': { w: 36, h: 36 },
     'arcade-knock-stand': { w: 72, h: 72 },
+    'arcade-knock-plank': { w: 144, h: 16 },
+    'arcade-knock-nest': { w: 60, h: 24 },
   },
 };
+
+/** Talon Toss's pieces by kind (OP-137), each drawn at its size in the game (PIECE_SIZE). */
+export const KNOCK_PIECES: Readonly<Record<PieceKind, string>> = { crate: 'arcade-knock-crate', plank: 'arcade-knock-plank', nest: 'arcade-knock-nest' };
+
+/**
+ * How a painting is laid on a body of the game: stretched so its solid part (`solid`, from the sprite
+ * manifest: x, y, w, h within the painting's `art` size) covers the `body`, with its middle on the
+ * body's middle (the image's origin, as shares of its size), so it turns about the body's centre.
+ */
+export function solidFit(art: ArtSize, solid: readonly number[] | null | undefined, body: ArtSize): { w: number; h: number; ox: number; oy: number } {
+  const [sx, sy, sw, sh] = solid?.length === 4 && solid[2]! > 0 && solid[3]! > 0 ? solid : [0, 0, art.w, art.h];
+  return { w: (art.w * body.w) / sw!, h: (art.h * body.h) / sh!, ox: (sx! + sw! / 2) / art.w, oy: (sy! + sh! / 2) / art.h };
+}
+
+/** Hoot & Hop's pieces for what goes along its lanes (OP-137). */
+export const HOP_PIECES: Readonly<Record<ItemKind, string>> = { cart: 'arcade-hop-cart', drone: 'arcade-hop-drone', bat: 'arcade-hop-bat', log: 'arcade-hop-log' };
+
+/**
+ * What a level lays over the street's lanes (OP-137), cut from the street's own painting (field
+ * pixels of arcade-hop-bg): a pavement is the near kerb (its neon line, the kerb stones and the top
+ * of the slabs) at the lane's top edge and mirrored at its bottom; a river is its water (a copy and
+ * its mirror beside it, so they meet without a seam) with the kerb's neon line along each bank.
+ */
+export const HOP_KERB = { y: 536, h: 40 } as const;
+export const HOP_BANK = { y: 536, h: 10 } as const;
+export const HOP_WATER = 'arcade-hop-river';
+
+/** The cuts of the street's painting a lane at `rowY` is laid with, each where it goes and whether it is mirrored. */
+export function laneCuts(kind: LaneKind, rowY: number): { cut: 'kerb' | 'bank'; y: number; flip: boolean }[] {
+  if (kind === 'safe') return [{ cut: 'kerb', y: rowY - 40, flip: false }, { cut: 'kerb', y: rowY, flip: true }];
+  if (kind === 'river') return [{ cut: 'bank', y: rowY - 40, flip: false }, { cut: 'bank', y: rowY + 40 - HOP_BANK.h, flip: true }];
+  return [];
+}
 
 /** Whether every piece of a game's painting is there (`has`: whether one art key loaded). */
 export function paintable(game: ArcadeGame, has: (key: string) => boolean): boolean {

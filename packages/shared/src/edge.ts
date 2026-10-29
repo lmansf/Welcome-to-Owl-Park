@@ -161,11 +161,12 @@ export interface ClientGather {
 /**
  * An activity (activities.ts): light a lantern, cast or reel in at the pond, start the robot owl's
  * copy game or play it a note (`e`, an emote the owl owns), or ask for today's tasks. In the arcade
- * (arcade.ts): start a run of a game (`g`) at its cabinet, or end the run whose seed is `k` with its
- * score `s` (and for Nest Knockdown its shots, `n`). Answered with `act`.
+ * (arcade.ts): start a run of a game (`g`) at its cabinet, end the run whose seed is `k` with its
+ * score `s` (and for Talon Toss its shots, `n`), or, as the run goes, keep its score so far as the
+ * owl's best (`record`, the same fields; OP-137). Answered with `act`.
  */
-export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks' | 'run' | 'score' | 'climb' | 'ascent';
-export const ACT_KINDS: readonly ActKind[] = ['light', 'cast', 'reel', 'copy', 'note', 'tasks', 'run', 'score', 'climb', 'ascent'];
+export type ActKind = 'light' | 'cast' | 'reel' | 'copy' | 'note' | 'tasks' | 'run' | 'score' | 'record' | 'climb' | 'ascent';
+export const ACT_KINDS: readonly ActKind[] = ['light', 'cast', 'reel', 'copy', 'note', 'tasks', 'run', 'score', 'record', 'climb', 'ascent'];
 export interface ClientAct {
   t: 'act';
   a: ActKind;
@@ -357,6 +358,8 @@ export type ServerAct = { t: 'act'; r: number } & (
   | { a: 'tasks'; ok: true; tasks: TaskView }
   | { a: 'run'; ok: true; game: ArcadeGame; seed: number; startedAt: number }
   | { a: 'score'; ok: true; paid: RunPaid }
+  /** A run's best so far kept: its game's column on the wall and the owl's own bests after it. */
+  | { a: 'record'; ok: true; wall: GameWall; mine: OwnBests }
   /** A climb started or resumed (the stained-glass climb, designs/the-stained-glass-climb.md). */
   | { a: 'climb'; ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
   /** A band reached: the run's banked band after it, what this frame added and the balance, and the first-time item when the clouds grant it. */
@@ -530,7 +533,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
         if (!isCount(k, 2 ** 32 - 1) || !isCount(band, BAND_COUNT) || band < 1) return null;
         return { t: 'act', a, k, band, r: v['r'] };
       }
-      if (a === 'score') {
+      if (a === 'score' || a === 'record') {
         const { g, s, n, k } = v;
         if (!isArcadeGame(g) || !isCount(s, 1e6) || !isCount(k, 2 ** 32 - 1) || (n !== undefined && !isCount(n, 1000))) return null;
         return n === undefined ? { t: 'act', a, g, s, k, r: v['r'] } : { t: 'act', a, g, s, n, k, r: v['r'] };

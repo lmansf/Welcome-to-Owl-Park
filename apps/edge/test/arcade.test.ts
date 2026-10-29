@@ -42,10 +42,27 @@ for (const [name, make] of STORES) {
       expect(s.top(next, 'flight', 5).map((r) => r.score)).toEqual([5]);
     });
 
+    it('keeps one run per collector, the latest in place of the one before, until it is dropped (OP-137)', () => {
+      const s = make();
+      expect(s.openRun('c_owlaaaaa')).toBeNull();
+      s.putRun({ cid: 'c_owlaaaaa', game: 'flight', seed: 7, startedAt: MON, bestBefore: null });
+      s.putRun({ cid: 'c_owlbbbbb', game: 'sling', seed: 2 ** 32 - 1, startedAt: MON, bestBefore: 4 });
+      s.putRun({ cid: 'c_owlaaaaa', game: 'crossing', seed: 8, startedAt: MON + 5, bestBefore: 3 });
+      expect(s.openRun('c_owlaaaaa')).toEqual({ cid: 'c_owlaaaaa', game: 'crossing', seed: 8, startedAt: MON + 5, bestBefore: 3 });
+      expect(s.openRun('c_owlbbbbb')).toEqual({ cid: 'c_owlbbbbb', game: 'sling', seed: 2 ** 32 - 1, startedAt: MON, bestBefore: 4 });
+      s.dropRun('c_owlaaaaa');
+      expect(s.openRun('c_owlaaaaa')).toBeNull();
+      expect(s.openRun('c_owlbbbbb')).not.toBeNull();
+    });
+
     it('settles runs the same way as the book’s memory store', () => {
       const arcade = new ArcadeBook(make(), new CollectionBook(new MemoryCollectionStore()));
-      expect(arcade.finish('c_owlaaaaa', { game: 'sling', score: 9, shots: 5 }, LOOK, MON).paid).toMatchObject({ best: true, top: true, mine: { sling: 9 } });
-      expect(arcade.finish('c_owlbbbbb', { game: 'sling', score: 9, shots: 5 }, LOOK, MON + 1).paid).toMatchObject({ best: true, top: false });
+      arcade.start('c_owlaaaaa', 'sling', 1, MON - 60_000);
+      arcade.start('c_owlbbbbb', 'sling', 2, MON - 60_000);
+      const a = arcade.finish('c_owlaaaaa', { game: 'sling', score: 9, shots: 5 }, 1, LOOK, MON);
+      expect(a.ok && a.paid).toMatchObject({ best: true, top: true, mine: { sling: 9 } });
+      const b = arcade.finish('c_owlbbbbb', { game: 'sling', score: 9, shots: 5 }, 2, LOOK, MON + 1);
+      expect(b.ok && b.paid).toMatchObject({ best: true, top: false });
       expect(arcade.wall('sling', MON).top.map((e) => e.score)).toEqual([9, 9]);
     });
   });

@@ -1,4 +1,4 @@
-import { NEST_WORDS, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -286,6 +286,14 @@ const CSS = `
   #hud .say-btn{position:absolute;left:117px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .say-btn svg{width:24px;height:24px}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
+  /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
+  #hud.arcade-pad .pad{visibility:visible;z-index:25}
+  #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
+  #hud.arcade-pad .pad-btn.jump{display:none}
+  /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
+  #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
+  /* The line on how to play keeps to the left of the stick or the Interact the game is played with. */
+  #hud.arcade-stick .arcade .a-hint,#hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
 }
 /* The '!' that stands for Interact, before the first action (what E and the pad's Interact do). */
 #hud .actions .bang{display:inline-flex;width:18px;height:18px;margin:0 6px 0 -4px;vertical-align:-3px}
@@ -434,6 +442,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let lookCb: ((l: OwlLook) => void) | null = null;
   let actionCb: ((id: string) => void) | null = null;
   let interactCb: (() => void) | null = null;
+  /** While a game plays on the pad (OP-137): what the pad's Interact does in it (Moon Flap: a flap). */
+  let arcadeTap: (() => void) | null = null;
   let jumpCbs: { press: (at?: number) => void; release: (at?: number) => void } | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
@@ -507,7 +517,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   };
   // The arcade's game screen covers the whole park while a run is played, like the owl builder.
   const arcade = createArcadeScreen(root);
-  arcade.onClose(() => root.classList.remove('covered'));
+  /** A game played on the pad has it over the arcade screen while the run goes, and not after: Interact, the stick's flicks, or a pull on it. */
+  const arcadePad = (tap: (() => void) | null) => {
+    arcadeTap = tap;
+    root.classList.toggle('arcade-pad', tap !== null);
+  };
+  const arcadeStick = (game: ArcadeGame | null) => {
+    root.classList.toggle('arcade-stick', game === 'crossing' || game === 'sling');
+    stick.flicks(game === 'crossing' ? (v) => arcade.padHop(v.y < 0 ? 'up' : v.y > 0 ? 'down' : v.x < 0 ? 'left' : 'right') : null);
+    stick.pulls(game === 'sling' ? { pull: (x, y) => arcade.padPull(x, y), release: () => arcade.padRelease() } : null);
+  };
+  arcade.onClose(() => {
+    arcadePad(null);
+    arcadeStick(null);
+    root.classList.remove('covered');
+  });
   // So does the climb screen (the stained-glass climb), which owns its controls while it is up.
   const climb = createClimbScreen(root);
   climb.onClose(() => root.classList.remove('covered'));
@@ -566,7 +590,15 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
   sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
   sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
-  interactBtn.addEventListener('click', () => interactCb?.());
+  interactBtn.addEventListener('click', () => {
+    if (!arcadeTap) interactCb?.();
+  });
+  // In a game, the pad's Interact acts as the thumb goes down: a flap cannot wait for the lift.
+  interactBtn.addEventListener('pointerdown', (e) => {
+    if (!arcadeTap) return;
+    e.preventDefault();
+    arcadeTap();
+  });
   // Jump goes down with the thumb and comes up with it (a hold glides); held onto the button, so a
   // thumb that drifts off it while held still holds. A click from a keyboard (no pointer) is a tap.
   jumpBtn.addEventListener('pointerdown', (e) => {
@@ -741,9 +773,17 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       if (!arcade.isOpen()) makeRoom();
       root.classList.add('covered');
       arcade.open(view, handlers);
+      // Moon Flap plays on the pad as well as on the field: Interact flaps; Hoot & Hop hops by the stick's
+      // flicks; Talon Toss aims by a pull on the stick and launches as the thumb lets go (OP-137).
+      arcadePad(view.game === 'flight' ? () => arcade.padTap() : null);
+      arcadeStick(view.game);
     },
     arcadePlaying: (score, banner) => arcade.playing(score, banner),
-    arcadeResult: (r) => arcade.result(r),
+    arcadeResult: (r) => {
+      arcadePad(null);
+      arcadeStick(null);
+      arcade.result(r);
+    },
     closeArcade: () => arcade.close(),
     openClimb(view, handlers) {
       if (!climb.isOpen()) makeRoom();

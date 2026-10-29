@@ -111,6 +111,8 @@ export type NoteReply =
 export type RunReply = { ok: true; game: ArcadeGame; seed: number; startedAt: number } | No;
 /** A run's result taken: what it paid, the wall it changed and the owl's own bests. */
 export type ScoreReply = { ok: true; paid: RunPaid } | No;
+/** A run's best so far kept (OP-137): its game's column on the wall and the owl's own bests after it. */
+export type RecordReply = { ok: true; wall: GameWall; mine: OwnBests } | No;
 /** A climb started at the portal, or the open one returned (`resumed`); `startedAt` on this device's clock. */
 export type ClimbReply =
   | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
@@ -140,8 +142,10 @@ export interface ActivityLink {
   tasks(): Promise<TaskView | null>;
   /** Start a run of an arcade game, standing at its cabinet. */
   run(game: ArcadeGame): Promise<RunReply>;
-  /** End the run with this seed: its score (and for Nest Knockdown, its shots). */
+  /** End the run with this seed: its score (and for Talon Toss, its shots). */
   score(result: RunResult, seed: number): Promise<ScoreReply>;
+  /** As the run with this seed goes: its score so far, kept as the owl's best when it beats it (OP-137). */
+  record(result: RunResult, seed: number): Promise<RecordReply>;
   /** The stained-glass climb: start a run at the portal, or get the open one back wherever the owl stands. */
   climb(): Promise<ClimbReply>;
   /** A band line reached in the run with this seed (1 to BAND_COUNT). */

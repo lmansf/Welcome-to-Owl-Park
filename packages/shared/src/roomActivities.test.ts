@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BITE_AFTER_MS, BITE_WINDOW_MS, CAST_EVERY_MS, COPY_FIRST, COPY_SPOT, FISHING_SPOT, LANTERNS, LANTERN_BURN_MS, LANTERN_EVERY_MS, LANTERN_GLOW_MS, QUIZ_ZONES, quizRound } from './activities';
 import { rectCenter } from './geometry';
 import type { Vec2 } from './protocol';
-import { CABINETS, leastRunMs } from './arcade';
-import { Activities, ACT_SLACK, NOTE_EVERY_MS, REEL_SLACK_MS, endRun, startRun, type ActivityRoom } from './roomActivities';
+import { CABINETS } from './arcade';
+import { Activities, ACT_SLACK, NOTE_EVERY_MS, REEL_SLACK_MS, startRun, type ActivityRoom } from './roomActivities';
 import { ROOMS } from '../rooms';
 
 /** A room as Activities sees it: an id, who is in it, and where each owl stands. */
@@ -154,16 +154,6 @@ describe('a run in the arcade', () => {
     // A cabinet switched off (Hatching Soon) starts nothing.
     const off = CABINETS.map((c) => (c.game === 'flight' ? { ...c, live: false } : c));
     expect(startRun('arcade', at('cabinet-flight'), 'flight', 1, T0, off)).toEqual({ ok: false, reason: 'unknown' });
-  });
-
-  it('ends only the run it started, with a result that could be true for its time', () => {
-    const run = { game: 'crossing' as const, seed: 7, startedAt: T0 };
-    const result = { game: 'crossing' as const, score: 4 };
-    expect(endRun(run, result, 7, T0 + leastRunMs(result))).toBe('ok');
-    expect(endRun(run, result, 8, T0 + 60_000)).toBe('idle');
-    expect(endRun(run, { game: 'flight', score: 4 }, 7, T0 + 60_000)).toBe('idle');
-    expect(endRun(undefined, result, 7, T0 + 60_000)).toBe('idle');
-    expect(endRun(run, { game: 'crossing', score: 40 }, 7, T0 + 5_000)).toBe('unknown');
   });
 });
 

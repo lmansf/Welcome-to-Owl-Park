@@ -4,7 +4,8 @@
  * the socket attachments when the object wakes up or is moved. Besides the park's rooms it
  * holds the street of nests and every nest with owls in it, each nest a room of its own made
  * from NEST_ROOM; whose nest it is and how it stands come from the collections object. An arcade
- * run lives on its visitor's socket from start to score, so it outlasts the object's sleep.
+ * run lives in the collections object, keyed by the collector, like the climb's: it outlasts the
+ * object's sleep and the visitor's socket (OP-137).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -25,7 +26,6 @@ import {
   STREET_DOORS,
   STREET_ROOM,
   distance,
-  endRun,
   filterOwnedWear,
   getInteractable,
   getNpc,
@@ -45,7 +45,6 @@ import {
   sameRealms,
   startRun,
   wearVariants,
-  type ArcadeRun,
   type ClientAct,
   type ClientFrame,
   type ClientHello,
@@ -86,8 +85,6 @@ interface Attachment {
   tz?: string;
   /** In a nest: this owl is its owner (the collections object said so at its hello). Only the owner changes a nest. */
   owner?: boolean;
-  /** In the arcade: the run this owl started and has not scored yet. */
-  run?: ArcadeRun;
   /** Which copy of its room this object is (OP-075), when it is not the room itself. */
   copy?: number;
   /** The entry the Worker gave this socket, handed over in the welcome and then let go (OP-075). */
@@ -850,20 +847,27 @@ export class RoomObject extends DurableObject<Env> {
             }
           }
         }
+        // The run lives in the collections object, keyed by the collector (OP-137): a page back from a
+        // dropped connection still has it, and the best it reaches is kept as it goes.
         case 'run': {
           const res = startRun(att.room, room.positionOf(att.id), frame.g!, crypto.getRandomValues(new Uint32Array(1))[0]!, Date.now());
           if (!res.ok) return no(res.reason);
-          this.keepRun(ws, res.run);
-          return this.send(ws, { t: 'act', r, a, ok: true, game: res.run.game, seed: res.run.seed, startedAt: res.run.startedAt });
+          const { startedAt } = await stub.arcadeStart(cid, res.run.game, res.run.seed);
+          return this.send(ws, { t: 'act', r, a, ok: true, game: res.run.game, seed: res.run.seed, startedAt });
+        }
+        case 'record': {
+          const result: RunResult = frame.n === undefined ? { game: frame.g!, score: frame.s! } : { game: frame.g!, score: frame.s!, shots: frame.n };
+          const kept = await stub.arcadeRecord(cid, result, frame.k!, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK));
+          if (!kept.ok) return no(kept.reason);
+          this.send(ws, { t: 'act', r, a, ok: true, wall: kept.wall, mine: kept.mine });
+          if (kept.changed) room.broadcast({ t: 'wall', walls: [kept.wall] }, att.id);
+          return;
         }
         case 'score': {
           const result: RunResult = frame.n === undefined ? { game: frame.g!, score: frame.s! } : { game: frame.g!, score: frame.s!, shots: frame.n };
-          const verdict = endRun((ws.deserializeAttachment() as Attachment | null)?.run, result, frame.k!, Date.now());
-          if (verdict === 'idle') return no('idle');
           // One result per run, whether or not it holds up.
-          this.keepRun(ws, undefined);
-          if (verdict === 'unknown') return no('unknown');
-          const settled = await stub.arcadeRun(cid, result, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK));
+          const settled = await stub.arcadeRun(cid, result, frame.k!, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK));
+          if (!settled.ok) return no(settled.reason);
           this.send(ws, { t: 'act', r, a, ok: true, paid: settled.paid });
           // Everyone else in the arcade sees the wall change; the player has it in the answer.
           if (settled.changed) room.broadcast({ t: 'wall', walls: [settled.paid.wall] }, att.id);
@@ -874,14 +878,6 @@ export class RoomObject extends DurableObject<Env> {
     } catch {
       return no('offline');
     }
-  }
-
-  /** Keep the visitor's arcade run on its socket (or, with none, drop it). */
-  private keepRun(ws: WebSocket, run: ArcadeRun | undefined): void {
-    const cur = ws.deserializeAttachment() as Attachment | null;
-    if (!cur) return;
-    const { run: _done, ...rest } = cur;
-    ws.serializeAttachment((run ? { ...rest, run } : rest) satisfies Attachment);
   }
 
   /** The arcade's score wall for a newcomer, with its own bests (the wall fills in with the next run if the collections are away). */

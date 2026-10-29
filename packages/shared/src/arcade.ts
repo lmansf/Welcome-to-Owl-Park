@@ -3,12 +3,15 @@
  * end, with three game cabinets along its back wall under the score wall. Each cabinet is a spot in
  * the room data (a door without `to`) and plays one game, as the visitor's own owl:
  *
- * - Hoot & Hop: hop across lanes of drones and noodle carts; each crossing banks a tier (the next
- *   one is quicker); a hit ends the run. The score is the crossings.
+ * - Hoot & Hop: hop four ways up the field to the perch, across lanes of noodle carts, drones and
+ *   bats and rivers crossed on logs, level after level, each quicker than the last; three lives. The
+ *   score is the rows first reached in each level, and one more for each level cleared (OP-137).
  * - Moon Flap: tap to flap through the gaps between neon branches on a night flight. The score is
  *   the gaps passed.
- * - Nest Knockdown: pull back and launch at stacked neon crates, ten stacks, three shots each; a
- *   stack knocked down in fewer shots scores more. The score is the points.
+ * - Talon Toss: pull back and launch at three targets on their stands (a stack of crates, a tower, a
+ *   nest sheltered under a plank), five shots at each; crates, the plank and the nest topple, fall and
+ *   break under real physics. The score is a point for each crate or plank knocked down and
+ *   KNOCK_NEST_POINTS for the nest (OP-137).
  *
  * The page plays; the room server starts each run, checks the score against the time the run took,
  * pays from a fixed table under the activities' shared daily cap, and keeps today's scores for the
@@ -23,6 +26,18 @@
  * score, the `wall` frame), and the page's arcade/ modules and ArcadeScene. The write-up drafted with
  * OP-038 is in commit c342d60 (its docs/ACTIVITIES.md and docs/ARCHITECTURE.md) to start from; the
  * hall and the paintings are noted in apps/park/src/game/arcade.ts.
+ *
+ * TODO-DOCS (OP-137): the slingshot game is Talon Toss (the owner renamed it from Nest Knockdown on
+ * 2026-10-28, its title sign repainted): docs/ACTIVITIES.md and docs/CHANGELOG.md still name it Nest
+ * Knockdown. Hoot & Hop is played in levels now (apps/park/src/arcade/hop.ts): four-way hops (the
+ * arrow keys or WASD, a swipe on the field, a flick of the pad's stick on a touch screen; a tap is a
+ * hop up), ten levels laid out by hand and seeded ones after, rivers crossed on logs and bats from
+ * level 4, three lives; seven points a level (a row each, one for the top), so its feather bands are
+ * seven times the old crossings' (7, 21, 35, 56, 84, 119) and its time check counts a hop a point.
+ * Talon Toss is played on a physics engine (matter.js, fetched only for that game): three targets (a
+ * stack, a tower, a nest sheltered under a plank), five shots at each, a point for each crate or plank
+ * knocked to the ground, broken or off the field and eight for the nest; a shot ends once everything
+ * has been still a second (eight seconds at most); its best is 30, as before, with the same bands.
  */
 import { CLOSED_SIGNS } from '../rooms';
 import type { OwlLook } from './protocol';
@@ -47,7 +62,7 @@ export interface CabinetDef {
   live: boolean;
 }
 
-/** The cabinets from west to east: Hoot & Hop, Moon Flap, Nest Knockdown. */
+/** The cabinets from west to east: Hoot & Hop, Moon Flap, Talon Toss. */
 export const CABINETS: readonly CabinetDef[] = [
   { spot: 'cabinet-crossing', game: 'crossing', live: true },
   { spot: 'cabinet-flight', game: 'flight', live: true },
@@ -69,7 +84,7 @@ export function cabinetOf(game: ArcadeGame, cabinets: readonly CabinetDef[] = CA
 
 // ---------- the games' clocks (the pages play by them, the room server checks by them) ----------
 
-/** Hoot & Hop: lanes of traffic between the two kerbs. */
+/** Hoot & Hop: lanes between the kerb and the perch. A level pays a point for each row and one for the perch. */
 export const HOP_LANES = 5;
 /** A hop's time in the air; the next hop waits for the landing. */
 export const HOP_MS = 180;
@@ -78,15 +93,17 @@ export const FLAP_SPEED = 200;
 export const FLAP_SPACING = 300;
 /** How far ahead of the owl the first branch starts. */
 export const FLAP_FIRST = 420;
-/** Nest Knockdown: stacks in a run, shots for each, and the least time a shot takes (aim, flight, fall). */
-export const KNOCK_LEVELS = 10;
-export const KNOCK_SHOTS = 3;
+/**
+ * Talon Toss: targets in a run, shots at each, and the least time a shot takes (its flight and the
+ * second everything must stand still before the next).
+ */
+export const KNOCK_LEVELS = 3;
+export const KNOCK_SHOTS = 5;
 export const KNOCK_SHOT_MS = 1200;
-
-/** Points for a stack knocked down in so many shots: 3 for one shot, 2 for two, 1 for three. */
-export function knockPoints(shots: number): number {
-  return Math.max(0, KNOCK_SHOTS + 1 - shots);
-}
+/** What the nest is worth knocked down; a crate or the plank is worth one. */
+export const KNOCK_NEST_POINTS = 8;
+/** Every crate and plank of the three targets (22) and the nest. */
+export const KNOCK_MAX_SCORE = 22 + KNOCK_NEST_POINTS;
 
 // ---------- scores and feathers ----------
 
@@ -101,9 +118,9 @@ export interface GameRules {
 }
 
 export const GAMES: Readonly<Record<ArcadeGame, GameRules>> = {
-  crossing: { game: 'crossing', name: 'Hoot & Hop', bands: [1, 3, 5, 8, 12, 17], maxScore: null },
+  crossing: { game: 'crossing', name: 'Hoot & Hop', bands: [7, 21, 35, 56, 84, 119], maxScore: null },
   flight: { game: 'flight', name: 'Moon Flap', bands: [2, 5, 10, 15, 25, 40], maxScore: null },
-  sling: { game: 'sling', name: 'Nest Knockdown', bands: [2, 5, 9, 14, 20, 26], maxScore: KNOCK_LEVELS * knockPoints(1) },
+  sling: { game: 'sling', name: 'Talon Toss', bands: [2, 5, 9, 14, 20, 26], maxScore: KNOCK_MAX_SCORE },
 };
 
 /** Feathers for a run: 0 to 6, one for each band its score reaches. */
@@ -118,7 +135,7 @@ export const DAY_BEST_FEATHERS = 3;
 export interface RunResult {
   game: ArcadeGame;
   score: number;
-  /** Nest Knockdown: every shot taken, the last stack's included. */
+  /** Talon Toss: every shot taken, the last target's included. */
   shots?: number;
 }
 
@@ -131,8 +148,8 @@ const RUN_SLACK_MS = 1000;
 export function leastRunMs(r: RunResult): number {
   switch (r.game) {
     case 'crossing':
-      // Every crossing is a hop onto each lane and one onto the far kerb.
-      return r.score * (HOP_LANES + 1) * HOP_MS;
+      // Every point is a hop, but a level's last: the perch's hop pays two.
+      return (r.score - Math.floor(r.score / (HOP_LANES + 2))) * HOP_MS;
     case 'flight':
       // The branches come at a steady pace: the first after FLAP_FIRST, then one every FLAP_SPACING.
       return r.score <= 0 ? 0 : ((FLAP_FIRST + (r.score - 1) * FLAP_SPACING) / FLAP_SPEED) * 1000;
@@ -149,8 +166,8 @@ export function plausibleRun(r: RunResult, elapsedMs: number): boolean {
   if (r.game === 'sling') {
     const shots = r.shots;
     if (shots === undefined || !Number.isInteger(shots) || shots < 0 || shots > KNOCK_LEVELS * KNOCK_SHOTS) return false;
-    // Each stack knocked down took at least one shot and scored at most three points.
-    if (r.score > shots * knockPoints(1)) return false;
+    // Nothing falls before the first shot.
+    if (shots === 0 && r.score > 0) return false;
   }
   return elapsedMs >= 0 && elapsedMs <= RUN_MAX_MS && elapsedMs + RUN_SLACK_MS >= leastRunMs(r);
 }

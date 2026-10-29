@@ -5,6 +5,8 @@ import {
   CABINETS,
   CABINET_OFF,
   GAMES,
+  KNOCK_NEST_POINTS,
+  KNOCK_SHOTS,
   WALL_SIZE,
   cabinetOf,
   hexToInt,
@@ -20,7 +22,7 @@ import {
 import { cabinetFace } from '../arcade/cabinets';
 import { FlapGame } from '../arcade/flap';
 import { HopGame } from '../arcade/hop';
-import { KnockGame } from '../arcade/knock';
+import { KnockGame, MAX_PULL, loadPhysics } from '../arcade/knock';
 import type { ActivityLink } from '../collect/service';
 import type { ArcadeInput } from '../ui/arcadeScreen';
 import type { Hud } from '../ui/hud';
@@ -42,19 +44,44 @@ interface Box {
 const CABINET_ART: Readonly<Record<string, { screen: Box; title: { key: string } & Box; ink: string; glow: string }>> = {
   'cabinet-crossing': { screen: { x: 594, y: 428, w: 116, h: 106 }, title: { key: 'arcade-title-hoot-hop', x: 618, y: 176, w: 364, h: 114 }, ink: '#FF8AD0', glow: '#FF2AA1' },
   'cabinet-flight': { screen: { x: 1798, y: 450, w: 128, h: 92 }, title: { key: 'arcade-title-moon-flap', x: 1813, y: 143, w: 251, h: 115 }, ink: '#8AF4FF', glow: '#00E5FF' },
-  'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-nest-knockdown', x: 3900, y: 146, w: 280, h: 110 }, ink: '#CDB0FF', glow: '#8A4DFF' },
+  'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-talon-toss', x: 3900, y: 146, w: 280, h: 110 }, ink: '#CDB0FF', glow: '#8A4DFF' },
 };
 
 /** The score wall: inside the frame of the board on the hall's middle wall (room pixels), one column per game. */
 const BOARD: Box = { x: 2322, y: 182, w: 466, h: 206 };
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
-/** How to play, under each game's field. Visitor-facing. */
-const HINTS: Readonly<Record<ArcadeGame, string>> = {
-  crossing: 'Tap to hop',
-  flight: 'Tap to flap',
-  sling: 'Pull back and let go',
+/** A run past the owl's best tells the room its score at most this often (OP-137). */
+const RECORD_EVERY_MS = 1000;
+
+const HOP_GOAL = 'Hop to the top of the street, level after level. Mind the carts, the drones and the bats, and cross the rivers on the logs.';
+const KNOCK_GOAL = `Knock the crates and the nest to the ground: three targets, ${KNOCK_SHOTS} shots at each. A crate is worth a point, the nest ${KNOCK_NEST_POINTS}.`;
+
+/** How to play, under each game's field, on a touch screen and on a keyboard. Visitor-facing. */
+const HINTS: Readonly<Record<ArcadeGame, { touch: string; keys: string }>> = {
+  crossing: { touch: 'Flick the stick to hop', keys: 'Arrow keys to hop' },
+  flight: { touch: 'Tap to flap', keys: 'Tap to flap' },
+  sling: { touch: 'Pull the stick, let go', keys: 'Pull back and let go, or arrows and space' },
 };
+
+/** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
+const HOW_TO: Readonly<Record<ArcadeGame, { touch: readonly string[]; keys: readonly string[] }>> = {
+  crossing: {
+    touch: [HOP_GOAL, 'Flick the stick to hop up, down, left or right, or swipe the screen. Three lives.'],
+    keys: [HOP_GOAL, 'The arrow keys or WASD hop up, down, left or right. Three lives.'],
+  },
+  flight: {
+    touch: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+    keys: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+  },
+  sling: {
+    touch: [KNOCK_GOAL, 'Pull the stick back to aim (the dots show where the owl will fly) and let go to launch. You can pull back on the screen too.'],
+    keys: [KNOCK_GOAL, 'Pull back on the screen and let go, or aim with the arrow keys and launch with space.'],
+  },
+};
+
+/** Whether this device plays by touch (a phone or a tablet): its hints and how-to say so. */
+const byTouch = () => typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
 
 /** What the arcade needs of the room it is in. */
 export interface ArcadeHost {
@@ -74,6 +101,9 @@ interface Run {
   sim: ArcadeSim;
   /** Sent to the room (once). */
   sent: boolean;
+  /** The best score this run told the room as it went, and when (OP-137). */
+  recorded: number;
+  recordedAt: number;
 }
 
 /** A shrunken owl's face in its own colours: the portraits on the score wall (no names anywhere). */
@@ -105,6 +135,14 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
  * arcade-mid, arcade-end) entered from the street at its west end, a bay per game with the game's
  * title sign over its cabinet, the score wall on the board in the middle; each game is drawn from its
  * painted field and pieces (arcade/paint.ts) once every piece has loaded, in neon lines until then.
+ *
+ * TODO-DOCS (OP-137): docs/ACTIVITIES.md (Neon Roost) and docs/ARCHITECTURE.md section 4: a run is
+ * kept by its collector in the collections object (not on the socket), so it outlasts a dropped
+ * connection; past the owl's best, the page sends `act` `record` (the score so far, at most once a
+ * second) and the room keeps it as the owl's best and shows it on the wall, paying nothing, so a run
+ * cut short keeps its best; the end pays as before, a new best and the day's best judged against the
+ * standings as the run started. Moon Flap flaps with the pad's Interact on a touch screen, and each
+ * game opens on a how-to card before its first run on a device.
  */
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();
@@ -191,6 +229,7 @@ export class Arcade {
   async play(game: ArcadeGame): Promise<void> {
     const acts = this.host.acts();
     if (!acts || this.destroyed) return;
+    const physics = game === 'sling' ? loadPhysics().catch(() => null) : null;
     const reply = await acts.run(game);
     if (this.destroyed) return;
     if (!reply.ok) {
@@ -199,11 +238,22 @@ export class Arcade {
       this.host.hud.closeArcade();
       return;
     }
-    const sim: ArcadeSim = game === 'crossing' ? new HopGame(reply.seed) : game === 'flight' ? new FlapGame(reply.seed) : new KnockGame();
-    this.run = { game, seed: reply.seed, sim, sent: false };
+    let sim: ArcadeSim;
+    if (game === 'sling') {
+      // Talon Toss's physics engine, fetched alongside the room's answer (only that game uses it).
+      const M = await physics;
+      if (this.destroyed) return;
+      if (!M) {
+        this.host.hud.toast('The park did not catch that. Try again in a moment.');
+        this.host.hud.closeArcade();
+        return;
+      }
+      sim = new KnockGame(M);
+    } else sim = game === 'crossing' ? new HopGame(reply.seed) : new FlapGame(reply.seed);
+    this.run = { game, seed: reply.seed, sim, sent: false, recorded: 0, recordedAt: 0 };
     const top = this.walls.get(game)?.top[0]?.score ?? null;
     this.host.hud.openArcade(
-      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game], top, best: this.mine[game] ?? null },
+      { game, name: GAMES[game].name, colour: ARCADE_INK[game].css, hint: HINTS[game][byTouch() ? 'touch' : 'keys'], howTo: HOW_TO[game][byTouch() ? 'touch' : 'keys'], top, best: this.mine[game] ?? null },
       {
         input: (i) => this.input(i),
         frame: (rect) => this.frame(rect),
@@ -248,25 +298,50 @@ export class Arcade {
   private input(i: ArcadeInput): void {
     const sim = this.run?.sim;
     if (!sim || sim.over) return;
+    if (i.kind === 'hop') {
+      if (sim.game === 'crossing') sim.hopTo(i.dir);
+      return;
+    }
     if (i.kind === 'tap') {
       if (sim.game !== 'sling') sim.tap();
       return;
     }
     if (sim.game !== 'sling') return;
     if (i.kind === 'aim') sim.aimByPull(i.dx, i.dy);
+    else if (i.kind === 'pull') sim.aimByPull(i.x * MAX_PULL, i.y * MAX_PULL);
     else if (i.kind === 'nudge') sim.nudge(i.angle, i.power);
     else sim.release();
   }
 
-  /** Every frame of a run: the score on the screen, and once it is over, its result to the room. */
+  /** Every frame of a run: the score on the screen, a new best kept as it comes, and once it is over, its result to the room. */
   private step(sim: ArcadeSim): void {
     const run = this.run;
     if (!run || run.sim !== sim) return;
-    this.host.hud.arcadePlaying(sim.score, sim.game === 'sling' ? sim.banner : '');
+    this.host.hud.arcadePlaying(sim.score, sim.game === 'flight' ? '' : sim.banner);
     if (sim.over && !run.sent) {
       run.sent = true;
       void this.finish(run);
-    }
+    } else if (!sim.over) this.keepBest(run);
+  }
+
+  /**
+   * A run past the owl's best of the day tells the room its score as it goes (at most once a
+   * RECORD_EVERY_MS), so the best is on the wall even if this page never sees the run end (OP-137).
+   */
+  private keepBest(run: Run): void {
+    const score = run.sim.score;
+    const now = Date.now();
+    if (score <= (this.mine[run.game] ?? 0) || score <= run.recorded || now - run.recordedAt < RECORD_EVERY_MS) return;
+    run.recorded = score;
+    run.recordedAt = now;
+    const result: RunResult = run.sim.game === 'sling' ? { game: run.game, score, shots: run.sim.shots } : { game: run.game, score };
+    void this.host
+      .acts()
+      ?.record(result, run.seed)
+      .then((reply) => {
+        if (reply.ok && !this.destroyed) this.onWall([reply.wall], reply.mine);
+      })
+      .catch(() => undefined);
   }
 
   private async finish(run: Run): Promise<void> {
@@ -293,7 +368,7 @@ export class Arcade {
   }
 
   /** The run as tests see it (the game itself, to play it by its rules), and whether it is drawn from its paintings. */
-  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; painted: boolean } | null {
+  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; recorded: number; painted: boolean } | null {
     const view = this.host.scene.scene.get('arcade') as ArcadeScene | null;
     return this.run ? { ...this.run, painted: view?.isPainted() ?? false } : null;
   }

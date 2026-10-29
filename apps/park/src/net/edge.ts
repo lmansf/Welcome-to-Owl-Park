@@ -639,6 +639,11 @@ export class EdgeTransport implements ParkTransport {
         if (!f.ok) return f;
         return f.a === 'score' ? { ok: true, paid: f.paid } : unknown;
       },
+      record: async (result, k) => {
+        const f = await act('record', { g: result.game, s: result.score, k, ...(result.shots !== undefined ? { n: result.shots } : {}) });
+        if (!f.ok) return f;
+        return f.a === 'record' ? { ok: true, wall: f.wall, mine: f.mine } : unknown;
+      },
       climb: async () => {
         const f = await act('climb');
         if (!f.ok) return f;

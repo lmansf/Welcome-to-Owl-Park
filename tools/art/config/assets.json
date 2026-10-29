@@ -152,7 +152,7 @@
       "key_colour": "#FF00FF",
       "with_2x": true
     },
-    "arcade-title-nest-knockdown": {
+    "arcade-title-talon-toss": {
       "w": 280,
       "h": 110,
       "kind": "arcade",
@@ -178,6 +178,29 @@
       "h": 84,
       "kind": "arcade",
       "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-bat": {
+      "w": 40,
+      "h": 34,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-log": {
+      "w": 112,
+      "h": 40,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-hop-river": {
+      "w": 320,
+      "h": 80,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "format": "webp",
       "with_2x": true
     },
     "arcade-flap-bg": {
@@ -225,6 +248,20 @@
     "arcade-knock-stand": {
       "w": 72,
       "h": 72,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-plank": {
+      "w": 144,
+      "h": 16,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-nest": {
+      "w": 60,
+      "h": 24,
       "kind": "arcade",
       "key_colour": "#00FF00",
       "with_2x": true

@@ -11,13 +11,14 @@ import {
   HOP_LANES,
   HOP_MS,
   KNOCK_LEVELS,
+  KNOCK_MAX_SCORE,
+  KNOCK_NEST_POINTS,
   KNOCK_SHOTS,
   KNOCK_SHOT_MS,
   RUN_MAX_MS,
   cabinetAt,
   cabinetOf,
   isArcadeGame,
-  knockPoints,
   leastRunMs,
   plausibleRun,
   portraitLook,
@@ -57,7 +58,7 @@ describe('the arcade', () => {
 
 describe('the arcade’s games', () => {
   it('names each game, and knows them by id only', () => {
-    expect(ARCADE_GAMES.map((g) => GAMES[g].name)).toEqual(['Hoot & Hop', 'Moon Flap', 'Nest Knockdown']);
+    expect(ARCADE_GAMES.map((g) => GAMES[g].name)).toEqual(['Hoot & Hop', 'Moon Flap', 'Talon Toss']);
     expect(ARCADE_GAMES.every((g) => cabinetOf(g).game === g)).toBe(true);
     expect(isArcadeGame('flight')).toBe(true);
     expect(isArcadeGame('Moon Flap')).toBe(false);
@@ -75,14 +76,18 @@ describe('the arcade’s games', () => {
     }
   });
 
-  it('scores a knocked-down stack higher for fewer shots, and caps a run at ten stacks', () => {
-    expect([1, 2, 3, 4].map(knockPoints)).toEqual([3, 2, 1, 0]);
-    expect(GAMES.sling.maxScore).toBe(KNOCK_LEVELS * 3);
+  it('plays Talon Toss at three targets, five shots each, with the nest worth eight and thirty the best (OP-137)', () => {
+    expect([KNOCK_LEVELS, KNOCK_SHOTS, KNOCK_NEST_POINTS]).toEqual([3, 5, 8]);
+    expect(GAMES.sling.maxScore).toBe(KNOCK_MAX_SCORE);
+    expect(KNOCK_MAX_SCORE).toBe(30);
     expect(GAMES.sling.bands[5]).toBeLessThanOrEqual(GAMES.sling.maxScore!);
   });
 
   it('knows the least time a result can take', () => {
-    expect(leastRunMs({ game: 'crossing', score: 3 })).toBe(3 * (HOP_LANES + 1) * HOP_MS);
+    // Hoot & Hop: a hop a point, and the perch's hop two (seven points a level of six hops).
+    expect(leastRunMs({ game: 'crossing', score: 3 })).toBe(3 * HOP_MS);
+    expect(leastRunMs({ game: 'crossing', score: HOP_LANES + 2 })).toBe((HOP_LANES + 1) * HOP_MS);
+    expect(leastRunMs({ game: 'crossing', score: 2 * (HOP_LANES + 2) + 2 })).toBe((2 * (HOP_LANES + 1) + 2) * HOP_MS);
     expect(leastRunMs({ game: 'flight', score: 0 })).toBe(0);
     expect(leastRunMs({ game: 'flight', score: 1 })).toBe((FLAP_FIRST / FLAP_SPEED) * 1000);
     expect(leastRunMs({ game: 'flight', score: 11 })).toBe(((FLAP_FIRST + 10 * FLAP_SPACING) / FLAP_SPEED) * 1000);
@@ -90,7 +95,7 @@ describe('the arcade’s games', () => {
   });
 
   it('takes a result only when the run lasted long enough for it', () => {
-    const hop = { game: 'crossing', score: 3 } as const;
+    const hop = { game: 'crossing', score: 21 } as const;
     expect(plausibleRun(hop, leastRunMs(hop))).toBe(true);
     expect(plausibleRun(hop, leastRunMs(hop) - 900)).toBe(true);
     expect(plausibleRun(hop, leastRunMs(hop) - 1100)).toBe(false);
@@ -105,11 +110,13 @@ describe('the arcade’s games', () => {
   it('refuses a result that cannot be', () => {
     expect(plausibleRun({ game: 'crossing', score: -1 }, 60_000)).toBe(false);
     expect(plausibleRun({ game: 'crossing', score: 2.5 }, 60_000)).toBe(false);
-    // Nest Knockdown: the shots come with the points, at most three points a shot and thirty a run.
+    // Talon Toss: the shots come with the points, fifteen at most, nothing down before the first, thirty a run.
     expect(plausibleRun({ game: 'sling', score: 9 }, 60_000)).toBe(false);
-    expect(plausibleRun({ game: 'sling', score: 9, shots: 3 }, 60_000)).toBe(true);
-    expect(plausibleRun({ game: 'sling', score: 10, shots: 3 }, 60_000)).toBe(false);
-    expect(plausibleRun({ game: 'sling', score: 31, shots: 30 }, 600_000)).toBe(false);
+    expect(plausibleRun({ game: 'sling', score: 14, shots: 1 }, 60_000)).toBe(true);
+    expect(plausibleRun({ game: 'sling', score: 1, shots: 0 }, 60_000)).toBe(false);
+    expect(plausibleRun({ game: 'sling', score: 0, shots: 0 }, 0)).toBe(true);
+    expect(plausibleRun({ game: 'sling', score: 31, shots: 15 }, 600_000)).toBe(false);
+    expect(plausibleRun({ game: 'sling', score: 30, shots: 15 }, 600_000)).toBe(true);
     expect(plausibleRun({ game: 'sling', score: 0, shots: KNOCK_LEVELS * KNOCK_SHOTS + 1 }, 600_000)).toBe(false);
     expect(plausibleRun({ game: 'sling', score: 3, shots: 1 }, 300)).toBe(true);
     expect(plausibleRun({ game: 'sling', score: 6, shots: 4 }, 2_000)).toBe(false);

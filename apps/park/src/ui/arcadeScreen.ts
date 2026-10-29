@@ -1,4 +1,5 @@
 import { FIELD_H, FIELD_W } from '../arcade/field';
+import type { HopDir } from '../arcade/hop';
 import type { PreviewRect } from '../game/BuilderScene';
 import { createModal, modalHeader } from './modal';
 
@@ -9,6 +10,8 @@ export interface ArcadeView {
   /** CSS colour of the game's neon. */
   colour: string;
   hint: string;
+  /** How to play, on a card before the game's first run on this device (OP-137). */
+  howTo: readonly string[];
   /** Today's best on the wall (null: no score yet today), and the owl's own. */
   top: number | null;
   best: number | null;
@@ -27,7 +30,14 @@ export interface ArcadeResultView {
 }
 
 /** What the player does on the field, in field pixels where it matters. */
-export type ArcadeInput = { kind: 'tap' } | { kind: 'aim'; dx: number; dy: number } | { kind: 'release' } | { kind: 'nudge'; angle: number; power: number };
+export type ArcadeInput =
+  | { kind: 'tap' }
+  | { kind: 'hop'; dir: HopDir }
+  | { kind: 'aim'; dx: number; dy: number }
+  /** The pad's stick pulled back (shares of its reach, -1 to 1): Talon Toss aims by it (OP-137). */
+  | { kind: 'pull'; x: number; y: number }
+  | { kind: 'release' }
+  | { kind: 'nudge'; angle: number; power: number };
 
 export interface ArcadeHandlers {
   input(i: ArcadeInput): void;
@@ -39,6 +49,14 @@ export interface ArcadeHandlers {
 
 export interface ArcadeScreen {
   open(view: ArcadeView, handlers: ArcadeHandlers): void;
+  /** The pad's Interact in a game played on the pad: it puts the how-to card away first, then plays (OP-137). */
+  padTap(): void;
+  /** A flick of the pad's stick in Hoot & Hop: the how-to card away first, then a hop that way (OP-137). */
+  padHop(dir: HopDir): void;
+  /** The pad's stick pulled in Talon Toss (shares of its reach): the how-to card away first, then the aim (OP-137). */
+  padPull(x: number, y: number): void;
+  /** The thumb off the pad's stick after a pull: the launch. */
+  padRelease(): void;
   /** The score and the line of the moment ("Cleared in 2 shots!"), as the run goes. */
   playing(score: number, banner: string): void;
   result(r: ArcadeResultView): void;
@@ -68,9 +86,40 @@ const CSS = `
 #hud .arcade .a-note{font-size:13px;opacity:.85;text-align:center}
 #hud .arcade .a-buttons{display:flex;gap:10px}
 #hud .arcade .a-buttons button{min-height:44px;padding:8px 22px}
+#hud .arcade .a-howto{position:absolute;left:12px;right:12px;top:24%;margin:0 auto;max-width:420px;display:none;flex-direction:column;gap:10px;align-items:center;padding:18px 16px;border-radius:20px;background:rgba(12,30,54,.95);border:1px solid var(--neon);box-shadow:0 0 30px rgba(0,0,0,.6);text-align:center}
+#hud .arcade.howto .a-howto{display:flex}
+#hud .arcade.howto .a-hint{display:none}
+#hud .arcade .a-howto h3{margin:0;color:var(--neon);text-shadow:0 0 10px var(--neon);font-size:22px}
+#hud .arcade .a-howto p{margin:0;font-size:16px;line-height:1.35}
+#hud .arcade .a-howto button{min-height:44px;padding:8px 28px}
 `;
 
 let styled = false;
+
+/** Hoot & Hop's keys: the arrows and WASD hop their ways, the space bar and Enter hop up (OP-137). */
+const HOP_KEYS: Readonly<Record<string, HopDir>> = { arrowup: 'up', w: 'up', ' ': 'up', enter: 'up', arrowdown: 'down', s: 'down', arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right' };
+/** A press on Hoot & Hop's field that moves this far (CSS pixels) is a swipe, a hop its way. */
+const SWIPE_PX = 24;
+
+/** The games whose how-to card this device has shown: each shows once, before its first run here (OP-137). */
+const HOW_TO_KEY = 'owl-park:arcade-how-to';
+
+function howToSeen(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HOW_TO_KEY) ?? '[]') as unknown;
+    return Array.isArray(v) ? v.filter((g): g is string => typeof g === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function sawHowTo(game: string): void {
+  try {
+    localStorage.setItem(HOW_TO_KEY, JSON.stringify([...new Set([...howToSeen(), game])]));
+  } catch {
+    /* no storage: the card shows again next time */
+  }
+}
 
 /**
  * The arcade's game screen (C40): the whole screen over the room, the field drawn by the game itself
@@ -92,6 +141,11 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       <div class="a-score" data-score aria-label="Score" aria-live="off"></div>
       <div class="a-banner" data-banner aria-live="polite"></div>
       <div class="a-hint" data-hint></div>
+      <div class="a-howto" data-howto role="dialog" aria-live="polite">
+        <h3 data-howto-title></h3>
+        <div data-howto-text></div>
+        <button data-howto-go>Play</button>
+      </div>
       <div class="a-result" data-result aria-live="polite">
         <div class="a-line" data-line></div>
         <div data-paid></div>
@@ -109,9 +163,22 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   let view: ArcadeView | null = null;
   let handlers: ArcadeHandlers | null = null;
   let drag: { x: number; y: number } | null = null;
+  /** Hoot & Hop: a press on the field, a hop up when it lifts, or a hop the way it swipes (OP-137). */
+  let swipe: { id: number; x: number; y: number } | null = null;
   let shown = { score: -1, banner: '' };
+  /** A pull on the pad's stick under way in the game (Talon Toss). */
+  let pulling = false;
   $<HTMLButtonElement>('[data-again]').addEventListener('click', () => handlers?.again());
   $<HTMLButtonElement>('[data-done]').addEventListener('click', () => modal.close());
+  const howToUp = () => box.classList.contains('howto');
+  /** The how-to card goes, for good on this device, and the field takes the keys. */
+  const howToDone = () => {
+    if (!view || !howToUp()) return;
+    sawHowTo(view.game);
+    box.classList.remove('howto');
+    requestAnimationFrame(() => stage.focus({ preventScroll: true }));
+  };
+  $<HTMLButtonElement>('[data-howto-go]').addEventListener('click', howToDone);
 
   /** The stage's rectangle, and the field fitted in its middle. */
   const fit = () => {
@@ -135,14 +202,27 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
 
   const over = () => box.classList.contains('over');
   stage.addEventListener('pointerdown', (e) => {
-    if (!view || over() || (e.target as Element).closest('button')) return;
+    if (!view || over() || howToUp() || (e.target as Element).closest('button')) return;
     e.preventDefault();
+    if (view.game === 'crossing') {
+      swipe = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      stage.setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (view.game !== 'sling') return handlers?.input({ kind: 'tap' });
     const f = fit();
     drag = { x: (e.clientX - f.x0) / f.k, y: (e.clientY - f.y0) / f.k };
     stage.setPointerCapture?.(e.pointerId);
   });
   stage.addEventListener('pointermove', (e) => {
+    if (swipe && e.pointerId === swipe.id) {
+      const dx = e.clientX - swipe.x;
+      const dy = e.clientY - swipe.y;
+      if (Math.hypot(dx, dy) < SWIPE_PX) return;
+      swipe = null;
+      handlers?.input({ kind: 'hop', dir: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up' });
+      return;
+    }
     if (!drag) return;
     const f = fit();
     handlers?.input({ kind: 'aim', dx: (e.clientX - f.x0) / f.k - drag.x, dy: (e.clientY - f.y0) / f.k - drag.y });
@@ -152,12 +232,31 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
     drag = null;
     handlers?.input({ kind: 'release' });
   };
-  stage.addEventListener('pointerup', letGo);
-  stage.addEventListener('pointercancel', () => (drag = null));
+  stage.addEventListener('pointerup', (e) => {
+    if (swipe && e.pointerId === swipe.id) {
+      swipe = null;
+      if (view && !over()) handlers?.input({ kind: 'hop', dir: 'up' });
+      return;
+    }
+    letGo();
+  });
+  stage.addEventListener('pointercancel', () => {
+    drag = null;
+    swipe = null;
+  });
   // The keys: a hop or a flap; for the slingshot, aim higher or lower, more or less power, and let go.
   box.addEventListener('keydown', (e) => {
     if (!view || over() || e.ctrlKey || e.metaKey || e.altKey) return;
     if ((e.target as Element).closest('button') && (e.key === 'Enter' || e.key === ' ')) return;
+    // The how-to card: Space or Enter puts it away, and nothing reaches the game until it is.
+    if (howToUp()) {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) howToDone();
+      }
+      return;
+    }
     const k = e.key.toLowerCase();
     let input: ArcadeInput | null = null;
     if (view.game === 'sling') {
@@ -166,6 +265,9 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       else if (k === 'arrowright' || k === 'd') input = { kind: 'nudge', angle: 0, power: 0.04 };
       else if (k === 'arrowleft' || k === 'a') input = { kind: 'nudge', angle: 0, power: -0.04 };
       else if (k === ' ' || k === 'enter') input = { kind: 'release' };
+    } else if (view.game === 'crossing') {
+      const dir = HOP_KEYS[k];
+      if (dir) input = { kind: 'hop', dir };
     } else if (k === ' ' || k === 'arrowup' || k === 'w' || k === 'enter') input = { kind: 'tap' };
     if (!input) return;
     e.preventDefault();
@@ -187,11 +289,45 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       hintEl.textContent = v.hint;
       bannerEl.textContent = '';
       scoreEl.textContent = '0';
+      // The first run of a game on this device: how to play it, before anything moves.
+      const first = v.howTo.length > 0 && !howToSeen().includes(v.game);
+      box.classList.toggle('howto', first);
+      if (first) {
+        $<HTMLElement>('[data-howto-title]').textContent = v.name;
+        $<HTMLElement>('[data-howto-text]').replaceChildren(
+          ...v.howTo.map((line) => {
+            const para = document.createElement('p');
+            para.textContent = line;
+            return para;
+          }),
+        );
+      }
       if (!modal.isOpen()) modal.open();
-      // The field takes the keys: the stage holds the focus while the run goes.
+      // The field takes the keys: the stage holds the focus while the run goes (the card's Play first).
       stage.tabIndex = -1;
-      requestAnimationFrame(() => stage.focus({ preventScroll: true }));
+      requestAnimationFrame(() => (first ? $<HTMLButtonElement>('[data-howto-go]') : stage).focus({ preventScroll: true }));
       frame();
+    },
+    padTap() {
+      if (howToUp()) howToDone();
+      else if (view && !over()) handlers?.input({ kind: 'tap' });
+    },
+    padHop(dir) {
+      if (howToUp()) howToDone();
+      else if (view && !over()) handlers?.input({ kind: 'hop', dir });
+    },
+    padPull(x, y) {
+      if (howToUp()) howToDone();
+      else if (view && !over()) {
+        pulling = true;
+        handlers?.input({ kind: 'pull', x, y });
+      }
+    },
+    padRelease() {
+      // Only a pull made in the game launches: not one that put the how-to card away.
+      if (!pulling) return;
+      pulling = false;
+      if (view && !over()) handlers?.input({ kind: 'release' });
     },
     playing(score, banner) {
       if (score !== shown.score) {
