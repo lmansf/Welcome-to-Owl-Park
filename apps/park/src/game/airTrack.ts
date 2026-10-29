@@ -4,6 +4,8 @@
  * step, so every page draws the same arc from the same states. A state whose time is still to come
  * waits its turn: the room server's are drawn a moment behind, as walks are. The state under way is
  * carried on in whole steps as frames go by, so a frame adds a step or two, never the whole flight.
+ * Carried on, a flight comes down on the floor; a landing on a perch is told (its page knows what was
+ * under the owl), and the owl stands on it until the next state.
  */
 import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, JUMP_CUT_SPEED, ON_GROUND, fall, type Air } from '@owl-park/shared';
 
@@ -63,8 +65,9 @@ export class AirTrack {
     }
     this.carried = c;
     if (c.air.s === GROUNDED) {
-      // Down, with nothing more told: done with this flight.
-      if (this.told.length === 1) {
+      // Down on the floor, with nothing more told: done with this flight. Down on a perch, it stands
+      // up there until told otherwise (OP-084).
+      if (this.told.length === 1 && c.air.z === 0) {
         this.told = [];
         this.carried = null;
       }

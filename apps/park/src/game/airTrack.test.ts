@@ -18,6 +18,20 @@ describe('an owl’s flight as a page draws it (OP-084)', () => {
     expect(track.at(10_500)).toEqual(ON_GROUND);
   });
 
+  it('keeps an owl told it landed on a perch standing up there, until it is told it left (OP-084)', () => {
+    const track = new AirTrack();
+    track.tell(up, 1000);
+    const onPerch: Air = { z: 80, vz: 0, s: GROUNDED, f: 0 };
+    track.tell(onPerch, 1300);
+    expect(track.at(1400)).toEqual(onPerch);
+    expect(track.at(60_000)).toEqual(onPerch);
+    // Off its edge: down from there to the floor, and done.
+    track.tell({ z: 80, vz: 0, s: AIRBORNE, f: 1 }, 61_000);
+    expect(track.at(61_100).z).toBeLessThan(80);
+    expect(track.at(70_000)).toEqual(ON_GROUND);
+    expect(track.at(70_100)).toEqual(ON_GROUND);
+  });
+
   it('waits for a state’s time to come, then takes the newer one; one overtaken never shows', () => {
     const track = new AirTrack();
     track.tell(up, 1000);

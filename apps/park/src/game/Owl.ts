@@ -119,6 +119,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private air: Air = ON_GROUND;
   /** How high the owl is drawn above its feet right now (owl canvas units). */
   private lift = 0;
+  /** What the owl comes down on where it is (OP-084, perches.ts groundAt): the scene's, the floor until it says. */
+  groundUnder: (pos: Vec2, z: number) => number = () => 0;
   /** The wings (OP-084): behind the body, a side for each shoulder; folded away on the ground. */
   private readonly wings: Phaser.GameObjects.Container;
   private readonly wingSides: ReadonlyArray<{ side: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image; accent: Phaser.GameObjects.Image; dir: 1 | -1 }>;
@@ -585,7 +587,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
     // Flight: the drawing rises and falls; the wings open behind the body, beating for a jump or a
     // flap, spread in a glide (the owl leaning into it) and raised a little in a fall, and fold away
-    // on landing; the shadow stays on the floor, smaller and fainter.
+    // on landing; the shadow stays on what is under the owl (the floor, or a perch), smaller and fainter.
     this.lift = air.z / (OWL_SCALE * this.size);
     const dt = this.drawnAt ? Math.min(0.1, Math.max(0, now - this.drawnAt) / 1000) : 0;
     this.drawnAt = now;
@@ -606,7 +608,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.art.setScale(this.dir * this.drawnFacing * sx, sy);
     this.art.y = y - this.lift;
     this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : 0;
-    const up = shadowFade(air.z);
+    const ground = this.groundUnder(this.pos, air.z);
+    this.shadow.y = -ground / (OWL_SCALE * this.size);
+    const up = shadowFade(air.z - ground);
     this.shadow.setScale(shadow * (1 - up * 0.45), shadow * (1 - up * 0.45));
     this.shadow.setAlpha(1 - up * 0.5);
 
