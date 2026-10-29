@@ -19,6 +19,9 @@ export interface ParkState {
     flown: { n: number; peak: number; glided: boolean; ms: number };
     /** Asleep where it stands, its visitor idle a while (OP-126). */
     asleep: boolean;
+    /** Its wings open, and the body layer drawn (its flight copy while they are, OP-136), as for this visitor's own owl. */
+    wings: boolean;
+    owlWorn: string;
   }>;
   /** How high this visitor's owl is drawn above the floor (OP-084), in room pixels; `pos` stays on the floor. */
   height: number;
@@ -37,6 +40,10 @@ export interface ParkState {
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
   eyes: number;
   owlArt: string;
+  /** The body layer drawn right now: `owlArt`, or with the wings out its flight copy (`owl-flight-body`), the folded wings taken away (OP-136). */
+  owlWorn: string;
+  /** Whether the owl's wings are open (OP-084). */
+  wings: boolean;
   /** NPC owls, the quest marker each shows, and whether its '!' says the visitor can talk to it now (OP-114). */
   npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
   objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;

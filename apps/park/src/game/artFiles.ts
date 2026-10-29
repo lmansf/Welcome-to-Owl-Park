@@ -1,7 +1,7 @@
 import { DEFAULT_SPECIES, SPECIES, type SpeciesId } from '@owl-park/shared';
-import { DENSE_SCALE, OWL_LAYERS } from './artNames';
+import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS } from './artNames';
 
-export { DENSE_SCALE, OWL_LAYERS, RASTER_EXTS, rasterCandidates, rasterNames } from './artNames';
+export { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, RASTER_EXTS, rasterCandidates, rasterNames } from './artNames';
 
 /** Each species' layer keys (`owl-barn-body` and so on); the great horned owl's are OWL_LAYERS. */
 export const SPECIES_LAYERS = Object.fromEntries(
@@ -13,6 +13,18 @@ const SPECIES_LAYER_KEYS: ReadonlySet<string> = new Set(SPECIES.filter((s) => s.
 /** A species' own layer (`owl-barn-face`): not loaded at boot, only when an owl of that kind shows up. */
 export function isSpeciesLayer(key: string): boolean {
   return SPECIES_LAYER_KEYS.has(key);
+}
+
+/** Each species' flight layers (`owl-barn-flight-body` and so on, OP-136); the great horned owl's are FLIGHT_LAYERS. */
+export const SPECIES_FLIGHT_LAYERS = Object.fromEntries(
+  SPECIES.map((s): [SpeciesId, readonly string[]] => [s.id, s.id === DEFAULT_SPECIES ? FLIGHT_LAYERS : FLIGHT_LAYERS.map((k) => k.replace('owl-', `owl-${s.id}-`))]),
+) as Readonly<Record<SpeciesId, readonly string[]>>;
+
+const FLIGHT_LAYER_KEYS: ReadonlySet<string> = new Set(SPECIES.flatMap((s) => SPECIES_FLIGHT_LAYERS[s.id]));
+
+/** A flight layer (`owl-flight-body`, `owl-snowy-flight-accent`): not loaded at boot, only once an owl may fly. */
+export function isFlightLayer(key: string): boolean {
+  return FLIGHT_LAYER_KEYS.has(key);
 }
 
 /** Decoded bytes of one 1600 x 900 room texture at 1x (RGBA). */

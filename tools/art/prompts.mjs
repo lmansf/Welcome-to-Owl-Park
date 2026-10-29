@@ -618,6 +618,41 @@ Object.assign(PROMPTS, SPECIES_OWL_PROMPTS);
 HELPER_KEYS.push(...SPECIES_MASTER_KEYS);
 JOBS.push(...SPECIES_JOBS);
 
+// In flight (OP-136): the owls' wing opens behind the body, and a body with its folded wings painted
+// on then shows four. Each kind gets a flight master, an edit of its SELECTED master with the folded
+// wings taken away and nothing else. The master goes out as the post stage's cut of its whole frame
+// (`pnpm art:finish cut <kind>-flight-master --base-key <kind>-master --box 0,0,1040,1248`), the same
+// pixels re-encoded small enough to send inline (the snowy owl's own file is not). The post stage
+// then pastes back only what changed around the wings (`pnpm art:finish patch <kind>-flight-master`)
+// and splits it with the master's own registration (`pnpm art:finish owl --flight`), so the flight
+// body sits exactly where the body does and the face, the eyes and the feet are the master's own.
+// TODO-DOCS (OP-136): docs/ART-PIPELINE.md's owl section gets this recipe (cut, edit, patch, owl --flight).
+const FLIGHT_BODY_PROMPT = `Edit the reference image, a colour-coded layer master of a cute cartoon owl, and take away its two folded wings, and nothing else. Where each folded wing lay against the side of the body, the body goes on as the plain, smooth, rounded side of the torso, painted FLAT pure red #FF0000 like the rest of the body, with any shading ONLY a darker red, and with no wing shape, no feather lines, no wing tip and no wing edge left on it; where a wing or its tip stood out past the body, paint the flat pure magenta #FF00FF background there instead, so the body's outline runs smooth and rounded from the shoulders down to the feet. The chest patch keeps its shape, FLAT pure green #00FF00. Keep everything else exactly as it is: the same single owl in the same pose, the same size and the same position in the frame with the feet on the bottom edge; the same head, and ear tufts if it has them; the same face, eyes, beak, markings, tail, legs and feet; the same strict colour code (the body FLAT pure red #FF0000, the chest FLAT pure green #00FF00, the accent parts such as the tail FLAT pure blue #0000FF, any shading ONLY a darker value of the same hue, no highlights, no outlines, no colour mixing between the regions, crisp hard edges between them); and the same flat, solid, uniform pure magenta #FF00FF background with no gradient, no vignette and no cast shadow. STYLE: clean flat 2D game character art in the same style as the reference, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture. No text, no watermark. AVOID: any wing, folded or spread; any arm; any feather pattern on the sides of the body; any change to the head, the face, the eyes or the feet; any second owl, bird, animal, person or character; any colour other than pure red, pure green, pure blue and their darker shades on the owl; magenta tint on the owl; soft or feathered edges; outlines.`;
+
+/** Each kind's flight master and the master it is an edit of. */
+export const FLIGHT_MASTERS = Object.fromEntries(['owl-master', ...SPECIES_MASTER_KEYS].map((m) => [m.replace(/-master$/, '-flight-master'), m]));
+const FLIGHT_LAYER_KEYS = ['owl-flight-body', 'owl-flight-belly', 'owl-flight-accent'];
+const FLIGHT_JOBS = Object.entries(FLIGHT_MASTERS).map(([key, master], i) => ({
+  key,
+  kind: 'owl-edit',
+  // owl-flight-master -> owl-flight-body; owl-barn-flight-master -> owl-barn-flight-body.
+  derives: FLIGHT_LAYER_KEYS.map((k) => k.replace('owl-', key.replace(/flight-master$/, ''))),
+  realm: 'hub',
+  optional: true,
+  size: '1040x1248',
+  seed: 1911 + i * 10,
+  variants: 4,
+  key_colour: '#FF00FF',
+  regions: OWL_REGIONS,
+  refs: [{ ref: `@canvas:${key}`, role: 'edit source', optional: false }],
+  // fal's edit endpoint answers in JPEG unless asked; JPEG rings at the key-colour edges.
+  providers: { fal: { output_format: 'png' } },
+  prompt: FLIGHT_BODY_PROMPT,
+}));
+for (const key of Object.keys(FLIGHT_MASTERS)) PROMPTS[key] = FLIGHT_BODY_PROMPT;
+HELPER_KEYS.push(...Object.keys(FLIGHT_MASTERS));
+JOBS.push(...FLIGHT_JOBS);
+
 // Flight (OP-084): the owls' wing. One right wing spread open, painted in the owl master's colour code
 // (the covert feathers FLAT red, the long flight feathers FLAT blue, on magenta) as an edit of the
 // selected owl master, so it shares the owls' style. The post stage splits the picked one into the two

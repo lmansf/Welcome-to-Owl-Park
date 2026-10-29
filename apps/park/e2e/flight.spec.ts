@@ -17,6 +17,28 @@ async function holdPadJump(page: Page, ms: number): Promise<void> {
   await jump.dispatchEvent('pointerup', { pointerId: 7, pointerType: 'touch', isPrimary: true });
 }
 
+/**
+ * Every frame the page draws through one flight, a jump held `ms` (to its top, then a glide): whether
+ * the owl's wings were out and which body layer it wore (OP-136), until it is down again.
+ */
+async function frameByFrame(page: Page, ms: number): Promise<Array<{ wings: boolean; worn: string; air: number }>> {
+  return page.evaluate(async (hold) => {
+    const seen: Array<{ wings: boolean; worn: string; air: number }> = [];
+    const landed = new Promise<void>((resolve) => {
+      const look = () => {
+        const s = window.owlPark.state();
+        if (s) seen.push({ wings: s.wings, worn: s.owlWorn, air: s.air.s });
+        if (s && s.air.s === 0 && seen.some((f) => f.air !== 0)) resolve();
+        else requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
+    });
+    window.owlPark.jump(hold);
+    await landed;
+    return seen;
+  }, ms);
+}
+
 test.describe('flight (OP-084)', () => {
   test('the space bar: held, a jump of about an owl and a quarter; a quick tap, less; pressed again in the air, higher; and the owl lands where it stood', async ({ page }) => {
     await openPark(page);
@@ -74,6 +96,32 @@ test.describe('flight (OP-084)', () => {
     expect(held.peak).toBeGreaterThan(120);
     expect(held.glided).toBe(true);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-flight-pad.png` });
+  });
+
+  test('with its wings out the owl wears its flight body, the folded wings taken away, every frame; landed, its own (OP-136)', async ({ page }) => {
+    await openPark(page);
+    // The room loads the flight body once its own art is in, ahead of a first take-off.
+    await expect.poll(() => page.evaluate(() => window.owlPark.textureSize('owl-flight-body')), { timeout: 15_000 }).not.toBeNull();
+    expect((await state(page)).owlWorn).toBe('owl-body');
+    const frames = await frameByFrame(page, 1_200);
+    const out = frames.filter((f) => f.wings);
+    expect(out.length).toBeGreaterThan(0);
+    // Never four wings: the open wings only ever over the body without the folded ones.
+    expect(out.every((f) => f.worn === 'owl-flight-body')).toBe(true);
+    const down = await state(page);
+    expect([down.wings, down.owlWorn]).toEqual([false, 'owl-body']);
+  });
+
+  test('a barn owl flies in its own flight body (OP-136)', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('owl-park:look', JSON.stringify({ body: '#D9A066', belly: '#FFF8EC', accent: '#A67B5B', species: 'barn' })));
+    await openPark(page);
+    // Its own layers load on first sight, its flight body after them.
+    await expect.poll(async () => (await state(page)).owlArt, { timeout: 15_000 }).toBe('owl-barn-body');
+    await expect.poll(() => page.evaluate(() => window.owlPark.textureSize('owl-barn-flight-body')), { timeout: 15_000 }).not.toBeNull();
+    const out = (await frameByFrame(page, 1_200)).filter((f) => f.wings);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((f) => f.worn === 'owl-barn-flight-body')).toBe(true);
+    expect((await state(page)).owlWorn).toBe('owl-barn-body');
   });
 
   test('another tab sees the owl jump, flap and glide from the same states, and come down where it stood', async ({ context }) => {

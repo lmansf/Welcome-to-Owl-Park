@@ -561,6 +561,111 @@
       "from": "owl-screech-master",
       "with_2x": true
     },
+    "owl-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-flight-master",
+      "with_2x": true
+    },
+    "owl-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-flight-master",
+      "with_2x": true
+    },
+    "owl-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-flight-master",
+      "with_2x": true
+    },
+    "owl-barn-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-flight-master",
+      "with_2x": true
+    },
+    "owl-barn-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-flight-master",
+      "with_2x": true
+    },
+    "owl-barn-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-flight-master",
+      "with_2x": true
+    },
+    "owl-burrowing-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-flight-master",
+      "with_2x": true
+    },
+    "owl-burrowing-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-flight-master",
+      "with_2x": true
+    },
+    "owl-burrowing-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-flight-master",
+      "with_2x": true
+    },
+    "owl-snowy-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-flight-master",
+      "with_2x": true
+    },
+    "owl-snowy-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-flight-master",
+      "with_2x": true
+    },
+    "owl-snowy-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-flight-master",
+      "with_2x": true
+    },
+    "owl-screech-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-flight-master",
+      "with_2x": true
+    },
+    "owl-screech-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-flight-master",
+      "with_2x": true
+    },
+    "owl-screech-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-flight-master",
+      "with_2x": true
+    },
     "owl-wing-body": {
       "w": 200,
       "h": 120,

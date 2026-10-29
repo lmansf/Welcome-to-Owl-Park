@@ -264,9 +264,12 @@ def label_image(labels: np.ndarray, absorbed: np.ndarray | None = None, hatch: b
     return Image.fromarray(out, "RGB")
 
 
-def _luminance(V: np.ndarray, region: np.ndarray, keys: dict) -> tuple[np.ndarray, float]:
-    vals = V[region]
-    vref = float(np.percentile(vals, keys["lit_percentile"])) if vals.size else 1.0
+def _luminance(V: np.ndarray, region: np.ndarray, keys: dict, vref: float | None = None) -> tuple[np.ndarray, float]:
+    """The region's shading as luminance, its lit base (``vref``, the region's ``lit_percentile``
+    value unless given) mapped to white."""
+    if vref is None:
+        vals = V[region]
+        vref = float(np.percentile(vals, keys["lit_percentile"])) if vals.size else 1.0
     vref = max(vref, 1e-3)
     L = np.clip((V / vref) ** float(keys["shade_gamma"]), float(keys["luminance_floor"]), 1.0)
     return L.astype(np.float32), vref
@@ -349,7 +352,11 @@ def _over(dst_rgb: np.ndarray, dst_a: np.ndarray, src_rgb: np.ndarray, src_a: np
 
 
 def split(master: Image.Image, keys: dict | None = None, *, height: int | None = None, flip: bool = False, blink_from: Image.Image | None = None,
-          labels_img: Image.Image | None = None, debug_dir: Path | None = None, chroma: ChromaParams | None = None) -> OwlSplit:
+          labels_img: Image.Image | None = None, debug_dir: Path | None = None, chroma: ChromaParams | None = None, like: dict | None = None) -> OwlSplit:
+    """The master's five layers at 1x and 2x. With ``like`` (another split's ``info``: the kind's own
+    master, of which this one is an edit), its lit bases and its registration are used instead of this
+    master's own, so the layers sit and shade exactly as that master's do (OP-136: a flight body whose
+    folded wings were taken away, which would otherwise register narrower and shade a little lighter)."""
     keys = keys or load_keys()
     reg = keys["registration"]
     target_h = int(height or reg.get("height", 220))
@@ -390,10 +397,14 @@ def split(master: Image.Image, keys: dict | None = None, *, height: int | None =
             Vbody[comp] = float(V[ring].mean()) if ring.any() else 1.0
         sm = mean_filter(Vbody, 2)
         Vbody[face_m] = sm[face_m]
-    Lbody, vref_body = _luminance(Vbody, body_m, keys)
-    Lbelly, vref_belly = _luminance(V, belly_m, keys)
-    Laccent, vref_accent = _luminance(V, accent_m, keys)
-    info["vref"] = {"body": round(vref_body, 4), "belly": round(vref_belly, 4), "accent": round(vref_accent, 4)}
+    # A split `like` another takes its lit bases as they were, unrounded, so what both paintings
+    # share comes out the same to the last level.
+    lit = ((like or {}).get("vref") or {}).get("exact") or {}
+    Lbody, vref_body = _luminance(Vbody, body_m, keys, lit.get("body"))
+    Lbelly, vref_belly = _luminance(V, belly_m, keys, lit.get("belly"))
+    Laccent, vref_accent = _luminance(V, accent_m, keys, lit.get("accent"))
+    info["vref"] = {"body": round(vref_body, 4), "belly": round(vref_belly, 4), "accent": round(vref_accent, 4),
+                    "exact": {"body": vref_body, "belly": vref_belly, "accent": vref_accent}}
 
     body_a = A
     belly_a = A * _feather(belly_m)
@@ -440,7 +451,12 @@ def split(master: Image.Image, keys: dict | None = None, *, height: int | None =
     max_w = float(reg.get("max_width", 196))
     half = max(feet_x - x0, x1 - feet_x, 1.0)
     s_logical = min(target_h / bh, max_w / bw, (max_w / 2.0) / half)
-    info["registration"] = {"scale_logical": round(s_logical, 5), "bbox": [x0, y0, x1, y1], "feet_x": round(feet_x, 1), "half_width": round(half, 1)}
+    placed = (like or {}).get("registration")
+    if placed:
+        # Where the kind's own master sits: its exact scale, its feet's column and (below) its lowest row at each size.
+        s_logical, feet_x = float(placed["exact"]["scale"]), float(placed["exact"]["feet_x"])
+    info["registration"] = {"scale_logical": round(s_logical, 5), "bbox": [x0, y0, x1, y1], "feet_x": round(feet_x, 1), "half_width": round(half, 1),
+                            "exact": {"scale": s_logical, "feet_x": feet_x}, "bottom": {}, **({"like": True} if placed else {})}
 
     full = {
         "owl-body": _la(Lbody, body_a),
@@ -457,6 +473,9 @@ def split(master: Image.Image, keys: dict | None = None, *, height: int | None =
         a = np.asarray(scaled["owl-body"].getchannel("A"))
         rows = np.nonzero((a >= 128).any(1))[0]
         bottom = int(rows[-1]) if rows.size else size[1] - 1
+        if placed:
+            bottom = int(placed["bottom"][str(k)])
+        info["registration"]["bottom"][str(k)] = bottom
         ox = int(round(OWL_W * k / 2.0 - feet_x * s))
         oy = OWL_H * k - 1 - bottom
         out = {}

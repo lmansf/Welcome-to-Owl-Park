@@ -62,7 +62,7 @@ except ImportError as _missing:  # pragma: no cover - depends on the machine
 
 from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, SPRITES_PATH, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
-                    TINTED_LAYERS, TOOLS_ART_DIR, WING_LAYERS, WING_MASTER, ArtError, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size,
+                    TINTED_LAYERS, TOOLS_ART_DIR, WING_LAYERS, WING_MASTER, ArtError, flight_layers, flight_master, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size,
                     now_iso, owl_layer_base, owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
 from artlib import forbidden, pngmeta, prov, sprites, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
@@ -769,6 +769,8 @@ def cmd_owl(ctx: Ctx, a: argparse.Namespace) -> int:
     species = getattr(a, "species", None)
     master_key = f"owl-{species}-master" if species else "owl-master"
     layer_keys = species_layers(species) if species else OWL_LAYERS
+    if a.flight:
+        return finish_flight(ctx, a, species, master_key)
     raw, sc = resolve_raw(ctx, master_key, a.raw)
     master = open_raw(raw)
     keys = owl_layers.for_species(owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), sc), species)
@@ -802,6 +804,43 @@ def cmd_owl(ctx: Ctx, a: argparse.Namespace) -> int:
         note(f"{fname}: {o['bytes']} bytes ({o['mode']})")
     note(f"review: {rel_to_repo(rv)}")
     note(json.dumps({k: res.info[k] for k in ("region_px", "eyes_found", "blink", "registration") if k in res.info}))
+    return 0
+
+
+def finish_flight(ctx: Ctx, a: argparse.Namespace, species: str | None, master_key: str) -> int:
+    """In flight (OP-136): the kind's flight master (its master with the folded wings taken away,
+    pasted back by `patch`) split into its flight body, belly and accent, placed and shaded exactly as
+    the kind's own layers are. The master is split again with the same flags and must give its
+    published body back pixel for pixel (else its registration is not the one the park draws); its
+    registration and lit bases are then the flight master's. The face stays the master's own."""
+    fkey = flight_master(species)
+    base_raw, base_sc = resolve_raw(ctx, master_key, None)
+    raw, sc = resolve_raw(ctx, fkey, a.raw)
+    keys = owl_layers.for_species(owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), base_sc), species)
+    auto = bool(a.key_colour) and a.key_colour.lower() == "auto"
+    chroma = chroma_params(a, None if auto else (key_colour_for(ctx, master_key, a.key_colour, base_sc) or keys["backdrop"]))
+    base = owl_layers.split(open_raw(base_raw), keys, height=a.height, flip=a.flip, chroma=chroma)
+    body = (species_layers(species) if species else OWL_LAYERS)[0]
+    published = ctx.public / f"{body}@2x.png"
+    if not published.exists():
+        raise ArtError(f"no published {published.name} to place the flight layers against (publish {master_key}'s layers first)")
+    if not np.array_equal(np.asarray(Image.open(published).convert("LA")), np.asarray(base.layers_2x["owl-body"].convert("LA"))):
+        raise ArtError(f"{master_key} split again does not give the published {published.name}: pass the flags its layers were finished with (its provenance line's owl: tool)")
+    res = owl_layers.split(open_raw(raw), keys, height=a.height, flip=a.flip, chroma=chroma, like=base.info)
+    outputs: dict[str, dict] = {}
+    for name, key in zip(TINTED_LAYERS, flight_layers(species)):
+        for tag, layer, mult in (("1x", res.layers_1x[name], 1), ("2x", res.layers_2x[name], 2)):
+            fname = f"{key}.png" if tag == "1x" else f"{key}@2x.png"
+            data, info = encode_under_budget(layer, ctx.budget)
+            outputs[fname] = {**write_final(ctx, fname, data, (200 * mult, 240 * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": key, "logical": tag}
+    rv = write_review(ctx, f"{fkey}-layers.png", owl_layers.review_sheet(res))
+    tools = patch_lines(sc) + [f"owl: {'species=' + species + ' ' if species else ''}flight, placed and shaded as {master_key} ({base_raw.name}, its published {published.name} reproduced) "
+                               f"height={a.height or keys['registration'].get('height', 220)} flip={a.flip} key={res.info.get('backdrop')} t0={a.t0} t1={a.t1} despill={a.despill_band}", "budget: LA/RGBA truecolour"]
+    save_post_record(ctx, fkey, {"key": fkey, "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
+    for fname, o in outputs.items():
+        note(f"{fname}: {o['bytes']} bytes ({o['mode']})")
+    note(f"review: {rel_to_repo(rv)}")
+    note(f"publish: pnpm art:finish publish {' '.join(flight_layers(species))}")
     return 0
 
 
@@ -1455,6 +1494,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--blink", default=None, help="from:<png> (an eyes-closed edit of the master)")
     sp.add_argument("--labels", default=None, help="hand-edited label map")
     sp.add_argument("--debug", action="store_true", help="dump intermediates to <work>/intermediates/<master key>")
+    sp.add_argument("--flight", action="store_true", help="finish the kind's flight master (its folded wings taken away) into its flight body, belly and accent, placed as its own layers (OP-136)")
     add_chroma_flags(sp)
     sp.set_defaults(despill_band=4)  # the owl's flat fills need only a narrow despill band
     add_common(sp)
