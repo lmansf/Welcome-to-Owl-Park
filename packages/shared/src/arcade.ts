@@ -8,8 +8,10 @@
  *   score is the rows first reached in each level, and one more for each level cleared (OP-137).
  * - Moon Flap: tap to flap through the gaps between neon branches on a night flight. The score is
  *   the gaps passed.
- * - Talon Toss: pull back and launch at stacked neon crates, ten stacks, three shots each; a
- *   stack knocked down in fewer shots scores more. The score is the points.
+ * - Talon Toss: pull back and launch at three targets on their stands (a stack of crates, a tower, a
+ *   nest sheltered under a plank), five shots at each; crates, the plank and the nest topple, fall and
+ *   break under real physics. The score is a point for each crate or plank knocked down and
+ *   KNOCK_NEST_POINTS for the nest (OP-137).
  *
  * The page plays; the room server starts each run, checks the score against the time the run took,
  * pays from a fixed table under the activities' shared daily cap, and keeps today's scores for the
@@ -32,6 +34,10 @@
  * hop up), ten levels laid out by hand and seeded ones after, rivers crossed on logs and bats from
  * level 4, three lives; seven points a level (a row each, one for the top), so its feather bands are
  * seven times the old crossings' (7, 21, 35, 56, 84, 119) and its time check counts a hop a point.
+ * Talon Toss is played on a physics engine (matter.js, fetched only for that game): three targets (a
+ * stack, a tower, a nest sheltered under a plank), five shots at each, a point for each crate or plank
+ * knocked to the ground, broken or off the field and eight for the nest; a shot ends once everything
+ * has been still a second (eight seconds at most); its best is 30, as before, with the same bands.
  */
 import { CLOSED_SIGNS } from '../rooms';
 import type { OwlLook } from './protocol';
@@ -87,15 +93,17 @@ export const FLAP_SPEED = 200;
 export const FLAP_SPACING = 300;
 /** How far ahead of the owl the first branch starts. */
 export const FLAP_FIRST = 420;
-/** Talon Toss: stacks in a run, shots for each, and the least time a shot takes (aim, flight, fall). */
-export const KNOCK_LEVELS = 10;
-export const KNOCK_SHOTS = 3;
+/**
+ * Talon Toss: targets in a run, shots at each, and the least time a shot takes (its flight and the
+ * second everything must stand still before the next).
+ */
+export const KNOCK_LEVELS = 3;
+export const KNOCK_SHOTS = 5;
 export const KNOCK_SHOT_MS = 1200;
-
-/** Points for a stack knocked down in so many shots: 3 for one shot, 2 for two, 1 for three. */
-export function knockPoints(shots: number): number {
-  return Math.max(0, KNOCK_SHOTS + 1 - shots);
-}
+/** What the nest is worth knocked down; a crate or the plank is worth one. */
+export const KNOCK_NEST_POINTS = 8;
+/** Every crate and plank of the three targets (22) and the nest. */
+export const KNOCK_MAX_SCORE = 22 + KNOCK_NEST_POINTS;
 
 // ---------- scores and feathers ----------
 
@@ -112,7 +120,7 @@ export interface GameRules {
 export const GAMES: Readonly<Record<ArcadeGame, GameRules>> = {
   crossing: { game: 'crossing', name: 'Hoot & Hop', bands: [7, 21, 35, 56, 84, 119], maxScore: null },
   flight: { game: 'flight', name: 'Moon Flap', bands: [2, 5, 10, 15, 25, 40], maxScore: null },
-  sling: { game: 'sling', name: 'Talon Toss', bands: [2, 5, 9, 14, 20, 26], maxScore: KNOCK_LEVELS * knockPoints(1) },
+  sling: { game: 'sling', name: 'Talon Toss', bands: [2, 5, 9, 14, 20, 26], maxScore: KNOCK_MAX_SCORE },
 };
 
 /** Feathers for a run: 0 to 6, one for each band its score reaches. */
@@ -127,7 +135,7 @@ export const DAY_BEST_FEATHERS = 3;
 export interface RunResult {
   game: ArcadeGame;
   score: number;
-  /** Talon Toss: every shot taken, the last stack's included. */
+  /** Talon Toss: every shot taken, the last target's included. */
   shots?: number;
 }
 
@@ -158,8 +166,8 @@ export function plausibleRun(r: RunResult, elapsedMs: number): boolean {
   if (r.game === 'sling') {
     const shots = r.shots;
     if (shots === undefined || !Number.isInteger(shots) || shots < 0 || shots > KNOCK_LEVELS * KNOCK_SHOTS) return false;
-    // Each stack knocked down took at least one shot and scored at most three points.
-    if (r.score > shots * knockPoints(1)) return false;
+    // Nothing falls before the first shot.
+    if (shots === 0 && r.score > 0) return false;
   }
   return elapsedMs >= 0 && elapsedMs <= RUN_MAX_MS && elapsedMs + RUN_SLACK_MS >= leastRunMs(r);
 }

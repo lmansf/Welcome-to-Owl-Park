@@ -4,8 +4,8 @@ import type { ParkConfig } from '../config';
 import { FIELD_H, FIELD_W, runRandom } from '../arcade/field';
 import { BRANCH_W, FLAP_R, FLAP_X, GROUND_Y as FLAP_GROUND, type Branch, type FlapGame } from '../arcade/flap';
 import { HOP_ROWS, rowY, type HopGame, type Item, type Lane } from '../arcade/hop';
-import { CRATE, GROUND_Y as KNOCK_GROUND, SLING, type Crate, type KnockGame, type Stand } from '../arcade/knock';
-import { GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, standPieces } from '../arcade/paint';
+import { GROUND_Y as KNOCK_GROUND, PIECE_SIZE, SLING, drawnAt, shown, type KnockGame, type Piece, type PieceKind, type Stand } from '../arcade/knock';
+import { GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, KNOCK_PIECES, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, solidFit, standPieces } from '../arcade/paint';
 import type { PreviewRect } from './BuilderScene';
 import { Owl } from './Owl';
 
@@ -32,6 +32,10 @@ const WATER_W = GAME_ART.crossing[HOP_WATER]!.w;
 /** A log's painting is stretched so the log itself (not the glow round it) is as long as the log the game plays. */
 const LOG_ART = GAME_ART.crossing[HOP_PIECES.log]!;
 const LOG_STRETCH = LOG_ART.w / (SPRITES[HOP_PIECES.log]?.solid?.[2] ?? LOG_ART.w);
+/** Talon Toss's paintings laid on its bodies: each stretched so its solid part covers the body (OP-137). */
+const KNOCK_FIT = Object.fromEntries(
+  (Object.keys(KNOCK_PIECES) as PieceKind[]).map((kind) => [kind, solidFit(GAME_ART.sling[KNOCK_PIECES[kind]]!, SPRITES[KNOCK_PIECES[kind]]?.solid, PIECE_SIZE[kind])]),
+) as Record<PieceKind, ReturnType<typeof solidFit>>;
 /** The ground strip needs this many tiles to cover the field at any scroll. */
 const GROUND_TILES = Math.ceil(FIELD_W / GROUND_TILE_W) + 1;
 
@@ -92,7 +96,7 @@ export class ArcadeScene extends Phaser.Scene {
   private stars: Array<{ x: number; y: number; r: number }> = [];
   /**
    * The run's painting, clipped to the field like the lines: the field and what stands still on it,
-   * then what moves (carts, drones, bats and logs, branches, stands and crates), then the flight's
+   * then what moves (carts, drones, bats and logs, branches, stands, crates, planks and nests), then the flight's
    * ground over the branches' feet. Empty while the run is drawn in neon.
    */
   private layers: { field: Phaser.GameObjects.Container; moving: Phaser.GameObjects.Container; front: Phaser.GameObjects.Container } | null = null;
@@ -107,7 +111,7 @@ export class ArcadeScene extends Phaser.Scene {
   private hopFacing: 1 | -1 = 1;
   private branchTops: Pieces<Branch> | null = null;
   private branchFeet: Pieces<Branch> | null = null;
-  private crates: Pieces<Crate> | null = null;
+  private knockPieces: Pieces<Piece> | null = null;
   private ground: Phaser.GameObjects.Image[] = [];
   /** The stands drawn, and the stack they were drawn for. */
   private standImages: Phaser.GameObjects.Image[] = [];
@@ -190,7 +194,7 @@ export class ArcadeScene extends Phaser.Scene {
     const layers = this.layers;
     if (!layers) return;
     for (const layer of Object.values(layers)) layer.removeAll(true);
-    this.hopItems = this.branchTops = this.branchFeet = this.crates = null;
+    this.hopItems = this.branchTops = this.branchFeet = this.knockPieces = null;
     this.ground = [];
     this.strips = [];
     this.stripsShown = null;
@@ -226,8 +230,9 @@ export class ArcadeScene extends Phaser.Scene {
       layers.front.add(this.ground);
     } else {
       layers.field.add(this.piece('arcade-knock-sling', SLING.x, KNOCK_GROUND).setOrigin(0.5, 1));
-      this.crates = new Pieces(() => {
-        const image = this.piece('arcade-knock-crate');
+      this.knockPieces = new Pieces((p) => {
+        const fit = KNOCK_FIT[p.kind];
+        const image = this.add.image(0, 0, KNOCK_PIECES[p.kind]).setDisplaySize(fit.w, fit.h).setOrigin(fit.ox, fit.oy);
         layers.front.add(image);
         return image;
       });
@@ -290,10 +295,10 @@ export class ArcadeScene extends Phaser.Scene {
   }
 
   /** A line drawn twice: a wide faint glow under a thin bright core. */
-  private neon(g: Phaser.GameObjects.Graphics, color: number, draw: () => void, width = 2): void {
-    g.lineStyle(width * 4, color, 0.14);
+  private neon(g: Phaser.GameObjects.Graphics, color: number, draw: () => void, width = 2, alpha = 1): void {
+    g.lineStyle(width * 4, color, 0.14 * alpha);
     draw();
-    g.lineStyle(width, color, 0.95);
+    g.lineStyle(width, color, 0.95 * alpha);
     draw();
   }
 
@@ -372,11 +377,14 @@ export class ArcadeScene extends Phaser.Scene {
     });
   }
 
-  /** Talon Toss in its painting: the stack's stands, each cut in nine to its size, and its crates as they stand or fly. */
+  /**
+   * Talon Toss in its painting: the target's stands, each cut in nine to its size, and its crates, plank
+   * and nest where the world has them (between its last two steps), fading out once cleared away.
+   */
   private paintKnock(sim: KnockGame): void {
-    const crates = this.crates;
+    const pieces = this.knockPieces;
     const layers = this.layers;
-    if (!crates || !layers) return;
+    if (!pieces || !layers) return;
     if (sim.stands !== this.standsShown) {
       for (const image of this.standImages) image.destroy();
       this.standImages = sim.stands.flatMap((st) =>
@@ -387,14 +395,13 @@ export class ArcadeScene extends Phaser.Scene {
       layers.moving.add(this.standImages);
       this.standsShown = sim.stands;
     }
-    for (const crate of sim.crates) {
-      if (crate.gone) continue;
-      crates
-        .for(crate)
-        .setPosition(crate.x + CRATE / 2, crate.y + CRATE / 2)
-        .setRotation(crate.angle);
+    for (const p of sim.pieces) {
+      const show = shown(p, sim.time);
+      if (show <= 0) continue;
+      const at = drawnAt(p, sim.alpha);
+      pieces.for(p).setPosition(at.x, at.y).setRotation(at.angle).setAlpha(show);
     }
-    crates.sweep();
+    pieces.sweep();
   }
 
   /** Hoot & Hop in neon: the kerb, the level's pavements, roads and rivers, the top of the street, and what goes along them. */
@@ -532,21 +539,46 @@ export class ArcadeScene extends Phaser.Scene {
       for (const p of sim.path()) g.fillCircle(p.x, p.y, 2.5);
     }
     for (const s of this.painted ? [] : sim.stands) this.neon(g, c.glow, () => g.strokeRect(s.x1, s.y, s.x2 - s.x1, KNOCK_GROUND - s.y));
-    for (const crate of this.painted ? [] : sim.crates) {
-      if (crate.gone) continue;
-      const cx = crate.x + CRATE / 2;
-      const cy = crate.y + CRATE / 2;
-      const a = crate.angle;
-      const corner = (dx: number, dy: number) => ({ x: cx + dx * Math.cos(a) - dy * Math.sin(a), y: cy + dx * Math.sin(a) + dy * Math.cos(a) });
-      const h = CRATE / 2 - 1;
-      const pts = [corner(-h, -h), corner(h, -h), corner(h, h), corner(-h, h)];
-      this.neon(g, crate.knocked ? 0xff8ad0 : AMBER, () => {
-        g.strokePoints(pts, true);
-        g.lineBetween(pts[0]!.x, pts[0]!.y, pts[2]!.x, pts[2]!.y);
-      });
+    for (const p of this.painted ? [] : sim.pieces) {
+      const show = shown(p, sim.time);
+      if (show > 0) this.drawPiece(g, p, drawnAt(p, sim.alpha), show);
     }
-    const o = aiming ? pocket : sim.owl;
-    this.placeOwl(o.x, o.y + 16, aiming ? 0 : Math.atan2(sim.owl.vy, sim.owl.vx) * 0.3, 1);
+    // A broken crate's shards, painted or not.
+    for (const s of sim.shards) {
+      const r = 5;
+      const corner = (dx: number, dy: number) => ({ x: s.x + dx * Math.cos(s.angle) - dy * Math.sin(s.angle), y: s.y + dx * Math.sin(s.angle) + dy * Math.cos(s.angle) });
+      g.fillStyle(AMBER, 0.85);
+      g.fillPoints([corner(-r, -r), corner(r, -r), corner(r, r), corner(-r, r)], true);
+    }
+    // The owl: pulled back in the slingshot, or flying where the world has it, leaning into its flight.
+    const owl = sim.owl;
+    const at = aiming ? pocket : owl.flying ? drawnAt({ ...owl, angle: 0, pangle: 0 }, sim.alpha) : owl;
+    const lean = owl.flying && Math.hypot(owl.vx, owl.vy) > 40 ? Math.atan2(owl.vy, owl.vx) * 0.3 : 0;
+    this.placeOwl(at.x, at.y + 16, aiming ? 0 : lean, 1);
+  }
+
+  /** A crate (a box with its brace), the plank or the nest (a bowl with its eggs) in neon, at its place and turn. */
+  private drawPiece(g: Phaser.GameObjects.Graphics, p: Piece, at: { x: number; y: number; angle: number }, show: number): void {
+    const { w, h } = PIECE_SIZE[p.kind];
+    const turn = (dx: number, dy: number) => ({ x: at.x + dx * Math.cos(at.angle) - dy * Math.sin(at.angle), y: at.y + dx * Math.sin(at.angle) + dy * Math.cos(at.angle) });
+    const box = [turn(-w / 2 + 1, -h / 2 + 1), turn(w / 2 - 1, -h / 2 + 1), turn(w / 2 - 1, h / 2 - 1), turn(-w / 2 + 1, h / 2 - 1)];
+    if (p.kind === 'crate') {
+      this.neon(g, AMBER, () => {
+        g.strokePoints(box, true);
+        g.lineBetween(box[0]!.x, box[0]!.y, box[2]!.x, box[2]!.y);
+      }, 2, show);
+    } else if (p.kind === 'plank') {
+      this.neon(g, ARCADE_INK.sling.ink, () => g.strokePoints(box, true), 2, show);
+    } else {
+      // The bowl: its rim straight across the top, its underside a half ellipse.
+      const bowl = Array.from({ length: 13 }, (_, i) => turn((w / 2) * Math.cos((Math.PI * i) / 12), -h / 2 + 4 + (h - 4) * Math.sin((Math.PI * i) / 12)));
+      this.neon(g, AMBER, () => g.strokePoints(bowl, true), 2, show);
+      g.fillStyle(0xf6f1e3, 0.9 * show);
+      for (const dx of [-14, 0, 14]) {
+        const egg = turn(dx, -h / 2 + 1);
+        g.fillEllipse(egg.x, egg.y, 10, 13);
+      }
+    }
   }
 
   /** The owl's feet at a point of the field, leaning a little, facing a way. */

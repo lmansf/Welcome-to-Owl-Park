@@ -252,6 +252,20 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "arcade-knock-plank": {
+      "w": 144,
+      "h": 16,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-nest": {
+      "w": 60,
+      "h": 24,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
     "guardian": {
       "w": 720,
       "h": 820,

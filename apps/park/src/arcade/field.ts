@@ -23,21 +23,28 @@ export function runRandom(seed: number, part?: string): () => number {
   return rotationRandom(part === undefined ? `arcade:${seed}` : `arcade:${seed}:${part}`);
 }
 
-/** Steps a game's fixed-slice clock through `ms` of real time, calling `step` for each slice. */
+/** Steps a game's fixed-slice clock through `ms` of real time, calling `step` for each slice (STEP_MS, or the game's own). */
 export class StepClock {
   private carry = 0;
 
+  constructor(private readonly slice = STEP_MS) {}
+
   /** A clock at the same point, for a copy of a game to look ahead with. */
   copy(): StepClock {
-    const c = new StepClock();
+    const c = new StepClock(this.slice);
     c.carry = this.carry;
     return c;
   }
 
+  /** How far into its next slice the clock is (0 to 1): a drawing between two steps goes that far from the one to the other. */
+  get alpha(): number {
+    return this.carry / this.slice;
+  }
+
   advance(ms: number, step: () => boolean): void {
     this.carry = Math.min(this.carry + Math.max(0, ms), MAX_CATCH_UP_MS);
-    while (this.carry >= STEP_MS) {
-      this.carry -= STEP_MS;
+    while (this.carry >= this.slice) {
+      this.carry -= this.slice;
       if (!step()) {
         this.carry = 0;
         return;

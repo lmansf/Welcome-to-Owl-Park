@@ -10,6 +10,7 @@
 import type { ArcadeGame } from '@owl-park/shared';
 import { FIELD_H, FIELD_W } from './field';
 import type { ItemKind, LaneKind } from './hop';
+import type { PieceKind } from './knock';
 
 /** A painting's size on the field. */
 export interface ArtSize {
@@ -20,7 +21,8 @@ export interface ArtSize {
 /**
  * Each game's painted field and pieces (art keys), at the size each is drawn: all of them, or the game
  * stays in neon. A cart, a drone and a bat are as wide as the hop plays them, a log is stretched to
- * its length, a river's water is laid twice across its lane, the second mirrored; a crate is CRATE square.
+ * its length, a river's water is laid twice across its lane, the second mirrored; a crate, the plank
+ * and the nest are the size the game plays them (PIECE_SIZE).
  */
 export const GAME_ART: Readonly<Record<ArcadeGame, Readonly<Record<string, ArtSize>>>> = {
   crossing: {
@@ -37,8 +39,23 @@ export const GAME_ART: Readonly<Record<ArcadeGame, Readonly<Record<string, ArtSi
     'arcade-knock-sling': { w: 60, h: 120 },
     'arcade-knock-crate': { w: 36, h: 36 },
     'arcade-knock-stand': { w: 72, h: 72 },
+    'arcade-knock-plank': { w: 144, h: 16 },
+    'arcade-knock-nest': { w: 60, h: 24 },
   },
 };
+
+/** Talon Toss's pieces by kind (OP-137), each drawn at its size in the game (PIECE_SIZE). */
+export const KNOCK_PIECES: Readonly<Record<PieceKind, string>> = { crate: 'arcade-knock-crate', plank: 'arcade-knock-plank', nest: 'arcade-knock-nest' };
+
+/**
+ * How a painting is laid on a body of the game: stretched so its solid part (`solid`, from the sprite
+ * manifest: x, y, w, h within the painting's `art` size) covers the `body`, with its middle on the
+ * body's middle (the image's origin, as shares of its size), so it turns about the body's centre.
+ */
+export function solidFit(art: ArtSize, solid: readonly number[] | null | undefined, body: ArtSize): { w: number; h: number; ox: number; oy: number } {
+  const [sx, sy, sw, sh] = solid?.length === 4 && solid[2]! > 0 && solid[3]! > 0 ? solid : [0, 0, art.w, art.h];
+  return { w: (art.w * body.w) / sw!, h: (art.h * body.h) / sh!, ox: (sx! + sw! / 2) / art.w, oy: (sy! + sh! / 2) / art.h };
+}
 
 /** Hoot & Hop's pieces for what goes along its lanes (OP-137). */
 export const HOP_PIECES: Readonly<Record<ItemKind, string>> = { cart: 'arcade-hop-cart', drone: 'arcade-hop-drone', bat: 'arcade-hop-bat', log: 'arcade-hop-log' };

@@ -30,7 +30,14 @@ export interface ArcadeResultView {
 }
 
 /** What the player does on the field, in field pixels where it matters. */
-export type ArcadeInput = { kind: 'tap' } | { kind: 'hop'; dir: HopDir } | { kind: 'aim'; dx: number; dy: number } | { kind: 'release' } | { kind: 'nudge'; angle: number; power: number };
+export type ArcadeInput =
+  | { kind: 'tap' }
+  | { kind: 'hop'; dir: HopDir }
+  | { kind: 'aim'; dx: number; dy: number }
+  /** The pad's stick pulled back (shares of its reach, -1 to 1): Talon Toss aims by it (OP-137). */
+  | { kind: 'pull'; x: number; y: number }
+  | { kind: 'release' }
+  | { kind: 'nudge'; angle: number; power: number };
 
 export interface ArcadeHandlers {
   input(i: ArcadeInput): void;
@@ -46,6 +53,10 @@ export interface ArcadeScreen {
   padTap(): void;
   /** A flick of the pad's stick in Hoot & Hop: the how-to card away first, then a hop that way (OP-137). */
   padHop(dir: HopDir): void;
+  /** The pad's stick pulled in Talon Toss (shares of its reach): the how-to card away first, then the aim (OP-137). */
+  padPull(x: number, y: number): void;
+  /** The thumb off the pad's stick after a pull: the launch. */
+  padRelease(): void;
   /** The score and the line of the moment ("Cleared in 2 shots!"), as the run goes. */
   playing(score: number, banner: string): void;
   result(r: ArcadeResultView): void;
@@ -155,6 +166,8 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   /** Hoot & Hop: a press on the field, a hop up when it lifts, or a hop the way it swipes (OP-137). */
   let swipe: { id: number; x: number; y: number } | null = null;
   let shown = { score: -1, banner: '' };
+  /** A pull on the pad's stick under way in the game (Talon Toss). */
+  let pulling = false;
   $<HTMLButtonElement>('[data-again]').addEventListener('click', () => handlers?.again());
   $<HTMLButtonElement>('[data-done]').addEventListener('click', () => modal.close());
   const howToUp = () => box.classList.contains('howto');
@@ -302,6 +315,19 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
     padHop(dir) {
       if (howToUp()) howToDone();
       else if (view && !over()) handlers?.input({ kind: 'hop', dir });
+    },
+    padPull(x, y) {
+      if (howToUp()) howToDone();
+      else if (view && !over()) {
+        pulling = true;
+        handlers?.input({ kind: 'pull', x, y });
+      }
+    },
+    padRelease() {
+      // Only a pull made in the game launches: not one that put the how-to card away.
+      if (!pulling) return;
+      pulling = false;
+      if (view && !over()) handlers?.input({ kind: 'release' });
     },
     playing(score, banner) {
       if (score !== shown.score) {

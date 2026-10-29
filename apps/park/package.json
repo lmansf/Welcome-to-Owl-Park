@@ -15,10 +15,12 @@
   "dependencies": {
     "@owl-park/shared": "workspace:*",
     "@supabase/supabase-js": "2.118.0",
+    "matter-js": "0.20.0",
     "phaser": "3.90.0"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
+    "@types/matter-js": "0.20.2",
     "@types/node": "^22.20.5",
     "typescript": "5.9.3",
     "vite": "8.3.4",

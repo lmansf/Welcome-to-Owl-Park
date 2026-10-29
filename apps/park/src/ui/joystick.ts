@@ -4,7 +4,8 @@ import type { Vec2 } from '@owl-park/shared';
  * The thumbstick on touch screens: a see-through stick in the bottom-right corner that walks the
  * owl while held, the way WASD does on a keyboard, so a thumb never has to tap the floor between the
  * buttons. It points one of eight ways, like the keys. In a game played by flicks (Hoot & Hop,
- * OP-137) it points one of four, and each push into a way is one flick.
+ * OP-137) it points one of four, and each push into a way is one flick; in a game played by a pull
+ * (Talon Toss) it says how far and which way the knob is pulled, and when the thumb lets go.
  */
 
 const D = Math.SQRT1_2;
@@ -40,11 +41,23 @@ export function stickWay(dx: number, dy: number, radius: number, prev: number | 
   return (((Math.round(a / sector) * (8 / ways)) % 8) + 8) % 8;
 }
 
+/** A game played by a pull on the stick: where the knob is (shares of its reach, -1 to 1), and the thumb letting go. */
+export interface StickPull {
+  pull(x: number, y: number): void;
+  release(): void;
+}
+
 export interface Joystick {
   /** Where the stick points: one of eight unit vectors, or null while it rests. */
   direction(): Vec2 | null;
   /** While `cb` is set the stick points four ways, and calls it once for each push into one (null: eight ways again). */
   flicks(cb: ((dir: Vec2) => void) | null): void;
+  /**
+   * While `cb` is set the stick points no way: it tells `cb` where its knob is pulled as it moves, and
+   * when the thumb lets go; a touch cut short (the page hidden, the touch cancelled) is a pull to nothing
+   * and no letting go (null: it walks again).
+   */
+  pulls(cb: StickPull | null): void;
   detach(): void;
 }
 
@@ -88,6 +101,7 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
   let pointer: number | null = null;
   let way: number | null = null;
   let flick: ((dir: Vec2) => void) | null = null;
+  let pulled: StickPull | null = null;
 
   const aim = (e: PointerEvent) => {
     const r = stick.getBoundingClientRect();
@@ -101,6 +115,7 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       dy *= reach / len;
     }
     knob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+    if (pulled) return pulled.pull(dx / reach, dy / reach);
     const was = way;
     way = stickWay(dx, dy, radius, way, flick ? 4 : 8);
     if (flick && way !== null && way !== was) flick(STICK_WAYS[way]!);
@@ -126,18 +141,30 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
   const onMove = (e: PointerEvent) => {
     if (e.pointerId === pointer) aim(e);
   };
-  const onEnd = (e: PointerEvent) => {
-    if (e.pointerId === pointer) rest();
+  /** The thumb lifted: a pull is let go. */
+  const onUp = (e: PointerEvent) => {
+    if (e.pointerId !== pointer) return;
+    const p = pulled;
+    rest();
+    p?.release();
+  };
+  /** A touch cut short: a pull comes to nothing. */
+  const cut = () => {
+    if (pointer !== null) pulled?.pull(0, 0);
+    rest();
+  };
+  const onCut = (e: PointerEvent) => {
+    if (e.pointerId === pointer) cut();
   };
   const onHide = () => {
-    if (document.visibilityState !== 'visible') rest();
+    if (document.visibilityState !== 'visible') cut();
   };
   stick.addEventListener('pointerdown', onDown);
   stick.addEventListener('pointermove', onMove);
-  stick.addEventListener('pointerup', onEnd);
-  stick.addEventListener('pointercancel', onEnd);
-  stick.addEventListener('lostpointercapture', onEnd);
-  window.addEventListener('blur', rest);
+  stick.addEventListener('pointerup', onUp);
+  stick.addEventListener('pointercancel', onCut);
+  stick.addEventListener('lostpointercapture', onCut);
+  window.addEventListener('blur', cut);
   document.addEventListener('visibilitychange', onHide);
 
   return {
@@ -146,8 +173,12 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       flick = cb;
       rest();
     },
+    pulls(cb) {
+      pulled = cb;
+      rest();
+    },
     detach() {
-      window.removeEventListener('blur', rest);
+      window.removeEventListener('blur', cut);
       document.removeEventListener('visibilitychange', onHide);
       stick.remove();
       style.remove();

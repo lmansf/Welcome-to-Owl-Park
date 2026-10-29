@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { CABINET, alongTheHall, clearLevel, flyThrough, knockByKeys, knockByPull, loseLives, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
+import { CABINET, alongTheHall, clearLevel, flyThrough, knockByKeys, knockByStick, loseLives, missTheRest, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
 import { doAction, openPark, state, walkToDoor } from './helpers';
 
 async function inRoom(page: Page, room: string): Promise<void> {
@@ -179,16 +179,23 @@ test.describe('the arcade (this device)', () => {
     await expect(interact).toBeHidden();
   });
 
-  test('Talon Toss: the first stack down in one shot, out of shots at the second, paid; and back out to the street', async ({ page }) => {
+  test('Talon Toss: the stack toppled by a shot, the shots left played out over the three targets, paid; and back out to the street (OP-137)', async ({ page }) => {
+    const phone = test.info().project.name === 'phone';
     const before = await intoArcade(page, `e2e-knock-${test.info().project.name}`);
     await playAt(page, 'sling');
     await paintedAsShipped(page, 'sling');
-    await expect(page.locator('.arcade [data-hint]')).toHaveText('Pull back and let go');
-    // On a phone the owl is pulled back on the screen; on a computer it is aimed with the keys.
-    if (test.info().project.name === 'phone') await knockByPull(page);
+    await expect(page.locator('.arcade [data-hint]')).toHaveText(phone ? 'Pull the stick back and let go' : 'Pull back and let go, or arrows and space');
+    await expect(page.locator('.arcade [data-banner]')).toHaveText('The stack · 5 shots left');
+    // On a phone the owl is pulled back on the pad's stick; on a computer it is aimed with the keys.
+    if (phone) await knockByStick(page);
     else await knockByKeys(page);
-    expect(await run(page)).toMatchObject({ score: 3, over: true });
-    await paidAndOnTheWall(page, 'sling', /^Out of shots at stack 2\. 3 points\.$/, before);
+    const first = (await run(page))!.score;
+    expect(first, 'crates the first shot knocked down').toBeGreaterThanOrEqual(2);
+    await expect(page.locator('.arcade [data-banner]')).toHaveText('The stack · 4 shots left');
+    // Fourteen shots into the ground: the tower and the nest come and stand, and the run ends.
+    await missTheRest(page);
+    expect(await run(page)).toMatchObject({ score: first, over: true, level: 2 });
+    await paidAndOnTheWall(page, 'sling', new RegExp(`^No target down, ${first} points\\.$`), before);
     // Back along the hall past the other cabinets to the entrance, and out: on the pavement in front of the doorway.
     await alongTheHall(page, 300, 820);
     await walkToDoor(page, 'to-market');

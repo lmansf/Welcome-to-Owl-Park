@@ -23,7 +23,7 @@ export async function alongTheHall(page: Page, x: number, y: number): Promise<vo
 const GAME_ART: Readonly<Record<Game, readonly string[]>> = {
   crossing: ['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart', 'arcade-hop-bat', 'arcade-hop-log', 'arcade-hop-river'],
   flight: ['arcade-flap-bg', 'arcade-flap-branch', 'arcade-flap-ground'],
-  sling: ['arcade-knock-bg', 'arcade-knock-sling', 'arcade-knock-crate', 'arcade-knock-stand'],
+  sling: ['arcade-knock-bg', 'arcade-knock-sling', 'arcade-knock-crate', 'arcade-knock-stand', 'arcade-knock-plank', 'arcade-knock-nest'],
 };
 
 /** Whether the park serves this piece of art (a WebP or a PNG; a missing file comes back as the page, or not at all). */
@@ -56,7 +56,7 @@ export async function pastHowTo(page: Page): Promise<void> {
   await expect(page.locator('.arcade [data-howto]')).toBeHidden();
 }
 
-/** The run as it stands: its score, whether it is over, its level (Hoot & Hop, Talon Toss's stack) and Talon Toss's phase. */
+/** The run as it stands: its score, whether it is over, its level (Hoot & Hop's, Talon Toss's target) and Talon Toss's phase. */
 export async function run(page: Page): Promise<{ score: number; over: boolean; level: number | null; phase: string | null } | null> {
   return page.evaluate(() => {
     const r = window.owlPark.arcade();
@@ -286,46 +286,57 @@ export async function untilOver(page: Page): Promise<void> {
   await expect.poll(async () => (await run(page))?.over ?? null, { timeout: 30_000, intervals: [100] }).toBe(true);
 }
 
-/** Talon Toss, by the keys: the first stack in one shot, then the second missed three times. */
+/** Talon Toss's shot count, the whole run's (OP-137). */
+const shotsTaken = (page: Page) => page.evaluate(() => (window.owlPark.arcade()!.sim as unknown as { shots: number }).shots);
+
+/** A shot launched (by `launch`) and played out: the owl back in the slingshot, or the target done. */
+async function shotTaken(page: Page, launch: () => Promise<void>): Promise<void> {
+  const before = await shotsTaken(page);
+  await launch();
+  await expect.poll(() => shotsTaken(page), { timeout: 5_000 }).toBe(before + 1);
+  await expect.poll(async () => (await run(page))?.phase, { timeout: 30_000 }).not.toBe('flying');
+}
+
+/** Talon Toss by the keys: from the aim it starts with (25 degrees, 0.7 of a full pull), 23 degrees and 0.9 topple the stack. */
 export async function knockByKeys(page: Page): Promise<void> {
-  const press = async (key: string, n: number) => {
-    for (let i = 0; i < n; i++) await page.keyboard.press(key);
-  };
-  // From the aim it starts with (25 degrees, 0.7 of a full pull): 19 degrees and 0.78 knock the first stack down.
-  await press('ArrowDown', 3);
-  await press('ArrowRight', 2);
-  await page.keyboard.press('Space');
-  await expect.poll(async () => (await run(page))?.level, { timeout: 15_000 }).toBe(1);
-  await missThrice(page);
-}
-
-/** Talon Toss, by a pull on the screen: back and a little down, and let go; then the second stack missed. */
-export async function knockByPull(page: Page): Promise<void> {
-  const box = await page.locator('.arcade [data-stage]').boundingBox();
-  if (!box) throw new Error('no stage');
-  // The field fills the stage as tall or as wide as it fits; a pull of 103 field pixels at 17 degrees.
-  const k = Math.min(box.width / 480, box.height / 640);
-  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  const len = 0.86 * 120 * k;
-  const a = (17 * Math.PI) / 180;
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(from.x - Math.cos(a) * len, from.y + Math.sin(a) * len, { steps: 6 });
-  await page.mouse.up();
-  await expect.poll(async () => (await run(page))?.level, { timeout: 15_000 }).toBe(1);
-  await missThrice(page);
-}
-
-/** Three shots into the ground: the second stack stands, and the run is over. */
-async function missThrice(page: Page): Promise<void> {
-  await expect.poll(async () => (await run(page))?.phase, { timeout: 15_000 }).toBe('aim');
   await page.locator('.arcade [data-stage]').focus();
-  for (let i = 0; i < 15; i++) await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowDown');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+  await shotTaken(page, () => page.keyboard.press('Space'));
+}
+
+/** Talon Toss on a phone, by the pad's stick: pulled back and down to 23 degrees and 0.9 of a full pull, aimed while held, and let go. */
+export async function knockByStick(page: Page): Promise<void> {
+  const stick = page.locator('#hud .stick');
+  await expect(stick).toBeVisible();
+  const s = (await stick.boundingBox())!;
+  const c = { x: s.x + s.width / 2, y: s.y + s.height / 2 };
+  // The knob goes as far as the stick's edge less 16 px (ui/joystick.ts).
+  const reach = s.width / 2 - 16;
+  const a = (23 * Math.PI) / 180;
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x - Math.cos(a) * 0.9 * reach, c.y + Math.sin(a) * 0.9 * reach, { steps: 6 });
+  const aim = await page.evaluate(() => {
+    const sim = window.owlPark.arcade()!.sim as unknown as { angle: number; power: number; phase: string; shots: number };
+    return { angle: sim.angle, power: sim.power, phase: sim.phase, shots: sim.shots };
+  });
+  expect(aim).toMatchObject({ phase: 'aim', shots: 0 });
+  expect(aim.angle).toBeCloseTo(23, 0);
+  expect(aim.power).toBeCloseTo(0.9, 1);
+  await shotTaken(page, () => page.mouse.up());
+}
+
+/** Every shot left (the stack's, the tower's and the nest's) into the ground at the slingshot's foot, to the run's end. */
+export async function missTheRest(page: Page): Promise<void> {
+  await page.locator('.arcade [data-stage]').focus();
+  for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowLeft');
   for (let i = 0; i < 30; i++) await page.keyboard.press('ArrowDown');
-  for (let shot = 0; shot < 3; shot++) {
-    await expect.poll(async () => (await run(page))?.phase, { timeout: 15_000 }).toBe('aim');
-    await page.keyboard.press('Space');
-    await expect.poll(async () => (await run(page))?.phase, { timeout: 15_000 }).not.toBe('aim');
+  for (let shot = 0; shot < 15; shot++) {
+    // Between two targets the next one comes after a moment.
+    await expect.poll(async () => ((r) => r!.over || r!.phase === 'aim')(await run(page)), { timeout: 30_000 }).toBe(true);
+    if ((await run(page))!.over) break;
+    await shotTaken(page, () => page.keyboard.press('Space'));
   }
   await untilOver(page);
 }

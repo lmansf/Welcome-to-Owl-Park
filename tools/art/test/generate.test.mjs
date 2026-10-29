@@ -363,8 +363,8 @@ test("the arcade's bays: an edit of the published hall, each hall candidate's tw
 test("the arcade's games: each background over its field guide at 2x, each piece alone on a chroma backdrop, each the arcade's own key", () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   const pieces = { hop: ['drone', 'cart'], flap: ['branch', 'ground'], knock: ['sling', 'crate', 'stand'] };
-  // Hoot & Hop's levels came after (OP-137): its bat, log and river, at the end so the others keep their seeds.
-  const levels = ['bat', 'log', 'river'].map((p) => `arcade-hop-${p}`);
+  // Hoot & Hop's levels came after (OP-137): its bat, log and river, then Talon Toss's plank and nest, at the end so the others keep their seeds.
+  const levels = [...['bat', 'log', 'river'].map((p) => `arcade-hop-${p}`), ...['plank', 'nest'].map((p) => `arcade-knock-${p}`)];
   assert.deepEqual(P.ARCADE_GAME_KEYS, [...Object.entries(pieces).flatMap(([game, ps]) => [`arcade-${game}-bg`, ...ps.map((p) => `arcade-${game}-${p}`)]), ...levels]);
   for (const key of P.ARCADE_GAME_KEYS) {
     const j = jobs.get(key);

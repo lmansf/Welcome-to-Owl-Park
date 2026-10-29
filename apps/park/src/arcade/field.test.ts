@@ -23,6 +23,16 @@ describe("the games' clock", () => {
     expect(steps).toBeLessThanOrEqual(3);
   });
 
+  it("steps in a game's own slices, and says how far it is into the next", () => {
+    const clock = new StepClock(1000 / 60);
+    let steps = 0;
+    clock.advance(25, () => ++steps > 0);
+    expect(steps).toBe(1);
+    expect(clock.alpha).toBeCloseTo((25 - 1000 / 60) / (1000 / 60));
+    expect(clock.copy().alpha).toBe(clock.alpha);
+    expect(new StepClock().alpha).toBe(0);
+  });
+
   it('stops stepping the moment the run ends', () => {
     const clock = new StepClock();
     let steps = 0;

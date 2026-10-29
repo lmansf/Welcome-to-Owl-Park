@@ -5,6 +5,8 @@ import {
   CABINETS,
   CABINET_OFF,
   GAMES,
+  KNOCK_NEST_POINTS,
+  KNOCK_SHOTS,
   WALL_SIZE,
   cabinetOf,
   hexToInt,
@@ -20,7 +22,7 @@ import {
 import { cabinetFace } from '../arcade/cabinets';
 import { FlapGame } from '../arcade/flap';
 import { HopGame } from '../arcade/hop';
-import { KnockGame } from '../arcade/knock';
+import { KnockGame, MAX_PULL, loadPhysics } from '../arcade/knock';
 import type { ActivityLink } from '../collect/service';
 import type { ArcadeInput } from '../ui/arcadeScreen';
 import type { Hud } from '../ui/hud';
@@ -53,12 +55,13 @@ const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const RECORD_EVERY_MS = 1000;
 
 const HOP_GOAL = 'Hop to the top of the street, level after level. Mind the carts, the drones and the bats, and cross the rivers on the logs.';
+const KNOCK_GOAL = `Knock the crates and the nest to the ground: three targets, ${KNOCK_SHOTS} shots at each. A crate is worth a point, the nest ${KNOCK_NEST_POINTS}.`;
 
 /** How to play, under each game's field, on a touch screen and on a keyboard. Visitor-facing. */
 const HINTS: Readonly<Record<ArcadeGame, { touch: string; keys: string }>> = {
   crossing: { touch: 'Flick the stick to hop', keys: 'Arrow keys to hop' },
   flight: { touch: 'Tap to flap', keys: 'Tap to flap' },
-  sling: { touch: 'Pull back and let go', keys: 'Pull back and let go' },
+  sling: { touch: 'Pull the stick back and let go', keys: 'Pull back and let go, or arrows and space' },
 };
 
 /** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
@@ -72,8 +75,8 @@ const HOW_TO: Readonly<Record<ArcadeGame, { touch: readonly string[]; keys: read
     keys: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
   },
   sling: {
-    touch: ['Knock the crates off their stands: ten stacks, three shots each.', 'Pull back and let go to launch.'],
-    keys: ['Knock the crates off their stands: ten stacks, three shots each.', 'Pull back and let go to launch.'],
+    touch: [KNOCK_GOAL, 'Pull the stick back to aim (the dots show where the owl will fly) and let go to launch. You can pull back on the screen too.'],
+    keys: [KNOCK_GOAL, 'Pull back on the screen and let go, or aim with the arrow keys and launch with space.'],
   },
 };
 
@@ -226,6 +229,7 @@ export class Arcade {
   async play(game: ArcadeGame): Promise<void> {
     const acts = this.host.acts();
     if (!acts || this.destroyed) return;
+    const physics = game === 'sling' ? loadPhysics().catch(() => null) : null;
     const reply = await acts.run(game);
     if (this.destroyed) return;
     if (!reply.ok) {
@@ -234,7 +238,18 @@ export class Arcade {
       this.host.hud.closeArcade();
       return;
     }
-    const sim: ArcadeSim = game === 'crossing' ? new HopGame(reply.seed) : game === 'flight' ? new FlapGame(reply.seed) : new KnockGame();
+    let sim: ArcadeSim;
+    if (game === 'sling') {
+      // Talon Toss's physics engine, fetched alongside the room's answer (only that game uses it).
+      const M = await physics;
+      if (this.destroyed) return;
+      if (!M) {
+        this.host.hud.toast('The park did not catch that. Try again in a moment.');
+        this.host.hud.closeArcade();
+        return;
+      }
+      sim = new KnockGame(M);
+    } else sim = game === 'crossing' ? new HopGame(reply.seed) : new FlapGame(reply.seed);
     this.run = { game, seed: reply.seed, sim, sent: false, recorded: 0, recordedAt: 0 };
     const top = this.walls.get(game)?.top[0]?.score ?? null;
     this.host.hud.openArcade(
@@ -293,6 +308,7 @@ export class Arcade {
     }
     if (sim.game !== 'sling') return;
     if (i.kind === 'aim') sim.aimByPull(i.dx, i.dy);
+    else if (i.kind === 'pull') sim.aimByPull(i.x * MAX_PULL, i.y * MAX_PULL);
     else if (i.kind === 'nudge') sim.nudge(i.angle, i.power);
     else sim.release();
   }

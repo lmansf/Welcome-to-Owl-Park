@@ -3,8 +3,8 @@ import { FIELD_H, FIELD_W } from './field';
 import { BRANCH_W, GROUND_Y as FLAP_GROUND } from './flap';
 import { runRandom } from './field';
 import { levelLanes } from './hop';
-import { CRATE } from './knock';
-import { BRANCH_ART, GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, standPieces } from './paint';
+import { CRATE, PIECE_SIZE } from './knock';
+import { BRANCH_ART, GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, KNOCK_PIECES, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, solidFit, standPieces } from './paint';
 
 describe("the arcade's games in their paintings", () => {
   it('paint each field whole, and each piece at the size the game plays it', () => {
@@ -24,7 +24,14 @@ describe("the arcade's games in their paintings", () => {
     expect(GAME_ART.crossing[HOP_WATER]!.h).toBe(80);
     expect(2 * GAME_ART.crossing[HOP_WATER]!.w).toBeGreaterThanOrEqual(FIELD_W);
     expect(new Set(lanes.map((l) => l.kind))).toEqual(new Set(['safe', 'road', 'air', 'river']));
-    expect(GAME_ART.sling['arcade-knock-crate']).toEqual({ w: CRATE, h: CRATE });
+    // Talon Toss's crates, plank and nest at the size the game plays them (OP-137).
+    for (const kind of ['crate', 'plank', 'nest'] as const) expect(GAME_ART.sling[KNOCK_PIECES[kind]], kind).toEqual(PIECE_SIZE[kind]);
+    expect(PIECE_SIZE.crate).toEqual({ w: CRATE, h: CRATE });
+    // A painting is stretched so its solid part covers the body, turning about the body's centre.
+    expect(solidFit({ w: 60, h: 24 }, [10, 4, 40, 16], { w: 60, h: 24 })).toEqual({ w: 90, h: 36, ox: 0.5, oy: 0.5 });
+    expect(solidFit({ w: 144, h: 16 }, [0, 2, 144, 12], { w: 144, h: 16 })).toEqual({ w: 144, h: 64 / 3, ox: 0.5, oy: 0.5 });
+    expect(solidFit({ w: 36, h: 36 }, [0, 0, 36, 32], { w: 36, h: 36 })).toEqual({ w: 36, h: 40.5, ox: 0.5, oy: 16 / 36 });
+    expect(solidFit({ w: 36, h: 36 }, undefined, { w: 36, h: 36 })).toEqual({ w: 36, h: 36, ox: 0.5, oy: 0.5 });
     // Two crates wide, the stand's painting is stretched (cut in nine) to every stand.
     expect(STAND_ART.w).toBe(2 * CRATE);
   });
