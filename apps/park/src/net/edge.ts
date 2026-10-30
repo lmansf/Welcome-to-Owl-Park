@@ -814,7 +814,7 @@ export class EdgeTransport implements ParkTransport {
         lastRx = Date.now();
         const hello: ClientFrame = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: current.look };
         if (spawn) hello.spawn = spawn;
-        const pos = currentPos();
+        const pos = handlers.here?.() ?? currentPos();
         hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));
         if (heartbeat) clearInterval(heartbeat);

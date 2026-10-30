@@ -216,16 +216,29 @@ export class Room {
     return isWalkable(p, this.def.walkable) && !inExit(this.def, p) && !this.occupied(p, except);
   }
 
-  /** Pick a free walkable point near the spawn, shrinking the search each failed attempt. */
-  scatter(spawn: Vec2, radius: number, except?: string): Vec2 {
+  /**
+   * Pick a free walkable point near the spawn, shrinking the search each failed attempt. `toward` is
+   * where the page has its owl when the room will not let it in there: a point whose straight walk
+   * reaches it comes first, so the room's copy walks over to the owl and the page never has to move
+   * its owl back to the room's spot (OP-138).
+   *
+   * TODO-DOCS (OP-138): docs/ARCHITECTURE.md's "Entering a room" row: a page's hello says where its
+   * owl is as the socket opens (RoomHandlers.here), and an arrival the room will not have there is
+   * scattered where its copy can walk straight to that spot.
+   */
+  scatter(spawn: Vec2, radius: number, except?: string, toward?: Vec2): Vec2 {
     let r = radius;
     let fallback: Vec2 | null = null; // walkable and outside exits, but possibly on top of someone
+    let walled: Vec2 | null = null; // free, but its straight walk to `toward` meets a wall
     for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++) {
       const p = { x: Math.round(spawn.x + (this.rnd() * 2 - 1) * r), y: Math.round(spawn.y + (this.rnd() * 2 - 1) * r * 0.5) };
-      if (this.free(p, except)) return p;
-      if (!fallback && isWalkable(p, this.def.walkable) && !inExit(this.def, p)) fallback = p;
+      if (this.free(p, except)) {
+        if (!toward || distance(resolveTarget(p, toward, this.def.walkable), toward) < 3) return p;
+        walled ??= p;
+      } else if (!fallback && isWalkable(p, this.def.walkable) && !inExit(this.def, p)) fallback = p;
       r -= LIMITS.scatterShrink;
     }
+    if (walled) return walled;
     if (isWalkable(spawn, this.def.walkable) && !inExit(this.def, spawn)) return { ...spawn };
     return fallback ?? { ...spawn };
   }
@@ -254,16 +267,18 @@ export class Room {
     const isDoorEntry = hello.spawn !== undefined;
     const spawn = findSpawn(this.def, hello.spawn);
     let pos: Vec2 | null = null;
-    if (hello.pos && isWalkable(hello.pos, this.def.walkable) && !inExit(this.def, hello.pos)) {
+    // Where the page has its owl, when that is on this room's floor.
+    const told = hello.pos && isWalkable(hello.pos, this.def.walkable) && !inExit(this.def, hello.pos) ? hello.pos : undefined;
+    if (told) {
       const recent = this.leavers.get(id);
-      const nearSpawn = distance(hello.pos, spawn) <= LIMITS.resumeRadius;
+      const nearSpawn = distance(told, spawn) <= LIMITS.resumeRadius;
       // Back soon after it left: near where it left, or as far from there as it could have walked
       // since (a page walks on while its connection is down, and comes back where its owl is, OP-138).
       const away = recent === undefined ? Infinity : this.now() - recent.leftAt;
-      const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(hello.pos, recent.pos) <= LIMITS.resumeRadius + (WALK_SPEED * away) / 1000;
-      if ((nearSpawn || nearLeave) && !this.occupied(hello.pos)) pos = hello.pos;
+      const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(told, recent.pos) <= LIMITS.resumeRadius + (WALK_SPEED * away) / 1000;
+      if ((nearSpawn || nearLeave) && !this.occupied(told)) pos = told;
     }
-    if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault);
+    if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault, undefined, told);
 
     const now = this.now();
     const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0 };

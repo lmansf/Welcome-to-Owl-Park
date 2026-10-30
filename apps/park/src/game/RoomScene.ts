@@ -664,6 +664,7 @@ export class RoomScene extends Phaser.Scene {
         // On joining, the room is caught up once this page holds the connection (below).
         if (this.conn) this.catchUpRoom();
       },
+      here: () => (live() ? { ...this.me.pos } : null),
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
       onSelfEcho: (from, to) => live() && this.posOverlay?.told('echo', to, from),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
