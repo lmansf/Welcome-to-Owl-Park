@@ -92,6 +92,17 @@ describe('an owl’s flight as a page draws it (OP-084)', () => {
     expect(GROUNDED).toBe(ON_GROUND.s);
   });
 
+  it('beats to another rhythm when told one: Moon Flap’s single stroke a flap (OP-135)', () => {
+    const one = { ms: 280, beats: 1 };
+    const gliding: Air = { z: 0, vz: 0, s: GLIDING, f: 0 };
+    expect(wingTurn(gliding, 0, one)).toEqual({ turn: WING_TURN.up, beating: true });
+    expect(wingTurn(gliding, 140, one)!.turn).toBeCloseTo(WING_TURN.down);
+    expect(wingTurn(gliding, 279, one)!.beating).toBe(true);
+    // Done at its own length, not the park's.
+    expect(wingTurn(gliding, 280, one)).toEqual({ turn: WING_TURN.glide, beating: false });
+    expect(wingTurn(gliding, 280)!.beating).toBe(true);
+  });
+
   it('shrinks and fades the shadow with height, and no further than SHADOW_FULL_Z', () => {
     expect(shadowFade(0)).toBe(0);
     expect(shadowFade(SHADOW_FULL_Z / 2)).toBeCloseTo(0.5);

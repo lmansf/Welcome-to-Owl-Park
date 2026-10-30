@@ -129,6 +129,48 @@ test.describe('the arcade (this device)', () => {
     await paidAndOnTheWall(page, 'flight', /^(Touched down|Clipped a branch) at \d+\.$/, before);
   });
 
+  test('Moon Flap’s owl flies in its flight body: wings out as it hovers, a stroke at each flap, a tumble off a branch, folded on the ground (OP-135)', async ({ page }) => {
+    await intoArcade(page, `e2e-flapowl-${test.info().project.name}`);
+    await playAt(page, 'flight');
+    const drawn = () => page.evaluate(() => window.owlPark.arcade()?.flight ?? null);
+    // Before the first flap it hovers, its wings out over its flight body (they wait for that to load).
+    await expect.poll(async () => (await drawn())?.wingsOut, { timeout: 15_000 }).toBe(true);
+    expect(await drawn()).toMatchObject({ pose: 'hover', flaps: 0, body: expect.stringMatching(/flight/) });
+    // Every pose it is drawn in from here, frame by frame, and the flaps as the drawing beat them.
+    await page.evaluate(() => {
+      const w = window as unknown as { poses: string[] };
+      w.poses = [];
+      const look = () => {
+        const f = window.owlPark.arcade()?.flight;
+        if (f && w.poses.at(-1) !== f.pose) w.poses.push(f.pose);
+        if (f?.pose !== 'landed') requestAnimationFrame(look);
+      };
+      look();
+    });
+    // Flapping far too often carries it up into the first branch's upper half.
+    const stage = page.locator('.arcade [data-stage]');
+    await page.evaluate(() => {
+      const stage = document.querySelector('.arcade [data-stage]') as HTMLElement;
+      const flap = () => {
+        const sim = window.owlPark.arcade()?.sim as unknown as { over: boolean } | undefined;
+        if (!sim || sim.over) return;
+        stage.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
+        setTimeout(flap, 90);
+      };
+      flap();
+    });
+    await untilOver(page);
+    expect(await page.evaluate(() => (window.owlPark.arcade()!.sim as unknown as { end: string }).end)).toBe('branch');
+    expect((await drawn())!.flaps).toBeGreaterThan(3);
+    // It tumbled to the ground and stands there, its wings folded away and its ground body back on.
+    await expect.poll(async () => (await drawn())?.pose, { timeout: 5_000 }).toBe('landed');
+    expect(await page.evaluate(() => (window as unknown as { poses: string[] }).poses)).toEqual(['hover', 'flying', 'tumbling', 'landed']);
+    const landed = (await drawn())!;
+    expect(landed.wingsOut).toBe(false);
+    expect(landed.body).not.toMatch(/flight/);
+    await expect(stage).toBeVisible();
+  });
+
   test('a game’s first run on a device opens on how to play it, and only that once (OP-137)', async ({ page }) => {
     await intoArcade(page, `e2e-howto-${test.info().project.name}`);
     await alongTheHall(page, CABINET.flight.x, CABINET.flight.y);
