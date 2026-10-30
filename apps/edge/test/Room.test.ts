@@ -405,7 +405,7 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     room.join(b, 'b', hello());
     // Above the room's top, on the ground in mid-air, a mode it does not know.
     for (const bad of [
-      { z: LIMITS.maxAirZ + 1, vz: 0, s: AIRBORNE, f: 1 },
+      { z: LIMITS.maxRise + 1, vz: 0, s: AIRBORNE, f: 1 },
       { z: 30, vz: 0, s: GROUNDED, f: 0 },
       { z: 30, vz: 0, s: 7, f: 0 },
     ]) {
@@ -427,6 +427,78 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     }
     expect(a.closed).toEqual({ code: CLOSE.RATE_LIMITED, reason: 'too many frames' });
     expect(dropped).toBe(LIMITS.framesPerWindow + 1);
+  });
+
+  it('keeps an owl standing on a perch up there, lets it walk and come back there, and believes its air to a jump above the highest (OP-084)', () => {
+    // The fixture room with a bench along its back wall (its front face over the floor's back edge) and a beam above it.
+    const withPerches: RoomDef = {
+      ...def,
+      perches: [
+        { id: 'bench', area: [{ x: 300, y: 440 }, { x: 600, y: 440 }, { x: 600, y: 520 }, { x: 300, y: 520 }], top: 80, solid: true },
+        { id: 'beam', area: [{ x: 320, y: 450 }, { x: 520, y: 450 }, { x: 520, y: 490 }, { x: 320, y: 490 }], top: 230 },
+      ],
+    };
+    const perched = new Room(withPerches, { now: () => now, random: () => 0.5, cap: 3 });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    perched.join(a, 'a', hello(), 's0');
+    perched.join(b, 'b', hello());
+    // A walk onto the bench's top, off the floor: the page has the owl's height, so the room takes it.
+    const onBench = { x: 400, y: 470 };
+    perched.move('a', { t: 'move', to: onBench, seq: 1 });
+    expect(a.last('move')!.to).toEqual(onBench);
+    expect(b.last('move')!.to).toEqual(onBench);
+    // Behind the wall is nowhere an owl can be, at any height.
+    perched.move('a', { t: 'move', to: { x: 400, y: 300 }, seq: 2 });
+    expect(a.last('move')!.to.y).toBeGreaterThanOrEqual(440);
+    // Landed on it: told, kept, and told to a newcomer long after, as standing up there.
+    now += 2000;
+    const standing = { z: 80, vz: 0, s: GROUNDED, f: 0 } as const;
+    expect(perched.air('a', standing)).toBe(true);
+    expect(b.last('air')).toEqual({ t: 'air', id: 'a', air: standing, at: now });
+    const told = now;
+    now += 60_000;
+    expect(perched.snapshot().find((o) => o.id === 'a')?.air).toEqual({ ...standing, at: told });
+    // Standing on nothing at a height is refused; a jump and a flap above the beam is believed, and no higher.
+    expect(perched.air('a', { z: 50, vz: 0, s: GROUNDED, f: 0 })).toBe(false);
+    expect(perched.air('a', { z: 230 + LIMITS.maxRise, vz: -10, s: AIRBORNE, f: 0 })).toBe(true);
+    expect(perched.air('a', { z: 231 + LIMITS.maxRise, vz: -10, s: AIRBORNE, f: 0 })).toBe(false);
+    // Walked off its edge: in the air from up there, then down on the floor by the time a newcomer asks.
+    expect(perched.air('a', { z: 80, vz: 0, s: AIRBORNE, f: 1 })).toBe(true);
+    now += 3000;
+    expect(perched.snapshot().find((o) => o.id === 'a')?.air).toBeUndefined();
+    // Back on the bench, and back again after the connection drops: where it was, on the perch's top.
+    perched.move('a', { t: 'move', to: onBench, seq: 3 });
+    now += 5000;
+    perched.leave('a', 's0', true);
+    const a2 = new FakePeer();
+    perched.join(a2, 'a', hello({ pos: onBench }), 's1');
+    expect(a2.last('welcome')!.you.pos).toEqual(onBench);
+  });
+
+  it('reaches what sits up on a perch only from that perch, and what is on the floor only from the floor (OP-084)', () => {
+    const withBench: RoomDef = { ...def, perches: [{ id: 'bench', area: [{ x: 300, y: 440 }, { x: 600, y: 440 }, { x: 600, y: 520 }, { x: 300, y: 520 }], top: 80, solid: true }] };
+    const perched = new Room(withBench, { now: () => now, random: () => 0.5, cap: 3 });
+    perched.join(new FakePeer(), 'a', hello());
+    const onBench = { x: 400, y: 470 };
+    const upThere = { top: 80 };
+    perched.move('a', { t: 'move', to: onBench, seq: 1 });
+    now += 5000;
+    // There on the plan but not up: the ground under the owl is the floor, so the floor's things.
+    expect(perched.groundOf('a')).toBe(0);
+    expect(perched.reaches('a', onBench, 40, upThere)).toBe(false);
+    expect(perched.reaches('a', onBench, 40, {})).toBe(true);
+    // Landed up there: the bench's things, and not the floor's.
+    expect(perched.air('a', { z: 80, vz: 0, s: GROUNDED, f: 0 })).toBe(true);
+    expect(perched.groundOf('a')).toBe(80);
+    expect(perched.reaches('a', onBench, 40, upThere)).toBe(true);
+    expect(perched.reaches('a', onBench, 40, {})).toBe(false);
+    // Along the bench out of reach is out of reach at any height.
+    expect(perched.reaches('a', { x: 560, y: 470 }, 40, upThere)).toBe(false);
+    // In the air above the bench, coming down on it: still the bench's.
+    expect(perched.air('a', { z: 140, vz: 0, s: AIRBORNE, f: 0 })).toBe(true);
+    expect(perched.groundOf('a')).toBe(80);
+    expect(perched.groundOf('nobody')).toBe(0);
   });
 
   it('relays a phrase’s number to the others, one phrase every three seconds per owl', () => {

@@ -323,8 +323,9 @@ export class Collections extends DurableObject<Env> {
     return this.climb.lookup(ref);
   }
 
-  async gather(cid: string, quest: string, n: number, room: string, pos: Vec2): Promise<GatherResult> {
-    return this.quests.gather(cid, quest, n, room, pos, Date.now());
+  /** Pick up a quest item, the owl at `pos` over `ground` (the room's groundOf: an item up on a perch is picked up from it, OP-084). */
+  async gather(cid: string, quest: string, n: number, room: string, pos: Vec2, ground = 0): Promise<GatherResult> {
+    return this.quests.gather(cid, quest, n, room, pos, Date.now(), ground);
   }
 
   async handIn(cid: string, quest: string, npc: string, visit?: Visit): Promise<HandInResult> {

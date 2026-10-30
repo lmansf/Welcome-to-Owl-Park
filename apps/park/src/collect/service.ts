@@ -226,10 +226,10 @@ export interface CollectionService {
   claimGift(): Promise<GiftResult>;
   /**
    * Quests in a room: the room connection's link when the server keeps them, otherwise one in this
-   * browser that reads the owl's position from `where`. Null when there is none (the server link
-   * is missing).
+   * browser that reads the owl's position from `where` and what it stands on from `ground` (a perch's
+   * top, else 0: OP-084). Null when there is none (the server link is missing).
    */
-  questLink(room: string, conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink | null;
+  questLink(room: string, conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2, ground?: () => number): QuestLink | null;
   /**
    * The activities in a room, the same way: the room server's over its socket, otherwise this
    * browser's (`look` gives the owl's colours for its portrait on the arcade's wall).

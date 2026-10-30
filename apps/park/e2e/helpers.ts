@@ -46,8 +46,8 @@ export interface ParkState {
   wings: boolean;
   /** NPC owls, the quest marker each shows, and whether its '!' says the visitor can talk to it now (OP-114). */
   npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
-  objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
-  items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;
+  objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
+  items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
   actions: string[];
   talkingTo: string | null;
   play: {

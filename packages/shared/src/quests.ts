@@ -205,8 +205,8 @@ export interface ActiveQuestView {
   reward: QuestReward;
   /** When it expires (daily and weekly quests end with their day or week), ms; 0 for never. */
   endsAt: number;
-  /** Quest items on the floor for the current step (only this collector sees them). */
-  items: { n: number; room: string; x: number; y: number; kind: QuestItemKind }[];
+  /** Quest items for the current step (only this collector sees them): on the floor, or up on a perch with its `top` (OP-084). */
+  items: { n: number; room: string; x: number; y: number; top?: number; kind: QuestItemKind }[];
 }
 
 export interface QuestOfferView {

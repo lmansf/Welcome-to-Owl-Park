@@ -3,7 +3,7 @@
  * channels, so every field is untrusted until it has the expected shape and range.
  */
 import { EMOTE_IDS, isWear } from './collectibles';
-import { MAX_RISE, checkAir } from './flight';
+import { MAX_AIR_Z, checkAir } from './flight';
 import { isHexColour, isPledge } from './look';
 import { isPhrase } from './phrases';
 import { isSpecies } from './species';
@@ -61,7 +61,7 @@ export function isPlayerState(v: unknown): v is PlayerState {
 
 /** An air state with the time it began (OP-084), as another page sends it. */
 function isAirAt(v: unknown): boolean {
-  return isObj(v) && typeof v['at'] === 'number' && Number.isFinite(v['at']) && checkAir(v, MAX_RISE) !== null;
+  return isObj(v) && typeof v['at'] === 'number' && Number.isFinite(v['at']) && checkAir(v, MAX_AIR_Z, null) !== null;
 }
 
 export function isParkMessage(value: unknown): value is ParkMessage {
@@ -82,7 +82,7 @@ export function isParkMessage(value: unknown): value is ParkMessage {
     case 'rest':
       return isId(value['id']) && typeof value['asleep'] === 'boolean';
     case 'air':
-      return isId(value['id']) && checkAir(value['air'], MAX_RISE) !== null && typeof value['at'] === 'number' && Number.isFinite(value['at']);
+      return isId(value['id']) && checkAir(value['air'], MAX_AIR_Z, null) !== null && typeof value['at'] === 'number' && Number.isFinite(value['at']);
     default:
       return false;
   }
