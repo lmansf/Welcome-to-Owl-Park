@@ -14,3 +14,11 @@ the doc agent; runs older than 90 days roll up to one line each.
 | 2026-10-30 06:59 | 1. The room server killed mid-session | failed | no | yes | 1 | [2026-10-30-room-server-killed-2](2026-10-30-room-server-killed-2/result.md) |
 | 2026-10-30 07:01 | 4. The hub filled to its cap, then one more | failed | no | yes | 1 | [2026-10-30-rooms-full-2](2026-10-30-rooms-full-2/result.md) |
 | 2026-10-30 07:02 | 7. One visitor floods the room with emotes | held | no | yes | 0 | [2026-10-30-emote-flood-2](2026-10-30-emote-flood-2/result.md) |
+| 2026-10-30 08:38 | 3. The store's webhook answered 500, then too late | held | no | yes | 0 | [2026-10-30-webhook-dropped](2026-10-30-webhook-dropped/result.md) |
+| 2026-10-30 08:39 | 5. One phone on a 3G network | held | no | yes | 0 | [2026-10-30-slow-phone](2026-10-30-slow-phone/result.md) |
+| 2026-10-30 08:40 | 6. A visitor's clock 10 minutes fast | held | no | yes | 0 | [2026-10-30-clock-skew](2026-10-30-clock-skew/result.md) |
+| 2026-10-30 08:40 | 8. The collection log’s database unreachable | held | no | yes | 0 | [2026-10-30-log-sink-down](2026-10-30-log-sink-down/result.md) |
+| 2026-10-30 08:41 | 3. The store's webhook answered 500, then too late | held | no | yes | 0 | [2026-10-30-webhook-dropped-2](2026-10-30-webhook-dropped-2/result.md) |
+| 2026-10-30 08:42 | 5. One phone on a 3G network | held | no | yes | 0 | [2026-10-30-slow-phone-2](2026-10-30-slow-phone-2/result.md) |
+| 2026-10-30 08:43 | 6. A visitor's clock 10 minutes fast | held | no | yes | 0 | [2026-10-30-clock-skew-2](2026-10-30-clock-skew-2/result.md) |
+| 2026-10-30 08:44 | 8. The collection log’s database unreachable | held | no | yes | 0 | [2026-10-30-log-sink-down-2](2026-10-30-log-sink-down-2/result.md) |
