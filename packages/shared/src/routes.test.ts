@@ -57,4 +57,19 @@ describe('route tiers (OP-084)', () => {
   it("finds the hub's bench a jump up and its lantern beam a jump and a flap from the bench", () => {
     expect(perchTiers(ROOMS['hub']!)).toEqual({ 'hub-bench': 1, 'hub-beam': 2 });
   });
+
+  it("finds the grove's ladder single jumps to the loft, and its far treehouse a glide from there", () => {
+    expect(perchTiers(ROOMS['grove']!)).toEqual({ 'grove-log': 1, 'grove-rung': 1, 'grove-porch': 1, 'grove-loft': 1, 'grove-hut': 3 });
+  });
+
+  it("finds the market's roofs single jumps up, and its food stall and tent a jump and the flap from the plaza", () => {
+    expect(perchTiers(ROOMS['market']!)).toEqual({
+      'market-stalls': 1,
+      'market-boards': 1,
+      'market-shop': 1,
+      'market-food': 2,
+      'market-roofs': 1,
+      'market-tent': 2,
+    });
+  });
 });

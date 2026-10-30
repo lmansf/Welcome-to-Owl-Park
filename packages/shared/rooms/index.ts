@@ -396,6 +396,81 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 760 },
       ],
     ],
+    // Upper levels (OP-084, perches.ts), the rooftops, tiered as routes.ts reckons them. On the west
+    // screen the stall row's roof, a jump up from the curb all along it: it climbs to the right as the
+    // street comes nearer, so its area slants with it, and an owl stands on the roof as drawn; along it,
+    // level with it, onto the neon signboards at its east end. The feather shop's roof, which the giant robot owl stands
+    // on, is a jump up from the curb right of the shop's doorway. On the east screen the stalls' roofs,
+    // a jump up from the plaza. All those single jumps (tier 1). The big food stall's roof and the big
+    // tent's ridge stand higher, over counters that reach out into the plaza: a jump and the flap from
+    // in front of each (tier 2), the stalls' roofs kept too far from them for a jump across. The street
+    // has no gap only a glide crosses. No perch reaches over a doorway, or an owl standing up there would
+    // be in it.
+    // TODO-DOCS (OP-084): docs/ACTIVITIES.md: the market's rooftops (the stall row to the signboards,
+    // the shop's roof at the robot owl's feet and the plaza's stalls by single jumps; the food stall and
+    // the tent by a jump and the flap).
+    perches: [
+      {
+        id: 'market-stalls',
+        area: [
+          { x: 340, y: 708 },
+          { x: 875, y: 679 },
+          { x: 875, y: 695 },
+          { x: 340, y: 724 },
+        ],
+        top: 136,
+      },
+      {
+        id: 'market-boards',
+        area: [
+          { x: 868, y: 676 },
+          { x: 985, y: 676 },
+          { x: 985, y: 689 },
+          { x: 868, y: 689 },
+        ],
+        top: 136,
+      },
+      {
+        id: 'market-shop',
+        area: [
+          { x: 1135, y: 684 },
+          { x: 1475, y: 684 },
+          { x: 1475, y: 700 },
+          { x: 1135, y: 700 },
+        ],
+        top: 126,
+      },
+      {
+        id: 'market-food',
+        area: [
+          { x: 1745, y: 724 },
+          { x: 1955, y: 752 },
+          { x: 1955, y: 768 },
+          { x: 1745, y: 740 },
+        ],
+        top: 220,
+      },
+      {
+        id: 'market-roofs',
+        area: [
+          { x: 2090, y: 692 },
+          { x: 2500, y: 692 },
+          { x: 2500, y: 708 },
+          { x: 2090, y: 708 },
+        ],
+        top: 130,
+      },
+      {
+        id: 'market-tent',
+        area: [
+          { x: 2640, y: 729 },
+          { x: 2870, y: 729 },
+          { x: 2870, y: 745 },
+          { x: 2640, y: 745 },
+        ],
+        top: 209,
+      },
+    ],
     spawns: { 'default': { x: 330, y: 740 }, 'from-arcade': { x: 3090, y: 770 } },
     doors: [
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, marker: { x: 70, y: 580 } },
@@ -422,6 +497,9 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 2500, y: 860 },
       { x: 2700, y: 800 },
       { x: 2900, y: 860 },
+      // Up on the stall row's roof, and on the plaza's stalls' roofs, a jump from the street (OP-084).
+      { x: 680, y: 698, top: 136 },
+      { x: 2300, y: 700, top: 130 },
     ],
   },
   /**
