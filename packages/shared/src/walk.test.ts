@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WALK_SPEED, facing, positionAlongWalk, walkDurationMs } from './walk';
+import { WALK_SPEED, facing, followsOn, positionAlongWalk, walkDurationMs } from './walk';
 
 describe('walks', () => {
   const walk = { from: { x: 0, y: 0 }, to: { x: WALK_SPEED, y: 0 }, startedAt: 1000 };
@@ -16,6 +16,14 @@ describe('walks', () => {
   });
   it('a zero-length walk is immediately done', () => {
     expect(positionAlongWalk({ from: { x: 5, y: 5 }, to: { x: 5, y: 5 }, startedAt: 0 }, 0).done).toBe(true);
+  });
+  it('takes another owl’s walk on from where the one it is drawn walking ends as next, not at once (OP-148)', () => {
+    const on = { from: { x: WALK_SPEED, y: 0 }, to: { x: WALK_SPEED, y: 200 }, startedAt: 2000 };
+    expect(followsOn(walk, on, 1900)).toBe(true);
+    // Already due, or from elsewhere (a tap while walking), or with nothing under way: at once.
+    expect(followsOn(walk, on, 2000)).toBe(false);
+    expect(followsOn(walk, { ...on, from: { x: 100, y: 0 } }, 1900)).toBe(false);
+    expect(followsOn(null, on, 1900)).toBe(false);
   });
   it('faces the direction of travel', () => {
     expect(facing(walk)).toBe(1);

@@ -52,6 +52,7 @@ import {
   putOn,
   resolveTarget,
   snapToWalkable,
+  followsOn,
   steerTarget,
   footing,
   footingLevel,
@@ -934,7 +935,7 @@ export class RoomScene extends Phaser.Scene {
       // is left alone, so heartbeats never replay a walk.
       const raw = s.walk;
       const walk = now - raw.startedAt < -CLOCK_TOLERANCE_MS ? { ...raw, startedAt: now } : raw;
-      const already = owl.walk ? sameWalk(owl.walk, raw) : distance(owl.pos, raw.to) < 1;
+      const already = owl.walk ? sameWalk(owl.walk, raw) || (owl.nextWalk !== null && sameWalk(owl.nextWalk, raw)) : distance(owl.pos, raw.to) < 1;
       if (!already) {
         const { done } = positionAlongWalk(walk, now);
         if (done) owl.place(walk.to);
@@ -952,6 +953,12 @@ export class RoomScene extends Phaser.Scene {
     const owl = this.peers.get(id);
     if (!owl) return;
     const w = this.rebase(walk, Date.now());
+    // On from where the walk it is drawn walking ends (its next leg round a bend, OP-148): under way
+    // as that one ends, so the owl does not skip ahead to it.
+    if (followsOn(owl.walk, w, Date.now())) {
+      owl.nextWalk = w;
+      return;
+    }
     owl.place(w.from);
     owl.startWalk(w);
   }
