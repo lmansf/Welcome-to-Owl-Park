@@ -257,6 +257,68 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 3100, y: 745 },
       ],
     ],
+    // Upper levels (OP-084, perches.ts), the treetop walk in the east wing, tiered as routes.ts reckons
+    // them. The fallen log on the lawn, a jump up (solid: walked round on the floor). The ladder up the
+    // middle tree: an owl perches on a rung halfway, then on the porch at its top, a jump each, and from
+    // the porch on the loft's deck above it to the left, a jump more: single jumps all the way (tier 1).
+    // The porch is also a jump and the second flap straight from the floor (tier 2). The left tree's
+    // treehouse is across the gap from the loft, past the rope bridge, and only a glide gets there (tier
+    // 3). The rope bridge stays painted, not a perch, so the treehouse stays the glide's.
+    // TODO-DOCS (OP-084): docs/ACTIVITIES.md: the grove's treetop walk (the ladder to the porch's leaf
+    // pile and the loft, and the glide to the far treehouse's), beside the hub's bench and beam.
+    perches: [
+      {
+        id: 'grove-log',
+        area: [
+          { x: 4060, y: 815 },
+          { x: 4285, y: 800 },
+          { x: 4285, y: 820 },
+          { x: 4060, y: 835 },
+        ],
+        top: 60,
+        solid: true,
+      },
+      {
+        id: 'grove-rung',
+        area: [
+          { x: 4083, y: 695 },
+          { x: 4120, y: 695 },
+          { x: 4120, y: 712 },
+          { x: 4083, y: 712 },
+        ],
+        top: 110,
+      },
+      {
+        id: 'grove-porch',
+        area: [
+          { x: 4118, y: 700 },
+          { x: 4362, y: 700 },
+          { x: 4362, y: 716 },
+          { x: 4118, y: 716 },
+        ],
+        top: 218,
+      },
+      {
+        id: 'grove-loft',
+        area: [
+          { x: 3995, y: 694 },
+          { x: 4140, y: 694 },
+          { x: 4140, y: 710 },
+          { x: 3995, y: 710 },
+        ],
+        top: 292,
+      },
+      {
+        id: 'grove-hut',
+        area: [
+          { x: 3560, y: 690 },
+          { x: 3728, y: 690 },
+          { x: 3728, y: 702 },
+          { x: 3560, y: 702 },
+        ],
+        top: 345,
+      },
+    ],
     spawns: { 'default': { x: 2610, y: 860 } },
     doors: [
       { id: 'to-hub', rect: { x: 2675, y: 775, w: 125, h: 80 }, to: { room: 'hub', spawn: 'from-grove' }, marker: { x: 2737, y: 700 } },
@@ -286,6 +348,9 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 3900, y: 800 },
       { x: 4200, y: 735 },
       { x: 4450, y: 700 },
+      // Up on the fallen log, a jump from the lawn, and on the loft, at the top of the ladder (OP-084).
+      { x: 4170, y: 818, top: 60 },
+      { x: 4050, y: 702, top: 292 },
     ],
   },
   market: {
