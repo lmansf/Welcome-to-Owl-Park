@@ -9,6 +9,10 @@ package scripts so the pinned version is used: `pnpm dev:edge`, `pnpm deploy:edg
 - Checks before a push: `pnpm check` (typecheck, unit tests, build) and `pnpm e2e` (Playwright).
 - The edge typecheck runs `wrangler types` first; `apps/edge/worker-configuration.d.ts` is generated
   and ignored by git. Never hand-write the `Env` bindings; change `wrangler.jsonc` instead.
+- The Worker and the room server log only through the shared logger (`packages/shared/src/log.ts`,
+  `apps/edge/src/logs.ts`; OP-134). A new event goes in `LOG_EVENTS` and fires in a test through
+  `logged()` (`apps/edge/test/logged.ts`), with a `TODO-DOCS` note for `docs/LOGGING.md`; no catch
+  swallows an error unseen. `apps/edge/test/logEvents.test.ts` fails otherwise.
 - Cloudflare guidance for agents is vendored in `.claude/skills/` (refresh with
   `tools/cloudflare-skills.sh`); prefer it over memory for Wrangler, Workers and Durable Objects.
 - Art comes from Seedream through `tools/art` (`tools/art/README.md`, `docs/ART-PIPELINE.md`).

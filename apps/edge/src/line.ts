@@ -37,12 +37,24 @@ export class Line {
 
   /** A number for `who`: the one it holds (waiting, or called and still held), or a new one at the back. */
   join(who: string, now: number, holdMs: number): number {
-    const held = this.sql
-      .exec<{ n: number }>(`SELECT n FROM line WHERE who = ? AND gone IS NULL AND claimed IS NULL AND (called IS NULL OR called > ?) ORDER BY n DESC LIMIT 1`, who, now - holdMs)
-      .toArray()[0];
-    if (held) return held.n;
+    const held = this.held(who, now, holdMs);
+    if (held !== null) return held;
     this.sql.exec(`INSERT INTO line (who, joined) VALUES (?, ?)`, who, now);
     return this.sql.exec<{ n: number }>(`SELECT last_insert_rowid() AS n`).one().n;
+  }
+
+  /** The number `who` holds now (waiting, or called and still held), if any. */
+  held(who: string, now: number, holdMs: number): number | null {
+    return (
+      this.sql
+        .exec<{ n: number }>(`SELECT n FROM line WHERE who = ? AND gone IS NULL AND claimed IS NULL AND (called IS NULL OR called > ?) ORDER BY n DESC LIMIT 1`, who, now - holdMs)
+        .toArray()[0]?.n ?? null
+    );
+  }
+
+  /** When number `n` was taken (OP-134 logs how long an owl waited); null for a number not in the line. */
+  joinedAt(n: number): number | null {
+    return this.sql.exec<{ joined: number }>(`SELECT joined FROM line WHERE n = ?`, n).toArray()[0]?.joined ?? null;
   }
 
   /** Owls waiting for their turn. */

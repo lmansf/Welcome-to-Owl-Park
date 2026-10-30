@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LINE_DEFAULTS, RIBBON_WORDS, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS } from '@owl-park/shared';
+import { LINE_DEFAULTS, RIBBON_WORDS, hashForLog, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS } from '@owl-park/shared';
 import { CLAIM_GRACE_MS, Line } from '../src/line';
 import { ENTRY_TTL_S, mintEntry, mintPass, verifyEntry, verifyPass } from '../src/pass';
 import type { Env } from '../src/env';
 import type { LineAnswer, OverflowState } from '../src/Overflow';
+import { captureLogs } from '../src/logs';
+import { logged } from './logged';
 import { sqlStorage } from './sqlite';
 
 // The Workers runtime is not here: its Durable Object base class stands in.
@@ -233,6 +235,33 @@ describe('the overflow object (OP-075)', () => {
     at(T0 + 3 * TICK_MS + CLAIM_GRACE_MS + 1);
     expect((await st()).active).toBe(false);
     expect((await join('c_cccccccc')).body).toEqual({ state: 'go' });
+  });
+
+  it('tells the line (OP-134): a number taken, a turn taken with how long it waited, the depth every ten seconds, and the realms switch', async () => {
+    const cap = captureLogs();
+    try {
+      rooms.counts.set('park', { lobby: 1, hub: 2 });
+      await post('/settings', { line: { mode: 'auto', threshold: 3, holdMin: 3 } });
+      await join('c_aaaaaaaa');
+      logged(cap.lines, 'queue_enter', { component: 'room.queue', n: 1, who_hash: hashForLog('c_aaaaaaaa'), again: false, waiting: 1 });
+      logged(cap.lines, 'queue_depth', { waiting: 1, held: 0, owls: 3 });
+      // The page loaded again: the same number.
+      await join('c_aaaaaaaa');
+      logged(cap.lines, 'queue_enter', { n: 1, again: true });
+      expect(cap.lines.filter((l) => l.event === 'queue_depth')).toHaveLength(1);
+      // A place frees: called on the next tick, and in on its next look.
+      rooms.counts.set('park', { lobby: 0, hub: 2 });
+      at(T0 + 12_000);
+      await obj.alarm();
+      logged(cap.lines, 'queue_depth', { waiting: 0, held: 1 });
+      await look(1, 'c_aaaaaaaa');
+      logged(cap.lines, 'queue_admit', { n: 1, who_hash: hashForLog('c_aaaaaaaa'), waited_ms: 12_000 });
+      await post('/settings', { realms: { open: ['glass'], portal: true, night: 'hard' } });
+      logged(cap.lines, 'realms_set', { component: 'overflow', open: ['glass'], portal: true, night: 'hard' });
+      expect(JSON.stringify(cap.lines)).not.toContain('c_aaaaaaaa');
+    } finally {
+      cap.restore();
+    }
   });
 
   it('gives up a place held too long, calling the next, and the late owl joins again at the back', async () => {

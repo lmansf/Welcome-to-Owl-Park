@@ -5,6 +5,7 @@
  * score clears the rest. Beside them, each collector's run under way (OP-137). No wrangler migration
  * is needed for the tables.
  */
+import { moduleLog } from './logs';
 import { isArcadeGame, sanitizePortrait, type ArcadeGame, type ArcadeRunRow, type PortraitLook, type ScoreRow, type ScoreStore } from '@owl-park/shared';
 
 type Row = { day: string; game: string; cid: string; score: number; look: string; at: number; bonus: number };
@@ -16,7 +17,8 @@ const PLAIN: PortraitLook = { body: '#8A6A4A', belly: '#F6F1E3', accent: '#C9A22
 function portrait(text: string): PortraitLook {
   try {
     return sanitizePortrait(JSON.parse(text) as unknown) ?? PLAIN;
-  } catch {
+  } catch (e) {
+    moduleLog.error('collections', 'read_failed', 'A stored score-wall picture could not be read: a plain owl shows.', { error: e });
     return PLAIN;
   }
 }

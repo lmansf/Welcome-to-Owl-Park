@@ -31,6 +31,7 @@
  * (apps/park-log/sql/realms.sql): how the times add up to the visit's, and what each entry source means.
  */
 import { DEFAULT_SPECIES, SPECIES, isHexColour, type SpeciesId } from '@owl-park/shared';
+import { moduleLog } from './logs';
 import { cleanVisit, type CollectLog, type EntrySource, type Visit } from './collectLog';
 
 /** A visit not seen for this long is over: two of the room objects' minute heartbeats and some. */
@@ -154,7 +155,8 @@ function rooms(text: string): string[] {
   try {
     const v = JSON.parse(text) as unknown;
     return Array.isArray(v) ? v.filter((r): r is string => typeof r === 'string') : [];
-  } catch {
+  } catch (e) {
+    moduleLog.error('collections', 'read_failed', 'A stored list of rooms could not be read: it counts as none.', { error: e });
     return [];
   }
 }

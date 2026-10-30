@@ -3,7 +3,9 @@
  * from the object class so tests run it against any SQLite with the same `exec(query, ...bindings)`
  * shape. A vote row names its voter (a wallet, C42) and the ticket that let the owl in.
  */
+import { errorFields } from '@owl-park/shared';
 import type { VoteStore } from './Ledger';
+import { moduleLog } from './logs';
 
 export class SqlVoteStore implements VoteStore {
   constructor(private readonly sql: SqlStorage) {
@@ -11,8 +13,9 @@ export class SqlVoteStore implements VoteStore {
     // A table kept before wallets counted (C42) has no ticket column: add it (once there, SQLite refuses a second one).
     try {
       sql.exec(`ALTER TABLE votes ADD COLUMN ticket TEXT`);
-    } catch {
-      // Already there.
+    } catch (e) {
+      // Already there; anything else is worth a line.
+      if (!/duplicate column/i.test(errorFields(e).message)) moduleLog.error('worker.tickets', 'write_failed', 'A table could not be brought up to date.', { table: 'votes', column: 'ticket', error: e });
     }
     sql.exec(`CREATE INDEX IF NOT EXISTS votes_day ON votes (day)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS votes_visitor ON votes (visitor)`);

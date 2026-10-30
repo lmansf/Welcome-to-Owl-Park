@@ -616,10 +616,16 @@ test.describe('room server', () => {
     // The network goes mid-run; the run plays on in the page.
     await a.context().setOffline(true);
     expect(await a.evaluate(() => window.owlPark.drop())).toBe(true);
-    await flyThrough(a, 2);
-    // Back online, the run plays on while the page finds the room again, until it is there and a gap further on.
-    await a.context().setOffline(false);
-    await flyThrough(a, 3, { untilOnline: true });
+    // One flight with no pause in it (an owl left alone between two flights falls): two gaps offline,
+    // then the network comes back while it flies, and it flies on until the page has found the room
+    // again (its dot gone and back) and a gap further on.
+    await Promise.all([
+      flyThrough(a, 3, { untilOnline: true }),
+      (async () => {
+        await expect.poll(() => a.evaluate(() => (window.owlPark.arcade()?.sim as unknown as { score: number } | undefined)?.score ?? -1), { timeout: 30_000, intervals: [100] }).toBeGreaterThanOrEqual(2);
+        await a.context().setOffline(false);
+      })(),
+    ]);
     expect(await a.evaluate(() => document.querySelector('[data-dot]')?.getAttribute('data-status'))).toBe('online');
     await untilOver(a);
     await expect(a.locator('.arcade [data-result] [data-paid]')).toHaveText(/^\+\d+ feathers?$/);

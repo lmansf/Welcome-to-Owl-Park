@@ -9,6 +9,7 @@
  *
  * The store's ticket products are asked for at most every few minutes and kept in this isolate.
  */
+import { moduleLog } from './logs';
 import { adminQuery, storeConfig } from './storeApi';
 import { CATALOGUE_QUERY, catalogueOf, type AdminCatalogue, type Catalogue } from './shopify';
 
@@ -31,8 +32,8 @@ export async function storeCatalogue(env: OpeningEnv, fetchFn: typeof fetch = fe
     kept = { shop: store.shop, until: now + KEEP_MS, value };
     return value;
   } catch (e) {
-    console.error('[owl-park] the store did not list its tickets:', e instanceof Error ? e.message : e);
     // The last answer stands until the store answers again.
+    moduleLog.error('worker.store', 'store_unreachable', 'The store did not list its ticket products: the last list stands.', { error: e });
     const value = kept?.shop === store.shop ? kept.value : null;
     kept = { shop: store.shop, until: now + RETRY_MS, value };
     return value;

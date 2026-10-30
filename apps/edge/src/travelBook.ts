@@ -21,13 +21,20 @@ export class TravelBook {
     sql.exec('CREATE TABLE IF NOT EXISTS travel_gate (cid TEXT PRIMARY KEY, through_at INTEGER NOT NULL)');
   }
 
-  /** An owl joined a room at a spawn: the place it walked into kept, and the gate walked through, or the owl outside again. */
-  entered(cid: string, room: string, spawn: string | undefined, now: number): void {
+  /**
+   * An owl joined a room at a spawn: the place it walked into kept, and the gate walked through, or the
+   * owl outside again. Says how the gate changed for the log (OP-134): walked through, the flag cleared, or neither.
+   */
+  entered(cid: string, room: string, spawn: string | undefined, now: number): 'crossed' | 'cleared' | null {
     const place = visitedPlace(room);
     if (place) this.sql.exec('INSERT OR IGNORE INTO travel_places (cid, place, first_at) VALUES (?, ?, ?)', cid, place, now);
     const gate = gateAfter(room, spawn);
-    if (gate === true) this.sql.exec('INSERT OR REPLACE INTO travel_gate (cid, through_at) VALUES (?, ?)', cid, now);
-    else if (gate === false) this.sql.exec('DELETE FROM travel_gate WHERE cid = ?', cid);
+    if (gate === true) {
+      this.sql.exec('INSERT OR REPLACE INTO travel_gate (cid, through_at) VALUES (?, ?)', cid, now);
+      return 'crossed';
+    }
+    if (gate === false) return this.sql.exec('DELETE FROM travel_gate WHERE cid = ?', cid).rowsWritten > 0 ? 'cleared' : null;
+    return null;
   }
 
   /** Whether the owl has walked through the front gate since it was last outside the park. */

@@ -29,6 +29,7 @@
  * (`POST /api/admin/collect-log`).
  */
 import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
+import { moduleLog } from './logs';
 import { ROOMS } from './rooms';
 
 export interface LogConfig {
@@ -46,7 +47,8 @@ export function logConfig(env: { PARK_LOG_URL?: string; FRAUD_SCORE_KEY?: string
   let u: URL;
   try {
     u = new URL(url);
-  } catch {
+  } catch (e) {
+    moduleLog.error('collections.log', 'collect_log_failed', 'PARK_LOG_URL is not an address: the collection log stays off.', { error: e });
     return null;
   }
   const local = u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
@@ -417,7 +419,7 @@ export class CollectLog {
       const now = this.deps.now();
       if (now - this.fullSince > 3600_000) {
         this.fullSince = now;
-        console.error(`[park-log] the outbox holds ${LOG_OUTBOX_MAX} rows and the log is not taking them: newer rows are not kept for it`);
+        moduleLog.error('collections.log', 'collect_log_full', 'The collection log’s outbox is full and the log is not taking rows: newer rows are not kept for it (told once an hour).', { rows: LOG_OUTBOX_MAX });
       }
       return false;
     }
@@ -495,7 +497,7 @@ export class CollectLog {
           await this.round(this.config!);
         } while (this.again);
       } catch (e) {
-        console.error('[park-log] send failed:', e instanceof Error ? e.message : String(e));
+        moduleLog.error('collections.log', 'collect_log_failed', 'Sending to the collection log failed: the rows wait in the outbox for the next round.', { error: e });
       } finally {
         this.sending = null;
       }
@@ -508,6 +510,7 @@ export class CollectLog {
     await Promise.resolve();
     // Should this round be cut short (the object put away mid-send), the alarm takes over.
     if (this.waiting() > 0) this.deps.wake(this.deps.now() + LOG_RETRY_MS[0]!);
+    if (this.failures > 0) moduleLog.info('collections.log', 'collect_log_retried', 'Sending to the collection log again after it failed.', { attempt: this.failures + 1, rows: this.waiting() });
     for (;;) {
       const waiting = this.sql.exec<Waiting>(`SELECT id, kind, data FROM log_outbox ORDER BY id LIMIT ?`, LOG_BATCH).toArray();
       if (!waiting.length) break;
@@ -518,12 +521,13 @@ export class CollectLog {
       const run = waiting.slice(0, n);
       const toRow = ROWS[kind];
       if (!toRow) {
-        console.error(`[park-log] ${run.length} rows of an unknown kind (${kind}) dropped`);
+        moduleLog.error('collections.log', 'collect_log_dropped', 'Rows of a kind the collection log does not know were dropped.', { kind, rows: run.length });
       } else {
         const rows = await Promise.all(run.map((w) => toRow(config.salt, JSON.parse(w.data) as never)));
         const sent = await this.post(config, { kind, rows });
         if (sent === 'retry') return this.retryLater();
-        if (sent === 'drop') console.error(`[park-log] the log refused a batch of ${rows.length} ${kind} rows for good; they are dropped`);
+        if (sent === 'drop') moduleLog.error('collections.log', 'collect_log_dropped', 'The collection log refused a batch for good: its rows are dropped.', { kind, rows: rows.length });
+        else moduleLog.info('collections.log', 'collect_logged', 'The collection log took a batch of rows.', { kind, rows: rows.length });
         this.failures = 0;
       }
       this.sql.exec(`DELETE FROM log_outbox WHERE id <= ?`, run.at(-1)!.id);
@@ -534,8 +538,10 @@ export class CollectLog {
     if (taken === catalogue.version) return;
     const sent = await this.post(config, { kind: 'catalogue', version: catalogue.version, items: catalogue.items });
     if (sent === 'retry') return this.retryLater();
-    if (sent === 'ok') this.sql.exec(`INSERT OR REPLACE INTO log_meta (k, v) VALUES ('catalogue', ?)`, catalogue.version);
-    else console.error('[park-log] the log refused the catalogue');
+    if (sent === 'ok') {
+      this.sql.exec(`INSERT OR REPLACE INTO log_meta (k, v) VALUES ('catalogue', ?)`, catalogue.version);
+      moduleLog.info('collections.log', 'collect_logged', 'The collection log took the catalogue.', { kind: 'catalogue', rows: catalogue.items.length });
+    } else moduleLog.error('collections.log', 'collect_log_dropped', 'The collection log refused the catalogue: it is sent again with the next change to it.', { kind: 'catalogue' });
   }
 
   private retryLater(): void {
@@ -562,9 +568,13 @@ export class CollectLog {
       });
       if (res.ok) return 'ok';
       // Not set up yet, the wrong key, too busy, or down: later. Anything else is the request itself.
-      return res.status === 401 || res.status === 403 || res.status === 408 || res.status === 429 || res.status >= 500 ? 'retry' : 'drop';
-    } catch {
-      return 'retry'; // unreachable, or slower than LOG_SEND_MS
+      const later = res.status === 401 || res.status === 403 || res.status === 408 || res.status === 429 || res.status >= 500;
+      if (later) moduleLog.warn('collections.log', 'collect_log_failed', 'The collection log did not take a batch: it is tried again later.', { status: res.status });
+      return later ? 'retry' : 'drop';
+    } catch (e) {
+      // Unreachable, or slower than LOG_SEND_MS.
+      moduleLog.warn('collections.log', 'collect_log_failed', 'The collection log did not answer: the batch is tried again later.', { error: e });
+      return 'retry';
     }
   }
 }

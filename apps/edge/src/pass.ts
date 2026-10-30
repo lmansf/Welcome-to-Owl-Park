@@ -8,6 +8,7 @@
  * pass is never a collector token and a collector token is never a pass.
  */
 import { isDeviceId, isTimeZone } from '@owl-park/shared';
+import { moduleLog } from './logs';
 import { isTicketId } from './tickets';
 
 export interface PassPayload {
@@ -73,9 +74,15 @@ async function key(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 
+/** Whether this isolate has said so already: the development key is warned of once, not on every request. */
+let devKeyWarned = false;
+
 export function signingSecret(env: { PASS_SIGNING_KEY?: string }): string {
   if (env.PASS_SIGNING_KEY && env.PASS_SIGNING_KEY.length >= 16) return env.PASS_SIGNING_KEY;
-  console.warn('[owl-park] PASS_SIGNING_KEY is not set; using the development key. Set it with: wrangler secret put PASS_SIGNING_KEY');
+  if (!devKeyWarned) {
+    devKeyWarned = true;
+    moduleLog.warn('worker.pass', 'signing_key_missing', 'PASS_SIGNING_KEY is not set, so passes are signed with the development key. Set it with: wrangler secret put PASS_SIGNING_KEY');
+  }
   return DEV_KEY;
 }
 
@@ -142,6 +149,13 @@ export async function verifyPass(secret: string, token: string | null, nowS = Ma
   if (Number.isSafeInteger(p['iat'])) out.iat = p['iat'] as number;
   if (isDeviceId(p['dev'])) out.dev = p['dev'];
   return out;
+}
+
+/** Why a token is not a pass (OP-134's pass_rejected): none given, past its time, or not one of the park's passes at all. */
+export async function passRefusal(secret: string, token: string | null, nowS = Math.floor(Date.now() / 1000)): Promise<'missing' | 'expired' | 'invalid'> {
+  if (!token) return 'missing';
+  const p = await verified(secret, token);
+  return p && p['k'] === undefined && typeof p['exp'] === 'number' && p['exp'] < nowS ? 'expired' : 'invalid';
 }
 
 export async function mintCollector(secret: string, cid: string, dev: string | null = null, iat = Math.floor(Date.now() / 1000)): Promise<string> {

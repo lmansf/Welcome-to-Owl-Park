@@ -22,7 +22,6 @@ import {
   LEAF_FEATHERS_PER_DAY,
   NestBook,
   QuestBook,
-  climbRef,
   leafFeathers,
   secureNestId,
   type AbandonResult,
@@ -314,9 +313,8 @@ export class Collections extends DurableObject<Env> {
   /** A band reached: checked against its floor, paid under the activities' cap, recorded; the clouds' item on the visit it came in. */
   async climbBand(cid: string, seed: number, band: number, visit?: Visit): Promise<AscentResult> {
     return this.during(visit, () => {
-      const res = this.climb.band(cid, seed, band, Date.now());
-      if (!res.ok) console.log(`[owl-park] climb ${climbRef(cid, seed)} band ${band}: ${res.reason}`);
-      return res;
+      // A refused band is logged by the room object, with the run's reference (OP-134).
+      return this.climb.band(cid, seed, band, Date.now());
     });
   }
 
@@ -383,8 +381,8 @@ export class Collections extends DurableObject<Env> {
   // ---------- travel from the map (OP-130; the rules are travelBook.ts and the shared travel.ts) ----------
 
   /** A room object's word that an owl joined a room at a spawn. */
-  async travelEntered(cid: string, room: string, spawn: string | null): Promise<void> {
-    this.travel.entered(cid, room, spawn ?? undefined, Date.now());
+  async travelEntered(cid: string, room: string, spawn: string | null): Promise<'crossed' | 'cleared' | null> {
+    return this.travel.entered(cid, room, spawn ?? undefined, Date.now());
   }
 
   /** Whether an owl travelling into the park has walked through the front gate since it was last outside. */

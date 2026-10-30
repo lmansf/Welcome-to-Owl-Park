@@ -1,6 +1,10 @@
 import { isNestRoom, type RoomDef } from '@owl-park/shared';
 import { ROOMS as PARK_ROOMS, roomFor } from '@owl-park/shared/rooms';
 import type { Env } from './env';
+import { moduleLog } from './logs';
+
+/** ROOM_CAPS that is not JSON is said once per isolate, not at every join. */
+let capsWarned = false;
 
 export const ROOMS: Record<string, RoomDef> = PARK_ROOMS;
 
@@ -26,8 +30,11 @@ export function roomCap(env: Env, roomId: string): number {
     const caps = env.ROOM_CAPS ? (JSON.parse(env.ROOM_CAPS) as Record<string, number>) : {};
     const c = Object.hasOwn(caps, key) ? caps[key] : undefined;
     if (typeof c === 'number' && c >= 1 && c <= 120) return Math.floor(c);
-  } catch {
-    /* fall through */
+  } catch (e) {
+    if (!capsWarned) {
+      capsWarned = true;
+      moduleLog.error('room.join', 'read_failed', 'ROOM_CAPS is not JSON: the default caps hold.', { error: e });
+    }
   }
   return (Object.hasOwn(DEFAULT_CAPS, key) ? DEFAULT_CAPS[key] : undefined) ?? 40;
 }

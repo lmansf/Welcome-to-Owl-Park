@@ -19,6 +19,8 @@ import { ROOMS } from '../src/rooms';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { SqlNestStore } from '../src/sqlNestStore';
 import type { Env } from '../src/env';
+import { captureLogs } from '../src/logs';
+import { logged } from './logged';
 import { sqlStorage } from './sqlite';
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -257,6 +259,35 @@ describe('the collection log (OP-107)', () => {
     expect(t.book.grant(CID, 'cape~2', 'quest', MON)).toMatchObject({ ok: true, added: true });
     expect(t.store.hasOwned(CID, 'cape~2')).toBe(true);
     expect(t.log.waiting()).toBe(LOG_OUTBOX_MAX);
+  });
+
+  it('tells each batch the log took, a send that failed and the try after it, a batch refused for good, and a full outbox (OP-134)', async () => {
+    const cap = captureLogs();
+    try {
+      let status = 503;
+      const t = rig({ answer: () => new Response('{}', { status }) });
+      t.book.ensure(CID, undefined, MON);
+      await t.log.flush();
+      logged(cap.lines, 'collect_log_failed', { component: 'collections.log', level: 'warn', status: 503 });
+      status = 200;
+      await t.log.flush();
+      logged(cap.lines, 'collect_log_retried', { attempt: 2 });
+      logged(cap.lines, 'collect_logged', { kind: 'collect' });
+      logged(cap.lines, 'collect_logged', { kind: 'catalogue' });
+      status = 400;
+      t.book.grant(CID, 'cape~2', 'quest', MON + 5000);
+      await t.log.flush();
+      logged(cap.lines, 'collect_log_dropped', { level: 'error', kind: 'collect', rows: 1 });
+      t.sql.exec(
+        `INSERT INTO log_outbox (kind, data) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?) SELECT 'collect', '{}' FROM n`,
+        LOG_OUTBOX_MAX,
+      );
+      t.book.grant(CID, allVariants().find((v) => !t.store.hasOwned(CID, v))!, 'quest', MON + 6000);
+      logged(cap.lines, 'collect_log_full', { level: 'error', rows: LOG_OUTBOX_MAX });
+      expect(JSON.stringify(cap.lines)).not.toContain(CID);
+    } finally {
+      cap.restore();
+    }
   });
 });
 

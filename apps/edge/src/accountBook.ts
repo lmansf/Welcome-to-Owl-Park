@@ -8,6 +8,7 @@
  * routes ask of the collections object. Written without platform APIs beyond `SqlStorage`, so Node
  * tests it.
  */
+import { moduleLog } from './logs';
 import { LINKS_PER_EMAIL_PER_HOUR, LINKS_PER_IP_PER_HOUR, MAGIC_LINK_MS, friendCodeFrom, isLook, portraitLook, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
 
 const HOUR_MS = 3600_000;
@@ -99,7 +100,8 @@ export class AccountBook {
     try {
       const parsed = r['look'] ? (JSON.parse(String(r['look'])) as unknown) : null;
       look = isLook(parsed) ? portraitLook(parsed) : null;
-    } catch {
+    } catch (e) {
+      moduleLog.error('worker.accounts', 'read_failed', 'An account’s stored picture could not be read: it shows none.', { error: e });
       look = null;
     }
     return { cid: String(r['cid']), friendCode: String(r['friend_code']), protected: r['email_hash'] !== null && r['email_hash'] !== undefined, device: (r['device'] as string | null) ?? null, look };

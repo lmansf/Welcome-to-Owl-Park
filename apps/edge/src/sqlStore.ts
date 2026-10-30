@@ -14,12 +14,14 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import { ROOM_LAYOUT, relayout } from '@owl-park/shared/rooms';
+import { moduleLog } from './logs';
 
 function json<T>(text: string | null, fallback: T): T {
   if (!text) return fallback;
   try {
     return JSON.parse(text) as T;
-  } catch {
+  } catch (e) {
+    moduleLog.error('collections', 'read_failed', 'A stored collection field could not be read: its default is used.', { error: e });
     return fallback;
   }
 }
