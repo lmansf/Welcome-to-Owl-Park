@@ -92,7 +92,9 @@ export function finished(request: Request, url: URL, res: Response, listed: stri
   if (res.status === 101 || res.webSocket) return res;
   const headers = new Headers(res.headers);
   headers.set('X-Content-Type-Options', 'nosniff');
+  // Only over https (the static files' own rule, public/_headers, puts it on the page as it comes from them).
   if (url.protocol === 'https:' && !isLocalHost(url.hostname)) headers.set('Strict-Transport-Security', HSTS);
+  else headers.delete('Strict-Transport-Security');
   headers.delete('Access-Control-Allow-Origin');
   const origin = request.headers.get('Origin');
   if (origin !== null && originAllowed(origin, url, listed)) {

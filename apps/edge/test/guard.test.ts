@@ -46,7 +46,8 @@ const env = (more: Record<string, string> = {}) =>
     VOTES: stub((req) => (new URL(req.url).pathname === '/gate' ? Response.json({ gate: null }) : Response.json({ error: 'not found' }, { status: 404 }))),
     OVERFLOW: stub(() => Response.json(state)),
     ROOMS: stub(() => new Response('in')),
-    ASSETS: { fetch: async () => new Response(PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ETag: '"page-1"' } }) },
+    // As the static files' own rules (public/_headers) send it.
+    ASSETS: { fetch: async () => new Response(PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ETag: '"page-1"', 'X-Content-Type-Options': 'nosniff', 'Strict-Transport-Security': 'max-age=31536000' } }) },
     GATE: 'open',
     PASS_SIGNING_KEY: KEY,
     ...more,
