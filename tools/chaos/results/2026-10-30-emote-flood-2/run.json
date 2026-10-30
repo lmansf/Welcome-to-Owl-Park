@@ -1,0 +1,56 @@
+{
+  "experiment": "emote-flood",
+  "n": 7,
+  "name": "One visitor floods the room with emotes",
+  "run_id": "2026-10-30-emote-flood-2",
+  "git": {
+    "park": "b9daa6a440d92279a3e87fdac530b118e4589e85",
+    "harness": "b9daa6a440d92279a3e87fdac530b118e4589e85"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "A visitor sending 50 emotes a second is throttled (its extra emotes dropped, then its socket closed), and nobody else in the room lags or loses a move (OP-089).",
+  "blast_radius": "One extra scripted visitor in the throwaway park's hub, flooding for 10 s at most.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-30T07:02:06.236Z",
+  "end": "2026-10-30T07:02:46.848Z",
+  "verdict": "held",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "the flood's emotes the others saw played",
+      "value": "1 of 41 sent over 838 ms",
+      "ok": true,
+      "component": "room server",
+      "fix": "play at most one emote per owl every 1.5 s (Room.ts emote) and drop the rest before they are sent on",
+      "at": "2026-10-30T07:02:41.230Z"
+    },
+    {
+      "what": "the flooding socket closed by the room",
+      "value": "after 838 ms and 41 emotes: code 4003 (too many frames)",
+      "ok": true,
+      "component": "room server",
+      "fix": "close a socket that sends past the frame limit (Room.ts admitFrame) for emotes too",
+      "at": "2026-10-30T07:02:41.230Z"
+    },
+    {
+      "what": "the others' move echo p95 from the flood's start",
+      "value": 7,
+      "unit": "ms (75 moves)",
+      "ok": true,
+      "component": "room server",
+      "fix": "drop a flooder's frames before any work is done for them",
+      "at": "2026-10-30T07:02:41.230Z"
+    },
+    {
+      "what": "moves the others lost from the flood's start",
+      "value": "0 of 75",
+      "ok": true,
+      "component": "room server",
+      "at": "2026-10-30T07:02:41.230Z"
+    }
+  ],
+  "filed": [],
+  "proposed": 0
+}
