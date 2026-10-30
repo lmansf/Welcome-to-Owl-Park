@@ -93,7 +93,7 @@ import type { CollectionState } from '../collect/state';
 import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
-import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type ScanReply } from '../net';
+import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import type { Away } from '../ui/away';
@@ -185,6 +185,25 @@ interface Action {
   label: string;
   run: () => void;
 }
+
+/** A room's connection as it opens (OP-129), and what the room pushes about quests, activities and nests. */
+interface Joining {
+  conn: Promise<RoomConnection>;
+  pushes: QuestPushes & ActivityPushes & NestPushes;
+}
+
+/** `handlers` with each call put off while `waiting()` gives a list: the call joins it, to run in turn when the list is played. */
+function heldBack<T extends object>(handlers: T, waiting: () => Array<() => void> | null): T {
+  const held: Record<string, unknown> = {};
+  for (const [name, handler] of Object.entries(handlers) as Array<[string, (...args: unknown[]) => unknown]>) {
+    held[name] = (...args: unknown[]) => {
+      const list = waiting();
+      if (list) list.push(() => void handler(...args));
+      else handler(...args);
+    };
+  }
+  return held as T;
+}
 /** How far hint chips keep from the screen's edges, in CSS pixels (clear of the HUD's top and bottom bars). */
 const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
 /** On touch screens the thumbstick and the buttons above it fill the bottom-right corner: hints keep above them. */
@@ -210,6 +229,11 @@ export class RoomScene extends Phaser.Scene {
   private peers = new Map<string, Owl>();
   private built = false;
   private conn: RoomConnection | null = null;
+  /**
+   * What the room says while its art loads (OP-129): the page joins as the art starts to load, and
+   * each word waits here, in order, until the scene is built and holds the connection. Null after.
+   */
+  private heard: Array<() => void> | null = null;
   private leaving = false;
   private cfg!: ParkConfig;
   private hud!: Hud;
@@ -359,6 +383,7 @@ export class RoomScene extends Phaser.Scene {
     this.peers = new Map();
     this.built = false;
     this.conn = null;
+    this.heard = null;
     this.roomHas = null;
     this.posOverlay = null;
     this.leaving = false;
@@ -435,13 +460,23 @@ export class RoomScene extends Phaser.Scene {
     void this.open();
   }
 
-  /** Load this room's art (releasing the previous room's) under the load screen (OP-129), then build the scene. */
+  /**
+   * Load this room's art (releasing the previous room's) under the load screen (OP-129), then build the
+   * scene. The room is joined as the art starts to load, so its welcome and the owls already in it come
+   * alongside the art instead of after it.
+   */
   private async open(): Promise<void> {
     const gen = this.gen;
     const previous = this.registry.get('loadedRoom') as string | undefined;
     if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
     const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
     screen?.show('Opening…');
+    const spawn = arrivalPoint(this.room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
+    const joining = this.join(spawn);
+    // Gone before the room was built (the page went on to another scene): the room is left too.
+    const leaveEarly = () => void joining.conn.then((conn) => conn.leave());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, leaveEarly);
+    this.openPosOverlay();
     const cap = roomArtCap(this.room, this.cfg);
     this.artCap = cap;
     // On a dense screen, the paintings whose sharp copies the browser does not have yet open at 1x,
@@ -458,11 +493,27 @@ export class RoomScene extends Phaser.Scene {
       soft,
     );
     if (gen !== this.gen || !this.scene.isActive()) return; // the scene moved on while we loaded
+    this.events.off(Phaser.Scenes.Events.SHUTDOWN, leaveEarly);
     this.registry.set('loadedRoom', this.room.id);
     screen?.hide();
-    this.build();
+    this.build(spawn);
+    void this.connect(joining);
     this.soft = soft;
     void this.sharpen(gen);
+  }
+
+  /** The keepers' position overlay (?pos=1 with the room server): asked for once a tab, as the first room starts to load, and up from then on. */
+  private openPosOverlay(): void {
+    if (!this.cfg.pos || this.transport.kind !== 'edge') return;
+    let overlay = this.registry.get('posOverlay') as Promise<PosOverlay | null> | undefined;
+    if (!overlay) {
+      overlay = openPosOverlay(this.cfg.edgeUrl);
+      this.registry.set('posOverlay', overlay);
+    }
+    const gen = this.gen;
+    void overlay.then((o) => {
+      if (gen === this.gen) this.posOverlay = o;
+    });
   }
 
   /**
@@ -489,7 +540,8 @@ export class RoomScene extends Phaser.Scene {
     return !this.me.walking && !this.keys?.direction() && this.flier.air.s === GROUNDED;
   }
 
-  private build(): void {
+  /** The room's art, pieces and residents, with the own owl at `spawn`, where the room was told it comes in. */
+  private build(spawn: Vec2): void {
     const { room } = this;
     ensureFxTextures(this);
 
@@ -543,21 +595,8 @@ export class RoomScene extends Phaser.Scene {
       if (this.textures.exists(t.key)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100);
     }
 
-    const spawn = arrivalPoint(room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
     this.arrivedAt = { ...spawn };
-    if (this.cfg.pos && this.transport.kind === 'edge') {
-      // Asked for once a tab; every room after shows it at once.
-      let overlay = this.registry.get('posOverlay') as Promise<PosOverlay | null> | undefined;
-      if (!overlay) {
-        overlay = openPosOverlay(this.cfg.edgeUrl);
-        this.registry.set('posOverlay', overlay);
-      }
-      const gen = this.gen;
-      void overlay.then((o) => {
-        if (gen === this.gen) this.posOverlay = o;
-      });
-    }
     // Come in to stand before the mirror (Play, OP-105), the owl faces it.
     if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
     this.addResidents();
@@ -607,7 +646,6 @@ export class RoomScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
-    void this.connect();
   }
 
   override update(): void {
@@ -634,15 +672,26 @@ export class RoomScene extends Phaser.Scene {
 
   // ---------- networking ----------
 
-  private snapshot(): PlayerState {
+  /** The own owl as the room sees it; before the scene is built, standing at `pos` (where it comes in). */
+  private snapshot(pos: Vec2 = this.me.pos, walk: Walk | null = this.me.walk): PlayerState {
     const told = this.roomTold;
-    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, ...(this.sleptAt ? { asleep: true } : {}), ...(told.air.s !== GROUNDED ? { air: { ...told.air, at: told.at } } : {}), v: PROTOCOL_VERSION };
+    return { id: this.playerId, look: this.look, pos: { ...pos }, walk, ...(this.sleptAt ? { asleep: true } : {}), ...(told.air.s !== GROUNDED ? { air: { ...told.air, at: told.at } } : {}), v: PROTOCOL_VERSION };
   }
 
-  private async connect(): Promise<void> {
+  /**
+   * Join the room for the owl coming in at `at`, as the room's art starts to load (OP-129): its welcome,
+   * the owls already in it and its settings then come while the art loads. Until connect() holds the
+   * connection, every word from the room waits in `heard`, in order.
+   *
+   * TODO-DOCS (OP-129): docs/ARCHITECTURE.md's client rules: a page joins a room as the room's art
+   * starts to load, and acts on what the room says once the scene is built, in the order it was said.
+   */
+  private join(at: Vec2): Joining {
     const gen = this.gen;
     const live = () => gen === this.gen && !this.leaving;
     const spawnName = this.registry.get('spawnName') as string | undefined;
+    const heard: Array<() => void> = [];
+    this.heard = heard;
     // What the room pushes about quests, shared objects and activities (the room server's own, or the local mode's).
     const pushes: QuestPushes & ActivityPushes & NestPushes = {
       onQuests: (board, updates) => {
@@ -663,7 +712,7 @@ export class RoomScene extends Phaser.Scene {
       onNest: (seen) => live() && this.onNest(seen),
       onNestClosed: () => live() && this.onNestClosed(),
     };
-    const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}) } as PlayerState, {
+    const handlers: RoomHandlers = {
       ...pushes,
       onPeerState: (s) => live() && this.onPeerState(s),
       onPeerMove: (id, walk) => live() && this.onPeerMove(id, walk),
@@ -673,7 +722,7 @@ export class RoomScene extends Phaser.Scene {
         if (!live()) return;
         this.posOverlay?.told('welcome', pos);
         this.roomHas = pos;
-        // On joining, the room is caught up once this page holds the connection (below).
+        // Heard only once this page holds the connection (connect()), so the room is caught up at once.
         if (this.conn) this.catchUpRoom();
       },
       onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
@@ -702,16 +751,27 @@ export class RoomScene extends Phaser.Scene {
         const owl = this.peers.get(id);
         if (owl) this.bubbles?.say(owl, n, Date.now());
       },
-    });
+    };
+    const self = { ...this.snapshot(at, null), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}) } as PlayerState;
+    const conn = this.transport.join(this.room.id, self, heldBack(handlers, () => (this.heard === heard ? heard : null)));
+    return { conn, pushes };
+  }
+
+  /** Take the room's connection once the scene is built, then hear what the room said while the art loaded (OP-129). */
+  private async connect(joining: Joining): Promise<void> {
+    const gen = this.gen;
+    const live = () => gen === this.gen && !this.leaving;
+    const spawnName = this.registry.get('spawnName') as string | undefined;
+    const conn = await joining.conn;
     if (!live() || !this.scene.isActive()) {
       await conn.leave();
       return;
     }
     this.conn = conn;
-    this.catchUpRoom();
     // The map's places (OP-130): this browser keeps the room walked into when no server does.
     this.collection.service.travelEntered(this.room.id, spawnName);
     void this.refreshTravel(spawnName);
+    const { pushes } = joining;
     this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
@@ -720,6 +780,10 @@ export class RoomScene extends Phaser.Scene {
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
+    // Everything the room said meanwhile, in the order it said it; from here on each word is heard as it comes.
+    const heard = this.heard ?? [];
+    this.heard = null;
+    for (const word of heard) word();
   }
 
   /**
