@@ -92,11 +92,14 @@ async function main() {
       execFileSync('pnpm', ['build'], { cwd: ROOT, stdio: 'ignore' });
     }
     log.note('action', { what: 'start the park and the stand-in store' });
-    park = await startPark({ runId: log.id, port: o.port, storePort: o.storePort });
+    // An experiment may run the park with settings of its own (experiment 8: the collection log on).
+    const extraVars = experiment.parkVars?.({ storeOrigin: `http://localhost:${o.storePort}` }) ?? {};
+    if (Object.keys(extraVars).length) run.park_settings = Object.keys(extraVars);
+    park = await startPark({ runId: log.id, port: o.port, storePort: o.storePort, extraVars });
     fleet = new Fleet({ base: park.base, run: log.id, events: onEvent });
     await fleet.start();
-    // The browser the journey's page runs in, the browser tests' own.
-    if (o.journey) browser = await (await import('@playwright/test')).chromium.launch();
+    // The browser the journey's page runs in (and an experiment's own pages), the browser tests' own.
+    if (o.journey || experiment.needsBrowser) browser = await (await import('@playwright/test')).chromium.launch();
     await sleepFor(10_000); // the fleet's first moves
 
     // Checks an experiment pauses while it runs, and why (the journey's page would be one owl too many
@@ -109,7 +112,7 @@ async function main() {
       const checks = light ? [await checkHealth(park.base, log.id), ...fleetChecks(fleet, windowMs)] : [];
       if (heavy) {
         if (on('checkout')) checks.push(await checkCheckout(park, log.id));
-        if (browser && on('journey')) checks.push(await checkJourney(browser, park.base, log.id));
+        if (o.journey && on('journey')) checks.push(await checkJourney(browser, park.base, log.id, `${log.dir}logs`));
       }
       const ok = checks.every((c) => c.ok);
       log.note('sample', { phase, ok, checks });
@@ -156,6 +159,7 @@ async function main() {
       base: park.base,
       run: log.id,
       fleet,
+      browser,
       state: {},
       signal: abort.signal,
       note: (kind, fields) => log.note(kind, fields),

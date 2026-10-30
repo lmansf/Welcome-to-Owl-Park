@@ -96,11 +96,13 @@ export async function startPark({ runId, port = 8797, storePort = 8791, extraVar
   const keep = (source) => (line) => {
     if (!line.trim()) return;
     const at = Date.now();
-    lines.push({ at, source, line });
+    const entry = { at, source, line };
+    lines.push(entry);
     const json = line.indexOf('{"ts":');
     if (json >= 0) {
       try {
         logs.push({ at, ...JSON.parse(line.slice(json)) });
+        entry.logged = true;
       } catch {
         /* a line that only looks like one of the park's */
       }

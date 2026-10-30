@@ -8,7 +8,7 @@
  *   timeline.jsonl       every harness action and every steady-state sample, timed, to replay a failure
  *   logs/park.jsonl      the Worker's and the room server's lines for the run's window (each carries
  *                        run_id when it is about one of the run's requests or sockets)
- *   logs/raw.log         everything the park's processes printed, as printed
+ *   logs/raw.log         what else the park's processes printed (wrangler's own lines, errors), as printed
  *   logs/visitors.jsonl  what the scripted visitors saw (welcomes, drops, comebacks, errors)
  *   result.md            one page: hypothesis, verdict, the steady state through the run, the graph
  *   graph.svg            the move echo times (p95) and the failing checks over the run
@@ -91,7 +91,9 @@ export function closeRun(log, { park, visitorEvents, proposed, startedAt }) {
   log.write('run.json', `${JSON.stringify(run, null, 2)}\n`);
   log.write('proposed-tickets.json', `${JSON.stringify(proposed, null, 2)}\n`);
   if (park) {
-    log.write('logs/raw.log', park.lines.filter((l) => l.at >= startedAt).map((l) => `${new Date(l.at).toISOString()} ${l.source} ${l.line}`).join('\n') + '\n');
+    // The park's own log lines are in park.jsonl; raw.log keeps the rest, as printed.
+    const raw = park.lines.filter((l) => l.at >= startedAt && !l.logged);
+    log.write('logs/raw.log', raw.map((l) => `${new Date(l.at).toISOString()} ${l.source} ${l.line}`).join('\n') + '\n');
     log.write('logs/park.jsonl', park.logs.filter((l) => l.at >= startedAt).map((l) => JSON.stringify(l)).join('\n') + '\n');
   }
   log.write('logs/visitors.jsonl', visitorEvents.map((e) => JSON.stringify(e)).join('\n') + '\n');

@@ -13,10 +13,9 @@
  * The journey stands in for the ticket's "enter the nest, walk the gate, join a realm and pick up a
  * find in under 10 s" until the harness's page learns the gate and the finds (noted in OP-132).
  */
-import { createHmac } from 'node:crypto';
-import { STORE } from './park.mjs';
 import { legsTo } from './route.mjs';
 import { ROOMS } from './shared.mjs';
+import { deliverPaid, orderNumber, putOrder, sentFor } from './store.mjs';
 import { hop, Visitor } from './visitor.mjs';
 
 export const STEADY = { latencyP95Ms: 300, errorRate: 0.01, checkoutMs: 5_000, stepMs: 10_000, fleet: 10, tapEveryMs: 2_000 };
@@ -101,35 +100,19 @@ export function fleetChecks(fleet, ms) {
   ];
 }
 
-let orders = 0;
 /**
  * A day ticket bought in the stand-in store, its paid webhook signed as the store signs it: the
  * ticket given out and its claim link sent, timed.
  */
 export async function checkCheckout(park, run) {
-  const id = String(Date.now() * 100 + (orders++ % 100));
+  const id = orderNumber();
   const t0 = Date.now();
   try {
-    const order = {
-      id: `gid://shopify/Order/${id}`,
-      cancelledAt: null,
-      lineItems: { nodes: [{ id: 'gid://shopify/LineItem/1', quantity: 1, product: { productType: 'Ticket', kind: { value: 'day' }, hours: null, start: null, end: null } }] },
-      totalPriceSet: { shopMoney: { amount: '4.99' } },
-      risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] },
-    };
-    const put = await fetch(`${park.storeOrigin}/test/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, order }) });
-    if (!put.ok) throw new Error(`the stand-in store took no order: HTTP ${put.status}`);
-    const body = JSON.stringify({ id: Number(id), admin_graphql_api_id: `gid://shopify/Order/${id}` });
-    const r = await fetch(`${park.base}/api/store/webhook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Shopify-Topic': 'orders/paid', 'X-Shopify-Hmac-Sha256': createHmac('sha256', STORE.webhookKey).update(body).digest('base64'), 'X-Shopify-Shop-Domain': STORE.shop, 'X-Chaos-Run': run },
-      body,
-      signal: AbortSignal.timeout(10_000),
-    });
-    const answer = r.ok ? await r.json() : { status: r.status };
-    const sent = await (await fetch(`${park.storeOrigin}/test/sent?order=${id}`)).json();
+    await putOrder(park, id);
+    const answer = await deliverPaid(park, run, id);
+    const sent = await sentFor(park, id);
     const ms = Date.now() - t0;
-    return { name: 'checkout', ok: r.ok && answer.tickets === 1 && !!sent.link && ms <= STEADY.checkoutMs, value: ms, detail: answer };
+    return { name: 'checkout', ok: answer.status === 200 && answer.body.tickets === 1 && !!sent.link && ms <= STEADY.checkoutMs, value: ms, detail: answer.status === 200 ? answer.body : { status: answer.status ?? 'no answer' } };
   } catch (e) {
     return { name: 'checkout', ok: false, value: Date.now() - t0, detail: e.message };
   }
@@ -139,7 +122,7 @@ export async function checkCheckout(park, run) {
  * A scripted page: straight into the hub by address, then through the grove's doorway. Each step's
  * time from asking to the owl able to move with the room server's welcome.
  */
-export async function checkJourney(browser, base, run) {
+export async function checkJourney(browser, base, run, shots) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: { 'X-Chaos-Run': run } });
   const page = await context.newPage();
   const online = (room) =>
@@ -150,24 +133,48 @@ export async function checkJourney(browser, base, run) {
     await page.goto(`${base}/?transport=edge&room=hub`, { waitUntil: 'commit', timeout: STEADY.stepMs });
     await online('hub');
     steps.push({ step: 'hub', ms: Date.now() - t0 });
-    // The way to the grove's doorway in legs, from wherever the room put the owl (lib/route.mjs).
-    const from = await page.evaluate(() => window.owlPark.state().pos);
-    const legs = legsTo('hub', from, ROOMS.hub.doors.find((d) => d.to?.room === 'grove').rect);
-    if (!legs) throw new Error(`no way to the grove's doorway from ${Math.round(from.x)},${Math.round(from.y)}`);
+    // The way to the grove's doorway in legs, from wherever the room put the owl (lib/route.mjs). An
+    // owl that stops short in the hub (the way not as the page walks it) goes again from where it
+    // stopped, three times at most; where each try stopped goes in the check's detail.
+    const rect = ROOMS.hub.doors.find((d) => d.to?.room === 'grove').rect;
+    const stops = [];
     t0 = Date.now();
-    for (const [i, leg] of legs.entries()) {
-      await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), leg);
-      if (i < legs.length - 1)
-        await page.waitForFunction(({ x, y }) => {
-          const s = window.owlPark?.state();
-          return !!s && !s.walking && Math.hypot(s.pos.x - x, s.pos.y - y) < 4;
-        }, leg, { timeout: STEADY.stepMs, polling: 50 });
+    let at = 0;
+    for (let attempt = 1; ; attempt++) {
+      const from = await page.evaluate(() => window.owlPark.state().pos);
+      const legs = legsTo('hub', from, rect);
+      if (!legs) throw new Error(`no way to the grove's doorway from ${Math.round(from.x)},${Math.round(from.y)}`);
+      for (const [i, leg] of legs.entries()) {
+        await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), leg);
+        if (i < legs.length - 1)
+          await page.waitForFunction(({ x, y }) => {
+            const s = window.owlPark?.state();
+            return !!s && !s.walking && Math.hypot(s.pos.x - x, s.pos.y - y) < 4;
+          }, leg, { timeout: STEADY.stepMs, polling: 50 });
+      }
+      // Into the grove, or stopped in the hub: the walk is the owl's own (260 px a second).
+      await page.waitForFunction(() => {
+        const s = window.owlPark?.state();
+        return !s || s.room !== 'hub' || !s.walking;
+      }, null, { timeout: 60_000, polling: 50 });
+      const ended = Date.now();
+      // Standing in the doorway the page goes through, the hub fading out first (still the hub meanwhile).
+      const through = await page
+        .waitForFunction(() => window.owlPark?.state()?.room !== 'hub', null, { timeout: 3_000, polling: 50 })
+        .then(() => true, () => false);
+      if (through) {
+        at = ended;
+        break;
+      }
+      const now = await page.evaluate(() => window.owlPark.state());
+      stops.push({ attempt, from: { x: Math.round(from.x), y: Math.round(from.y) }, legs: legs.length, stopped: { x: Math.round(now.pos.x), y: Math.round(now.pos.y) } });
+      if (attempt === 3) {
+        await page.screenshot({ path: `${shots}/journey-${new Date().toISOString().slice(11, 19).replaceAll(':', '')}.png` }).catch(() => undefined);
+        throw new Error(`the owl stopped short of the grove's doorway three times: ${JSON.stringify(stops)}`);
+      }
     }
-    // The walk to the doorway is the owl's own (260 px a second): the step is timed from the doorway.
-    await page.waitForFunction(() => window.owlPark?.state()?.room !== 'hub', null, { timeout: 60_000, polling: 50 });
-    const at = Date.now();
     await online('grove');
-    steps.push({ step: 'grove', ms: Date.now() - at, walkMs: at - t0 });
+    steps.push({ step: 'grove', ms: Date.now() - at, walkMs: at - t0, ...(stops.length ? { stops } : {}) });
     return { name: 'journey', ok: steps.every((s) => s.ms <= STEADY.stepMs), value: Math.max(...steps.map((s) => s.ms)), detail: steps };
   } catch (e) {
     return { name: 'journey', ok: false, value: null, detail: { steps, error: e.message.split('\n')[0] } };
