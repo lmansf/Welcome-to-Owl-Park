@@ -126,7 +126,8 @@ test.describe('the nests (this device)', () => {
     const own = (await streetOf(page))[0]!;
     // From the lane's west end a straight walk to door 0 stops at the mounds; the walk there goes round them.
     await walkAndStop(page, 470, 870);
-    await walkToDoor(page, 'nest-door-0');
+    // The door is far off screen: its chip at the screen's edge sends the owl there, as a tap on it would.
+    await page.locator('[data-hint="nest-door-0"]').click();
     await inRoom(page, `nest-${own.kind === 'own' ? own.nestId : ''}`);
   });
 
