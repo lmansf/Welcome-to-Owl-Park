@@ -9,8 +9,9 @@ import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_S
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
-import { FLIGHT_STEP_MS, GROUNDED, JUMP_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
+import { FLIGHT_STEP_MS, GROUNDED, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
 import { MAX_PERCH_TOP, footing, groundAt, type Raised } from '../src/perches';
+import { perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 
@@ -324,12 +325,14 @@ describe('hiding spots', () => {
         for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) expect(distance(spots[i]!, spots[j]!)).toBeGreaterThanOrEqual(60);
       });
 
-      it('puts every spot on the floor or up on a perch a jump from it, 60 px or more from every doorway and spot', () => {
+      it('puts every spot on the floor or up on a perch single jumps reach, 60 px or more from every doorway and spot', () => {
+        const tiers = perchTiers(room);
         for (const s of spots) {
           if (s.top) {
-            // A quest never asks for more than a jump: the perch's top is lower than a jump rises.
-            expect(room.perches?.some((p) => p.top === s.top && pointInPolygon(s, p.area)), `${room.id} ${s.x},${s.y} on a perch with top ${s.top}`).toBe(true);
-            expect(s.top, `${room.id} ${s.x},${s.y}`).toBeLessThan(JUMP_RISE - 20);
+            // A quest never asks for more than single jumps: the perch is a tier 1 one (routes.ts).
+            const perch = room.perches?.find((p) => p.top === s.top && pointInPolygon(s, p.area));
+            expect(perch, `${room.id} ${s.x},${s.y} on a perch with top ${s.top}`).toBeDefined();
+            expect(tiers[perch!.id], `${room.id} ${s.x},${s.y} on ${perch!.id}`).toBe(1);
           } else expect(isWalkable(s, room.walkable), `${room.id} ${s.x},${s.y} walkable`).toBe(true);
           for (const d of room.doors) expect(distanceToRect(s, d.rect), `${room.id} ${s.x},${s.y} vs ${d.id}`).toBeGreaterThanOrEqual(60);
         }
@@ -477,6 +480,10 @@ describe('perches (OP-084)', () => {
         expect(meets, `${room.id}: ${p.id} meets no floor or perch`).toBe(true);
       }
     }
+  });
+
+  it('each have a route up from the floor, by single jumps, the second flap or a glide (routes.ts)', () => {
+    for (const room of ALL_ROOMS) for (const [id, tier] of Object.entries(perchTiers(room))) expect(tier, `${room.id}: nothing reaches ${id}`).not.toBeNull();
   });
 
   it('hold what sits up on them, each on a perch with that very top, where an owl standing on it is drawn', () => {
