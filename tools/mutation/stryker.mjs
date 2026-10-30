@@ -26,6 +26,28 @@ export function linesOf(root, file, name) {
 }
 
 /**
+ * A file cut into pieces for shards, as Stryker's `file:from-to`: the lines up to the first marker's,
+ * from it up to the next one's, and so on to the end. A marker is how a line begins (a comment that
+ * stays put as the file is edited), found in order; a missing one stops the run. A mutant whose code
+ * reaches across a cut, a block around it emptied whole, is in no piece.
+ * @param {URL} root
+ * @param {string} file
+ * @param {string[]} markers
+ * @returns {string[]}
+ */
+export function piecesOf(root, file, markers) {
+  const lines = readFileSync(new URL(file, root), 'utf8').split('\n');
+  const starts = [1];
+  for (const marker of markers) {
+    const after = starts[starts.length - 1];
+    const at = lines.findIndex((l, i) => i + 1 > after && l.trimStart().startsWith(marker));
+    if (at < 0) throw new Error(`stryker.config.mjs: ${file} has no line ${marker} after line ${after} any more; update the shards.`);
+    starts.push(at + 1);
+  }
+  return starts.map((from, i) => `${file}:${from}-${i + 1 < starts.length ? starts[i + 1] - 1 : lines.length}`);
+}
+
+/**
  * A package's Stryker options for the shard MUTATION_SHARD names.
  * @param {Record<string, string[]>} shards the package's files to mutate, by shard
  * @param {import('@stryker-mutator/api/core').PartialStrykerOptions} own the package's own options (its plugins, found from it)

@@ -109,7 +109,9 @@ jobs:
         include:
           - { shard: room, scope: room, package: '@owl-park/edge', dir: apps/edge, touches: '^apps/edge/|^packages/shared/|^tools/mutation/|^patches/' }
           - { shard: worker, scope: worker, package: '@owl-park/edge', dir: apps/edge, touches: '^apps/edge/|^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: climb, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: climb-1, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: climb-2, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: climb-3, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
           - { shard: rules, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
     steps:
       - uses: actions/checkout@v4
