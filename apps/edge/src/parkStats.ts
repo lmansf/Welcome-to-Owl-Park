@@ -46,6 +46,8 @@ export interface Sighting extends Visit {
   entered?: boolean;
   /** The room is the owl's own nest, where Play lands it. */
   own?: boolean;
+  /** It came by travel from the Menu's map (OP-130). */
+  travel?: boolean;
 }
 
 /** What of an owl's look the stats keep: its kind and its body colour. */
@@ -132,8 +134,8 @@ export class ParkStats {
   /**
    * The owl came into a room (OP-113): its time in the room before ends now, and one here begins.
    * The visit's first room is Play's (its own nest, or the lobby when the nests did not answer) or
-   * else the one the page's address named; any other is walked into, or, when it is the room the
-   * owl was already in, come back to after a dropped line.
+   * else the one the page's address named; any other is walked or travelled into (OP-130), or, when
+   * it is the room the owl was already in, come back to after a dropped line.
    */
   private entered(s: Sighting, now: number): void {
     const v = cleanVisit(s);
@@ -142,7 +144,7 @@ export class ParkStats {
     const last = this.sql.exec<RoomTime>(`SELECT * FROM stats_rooms WHERE pass = ? ORDER BY seq DESC LIMIT 1`, v.pass).toArray()[0];
     if (last && last.seq >= REALM_VISITS_MAX) return;
     const open = last && last.exited === null ? last : null;
-    const source: EntrySource = open?.place === place ? 'reconnect' : last ? 'walked' : v.room === 'lobby' || (v.room === 'nest' && s.own) ? 'spawn' : 'deep_link';
+    const source: EntrySource = open?.place === place ? 'reconnect' : s.travel === true ? 'travel' : last ? 'walked' : v.room === 'lobby' || (v.room === 'nest' && s.own) ? 'spawn' : 'deep_link';
     if (open) this.sql.exec(`UPDATE stats_rooms SET exited = MAX(entered, ?) WHERE pass = ? AND seq = ?`, now, v.pass, open.seq);
     this.sql.exec(`INSERT INTO stats_rooms (pass, seq, cid, place, room, entered, source) VALUES (?, ?, ?, ?, ?, ?, ?)`, v.pass, (last?.seq ?? 0) + 1, s.cid, place, v.room, now, source);
   }

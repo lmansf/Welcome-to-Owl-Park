@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export interface ParkState {
   room: string;
@@ -63,6 +63,24 @@ export interface ParkState {
   nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; drawn: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
   /** In a nest, its mirror: where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
   mirror: { x: number; y: number; stage: { x: number; y: number; w: number; h: number } | null } | null;
+  /** The map's places walked into, and whether the owl is through the front gate, as the page has them (OP-130). */
+  travel: { places: string[]; gate: boolean };
+}
+
+/** The Menu opened on its map (OP-130) and one place's card on it, open. */
+export async function mapCard(page: Page, place: string): Promise<Locator> {
+  const menu = page.getByRole('dialog', { name: 'Menu' });
+  if (!(await menu.isVisible())) await page.locator('[data-menu-btn]').click();
+  await menu.locator('[data-tab="map"]').click();
+  await menu.locator(`button.pin[data-place="${place}"]`).click();
+  const card = menu.locator(`[data-travel-card="${place}"]`);
+  await expect(card).toBeVisible();
+  return card;
+}
+
+/** Travel from the map (OP-130): the place's card, its travel button pressed with a key (a key acts at once; a pointer holds it, travel.spec.ts). */
+export async function travelTo(page: Page, place: string): Promise<void> {
+  await (await mapCard(page, place)).locator('[data-travel]').press('Enter');
 }
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */

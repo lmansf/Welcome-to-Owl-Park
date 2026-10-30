@@ -268,6 +268,8 @@ describe('time per room (OP-113)', () => {
     expect(checkRealmVisit(stay(1, { realm: null }))).toBe('realm');
     expect(checkRealmVisit(stay(1, { realm_kind: 'castle' }))).toBe('realm_kind');
     expect(checkRealmVisit(stay(1, { entry_source: 'teleport' }))).toBe('entry_source');
+    // Come into by travel from the map (OP-130).
+    expect(checkRealmVisit(stay(1, { entry_source: 'travel' }))).toEqual(stay(1, { entry_source: 'travel' }));
     expect(checkRealmVisit(stay(1, { exited_at: '2026-10-19T16:04:59.000Z' }))).toBe('exited_at');
     expect(checkRealmVisit(stay(1, { collectibles_gained: -1 }))).toBe('collectibles_gained');
     expect(checkRealmVisit(stay(1, { visit_id: 'v_visitAAAA1' }))).toBe('visit_id');

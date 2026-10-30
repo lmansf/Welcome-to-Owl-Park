@@ -8,7 +8,9 @@
  * (packages/shared) over the SQL stores in sqlStore.ts, sqlNestStore.ts, sqlScoreStore.ts and
  * sqlClimbStore.ts. Rewards, nest ids and run seeds draw from the platform's cryptographic random source.
  * Visitors' feedback waits here too, for the keepers' page (feedbackBox.ts), and every owl's account
- * (OP-139, accountBook.ts): its friend code, the device it is on and the email that protects it. Every collectible
+ * (OP-139, accountBook.ts): its friend code, the device it is on and the email that protects it. And for travel
+ * from the map (OP-130, travelBook.ts), the places each owl has walked into and whether it has walked through the
+ * front gate since it was last outside the park. Every collectible
  * granted goes to the collection log (collectLog.ts, OP-107) in the same step, and on to the owner's
  * analytics once the call is done; the object's alarm retries what could not be sent.
  */
@@ -50,6 +52,7 @@ import {
   type NestLook,
   type NestVisit,
   type OwlAccount,
+  type TravelState,
   type OwlPicture,
   type QuestBoard,
   type QuestEvent,
@@ -64,6 +67,7 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import { AccountBook, type LinkKind, type Protected, type Restored } from './accountBook';
+import { TravelBook } from './travelBook';
 import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
@@ -104,6 +108,7 @@ export class Collections extends DurableObject<Env> {
   private readonly climb: ClimbBook;
   private readonly feedbackBox: FeedbackBox;
   private readonly accounts: AccountBook;
+  private readonly travel: TravelBook;
   private readonly log: CollectLog;
   private readonly stats: ParkStats;
   /** The visit the call in progress came in, as its caller said (`during`), for the log's rows. */
@@ -123,6 +128,7 @@ export class Collections extends DurableObject<Env> {
     this.climb = new ClimbBook(new SqlClimbStore(sql), this.book, () => crypto.getRandomValues(new Uint32Array(1))[0]!);
     this.feedbackBox = new FeedbackBox(sql);
     this.accounts = new AccountBook(sql, randomBytes);
+    this.travel = new TravelBook(sql);
   }
 
   // ---------- the collection log (OP-107) ----------
@@ -372,6 +378,23 @@ export class Collections extends DurableObject<Env> {
 
   async setFeedbackStatus(id: number, status: FeedbackStatus): Promise<boolean> {
     return this.feedbackBox.setStatus(id, status);
+  }
+
+  // ---------- travel from the map (OP-130; the rules are travelBook.ts and the shared travel.ts) ----------
+
+  /** A room object's word that an owl joined a room at a spawn. */
+  async travelEntered(cid: string, room: string, spawn: string | null): Promise<void> {
+    this.travel.entered(cid, room, spawn ?? undefined, Date.now());
+  }
+
+  /** Whether an owl travelling into the park has walked through the front gate since it was last outside. */
+  async travelThroughGate(cid: string): Promise<boolean> {
+    return this.travel.throughGate(cid);
+  }
+
+  /** What an owl's page is told for its map: the places it has walked into, and whether it is through the gate. */
+  async travelState(cid: string): Promise<TravelState> {
+    return this.travel.state(cid);
   }
 
   // ---------- accounts (OP-139; the Worker calls these only with ACCOUNTS on; the rules are accountBook.ts) ----------

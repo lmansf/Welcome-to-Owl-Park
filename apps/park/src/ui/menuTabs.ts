@@ -1,4 +1,4 @@
-import { ARCADE_NAME, NEST_WORDS, WAY_OUT_WORDS, allVariants, parseVariant, setProgress, type ItemKind, type SetProgress } from '@owl-park/shared';
+import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
@@ -38,18 +38,16 @@ const actionButton = (label: string, screen: string, onClick: () => void, ghost 
   return b;
 };
 
-/** How long Go home is held before the owl goes (OP-114): long enough that a stray tap mid-quest does nothing. */
+/** How long a travel button is held before the owl goes (OP-114, OP-130): long enough that a stray tap mid-quest does nothing. */
 const HOLD_MS = 350;
-const HOLD_HINT = 'Hold to go home.';
 
 /**
- * A button that acts once held for HOLD_MS, a fill running across it meanwhile (Go home, OP-114);
- * let go sooner and it empties, and `early` is told. A key's press is meant: it acts at once.
+ * A button that acts once held for HOLD_MS, a fill running across it meanwhile (travel, OP-130, as
+ * Go home was, OP-114); let go sooner and it empties, and `early` is told. A key's press is meant: it
+ * acts at once.
  */
-const holdButton = (label: string, screen: string, onHold: () => void, early: () => void): HTMLButtonElement => {
+const holdButton = (label: string, onHold: () => void, early: () => void): HTMLButtonElement => {
   const b = el('button', 'mbtn hold', label);
-  b.dataset['screen'] = screen;
-  b.dataset['key'] = screen;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const letGo = (): boolean => {
     if (!timer) return false;
@@ -179,27 +177,19 @@ export function setsCard(sets: readonly SetProgress[]): HTMLElement {
 // ---------- Nest ----------
 
 export interface NestTabState {
-  /** Away from the owl's own nest: "Go home" takes it there. */
-  canGoHome: boolean;
+  /** Away from the owl's own nest: the Map travels it home. */
+  away: boolean;
   /** The owl's account (OP-139): its friend code and whether an email protects it. Null while accounts are off. */
   account?: HTMLElement[] | null;
 }
 
-export function renderNest(panel: HTMLElement, nest: NestTabState, goHome: () => void): void {
-  if (nest.canGoHome) {
-    const c = card(NEST_WORDS.yourNest, note('Your own room on the nests’ street: decorate it with your furniture, open it to visitors, and change how your owl looks at its mirror.'));
-    // Going home is the Menu's, not the pad's (Logan, 2026-10-27), held as the pad's Nest was.
+/** `toMap`: the Map tab with the owl's nest picked, where travel home is (OP-130; it was Go home here, OP-114). */
+export function renderNest(panel: HTMLElement, nest: NestTabState, toMap: () => void): void {
+  if (nest.away) {
+    const c = card(NEST_WORDS.yourNest, note('Your own room on the nests’ street: decorate it with your furniture, open it to visitors, and change how your owl looks at its mirror. Your nest is always on the map, to travel home.'));
     const row = el('div', 'mrow');
-    const hint = note(HOLD_HINT);
-    hint.hidden = true;
-    let hide: ReturnType<typeof setTimeout> | undefined;
-    const tooQuick = () => {
-      hint.hidden = false;
-      clearTimeout(hide);
-      hide = setTimeout(() => (hint.hidden = true), 2500);
-    };
-    row.appendChild(holdButton(WAY_OUT_WORDS.home, 'home', goHome, tooQuick));
-    c.append(row, hint);
+    row.appendChild(actionButton('Open the map', 'map', toMap, true));
+    c.appendChild(row);
     panel.appendChild(c);
   } else {
     panel.appendChild(card(NEST_WORDS.yourNest, note('You are home. Tap Decorate to arrange your furniture and open your nest to visitors, or stand at the mirror to change how your owl looks.')));
@@ -257,8 +247,77 @@ export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string
   return MAP_PLACES.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
 }
 
-/** `open`: the gated realms the keepers have opened (the realms switch); their arches draw as doorways. */
-export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = []): void {
+/** Travel from the map (OP-130), as the Map tab shows it. */
+export interface MapTravel {
+  /** The places walked into; the owl's own nest is always there to travel to. */
+  places: readonly string[];
+  /** Whether the owl has walked through the front gate since it was last outside the park. */
+  gate: boolean;
+  /** Places lit since this device last showed them lit: they sparkle. */
+  fresh: readonly string[];
+  /** The place whose card is open, if any. */
+  picked: string | null;
+  pick(place: string): void;
+  /** Its travel button held to the end: null when the owl is on its way, otherwise why not. */
+  go(place: string): TravelRefusal | null;
+}
+
+/** What a place's card says, and the travel it offers: its button's words and the place it travels to. */
+export interface PlaceCard {
+  line: string | null;
+  button: { label: string; to: string } | null;
+}
+
+/** What a travel the owl could not take says on the card. */
+export const REFUSAL_WORDS: Readonly<Record<TravelRefusal, string>> = {
+  here: TRAVEL_WORDS.youAreHere,
+  'not-yet': TRAVEL_WORDS.notYet,
+  gate: TRAVEL_WORDS.gateFirst,
+  busy: TRAVEL_WORDS.busy,
+};
+
+/**
+ * A place's card on the map (OP-130), from where the owl is (`here`) and what it has walked into.
+ * The nest always travels home and any other place once walked into. Into the park is only through
+ * the front gate: the great tree's card travels to the gate, outside the turnstiles, and a place
+ * inside the park offers the gate instead until the owl has walked through it.
+ */
+export function placeCard(place: string, here: string | null, travel: { places: readonly string[]; gate: boolean }): PlaceCard {
+  if (place === here) return { line: TRAVEL_WORDS.youAreHere, button: null };
+  if (place === 'nest') return { line: null, button: { label: TRAVEL_WORDS.home, to: 'nest' } };
+  if (!canTravel(place, travel.places)) return { line: TRAVEL_WORDS.notYet, button: null };
+  // Both land outside the turnstiles; whichever the owl has walked into.
+  const gateWay = here === 'lobby' ? undefined : (['hub', 'lobby'] as const).find((p) => canTravel(p, travel.places));
+  const toGate = gateWay ? { label: TRAVEL_WORDS.gate, to: gateWay } : null;
+  if (place === 'hub') return here === 'lobby' ? { line: TRAVEL_WORDS.atGate, button: null } : { line: TRAVEL_WORDS.throughGate, button: toGate };
+  if (place === 'lobby') return { line: null, button: toGate };
+  if (needsGate(place) && !travel.gate) return { line: TRAVEL_WORDS.gateFirst, button: toGate };
+  return { line: null, button: { label: TRAVEL_WORDS.here, to: place } };
+}
+
+/** Places of the map this device has shown lit (OP-130), so a place walked into sparkles the first time. */
+export const MAP_LIT_KEY = 'owl-park:map-lit';
+
+/** The places walked into that this device has not shown lit yet; from now on they count as shown. Nothing sparkles where the browser keeps nothing. */
+export function newlyLit(storage: Pick<Storage, 'getItem' | 'setItem'> | null, places: readonly string[]): string[] {
+  if (!storage) return [];
+  try {
+    const raw: unknown = JSON.parse(storage.getItem(MAP_LIT_KEY) ?? '[]');
+    const shown = Array.isArray(raw) ? raw.filter((p): p is string => typeof p === 'string') : [];
+    const fresh = places.filter((p) => !shown.includes(p));
+    if (fresh.length) storage.setItem(MAP_LIT_KEY, JSON.stringify([...shown, ...fresh]));
+    return fresh;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * `open`: the gated realms the keepers have opened (the realms switch); their arches draw as doorways.
+ * With `travel` (OP-130) each open place is a button: lit once walked into (the nest always), and a
+ * tap opens its card below the map, with the hold that travels.
+ */
+export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = [], travel: MapTravel | null = null): void {
   const map = el('div', 'mmap');
   const cols = 3;
   const rows = 5;
@@ -269,16 +328,86 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     return `<line x1="${p.col + 0.5}" y1="${p.row + 0.5}" x2="${q.col + 0.5}" y2="${q.row + 0.5}"${q.closed ? ' class="closed"' : ''}/>`;
   }).join('');
   map.innerHTML = `<svg class="paths" viewBox="0 0 ${cols} ${rows}" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>`;
+  const cardBox = el('div', 'mtravel');
+  cardBox.setAttribute('aria-live', 'polite');
+  let picked = travel?.picked ?? null;
+  const drawCard = () => {
+    cardBox.replaceChildren();
+    const place = picked ? at.get(picked) : undefined;
+    if (!travel || !place || place.closed) return;
+    const what = placeCard(place.id, here, travel);
+    const box = card(place.name);
+    box.dataset['travelCard'] = place.id;
+    const said = note(what.line ?? '');
+    said.hidden = !what.line;
+    said.dataset['travelLine'] = '';
+    box.appendChild(said);
+    const go = what.button;
+    if (go) {
+      const hint = note(TRAVEL_WORDS.hold);
+      hint.hidden = true;
+      let hide: ReturnType<typeof setTimeout> | undefined;
+      const tooQuick = () => {
+        hint.hidden = false;
+        clearTimeout(hide);
+        hide = setTimeout(() => (hint.hidden = true), 2500);
+      };
+      const b = holdButton(
+        go.label,
+        () => {
+          const why = travel.go(go.to);
+          if (!why) return;
+          said.textContent = REFUSAL_WORDS[why];
+          said.hidden = false;
+        },
+        tooQuick,
+      );
+      b.dataset['travel'] = go.to;
+      b.dataset['key'] = 'travel';
+      const row = el('div', 'mrow');
+      row.appendChild(b);
+      box.append(row, hint);
+    }
+    cardBox.appendChild(box);
+  };
   for (const p of at.values()) {
-    const pin = el('div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}`);
+    const tappable = travel !== null && !p.closed;
+    const lit = tappable && (p.id === 'nest' || canTravel(p.id, travel.places));
+    const pin = el(tappable ? 'button' : 'div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}${tappable && !lit ? ' unlit' : ''}`);
     pin.dataset['place'] = p.id;
     pin.style.gridColumn = String(p.col + 1);
     pin.style.gridRow = String(p.row + 1);
     pin.appendChild(el('span', 'name', p.name));
     if (p.id === here) pin.appendChild(el('b', 'you', 'You are here'));
+    if (tappable) {
+      pin.dataset['key'] = `pin-${p.id}`;
+      if (lit) pin.dataset['lit'] = '';
+      pin.classList.toggle('picked', picked === p.id);
+      pin.setAttribute('aria-pressed', String(picked === p.id));
+      if (travel.fresh.includes(p.id)) {
+        pin.classList.add('new');
+        const spark = el('i', 'spark', '✦');
+        spark.setAttribute('aria-hidden', 'true');
+        pin.appendChild(spark);
+      }
+      pin.addEventListener('click', () => {
+        picked = p.id;
+        travel.pick(p.id);
+        for (const other of map.querySelectorAll<HTMLElement>('button.pin')) {
+          const on = other.dataset['place'] === p.id;
+          other.classList.toggle('picked', on);
+          other.setAttribute('aria-pressed', String(on));
+        }
+        drawCard();
+        cardBox.scrollIntoView?.({ block: 'nearest' });
+      });
+    }
     map.appendChild(pin);
   }
   panel.appendChild(map);
+  panel.appendChild(cardBox);
+  drawCard();
+  if (travel) panel.appendChild(note(TRAVEL_WORDS.map));
   panel.appendChild(note('Inside the turnstiles: the great tree, with the treehouse clearing and the neon street on either side, and Neon Roost off the neon street. Outside the gate: the nests’ street and your nest. The boarded arches open as new realms arrive.'));
 }
 

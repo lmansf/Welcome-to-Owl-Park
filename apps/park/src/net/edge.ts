@@ -368,6 +368,8 @@ export class EdgeTransport implements ParkTransport {
     let current = self;
     const requestedSpawn = (self as PlayerState & { spawn?: string }).spawn;
     let spawn = requestedSpawn && SPAWN_NAME.test(requestedSpawn) ? requestedSpawn : undefined;
+    /** Come by travel from the map (OP-130): said in the hello until the room has let the owl in. */
+    let via = (self as PlayerState & { via?: string }).via === 'travel' ? ('travel' as const) : undefined;
     let backoff = BACKOFF_MIN_MS;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -469,6 +471,8 @@ export class EdgeTransport implements ParkTransport {
           offset = f.now - localNow;
           offsetKnown = true;
           welcomed = true;
+          // In: a socket dropped from here on comes back to a room the owl is already in.
+          via = undefined;
           selfId = f.id;
           backoff = BACKOFF_MIN_MS;
           clearPending();
@@ -577,6 +581,7 @@ export class EdgeTransport implements ParkTransport {
           break;
         case 'closed':
           if (f.why === 'realm') handlers.onRealmClosed?.(f.sign ?? '');
+          else if (f.why === 'gate') handlers.onNotThroughGate?.();
           else handlers.onNestClosed?.(f.why);
           break;
         case 'realms':
@@ -814,6 +819,7 @@ export class EdgeTransport implements ParkTransport {
         lastRx = Date.now();
         const hello: ClientFrame = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: current.look };
         if (spawn) hello.spawn = spawn;
+        if (via) hello.via = via;
         const pos = currentPos();
         hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));
@@ -851,7 +857,7 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return; // it waits in the line on the home screen
         }
-        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED) {
+        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED || ev.code === CLOSE.NOT_THROUGH_GATE) {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop
         }

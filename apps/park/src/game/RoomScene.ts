@@ -79,6 +79,13 @@ import {
   type Air,
   type Flier,
   type FlightAbilities,
+  TRAVEL_LANDINGS,
+  TRAVEL_WORDS,
+  canTravel,
+  needsGate,
+  travelAfter,
+  type TravelRefusal,
+  type TravelState,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -125,15 +132,17 @@ export interface RoomStart {
   from?: { room: string; spawn: string | undefined } | undefined;
   /** How far across the doorway the owl came through, so it comes out as far across the doorway back (OP-124). */
   lane?: Lane | undefined;
+  /** Come by travel from the Menu's map (OP-130): into the park, the room server lets it in only once it has walked through the gate. */
+  via?: 'travel' | undefined;
 }
 
 /** How far a tap may drift before it counts as a drag (game pixels). */
 const TAP_SLOP = 16;
 /** How long the room fades out on the way to another. */
 const LEAVE_FADE_MS = 220;
-/** Where Play and the Menu's Go home land the owl in its own nest (OP-105, OP-114): before its mirror. */
+/** Where Play and travel home land the owl in its own nest (OP-105, OP-130): before its mirror. */
 export const NEST_SPAWN = 'mirror';
-/** Go home fades out slower than a doorway, so going home is not a jolt (OP-114). */
+/** Travel from the map fades out slower than a doorway, so going home or across the park is not a jolt (OP-114, OP-130). */
 export const NEST_FADE_MS = 400;
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
@@ -231,6 +240,8 @@ export class RoomScene extends Phaser.Scene {
   /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
   private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
+  /** How the owl came: by travel from the map, or (undefined) through a doorway, Play or the page's address. */
+  private via: RoomStart['via'];
   private lane: Lane | undefined;
   /** When the owl fell asleep, its visitor idle (OP-126); 0 awake. */
   private sleptAt = 0;
@@ -364,6 +375,7 @@ export class RoomScene extends Phaser.Scene {
     this.pieces = {};
     this.cameFrom = data.from;
     this.lane = data.lane;
+    this.via = data.via;
     this.sleptAt = 0;
     this.askedAt = 0;
     this.goingAway = false;
@@ -651,7 +663,7 @@ export class RoomScene extends Phaser.Scene {
       onNest: (seen) => live() && this.onNest(seen),
       onNestClosed: () => live() && this.onNestClosed(),
     };
-    const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}) } as PlayerState, {
+    const conn = await this.transport.join(this.room.id, { ...this.snapshot(), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}) } as PlayerState, {
       ...pushes,
       onPeerState: (s) => live() && this.onPeerState(s),
       onPeerMove: (id, walk) => live() && this.onPeerMove(id, walk),
@@ -679,6 +691,7 @@ export class RoomScene extends Phaser.Scene {
       onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
       onRealms: (realms) => live() && this.setRealms(realms),
       onRealmClosed: (sign) => live() && this.onRealmClosed(sign),
+      onNotThroughGate: () => live() && this.notThroughGate(),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -696,6 +709,9 @@ export class RoomScene extends Phaser.Scene {
     }
     this.conn = conn;
     this.catchUpRoom();
+    // The map's places (OP-130): this browser keeps the room walked into when no server does.
+    this.collection.service.travelEntered(this.room.id, spawnName);
+    void this.refreshTravel(spawnName);
     this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
@@ -962,9 +978,9 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * "Go home" (the Menu's way out, held, OP-114): straight to the owl's own nest,
-   * from anywhere, an open dialogue closing first (the quest stays as it was). Out of it again, the
-   * owl is on the street in front of its own door, as if it had come in that way.
+   * Home (travel home on the map, OP-130, and Q away from it): straight to the owl's own nest, from
+   * anywhere, an open dialogue closing first (the quest stays as it was). Out of it again, the owl is
+   * on the street in front of its own door, as if it had come in that way.
    */
   async goHome(spawn = 'default', fadeMs = LEAVE_FADE_MS): Promise<boolean> {
     if (!this.built || this.leaving) return false;
@@ -978,8 +994,76 @@ export class RoomScene extends Phaser.Scene {
     if (home === this.room.id) return false;
     this.hud.closeDialogue();
     this.talkingTo = null;
-    void this.goTo(home, spawn, { room: STREET_ROOM, spawn: 'from-nest-0' }, fadeMs);
+    void this.goTo(home, spawn, { room: STREET_ROOM, spawn: 'from-nest-0' }, fadeMs, undefined, 'travel');
     return true;
+  }
+
+  /**
+   * Travel from the Menu's map, its button held (OP-130): to a place the owl has walked into (its own
+   * nest always), landing where walking in would have, after the slower fade going home has. Into the
+   * park only once the owl has walked through the front gate since it was last outside; the room server
+   * turns any other travel in away (notThroughGate). Not in the middle of a climb, a game or the
+   * turnstiles, nor while "Still here?" is asked. Null when the owl is on its way, otherwise why not.
+   *
+   * TODO-DOCS (OP-130): docs/PLAYBOOK.md's controls: travel from the Menu's map, held (M opens the
+   * map), places lit once walked into, into the park only through the gate, Go home retired;
+   * docs/ARCHITECTURE.md: protocol 13 (`via: 'travel'` in the hello, `closed` why 'gate' and close
+   * 4015), GET /api/travel and the travel book in the Collections object (travelBook.ts).
+   */
+  travel(place: string): TravelRefusal | null {
+    if (!this.built || this.leaving) return 'busy';
+    const climb = this.climb?.debug();
+    if (this.passingGate || this.decorating || this.askedAt || this.goingAway || this.arcade?.debug() || (climb && !climb.over)) return 'busy';
+    const known = this.travelNow();
+    if (!canTravel(place, known.places)) return 'not-yet';
+    if (needsGate(place) && !known.gate) return 'gate';
+    if (place === 'nest') {
+      if (isNestRoom(this.room.id) && this.nestMine) return 'here';
+      void this.goHome(NEST_SPAWN, NEST_FADE_MS);
+      return null;
+    }
+    const to = TRAVEL_LANDINGS[place]!;
+    if (to.room === this.room.id) return 'here';
+    this.hud.closeDialogue();
+    this.talkingTo = null;
+    void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, NEST_FADE_MS, undefined, 'travel');
+    return null;
+  }
+
+  /** The map's places and the gate as this page has them (OP-130): none walked into yet until it hears. */
+  private travelNow(): TravelState {
+    return (this.registry.get('travel') as TravelState | undefined) ?? { places: [], gate: false };
+  }
+
+  private setTravel(state: TravelState): void {
+    this.registry.set('travel', state);
+    this.hud.setTravel(state);
+  }
+
+  /**
+   * In a room (OP-130): the map has this room on top of what the page had, at once, and then on top of
+   * what the collection keeps (the room server's, or this browser's), once that answers.
+   */
+  private async refreshTravel(spawn: string | undefined): Promise<void> {
+    const gen = this.gen;
+    const room = this.room.id;
+    this.setTravel(travelAfter(this.travelNow(), room, spawn));
+    const kept = await this.collection.service.travel().catch(() => null);
+    if (gen !== this.gen || !kept) return;
+    this.setTravel(travelAfter(kept, room, spawn));
+  }
+
+  /**
+   * The room server turned a travel into the park away (OP-130): the owl has not walked through the
+   * front gate since it was last outside (another screen may have taken it out). It goes back where it
+   * was, and the map offers the gate.
+   */
+  private notThroughGate(): void {
+    if (this.leaving) return;
+    this.setTravel({ ...this.travelNow(), gate: false });
+    this.hud.toast(TRAVEL_WORDS.gateFirst, 3500);
+    const back = this.cameFrom ?? { room: LOBBY_ROOM, spawn: undefined };
+    void this.goTo(back.room, back.spawn ?? 'default', undefined);
   }
 
   /** Calm motion, as this visitor set it. */
@@ -1235,6 +1319,8 @@ export class RoomScene extends Phaser.Scene {
     mirror: { x: number; y: number; stage: PreviewFrame | null } | null;
     /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
     soft: string[];
+    /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
+    travel: TravelState;
   } | null {
     if (!this.built) return null;
     return {
@@ -1267,6 +1353,7 @@ export class RoomScene extends Phaser.Scene {
         : null,
       mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
       soft: [...this.soft],
+      travel: this.travelNow(),
     };
   }
 
@@ -1945,8 +2032,8 @@ export class RoomScene extends Phaser.Scene {
     else this.hud.toast('The gift shop opens soon.');
   }
 
-  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane): Promise<void> {
-    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane } satisfies RoomStart);
+  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane, via?: RoomStart['via']): Promise<void> {
+    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via } satisfies RoomStart);
   }
 
   /** The owl stops, the room fades and its connection closes. False when the room is already being left. */

@@ -29,11 +29,13 @@ import {
   leafRespawnMs,
   nestIdOf,
   normalizeTimeZone,
+  parseTravelState,
   pointInRect,
   portraitLook,
   randomNestId,
   secureNestId,
   startRun,
+  travelAfter,
   type BuyResult,
   type GiftResult,
   type Inventory,
@@ -46,6 +48,7 @@ import {
   type PlayResult,
   type QuestSpots,
   type ShopView,
+  type TravelState,
   type Vec2,
 } from '@owl-park/shared';
 import { LOCAL_COLLECTOR_KEY } from '../identity';
@@ -62,6 +65,8 @@ const NESTS_CHANNEL = 'owl-park:nests';
 const ARCADE_KEY = 'owl-park:arcade';
 /** The climb's runs and bands in this browser, every collector's. */
 const CLIMB_KEY = 'owl-park:climb';
+/** Each collector's travel from the map in this browser (OP-130): the places walked into, and the gate. */
+const TRAVEL_PREFIX = 'owl-park:travel:';
 const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
 export interface KeyValueStorage {
@@ -115,6 +120,8 @@ export class LocalCollections implements CollectionService {
   private usedAt = Number.NEGATIVE_INFINITY;
   /** Each room's activities for this page (a lantern beam stays lit while the owl looks round). */
   private readonly activities = new Map<string, { acts: Activities; where: { at: () => Vec2 } }>();
+  /** The travel state as this page last had it, should the browser keep nothing. */
+  private travelMemory: TravelState = { places: [], gate: false };
 
   constructor(
     private readonly storage: KeyValueStorage | null,
@@ -246,6 +253,32 @@ export class LocalCollections implements CollectionService {
 
   async homeNest(): Promise<string | null> {
     return this.nests((nests) => nests.mine(this.cid, null, this.now()).nest.nestId);
+  }
+
+  async travel(): Promise<TravelState> {
+    return this.travelNow();
+  }
+
+  /** The owl joined a room at a spawn: the places and the gate kept as the room server keeps them (shared travel.ts). */
+  travelEntered(room: string, spawn: string | undefined): void {
+    this.travelMemory = travelAfter(this.travelNow(), room, spawn);
+    try {
+      this.storage?.setItem(TRAVEL_PREFIX + this.cid, JSON.stringify(this.travelMemory));
+    } catch {
+      /* storage full or unavailable: the map lives for this page only */
+    }
+  }
+
+  /** The travel state as stored (another tab of this browser may have moved it on), or as this page last had it. */
+  private travelNow(): TravelState {
+    try {
+      const raw = this.storage?.getItem(TRAVEL_PREFIX + this.cid) ?? null;
+      const stored = raw ? parseTravelState(JSON.parse(raw)) : null;
+      if (stored) this.travelMemory = stored;
+    } catch {
+      /* unreadable: what this page last had */
+    }
+    return this.travelMemory;
   }
 
   /**
