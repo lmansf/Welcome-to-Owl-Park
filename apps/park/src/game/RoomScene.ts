@@ -848,7 +848,8 @@ export class RoomScene extends Phaser.Scene {
     if (!at) return;
     // The room starts the owl on the floor: standing on a perch, or up in the air, it is told (OP-084).
     this.retellAir();
-    const target = this.me.walk?.to;
+    // Where the owl is going: the end of a tap's way round a bend (OP-148), else of the walk under way.
+    const target = this.wayTo ?? this.me.walk?.to;
     if (distance(at, this.me.pos) >= 3 && !this.roomCanFollow(at)) {
       this.moveTo(at);
       if (target) this.walkTo(target, this.keyWalk, this.walkGoal);
