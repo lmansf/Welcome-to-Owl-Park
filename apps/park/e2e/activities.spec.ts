@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { doAction as act, openPark, state, walkAndStop as walk, walkToJetty } from './helpers';
 
 const feathers = (page: Page) => page.evaluate(() => window.owlPark.collection()?.feathers ?? 0);

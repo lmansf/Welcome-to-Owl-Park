@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { CABINET, alongTheHall, clearLevel, flyThrough, knockByKeys, knockByStick, loseLives, missTheRest, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
 import { doAction, openPark, state, walkToDoor } from './helpers';
 

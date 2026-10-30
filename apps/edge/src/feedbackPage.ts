@@ -192,6 +192,7 @@ export function adminPage(html: (nonce: string) => string): Response {
       'X-Robots-Tag': 'noindex, nofollow',
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
       'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
     },
   });

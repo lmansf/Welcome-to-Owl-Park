@@ -5,7 +5,7 @@
  * then deletes. The copy has its own name and only its workers.dev address: no domain, so the park's
  * domain can never move to it, and no cron. It trusts X-Forwarded-For, so each bot counts as its own
  * visitor, and its room caps are raised to the most the server takes (120) and its per-address cap
- * well past the bots' needs. Never deploy the park with this file.
+ * well past the bots' needs; the API's rate limits are off. Never deploy the park with this file.
  *
  *   node tools/load/throwaway-config.mjs
  */
@@ -51,6 +51,8 @@ config.vars = {
   // LOAD_SHARDING=room tries each room on its own object (ROOM_SHARDING); otherwise as the park has it.
   ...(process.env.LOAD_SHARDING === 'room' ? { ROOM_SHARDING: 'room' } : {}),
   TRUST_FORWARDED_FOR: 'true',
+  // Every bot comes from this one runner: the API's rate limits (OP-142) would stop the swarm, not measure the park.
+  RATE_LIMITS: 'off',
   MAX_SOCKETS_PER_IP: '64',
   // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
   ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120 }),

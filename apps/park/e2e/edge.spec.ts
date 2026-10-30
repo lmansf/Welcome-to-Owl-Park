@@ -1,4 +1,5 @@
-import { devices, expect, test, type Browser, type Page } from '@playwright/test';
+import { devices, type Browser, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
 import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
@@ -808,6 +809,36 @@ test.describe('room server', () => {
     await expect(note).toBeHidden();
     await keeper.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'Done' }).click();
     await expect(keeper.getByRole('listitem').filter({ hasText: words })).toBeVisible();
+    await keeper.close();
+    await a.context().close();
+  });
+
+  test("a hostile note reaches the keepers' page as plain words: no markup, no script (OP-143)", async ({ browser }) => {
+    const a = await visitor(browser);
+    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now()})`;
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
+    await a.locator('[data-screen="feedback"]').click();
+    const sheet = a.getByRole('dialog', { name: 'Feedback' });
+    await sheet.getByRole('button', { name: 'Bug' }).click();
+    await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
+    await sheet.getByRole('button', { name: 'Send' }).click();
+    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+
+    const keeper = await browser.newPage();
+    const alerts: string[] = [];
+    keeper.on('dialog', (d) => {
+      alerts.push(d.message());
+      void d.dismiss();
+    });
+    await keeper.goto('/admin/feedback');
+    await keeper.getByRole('textbox', { name: 'Admin key' }).fill(E2E_ADMIN_KEY);
+    await keeper.getByRole('button', { name: 'Open' }).click();
+    const note = keeper.getByRole('listitem').filter({ hasText: words });
+    await expect(note).toBeVisible();
+    await expect(note.locator('.text')).toHaveText(words);
+    await expect(keeper.locator('#list img')).toHaveCount(0);
+    expect(alerts).toEqual([]);
     await keeper.close();
     await a.context().close();
   });

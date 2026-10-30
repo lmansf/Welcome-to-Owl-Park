@@ -82,7 +82,8 @@ async function startBot(n) {
     stats.errors.push(`bot ${n}: ${e.message}`);
     return bot;
   }
-  const headers = opts.ipHeader ? { 'X-Forwarded-For': `10.0.${(n >> 8) & 255}.${n & 255}` } : {};
+  // The park opens a socket only for its own page (OP-141): the bots say they come from it.
+  const headers = { Origin: new URL(BASE).origin, ...(opts.ipHeader ? { 'X-Forwarded-For': `10.0.${(n >> 8) & 255}.${n & 255}` } : {}) };
   const ws = new WebSocket(`${WS_BASE}/ws/${opts.room}?pass=${encodeURIComponent(pass)}`, { headers });
   bot.ws = ws;
   ws.on('open', () => {

@@ -42,6 +42,10 @@
   // Keep the workers.dev address on beside the domain: with routes listed, Wrangler switches it off
   // unless this says otherwise.
   "workers_dev": true,
+  // wrangler dev: the Worker sees each request at this machine's address, not at the first route's
+  // (the park's domain, over http), so the front door (src/guard.ts) knows it is local and links it
+  // makes point here. On another port: wrangler dev --port <n> --host localhost:<n>.
+  "dev": { "host": "localhost:8787" },
   // Month close for the Realm Vote: 05:05 UTC on the 1st (just after midnight in the park's time zone).
   "triggers": { "crons": ["5 5 1 * *"] },
   "vars": {
@@ -63,7 +67,10 @@
     "ACCOUNTS": "off",
     // How much the Worker and the room server log (OP-134): one JSON line per event, "info" in
     // production; "debug" adds a line for every pass taken and for the realms switch reaching each room object.
-    "LOG_LEVEL": "info"
+    "LOG_LEVEL": "info",
+    // The API's and the sockets' rate limits (OP-142, src/limits.ts): "on" always, but for a load test's
+    // throwaway copy, whose bots all come from one machine.
+    "RATE_LIMITS": "on"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },
