@@ -91,6 +91,39 @@ test.describe('room server', () => {
     await b.context().close();
   });
 
+  test('a room is joined while its art loads: the owl already there sees the newcomer before its page has the painting, and the room opens with that owl in it (OP-129)', async ({ browser }) => {
+    test.slow(); // two parks, one of them waiting on its room's paintings
+    const b = await visitor(browser);
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // The hub's paintings come only when the test says: the room cannot open before.
+    let paintingsCame!: () => void;
+    const paintingsHeld = new Promise<void>((r) => (paintingsCame = r));
+    await a.route(/\/art\/hub[-.%@]/, async (route) => {
+      await paintingsHeld;
+      await route.continue().catch(() => undefined);
+    });
+    // The page's own log (?log=1) says when the room lets the owl in, as it happens.
+    const joined = a.waitForEvent('console', { predicate: (m) => m.text().includes('"event":"room_join_ok"'), timeout: 30_000 });
+    await a.goto('/?transport=edge&room=hub&log=1');
+    await joined;
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    expect(await a.evaluate(() => window.owlPark?.state() ?? null)).toBeNull();
+    paintingsCame();
+    // The first frame the room draws: the page holds the room's connection and the other owl is in it.
+    const first = await a.waitForFunction(
+      () => {
+        const s = window.owlPark?.state();
+        return s ? { connected: s.connected, peers: s.peers.length } : null;
+      },
+      null,
+      { timeout: 30_000 },
+    );
+    expect(await first.jsonValue()).toEqual({ connected: true, peers: 1 });
+    await expect(a.getByText('2 owls here')).toBeVisible();
+    await a.context().close();
+    await b.context().close();
+  });
+
   test('a page whose connection drops keeps its owl where it walks: back online it never jumps, and the other owl sees it there (OP-138)', async ({ browser }) => {
     test.slow(); // two parks, and a reconnect
     const a = await visitor(browser);
