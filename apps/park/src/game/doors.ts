@@ -1,4 +1,4 @@
-import { STREET_ROOM, distanceToRect, nestDoorIndex, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { STREET_ROOM, distanceToRect, nestDoorIndex, pointInRect, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
 import { NEST_ROOM, roomFor } from '../rooms';
 
 /**
@@ -16,6 +16,24 @@ export const DOOR_AIM_PX = 48;
 export function takesDoorway(rect: Rect, walkTo: Vec2 | null, fromKeys: boolean, onErrand: boolean): boolean {
   if (onErrand) return false;
   return fromKeys || walkTo === null || distanceToRect(walkTo, rect) <= DOOR_AIM_PX;
+}
+
+/** How much wider than drawn a doorway is kept out of a tap's way around a bend (OP-148). */
+export const WAY_DOOR_PX = 8;
+
+/**
+ * The doorways a tap's way around a bend in the floor keeps out of (OP-148), as floor shut for that
+ * way: each one that takes an owl through (an open doorway to another room, or a nest's door on the
+ * street) but the one the tap is aimed at, a little wider than drawn, and none the owl at `pos`
+ * already stands in. A leg that ended by one on its way would go through it.
+ */
+export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean): Rect[] {
+  const m = WAY_DOOR_PX;
+  return room.doors
+    .filter((d) => (d.to ? !closed(d.to.room) : room.id === STREET_ROOM && nestDoorIndex(d.id) !== null))
+    .filter((d) => distanceToRect(aim, d.rect) > DOOR_AIM_PX)
+    .map((d) => ({ x: d.rect.x - m, y: d.rect.y - m, w: d.rect.w + 2 * m, h: d.rect.h + 2 * m }))
+    .filter((r) => !pointInRect(pos, r));
 }
 
 /** An owl walking on the held keys this near a doorway may be going through it (the keys have no other sign). */

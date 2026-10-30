@@ -1,7 +1,7 @@
 import { STREET_ROOM } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
-import { AHEAD_PX, DOOR_AIM_PX, roomsAhead, takesDoorway } from './doors';
+import { AHEAD_PX, DOOR_AIM_PX, WAY_DOOR_PX, doorwaysOff, roomsAhead, takesDoorway } from './doors';
 
 const door = { x: 1700, y: 610, w: 130, h: 90 };
 
@@ -17,6 +17,31 @@ describe('takesDoorway', () => {
     expect(takesDoorway(door, { x: 2000, y: 640 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 700 + DOOR_AIM_PX + 1 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 655 }, false, true)).toBe(false);
+  });
+});
+
+describe('doorwaysOff (OP-148)', () => {
+  const street = ROOMS[STREET_ROOM]!;
+  const hub = ROOMS['hub']!;
+  const middle = (id: string) => {
+    const r = street.doors.find((d) => d.id === id)!.rect;
+    return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  };
+
+  it('is each doorway a tap’s way round could take the owl through but the one it is aimed at, a little wider than drawn', () => {
+    const off = doorwaysOff(street, { x: 470, y: 870 }, middle('nest-door-0'), () => false);
+    const door1 = street.doors.find((d) => d.id === 'nest-door-1')!.rect;
+    expect(off).toHaveLength(6); // the other five nest doors and the way to the lobby
+    expect(off).toContainEqual({ x: door1.x - WAY_DOOR_PX, y: door1.y - WAY_DOOR_PX, w: door1.w + 2 * WAY_DOOR_PX, h: door1.h + 2 * WAY_DOOR_PX });
+  });
+
+  it('leaves out an arch whose realm is closed (its floor is shut already), the idol and other spots, and a doorway the owl stands in', () => {
+    const ids = (pos: { x: number; y: number }, closed: (id: string) => boolean) => doorwaysOff(hub, pos, { x: 1200, y: 780 }, closed).length;
+    const doors = hub.doors.filter((d) => d.to).length;
+    expect(ids({ x: 2400, y: 760 }, () => false)).toBe(doors);
+    expect(ids({ x: 2400, y: 760 }, (id) => id === 'glass')).toBe(doors - 1);
+    // Standing in the way out's doorway, widened: it is not kept out of.
+    expect(ids({ x: 2400, y: 860 }, () => false)).toBe(doors - 1);
   });
 });
 

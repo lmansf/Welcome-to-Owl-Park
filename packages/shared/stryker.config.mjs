@@ -44,6 +44,7 @@ export default strykerOptions(
       'src/jump.ts',
       'src/walk.ts',
       'src/resolveTarget.ts',
+      'src/wayAround.ts',
       'src/geometry.ts',
       'src/questbook.ts',
       'src/quests.ts',

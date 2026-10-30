@@ -51,6 +51,7 @@ import {
   positionAlongWalk,
   putOn,
   resolveTarget,
+  snapToWalkable,
   steerTarget,
   footing,
   footingLevel,
@@ -94,6 +95,8 @@ import {
   travelAfter,
   type TravelRefusal,
   type TravelState,
+  WAY_SHORT_PX,
+  wayAround,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -120,7 +123,7 @@ import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
-import { roomsAhead, takesDoorway } from './doors';
+import { doorwaysOff, roomsAhead, takesDoorway } from './doors';
 import { FitOverlay } from './fitOverlay';
 import { placeHints } from './hints';
 import { itemScale } from './items';
@@ -337,6 +340,11 @@ export class RoomScene extends Phaser.Scene {
    * whenever it changes.
    */
   private walkGoal: Vec2 | null = null;
+  /**
+   * Where a tap asked the owl to go that a straight walk stops short of, at a bend in the floor
+   * (OP-148): the owl walks there in legs, each set off as the one before ends.
+   */
+  private wayTo: Vec2 | null = null;
   private footLevel = 0;
   /** Held keys to steer afresh at the next frame, the footing having changed under a walk they own. */
   private reSteer = false;
@@ -437,6 +445,7 @@ export class RoomScene extends Phaser.Scene {
     this.airTokens = AIR_SEND_BURST;
     this.airRefilledAt = 0;
     this.walkGoal = null;
+    this.wayTo = null;
     this.footLevel = 0;
     this.reSteer = false;
     this.gen += 1;
@@ -677,7 +686,9 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built) return;
     const now = Date.now();
     this.fly(now);
-    const finished = this.me.tick(now);
+    let finished = this.me.tick(now);
+    // A leg of a way around a bend done (OP-148): the next sets off at once, and the walk goes on.
+    if (finished && this.wayTo && this.walkOn()) finished = false;
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
@@ -859,6 +870,7 @@ export class RoomScene extends Phaser.Scene {
   /** The own owl to where the room has it, faded in there: the one move of it that is not a walk (OP-138). */
   private moveTo(at: Vec2): void {
     this.posOverlay?.told('moved', at, this.me.pos);
+    this.wayTo = null;
     this.me.place(at);
     this.me.setAlpha(0);
     this.tweens.add({ targets: this.me, alpha: 1, duration: 200 });
@@ -1022,6 +1034,7 @@ export class RoomScene extends Phaser.Scene {
   /** Stand still where the owl is and tell the room. */
   private stop(): void {
     const here = { x: Math.round(this.me.pos.x), y: Math.round(this.me.pos.y) };
+    this.wayTo = null;
     this.me.walk = null;
     this.me.pos = here;
     const walk: Walk = { from: here, to: here, startedAt: Date.now() };
@@ -1986,9 +1999,20 @@ export class RoomScene extends Phaser.Scene {
   walkTo(target: Vec2, fromKeys = false, goal: Vec2 | null = fromKeys ? null : target): boolean {
     if (!this.built) return false;
     const f = this.footingNow();
-    const to = resolveTarget({ ...this.me.pos }, target, f.walkable, f.shut);
+    let to = resolveTarget({ ...this.me.pos }, target, f.walkable, f.shut);
     // Kept for a jump to carry on (OP-084): a perch's top asked for from the floor stops at its face.
     this.walkGoal = goal;
+    this.wayTo = null;
+    // A tap that a straight walk stops short of, at a bend in the floor: there by the way around it,
+    // the first leg now (OP-148). A perch's top asked for from the floor has no way round: its face.
+    const aim = snapToWalkable(target, f.walkable);
+    if (!fromKeys && distance(to, aim) > WAY_SHORT_PX) {
+      const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id))]);
+      if (legs?.[0]) {
+        to = resolveTarget({ ...this.me.pos }, legs[0], f.walkable, f.shut);
+        this.wayTo = aim;
+      }
+    }
     if (distance(to, this.me.pos) < 3) return false;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
     this.keyWalk = fromKeys;
@@ -1996,6 +2020,14 @@ export class RoomScene extends Phaser.Scene {
     this.conn?.send({ t: 'move', id: this.playerId, walk });
     this.conn?.track(this.snapshot());
     return true;
+  }
+
+  /** On round a bend to where a tap asked (OP-148), from where the last leg ended: false when the owl can go no further. */
+  private walkOn(): boolean {
+    const aim = this.wayTo;
+    if (aim && this.walkTo(aim, false, this.walkGoal)) return true;
+    this.wayTo = null;
+    return false;
   }
 
   private changeLook(look: OwlLook): void {

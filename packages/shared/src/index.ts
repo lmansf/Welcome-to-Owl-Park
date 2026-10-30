@@ -5,6 +5,7 @@ export * from './room';
 export * from './look';
 export * from './validate';
 export * from './resolveTarget';
+export * from './wayAround';
 export * from './edge';
 export * from './collectibles';
 export * from './book';

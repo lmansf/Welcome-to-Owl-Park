@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openPark, settleCamera, state, tapRoomPoint, toScreen, walkToDoor, type ParkState } from './helpers';
+import { openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor, type ParkState } from './helpers';
 
 /** The nest this page's owl is in, once the nest has said how it stands. */
 async function nestOf(page: Page): Promise<NonNullable<ParkState['nest']>> {
@@ -119,6 +119,31 @@ test.describe('the nests (this device)', () => {
     await inRoom(page, `nest-${own}`);
     await expect.poll(async () => (await state(page)).nest?.owned.length).toBe(5);
     expect((await state(page)).nest?.open).toBe(false);
+  });
+
+  test('from the street’s west end, the owl’s own door: a walk round the mounds where the two screens join, and in (OP-148)', async ({ page }) => {
+    await openPark(page, { room: 'homes', spawn: 'from-nest-5', collector: 'e2e-nest-way', tz: 'UTC' });
+    const own = (await streetOf(page))[0]!;
+    // From the lane's west end a straight walk to door 0 stops at the mounds; the walk there goes round them.
+    await walkAndStop(page, 470, 870);
+    await walkToDoor(page, 'nest-door-0');
+    await inRoom(page, `nest-${own.kind === 'own' ? own.nestId : ''}`);
+  });
+
+  test('stopped at the mounds, a tap past them walks round them, where it did nothing (OP-148)', async ({ page }) => {
+    await openPark(page, { room: 'homes', spawn: 'from-nest-5', collector: 'e2e-nest-mound', tz: 'UTC' });
+    // Where a straight walk east along the lane's bottom edge stops, against the mounds.
+    const at = await walkAndStop(page, 1431, 805);
+    await settleCamera(page);
+    // A point on the lane past the mounds: from here the straight line to it leaves the floor at once.
+    const past = await openGround(page, [
+      { x: 1650, y: 730 },
+      { x: 1620, y: 720 },
+      { x: 1700, y: 740 },
+    ]);
+    await tapRoomPoint(page, past.x, past.y);
+    await waitForArrival(page, past.x, past.y, 8);
+    expect(Math.hypot(at.x - 1431, at.y - 805)).toBeLessThan(8);
   });
 
   test('two owls of one browser visit each other’s nests, and a nest that closes sends its visitor out', async ({ page, context }) => {
