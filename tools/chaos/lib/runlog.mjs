@@ -46,8 +46,9 @@ export function openRun(experiment, environment, root = RESULTS) {
     name: experiment.name,
     run_id: id,
     git: { park: git('rev-parse', 'HEAD'), harness: git('log', '-1', '--format=%H', '--', 'tools/chaos') || 'uncommitted' },
-    // Changes to the park's tracked files not committed yet (the run is then of more than the commit).
-    dirty: git('diff', '--name-only', 'HEAD').length > 0,
+    // Changes to the park's tracked files not committed yet (the run is then of more than the commit);
+    // the runs' own folders and INDEX.md are not the park.
+    dirty: git('diff', '--name-only', 'HEAD', '--', '.', ':(exclude)tools/chaos/results').length > 0,
     environment,
     hypothesis: experiment.hypothesis,
     blast_radius: experiment.blastRadius,
