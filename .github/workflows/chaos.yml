@@ -1,0 +1,68 @@
+# The chaos harness (OP-132): one experiment against a throwaway park started on this runner
+# (tools/chaos/run.mjs: the Worker and the room server under wrangler dev, the browser tests' stand-in
+# store beside them). Nothing is deployed, so neither the live park nor the account's free daily
+# requests are touched. It runs only when started by hand: Actions -> Chaos -> Run workflow. The run's
+# folder (tools/chaos/results/<date>-<experiment>/) is kept as an artifact for 90 days; the QA agent
+# reviews its proposed-tickets.json and files what is new. An experiment not built yet records a run
+# that could not run.
+name: Chaos
+
+on:
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: 'The experiment: 1 room server killed, 2 fraud endpoint, 3 webhook dropped, 4 rooms full, 5 slow phone, 6 clock skew, 7 emote flood, 8 log sink down'
+        type: choice
+        options: ['1', '2', '3', '4', '5', '6', '7', '8']
+        default: '7'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chaos
+  cancel-in-progress: false
+
+jobs:
+  chaos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright
+        name: Playwright's version
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: The browser's system packages, only if the runner lacks some
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
+      - name: Run the experiment
+        env:
+          EXPERIMENT: ${{ inputs.experiment }}
+        run: pnpm chaos "$EXPERIMENT"
+      - name: Keep the run's folder
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-${{ inputs.experiment }}-run-${{ github.run_number }}
+          path: tools/chaos/results/
+          if-no-files-found: ignore
+          retention-days: 90

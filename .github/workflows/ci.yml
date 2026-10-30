@@ -64,6 +64,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      # The chaos harness's own tests (OP-132): it loads the rooms and the walk rule from
+      # packages/shared, so a change there that it cannot load, or that leaves its walks short, fails here.
+      - run: pnpm chaos:test
       - name: Cancel the rest of the run
         if: failure()
         run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
