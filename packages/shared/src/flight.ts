@@ -10,16 +10,18 @@
  * room only when it changes (off the ground, a flap, the cut, a glide begun or ended, the landing),
  * and every page carries an owl on from its last state with the same step ({@link carryOn}), so all
  * draw the same arc. Nothing about flight is logged. The owl's place in the room stays its spot on
- * the floor: flight is a height above it, so doorways, spots and walks are as before.
+ * the floor plan: flight is a height above it, so doorways, spots and walks are as before.
  *
- * `ground` is the height of what the owl stands on where it is: the floor (0) until rooms have upper
- * levels to land on.
+ * `ground` is the height of what the owl comes down on where it is: the floor (0), or the top of a
+ * perch (perches.ts, groundAt). A landing on the floor is never sent; one on a perch is, since only
+ * the owl's own page knows what was under it.
  *
  * TODO-DOCS (OP-084): docs/ARCHITECTURE.md (movement): the air state, when it is sent, how other
  * pages carry it on, the room server's checks; docs/PLAYBOOK.md (controls): Jump, a second flap in
  * the air, Jump held to glide, on the pad and the space bar.
  */
 import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
+import { MAX_PERCH_TOP } from './perches';
 import { WALK_SPEED } from './walk';
 
 /** One step of flight: the climb's (jump.ts). */
@@ -38,9 +40,10 @@ export const AIRBORNE: AirMode = 1;
 export const GLIDING: AirMode = 2;
 
 /**
- * An owl's air state, the part every page shares: how high it is above what it stands on (room px),
- * how fast it is rising (px/s, falling is negative), whether it is on the ground, in the air or
- * gliding, and the flaps it has left before it lands (one after leaving the ground).
+ * An owl's air state, the part every page shares: how high it is above the floor (room px), how fast
+ * it is rising (px/s, falling is negative), whether it is on the ground, in the air or gliding, and
+ * the flaps it has left before it lands (one after leaving the ground). On the ground above the
+ * floor, it stands on a perch.
  */
 export interface Air {
   z: number;
@@ -51,8 +54,12 @@ export interface Air {
 
 export const ON_GROUND: Air = { z: 0, vz: 0, s: GROUNDED, f: 0 };
 
+/** The highest a jump alone carries an owl above what it took off from (px, about 149): a perch a quest may use is lower than this. */
+export const JUMP_RISE = (JUMP_IMPULSE * JUMP_IMPULSE) / (2 * GRAVITY);
 /** The highest a jump and a flap at its top can carry an owl above what it took off from, with room to spare. */
 export const MAX_RISE = Math.ceil((JUMP_IMPULSE * JUMP_IMPULSE + DOUBLE_JUMP_IMPULSE * DOUBLE_JUMP_IMPULSE) / (2 * GRAVITY)) + 20;
+/** The highest an owl can be in any room: a jump and a flap from the highest top a perch may have. */
+export const MAX_AIR_Z = MAX_PERCH_TOP + MAX_RISE;
 
 /** The visitor's own owl: its air state and the timers only its own page keeps. */
 export interface Flier {
@@ -166,13 +173,18 @@ export function isAirShape(v: unknown): v is Air {
 
 /**
  * An air state as the room server accepts it from a visitor (null for one it drops): its shape, its
- * numbers in range, and on the ground only at the ground. `maxZ` is the highest an owl can be in the
- * room. Rounded to a tenth, as it goes out.
+ * numbers in range, and on the ground only at a height an owl can stand at, which it is put at
+ * exactly. `maxZ` is the highest an owl can be in the room, `standing` the heights it can stand at
+ * there (the floor and its perches' tops, perches.ts), or null where any height up to `maxZ` will do.
+ * Rounded to a tenth, as it goes out.
  */
-export function checkAir(v: unknown, maxZ: number, ground = 0): Air | null {
+export function checkAir(v: unknown, maxZ: number, standing: readonly number[] | null = [0]): Air | null {
   if (!isAirShape(v)) return null;
   const { z, vz, s, f } = v;
-  if (z < ground - 0.5 || z > maxZ || vz < -MAX_FALL - 1 || vz > JUMP_IMPULSE + 1) return null;
-  if (s === GROUNDED && (Math.abs(z - ground) > 0.5 || vz !== 0)) return null;
+  if (z < -0.5 || z > maxZ || vz < -MAX_FALL - 1 || vz > JUMP_IMPULSE + 1) return null;
+  if (s === GROUNDED) {
+    const at = standing === null ? z : standing.find((h) => Math.abs(z - h) <= 0.5);
+    return at === undefined || vz !== 0 ? null : { z: Math.round(Math.max(0, at) * 10) / 10, vz: 0, s, f };
+  }
   return { z: Math.round(z * 10) / 10, vz: Math.round(vz * 10) / 10, s, f };
 }

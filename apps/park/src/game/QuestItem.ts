@@ -9,8 +9,9 @@ const LOOK: Record<QuestItemKind, { tint: number; symbol: SymbolName }> = {
 };
 
 /**
- * Something a quest hides on the floor (an acorn, a lost gear, a moonstone): a soft glow and a
- * bobbing glint, sorted by depth like everything else. Only the visitor on that quest sees it.
+ * Something a quest hides on the floor or up on a perch (an acorn, a lost gear, a moonstone): a soft
+ * glow and a bobbing glint, sorted by depth like everything else, by its spot on the plan; one up on
+ * a perch is drawn `top` above it (OP-084). Only the visitor on that quest sees it.
  */
 export class QuestItemMarker {
   private readonly root: Phaser.GameObjects.Container;
@@ -23,16 +24,17 @@ export class QuestItemMarker {
     readonly n: number,
     readonly kind: QuestItemKind,
     readonly pos: Vec2,
+    readonly top = 0,
   ) {
     const { tint, symbol } = LOOK[kind];
     const glow = scene.add.image(0, 0, 'fx-glow').setTint(tint).setAlpha(0.55).setScale(0.42, 0.16).setBlendMode(Phaser.BlendModes.ADD);
     const halo = scene.add.image(0, -26, 'fx-glow').setTint(tint).setAlpha(0.45).setScale(0.22).setBlendMode(Phaser.BlendModes.ADD);
     const glint = scene.add.image(0, -26, symbolTexture(scene, symbol)).setTint(tint).setScale(1.1);
-    this.root = scene.add.container(pos.x, pos.y, [glow, halo, glint]).setDepth(pos.y - 1);
+    this.root = scene.add.container(pos.x, pos.y - top, [glow, halo, glint]).setDepth(pos.y - 1);
     scene.tweens.add({ targets: [glint, halo], y: -34, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.8, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.sparkles = scene.add
-      .particles(pos.x, pos.y - 24, symbolTexture(scene, 'star4'), {
+      .particles(pos.x, pos.y - top - 24, symbolTexture(scene, 'star4'), {
         lifespan: { min: 500, max: 900 },
         speed: { min: 6, max: 18 },
         scale: { start: 0.3, end: 0 },
@@ -57,7 +59,7 @@ export class QuestItemMarker {
     const { tint } = LOOK[this.kind];
     this.sparkles.stop();
     const burst = this.scene.add
-      .particles(this.pos.x, this.pos.y - 26, symbolTexture(this.scene, 'star4'), {
+      .particles(this.pos.x, this.pos.y - this.top - 26, symbolTexture(this.scene, 'star4'), {
         speed: { min: 60, max: 160 },
         lifespan: { min: 500, max: 900 },
         scale: { start: 0.55, end: 0 },
@@ -100,11 +102,14 @@ export class SpotGlow {
     private readonly scene: Phaser.Scene,
     readonly def: InteractableDef,
   ) {
-    const { x, y } = def.pos;
+    const { x } = def.pos;
+    // On a perch (OP-084) the glow is under the thing, up on the perch's top; it sorts by its spot on the plan.
+    const y = def.pos.y - (def.top ?? 0);
+    const depth = def.pos.y;
     const tint = SPOT_TINTS[def.kind] ?? 0xffd36a;
-    this.glow = scene.add.image(x, y, 'fx-glow').setTint(tint).setScale(0.6, 0.2).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(y - 3);
+    this.glow = scene.add.image(x, y, 'fx-glow').setTint(tint).setScale(0.6, 0.2).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 3);
     if (def.kind === 'moonbeam') {
-      const shaft = scene.add.image(x, y - 260, 'fx-glow').setTint(tint).setScale(0.45, 2.2).setAlpha(0.16).setBlendMode(Phaser.BlendModes.ADD).setDepth(y - 4);
+      const shaft = scene.add.image(x, y - 260, 'fx-glow').setTint(tint).setScale(0.45, 2.2).setAlpha(0.16).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 4);
       scene.tweens.add({ targets: shaft, alpha: 0.26, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       const motes = scene.add
         .particles(x, y - 10, symbolTexture(scene, 'dot'), {
@@ -118,7 +123,7 @@ export class SpotGlow {
           frequency: 380,
           emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-45, -20, 90, 30) } as Phaser.Types.GameObjects.Particles.EmitZoneData,
         })
-        .setDepth(y + 2);
+        .setDepth(depth + 2);
       this.extras.push(shaft, motes);
     }
   }
@@ -132,7 +137,9 @@ export class SpotGlow {
 
   /** A use: a little burst of light. */
   pulse(): void {
-    const { x, y } = this.def.pos;
+    const { x } = this.def.pos;
+    const y = this.def.pos.y - (this.def.top ?? 0);
+    const depth = this.def.pos.y;
     const tint = SPOT_TINTS[this.def.kind] ?? 0xffd36a;
     const burst = this.scene.add
       .particles(x, y - 40, symbolTexture(this.scene, 'star4'), {
@@ -144,7 +151,7 @@ export class SpotGlow {
         tint: [tint, 0xffffff],
         blendMode: Phaser.BlendModes.ADD,
       })
-      .setDepth(y + 50);
+      .setDepth(depth + 50);
     burst.explode(12);
     this.scene.time.delayedCall(1000, () => burst.destroy());
   }

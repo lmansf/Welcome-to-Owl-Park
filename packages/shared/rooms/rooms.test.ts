@@ -9,6 +9,11 @@ import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_S
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
+import { FLIGHT_STEP_MS, GROUNDED, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
+import { MAX_PERCH_TOP, footing, groundAt, type Raised } from '../src/perches';
+import { perchTiers } from '../src/routes';
+import { pointInPolygon } from '../src/geometry';
+import { WALK_SPEED } from '../src/walk';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -63,8 +68,9 @@ describe('the floor', () => {
       const things: [string, Vec2][] = [
         ...Object.entries(room.spawns).map(([name, p]): [string, Vec2] => [`spawn ${name}`, p]),
         ...room.doors.map((d): [string, Vec2] => [`door ${d.id}`, { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }]),
-        ...(room.spots ?? []).map((s): [string, Vec2] => [`spot ${s.x},${s.y}`, s]),
-        ...[...NPCS, ...INTERACTABLES].filter((t) => t.room === room.id).map((t): [string, Vec2] => [t.id, t.pos]),
+        // What sits up on a perch is reached from the perch (the perches' tests below).
+        ...(room.spots ?? []).filter((s) => !s.top).map((s): [string, Vec2] => [`spot ${s.x},${s.y}`, s]),
+        ...[...NPCS, ...INTERACTABLES].filter((t) => t.room === room.id && !(t as Raised).top).map((t): [string, Vec2] => [t.id, t.pos]),
       ];
       // A doorway or the idol's gathering spot may reach past the floor's edge; its middle is on the floor or next to it.
       for (const [name, p] of things) expect(floor.has(cell(p)) || [0, 1, -1].some((d) => floor.has(cell({ x: p.x, y: p.y + d * 2 * STEP }))), `${room.id} ${name} reachable`).toBe(true);
@@ -319,9 +325,15 @@ describe('hiding spots', () => {
         for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) expect(distance(spots[i]!, spots[j]!)).toBeGreaterThanOrEqual(60);
       });
 
-      it('puts every spot on the floor, 60 px or more from every doorway and spot', () => {
+      it('puts every spot on the floor or up on a perch single jumps reach, 60 px or more from every doorway and spot', () => {
+        const tiers = perchTiers(room);
         for (const s of spots) {
-          expect(isWalkable(s, room.walkable), `${room.id} ${s.x},${s.y} walkable`).toBe(true);
+          if (s.top) {
+            // A quest never asks for more than single jumps: the perch is a tier 1 one (routes.ts).
+            const perch = room.perches?.find((p) => p.top === s.top && pointInPolygon(s, p.area));
+            expect(perch, `${room.id} ${s.x},${s.y} on a perch with top ${s.top}`).toBeDefined();
+            expect(tiers[perch!.id], `${room.id} ${s.x},${s.y} on ${perch!.id}`).toBe(1);
+          } else expect(isWalkable(s, room.walkable), `${room.id} ${s.x},${s.y} walkable`).toBe(true);
           for (const d of room.doors) expect(distanceToRect(s, d.rect), `${room.id} ${s.x},${s.y} vs ${d.id}`).toBeGreaterThanOrEqual(60);
         }
       });
@@ -421,5 +433,104 @@ describe("the realms' guardians (OP-112)", () => {
 
   it("name species from the list the visitors' owls come from", () => {
     for (const s of SPECIES) expect(OWL_SPECIES).toContain(s.id);
+  });
+});
+
+/**
+ * An owl flown step by step while it walks from `from` towards `to` at the walk's pace on the
+ * footing for its height, coming down on the ground under it: as its own page flies it (OP-084).
+ */
+function flyOver(room: RoomDef, from: Vec2, to: Vec2, plan: Array<[FlightInput, number]>, start: Flier = newFlier()): { fl: Flier; pos: Vec2 } {
+  let fl = start;
+  let pos = { ...from };
+  const step = (WALK_SPEED * FLIGHT_STEP_MS) / 1000;
+  for (const [input, n] of plan) {
+    for (let i = 0; i < n; i++) {
+      fl = stepFlier(fl, i === 0 ? input : { ...input, pressed: false }, groundAt(room.perches, pos, fl.air.z));
+      const f = footing(room, fl.air.z);
+      const goal = resolveTarget(pos, to, f.walkable, f.shut);
+      const left = distance(pos, goal);
+      if (left > 0.01) pos = left <= step ? goal : { x: pos.x + ((goal.x - pos.x) / left) * step, y: pos.y + ((goal.y - pos.y) / left) * step };
+    }
+  }
+  return { fl, pos };
+}
+const steps = (ms: number) => Math.round(ms / FLIGHT_STEP_MS);
+const PRESS: FlightInput = { pressed: true, held: true };
+const HOLD: FlightInput = { pressed: false, held: true };
+const NONE: FlightInput = { pressed: false, held: false };
+
+describe('perches (OP-084)', () => {
+  it('stand in the room, drawn inside it, no higher than a perch may be, each by a floor or a perch to jump from', () => {
+    for (const room of ALL_ROOMS) {
+      const ids = new Set<string>();
+      for (const p of room.perches ?? []) {
+        expect(ids.has(p.id), `${room.id}: ${p.id} twice`).toBe(false);
+        ids.add(p.id);
+        expect(p.area.length, p.id).toBeGreaterThanOrEqual(3);
+        expect(p.top, p.id).toBeGreaterThan(0);
+        expect(p.top, p.id).toBeLessThanOrEqual(MAX_PERCH_TOP);
+        for (const v of p.area) {
+          expect(v.x >= 0 && v.x <= room.size.w && v.y <= room.size.h, `${p.id} ${v.x},${v.y}`).toBe(true);
+          expect(v.y - p.top, `${p.id}: its top is drawn above the room`).toBeGreaterThanOrEqual(0);
+        }
+        // Somewhere under it or beside it to take off from: its area meets the floor or another perch's.
+        const others = (room.perches ?? []).filter((o) => o !== p).map((o) => o.area);
+        const meets = p.area.some((v) => isWalkable(v, room.walkable) || others.some((o) => pointInPolygon(v, o)));
+        expect(meets, `${room.id}: ${p.id} meets no floor or perch`).toBe(true);
+      }
+    }
+  });
+
+  it('each have a route up from the floor, by single jumps, the second flap or a glide (routes.ts)', () => {
+    for (const room of ALL_ROOMS) for (const [id, tier] of Object.entries(perchTiers(room))) expect(tier, `${room.id}: nothing reaches ${id}`).not.toBeNull();
+  });
+
+  it('hold what sits up on them, each on a perch with that very top, where an owl standing on it is drawn', () => {
+    for (const room of ALL_ROOMS) {
+      const raised: Array<[string, Vec2, number]> = [
+        ...(room.spots ?? []).filter((s) => s.top).map((s): [string, Vec2, number] => [`spot ${s.x},${s.y}`, s, s.top!]),
+        ...INTERACTABLES.filter((t) => t.room === room.id && t.top).map((t): [string, Vec2, number] => [t.id, t.pos, t.top!]),
+      ];
+      for (const [name, p, top] of raised) {
+        expect(room.perches?.some((perch) => perch.top === top && pointInPolygon(p, perch.area)), `${room.id} ${name}`).toBe(true);
+        // What an owl there comes down on is that perch, from the floor's side too: nothing higher hides it.
+        expect(groundAt(room.perches, p, top), `${room.id} ${name}`).toBe(top);
+      }
+    }
+    // The hub's first: two quest spots on the bench, a leaf pile on the beam.
+    expect(ROOMS['hub']!.spots?.filter((s) => s.top === 80)).toHaveLength(2);
+    expect(INTERACTABLES.find((t) => t.id === 'hub-leaves-beam')?.top).toBe(264);
+  });
+
+  it("the hub's bench is a jump up from the floor, and the lantern beam a jump and the second flap up from the bench", () => {
+    const hub = ROOMS['hub']!;
+    const atFace = { x: 900, y: 740 };
+    const onBench = { x: 900, y: 696 };
+    // From the floor: walk to the bench, held there at its face, jump and keep walking: up on its seat.
+    const up = flyOver(hub, atFace, onBench, [[NONE, steps(400)], [PRESS, steps(320)], [NONE, steps(900)]]);
+    expect(up.fl.air).toEqual({ z: 80, vz: 0, s: GROUNDED, f: 0 });
+    expect(distance(up.pos, onBench)).toBeLessThan(1);
+    // Without the jump the face holds the owl on the floor.
+    const held = flyOver(hub, atFace, onBench, [[NONE, steps(1500)]]);
+    expect(held.fl.air.z).toBe(0);
+    expect(held.pos.y).toBeGreaterThan(712);
+    // From the bench, a jump alone falls short of the beam and comes back down on the bench.
+    const standing: Flier = { ...newFlier(), air: { z: 80, vz: 0, s: GROUNDED, f: 0 } };
+    const short = flyOver(hub, onBench, onBench, [[PRESS, steps(360)], [NONE, steps(1200)]], standing);
+    expect(short.fl.air).toEqual({ z: 80, vz: 0, s: GROUNDED, f: 0 });
+    // A jump, and the second flap at its top: up on the beam.
+    const flap = flyOver(hub, onBench, onBench, [[PRESS, steps(330)], [NONE, steps(10)], [PRESS, steps(300)], [NONE, steps(1200)]], standing);
+    expect(flap.fl.air).toEqual({ z: 264, vz: 0, s: GROUNDED, f: 0 });
+    // Walked off the beam's east end, where it bends down into the trunk: down onto the bench below.
+    const onBeam: Flier = { ...newFlier(), air: { z: 264, vz: 0, s: GROUNDED, f: 0 } };
+    const off = flyOver(hub, { x: 1100, y: 696 }, { x: 1200, y: 696 }, [[NONE, steps(1500)]], onBeam);
+    expect(off.fl.air).toEqual({ z: 80, vz: 0, s: GROUNDED, f: 0 });
+    // And a glide off the bench's front carries the owl out over the floor, slowly, before it lands.
+    const glide = flyOver(hub, onBench, { x: 900, y: 900 }, [[PRESS, steps(200)], [HOLD, steps(2000)]], standing);
+    expect(glide.fl.air.z).toBeGreaterThan(0);
+    expect(glide.pos.y).toBeGreaterThan(850);
+    const landed = flyOver(hub, onBench, { x: 900, y: 900 }, [[PRESS, steps(200)], [HOLD, steps(4000)]], standing);
+    expect(landed.fl.air).toEqual({ z: 0, vz: 0, s: GROUNDED, f: 0 });
   });
 });

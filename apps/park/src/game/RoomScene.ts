@@ -52,6 +52,11 @@ import {
   putOn,
   resolveTarget,
   steerTarget,
+  footing,
+  footingLevel,
+  groundAt,
+  sameLevel,
+  tapGoal,
   variantName,
   type DoorDef,
   type EquipSlot,
@@ -63,7 +68,10 @@ import {
   type PlayerState,
   type QuestBoard,
   type QuestUpdate,
+  type Polygon,
+  type Raised,
   type Rect,
+  type Shut,
   type RoomDef,
   type Vec2,
   type Walk,
@@ -298,6 +306,18 @@ export class RoomScene extends Phaser.Scene {
   private roomTold: { air: Air; at: number } = { air: ON_GROUND, at: 0 };
   /** Air states this page may still send now, a little under the room server's allowance so a late frame is never dropped there. */
   private airTokens = AIR_SEND_BURST;
+  /**
+   * Perches (OP-084): where a tap or an errand last asked the owl to go, which a walk stopped short of
+   * (at a perch's face, from the floor) goes on for once a jump lifts the owl to it; and the footing
+   * the owl last walked on (how many perch tops are at or below it), which a walk is aimed afresh for
+   * whenever it changes.
+   */
+  private walkGoal: Vec2 | null = null;
+  private footLevel = 0;
+  /** Held keys to steer afresh at the next frame, the footing having changed under a walk they own. */
+  private reSteer = false;
+  /** What an owl comes down on where it is in this room: the floor, or a perch's top (OP-084). */
+  private readonly groundUnder = (p: Vec2, z: number): number => groundAt(this.room.perches, p, z);
   private airRefilledAt = 0;
   /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
   private flown = { n: 0, peak: 0, glided: false, ms: 0 };
@@ -391,6 +411,9 @@ export class RoomScene extends Phaser.Scene {
     this.roomTold = { air: ON_GROUND, at: 0 };
     this.airTokens = AIR_SEND_BURST;
     this.airRefilledAt = 0;
+    this.walkGoal = null;
+    this.footLevel = 0;
+    this.reSteer = false;
     this.gen += 1;
     this.soft = new Set();
     this.lastStatus = null;
@@ -545,6 +568,8 @@ export class RoomScene extends Phaser.Scene {
 
     const spawn = arrivalPoint(room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
+    this.me.groundUnder = this.groundUnder;
+    this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
     if (this.cfg.pos && this.transport.kind === 'edge') {
       // Asked for once a tab; every room after shows it at once.
@@ -615,6 +640,8 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     this.fly(now);
     const finished = this.me.tick(now);
+    // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
+    if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     if (!this.leaving) {
       this.steer();
@@ -636,7 +663,8 @@ export class RoomScene extends Phaser.Scene {
 
   private snapshot(): PlayerState {
     const told = this.roomTold;
-    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, ...(this.sleptAt ? { asleep: true } : {}), ...(told.air.s !== GROUNDED ? { air: { ...told.air, at: told.at } } : {}), v: PROTOCOL_VERSION };
+    const up = told.air.s !== GROUNDED || told.air.z > 0;
+    return { id: this.playerId, look: this.look, pos: { ...this.me.pos }, walk: this.me.walk, ...(this.sleptAt ? { asleep: true } : {}), ...(up ? { air: { ...told.air, at: told.at } } : {}), v: PROTOCOL_VERSION };
   }
 
   private async connect(): Promise<void> {
@@ -712,7 +740,7 @@ export class RoomScene extends Phaser.Scene {
     // The map's places (OP-130): this browser keeps the room walked into when no server does.
     this.collection.service.travelEntered(this.room.id, spawnName);
     void this.refreshTravel(spawnName);
-    this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }));
+    this.link = this.collection.service.questLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.groundNow());
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
     this.nests = this.collection.service.nestLink(this.room.id, conn, pushes, () => nestLook(this.look));
@@ -740,13 +768,15 @@ export class RoomScene extends Phaser.Scene {
     const at = this.roomHas;
     this.roomHas = null;
     if (!at) return;
+    // The room starts the owl on the floor: standing on a perch, or up in the air, it is told (OP-084).
+    this.retellAir();
     const target = this.me.walk?.to;
     if (distance(at, this.me.pos) >= 3 && !this.roomCanFollow(at)) {
       this.moveTo(at);
-      if (target) this.walkTo(target, this.keyWalk);
+      if (target) this.walkTo(target, this.keyWalk, this.walkGoal);
       return;
     }
-    if (target && this.walkTo(target, this.keyWalk)) return;
+    if (target && this.walkTo(target, this.keyWalk, this.walkGoal)) return;
     const off = distance(at, this.me.pos);
     if (off < 3) return;
     const untouched = !this.me.walk && distance(this.me.pos, this.arrivedAt) < 3;
@@ -756,7 +786,8 @@ export class RoomScene extends Phaser.Scene {
 
   /** Whether the room's copy of the own owl, at `from`, can walk straight to where the owl is. */
   private roomCanFollow(from: Vec2): boolean {
-    return distance(resolveTarget(from, this.me.pos, this.room.walkable, this.shutFloor()), this.me.pos) < 3;
+    const f = this.footingNow();
+    return distance(resolveTarget(from, this.me.pos, f.walkable, f.shut), this.me.pos) < 3;
   }
 
   /** The own owl to where the room has it, faded in there: the one move of it that is not a walk (OP-138). */
@@ -804,6 +835,8 @@ export class RoomScene extends Phaser.Scene {
     let owl = this.peers.get(s.id);
     if (!owl) {
       owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio));
+      owl.groundUnder = this.groundUnder;
+      owl.calm = () => this.calm();
       owl.setAlpha(0);
       this.tweens.add({ targets: owl, alpha: 1, duration: 400 });
       this.peers.set(s.id, owl);
@@ -871,7 +904,8 @@ export class RoomScene extends Phaser.Scene {
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
-      this.walkTo({ x: world.x, y: world.y });
+      // A tap on a perch's top asks for the top, not the floor behind it (OP-084).
+      this.walkTo(tapGoal(this.room, { x: world.x, y: world.y }));
     });
   }
 
@@ -888,18 +922,25 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     const same = this.keyDir !== null && this.keyDir.x === dir.x && this.keyDir.y === dir.y;
-    if (same && this.me.walking) return; // keep going
+    const afresh = this.reSteer;
+    this.reSteer = false;
+    if (same && this.me.walking && !afresh) return; // keep going
     if (!same) {
       this.keyDir = dir;
       this.keyTurns = KEY_TURNS;
     }
     if (this.keyTurns <= 0) return; // boxed in: wait for other keys
     this.keyTurns -= 1;
-    const target = steerTarget(this.me.pos, dir, this.room.walkable, undefined, this.shutFloor());
+    const f = this.footingNow();
+    const target = steerTarget(this.me.pos, dir, f.walkable, undefined, f.shut);
     if (!target) {
       this.keyTurns = 0;
+      // Steered afresh at a perch's face, from the floor: no further this way, so stand.
+      if (afresh && this.me.walking) this.stop();
       return;
     }
+    // Steered afresh to where the walk already ends: nothing to tell.
+    if (afresh && this.me.walk && distance(target, this.me.walk.to) < 3) return;
     this.pendingVote = false; // walking away cancels a walk to the idol
     this.errand = null;
     this.walkTo(target, true);
@@ -1300,9 +1341,9 @@ export class RoomScene extends Phaser.Scene {
     /** NPC owls in this room, the quest marker each shows, and whether its '!' says the owl can talk to it now (OP-114). */
     npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
     /** Interactables in this room; `here` is false while a leaf pile is used up. */
-    objects: Array<{ id: string; kind: string; x: number; y: number; here: boolean }>;
-    /** Quest items waiting in this room (only this visitor sees them). */
-    items: Array<{ quest: string; n: number; kind: string; x: number; y: number }>;
+    objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
+    /** Quest items waiting in this room (only this visitor sees them); `top` for one up on a perch. */
+    items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
     /** What the owl can do where it stands (the action buttons), in order. */
     actions: string[];
     /** The NPC whose dialogue is open. */
@@ -1341,8 +1382,8 @@ export class RoomScene extends Phaser.Scene {
       owlWorn: this.me.wornKey,
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
-      objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, here: this.piles.get(d.id)?.here ?? true })),
-      items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y })),
+      objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
+      items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y, top: m.top })),
       actions: this.actions.map((a) => a.id),
       talkingTo: this.talkingTo,
       play: this.play?.debug() ?? null,
@@ -1379,7 +1420,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /** Where an errand happens and how close the owl must stand for it. */
-  private errandSpot(e: Errand): { pos: Vec2; reach: number } | null {
+  private errandSpot(e: Errand): { pos: Vec2; reach: number; top?: number } | null {
     if (e.kind === 'talk' || e.kind === 'handin') {
       const npc = this.npcs.get(e.id);
       return npc ? { pos: npc.def.pos, reach: NPC_TALK_RADIUS } : null;
@@ -1389,7 +1430,7 @@ export class RoomScene extends Phaser.Scene {
       return at ? { pos: at, reach: 40 } : null;
     }
     const def = getInteractable(e.id);
-    return def && def.room === this.room.id ? { pos: def.pos, reach: KIND_RULES[def.kind].reach } : null;
+    return def && def.room === this.room.id ? { pos: def.pos, reach: KIND_RULES[def.kind].reach, ...(def.top ? { top: def.top } : {}) } : null;
   }
 
   private runErrand(e: Errand): void {
@@ -1404,7 +1445,7 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built || this.leaving) return false;
     const spot = this.errandSpot(e);
     if (!spot) return false;
-    if (distance(this.me.pos, spot.pos) <= spot.reach) {
+    if (distance(this.me.pos, spot.pos) <= spot.reach && this.atLevel(spot)) {
       this.errand = null;
       this.runErrand(e);
       return true;
@@ -1413,8 +1454,8 @@ export class RoomScene extends Phaser.Scene {
     const side = this.me.pos.x < spot.pos.x ? -1 : 1;
     const target = e.kind === 'use' || e.kind === 'mirror' ? spot.pos : { x: spot.pos.x + side * 70, y: spot.pos.y + 24 };
     if (!this.walkTo(target)) {
-      // Already as close as the floor allows.
-      if (distance(this.me.pos, spot.pos) <= spot.reach + REACH_SLACK / 2) this.runErrand(e);
+      // Already as close as the floor allows (a thing up on a perch waits for the owl to be up there too).
+      if (distance(this.me.pos, spot.pos) <= spot.reach + REACH_SLACK / 2 && this.atLevel(spot)) this.runErrand(e);
       return true;
     }
     this.errand = e;
@@ -1450,7 +1491,8 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const def of interactablesIn(this.room.id)) {
       const rules = KIND_RULES[def.kind];
-      const close = distance(pos, def.pos) <= rules.reach;
+      // A pile up on a perch is in reach only from that perch, one on the floor only from the floor (OP-084).
+      const close = distance(pos, def.pos) <= rules.reach && this.atLevel(def);
       this.glows.get(def.id)?.setNear(close);
       if (!close || this.piles.get(def.id)?.here === false) continue;
       out.push({ id: `use:${def.id}`, label: rules.label, run: () => void this.use(def.id) });
@@ -1490,14 +1532,14 @@ export class RoomScene extends Phaser.Scene {
   private showBoard(board: QuestBoard | null): void {
     if (!this.built) return;
     for (const npc of this.npcs.values()) npc.setMark(this.quests.markFor(npc.id));
-    const wanted = new Map<string, { quest: string; n: number; kind: QuestItemMarker['kind']; x: number; y: number }>();
+    const wanted = new Map<string, { quest: string; n: number; kind: QuestItemMarker['kind']; x: number; y: number; top?: number }>();
     for (const q of board?.active ?? []) for (const it of q.items) if (it.room === this.room.id) wanted.set(`${q.id}#${it.n}`, { quest: q.id, ...it });
     for (const [key, m] of this.items) {
       if (wanted.has(key)) continue;
       m.destroy();
       this.items.delete(key);
     }
-    for (const [key, it] of wanted) if (!this.items.has(key)) this.items.set(key, new QuestItemMarker(this, it.quest, it.n, it.kind, { x: it.x, y: it.y }));
+    for (const [key, it] of wanted) if (!this.items.has(key)) this.items.set(key, new QuestItemMarker(this, it.quest, it.n, it.kind, { x: it.x, y: it.y }, it.top ?? 0));
   }
 
   /**
@@ -1551,7 +1593,7 @@ export class RoomScene extends Phaser.Scene {
           const n = res.feathers;
           this.time.delayedCall(FLOP_LAND_MS + 150, () => {
             if (gen !== this.gen) return;
-            featherFind(this, def.pos, () => this.me.pos, () => this.collection.setFeathers(res.total));
+            featherFind(this, def.pos, () => ({ x: this.me.pos.x, y: this.me.pos.y - this.flier.air.z }), () => this.collection.setFeathers(res.total), def.top ?? 0);
             this.hud.toast(n === 1 ? 'A feather was hiding in the leaves! +1 feather' : `Feathers were hiding in the leaves! +${n} feathers`, 3200, '#FFD36A');
           });
         }
@@ -1585,7 +1627,7 @@ export class RoomScene extends Phaser.Scene {
       const retryAt = this.gathering.get(key);
       if (retryAt !== undefined && now < retryAt) continue;
       const d = distance(this.me.pos, m.pos);
-      if (d > PICKUP_CLIENT_RADIUS || (this.me.walking && d > PICKUP_CLIENT_RADIUS / 2)) continue;
+      if (d > PICKUP_CLIENT_RADIUS || (this.me.walking && d > PICKUP_CLIENT_RADIUS / 2) || !this.atLevel(m)) continue;
       void this.gather(m);
     }
   }
@@ -1741,8 +1783,13 @@ export class RoomScene extends Phaser.Scene {
       if (pressed) this.jumpTaken = down;
       const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
       const grounded = this.flier.air.s === GROUNDED;
-      this.flier = stepFlier(this.flier, { pressed, held }, 0, this.abilities);
+      this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities);
       const air = this.flier.air;
+      const level = footingLevel(this.room, air.z);
+      if (level !== this.footLevel) {
+        this.footLevel = level;
+        this.reaim();
+      }
       if (air.s !== GROUNDED) {
         if (grounded) {
           this.flown = { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 };
@@ -1758,11 +1805,56 @@ export class RoomScene extends Phaser.Scene {
       }
       this.roomAir = fall(this.roomAir, FLIGHT_STEP_MS);
       if (airChanged(this.roomAir, air) && this.takeAirToken(at)) {
+        const wasPerched = this.roomTold.air.s === GROUNDED && this.roomTold.air.z > 0;
         this.roomAir = air;
         this.roomTold = { air, at };
         this.conn?.send({ t: 'air', id: this.playerId, air: { z: Math.round(air.z * 10) / 10, vz: Math.round(air.vz * 10) / 10, s: air.s, f: air.f }, at });
+        // A newcomer on the peer transports reads the snapshot: up on a perch, or just off one, it is told afresh (OP-084).
+        if (wasPerched || (air.s === GROUNDED && air.z > 0)) this.conn?.track(this.snapshot());
       }
     }
+  }
+
+  /**
+   * The footing changed under the owl (OP-084): it rose past a perch's top, or came down below one.
+   * Held keys steer afresh; a walk asked for by a tap is aimed afresh at what was asked, and sent
+   * only if that changes where it ends: on from a perch's face once the owl is up level with its
+   * top, or stopped at the face for an owl that came down before reaching it.
+   */
+  private reaim(): void {
+    if (this.keys?.direction()) {
+      this.keyTurns = KEY_TURNS;
+      this.reSteer = true;
+      return;
+    }
+    const goal = this.walkGoal;
+    if (!goal) return;
+    if (distance(goal, this.me.pos) < 3) {
+      this.walkGoal = null;
+      return;
+    }
+    const f = this.footingNow();
+    const to = resolveTarget({ ...this.me.pos }, goal, f.walkable, f.shut);
+    if (distance(to, this.me.walk?.to ?? this.me.pos) < 3) return;
+    if (distance(to, this.me.pos) >= 3) {
+      this.walkTo(goal);
+      return;
+    }
+    // No further on this footing: stand here, the goal kept for the next jump.
+    this.stop();
+    this.walkGoal = goal;
+  }
+
+  /** The own owl's air told to the room afresh (after a welcome): not on the floor, the room needs it. */
+  private retellAir(): void {
+    const air = this.flier.air;
+    if (air.s === GROUNDED && air.z === 0) return;
+    const at = Date.now();
+    if (!this.takeAirToken(at)) return;
+    this.roomAir = air;
+    this.roomTold = { air, at };
+    this.conn?.send({ t: 'air', id: this.playerId, air: { z: Math.round(air.z * 10) / 10, vz: Math.round(air.vz * 10) / 10, s: air.s, f: air.f }, at });
+    this.conn?.track(this.snapshot());
   }
 
   private takeAirToken(now: number): boolean {
@@ -1825,9 +1917,12 @@ export class RoomScene extends Phaser.Scene {
    * Public for tests and future features: walk the local owl to a room point. True if it set off.
    * `fromKeys` marks a walk the held keys own, which letting go of them stops.
    */
-  walkTo(target: Vec2, fromKeys = false): boolean {
+  walkTo(target: Vec2, fromKeys = false, goal: Vec2 | null = fromKeys ? null : target): boolean {
     if (!this.built) return false;
-    const to = resolveTarget({ ...this.me.pos }, target, this.room.walkable, this.shutFloor());
+    const f = this.footingNow();
+    const to = resolveTarget({ ...this.me.pos }, target, f.walkable, f.shut);
+    // Kept for a jump to carry on (OP-084): a perch's top asked for from the floor stops at its face.
+    this.walkGoal = goal;
     if (distance(to, this.me.pos) < 3) return false;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
     this.keyWalk = fromKeys;
@@ -1855,7 +1950,7 @@ export class RoomScene extends Phaser.Scene {
       // Arrived (or stopped short): do it if close enough, else give up quietly.
       this.errand = null;
       const spot = this.errandSpot(errand);
-      if (spot && distance(pos, spot.pos) <= spot.reach + REACH_SLACK / 2) this.runErrand(errand);
+      if (spot && distance(pos, spot.pos) <= spot.reach + REACH_SLACK / 2 && this.atLevel(spot)) this.runErrand(errand);
     }
     if (this.talkingTo) {
       const npc = this.npcs.get(this.talkingTo);
@@ -2170,6 +2265,21 @@ export class RoomScene extends Phaser.Scene {
    */
   private shutFloor(): Rect[] {
     return this.room.doors.flatMap((d) => (d.marker && this.realmClosed(d.to?.room) ? [{ x: d.rect.x, y: 0, w: d.rect.w, h: d.marker.y + 2 }] : []));
+  }
+
+  /** Where the owl can walk at the height it is now (OP-084, perches.ts): the floor and the perch tops at or below it, less the floor shut for now. */
+  private footingNow(): { walkable: Polygon[]; shut: Shut[] } {
+    return footing(this.room, this.flier.air.z, this.shutFloor());
+  }
+
+  /** What the owl stands on, or would come down on, now: a perch's top, else the floor (0). */
+  private groundNow(): number {
+    return this.groundUnder(this.me.pos, this.flier.air.z);
+  }
+
+  /** Whether the owl is level with a thing that may sit up on a perch (OP-084): on that perch, or on the floor for a thing on the floor. */
+  private atLevel(thing: Raised): boolean {
+    return sameLevel(this.groundNow(), thing);
   }
 
   /** The realms switch, as the welcome or a later frame said it: the hub's arches draw open or closed, and the Menu map agrees. */

@@ -992,7 +992,7 @@ export class RoomObject extends DurableObject<Env> {
           const it = getInteractable(frame.target);
           if (!it || it.room !== att.room) return refuse('unknown');
           const rules = KIND_RULES[it.kind];
-          if (!room.near(att.id, it.pos, rules.reach)) return refuse('far');
+          if (!room.reaches(att.id, it.pos, rules.reach, it)) return refuse('far');
           if (!room.takeUse(att.id)) return refuse('busy');
           const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
           // Leaf piles and stalls count toward today's tasks too.
@@ -1014,7 +1014,7 @@ export class RoomObject extends DurableObject<Env> {
         case 'gather': {
           const pos = room.positionOf(att.id);
           if (!pos) return refuse('unknown');
-          const res = await stub.gather(cid, frame.quest, frame.n, att.room, pos);
+          const res = await stub.gather(cid, frame.quest, frame.n, att.room, pos, room.groundOf(att.id));
           if (res.ok) return this.sendBoard(ws, res.board, res.updates, { r, ok: true });
           return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
         }

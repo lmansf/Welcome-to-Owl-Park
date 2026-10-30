@@ -34,6 +34,8 @@ export * from './climbbook';
 export * from './climbCity';
 export * from './climbPilot';
 export * from './flight';
+export * from './perches';
+export * from './routes';
 export * from './sprites';
 export * from './owlFacts';
 export * from './accounts';

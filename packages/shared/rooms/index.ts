@@ -103,6 +103,34 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 4720, y: 900 },
       ],
     ],
+    // Upper levels (OP-084, perches.ts), along the west wing's back wall: the root bench under the
+    // lantern beam, its seat drawn at y 600..632 above its place along the wall, a jump up from the
+    // floor; and the beam itself, drawn at y 416..448 from the left trunk to where it bends down into
+    // the right one, a jump and the second flap up from the bench. The bench is solid, its front a face
+    // on the floor's back edge; the beam is not, and the bench is under it.
+    perches: [
+      {
+        id: 'hub-bench',
+        area: [
+          { x: 715, y: 680 },
+          { x: 1260, y: 680 },
+          { x: 1260, y: 712 },
+          { x: 715, y: 712 },
+        ],
+        top: 80,
+        solid: true,
+      },
+      {
+        id: 'hub-beam',
+        area: [
+          { x: 722, y: 680 },
+          { x: 1140, y: 680 },
+          { x: 1140, y: 712 },
+          { x: 722, y: 712 },
+        ],
+        top: 264,
+      },
+    ],
     spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
     doors: [
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 } },
@@ -122,6 +150,9 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 980, y: 860 },
       { x: 1200, y: 760 },
       { x: 1450, y: 840 },
+      // Up on the root bench, a jump from the floor (OP-084).
+      { x: 820, y: 696, top: 80 },
+      { x: 1150, y: 696, top: 80 },
       { x: 1660, y: 820 },
       { x: 1930, y: 820 },
       { x: 1980, y: 720 },

@@ -26,12 +26,14 @@ import {
  * over the room so the fit can be judged by eye on a phone and a computer. Pink: a spot's trigger
  * (where the owl must stand); gold: a doorway's; cyan circles: how near an owl must be; green: tap
  * areas; cream: what a sprite draws; yellow: the object itself without its glow; red dots and ticks:
- * visual centres, worn-item anchors and where a marker stands; red shading: floor shut for now.
+ * visual centres, worn-item anchors and where a marker stands; red shading: floor shut for now;
+ * lime: a perch's top as an owl on it is drawn (its area lifted by its height), and faintly where
+ * that is on the floor plan (OP-084).
  *
  * TODO-DOCS (OP-127): docs/PLAYBOOK.md (or the QA notes) explains `?boxes=1`: dev builds, or a build
  * with VITE_BOXES=on; what each colour means; re-run it whenever a style set adds wearables.
  */
-const C = { spot: 0xff2aa1, doorway: 0xc9a227, reach: 0x00e5ff, tap: 0x7be0c8, drawn: 0xf6f1e3, solid: 0xffd36a, mark: 0xff5a5a };
+const C = { spot: 0xff2aa1, doorway: 0xc9a227, reach: 0x00e5ff, tap: 0x7be0c8, drawn: 0xf6f1e3, solid: 0xffd36a, mark: 0xff5a5a, perch: 0x9cff57 };
 
 /** An NPC owl as the overlay sees it: where it stands, its tap area and where its marker's foot is (room pixels). */
 export interface NpcFit {
@@ -74,6 +76,10 @@ export class FitOverlay {
     for (const d of subjects.room.doors) {
       this.labels.push(scene.add.text(d.rect.x + 2, d.rect.y - 16, d.id, { fontSize: '13px', color: '#F6F1E3', backgroundColor: '#0C1E36' }).setDepth(top + 1));
     }
+    for (const p of subjects.room.perches ?? []) {
+      const at = p.area[0];
+      if (at) this.labels.push(scene.add.text(at.x + 2, at.y - p.top - 16, `${p.id} ${p.top}`, { fontSize: '13px', color: '#9CFF57', backgroundColor: '#0C1E36' }).setDepth(top + 1));
+    }
   }
 
   draw(): void {
@@ -84,8 +90,13 @@ export class FitOverlay {
       if (d.marker) this.dot(d.marker, C.mark);
     }
     for (const r of this.subjects.shut()) g.fillStyle(C.mark, 0.22).fillRect(r.x, r.y, r.w, r.h);
-    for (const def of interactablesIn(room.id)) g.lineStyle(2, C.reach, 0.8).strokeCircle(def.pos.x, def.pos.y, KIND_RULES[def.kind].reach);
-    for (const s of room.spots ?? []) g.lineStyle(1, C.reach, 0.35).strokeCircle(s.x, s.y, PICKUP_CLIENT_RADIUS);
+    for (const p of room.perches ?? []) {
+      g.lineStyle(1, C.perch, 0.35).strokePoints(p.area, true);
+      g.lineStyle(2, C.perch, 0.95).strokePoints(p.area.map((v) => ({ x: v.x, y: v.y - p.top })), true);
+    }
+    // Things up on a perch (OP-084) have their reach drawn up there, where an owl on that perch is drawn.
+    for (const def of interactablesIn(room.id)) g.lineStyle(2, C.reach, 0.8).strokeCircle(def.pos.x, def.pos.y - (def.top ?? 0), KIND_RULES[def.kind].reach);
+    for (const s of room.spots ?? []) g.lineStyle(1, C.reach, 0.35).strokeCircle(s.x, s.y - (s.top ?? 0), PICKUP_CLIENT_RADIUS);
     if (room.id === LANTERN_ROOM) {
       this.rect(LANTERN_FLOOR, C.spot);
       for (const l of LANTERNS) g.lineStyle(1, C.reach, 0.6).lineBetween(l.pos.x - LANTERN_REACH_X, LANTERN_FLOOR.y, l.pos.x + LANTERN_REACH_X, LANTERN_FLOOR.y);

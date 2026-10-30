@@ -3,12 +3,13 @@ import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToI
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, loadFlightArt, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
-import { AirTrack, WING_TURN, shadowFade, wingTurn, type WingBeat } from './airTrack';
+import { AirTrack, LANDING, WING_TURN, landingHardness, landingSquash, shadowFade, wingTurn, type WingBeat } from './airTrack';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { EYE_SPREAD, FEET, solidTop, wornAt } from './fit';
 import type { OwlFit } from './fitOverlay';
 import { ensureVariantTexture, owlAnchors } from './items';
 import { Pet } from './Pet';
+import { symbolTexture } from './symbols';
 
 export { OWL_H, OWL_W };
 /** The 200 x 240 layer canvas is drawn at this scale in 1600-wide rooms. */
@@ -134,6 +135,15 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private held: Held | null = null;
   /** How high the owl is drawn above its feet right now (owl canvas units). */
   private lift = 0;
+  /** What the owl comes down on where it is (OP-084, perches.ts groundAt): the scene's, the floor until it says. */
+  groundUnder: (pos: Vec2, z: number) => number = () => 0;
+  /** Whether the visitor asked for calm motion: the scene's (no landing dust then). */
+  calm: () => boolean = () => false;
+  /** Its last landing (OP-084): when (ms), and how hard (landingHardness); and how fast it was last falling in the air. */
+  private landedAt = Number.NEGATIVE_INFINITY;
+  private landedHard = 0;
+  private falling = 0;
+  private wasFlying = false;
   /** The wings (OP-084): behind the body, a side for each shoulder; folded away on the ground. */
   private readonly wings: Phaser.GameObjects.Container;
   private readonly wingSides: ReadonlyArray<{ side: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image; accent: Phaser.GameObjects.Image; dir: 1 | -1 }>;
@@ -589,6 +599,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     const air = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
     this.air = air;
     const flying = air.s !== GROUNDED;
+    // A landing (OP-084): how hard the owl came down decides its squash, and a hard one its dust.
+    if (flying) this.falling = Math.max(0, -air.vz);
+    else if (this.wasFlying) this.land(now, air.z);
+    this.wasFlying = flying;
 
     // Walk cycle: a gentle bob and squash while moving (on the ground: in the air the feet are off it).
     if (this.walk && !flying) {
@@ -609,7 +623,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
     // Flight: the drawing rises and falls; the wings open behind the body, beating for a jump or a
     // flap, spread in a glide (the owl leaning into it) and raised a little in a fall, and fold away
-    // on landing; the shadow stays on the floor, smaller and fainter.
+    // on landing; the shadow stays on what is under the owl (the floor, or a perch), smaller and fainter.
     this.lift = air.z / (OWL_SCALE * this.size);
     const dt = this.drawnAt ? Math.min(0.1, Math.max(0, now - this.drawnAt) / 1000) : 0;
     this.drawnAt = now;
@@ -627,10 +641,13 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.wingAt = wingPose.beating ? wingPose.turn : this.wingAt + (wingPose.turn - this.wingAt) * Math.min(1, dt * WING.ease);
       for (const w of this.wingSides) w.side.rotation = this.wingAt * w.dir;
     }
-    this.art.setScale(this.dir * this.drawnFacing * sx, sy);
+    const squash = landingSquash(now - this.landedAt, this.landedHard);
+    this.art.setScale(this.dir * this.drawnFacing * sx * squash.sx, sy * squash.sy);
     this.art.y = y - this.lift;
     this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : 0;
-    const up = shadowFade(air.z);
+    const ground = this.groundUnder(this.pos, air.z);
+    this.shadow.y = -ground / (OWL_SCALE * this.size);
+    const up = shadowFade(air.z - ground);
     this.shadow.setScale(shadow * (1 - up * 0.45), shadow * (1 - up * 0.45));
     this.shadow.setAlpha(1 - up * 0.5);
 
@@ -662,6 +679,28 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.fx?.tick(now);
     this.pet?.tick(now, this.pos.x, this.pos.y, this.dir, this.alpha);
     return finished;
+  }
+
+  /** Down on the floor or a perch `z` above it: the squash starts, and a hard landing kicks up dust round its feet. */
+  private land(now: number, z: number): void {
+    this.landedAt = now;
+    this.landedHard = landingHardness(this.falling);
+    this.falling = 0;
+    if (this.landedHard < LANDING.dust || this.calm() || !this.scene) return;
+    const dust = this.scene.add
+      .particles(this.x, this.y - z, symbolTexture(this.scene, 'puff'), {
+        emitting: false,
+        speed: { min: 30, max: 90 * this.landedHard },
+        angle: { min: 160, max: 380 },
+        scale: { start: 0.35, end: 1.1 },
+        alpha: { start: 0.55, end: 0 },
+        lifespan: { min: 350, max: 600 },
+        tint: [0xe9e4da, 0xd8d2c8],
+        emitZone: { type: 'random', source: new Phaser.Geom.Ellipse(0, 0, 70, 10) } as Phaser.Types.GameObjects.Particles.EmitZoneData,
+      })
+      .setDepth(this.depth + 1);
+    dust.explode(Math.round(4 + 6 * this.landedHard));
+    this.scene.time.delayedCall(800, () => dust.destroy());
   }
 
   override destroy(fromScene?: boolean): void {
