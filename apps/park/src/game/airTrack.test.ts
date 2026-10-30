@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AIRBORNE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, ON_GROUND, carryOn, newFlier, stepFlier, type Air } from '@owl-park/shared';
-import { AirTrack, FLAP_BEATS, FLAP_MS, SHADOW_FULL_Z, WING_TURN, shadowFade, wingTurn } from './airTrack';
+import { AIRBORNE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, JUMP_IMPULSE, MAX_FALL, ON_GROUND, carryOn, newFlier, stepFlier, type Air } from '@owl-park/shared';
+import { AirTrack, FLAP_BEATS, FLAP_MS, LANDING, SHADOW_FULL_Z, WING_TURN, landingHardness, landingSquash, shadowFade, wingTurn } from './airTrack';
 
 /** One step into a jump, as the jumping page tells it. */
 const up = stepFlier(newFlier(), { pressed: true, held: true }).air;
@@ -112,5 +112,25 @@ describe('an owl’s flight as a page draws it (OP-084)', () => {
     expect(shadowFade(SHADOW_FULL_Z * 3)).toBe(1);
     expect(shadowFade(-4)).toBe(0);
     expect(FLIGHT_STEP_MS).toBeGreaterThan(0);
+  });
+
+  it('squashes a landing by how hard it was, springing back by LANDING.ms: a jump kicks up dust, a glide touches down softly', () => {
+    // A jump comes down as fast as it went up; a glide at its sink; the fastest fall is the cap.
+    const jump = landingHardness(JUMP_IMPULSE);
+    const glide = landingHardness(GLIDE_SINK);
+    expect(jump).toBeGreaterThanOrEqual(LANDING.dust);
+    expect(glide).toBeLessThan(0.1);
+    expect(landingHardness(MAX_FALL * 2)).toBe(1);
+    expect(landingHardness(-50)).toBe(0);
+    // At the landing: wider and shorter, the most after the hardest fall; eased back to the owl's own shape.
+    const hard = landingSquash(0, 1);
+    expect(hard.sy).toBeCloseTo(1 - LANDING.squash);
+    expect(hard.sx).toBeGreaterThan(1);
+    expect(landingSquash(0, glide).sy).toBeGreaterThan(0.98);
+    const half = landingSquash(LANDING.ms / 2, 1);
+    expect(half.sy).toBeGreaterThan(hard.sy);
+    expect(half.sy).toBeLessThan(1);
+    for (const since of [LANDING.ms, LANDING.ms + 1, -1, Number.NaN]) expect(landingSquash(since, 1)).toEqual({ sx: 1, sy: 1 });
+    expect(landingSquash(10, 0)).toEqual({ sx: 1, sy: 1 });
   });
 });

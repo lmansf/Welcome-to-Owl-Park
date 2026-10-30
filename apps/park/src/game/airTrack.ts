@@ -7,7 +7,7 @@
  * Carried on, a flight comes down on the floor; a landing on a perch is told (its page knows what was
  * under the owl), and the owl stands on it until the next state.
  */
-import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, JUMP_CUT_SPEED, ON_GROUND, fall, type Air } from '@owl-park/shared';
+import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, JUMP_CUT_SPEED, MAX_FALL, ON_GROUND, fall, type Air } from '@owl-park/shared';
 
 /** How long the wings beat for a jump or a flap, and how many beats that is. */
 export const FLAP_MS = 420;
@@ -109,4 +109,23 @@ export function wingTurn(air: Air, sinceFlapMs: number): { turn: number; beating
 /** How much of its size and darkness the shadow on the floor gives up at a height: 0 on the floor, 1 from SHADOW_FULL_Z up. */
 export function shadowFade(z: number): number {
   return Math.min(1, Math.max(0, z) / SHADOW_FULL_Z);
+}
+
+/**
+ * A landing, drawn from the owl's own art (OP-084: the landing frame): it squashes as its feet take
+ * the fall and springs back over `ms`, at most `squash` shorter after the fastest fall, and a landing
+ * at least `dust` hard kicks up a little dust (not in calm motion).
+ */
+export const LANDING = { ms: 240, squash: 0.18, dust: 0.45 } as const;
+
+/** How hard a landing is from the speed the owl came down at (px/s): about 0 for a glide's touch-down, 1 at the fastest fall. */
+export function landingHardness(fallSpeed: number): number {
+  return Math.min(1, Math.max(0, fallSpeed) / MAX_FALL);
+}
+
+/** The squash `since` ms after a landing `hard` hard (landingHardness): wider and shorter at once, easing back to 1 by LANDING.ms. */
+export function landingSquash(since: number, hard: number): { sx: number; sy: number } {
+  if (!(since >= 0 && since < LANDING.ms) || hard <= 0) return { sx: 1, sy: 1 };
+  const k = (1 - since / LANDING.ms) ** 2 * Math.min(1, hard);
+  return { sx: 1 + LANDING.squash * 0.6 * k, sy: 1 - LANDING.squash * k };
 }

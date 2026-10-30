@@ -569,6 +569,7 @@ export class RoomScene extends Phaser.Scene {
     const spawn = arrivalPoint(room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
     this.me.groundUnder = this.groundUnder;
+    this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
     if (this.cfg.pos && this.transport.kind === 'edge') {
       // Asked for once a tab; every room after shows it at once.
@@ -835,6 +836,7 @@ export class RoomScene extends Phaser.Scene {
     if (!owl) {
       owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio));
       owl.groundUnder = this.groundUnder;
+      owl.calm = () => this.calm();
       owl.setAlpha(0);
       this.tweens.add({ targets: owl, alpha: 1, duration: 400 });
       this.peers.set(s.id, owl);
