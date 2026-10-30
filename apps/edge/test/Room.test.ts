@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, isWalkable, nestDoorIndex, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
 
@@ -312,6 +312,26 @@ describe('Room', () => {
     room.join(a, 'a', hello({ pos: { x: 1400, y: 850 } }));
     const p = a.last('welcome')!.you.pos;
     expect(Math.hypot(p.x - 800, p.y - 700)).toBeLessThanOrEqual(LIMITS.scatterDefault * 1.5);
+  });
+
+  it('lets a stranger in near the spawn where its copy can walk straight to where its page has it (OP-138)', () => {
+    // A page that walked off across the hub before it joined: the room will not have it there, and
+    // from some spots near the spawn the straight walk east meets the pillar beside the glass arch.
+    const hubDef = ROOMS['hub']!;
+    const spawn = hubDef.spawns['default']!;
+    const there = { x: 3400, y: 780 };
+    for (let s = 1; s <= 200; s++) {
+      let seed = s;
+      const random = () => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+      };
+      const a = new FakePeer();
+      new Room(hubDef, { now: () => now, random, cap: 50 }).join(a, 'a', hello({ pos: there }));
+      const pos = a.last('welcome')!.you.pos;
+      expect(Math.hypot(pos.x - spawn.x, pos.y - spawn.y)).toBeLessThanOrEqual(LIMITS.scatterDefault * 1.5);
+      expect(distance(resolveTarget(pos, there, hubDef.walkable), there)).toBeLessThan(3);
+    }
   });
 
   it('restores visitors without sending frames', () => {

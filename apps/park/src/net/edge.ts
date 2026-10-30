@@ -826,7 +826,7 @@ export class EdgeTransport implements ParkTransport {
         const hello: ClientFrame = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: current.look };
         if (spawn) hello.spawn = spawn;
         if (via) hello.via = via;
-        const pos = currentPos();
+        const pos = handlers.here?.() ?? currentPos();
         hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));
         if (heartbeat) clearInterval(heartbeat);
