@@ -731,6 +731,36 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
+  test("a hostile note reaches the keepers' page as plain words: no markup, no script (OP-143)", async ({ browser }) => {
+    const a = await visitor(browser);
+    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now()})`;
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
+    await a.locator('[data-screen="feedback"]').click();
+    const sheet = a.getByRole('dialog', { name: 'Feedback' });
+    await sheet.getByRole('button', { name: 'Bug' }).click();
+    await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
+    await sheet.getByRole('button', { name: 'Send' }).click();
+    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+
+    const keeper = await browser.newPage();
+    const alerts: string[] = [];
+    keeper.on('dialog', (d) => {
+      alerts.push(d.message());
+      void d.dismiss();
+    });
+    await keeper.goto('/admin/feedback');
+    await keeper.getByRole('textbox', { name: 'Admin key' }).fill(E2E_ADMIN_KEY);
+    await keeper.getByRole('button', { name: 'Open' }).click();
+    const note = keeper.getByRole('listitem').filter({ hasText: words });
+    await expect(note).toBeVisible();
+    await expect(note.locator('.text')).toHaveText(words);
+    await expect(keeper.locator('#list img')).toHaveCount(0);
+    expect(alerts).toEqual([]);
+    await keeper.close();
+    await a.context().close();
+  });
+
   test('closing the tab removes the owl for everyone else', async ({ browser }) => {
     const a = await visitor(browser);
     const b = await visitor(browser);
