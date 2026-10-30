@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { openPark, settleCamera, state, tapRoomPoint, toScreen, walkToDoor, type ParkState } from './helpers';
 
 /** The nest this page's owl is in, once the nest has said how it stands. */

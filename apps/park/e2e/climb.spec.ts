@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { autoClimbTo, climbRun, climbState, openClimb, startClimb, tapKey, toPortal } from './climbPlay';
 import { E2E_ADMIN_KEY, openPark, state } from './helpers';
 

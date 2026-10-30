@@ -1,4 +1,5 @@
-import { devices, expect, test, type Browser, type Page } from '@playwright/test';
+import { devices, type Browser, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
 import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
