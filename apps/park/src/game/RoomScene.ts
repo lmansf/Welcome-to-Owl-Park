@@ -781,7 +781,9 @@ export class RoomScene extends Phaser.Scene {
       },
     };
     const self = { ...this.snapshot(at, null), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}) } as PlayerState;
-    const conn = this.transport.join(this.room.id, self, heldBack(handlers, () => (this.heard === heard ? heard : null)));
+    // Where the own owl is as the room's socket opens (OP-138): a question, not news, so never held back; until the scene has its owl, where it comes in.
+    const here = (): Vec2 | null => (!live() ? null : this.built ? { ...this.me.pos } : { ...at });
+    const conn = this.transport.join(this.room.id, self, { ...heldBack(handlers, () => (this.heard === heard ? heard : null)), here });
     return { conn, pushes };
   }
 

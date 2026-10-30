@@ -15,6 +15,12 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onStatus(status: ConnectionStatus): void;
   /** Authoritative transports: where the room let the own owl in (its welcome, on joining and on every reconnect). */
   onSelf?(pos: Vec2): void;
+  /**
+   * Authoritative transports: where the own owl is now, for the hello that asks the room to let it in
+   * (OP-138). The owl may have walked since the page asked to join (a pass that came late), and the
+   * room is told where it is, not where it came in; null when the scene has gone.
+   */
+  here?(): Vec2 | null;
   /** The server corrected one of our walks (clamped, or started from a different point). */
   onSelfWalk?(walk: Walk): void;
   /** The room echoed one of our walks, as it walks it (the position overlay shows them, OP-138). */
