@@ -118,6 +118,13 @@ const CSS = `
 #hud .menu-shell .mmap .pin.here{border-width:3px;border-color:var(--m-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--m-accent) 35%,transparent)}
 #hud .menu-shell .mmap .pin .you{font-size:var(--m-body);font-weight:800;color:var(--m-text)}
 #hud .menu-shell .mmap .pin .you::before{content:'★ ';color:var(--m-accent)}
+#hud .menu-shell .mmap button.pin{cursor:pointer;min-height:var(--m-target);touch-action:manipulation}
+#hud .menu-shell .mmap button.pin.unlit{font-weight:500;color:var(--m-muted);border-style:dotted}
+#hud .menu-shell .mmap button.pin.picked{outline:3px solid var(--m-accent);outline-offset:2px}
+#hud .menu-shell .mmap .pin .spark{position:absolute;top:-10px;right:-8px;font-style:normal;font-size:20px;line-height:1;color:var(--m-accent);pointer-events:none;animation:msparkle 1.2s ease-out 2}
+@keyframes msparkle{0%{transform:scale(.3) rotate(0);opacity:0}45%{transform:scale(1.35) rotate(45deg);opacity:1}100%{transform:scale(1) rotate(90deg);opacity:1}}
+#hud .menu-shell .mtravel:empty{display:none}
+#hud .menu-shell .mtravel .mcard{border:2px solid var(--m-accent)}
 #hud .menu-shell .quests{display:flex;flex-direction:column;gap:10px}
 #hud .menu-shell .quests .qsum{margin:0;color:var(--m-muted)}
 #hud .menu-shell .quests nav.tabs{display:flex;gap:6px;flex-wrap:wrap}
@@ -153,7 +160,7 @@ const CSS = `
 #hud .menu-shell .settings button:not(.switch){min-height:var(--m-target);padding:8px 16px;border-radius:999px;background:var(--m-accent);color:var(--m-on-accent);border:0;font-weight:800}
 #hud .menu-layer.closing .menu-scrim{animation:menu-fade-out var(--m-motion) var(--m-easing) forwards}
 #hud .menu-layer.closing .menu-shell{animation:menu-drop var(--m-motion) var(--m-easing) forwards}
-#hud .menu-layer.calm .menu-scrim,#hud .menu-layer.calm .menu-shell{animation:none !important}
+#hud .menu-layer.calm .menu-scrim,#hud .menu-layer.calm .menu-shell,#hud .menu-layer.calm .mmap .pin .spark{animation:none !important}
 @keyframes menu-fade{from{opacity:0}to{opacity:1}}
 @keyframes menu-fade-out{from{opacity:1}to{opacity:0}}
 @keyframes menu-pop{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
@@ -167,7 +174,7 @@ const CSS = `
 }
 @keyframes menu-rise{from{transform:translateY(100%)}to{transform:none}}
 @keyframes menu-sink{from{transform:none}to{transform:translateY(100%)}}
-@media (prefers-reduced-motion:reduce){#hud .menu-layer .menu-scrim,#hud .menu-shell{animation:none !important}}
+@media (prefers-reduced-motion:reduce){#hud .menu-layer .menu-scrim,#hud .menu-shell,#hud .menu-shell .mmap .pin .spark{animation:none !important}}
 `;
 
 let styled = false;

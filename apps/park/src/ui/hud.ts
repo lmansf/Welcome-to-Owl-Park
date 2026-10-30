@@ -1,4 +1,4 @@
-import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -17,7 +17,7 @@ import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
 import { createMenuShell } from './menuShell';
-import { mapPlaceOf, renderCollection, renderMap, renderNest, renderSettings } from './menuTabs';
+import { mapPlaceOf, newlyLit, renderCollection, renderMap, renderNest, renderSettings, type MapTravel } from './menuTabs';
 import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuilder';
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createSayWheel } from './sayWheel';
@@ -42,8 +42,8 @@ export interface CollectionActions {
 export interface WayOutActions {
   /** "Leave the park": to the lobby, outside the gate (the card asked first). */
   leave(): void;
-  /** "Go home": straight to the owl's own nest. */
-  home(): void;
+  /** Travel from the map (OP-130), its button held: null when the owl is on its way, otherwise why not. */
+  travel(place: string): TravelRefusal | null;
   /** "Home screen" (OP-065): out of the room as through a door, to the home screen. */
   title(): void;
 }
@@ -82,12 +82,14 @@ export interface Hud {
   attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
   /** The owl's account (OP-139): its card in the Menu's Nest and Settings tabs, and the screens that protect and bring back an owl. */
   attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
-  /** The Menu's ways out: what "Leave the park" and "Go home" do. */
+  /** The Menu's ways out: what "Leave the park" and travel from the map do. */
   attachWayOut(actions: WayOutActions): void;
   /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
   attachTickets(load: () => Promise<WalletEntry[] | null>): void;
-  /** Which ways out the Menu offers where the owl is: leaving inside the park, going home outside its own nest. */
+  /** Which ways out the Menu offers where the owl is: leaving inside the park; `home` away from its own nest. */
   setWaysOut(ways: { leave: boolean; home: boolean }): void;
+  /** The map's places walked into and whether the owl is through the front gate (OP-130), as the room scene has them. */
+  setTravel(state: TravelState): void;
   /** Wire the quest tracker, the journal and NPC dialogues to the visitor's quests and today's tasks. */
   attachQuests(state: QuestState, actions: QuestActions, tasks: TaskState): void;
   /** Talking to an NPC owl: its quests, and the shop for the shopkeeper. */
@@ -95,8 +97,10 @@ export interface Hud {
   closeDialogue(): void;
   /** The NPC whose dialogue is open, if any. */
   dialogueNpc(): string | null;
-  /** M: open or close the Menu (closing the other screens). */
+  /** The Menu button: open or close the Menu (closing the other screens). */
   toggleMenu(): void;
+  /** M: open the Menu on its map (OP-130), or close it there. */
+  toggleMap(): void;
   /** The Emotes button: open or close the emote wheel. */
   toggleEmotes(): void;
   /** T: open or close the Say wheel. */
@@ -265,8 +269,8 @@ const CSS = `
  * (81.25 px in, 73.25 px up), so Jump is 8 px from each; Emotes and Say, 44 px, sit above the Menu
  * and Interact, 9 px clear of them. All see-through, like the stick.
  * TODO-DOCS (OP-114, OP-084): docs/PLAYBOOK.md's controls (OP-099): Interact, the Menu and Jump (tap,
- * tap again in the air, hold to glide; the space bar on a keyboard), Go home held in the Menu's Nest
- * tab, the '!' for Interact; docs/ACTIVITIES.md,
+ * tap again in the air, hold to glide; the space bar on a keyboard), travel held on the Menu's map
+ * (OP-130), the '!' for Interact; docs/ACTIVITIES.md,
  * talking to characters: the '!' over the one the owl can talk to now (game/Npc.ts), at the reach
  * Interact talks from.
  */
@@ -338,12 +342,15 @@ const INTERACT_ICON =
 /** A keyboard's click on the pad's Jump is a tap this long: a jump, not a glide. */
 const KEY_TAP_MS = 150;
 
+/** How long a place newly lit on the map sparkles, however often the map is drawn again meanwhile (OP-130). */
+const SPARKLE_MS = 4000;
+
 /** The pad's Jump button: up from a little arc. */
 const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 /** The Menu (on its Quests tab, for `quests`), the screens it leads to, and the wheels with buttons of their own. */
-type ScreenId = 'menu' | 'quests' | 'map' | 'emotes' | 'say' | 'owl' | 'settings' | 'feedback' | 'home' | 'leave' | 'title';
+type ScreenId = 'menu' | 'quests' | 'map' | 'emotes' | 'say' | 'owl' | 'settings' | 'feedback' | 'leave' | 'title';
 
 export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: SettingsStore): Hud {
   const style = document.createElement('style');
@@ -418,6 +425,38 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let collectionActions: CollectionActions | null = null;
   let wayOut: WayOutActions | null = null;
   let waysOut = { leave: false, home: false };
+  /** Travel from the map (OP-130): what the room scene last said, the place whose card is open, and when places lit up. */
+  let travel: TravelState | null = null;
+  let picked: string | null = null;
+  const sparkles = new Map<string, number>();
+  let storage: Storage | null = null;
+  try {
+    storage = localStorage;
+  } catch {
+    // A browser that keeps nothing: no place sparkles.
+  }
+  /** The Map tab's travel, with the places lit since this device last showed them sparkling for a few seconds. */
+  const mapTravel = (): MapTravel | null => {
+    if (!travel || !wayOut) return null;
+    const now = Date.now();
+    for (const place of newlyLit(storage, travel.places)) sparkles.set(place, now);
+    const fresh = [...sparkles].filter(([, at]) => now - at < SPARKLE_MS).map(([place]) => place);
+    return {
+      ...travel,
+      fresh,
+      picked,
+      pick: (place) => (picked = place),
+      go: (place) => {
+        const why = wayOut ? wayOut.travel(place) : 'busy';
+        // On its way: the Menu closes, so the owl is seen going, and the map opens next time with no card.
+        if (why === null) {
+          picked = null;
+          closeScreens();
+        }
+        return why;
+      },
+    };
+  };
   /** The tickets on this device for the Settings tab, read again at most every half minute. */
   let ticketsLoad: (() => Promise<WalletEntry[] | null>) | null = null;
   let tickets: { at: number; list: Promise<WalletEntry[] | null> } | null = null;
@@ -492,9 +531,18 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         },
       },
       { id: 'collection', label: 'Collection', render: (panel) => renderCollection(panel, collectionState) },
-      { id: 'nest', label: 'Nest', render: (panel) => renderNest(panel, { canGoHome: waysOut.home, account: accountCards() }, () => openScreen('home')) },
+      {
+        id: 'nest',
+        label: 'Nest',
+        render: (panel) =>
+          renderNest(panel, { away: waysOut.home, account: accountCards() }, () => {
+            // Travel home is on the map now (OP-130): its card is open there.
+            picked = 'nest';
+            menu.show('map');
+          }),
+      },
       // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
-      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms) },
+      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms, mapTravel()) },
       {
         id: 'settings',
         label: 'Settings',
@@ -593,9 +641,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     else if (id === 'settings') settingsScreen.open(opener);
     else if (id === 'feedback') feedback?.open(fromMenu, opener);
     else if (id === 'leave') leaveCard.open(opener);
-    // Going home asks nothing: the owl's nest is a tap away from anywhere, and the park a tap back.
-    else if (id === 'home') wayOut?.home();
-    // Nor does the home screen: Play is a tap back in, to the owl's nest.
+    // The home screen asks nothing: Play is a tap back in, to the owl's nest.
     else if (id === 'title') wayOut?.title();
   }
   const toggle = (id: ScreenId, isOpen: () => boolean) => {
@@ -738,6 +784,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       waysOut = { ...ways };
       menu.refresh();
     },
+    setTravel(state) {
+      const same = travel !== null && travel.gate === state.gate && travel.places.join() === state.places.join();
+      travel = { places: [...state.places], gate: state.gate };
+      if (!same && menu.isOpen() && menu.tab() === 'map') menu.refresh();
+    },
     attachQuests(state, actions, tasks) {
       questState = state;
       taskState = tasks;
@@ -754,6 +805,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     dialogueNpc: () => questUi?.dialogueNpc() ?? null,
     toggleMenu: () => toggle('menu', () => menu.isOpen()),
+    toggleMap: () => toggle('map', () => menu.isOpen() && menu.tab() === 'map'),
     toggleEmotes: () => toggle('emotes', () => !!wheel?.isOpen()),
     toggleSay: () => toggle('say', () => sayWheel.isOpen()),
     onSay(cb) {

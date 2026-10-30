@@ -1,6 +1,6 @@
 import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -299,7 +299,7 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
-  test('leaving the park keeps a ticket running, the turnstiles let the owl back in, and Go home finds its nest', async ({ browser, request }) => {
+  test('leaving the park keeps a ticket running, the turnstiles let the owl back in, and travel home finds its nest', async ({ browser, request }) => {
     const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
     expect(issued.status()).toBe(200);
     const { link } = (await issued.json()) as { link: string };
@@ -328,11 +328,8 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
     expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ status: 'active', firstScan: started.firstScan });
 
-    // Go home (the Menu's Nest): straight to the owl's own nest, which the room server makes on first sight.
-    await a.locator('[data-menu-btn]').click();
-    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="nest"]').click();
-    // Go home acts at once on a key; a pointer holds it (pad.spec.ts).
-    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').press('Enter');
+    // Travel home (the Menu's map): straight to the owl's own nest, which the room server makes on first sight.
+    await travelTo(a, 'nest');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
     await expect.poll(async () => (await state(a)).nest?.mine, { timeout: 10_000 }).toBe(true);
     await a.context().close();

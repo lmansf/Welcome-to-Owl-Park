@@ -34,6 +34,7 @@ import {
   getQuest,
   isDeviceId,
   isEmoteId,
+  insidePark,
   isNestRoom,
   isTimeZone,
   lanternFeathers,
@@ -495,13 +496,16 @@ export class RoomObject extends DurableObject<Env> {
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
         }
-        await this.join(ws, att, frame);
-        return;
+        if (!(frame.via === 'travel' && insidePark(att.room) && att.cid)) {
+          await this.join(ws, att, frame);
+          return;
+        }
       }
-      // A nest asks the collections object whose it is and how it stands before letting anyone in.
+      // A nest asks the collections object whose it is and how it stands before letting anyone in; a
+      // travel into the park (OP-130) whether the owl has walked through the front gate.
       const room = att.room;
       const sid = att.sid;
-      const done = this.helloNest(ws, att, frame)
+      const done = (isNestRoom(att.room) ? this.helloNest(ws, att, frame) : this.helloTravel(ws, att, frame))
         .catch(() => closeSocket(ws, 1011, 'try again'))
         .finally(() => {
           this.admitting.delete(sid);
@@ -588,7 +592,8 @@ export class RoomObject extends DurableObject<Env> {
       ws.serializeAttachment(kept);
     }
     this.emitCounts();
-    this.statsSeen(att, look, true);
+    this.statsSeen(att, look, true, hello.via === 'travel');
+    this.travelNote(att, hello.spawn);
     this.accountLook(att, look);
     this.checkDevice(ws, att);
     if (recheck) void this.recheckLook(att, hello.look);
@@ -600,6 +605,37 @@ export class RoomObject extends DurableObject<Env> {
     // Arriving in a room counts for quests that ask to visit it (none asks for a nest).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
+  }
+
+  // ---------- travel from the map (OP-130) ----------
+
+  /**
+   * A travel into the park: let in only once the owl has walked through the front gate since it was
+   * last outside (the collections object keeps that); turned away with the reason otherwise, and the
+   * page offers the gate. Should the collections object not answer, the owl is let in: the gate is
+   * the park's welcome, not its lock.
+   */
+  private async helloTravel(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
+    const through = await this.collections()
+      .travelThroughGate(att.cid!)
+      .catch(() => true);
+    if (ws.readyState !== WebSocket.READY_STATE_OPEN) return;
+    if (!through) {
+      this.send(ws, { t: 'closed', room: att.room, why: 'gate' });
+      return closeSocket(ws, CLOSE.NOT_THROUGH_GATE, 'not through the gate');
+    }
+    await this.join(ws, att, hello);
+  }
+
+  /** An owl joined a room: the collections object keeps the places it walks into and whether it is through the gate. */
+  private travelNote(att: Attachment, spawn: string | undefined): void {
+    const cid = att.cid;
+    if (!cid) return;
+    this.ctx.waitUntil(
+      this.collections()
+        .travelEntered(cid, att.room, spawn ?? null)
+        .catch(() => undefined),
+    );
   }
 
   // ---------- the nests ----------
@@ -1048,10 +1084,10 @@ export class RoomObject extends DurableObject<Env> {
    * An owl in a room, for the player stats (OP-111): its visit goes on, and its kind and colour as it
    * shows them. At its hello (`entered`) its time in the room begins (OP-113), in its own nest or not.
    */
-  private statsSeen(att: Attachment, look: OwlLook, entered = false): void {
+  private statsSeen(att: Attachment, look: OwlLook, entered = false, travel = false): void {
     const s = sightingOf(att);
     if (!this.statsOn || !s) return;
-    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}) } : s;
+    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}), ...(travel ? { travel: true } : {}) } : s;
     this.ctx.waitUntil(this.collections().seen(sighting, { body: look.body, ...(look.species ? { species: look.species } : {}) }).catch(() => undefined));
   }
 

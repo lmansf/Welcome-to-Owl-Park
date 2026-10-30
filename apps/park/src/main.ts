@@ -11,7 +11,7 @@ import { ClimbScene } from './game/ClimbScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
-import { NEST_FADE_MS, NEST_SPAWN, RoomScene, type RoomStart } from './game/RoomScene';
+import { NEST_SPAWN, RoomScene, type RoomStart } from './game/RoomScene';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
@@ -126,11 +126,11 @@ game.registry.set('away', away);
 game.registry.set('idle', idle);
 game.registry.set('startRoom', { room: cfg.room, spawn: cfg.spawn } satisfies RoomStart);
 // WASD and the arrow keys walk (the room scene reads them every frame), and so does the thumbstick on
-// touch screens; E interacts (the pad's Interact on touch screens), M opens the Menu, T the Say wheel
-// (1 to 8 play an emote at once), Q goes to the mirror in the owl's nest, where Your owl is (OP-077),
-// and J the quests. The space bar (the pad's Jump) jumps, flaps once more in the air, and held on the
-// way down glides (OP-084). Go home, held in the Menu, goes home. While the Menu or
-// one of its screens is open, the owl stays put. On the home screen only Q (as Play does, once there
+// touch screens; E interacts (the pad's Interact on touch screens), M opens the Menu on its map (OP-130),
+// T the Say wheel (1 to 8 play an emote at once), Q goes to the mirror in the owl's nest, where Your owl
+// is (OP-077), and J the quests. The space bar (the pad's Jump) jumps, flaps once more in the air, and
+// held on the way down glides (OP-084). A place on the map, its button held, travels there. While the
+// Menu or one of its screens is open, the owl stays put. On the home screen only Q (as Play does, once there
 // is an owl: into the nest, before its mirror) and Escape do anything; Enter plays too (ui/home.ts).
 const interact = () => {
   if (!atHome && !hud.isBlocking()) void roomScene()?.interact();
@@ -147,7 +147,7 @@ const keyboard = attachKeyboard(window, {
   jump,
   jumpEnd,
   menu: () => {
-    if (!atHome) hud.toggleMenu();
+    if (!atHome) hud.toggleMap();
   },
   say: () => {
     if (!atHome) hud.toggleSay();
@@ -271,11 +271,15 @@ hud.attachCollection(collection, {
   wear: () => roomScene()?.wear() ?? lookNow().wear,
   look: lookNow,
 });
-// The Menu's ways out (C43): out of the park to the lobby, home to the owl's own nest, and back to the home screen.
-// Home lands the owl where Play does (OP-105): before the mirror in its own nest, after a slower fade.
+// The Menu's ways out (C43): out of the park to the lobby, travel from the map (OP-130; home lands the
+// owl where Play does, OP-105: before the mirror in its own nest), and back to the home screen.
 hud.attachWayOut({
   leave: () => void roomScene()?.leavePark(),
-  home: () => void roomScene()?.goHome(NEST_SPAWN, NEST_FADE_MS),
+  // Null is the owl on its way; with no room scene (the home screen) there is nowhere to travel from.
+  travel: (place) => {
+    const room = roomScene();
+    return room ? room.travel(place) : 'busy';
+  },
   title: () => void roomScene()?.toHomeScreen(),
 });
 

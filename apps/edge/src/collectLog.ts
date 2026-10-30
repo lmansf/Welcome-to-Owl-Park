@@ -329,10 +329,11 @@ async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
 
 /**
  * How an owl came into a room (OP-113): walked in from another room of the same visit (a door, the
- * way out, the turnstile, Go home), spawned as the page began (Play's nest, or the lobby), came
- * straight in by the page's address, or came back into the same room after its line dropped.
+ * way out, the turnstile), spawned as the page began (Play's nest, or the lobby), came straight in by
+ * the page's address, came back into the same room after its line dropped, or travelled there by the
+ * Menu's map (OP-130, which also took the place of Go home).
  */
-export type EntrySource = 'walked' | 'spawn' | 'deep_link' | 'reconnect';
+export type EntrySource = 'walked' | 'spawn' | 'deep_link' | 'reconnect' | 'travel';
 
 /** A time in one room, as the outbox keeps it: sent with its visit once the visit is over. */
 export interface RealmVisitData {

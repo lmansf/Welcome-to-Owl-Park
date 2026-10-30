@@ -46,7 +46,7 @@ describe('leaving the park', () => {
   });
 
   it('says only Logan’s words', () => {
-    expect(Object.values(WAY_OUT_WORDS)).toEqual(['Leave the park', 'Go home', 'Leave the park? Your ticket keeps running.', 'Leave', 'Stay']);
+    expect(Object.values(WAY_OUT_WORDS)).toEqual(['Leave the park', 'Leave the park? Your ticket keeps running.', 'Leave', 'Stay']);
   });
 });
 

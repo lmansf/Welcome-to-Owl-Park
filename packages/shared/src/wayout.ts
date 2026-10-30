@@ -3,7 +3,8 @@
  * - The spot in the hub where owls arrive from the turnstiles is also the way back. Walking off the
  *   floor's bottom edge there puts the owl in the lobby, outside the gate.
  * - "Leave the park" in the Menu does the same from any room inside the park, after asking.
- * - "Go home" goes straight to the owl's own nest, from anywhere.
+ * - Travel home, on the Menu's map (OP-130; "Go home" in the Menu until then), goes straight to the
+ *   owl's own nest, from anywhere.
  * Leaving changes nothing on a ticket: a day ticket's hours keep running from its first scan, and
  * coming back in is the gate's quick scan (C35).
  */
@@ -19,7 +20,6 @@ export const WAY_OUT_DOOR = 'to-lobby';
 /** What a visitor reads about leaving (Logan's words, C43). */
 export const WAY_OUT_WORDS = {
   leave: 'Leave the park',
-  home: 'Go home',
   /** The card that asks before "Leave the park" takes the owl out. */
   ask: 'Leave the park? Your ticket keeps running.',
   yes: 'Leave',

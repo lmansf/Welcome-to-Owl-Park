@@ -197,13 +197,13 @@ test.describe('single visitor', () => {
     await expect(menu.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'true');
     await expect(menu.locator('.journal')).toBeVisible();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-menu.png` });
-    // Each tab draws its own panel: the collection by kind, the nest with the way home, the map with the owl on it.
+    // Each tab draws its own panel: the collection by kind, the nest with the way to the map, the map with the owl on it.
     await menu.locator('[data-tab="collection"]').click();
     await expect(menu.locator('[data-tab="collection"]')).toHaveAttribute('aria-selected', 'true');
     await expect(menu.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'false');
     await expect(menu.locator('[data-panel="collection"] [role="progressbar"]')).toHaveCount(5);
     await menu.locator('[data-tab="nest"]').click();
-    await expect(menu.locator('[data-screen="home"]')).toBeVisible();
+    await expect(menu.locator('[data-screen="map"]')).toBeVisible();
     await menu.locator('[data-tab="map"]').click();
     await expect(menu.locator('[data-place="hub"]')).toContainText('You are here');
     await expect(menu.locator('[data-place].here')).toHaveCount(1);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { dist, settleCamera, state, toScreen } from './helpers';
+import { dist, settleCamera, state, toScreen, travelTo } from './helpers';
 
 /**
  * The home screen (OP-065), on this device (local mode): a first visit logs in (the owl is made and
@@ -160,10 +160,7 @@ test.describe('the home screen (OP-065)', () => {
       await expect(welcome).toBeHidden();
     }
     // Home again, the welcome does not come back: it was this device's first time.
-    await page.locator('[data-menu-btn]').click();
-    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="nest"]').click();
-    // Go home acts at once on a key; a pointer holds it (pad.spec.ts).
-    await page.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="home"]').press('Enter');
+    await travelTo(page, 'nest');
     await inOwnNest(page);
     await expect.poll(async () => (await state(page)).walking).toBe(false);
     await expect(welcome).toBeHidden();

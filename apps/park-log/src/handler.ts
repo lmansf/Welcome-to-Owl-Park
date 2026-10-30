@@ -42,7 +42,7 @@ export const OWL_TYPES = ['great-horned', 'barn', 'burrowing', 'snowy', 'screech
 export const CHANGE_REASONS = ['first', 'chosen', 'quest', 'seasonal'] as const;
 /** A room's kind of place, and how an owl came into it (OP-113). */
 export const REALM_KINDS = ['realm', 'hub', 'nest'] as const;
-export const ENTRY_SOURCES = ['walked', 'spawn', 'deep_link', 'reconnect'] as const;
+export const ENTRY_SOURCES = ['walked', 'spawn', 'deep_link', 'reconnect', 'travel'] as const;
 
 /** A row of `game.collect_log` as the park sends it, after the check. */
 export interface LogRow {
