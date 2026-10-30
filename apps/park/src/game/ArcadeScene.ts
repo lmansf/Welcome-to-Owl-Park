@@ -6,6 +6,7 @@ import { BRANCH_W, FLAP_R, FLAP_X, GROUND_Y as FLAP_GROUND, type Branch, type Fl
 import { HOP_ROWS, rowY, type HopGame, type Item, type Lane } from '../arcade/hop';
 import { GROUND_Y as KNOCK_GROUND, PIECE_SIZE, SLING, drawnAt, shown, type KnockGame, type Piece, type PieceKind, type Stand } from '../arcade/knock';
 import { GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, KNOCK_PIECES, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, solidFit, standPieces } from '../arcade/paint';
+import type { WingBeat } from './airTrack';
 import type { PreviewRect } from './BuilderScene';
 import { Owl } from './Owl';
 
@@ -24,6 +25,21 @@ const WATER = 0x8af4ff;
 const NIGHT = 0x05060d;
 /** The owl is drawn at this share of its size in the rooms: the field is a small world. */
 const OWL_IN_FIELD = 0.5;
+
+/**
+ * Moon Flap's owl in flight (OP-135): a single stroke of its wings at each flap, a beat this often
+ * while it hovers before the first, and this long to tumble off a branch down to the ground.
+ *
+ * TODO-DOCS (OP-135): docs/ACTIVITIES.md's Moon Flap gains how the owl looks: in its own flight body
+ * with its wings out, as it flies in the park (OP-084, OP-136), a stroke at each flap, a tumble off a
+ * branch, and standing with its wings folded once the run is over.
+ */
+const FLAP_BEAT: WingBeat = { ms: 280, beats: 1 };
+const HOVER_EVERY_MS = 560;
+const TUMBLE_MS = 650;
+
+/** How Moon Flap's owl is drawn: hovering before the first flap, flying, tumbling off a branch, or down on the ground. */
+export type FlightPose = 'hover' | 'flying' | 'tumbling' | 'landed';
 
 /** Each game's painted field. */
 const FIELD_ART: Readonly<Record<ArcadeGame, string>> = { crossing: 'arcade-hop-bg', flight: 'arcade-flap-bg', sling: 'arcade-knock-bg' };
@@ -109,6 +125,11 @@ export class ArcadeScene extends Phaser.Scene {
   private stripsShown: Lane[] | null = null;
   /** Which way the hopping owl faces: the way of its last hop sideways. */
   private hopFacing: 1 | -1 = 1;
+  /** Moon Flap's owl (OP-135): the flaps beaten so far and when the last began (ms), its pose, and when and where its run ended. */
+  private flapsDrawn = 0;
+  private flapAt = Number.NEGATIVE_INFINITY;
+  private flightPose: FlightPose = 'hover';
+  private flightEnd: { at: number; y: number; tilt: number } | null = null;
   private branchTops: Pieces<Branch> | null = null;
   private branchFeet: Pieces<Branch> | null = null;
   private knockPieces: Pieces<Piece> | null = null;
@@ -175,6 +196,12 @@ export class ArcadeScene extends Phaser.Scene {
     this.owl = new Owl(this, 'arcade', playingLook(look), { x: 0, y: 0 }, 2);
     this.owl.setScale(this.owl.scaleX * OWL_IN_FIELD).setDepth(5);
     this.owl.showShadow(sim.game !== 'flight');
+    this.flapsDrawn = 0;
+    this.flapAt = Number.NEGATIVE_INFINITY;
+    this.flightPose = 'hover';
+    this.flightEnd = null;
+    // Moon Flap flies the owl from the start: its flight body asked for now, if the room has not already.
+    if (sim.game === 'flight') this.owl.readyForFlight();
     this.paint(sim.game);
   }
 
@@ -510,10 +537,39 @@ export class ArcadeScene extends Phaser.Scene {
     }
   }
 
-  /** The flying owl, leaning into its climb or its fall. */
+  /**
+   * The flying owl (OP-135), drawn as the park draws one in flight: its flight body with its wings out,
+   * a stroke of them at each flap and spread between, leaning into its climb or its fall; before the
+   * first flap it hovers, beating now and then. Down on the ground it stands, its wings folded; off a
+   * branch it tumbles to the ground first, turning over once with its wings raised.
+   */
   private placeFlapOwl(sim: FlapGame): void {
+    const owl = this.owl;
+    if (!owl) return;
+    const now = Date.now();
+    if (sim.flaps !== this.flapsDrawn) {
+      this.flapsDrawn = sim.flaps;
+      this.flapAt = now;
+    }
     const tilt = Math.max(-0.5, Math.min(0.7, sim.vy / 700));
-    this.placeOwl(FLAP_X, sim.y + FLAP_R + 6, tilt, 1);
+    if (!sim.over) {
+      this.flightPose = sim.flying ? 'flying' : 'hover';
+      owl.holdAloft({ flapAt: sim.flying ? this.flapAt : now - (now % HOVER_EVERY_MS), beat: FLAP_BEAT });
+      this.placeOwl(FLAP_X, sim.y + FLAP_R + 6, sim.flying ? tilt : 0, 1);
+      return;
+    }
+    const end = (this.flightEnd ??= { at: now, y: sim.y, tilt });
+    const t = sim.end === 'branch' ? Math.min(1, (now - end.at) / TUMBLE_MS) : 1;
+    if (t < 1) {
+      this.flightPose = 'tumbling';
+      owl.holdAloft({ flapAt: Number.NEGATIVE_INFINITY, tumbling: true });
+      const y = end.y + (FLAP_GROUND - FLAP_R - end.y) * t * t;
+      this.placeOwl(FLAP_X, y + FLAP_R + 6, end.tilt + 2 * Math.PI * t, 1);
+      return;
+    }
+    this.flightPose = 'landed';
+    owl.holdAloft(null);
+    this.placeOwl(FLAP_X, FLAP_GROUND + 6, 0, 1);
   }
 
   /** Talon Toss in neon, or over its painting just the band pulled back and the path it will fly; and the owl. */
@@ -593,5 +649,11 @@ export class ArcadeScene extends Phaser.Scene {
   /** The owl drawn at its size in the field (tests check it is the visitor's own). */
   owlLook(): OwlLook | null {
     return this.owl?.look ?? null;
+  }
+
+  /** Moon Flap's owl as drawn (tests, OP-135): its pose, its wings out or folded, the body layer it wears, the flaps it has beaten. */
+  flightDrawn(): { pose: FlightPose; wingsOut: boolean; body: string; flaps: number } | null {
+    const owl = this.owl;
+    return owl && this.sim?.game === 'flight' ? { pose: this.flightPose, wingsOut: owl.wingsOut, body: owl.wornKey, flaps: this.flapsDrawn } : null;
   }
 }

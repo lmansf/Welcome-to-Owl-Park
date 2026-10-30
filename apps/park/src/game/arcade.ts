@@ -367,10 +367,10 @@ export class Arcade {
     });
   }
 
-  /** The run as tests see it (the game itself, to play it by its rules), and whether it is drawn from its paintings. */
-  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; recorded: number; painted: boolean } | null {
+  /** The run as tests see it (the game itself, to play it by its rules), whether it is drawn from its paintings, and Moon Flap's owl as drawn. */
+  debug(): { game: ArcadeGame; seed: number; sim: ArcadeSim; sent: boolean; recorded: number; painted: boolean; flight: ReturnType<ArcadeScene['flightDrawn']> } | null {
     const view = this.host.scene.scene.get('arcade') as ArcadeScene | null;
-    return this.run ? { ...this.run, painted: view?.isPainted() ?? false } : null;
+    return this.run ? { ...this.run, painted: view?.isPainted() ?? false, flight: view?.flightDrawn() ?? null } : null;
   }
 
   /** The wall as it stands, for tests. */

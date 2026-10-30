@@ -10,6 +10,14 @@ import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, JUMP_CUT_SPEED, ON_GROUND,
 /** How long the wings beat for a jump or a flap, and how many beats that is. */
 export const FLAP_MS = 420;
 export const FLAP_BEATS = 2;
+
+/** A beat of the wings: how long it lasts (ms) and how many strokes it makes in that time. */
+export interface WingBeat {
+  ms: number;
+  beats: number;
+}
+const PARK_BEAT: WingBeat = { ms: FLAP_MS, beats: FLAP_BEATS };
+
 /**
  * The wing's turn about its root at the shoulder (radians; the painted wing is spread and a little
  * raised at 0, and + lowers the tip): up and down in a beat, spread in a glide, raised a little in a fall.
@@ -91,13 +99,14 @@ export class AirTrack {
 
 /**
  * How the wings are turned (WING_TURN) and whether they are beating: a jump or a flap beats them,
- * from up through down and back FLAP_BEATS times over FLAP_MS, the power in the down stroke; then
- * they hold spread in a glide or raised a little in a fall. Null on the ground: folded away.
+ * from up through down and back FLAP_BEATS times over FLAP_MS (or as `beat` says), the power in the
+ * down stroke; then they hold spread in a glide or raised a little in a fall. Null on the ground:
+ * folded away.
  */
-export function wingTurn(air: Air, sinceFlapMs: number): { turn: number; beating: boolean } | null {
+export function wingTurn(air: Air, sinceFlapMs: number, beat: WingBeat = PARK_BEAT): { turn: number; beating: boolean } | null {
   if (air.s === GROUNDED) return null;
-  if (sinceFlapMs >= 0 && sinceFlapMs < FLAP_MS) {
-    const swing = 0.5 - 0.5 * Math.cos((2 * Math.PI * FLAP_BEATS * sinceFlapMs) / FLAP_MS);
+  if (sinceFlapMs >= 0 && sinceFlapMs < beat.ms) {
+    const swing = 0.5 - 0.5 * Math.cos((2 * Math.PI * beat.beats * sinceFlapMs) / beat.ms);
     return { turn: WING_TURN.up + (WING_TURN.down - WING_TURN.up) * swing, beating: true };
   }
   return { turn: air.s === GLIDING ? WING_TURN.glide : WING_TURN.fall, beating: false };

@@ -33,6 +33,19 @@ describe('Moon Flap', () => {
     expect(g.overLine()).toBe('Touched down at 0.');
   });
 
+  it('counts its flaps, the first one too, and none once the run is over (OP-135)', () => {
+    const g = new FlapGame(1);
+    expect(g.flaps).toBe(0);
+    g.tap();
+    play(g, 200);
+    g.tap();
+    expect(g.flaps).toBe(2);
+    play(g, 5000);
+    expect(g.over).toBe(true);
+    g.tap();
+    expect(g.flaps).toBe(2);
+  });
+
   it('brings the branches at the steady pace the room server counts on', () => {
     const g = new FlapGame(5);
     steady(g, 3);
