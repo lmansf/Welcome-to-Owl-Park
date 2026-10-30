@@ -1,0 +1,49 @@
+{
+  "experiment": "room-server-killed",
+  "n": 1,
+  "name": "The room server killed mid-session",
+  "run_id": "2026-10-30-room-server-killed-2",
+  "git": {
+    "park": "b9daa6a440d92279a3e87fdac530b118e4589e85",
+    "harness": "b9daa6a440d92279a3e87fdac530b118e4589e85"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "Every visitor in a room is back in within 10 s of the room server returning, its owl where it stood (OP-087).",
+  "blast_radius": "This machine's throwaway park only: its Worker and room server process, killed and kept down for 3 s; the stand-in store and the scripted visitors carry on.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-30T06:59:42.775Z",
+  "end": "2026-10-30T07:01:26.412Z",
+  "verdict": "failed",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "visitors back in after the room server returned",
+      "value": "10 of 10",
+      "ok": true,
+      "component": "room server",
+      "fix": "every page that was in a room is let back in once the room server returns",
+      "at": "2026-10-30T07:00:14.323Z"
+    },
+    {
+      "what": "the slowest visitor back, from the room server returning",
+      "value": 2118,
+      "unit": "ms",
+      "ok": true,
+      "component": "page reconnect",
+      "fix": "a page tries again sooner after a dropped socket (apps/park/src/net/edge.ts: the backoff's ceiling)",
+      "at": "2026-10-30T07:00:14.323Z"
+    },
+    {
+      "what": "owls let back in more than 60 px from where they stood",
+      "value": "5 of 10 (furthest 846 px)",
+      "ok": false,
+      "component": "room server",
+      "fix": "keep where each owl stood through a restart: the room's memory of owls that left (Room.ts leavers) lives only in memory, so after a restart a hello's position is trusted only near the spawn",
+      "at": "2026-10-30T07:00:14.324Z"
+    }
+  ],
+  "filed": [],
+  "proposed": 1
+}
