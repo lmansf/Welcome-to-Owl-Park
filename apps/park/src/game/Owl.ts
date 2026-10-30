@@ -95,6 +95,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   readonly id: string;
   look: OwlLook;
   walk: Walk | null = null;
+  /** Another owl's walk on from where its walk under way ends (its next leg round a bend, OP-148): under way as that one ends. */
+  nextWalk: Walk | null = null;
   pos: Vec2;
   readonly pose: Phaser.GameObjects.Container;
   readonly back: Phaser.GameObjects.Container;
@@ -557,6 +559,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   /** Begin (or replace) a walk. Facing flips immediately. */
   startWalk(walk: Walk): void {
     this.walk = walk;
+    this.nextWalk = null;
     const f = facing(walk);
     if (f !== 0) this.dir = f;
   }
@@ -564,6 +567,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   /** Teleport without animation (room entry, snapshot of a standing owl). */
   place(pos: Vec2): void {
     this.walk = null;
+    this.nextWalk = null;
     this.pos = { ...pos };
     this.setPosition(pos.x, pos.y);
     this.pet?.snap(pos.x, pos.y, this.dir);
@@ -582,6 +586,12 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       if (done) {
         this.walk = null;
         finished = true;
+        const next = this.nextWalk;
+        if (next) {
+          this.startWalk(next);
+          this.pos = positionAlongWalk(next, now).pos;
+          finished = false;
+        }
       }
     }
     this.setPosition(this.pos.x, this.pos.y);

@@ -22,6 +22,16 @@ export function positionAlongWalk(walk: Walk, now: number, speed = WALK_SPEED): 
   return { pos: lerpVec(walk.from, walk.to, elapsed / total), done: false };
 }
 
+/**
+ * Whether `next` sets off, later than `now`, from where `current` ends: another owl's walk on from
+ * the one it is drawn walking (its next leg round a bend, OP-148). A page draws other owls a little
+ * behind the room, so it takes such a walk up as the one under way ends, instead of skipping the owl
+ * ahead to its start.
+ */
+export function followsOn(current: Walk | null, next: Walk, now: number): boolean {
+  return current !== null && distance(current.to, next.from) < 3 && next.startedAt > now;
+}
+
 /** Which way the owl faces while walking: -1 left, 1 right, 0 straight. */
 export function facing(walk: Walk): -1 | 0 | 1 {
   const dx = walk.to.x - walk.from.x;
