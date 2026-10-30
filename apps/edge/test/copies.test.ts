@@ -4,6 +4,7 @@ import { copiesIn, copyObjectName, pickCopy, withCopy } from '../src/copies';
 import type { Env } from '../src/env';
 import type { OverflowState } from '../src/Overflow';
 import { forgetCounts, forgetOverflow } from '../src/overflowState';
+import { forgetLimits } from '../src/limits';
 import { mintEntry, mintPass } from '../src/pass';
 
 describe('copies of a room (OP-075)', () => {
@@ -50,11 +51,11 @@ vi.mock('cloudflare:workers', () => ({
 }));
 // Node's Response refuses a 101; the Workers runtime returns one for an upgraded socket.
 class WorkerResponse extends Response {
-  /** The page's end of an upgraded socket (the runtime's own `webSocket`). */
-  readonly socket: unknown;
+  /** The page's end of an upgraded socket, where the runtime keeps it. */
+  override readonly webSocket: WebSocket | null;
   constructor(body?: BodyInit | null, init?: ResponseInit & { webSocket?: unknown }) {
     super(body, init?.status === 101 ? { ...init, status: 200 } : init);
-    this.socket = init?.webSocket ?? null;
+    this.webSocket = (init?.webSocket ?? null) as WebSocket | null;
   }
 }
 vi.stubGlobal('Response', WorkerResponse);
@@ -121,12 +122,13 @@ describe('the Worker sends owls across two copies of a room (OP-075)', () => {
     ({ ROOMS: rooms, OVERFLOW: overflowWith(over), VOTES, ROOM_SHARDING: sharding, GATE: 'open', PASS_SIGNING_KEY: KEY, ROOM_CAPS: '{"hub":3}' }) as unknown as Env;
   const pass = async (cid: string) => mintPass(KEY, { id: `v_owl${String(++n).padStart(5, '0')}`, exp: Math.floor(Date.now() / 1000) + 600, adm: false, cid });
   const arrive = async (e: Env, query = '', cid = `c_owl${String(n + 1).padStart(5, '0')}`) =>
-    worker.fetch(new Request(`https://park.example/ws/hub?pass=${encodeURIComponent(await pass(cid))}${query}`, { headers: { Upgrade: 'websocket' } }), e, CTX);
+    worker.fetch(new Request(`https://park.example/ws/hub?pass=${encodeURIComponent(await pass(cid))}${query}`, { headers: { Upgrade: 'websocket', Origin: 'https://park.example' } }), e, CTX);
 
   beforeEach(() => {
     rooms = new FakeRooms();
     forgetOverflow();
     forgetCounts();
+    forgetLimits();
   });
   afterEach(() => {
     forgetOverflow();
@@ -164,7 +166,7 @@ describe('the Worker sends owls across two copies of a room (OP-075)', () => {
   it('turns a newcomer away to the line while there is one, and lets an owl with an entry in', async () => {
     const e = env({ active: true });
     const away = (await arrive(e)) as WorkerResponse;
-    expect(away.socket).toEqual({ side: 'client' });
+    expect(away.webSocket).toEqual({ side: 'client' });
     expect(rooms.arrivals).toHaveLength(0);
     const cid = 'c_insider01';
     const entry = await mintEntry(KEY, cid);

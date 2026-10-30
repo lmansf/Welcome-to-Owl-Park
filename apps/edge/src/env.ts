@@ -14,6 +14,12 @@ export interface Env extends Cloudflare.Env {
   /** Local load testing only: trust X-Forwarded-For as the client address. Never set in production. */
   TRUST_FORWARDED_FOR?: string;
   /**
+   * Pages served somewhere else that may open the park's sockets and read its answers (src/guard.ts),
+   * as origins separated by commas, e.g. "https://owner.github.io" for the client on GitHub Pages
+   * (docs/DEPLOY.md mode A). Unset: only the park's own pages (and, on this machine, local ones).
+   */
+  PARK_ORIGINS?: string;
+  /**
    * The store that sells tickets (C35): its myshopify domain, and the app the park signs in with:
    * a Dev Dashboard app's client ID and secret (traded for a token that lasts a day), or the fixed
    * Admin API token of an app made in the store's admin before 2026. Unset: the store's webhooks

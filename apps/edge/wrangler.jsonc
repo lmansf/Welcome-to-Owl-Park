@@ -63,7 +63,10 @@
     "ACCOUNTS": "off",
     // How much the Worker and the room server log (OP-134): one JSON line per event, "info" in
     // production; "debug" adds a line for every pass taken and for the realms switch reaching each room object.
-    "LOG_LEVEL": "info"
+    "LOG_LEVEL": "info",
+    // The API's and the sockets' rate limits (OP-142, src/limits.ts): "on" always, but for a load test's
+    // throwaway copy, whose bots all come from one machine.
+    "RATE_LIMITS": "on"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },

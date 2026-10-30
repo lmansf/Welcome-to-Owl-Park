@@ -14,6 +14,8 @@ import type { LineAnswer, OverflowState } from './Overflow';
 import { countIn, countedOneMore, forgetOverflow, overflowNow } from './overflowState';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
 import { feedbackPage } from './feedbackPage';
+import { CSP_REPORT_PATH, REPORT_BODY_MAX, finished, frontDoor, guardedPage, noteViolation, tooMany, violationOf } from './guard';
+import { limitsOn, overLimit } from './limits';
 import { walletVoter } from './Ledger';
 import { loggerFor } from './logs';
 import { openingOn, passLinkReady, storeCatalogue } from './opening';
@@ -38,8 +40,8 @@ export { VoteLedger } from './VoteLedger';
 export { Collections } from './Collections';
 export { Overflow } from './Overflow';
 
+// Which pages may read an answer is the front door's to say, as each answer leaves (guard.ts `finished`): the park's own only.
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key, X-Collector',
   'Cache-Control': 'no-store',
@@ -131,13 +133,28 @@ function isAdmin(request: Request, env: Env, log: Logger): boolean {
   return reason === null;
 }
 
+/** A request's pass token: the Authorization header (Bearer), or the query string. */
+function tokenOf(request: Request): string | null {
+  const auth = request.headers.get('Authorization') ?? '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : new URL(request.url).searchParams.get('pass');
+}
+
+/** Each request's pass, checked once: the rate limits count by it before its route asks for it. */
+const checked = new WeakMap<Request, PassPayload | null>();
+
+async function passOf(request: Request, env: Env): Promise<PassPayload | null> {
+  if (checked.has(request)) return checked.get(request) ?? null;
+  const pass = await verifyPass(signingSecret(env), tokenOf(request));
+  checked.set(request, pass);
+  return pass;
+}
+
 /** The pass from the Authorization header (Bearer) or the query string; a refused one is logged with why. */
 async function passFrom(request: Request, env: Env, log: Logger) {
-  const auth = request.headers.get('Authorization') ?? '';
   const url = new URL(request.url);
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : url.searchParams.get('pass');
+  const token = tokenOf(request);
   const secret = signingSecret(env);
-  const pass = await verifyPass(secret, token);
+  const pass = await passOf(request, env);
   if (pass) log.debug('worker.pass', 'pass_verified', 'A pass was taken.', { route: url.pathname, session_id: hashForLog(pass.id), adm: pass.adm });
   else log.info('worker.pass', 'pass_rejected', 'A pass was refused.', { route: url.pathname, reason: await passRefusal(secret, token) });
   return pass;
@@ -301,6 +318,30 @@ const park = {
     const url = new URL(request.url);
     // One logger per request (OP-134): the deployment's level, and the chaos run's id when the request names one.
     const log = loggerFor(env, request);
+
+    // The front door (OP-140, OP-141): only https off this machine, and sockets and API calls only from the park's own pages.
+    const door = frontDoor(request, url, env.PARK_ORIGINS, log);
+    if (door) return door;
+    // The rate limits (OP-142): by address, by owl, and tightly for the calls that move tickets or send mail.
+    const socket = url.pathname.startsWith('/ws/');
+    if ((socket || url.pathname.startsWith('/api/')) && url.pathname !== '/api/store/webhook' && limitsOn(env)) {
+      const pass = await passOf(request, env);
+      const over = overLimit({ ip: clientIp(request, env), visitor: pass ? (pass.cid ?? pass.id) : null, path: url.pathname }, Date.now());
+      if (over) {
+        if (over.first) log.warn('worker.guard', 'rate_limited', 'Calls came too fast: refused until the minute is out.', { route: url.pathname, limit: over.limit, retry_after_s: over.wait, ...(over.limit !== 'address' && pass?.cid ? { collector_hash: hashForLog(pass.cid) } : {}) });
+        return tooMany(socket, over.wait);
+      }
+    }
+
+    if (url.pathname === CSP_REPORT_PATH) {
+      // What the page's policy blocked (OP-140), as the browser reports it: logged, a line per kind a while.
+      if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+      if (Number(request.headers.get('Content-Length') ?? 0) > REPORT_BODY_MAX) return json({ error: 'too large' }, 413);
+      const v = violationOf(await readJson(request));
+      if (!v) return json({ error: 'bad request' }, 400);
+      noteViolation(log, v, Date.now());
+      return new Response(null, { status: 204 });
+    }
 
     if (url.pathname === '/api/pass') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -847,7 +888,8 @@ const park = {
     }
 
     const asset = await env.ASSETS.fetch(request);
-    return isPage(url.pathname) ? uncachedPage(asset) : asset;
+    // The page with its policy (OP-140): only its own scripts, and only its own host to talk to.
+    return isPage(url.pathname) ? guardedPage(uncachedPage(asset), url) : asset;
   },
 
   /** Month-end: decide the previous park month's Realm Vote. */
@@ -857,13 +899,14 @@ const park = {
 } satisfies ExportedHandler<Env>;
 
 /**
- * The Worker as the platform calls it: an error no route handled is logged as one line (OP-134),
- * then thrown on as before, so what the visitor gets does not change.
+ * The Worker as the platform calls it: every answer leaves with nosniff, HSTS and the park's CORS
+ * (OP-140, OP-144); an error no route handled is logged as one line (OP-134), then thrown on as
+ * before, so what the visitor gets does not change.
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      return await park.fetch(request, env, ctx);
+      return finished(request, new URL(request.url), await park.fetch(request, env, ctx), env.PARK_ORIGINS);
     } catch (e) {
       loggerFor(env, request).error('worker', 'unhandled_error', 'A request failed with an error no route handled.', { route: new URL(request.url).pathname, error: e });
       throw e;
