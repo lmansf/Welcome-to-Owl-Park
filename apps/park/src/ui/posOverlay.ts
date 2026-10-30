@@ -2,17 +2,23 @@
  * The position overlay (OP-138, `?pos=1`, for the park's keepers): where the room last said the own
  * owl stands (its welcome and the echoes of the owl's walks, the last five, with their age) beside
  * where the owl is drawn, and a red flash and a count each time the owl moves further than an owl's
- * width between two frames, which no walk does. It asks once a tab for the keepers' key and checks
- * it with the room server; without it nothing shows.
+ * width between two frames beyond what its walk covers in that time, which no walk does. It asks once
+ * a tab for the keepers' key and checks it with the room server; without it nothing shows.
  *
  * TODO-DOCS (OP-138): docs/PLAYBOOK.md gets the overlay for a report of an owl jumping: `?pos=1`, the
  * keepers' key it asks for (checked with GET /api/admin/ping), what its lines mean, and the red flash.
  */
-import type { Vec2 } from '@owl-park/shared';
+import { WALK_SPEED, type Vec2 } from '@owl-park/shared';
 
 const KEY_STORE = 'owl-park:keepers-key';
-/** Further than this between two frames is a jump (room px): about an owl's width. */
+/** Further than this between two frames, beyond the frame's walk, is a jump (room px): about an owl's width. */
 export const JUMP_PX = 60;
+/**
+ * The longest frame whose walk is allowed for (ms). A frame a busy phone takes a quarter second over
+ * carries a walk past an owl's width, and is no jump; the first frame after the tab slept is long
+ * too, and a jump then is what the overlay is for.
+ */
+export const WALK_FRAME_MS = 600;
 const SHOWN = 5;
 /** How each thing the room said is listed: its welcome, the echo of a walk, and the owl moved to the room's spot (it could not follow, OP-138). */
 const SAID = { welcome: 'room', echo: 'walk', moved: 'moved' } as const;
@@ -31,16 +37,20 @@ export interface PosOverlay {
 
 const xy = (p: Vec2) => `${Math.round(p.x)},${Math.round(p.y)}`;
 
-/** Counts the own owl's jumps, frame by frame: further than JUMP_PX between two frames in one room. */
-export function jumpWatch(): { see(pos: Vec2, room: string): boolean; readonly count: number } {
-  let last: Vec2 | null = null;
+/**
+ * Counts the own owl's jumps, frame by frame (`now` in ms): further between two frames in one room
+ * than JUMP_PX beyond what a walk covers in that frame's time, up to WALK_FRAME_MS of it.
+ */
+export function jumpWatch(): { see(pos: Vec2, room: string, now: number): boolean; readonly count: number } {
+  let last: { pos: Vec2; at: number } | null = null;
   let lastRoom = '';
   let count = 0;
   return {
-    see(pos, room) {
-      const jumped = room === lastRoom && last !== null && Math.hypot(pos.x - last.x, pos.y - last.y) > JUMP_PX;
+    see(pos, room, now) {
+      const walked = last ? (WALK_SPEED * Math.min(Math.max(now - last.at, 0), WALK_FRAME_MS)) / 1000 : 0;
+      const jumped = room === lastRoom && last !== null && Math.hypot(pos.x - last.pos.x, pos.y - last.pos.y) > JUMP_PX + walked;
       if (jumped) count += 1;
-      last = { ...pos };
+      last = { pos: { ...pos }, at: now };
       lastRoom = room;
       return jumped;
     },
@@ -113,7 +123,7 @@ export function mountPosOverlay(): PosOverlay {
     },
     frame(pos, now, room) {
       here = { ...pos };
-      if (watch.see(pos, room)) {
+      if (watch.see(pos, room, now)) {
         flashUntil = now + FLASH_MS;
         draw(now);
       }
