@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
-import { expect, test, type APIRequestContext, type Browser, type Locator, type Page } from '@playwright/test';
+import type { APIRequestContext, Browser, Locator, Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { E2E_STORE, openPark, state } from './helpers';
 
 /**

@@ -71,7 +71,8 @@ async function bot(room, { entry, pass: given, n: givenN } = {}) {
   const n = givenN ?? ++botN;
   const pass = given ?? (await passFor(n));
   const q = `pass=${encodeURIComponent(pass)}${entry ? `&entry=${encodeURIComponent(entry)}` : ''}`;
-  const ws = new WebSocket(`${WS_BASE}/ws/${room}?${q}`, { headers: { 'X-Forwarded-For': ipOf(n) } });
+  // The park opens a socket only for its own page (OP-141): the bots say they come from it.
+  const ws = new WebSocket(`${WS_BASE}/ws/${room}?${q}`, { headers: { Origin: new URL(BASE).origin, 'X-Forwarded-For': ipOf(n) } });
   const b = { n, ws, copy: null, closed: null, hb: null };
   return new Promise((resolve) => {
     const done = () => resolve(b);

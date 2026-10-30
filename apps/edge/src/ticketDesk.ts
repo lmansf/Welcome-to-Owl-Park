@@ -178,9 +178,10 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       if (!id) return json({ ok: false, reason: 'none' });
       const r = book.scan(id, device, now);
       if (!r.ok) {
-        // This device's own ticket: its kind too, so the gate can say what kind of night it waits for.
+        // This device's own ticket: its kind too, so the gate can say what kind of night it waits for. An id
+        // that names no ticket is the asker's own words, never said back (OP-143).
         const kind = r.reason === 'unknown' || r.reason === 'elsewhere' ? undefined : book.get(id)?.kind;
-        return json({ ok: false, reason: r.reason, id, ...(kind ? { kind } : {}) });
+        return json({ ok: false, reason: r.reason, ...(r.reason === 'unknown' ? {} : { id }), ...(kind ? { kind } : {}) });
       }
       return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
     }

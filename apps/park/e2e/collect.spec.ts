@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { frames, openPark, state } from './helpers';
 
 /** Give a collector a variant before the park loads (as if earned earlier), stored the way the local mode keeps it. */

@@ -1,4 +1,5 @@
-import { devices, expect, test, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
+import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { E2E_ADMIN_KEY, state, walkToDoor } from './helpers';
 
 /**

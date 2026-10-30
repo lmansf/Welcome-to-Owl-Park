@@ -6,6 +6,7 @@ import { captureLogs } from '../src/logs';
 import { storeCatalogue } from '../src/opening';
 import type { OverflowState } from '../src/Overflow';
 import { forgetCounts, forgetOverflow, overflowNow } from '../src/overflowState';
+import { forgetLimits } from '../src/limits';
 import { mintPass } from '../src/pass';
 import { webhookSignature } from '../src/shopify';
 import { MemoryTicketStore, TicketBook } from '../src/TicketBook';
@@ -109,6 +110,7 @@ beforeEach(() => {
   forgetGate();
   forgetOverflow();
   forgetCounts();
+  forgetLimits();
   cap = captureLogs();
 });
 
@@ -183,7 +185,7 @@ describe('the Worker’s log (OP-134)', () => {
   });
 
   it('tells a room socket refused at the door: its pass, the gate, the line', async () => {
-    const ws = (e: Env, pass: string) => call(e, `/ws/hub?pass=${encodeURIComponent(pass)}`, { headers: { Upgrade: 'websocket' } });
+    const ws = (e: Env, pass: string) => call(e, `/ws/hub?pass=${encodeURIComponent(pass)}`, { headers: { Upgrade: 'websocket', Origin: 'https://park.example' } });
     await ws(park.env(), 'nonsense');
     logged(cap.lines, 'room_join_refused', { component: 'room.join', room: 'hub', reason: 'pass', pass: 'invalid' });
     const guest = await mintPass(KEY, { id: 'v_guest0001', exp: nowS() + 600, adm: false, cid: 'c_guest00001' });

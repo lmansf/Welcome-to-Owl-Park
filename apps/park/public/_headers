@@ -5,3 +5,8 @@
   Cache-Control: public, max-age=31536000, immutable
 /art/*
   Cache-Control: public, max-age=31536000, immutable
+# OP-140: every file goes out as the type it is named for, and over https only once a browser has
+# been here (the Worker's own answers carry the same: apps/edge/src/guard.ts).
+/*
+  X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=31536000
