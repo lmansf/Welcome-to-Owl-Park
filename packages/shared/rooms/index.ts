@@ -150,6 +150,9 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 980, y: 860 },
       { x: 1200, y: 760 },
       { x: 1450, y: 840 },
+      // Up on the root bench, a jump from the floor (OP-084).
+      { x: 820, y: 696, top: 80 },
+      { x: 1150, y: 696, top: 80 },
       { x: 1660, y: 820 },
       { x: 1930, y: 820 },
       { x: 1980, y: 720 },

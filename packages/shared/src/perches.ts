@@ -13,8 +13,9 @@
  * at or below the owl, less the solid perches it is under.
  *
  * TODO-DOCS (OP-084): docs/ARCHITECTURE.md (movement): perches, the ground under an owl, the footing
- * at a height, the landing on a perch told to the room; docs/PLAYBOOK.md (controls): jump onto a
- * perch, walk off its edge to come down.
+ * at a height, the landing on a perch told to the room, and things up on perches (`Raised`: a quest
+ * spot, a leaf pile) reached only from that perch; docs/PLAYBOOK.md (controls): jump onto a perch,
+ * walk off its edge to come down.
  */
 import { isWalkable, pointInPolygon, type Polygon, type Shut } from './geometry';
 import type { Vec2 } from './protocol';
@@ -93,4 +94,18 @@ export function standingHeights(room: Pick<RoomDef, 'perches'>): number[] {
 /** The top of the room's highest perch (0 for a room without). */
 export function highestTop(room: Pick<RoomDef, 'perches'>): number {
   return Math.max(0, ...(room.perches ?? []).map((perch) => perch.top));
+}
+
+/**
+ * Something that sits up on a perch: a spot for a quest's finds, a quest item put there, a leaf pile.
+ * `top` is that perch's top; absent, the thing is on the floor. It is drawn `top` above its point on
+ * the plan, as an owl on the perch is.
+ */
+export interface Raised {
+  top?: number;
+}
+
+/** Whether an owl over `ground` (groundAt: what it stands on, or would come down on) can reach a thing: only from the perch it sits on, and a thing on the floor only from the floor. */
+export function sameLevel(ground: number, thing: Raised): boolean {
+  return ground === (thing.top ?? 0);
 }

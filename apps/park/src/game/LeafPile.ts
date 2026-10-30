@@ -37,6 +37,8 @@ export class LeafPile {
     readonly def: InteractableDef,
   ) {
     const { x, y } = def.pos;
+    // A pile up on a perch (OP-084) is drawn that much higher, and sorts with the owls by its spot on the plan.
+    const lift = def.top ?? 0;
     const rnd = seeded(def.id);
     // A soft shadow under the pile (the glow texture in black: no hard edge to read as a log).
     const shade = scene.add.image(0, 4, 'fx-glow').setTint(0x000000).setScale(0.62, 0.13).setAlpha(0.5);
@@ -59,7 +61,7 @@ export class LeafPile {
         .setScale(0.85 + rnd() * 0.45, 0.6 + rnd() * 0.35);
       this.leaves.push(leaf);
     }
-    this.root = scene.add.container(x, y, [shade, ...this.leaves]).setDepth(y - 2);
+    this.root = scene.add.container(x, y - lift, [shade, ...this.leaves]).setDepth(y - 2);
     // A breath of wind now and then stirs the top leaves.
     for (const leaf of this.leaves.slice(-6)) {
       scene.tweens.add({ targets: leaf, angle: leaf.angle + 10, duration: 1400 + rnd() * 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: rnd() * 1500 });
@@ -94,9 +96,10 @@ export class LeafPile {
     if (this.destroyed) return;
     this.until = Math.max(until, Date.now() + 1000);
     const { x, y } = this.def.pos;
+    const up = y - (this.def.top ?? 0);
     const scene = this.scene;
     const leaves = scene.add
-      .particles(x, y - 18, symbolTexture(scene, 'fallen'), {
+      .particles(x, up - 18, symbolTexture(scene, 'fallen'), {
         emitting: false,
         speed: { min: 140, max: 360 },
         angle: { min: 200, max: 340 },
@@ -111,7 +114,7 @@ export class LeafPile {
       .setDepth(y + 40);
     leaves.explode(40);
     const smoke = scene.add
-      .particles(x, y - 14, symbolTexture(scene, 'puff'), {
+      .particles(x, up - 14, symbolTexture(scene, 'puff'), {
         emitting: false,
         speed: { min: 20, max: 90 },
         angle: { min: 180, max: 360 },
@@ -138,7 +141,7 @@ export class LeafPile {
     this.root.setVisible(true).setAlpha(0).setScale(0.6, 0.2);
     this.scene.tweens.add({ targets: this.root, alpha: 1, scaleX: 1, scaleY: 1, duration: 650, ease: 'Back.easeOut' });
     const drift = this.scene.add
-      .particles(x, y - 120, symbolTexture(this.scene, 'fallen'), {
+      .particles(x, y - (this.def.top ?? 0) - 120, symbolTexture(this.scene, 'fallen'), {
         emitting: false,
         speedY: { min: 60, max: 120 },
         speedX: { min: -40, max: 40 },
@@ -166,11 +169,16 @@ export class LeafPile {
   }
 }
 
-/** A feather left where the leaves were: it rises, turns, then glides into the owl. */
-export function featherFind(scene: Phaser.Scene, from: Vec2, to: () => Vec2, onArrive: () => void): void {
-  const img = scene.add.image(from.x, from.y - 30, symbolTexture(scene, 'feather')).setTint(0xf6f1e3).setScale(1.4).setDepth(from.y + 60);
-  const glow = scene.add.image(from.x, from.y - 30, 'fx-glow').setTint(0xffd36a).setScale(0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(from.y + 59);
-  scene.tweens.add({ targets: [img, glow], y: from.y - 110, duration: 700, ease: 'Sine.easeOut' });
+/**
+ * A feather left where the leaves were: it rises, turns, then glides into the owl. `from` is the
+ * pile's spot on the plan and `lift` how high it is drawn above it (a pile up on a perch); `to` is
+ * where the owl is drawn.
+ */
+export function featherFind(scene: Phaser.Scene, from: Vec2, to: () => Vec2, onArrive: () => void, lift = 0): void {
+  const y = from.y - lift;
+  const img = scene.add.image(from.x, y - 30, symbolTexture(scene, 'feather')).setTint(0xf6f1e3).setScale(1.4).setDepth(from.y + 60);
+  const glow = scene.add.image(from.x, y - 30, 'fx-glow').setTint(0xffd36a).setScale(0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(from.y + 59);
+  scene.tweens.add({ targets: [img, glow], y: y - 110, duration: 700, ease: 'Sine.easeOut' });
   scene.tweens.add({ targets: img, angle: { from: -25, to: 25 }, duration: 350, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
   scene.time.delayedCall(800, () => {
     const start = { x: img.x, y: img.y };

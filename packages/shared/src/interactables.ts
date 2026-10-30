@@ -4,11 +4,13 @@
  * when someone flops into it, then grows back), and plain ones that only count toward quests
  * (browsing a stall, basking in the moonbeam). The room server checks reach and state.
  */
+import type { Raised } from './perches';
 import type { Vec2 } from './protocol';
 
 export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam';
 
-export interface InteractableDef {
+/** A thing to use; one with a `top` sits up on that perch (OP-084), and only an owl standing on it reaches it. */
+export interface InteractableDef extends Raised {
   id: string;
   kind: InteractableKind;
   room: string;
@@ -37,6 +39,8 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
 export const INTERACTABLES: readonly InteractableDef[] = [
   // Leaves blow in through the storybook arch and pile up just inside the great tree...
   { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 1930, y: 820 } },
+  // ...and some up on the lantern beam in the west wing, a jump and the second flap from the root bench (OP-084).
+  { id: 'hub-leaves-beam', kind: 'leaf-pile', room: 'hub', pos: { x: 930, y: 696 }, top: 264 },
   // ...and drift around the hollow at the foot of the tree outside.
   { id: 'grove-leaves-1', kind: 'leaf-pile', room: 'grove', pos: { x: 2500, y: 835 } },
   { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 2890, y: 845 } },
@@ -98,8 +102,8 @@ export function isQuestItemKind(k: unknown): k is QuestItemKind {
   return typeof k === 'string' && Object.hasOwn(QUEST_ITEMS, k);
 }
 
-/** A quest item waiting on the floor for one collector. */
-export interface QuestItemSpot {
+/** A quest item waiting for one collector: on the floor, or up on a perch with its `top` (OP-084). */
+export interface QuestItemSpot extends Raised {
   n: number;
   /** The quest step it belongs to (it shows, and counts, only while that step is current). */
   step: number;

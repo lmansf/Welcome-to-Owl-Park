@@ -13,6 +13,7 @@ import { distance } from './geometry';
 import { PICKUP_RADIUS } from './collectibles';
 import { INTERACTABLES, type QuestItemSpot } from './interactables';
 import { NPCS } from './npcs';
+import { sameLevel, type Raised } from './perches';
 import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek, rotationRandom } from './parktime';
 import type { Vec2 } from './protocol';
 import { DAILY_POOL, QUESTS, WEEKLY_POOL, getQuest } from './questCatalog';
@@ -37,7 +38,7 @@ import {
 import type { Award, CollectionBook, CollectionStore, QuestRow } from './book';
 
 /** Hiding spots by room (room data's `spots`), where quest items appear. */
-export type QuestSpots = Readonly<Record<string, readonly Vec2[]>>;
+export type QuestSpots = Readonly<Record<string, ReadonlyArray<Vec2 & Raised>>>;
 
 /** Quest items keep this far from NPC owls and interactables, so they never hide under one. */
 const ITEM_CLEARANCE = 90;
@@ -142,7 +143,7 @@ export class QuestBook {
       ready,
       reward: q.reward,
       endsAt: q.cadence === 'daily' ? nextParkDayAt(now) : q.cadence === 'weekly' ? nextParkWeekAt(now) : 0,
-      items: r.items.filter((i) => i.step === r.step && !i.taken).map(({ n, room, x, y, kind }) => ({ n, room, x, y, kind })),
+      items: r.items.filter((i) => i.step === r.step && !i.taken).map(({ n, room, x, y, top, kind }) => ({ n, room, x, y, ...(top ? { top } : {}), kind })),
     };
   }
 
@@ -178,7 +179,7 @@ export class QuestBook {
       const free = (this.spots[g.room] ?? []).filter((p) => blockers.every((b) => distance(p, b) >= ITEM_CLEARANCE));
       const pickFrom = free.length >= g.count ? free : [...(this.spots[g.room] ?? [])];
       const chosen = shuffled(pickFrom, rotationRandom(`owl-park-items|${cid}|${q.id}|${period}|${step}`)).slice(0, g.count);
-      for (const p of chosen) out.push({ n: n++, step, room: g.room, x: p.x, y: p.y, kind: g.item, taken: false });
+      for (const p of chosen) out.push({ n: n++, step, room: g.room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}), kind: g.item, taken: false });
     });
     return out;
   }
@@ -257,15 +258,15 @@ export class QuestBook {
     return updates;
   }
 
-  /** Pick up quest item `n` of an active quest, standing at `pos` in `room`. */
-  gather(cid: string, questId: unknown, n: number, room: string, pos: Vec2, now: number): GatherResult {
+  /** Pick up quest item `n` of an active quest, standing at `pos` in `room` over `ground` (groundAt: an item up on a perch is picked up from it). */
+  gather(cid: string, questId: unknown, n: number, room: string, pos: Vec2, now: number, ground = 0): GatherResult {
     const q = getQuest(questId);
     const row = q ? this.rows(cid, now).find((r) => r.quest === q.id && r.doneAt === null) : undefined;
     if (!q || !row) return { ok: false, reason: 'gone' };
     const item = row.items.find((i) => i.n === n);
     if (!item || item.taken) return { ok: false, reason: 'gone' };
     if (item.step !== row.step) return { ok: false, reason: 'not-current' };
-    if (item.room !== room || distance(pos, item) > PICKUP_RADIUS) return { ok: false, reason: 'far' };
+    if (item.room !== room || distance(pos, item) > PICKUP_RADIUS || !sameLevel(ground, item)) return { ok: false, reason: 'far' };
     item.taken = true;
     row.count += 1;
     const update = this.advance(q, row, room);

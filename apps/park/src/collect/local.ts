@@ -16,6 +16,7 @@ import {
   QUIZ_ROOM,
   QuestBook,
   REACH_SLACK,
+  sameLevel,
   STREET_DOORS,
   STREET_ROOM,
   USE_COOLDOWN_MS,
@@ -344,7 +345,7 @@ export class LocalCollections implements CollectionService {
     return out;
   }
 
-  questLink(room: string, _conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2): QuestLink {
+  questLink(room: string, _conn: RoomConnection | null, pushes: QuestPushes, where: () => Vec2, ground: () => number = () => 0): QuestLink {
     const cid = this.cid;
     const near = (p: Vec2, radius: number) => distance(where(), p) <= radius + REACH_SLACK;
     /** The giver of a quest, if it stands in this room. */
@@ -393,7 +394,8 @@ export class LocalCollections implements CollectionService {
         const it = getInteractable(target);
         if (!it || it.room !== room) return unused('unknown');
         const rules = KIND_RULES[it.kind];
-        if (!near(it.pos, rules.reach)) return unused('far');
+        // Up on a perch, only from that perch; on the floor, only from the floor (OP-084).
+        if (!near(it.pos, rules.reach) || !sameLevel(ground(), it)) return unused('far');
         const now = this.now();
         if (now - this.usedAt < USE_COOLDOWN_MS) return unused('busy');
         this.usedAt = now;
@@ -420,7 +422,7 @@ export class LocalCollections implements CollectionService {
       gather: async (quest, n) =>
         this.use(({ quests }) => {
           const now = this.now();
-          const res = quests.gather(cid, quest, n, room, where(), now);
+          const res = quests.gather(cid, quest, n, room, where(), now, ground());
           return res.ok ? { ok: true, board: res.board, updates: res.updates } : { ok: false, reason: res.reason, board: quests.board(cid, now), updates: [] };
         }),
       note: (ev) => {

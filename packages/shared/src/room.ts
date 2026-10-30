@@ -1,5 +1,5 @@
 import type { Polygon, Rect } from './geometry';
-import type { Perch } from './perches';
+import type { Perch, Raised } from './perches';
 import type { Vec2 } from './protocol';
 
 /**
@@ -45,9 +45,11 @@ export interface RoomDef {
   /**
    * Hiding spots where a visitor's collectible finds can appear (only the finder sees them).
    * Each is on the floor, at least 60 px from every doorway and spot, and reachable by a straight
-   * walk from the default spawn that never crosses an exit (unit-tested in rooms.test.ts).
+   * walk from the default spawn that never crosses an exit; or up on a perch a single jump from
+   * the floor, with that perch's `top` (OP-084), so a quest never asks for more than a jump
+   * (unit-tested in rooms.test.ts).
    */
-  spots?: Vec2[];
+  spots?: Array<Vec2 & Raised>;
   /** Ambient mood used by the scene for lighting and particles (`arcade`: neon indoors, no rain). */
   mood: 'hub' | 'dusk' | 'neon' | 'arcade';
   /**

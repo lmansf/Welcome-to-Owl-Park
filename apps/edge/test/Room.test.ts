@@ -476,6 +476,31 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(a2.last('welcome')!.you.pos).toEqual(onBench);
   });
 
+  it('reaches what sits up on a perch only from that perch, and what is on the floor only from the floor (OP-084)', () => {
+    const withBench: RoomDef = { ...def, perches: [{ id: 'bench', area: [{ x: 300, y: 440 }, { x: 600, y: 440 }, { x: 600, y: 520 }, { x: 300, y: 520 }], top: 80, solid: true }] };
+    const perched = new Room(withBench, { now: () => now, random: () => 0.5, cap: 3 });
+    perched.join(new FakePeer(), 'a', hello());
+    const onBench = { x: 400, y: 470 };
+    const upThere = { top: 80 };
+    perched.move('a', { t: 'move', to: onBench, seq: 1 });
+    now += 5000;
+    // There on the plan but not up: the ground under the owl is the floor, so the floor's things.
+    expect(perched.groundOf('a')).toBe(0);
+    expect(perched.reaches('a', onBench, 40, upThere)).toBe(false);
+    expect(perched.reaches('a', onBench, 40, {})).toBe(true);
+    // Landed up there: the bench's things, and not the floor's.
+    expect(perched.air('a', { z: 80, vz: 0, s: GROUNDED, f: 0 })).toBe(true);
+    expect(perched.groundOf('a')).toBe(80);
+    expect(perched.reaches('a', onBench, 40, upThere)).toBe(true);
+    expect(perched.reaches('a', onBench, 40, {})).toBe(false);
+    // Along the bench out of reach is out of reach at any height.
+    expect(perched.reaches('a', { x: 560, y: 470 }, 40, upThere)).toBe(false);
+    // In the air above the bench, coming down on it: still the bench's.
+    expect(perched.air('a', { z: 140, vz: 0, s: AIRBORNE, f: 0 })).toBe(true);
+    expect(perched.groundOf('a')).toBe(80);
+    expect(perched.groundOf('nobody')).toBe(0);
+  });
+
   it('relays a phrase’s number to the others, one phrase every three seconds per owl', () => {
     const a = new FakePeer();
     const b = new FakePeer();

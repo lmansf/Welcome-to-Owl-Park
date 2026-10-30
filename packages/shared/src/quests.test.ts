@@ -5,6 +5,7 @@ import { DUPLICATE_FEATHERS, EMOTE_IDS, PRESENTS, STARTER_PACK, parseVariant } f
 import { isWalkable, pointInRect } from './geometry';
 import { INTERACTABLES, KIND_RULES, LEAF_FEATHERS_PER_DAY, getInteractable, leafFeathers } from './interactables';
 import { NPCS, NPC_TALK_RADIUS, getNpc } from './npcs';
+import type { Raised } from './perches';
 import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek } from './parktime';
 import { DAILY_POOL, QUESTS, STORY_QUESTS, WEEKLY_POOL, getQuest } from './questCatalog';
 import { QuestBook, dailyQuestIds, weeklyQuestIds, type QuestSpots } from './questbook';
@@ -81,11 +82,11 @@ describe('owl species', () => {
 describe('NPC owls and interactables', () => {
   const exits = (room: string) => ROOMS[room]!.doors.filter((d) => d.to).map((d) => d.rect);
 
-  it('stand on walkable floor, outside every doorway', () => {
+  it('stand on walkable floor, outside every doorway, or up on a perch (rooms.test.ts checks which)', () => {
     for (const thing of [...NPCS, ...INTERACTABLES]) {
       const room = ROOMS[thing.room]!;
       expect(room, thing.id).toBeDefined();
-      expect(isWalkable(thing.pos, room.walkable), `${thing.id} walkable`).toBe(true);
+      if (!(thing as Raised).top) expect(isWalkable(thing.pos, room.walkable), `${thing.id} walkable`).toBe(true);
       for (const r of exits(thing.room)) expect(pointInRect(thing.pos, r), `${thing.id} in a doorway`).toBe(false);
     }
   });
@@ -331,6 +332,25 @@ describe('quest ledger', () => {
     quests.gather('c1', 'story-hazel-acorns', b!.n, 'grove', b!, MON);
     const last = quests.gather('c1', 'story-hazel-acorns', c!.n, 'grove', c!, MON);
     expect(last.ok && last.updates[0]!.ready).toBe(true);
+  });
+
+  it('carries a spot\'s height to the item put there, and picks an item up only at its own height (OP-084)', () => {
+    const store = new MemoryCollectionStore();
+    // Two spots up on a perch 80 px high and one on the floor: the quest's three acorns take all three.
+    const spots: QuestSpots = { ...SPOTS, grove: [{ x: 2000, y: 700, top: 80 }, { x: 2300, y: 700, top: 80 }, { x: 2600, y: 840 }] };
+    const quests = new QuestBook(store, new CollectionBook(store), spots);
+    store.putQuest({ cid: 'c1', quest: 'story-welcome', period: '', step: 0, count: 0, seen: [], items: [], acceptedAt: MON, doneAt: MON });
+    expect(quests.accept('c1', 'story-hazel-acorns', MON, 'grove').ok).toBe(true);
+    const items = quests.board('c1', MON).active[0]!.items;
+    const up = items.find((i) => i.top === 80)!;
+    const down = items.find((i) => i.top === undefined)!;
+    expect(items.filter((i) => i.top === 80)).toHaveLength(2);
+    // Under the perch, on the floor right below it: out of reach. Over the perch: picked up.
+    expect(quests.gather('c1', 'story-hazel-acorns', up.n, 'grove', up, MON)).toEqual({ ok: false, reason: 'far' });
+    expect(quests.gather('c1', 'story-hazel-acorns', up.n, 'grove', up, MON, 80).ok).toBe(true);
+    // And one on the floor is out of reach from up on a perch.
+    expect(quests.gather('c1', 'story-hazel-acorns', down.n, 'grove', down, MON, 80)).toEqual({ ok: false, reason: 'far' });
+    expect(quests.gather('c1', 'story-hazel-acorns', down.n, 'grove', down, MON, 0).ok).toBe(true);
   });
 
   it('moves quest items saved under the one-screen rooms along with the rooms, once', () => {

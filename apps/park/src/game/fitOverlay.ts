@@ -94,8 +94,9 @@ export class FitOverlay {
       g.lineStyle(1, C.perch, 0.35).strokePoints(p.area, true);
       g.lineStyle(2, C.perch, 0.95).strokePoints(p.area.map((v) => ({ x: v.x, y: v.y - p.top })), true);
     }
-    for (const def of interactablesIn(room.id)) g.lineStyle(2, C.reach, 0.8).strokeCircle(def.pos.x, def.pos.y, KIND_RULES[def.kind].reach);
-    for (const s of room.spots ?? []) g.lineStyle(1, C.reach, 0.35).strokeCircle(s.x, s.y, PICKUP_CLIENT_RADIUS);
+    // Things up on a perch (OP-084) have their reach drawn up there, where an owl on that perch is drawn.
+    for (const def of interactablesIn(room.id)) g.lineStyle(2, C.reach, 0.8).strokeCircle(def.pos.x, def.pos.y - (def.top ?? 0), KIND_RULES[def.kind].reach);
+    for (const s of room.spots ?? []) g.lineStyle(1, C.reach, 0.35).strokeCircle(s.x, s.y - (s.top ?? 0), PICKUP_CLIENT_RADIUS);
     if (room.id === LANTERN_ROOM) {
       this.rect(LANTERN_FLOOR, C.spot);
       for (const l of LANTERNS) g.lineStyle(1, C.reach, 0.6).lineBetween(l.pos.x - LANTERN_REACH_X, LANTERN_FLOOR.y, l.pos.x + LANTERN_REACH_X, LANTERN_FLOOR.y);

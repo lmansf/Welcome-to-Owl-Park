@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { holdSpace, openPark, settleCamera, state, tapRoomPoint, walkAndStop } from './helpers';
+import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, tapRoomPoint, walkAndStop } from './helpers';
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
@@ -52,6 +52,22 @@ test.describe('perches (OP-084)', () => {
     await page.evaluate(() => window.owlPark.walkTo(900, 800));
     await expect.poll(async () => { const w = await where(page); return [w.s, w.z, w.walking]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 0, false]);
     expect((await where(page)).y).toBeCloseTo(800, 0);
+  });
+
+  test('a leaf pile up on the lantern beam is out of reach from the bench below it, and flopped into from the beam', async ({ page }) => {
+    test.slow(); // the walk across the hub
+    await openPark(page);
+    await upOnBench(page);
+    // Right under the beam's pile, standing on the bench: no flop on offer.
+    await page.evaluate(() => window.owlPark.walkTo(930, 696));
+    await expect.poll(async () => (await where(page)).walking, { intervals: [50] }).toBe(false);
+    expect((await state(page)).actions).not.toContain('use:hub-leaves-beam');
+    // A jump and the second flap at its top: up on the beam, and the pile is in reach.
+    await jumpFlapGlide(page, 250);
+    await expect.poll(async () => { const w = await where(page); return [w.s, w.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 264]);
+    await doAction(page, 'use:hub-leaves-beam');
+    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'hub-leaves-beam')?.here, { timeout: 15_000 }).toBe(false);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-leaves.png` });
   });
 
   test('another tab sees the owl stand on the bench, a newcomer finds it up there, and both see it come down', async ({ context }) => {

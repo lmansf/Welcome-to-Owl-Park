@@ -54,6 +54,8 @@ export interface Air {
 
 export const ON_GROUND: Air = { z: 0, vz: 0, s: GROUNDED, f: 0 };
 
+/** The highest a jump alone carries an owl above what it took off from (px, about 149): a perch a quest may use is lower than this. */
+export const JUMP_RISE = (JUMP_IMPULSE * JUMP_IMPULSE) / (2 * GRAVITY);
 /** The highest a jump and a flap at its top can carry an owl above what it took off from, with room to spare. */
 export const MAX_RISE = Math.ceil((JUMP_IMPULSE * JUMP_IMPULSE + DOUBLE_JUMP_IMPULSE * DOUBLE_JUMP_IMPULSE) / (2 * GRAVITY)) + 20;
 /** The highest an owl can be in any room: a jump and a flap from the highest top a perch may have. */

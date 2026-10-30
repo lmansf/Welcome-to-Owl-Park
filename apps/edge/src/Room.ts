@@ -14,8 +14,10 @@ import {
   carryOn,
   checkAir,
   footing,
+  groundAt,
   highestTop,
   onSomeFooting,
+  sameLevel,
   standingHeights,
   USE_COOLDOWN_MS,
   REACH_SLACK,
@@ -37,6 +39,7 @@ import {
   type OwlLook,
   type OwlSnapshot,
   type Polygon,
+  type Raised,
   type RoomDef,
   type ServerFrame,
   type ServerWalk,
@@ -569,6 +572,22 @@ export class Room {
   near(id: string, p: Vec2, radius: number): boolean {
     const v = this.visitors.get(id);
     return !!v && distance(this.currentPos(v), p) <= radius + LIMITS.reachSlackPx;
+  }
+
+  /**
+   * What a visitor stands on, or would come down on, now (OP-084): the top of the perch under it at
+   * its height (its air as its page last told it, carried on), else the floor (0).
+   */
+  groundOf(id: string): number {
+    const v = this.visitors.get(id);
+    if (!v) return 0;
+    const a = this.airOf(v);
+    return groundAt(this.def.perches, this.currentPos(v), a ? carryOn(a, this.now() - a.at).z : 0);
+  }
+
+  /** Whether a visitor can reach a thing that may sit up on a perch: near it, and on the same perch (or both on the floor). */
+  reaches(id: string, p: Vec2, radius: number, thing: Raised): boolean {
+    return this.near(id, p, radius) && sameLevel(this.groundOf(id), thing);
   }
 
   /** Count a use of an interactable against the visitor's cooldown. False when too soon. */

@@ -9,8 +9,8 @@ import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_S
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
-import { FLIGHT_STEP_MS, GROUNDED, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
-import { MAX_PERCH_TOP, footing, groundAt } from '../src/perches';
+import { FLIGHT_STEP_MS, GROUNDED, JUMP_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
+import { MAX_PERCH_TOP, footing, groundAt, type Raised } from '../src/perches';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 
@@ -67,8 +67,9 @@ describe('the floor', () => {
       const things: [string, Vec2][] = [
         ...Object.entries(room.spawns).map(([name, p]): [string, Vec2] => [`spawn ${name}`, p]),
         ...room.doors.map((d): [string, Vec2] => [`door ${d.id}`, { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }]),
-        ...(room.spots ?? []).map((s): [string, Vec2] => [`spot ${s.x},${s.y}`, s]),
-        ...[...NPCS, ...INTERACTABLES].filter((t) => t.room === room.id).map((t): [string, Vec2] => [t.id, t.pos]),
+        // What sits up on a perch is reached from the perch (the perches' tests below).
+        ...(room.spots ?? []).filter((s) => !s.top).map((s): [string, Vec2] => [`spot ${s.x},${s.y}`, s]),
+        ...[...NPCS, ...INTERACTABLES].filter((t) => t.room === room.id && !(t as Raised).top).map((t): [string, Vec2] => [t.id, t.pos]),
       ];
       // A doorway or the idol's gathering spot may reach past the floor's edge; its middle is on the floor or next to it.
       for (const [name, p] of things) expect(floor.has(cell(p)) || [0, 1, -1].some((d) => floor.has(cell({ x: p.x, y: p.y + d * 2 * STEP }))), `${room.id} ${name} reachable`).toBe(true);
@@ -323,9 +324,13 @@ describe('hiding spots', () => {
         for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) expect(distance(spots[i]!, spots[j]!)).toBeGreaterThanOrEqual(60);
       });
 
-      it('puts every spot on the floor, 60 px or more from every doorway and spot', () => {
+      it('puts every spot on the floor or up on a perch a jump from it, 60 px or more from every doorway and spot', () => {
         for (const s of spots) {
-          expect(isWalkable(s, room.walkable), `${room.id} ${s.x},${s.y} walkable`).toBe(true);
+          if (s.top) {
+            // A quest never asks for more than a jump: the perch's top is lower than a jump rises.
+            expect(room.perches?.some((p) => p.top === s.top && pointInPolygon(s, p.area)), `${room.id} ${s.x},${s.y} on a perch with top ${s.top}`).toBe(true);
+            expect(s.top, `${room.id} ${s.x},${s.y}`).toBeLessThan(JUMP_RISE - 20);
+          } else expect(isWalkable(s, room.walkable), `${room.id} ${s.x},${s.y} walkable`).toBe(true);
           for (const d of room.doors) expect(distanceToRect(s, d.rect), `${room.id} ${s.x},${s.y} vs ${d.id}`).toBeGreaterThanOrEqual(60);
         }
       });
@@ -472,6 +477,23 @@ describe('perches (OP-084)', () => {
         expect(meets, `${room.id}: ${p.id} meets no floor or perch`).toBe(true);
       }
     }
+  });
+
+  it('hold what sits up on them, each on a perch with that very top, where an owl standing on it is drawn', () => {
+    for (const room of ALL_ROOMS) {
+      const raised: Array<[string, Vec2, number]> = [
+        ...(room.spots ?? []).filter((s) => s.top).map((s): [string, Vec2, number] => [`spot ${s.x},${s.y}`, s, s.top!]),
+        ...INTERACTABLES.filter((t) => t.room === room.id && t.top).map((t): [string, Vec2, number] => [t.id, t.pos, t.top!]),
+      ];
+      for (const [name, p, top] of raised) {
+        expect(room.perches?.some((perch) => perch.top === top && pointInPolygon(p, perch.area)), `${room.id} ${name}`).toBe(true);
+        // What an owl there comes down on is that perch, from the floor's side too: nothing higher hides it.
+        expect(groundAt(room.perches, p, top), `${room.id} ${name}`).toBe(top);
+      }
+    }
+    // The hub's first: two quest spots on the bench, a leaf pile on the beam.
+    expect(ROOMS['hub']!.spots?.filter((s) => s.top === 80)).toHaveLength(2);
+    expect(INTERACTABLES.find((t) => t.id === 'hub-leaves-beam')?.top).toBe(264);
   });
 
   it("the hub's bench is a jump up from the floor, and the lantern beam a jump and the second flap up from the bench", () => {
