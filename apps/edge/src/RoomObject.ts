@@ -32,6 +32,7 @@ import {
   getInteractable,
   getNpc,
   getQuest,
+  hashForLog,
   isDeviceId,
   isEmoteId,
   insidePark,
@@ -46,6 +47,7 @@ import {
   pointInRect,
   portraitLook,
   cleanRealms,
+  climbRef,
   sameRealms,
   startRun,
   wearVariants,
@@ -54,6 +56,8 @@ import {
   type ClientHello,
   type ClientNest,
   type LanternState,
+  type LogFields,
+  type Logger,
   type NestEditRefusal,
   type NestEditResult,
   type NestView,
@@ -71,6 +75,7 @@ import {
 import { accountsOn } from './accounts';
 import type { Collections } from './Collections';
 import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectLog';
+import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
@@ -98,6 +103,16 @@ interface Attachment {
   device?: DeviceClass;
   /** The device the pass's collector token names (OP-139): the owl's other screens are sent the moved card. */
   dev?: string;
+  /** The chaos run the socket was opened under (its X-Chaos-Run header, OP-132): on every line about it (OP-134). */
+  run?: string;
+  /** Why the room server closed the socket, when it did (rate limits, a bad frame): its leave is a kick (OP-134). */
+  kicked?: string;
+}
+
+/** Why an owl leaves its room, as the log tells it (OP-134); `afk` is told for a goodbye said asleep. */
+interface LeaveWhy {
+  reason: 'user' | 'dropped' | 'timeout' | 'kick';
+  detail?: string;
 }
 
 /** The visit a socket's owl is on, as the collection log takes it: its pass's id, its device and its room. */
@@ -151,9 +166,9 @@ function cleanLeavers(v: unknown): Record<string, Record<string, Leaver>> {
   for (const [room, owls] of Object.entries(v as Record<string, unknown>)) {
     if (!owls || typeof owls !== 'object') continue;
     for (const [id, l] of Object.entries(owls as Record<string, unknown>)) {
-      const { pos, leftAt } = (l ?? {}) as Partial<Leaver>;
+      const { pos, leftAt, dropped } = (l ?? {}) as Partial<Leaver>;
       if (typeof leftAt !== 'number' || typeof pos?.x !== 'number' || typeof pos.y !== 'number') continue;
-      (out[room] ??= {})[id] = { pos: { x: pos.x, y: pos.y }, leftAt };
+      (out[room] ??= {})[id] = { pos: { x: pos.x, y: pos.y }, leftAt, ...(dropped === true ? { dropped: true as const } : {}) };
     }
   }
   return out;
@@ -173,13 +188,19 @@ function withWear(look: OwlLook, wear: Wear | undefined): OwlLook {
 
 function peerOf(ws: WebSocket): Peer {
   return {
-    send: (text) => ws.send(text),
-    close: (code, reason) => {
+    // A socket closed meanwhile is the close handler's to clean up: a send to it failing is no news,
+    // and one that fails on an open socket goes on to the room, which logs it.
+    send: (text) => {
       try {
-        ws.close(code, reason);
-      } catch {
-        /* already closed */
+        ws.send(text);
+      } catch (e) {
+        if (ws.readyState === WebSocket.READY_STATE_OPEN) throw e;
       }
+    },
+    close: (code, reason) => {
+      // The room closes a socket for its rate limits; a replaced session's owl stays, on its new socket.
+      if (code !== CLOSE.REPLACED) kickedFor(ws, reason);
+      closeSocket(ws, code, reason);
     },
     persist: (state) => {
       const att = ws.deserializeAttachment() as Attachment | null;
@@ -193,13 +214,32 @@ function randomSid(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** Close a socket that may be closed already. */
+/** Close a socket that may be closed already (the page went first: nothing to tell). One still open that will not close is logged. */
 function closeSocket(ws: WebSocket, code: number, reason: string): void {
   try {
     ws.close(code, reason);
-  } catch {
-    /* already closed */
+  } catch (e) {
+    if (ws.readyState === WebSocket.READY_STATE_OPEN) moduleLog.warn('room.leave', 'send_failed', 'A socket could not be closed.', { code, reason, error: e });
   }
+}
+
+/** The room server is closing this socket: its owl's leave is logged as a kick, with why (OP-134). */
+function kickedFor(ws: WebSocket, why: string): void {
+  const att = ws.deserializeAttachment() as Attachment | null;
+  if (att && !att.kicked) ws.serializeAttachment({ ...att, kicked: why } satisfies Attachment);
+}
+
+/** Frames' handling time is told per room this often (OP-134's tick_latency_p95), from a sample of at most so many frames. */
+const TICK_EVERY_MS = 10_000;
+const TICK_SAMPLE_MAX = 2_000;
+/** Emotes dropped for coming too fast are told at most this often per socket, with how many (OP-134). */
+const THROTTLE_TELL_MS = 10_000;
+
+/** The nearest-rank 95th percentile of some times (ms); 0 for none. */
+export function p95(ms: readonly number[]): number {
+  if (!ms.length) return 0;
+  const sorted = [...ms].sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)]!;
 }
 
 export class RoomObject extends DurableObject<Env> {
@@ -232,9 +272,16 @@ export class RoomObject extends DurableObject<Env> {
   private noticeAt = 0;
   /** Where owls left each room lately, kept past the rooms themselves (OP-138). */
   private readonly leftBehind = new Map<string, Record<string, Leaver>>();
+  /** The room server's log (OP-134), at the deployment's level. */
+  private readonly log: Logger;
+  /** Each room's frames' handling times since its window began (OP-134's tick_latency_p95). */
+  private readonly ticks = new Map<string, { since: number; n: number; ms: number[] }>();
+  /** Emotes dropped for coming too fast, by socket session, since last told (OP-134's emote_throttled). */
+  private readonly throttled = new Map<string, { n: number; toldAt: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.log = loggerFor(env);
     this.statsOn = logConfig(env) !== null;
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_FRAME, HEARTBEAT_FRAME));
     // Wake-up: rebuild rooms from the hibernated sockets' attachments. A socket whose
@@ -244,12 +291,9 @@ export class RoomObject extends DurableObject<Env> {
         const att = ws.deserializeAttachment() as Attachment | null;
         if (!att?.state) continue;
         this.room(att.room).restore(peerOf(ws), att.state, att.sid);
-      } catch {
-        try {
-          ws.close(1011, 'room unavailable');
-        } catch {
-          /* ignore */
-        }
+      } catch (e) {
+        this.log.error('room.join', 'unhandled_error', 'A socket’s owl could not be put back in its room after the object woke: the socket is closed.', { error: e });
+        closeSocket(ws, 1011, 'room unavailable');
       }
     }
     // An idle object can be evicted while a leaf pile is still gone: bring those back from storage.
@@ -287,6 +331,7 @@ export class RoomObject extends DurableObject<Env> {
         now: () => Date.now(),
         cap: roomCap(this.env, id),
         counts: () => this.counts(),
+        log: this.log,
       });
       this.rooms.set(id, r);
       const kept = this.leftBehind.get(id);
@@ -304,6 +349,62 @@ export class RoomObject extends DurableObject<Env> {
     return a;
   }
 
+  // ---------- the log (OP-134) ----------
+
+  /** The lines about one socket's owl: its room, its hashed ids, and its chaos run when it came with one. */
+  private logOf(att: Attachment): Logger {
+    const fields: LogFields = { room: att.room, session_id: hashForLog(att.id) };
+    if (att.cid) fields.collector_hash = hashForLog(att.cid);
+    if (att.run) fields.run_id = att.run;
+    return this.log.with(fields);
+  }
+
+  /** A frame's handling time in a room (every nest together): once its window has run TICK_EVERY_MS, the window's 95th percentile is logged. */
+  private sampleTick(roomId: string, ms: number): void {
+    const room = isNestRoom(roomId) ? 'nest' : roomId;
+    const now = Date.now();
+    let w = this.ticks.get(room);
+    if (!w) this.ticks.set(room, (w = { since: now, n: 0, ms: [] }));
+    w.n += 1;
+    if (w.ms.length < TICK_SAMPLE_MAX) w.ms.push(ms);
+    if (now - w.since < TICK_EVERY_MS) return;
+    this.log.info('room.tick', 'tick_latency_p95', 'How long a room’s frames took to handle over the last window.', { room, p95_ms: p95(w.ms), frames: w.n, window_ms: now - w.since });
+    this.ticks.set(room, { since: now, n: 0, ms: [] });
+  }
+
+  /** An emote dropped for coming too fast: told at once, then at most every THROTTLE_TELL_MS per socket with how many since. */
+  private emoteThrottled(att: Attachment): void {
+    const now = Date.now();
+    const t = this.throttled.get(att.sid) ?? { n: 0, toldAt: Number.NEGATIVE_INFINITY };
+    t.n += 1;
+    if (now - t.toldAt >= THROTTLE_TELL_MS) {
+      this.logOf(att).info('room.emote', 'emote_throttled', 'Emotes came too fast and were dropped.', { count: t.n });
+      t.n = 0;
+      t.toldAt = now;
+    }
+    // Kept per socket until it goes; a flood of sockets never grows it past this.
+    if (this.throttled.size >= 2_000 && !this.throttled.has(att.sid)) this.throttled.clear();
+    this.throttled.set(att.sid, t);
+  }
+
+  /** A socket is done: the emotes it had dropped since last told are told now. */
+  private flushThrottled(att: Attachment): void {
+    const t = this.throttled.get(att.sid);
+    this.throttled.delete(att.sid);
+    if (t?.n) this.logOf(att).info('room.emote', 'emote_throttled', 'Emotes came too fast and were dropped.', { count: t.n });
+  }
+
+  /** An owl's leave (OP-134): why, how long it stayed, and for a goodbye said asleep how long it slept (afk). Before the room lets it go. */
+  private logLeave(att: Attachment, room: Room, why: LeaveWhy): void {
+    const log = this.logOf(att);
+    const sleep = room.sleepOf(att.id);
+    const reason = att.kicked ? 'kick' : why.reason === 'user' && sleep ? 'afk' : why.reason;
+    const detail = att.kicked ?? why.detail;
+    const now = Date.now();
+    log.info('room.leave', 'room_leave', 'An owl left a room.', { reason, ...(detail ? { detail } : {}), stayed_ms: now - att.joinedAt });
+    if (reason === 'afk') log.info('room.rest', 'afk_leave', 'An owl left its room asleep, its visitor away.', sleep?.since != null ? { asleep_ms: now - sleep.since } : {});
+  }
+
   /** The busy ribbon now: asked of the overflow object when last asked more than a minute ago. */
   private async freshNotice(): Promise<void> {
     if (Date.now() - this.noticeAt < NOTICE_FRESH_MS) return;
@@ -317,9 +418,9 @@ export class RoomObject extends DurableObject<Env> {
         const body = (await r.json()) as { words?: unknown; realms?: unknown };
         this.setNotice(body.words);
         if (body.realms !== undefined) this.setRealms(body.realms);
-      }
-    } catch {
-      /* the ribbon stays as it was until the next ask */
+      } else this.log.warn('overflow', 'read_failed', 'The overflow object did not say the busy ribbon: it stays as it was until the next ask.', { status: r.status });
+    } catch (e) {
+      this.log.warn('overflow', 'read_failed', 'The overflow object did not say the busy ribbon: it stays as it was until the next ask.', { error: e });
     }
   }
 
@@ -354,6 +455,7 @@ export class RoomObject extends DurableObject<Env> {
     if (sameRealms(next, this.realms)) return;
     const before = this.realms;
     this.realms = next;
+    this.log.debug('room.realms', 'realms_set', 'The realms switch reached this room object.', { open: next.open, portal: next.portal, ...(next.night ? { night: next.night } : {}) });
     void this.ctx.storage.put(REALMS_KEY, next);
     for (const room of this.rooms.values()) room.broadcast({ t: 'realms', realms: next });
     for (const roomId of before.open) if (!next.open.includes(roomId) && roomDef(roomId)?.gated) this.sendRealmAway(roomId);
@@ -364,7 +466,7 @@ export class RoomObject extends DurableObject<Env> {
   /** A socket whose owl is on another screen now: closed with the code that shows the moved card. */
   private sendMoved(ws: WebSocket): void {
     closeSocket(ws, CLOSE.MOVED, 'moved');
-    this.drop(ws);
+    this.drop(ws, { reason: 'kick', detail: 'moved' });
   }
 
   /** An owl restored on another screen: its sockets here from every other device are sent the moved card. */
@@ -385,7 +487,7 @@ export class RoomObject extends DurableObject<Env> {
         .then((holds) => {
           if (!holds && (ws.deserializeAttachment() as Attachment | null)?.sid === sid) this.sendMoved(ws);
         })
-        .catch(() => undefined),
+        .catch((e: unknown) => this.logOf(att).warn('room.join', 'read_failed', 'The collections object did not say which screen holds the owl: it stays on this one.', { error: e })),
     );
   }
 
@@ -401,7 +503,11 @@ export class RoomObject extends DurableObject<Env> {
     this.ctx.waitUntil(
       this.collections()
         .accountLook(cid, portrait)
-        .catch(() => void this.looksSent.delete(cid)),
+        .catch((e: unknown) => {
+          // Sent again with the next look.
+          this.looksSent.delete(cid);
+          this.logOf(att).warn('room.join', 'write_failed', 'The owl’s picture for its account was not kept: it goes again with its next look.', { error: e });
+        }),
     );
   }
 
@@ -413,7 +519,7 @@ export class RoomObject extends DurableObject<Env> {
       if (!att?.state) continue;
       this.send(ws, { t: 'closed', room: roomId, why: 'realm', sign });
       closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
-      this.drop(ws);
+      this.drop(ws, { reason: 'kick', detail: 'realm-closed' });
     }
   }
 
@@ -445,12 +551,17 @@ export class RoomObject extends DurableObject<Env> {
     const tz = request.headers.get('X-Collector-Tz');
     if (!isRoomId(roomId) || !id) return new Response('bad room', { status: 400 });
     const perIp = Number(this.env.MAX_SOCKETS_PER_IP) || DEFAULT_MAX_SOCKETS_PER_IP;
-    if (this.ctx.getWebSockets(`ip:${ip}`).length >= perIp) return new Response('too many connections from this address', { status: 429 });
+    const run = runIdOf(request);
+    if (this.ctx.getWebSockets(`ip:${ip}`).length >= perIp) {
+      (run ? this.log.with({ run_id: run }) : this.log).warn('room.join', 'room_join_refused', 'A room socket was refused: too many from one address.', { room: roomId, session_id: hashForLog(id), reason: 'address', limit: perIp });
+      return new Response('too many connections from this address', { status: 429 });
+    }
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server, [`id:${id}`, `ip:${ip}`, `room:${roomId}`, ...(isCollectorId(cid) ? [`cid:${cid}`] : [])]);
     const att: Attachment = { room: roomId, id, sid: randomSid(), ip, joinedAt: Date.now(), state: null };
+    if (run) att.run = run;
     if (isCollectorId(cid)) att.cid = cid;
     if (isDeviceId(dev)) att.dev = dev;
     if (isTimeZone(tz)) att.tz = tz;
@@ -467,8 +578,31 @@ export class RoomObject extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  /**
+   * A frame from a socket. How long each takes to handle is sampled per room (tick_latency_p95), and an
+   * error nothing handled is logged before it goes on as before (OP-134).
+   */
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    let att = ws.deserializeAttachment() as Attachment | null;
+    const at = ws.deserializeAttachment() as Attachment | null;
+    const t0 = Date.now();
+    try {
+      await this.frame(ws, message, at);
+    } catch (e) {
+      (at ? this.logOf(at) : this.log).error('room.tick', 'unhandled_error', 'A frame failed with an error nothing handled.', { error: e });
+      throw e;
+    } finally {
+      if (at) this.sampleTick(at.room, Date.now() - t0);
+    }
+  }
+
+  /** The room server is closing this socket for what it sent: its owl's leave is a kick (OP-134). */
+  private kick(ws: WebSocket, code: number, reason: string): void {
+    kickedFor(ws, reason);
+    closeSocket(ws, code, reason);
+  }
+
+  private async frame(ws: WebSocket, message: string | ArrayBuffer, first: Attachment | null): Promise<void> {
+    let att = first;
     // A nest's hello waits on the collections object: frames that arrive meanwhile wait behind it, in order.
     const waiting = att ? this.admitting.get(att.sid) : undefined;
     if (waiting) {
@@ -476,23 +610,24 @@ export class RoomObject extends DurableObject<Env> {
       if (ws.readyState !== WebSocket.READY_STATE_OPEN) return; // turned away
       att = ws.deserializeAttachment() as Attachment | null; // the hello put its owl in the room
     }
-    if (!att) return ws.close(CLOSE.BAD_PROTOCOL, 'no session');
-    if (typeof message !== 'string') return ws.close(CLOSE.BAD_PROTOCOL, 'text frames only');
+    if (!att) return closeSocket(ws, CLOSE.BAD_PROTOCOL, 'no session');
+    if (typeof message !== 'string') return this.kick(ws, CLOSE.BAD_PROTOCOL, 'text frames only');
     if (message === HEARTBEAT_FRAME) return; // normally answered by the auto-response without reaching here
     const frame = parseClientFrame(message);
     if (!frame) {
-      if (message.length > 1024) return ws.close(CLOSE.TOO_LARGE, 'frame too large');
-      return ws.close(CLOSE.BAD_PROTOCOL, 'malformed frame');
+      if (message.length > 1024) return this.kick(ws, CLOSE.TOO_LARGE, 'frame too large');
+      return this.kick(ws, CLOSE.BAD_PROTOCOL, 'malformed frame');
     }
 
     if (!att.state) {
-      if (frame.t !== 'hello') return ws.close(CLOSE.BAD_PROTOCOL, 'hello first');
+      if (frame.t !== 'hello') return this.kick(ws, CLOSE.BAD_PROTOCOL, 'hello first');
       if (this.env.GATE === 'ticket' && att.ip !== 'admitted') {
         // v2 hook: the Worker marks admitted passes; guests are refused when the gate is closed.
       }
       if (!isNestRoom(att.room)) {
         if (this.realmClosed(att.room)) {
           // A gated realm the keepers have not opened: the page walks the owl back to the hub.
+          this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a realm the keepers have not opened.', { reason: 'realm' });
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
         }
@@ -505,8 +640,12 @@ export class RoomObject extends DurableObject<Env> {
       // travel into the park (OP-130) whether the owl has walked through the front gate.
       const room = att.room;
       const sid = att.sid;
+      const me = att;
       const done = (isNestRoom(att.room) ? this.helloNest(ws, att, frame) : this.helloTravel(ws, att, frame))
-        .catch(() => closeSocket(ws, 1011, 'try again'))
+        .catch((e: unknown) => {
+          this.logOf(me).error('room.join', 'room_join_refused', 'An owl’s hello failed: the page is asked to try again.', { reason: 'offline', error: e });
+          closeSocket(ws, 1011, 'try again');
+        })
         .finally(() => {
           this.admitting.delete(sid);
           this.forget(room);
@@ -518,11 +657,12 @@ export class RoomObject extends DurableObject<Env> {
     const room = this.room(att.room);
     switch (frame.t) {
       case 'hello':
-        return ws.close(CLOSE.BAD_PROTOCOL, 'duplicate hello');
+        return this.kick(ws, CLOSE.BAD_PROTOCOL, 'duplicate hello');
       case 'move':
         return room.move(att.id, frame);
       case 'rest':
-        return room.rest(att.id, frame.asleep);
+        if (room.rest(att.id, frame.asleep) && frame.asleep) this.logOf(att).info('room.rest', 'afk_sleep', 'An owl fell asleep, its visitor idle.');
+        return;
       case 'air':
         // Flight (OP-084): a state of the owl, counted against its own allowance, never logged.
         return void room.air(att.id, frame.air);
@@ -536,6 +676,8 @@ export class RoomObject extends DurableObject<Env> {
         return;
       }
       case 'bye':
+        if (room.sessionOf(att.id) === att.sid) this.logLeave(att, room, { reason: 'user' });
+        this.flushThrottled(att);
         room.leave(att.id, att.sid);
         this.keepLeavers(att.room);
         this.acts.get(att.room)?.forget(att.id);
@@ -579,12 +721,20 @@ export class RoomObject extends DurableObject<Env> {
     // Wear the collector does not own (or is not yet known to own) is left off until checked.
     const { look, recheck } = this.vetLook(att, hello.look);
     const welcome = { ...(att.copy ? { copy: att.copy } : {}), ...(att.entry ? { entry: att.entry } : {}), notice: this.notice, realms: this.realms };
+    // Back on a new socket (OP-134): before the room saw its old one go, or soon after its connection dropped.
+    const replaced = room.has(att.id);
+    const back = room.leaverOf(att.id);
     const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome });
+    const log = this.logOf(att);
     if (result === 'full') {
+      log.info('room.join', 'room_join_refused', 'An owl was turned away from a full room.', { reason: 'cap', cap: room.cap });
       this.send(ws, { t: 'full', room: att.room, cap: room.cap });
       closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
       return false;
     }
+    log.info('room.join', 'room_join_ok', 'An owl joined a room.', { owls: room.count, ...(hello.via ? { via: hello.via } : {}), ...(att.copy ? { copy: att.copy } : {}), ...(att.owner ? { owner: true } : {}) });
+    if (replaced) log.info('room.join', 'reconnect_ok', 'An owl came back on a new socket before the room saw its old one go.', { gap_ms: 0, replaced: true });
+    else if (back?.dropped) log.info('room.join', 'reconnect_ok', 'An owl came back after its connection dropped.', { gap_ms: Date.now() - back.leftAt });
     // The entry went out with the welcome: the socket need not keep it.
     const kept = ws.deserializeAttachment() as Attachment | null;
     if (kept?.entry) {
@@ -618,9 +768,13 @@ export class RoomObject extends DurableObject<Env> {
   private async helloTravel(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
     const through = await this.collections()
       .travelThroughGate(att.cid!)
-      .catch(() => true);
+      .catch((e: unknown) => {
+        this.logOf(att).warn('collections.travel', 'read_failed', 'The collections object did not say whether the owl walked through the gate: it is let in.', { error: e });
+        return true;
+      });
     if (ws.readyState !== WebSocket.READY_STATE_OPEN) return;
     if (!through) {
+      this.logOf(att).info('room.join', 'room_join_refused', 'A travel into the park was turned away: the owl has not walked through the front gate.', { reason: 'gate' });
       this.send(ws, { t: 'closed', room: att.room, why: 'gate' });
       return closeSocket(ws, CLOSE.NOT_THROUGH_GATE, 'not through the gate');
     }
@@ -634,7 +788,11 @@ export class RoomObject extends DurableObject<Env> {
     this.ctx.waitUntil(
       this.collections()
         .travelEntered(cid, att.room, spawn ?? null)
-        .catch(() => undefined),
+        .then((gate) => {
+          if (gate === 'crossed') this.logOf(att).info('collections.travel', 'gate_crossed', 'An owl walked through the front gate into the park.');
+          else if (gate === 'cleared') this.logOf(att).info('collections.travel', 'gate_flag_cleared', 'An owl is outside the park again: into it is through the front gate next time.');
+        })
+        .catch((e: unknown) => this.logOf(att).error('collections.travel', 'write_failed', 'Where the owl walked was not kept: the map and the gate rule miss this room.', { error: e })),
     );
   }
 
@@ -652,7 +810,8 @@ export class RoomObject extends DurableObject<Env> {
     let visit: NestVisit | null;
     try {
       visit = await this.collections().nestById(nestId, att.cid);
-    } catch {
+    } catch (e) {
+      this.logOf(att).error('room.join', 'room_join_refused', 'The collections object did not say how the nest stands: the page is asked to try again.', { reason: 'offline', error: e });
       return closeSocket(ws, 1011, 'try again');
     }
     if (ws.readyState !== WebSocket.READY_STATE_OPEN) return;
@@ -660,6 +819,7 @@ export class RoomObject extends DurableObject<Env> {
     const mine = visit?.mine === true;
     if (!view || (!view.open && !mine)) {
       const why = view ? 'closed' : 'gone';
+      this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a nest that is closed or gone.', { reason: 'nest', detail: why });
       this.send(ws, { t: 'closed', room: att.room, why });
       return closeSocket(ws, CLOSE.NEST_CLOSED, why);
     }
@@ -690,7 +850,8 @@ export class RoomObject extends DurableObject<Env> {
     let res: NestEditResult;
     try {
       res = 'open' in frame ? await stub.setNestOpen(att.cid, frame.open) : await stub.setNestSpot(att.cid, frame.spot, frame.item);
-    } catch {
+    } catch (e) {
+      this.logOf(att).error('room.nest', 'write_failed', 'An owner’s change to its nest did not reach the collections object: the page is told to try again.', { error: e });
       return no('offline');
     }
     if (!res.ok) return no(res.reason);
@@ -711,7 +872,7 @@ export class RoomObject extends DurableObject<Env> {
       if (!att?.state || att.owner) continue;
       this.send(ws, { t: 'closed', room: roomId, why: 'closed' });
       closeSocket(ws, CLOSE.NEST_CLOSED, 'closed');
-      this.drop(ws);
+      this.drop(ws, { reason: 'kick', detail: 'nest-closed' });
     }
   }
 
@@ -728,7 +889,8 @@ export class RoomObject extends DurableObject<Env> {
       const [own, others] = await Promise.all([stub.myNest(att.cid, look ? nestLook(look) : null, visitOf(att)), stub.streetNests(att.cid, STREET_DOORS - 1)]);
       const doors = Array.from({ length: STREET_DOORS - 1 }, (_, i) => others[i] ?? null);
       this.send(ws, { t: 'street', r, own: { nestId: own.nest.nestId, open: own.nest.open }, doors });
-    } catch {
+    } catch (e) {
+      this.logOf(att).error('room.nest', 'read_failed', 'The collections object did not say the street’s doors: the page is told to try again.', { error: e });
       refuse('offline');
     }
   }
@@ -766,7 +928,8 @@ export class RoomObject extends DurableObject<Env> {
   /** Run quest work for one visitor after the previous one finished (no interleaving per visitor). */
   private serial(att: Attachment, fn: () => Promise<void>): void {
     const prev = this.queues.get(att.id) ?? Promise.resolve();
-    const next = prev.then(fn, fn).catch(() => undefined);
+    // Each piece of work answers its own failures; one that throws anyway is logged, and the next still runs.
+    const next = prev.then(fn, fn).catch((e: unknown) => this.logOf(att).error('room.play', 'unhandled_error', 'A visitor’s quest or game work failed with an error nothing handled.', { error: e }));
     this.queues.set(att.id, next);
     void next.finally(() => {
       if (this.queues.get(att.id) === next) this.queues.delete(att.id);
@@ -783,8 +946,9 @@ export class RoomObject extends DurableObject<Env> {
     try {
       const res = await this.collections().questEvent(att.cid, ev, att.room);
       if (res.updates.length && res.board) this.sendBoard(ws, res.board, res.updates);
-    } catch {
-      /* quests are best effort for pushes: the next request returns the true board */
+    } catch (e) {
+      // Quests are best effort for pushes: the next request returns the true board.
+      this.logOf(att).warn('room.play', 'write_failed', 'A quest event was not counted: the collections object did not answer.', { kind: ev.kind, error: e });
     }
   }
 
@@ -855,7 +1019,8 @@ export class RoomObject extends DurableObject<Env> {
           return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
         }
       }
-    } catch {
+    } catch (e) {
+      this.logOf(att).error('room.play', 'write_failed', 'A quest step did not reach the collections object: the page is told to try again.', { frame: frame.t, error: e });
       return refuse('offline');
     }
   }
@@ -885,7 +1050,10 @@ export class RoomObject extends DurableObject<Env> {
       }
       if (a === 'ascent') {
         const res = await stub.climbBand(cid, frame.k!, frame.band!, visitOf(att));
-        if (!res.ok) return no(res.reason);
+        if (!res.ok) {
+          this.logOf(att).info('collections.climb', 'climb_band_refused', 'A band of the climb was refused.', { climb_ref: climbRef(cid, frame.k!), band: frame.band, reason: res.reason });
+          return no(res.reason);
+        }
         const { ok: _ok, ...settled } = res;
         return this.send(ws, { t: 'act', r, a, ok: true, ...settled });
       }
@@ -976,7 +1144,8 @@ export class RoomObject extends DurableObject<Env> {
           return;
         }
       }
-    } catch {
+    } catch (e) {
+      this.logOf(att).error('room.play', 'write_failed', 'An activity or game step did not reach the collections object: the page is told to try again.', { error: e });
       return no('offline');
     }
   }
@@ -986,8 +1155,9 @@ export class RoomObject extends DurableObject<Env> {
     try {
       const { walls, mine } = await this.collections().arcadeWalls(att.cid ?? null);
       this.send(ws, { t: 'wall', walls, mine });
-    } catch {
-      /* best effort */
+    } catch (e) {
+      // The wall fills in with the next run.
+      this.logOf(att).warn('room.play', 'read_failed', 'The collections object did not say the arcade’s score wall: it fills in with the next run.', { error: e });
     }
   }
 
@@ -1016,8 +1186,9 @@ export class RoomObject extends DurableObject<Env> {
         const played = await this.collections().play(att.cid, each, { kind: 'beam' });
         this.send(ws, { t: 'paid', what: 'beam', feathers: played.added, total: played.total });
         this.pushTasks(ws, played);
-      } catch {
-        /* the beam still glows; pay is best effort */
+      } catch (e) {
+        // The beam still glows; pay is best effort.
+        this.logOf(att).error('room.play', 'write_failed', 'An owl that helped light the lantern beam was not paid: the collections object did not answer.', { feathers: each, error: e });
       }
     }
   }
@@ -1040,8 +1211,8 @@ export class RoomObject extends DurableObject<Env> {
         const played = await this.collections().play(att.cid, QUIZ_FEATHERS, { kind: 'quiz' });
         this.send(ws, { t: 'paid', what: 'quiz', feathers: played.added, total: played.total });
         this.pushTasks(ws, played);
-      } catch {
-        /* best effort */
+      } catch (e) {
+        this.logOf(att).error('room.play', 'write_failed', 'An owl that answered the stage quiz right was not paid: the collections object did not answer.', { feathers: QUIZ_FEATHERS, error: e });
       }
     }
   }
@@ -1088,7 +1259,11 @@ export class RoomObject extends DurableObject<Env> {
     const s = sightingOf(att);
     if (!this.statsOn || !s) return;
     const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}), ...(travel ? { travel: true } : {}) } : s;
-    this.ctx.waitUntil(this.collections().seen(sighting, { body: look.body, ...(look.species ? { species: look.species } : {}) }).catch(() => undefined));
+    this.ctx.waitUntil(
+      this.collections()
+        .seen(sighting, { body: look.body, ...(look.species ? { species: look.species } : {}) })
+        .catch((e: unknown) => this.logOf(att).warn('collections', 'write_failed', 'The player stats missed a sighting of an owl.', { error: e })),
+    );
   }
 
   /** These owls' visits are still going (the minute heartbeat, a socket's close), for the player stats. */
@@ -1096,14 +1271,15 @@ export class RoomObject extends DurableObject<Env> {
     if (!this.statsOn || !sightings.length) return Promise.resolve();
     return this.collections()
       .alive(sightings)
-      .catch(() => undefined);
+      .catch((e: unknown) => this.log.warn('collections', 'write_failed', 'The player stats missed a heartbeat of the owls still here.', { owls: sightings.length, error: e }));
   }
 
   private send(ws: WebSocket, frame: ServerFrame): void {
     try {
       ws.send(JSON.stringify(frame));
-    } catch {
-      /* closed meanwhile */
+    } catch (e) {
+      // A socket closed meanwhile is its close handler's to clean up; one that is open and still refuses is news.
+      if (ws.readyState === WebSocket.READY_STATE_OPEN) this.log.warn('room.tick', 'send_failed', 'A frame could not be sent to an open socket.', { frame: frame.t, error: e });
     }
   }
 
@@ -1125,7 +1301,10 @@ export class RoomObject extends DurableObject<Env> {
           }
           return entry;
         })
-        .catch(() => null)
+        .catch((e: unknown) => {
+          this.log.warn('room.join', 'read_failed', 'The collections object did not say what an owl owns: its wear stays off until the next read.', { collector_hash: hashForLog(cid), error: e });
+          return null;
+        })
         .finally(() => this.ownedLoads.delete(cid));
       this.ownedLoads.set(cid, load);
     }
@@ -1173,7 +1352,7 @@ export class RoomObject extends DurableObject<Env> {
       this.collections()
         .setEquipped(att.cid, att.tz, wear ?? null)
         .then(() => undefined)
-        .catch(() => undefined),
+        .catch((e: unknown) => this.logOf(att).warn('room.join', 'write_failed', 'What the owl wears was not kept in its collection: the next change sends it again.', { error: e })),
     );
   }
 
@@ -1182,36 +1361,43 @@ export class RoomObject extends DurableObject<Env> {
     let entry: OwnedEntry | null | undefined = this.owned.get(att.cid);
     if (!entry?.set.has(e)) entry = await this.loadOwned(att.cid, att.tz, true, visitOf(att));
     if (!entry?.set.has(e) || room.sessionOf(att.id) !== att.sid) return;
-    if (!room.emote(att.id, e)) return;
+    if (!room.emote(att.id, e)) return this.emoteThrottled(att);
     // An emote counts for quests in this room, and "for" any NPC owl standing close enough.
     const pos = room.positionOf(att.id);
     const near = pos ? npcsIn(att.room).filter((n) => distance(n.pos, pos) <= NPC_EMOTE_RADIUS).map((n) => n.id) : [];
     this.serial(att, () => this.pushEvent(ws, att, { kind: 'emote', emote: e, room: att.room, near }));
   }
 
-  override async webSocketClose(ws: WebSocket): Promise<void> {
+  override async webSocketClose(ws: WebSocket, code?: number): Promise<void> {
     // The visit was here until now: it ends here unless the owl comes back in (another room, a dropped line).
     const att = ws.deserializeAttachment() as Attachment | null;
     const s = att?.state ? sightingOf(att) : null;
-    this.drop(ws);
+    // Closed by the page (1000, or 1001 as it goes away), or a connection that dropped.
+    this.drop(ws, code === 1000 || code === 1001 ? { reason: 'user' } : { reason: 'dropped', ...(code ? { detail: `code ${code}` } : {}) });
     if (s) this.ctx.waitUntil(this.statsAlive([s]));
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
-    this.drop(ws);
+    this.drop(ws, { reason: 'dropped', detail: 'error' });
   }
 
-  private drop(ws: WebSocket): void {
+  /** A socket is gone or sent away: its owl leaves its room (when this socket still holds it), logged once with why (OP-134). */
+  private drop(ws: WebSocket, why: LeaveWhy): void {
     const att = ws.deserializeAttachment() as Attachment | null;
     if (!att) return;
     if (att.state) {
       // Only the session that owns the visitor may remove it; a replaced socket's close is ignored.
       const room = this.rooms.get(att.room);
       const owns = room?.sessionOf(att.id) === att.sid;
-      if (owns) this.acts.get(att.room)?.forget(att.id);
-      room?.leave(att.id, att.sid);
+      if (owns) {
+        this.logLeave(att, room!, why);
+        this.acts.get(att.room)?.forget(att.id);
+      }
+      // A connection lost (not a goodbye, not sent away): one back soon has reconnected.
+      room?.leave(att.id, att.sid, !att.kicked && (why.reason === 'dropped' || why.reason === 'timeout'));
       if (owns) this.keepLeavers(att.room);
     }
+    this.flushThrottled(att);
     this.forget(att.room);
     this.emitCounts();
   }
@@ -1252,12 +1438,9 @@ export class RoomObject extends DurableObject<Env> {
       const idleFor = now - Math.max(lastBeat, att.joinedAt);
       const limit = att.state ? IDLE_CLOSE_MS : HELLO_TIMEOUT_MS;
       if (idleFor > limit) {
-        try {
-          ws.close(att.state ? 1001 : CLOSE.BAD_PROTOCOL, att.state ? 'idle' : 'no hello');
-        } catch {
-          /* ignore */
-        }
-        this.drop(ws);
+        if (!att.state) this.logOf(att).info('room.join', 'room_join_refused', 'A socket said no hello in time and was closed.', { reason: 'no-hello' });
+        closeSocket(ws, att.state ? 1001 : CLOSE.BAD_PROTOCOL, att.state ? 'idle' : 'no hello');
+        this.drop(ws, { reason: 'timeout' });
       }
     }
     this.emitCounts(true);

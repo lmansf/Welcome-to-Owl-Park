@@ -28,6 +28,7 @@ import {
   CLOSE,
   type ClientHello,
   type AirAt,
+  type Logger,
   type ClientMove,
   type OwlLook,
   type OwlSnapshot,
@@ -77,6 +78,8 @@ interface Visitor {
   usedAt: number;
   /** When this visitor, the owner of the nest it is in, last changed it. */
   arrangedAt: number;
+  /** When its owl fell asleep (OP-126), on the room's clock: unknown for one asleep before the object woke. */
+  sleptAt?: number;
 }
 
 export interface RoomOptions {
@@ -85,6 +88,8 @@ export interface RoomOptions {
   cap: number;
   /** Provides park-wide counts for welcome frames. */
   counts?: () => Record<string, number>;
+  /** Where a frame that could not be sent says so (OP-134). */
+  log?: Logger;
 }
 
 export const LIMITS = {
@@ -123,6 +128,8 @@ export const LIMITS = {
 export interface Leaver {
   pos: Vec2;
   leftAt: number;
+  /** Its connection dropped (it said no goodbye): back soon, it reconnected (OP-134's reconnect_ok). */
+  dropped?: true;
 }
 
 export class Room {
@@ -161,11 +168,12 @@ export class Room {
     return (this.opts.random ?? Math.random)();
   }
 
+  /** A frame to one visitor. A socket that has died meanwhile is the adapter's to clean up; the miss is logged (OP-134). */
   private send(v: Visitor, frame: ServerFrame): void {
     try {
       v.peer.send(JSON.stringify(frame));
-    } catch {
-      /* a dead socket is cleaned up by the adapter's close handler */
+    } catch (e) {
+      this.sendFailed(frame, e);
     }
   }
 
@@ -175,10 +183,14 @@ export class Room {
       if (id === except) continue;
       try {
         v.peer.send(text);
-      } catch {
-        /* ignore */
+      } catch (e) {
+        this.sendFailed(frame, e);
       }
     }
+  }
+
+  private sendFailed(frame: ServerFrame, e: unknown): void {
+    this.opts.log?.warn('room.tick', 'send_failed', 'A frame could not be sent to an owl in the room: its socket is cleaned up when it closes.', { room: this.id, frame: frame.t, error: e });
   }
 
   snapshot(except?: string): OwlSnapshot[] {
@@ -301,8 +313,14 @@ export class Room {
   leaversNow(): Record<string, Leaver> {
     const now = this.now();
     const out: Record<string, Leaver> = {};
-    for (const [id, l] of this.leavers) if (now - l.leftAt <= LIMITS.leaverMemoryMs) out[id] = { pos: { ...l.pos }, leftAt: l.leftAt };
+    for (const [id, l] of this.leavers) if (now - l.leftAt <= LIMITS.leaverMemoryMs) out[id] = { pos: { ...l.pos }, leftAt: l.leftAt, ...(l.dropped ? { dropped: true as const } : {}) };
     return out;
+  }
+
+  /** Where and when an owl left this room lately (within the memory window), and whether its connection dropped. */
+  leaverOf(id: string): Leaver | undefined {
+    const l = this.leavers.get(id);
+    return l && this.now() - l.leftAt <= LIMITS.leaverMemoryMs ? { pos: { ...l.pos }, leftAt: l.leftAt, ...(l.dropped ? { dropped: true as const } : {}) } : undefined;
   }
 
   /** Owls that left lately as the room object kept them: an owl in the room now, or one this room saw leave later, keeps its own. */
@@ -311,7 +329,7 @@ export class Room {
     for (const [id, l] of Object.entries(kept)) {
       if (this.visitors.has(id) || now - l.leftAt > LIMITS.leaverMemoryMs) continue;
       const mine = this.leavers.get(id);
-      if (!mine || mine.leftAt < l.leftAt) this.leavers.set(id, { pos: { ...l.pos }, leftAt: l.leftAt });
+      if (!mine || mine.leftAt < l.leftAt) this.leavers.set(id, { pos: { ...l.pos }, leftAt: l.leftAt, ...(l.dropped ? { dropped: true as const } : {}) });
     }
   }
 
@@ -373,6 +391,7 @@ export class Room {
     // An owl that walks is awake, for everyone, whatever its page said last (OP-126).
     const woke = v.st.asleep === true;
     delete v.st.asleep;
+    delete v.sleptAt;
     v.peer.persist?.(v.st);
     if (woke) this.broadcast({ t: 'rest', id, asleep: false }, id);
     const frame: ServerFrame = { t: 'move', id, from, to: target, at };
@@ -405,16 +424,34 @@ export class Room {
     this.broadcast({ t: 'look', id, look }, id);
   }
 
-  /** The owl falls asleep or wakes (OP-126): kept on the visitor, so a newcomer sees it too, and told to the others. */
-  rest(id: string, asleep: boolean): void {
+  /**
+   * The owl falls asleep or wakes (OP-126): kept on the visitor, so a newcomer sees it too, and told to
+   * the others. True when that changed how it stands.
+   */
+  rest(id: string, asleep: boolean): boolean {
     const v = this.visitors.get(id);
-    if (!v) return;
-    if (!this.admitFrame(v)) return void v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
-    if (asleep === (v.st.asleep === true)) return;
-    if (asleep) v.st.asleep = true;
-    else delete v.st.asleep;
+    if (!v) return false;
+    if (!this.admitFrame(v)) {
+      v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
+      return false;
+    }
+    if (asleep === (v.st.asleep === true)) return false;
+    if (asleep) {
+      v.st.asleep = true;
+      v.sleptAt = this.now();
+    } else {
+      delete v.st.asleep;
+      delete v.sleptAt;
+    }
     v.peer.persist?.(v.st);
     this.broadcast({ t: 'rest', id, asleep }, id);
+    return true;
+  }
+
+  /** Whether a visitor's owl is asleep now (OP-126), and since when on the room's clock (null: asleep before the object woke). */
+  sleepOf(id: string): { since: number | null } | null {
+    const v = this.visitors.get(id);
+    return v?.st.asleep ? { since: v.sleptAt ?? null } : null;
   }
 
   /** The visitor's current look (what everyone else sees), if present. */
@@ -480,6 +517,7 @@ export class Room {
     // An owl that jumps is awake, for everyone (OP-126).
     const woke = v.st.asleep === true;
     delete v.st.asleep;
+    delete v.sleptAt;
     v.peer.persist?.(v.st);
     if (woke) this.broadcast({ t: 'rest', id, asleep: false }, id);
     this.broadcast({ t: 'air', id, air, at: now }, id);
@@ -563,14 +601,17 @@ export class Room {
     return true;
   }
 
-  /** Remove a visitor (graceful bye, socket close, or idle reap). A stale session's close is ignored. */
-  leave(id: string, sid?: string): void {
+  /**
+   * Remove a visitor (graceful bye, socket close, or idle reap). A stale session's close is ignored.
+   * `dropped`: its connection went without a goodbye, so one back soon reconnected (OP-134).
+   */
+  leave(id: string, sid?: string, dropped = false): void {
     const v = this.visitors.get(id);
     if (!v) return;
     if (sid !== undefined && v.sid !== sid) return;
     const pos = this.currentPos(v);
     this.visitors.delete(id);
-    this.leavers.set(id, { pos, leftAt: this.now() });
+    this.leavers.set(id, { pos, leftAt: this.now(), ...(dropped ? { dropped: true as const } : {}) });
     if (this.leavers.size > 200) {
       const oldest = this.leavers.keys().next().value;
       if (oldest !== undefined) this.leavers.delete(oldest);

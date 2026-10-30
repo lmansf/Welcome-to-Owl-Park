@@ -60,7 +60,10 @@
     // Accounts without passwords (OP-139): friend codes, one screen at a time, an owl protected by an
     // email and restored by a magic link. "on" once the owner has set ACCOUNT_SECRET, RESEND_API_KEY and
     // MAIL_FROM (secrets, below) and approved the words; "off" leaves every page as it was.
-    "ACCOUNTS": "off"
+    "ACCOUNTS": "off",
+    // How much the Worker and the room server log (OP-134): one JSON line per event, "info" in
+    // production; "debug" adds a line for every pass taken and for the realms switch reaching each room object.
+    "LOG_LEVEL": "info"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },

@@ -231,8 +231,11 @@ export interface FlyOptions {
  * flapping would end the run. A page cannot act between its frames, and the game steps up to 100 ms
  * at once (MAX_CATCH_UP_MS in arcade/field.ts), so a choice must hold through 100 ms with no say;
  * when none does, the one that holds frame by frame. Each flap is a press on `target`: the field, or
- * on a phone the pad's Interact (OP-137). With `untilOnline` it flies on until the page is back online
- * as well; with `hold` the game is held still in the frame that is done (the page's game loop sleeps).
+ * on a phone the pad's Interact (OP-137). With `untilOnline` it flies on until the page has found the
+ * room again: its dot has gone from online and come back (a socket the page dropped itself shows online
+ * until the browser gives up on its closing handshake, ten seconds and more after the network went, so
+ * an online dot alone does not mean the room has the owl again). With `hold` the game is held still in
+ * the frame that is done (the page's game loop sleeps).
  */
 export async function flyThrough(page: Page, gaps: number, how: FlyOptions = {}): Promise<void> {
   const { target = '.arcade [data-stage]', untilOnline = false, hold = false } = how;
@@ -256,6 +259,8 @@ export async function flyThrough(page: Page, gaps: number, how: FlyOptions = {})
     const BLIND = 100 + 1000 / 120;
     const steady = (f: Flap) => f.y > (f.ahead()?.gapY ?? 320) + 18 && f.vy > 0;
     const online = () => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online';
+    /** Whether the dot has left online since this flight began: the page has seen its socket go. */
+    let lost = !online();
     /** Whether the flight lasts the next second, flapping now or not, with no say for `blind` ms and steady flaps after. */
     const lasts = (flapNow: boolean, blind: number) => {
       const c = g.clone();
@@ -276,7 +281,8 @@ export async function flyThrough(page: Page, gaps: number, how: FlyOptions = {})
         slowest = Math.max(slowest, now - last);
         last = now;
         if (g.over || now - t0 > 60_000) return done();
-        if (g.score >= gaps && (!untilOnline || online())) {
+        lost ||= !online();
+        if (g.score >= gaps && (!untilOnline || (lost && online()))) {
           // Held there: the game's clock stops with the frame that reached the gap, so nothing more happens to the run.
           if (hold) (window as unknown as { owlPark: { game: { loop: { sleep(): void } } } }).owlPark.game.loop.sleep();
           return done();

@@ -3,6 +3,8 @@
  * Apart from the object class so tests run it against any SQLite with the same
  * `exec(query, ...bindings)` shape. Only order and line numbers are stored, never a buyer.
  */
+import { errorFields } from '@owl-park/shared';
+import { moduleLog } from './logs';
 import type { OrderRecord, PassLink, TicketRecord, TicketStore } from './TicketBook';
 import type { TicketKind } from './tickets';
 
@@ -70,8 +72,9 @@ export class SqlTicketStore implements TicketStore {
     // A table kept before the pass had a price (OP-062) has no cents column: add it (once there, SQLite refuses a second one).
     try {
       sql.exec(`ALTER TABLE opening_passes ADD COLUMN cents INTEGER`);
-    } catch {
-      // Already there.
+    } catch (e) {
+      // Already there; anything else is worth a line.
+      if (!/duplicate column/i.test(errorFields(e).message)) moduleLog.error('worker.tickets', 'write_failed', 'A table could not be brought up to date.', { table: 'opening_passes', column: 'cents', error: e });
     }
     sql.exec(`CREATE INDEX IF NOT EXISTS opening_passes_from ON opening_passes (from_ticket)`);
   }

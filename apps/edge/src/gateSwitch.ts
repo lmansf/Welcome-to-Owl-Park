@@ -6,6 +6,7 @@
  * With the switch never used, or cleared, GATE in wrangler.jsonc decides as before.
  */
 import { gateMode, type Gate, type GateMode } from './gate';
+import { moduleLog } from './logs';
 
 /** How long a Worker keeps what it read of the switch: a flip reaches everyone within this. */
 export const GATE_KEEP_MS = 10_000;
@@ -56,7 +57,7 @@ export async function gateNow(read: () => Promise<GateSet>, deployed: string | u
     kept = { gate, until: now + GATE_KEEP_MS };
     return gate;
   } catch (e) {
-    console.error('[owl-park] the opening switch could not be read:', e instanceof Error ? e.message : e);
+    moduleLog.error('worker.admin', 'read_failed', 'The opening switch could not be read: the last answer stands (GATE before the first).', { error: e });
     const gate = kept?.gate ?? gateFrom(null, deployed);
     kept = { gate, until: now + GATE_KEEP_MS };
     return gate;

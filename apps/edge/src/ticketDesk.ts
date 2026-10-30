@@ -109,9 +109,11 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
     case '/issue': {
       const l = lines(body['lines']);
       if (!order || !l || typeof body['held'] !== 'boolean') return bad();
+      // Already in the book: an earlier delivery of the store's webhook made these tickets (OP-134 logs the repeat).
+      const existed = book.orderOf(order) !== null;
       const r = await book.issue(order, l, body['held'], now);
       const o = book.orderOf(order)!.record;
-      return json({ claim: r.claim, tickets: r.tickets.map((t) => t.id), held: o.held, sent: o.sent });
+      return json({ claim: r.claim, tickets: r.tickets.map((t) => t.id), held: o.held, sent: o.sent, existed });
     }
     case '/release': {
       if (!order) return bad();
@@ -149,9 +151,12 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
     case '/claim': {
       const secret = str(body['secret'], 64);
       if (!secret || !device) return bad();
+      // Where the link's tickets were, for the Worker's log (OP-134): how many it moves from another device.
+      const before = await book.claimable(secret);
       const r = await book.claim(secret, device);
+      const moved = (before ?? []).filter((t) => t.device !== null && t.device !== device).length;
       // The order, for the Worker alone (OP-139: its email protects the owl that claimed it).
-      return r ? json({ tickets: wallet(device), order: r[0]?.order ?? null }) : json({ error: 'unknown link' }, 404);
+      return r ? json({ tickets: wallet(device), order: r[0]?.order ?? null, moved, claimed: r.length }) : json({ error: 'unknown link' }, 404);
     }
     case '/take': {
       const secret = str(body['secret'], 64);

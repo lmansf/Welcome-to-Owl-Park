@@ -27,6 +27,7 @@ import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, Qu
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { MoveBudget } from './budget';
+import { pageLog } from './pageLog';
 import { OPEN_ENTRY, type AccountConfirm, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
@@ -376,6 +377,8 @@ export class EdgeTransport implements ParkTransport {
     let welcomed = false;
     let opened = false;
     let lastRx = Date.now();
+    /** When the socket dropped (it reconnects): the page's log tells the gap once the room has the owl again (OP-134). */
+    let droppedAt: number | null = null;
     /** Which copy of the room the server put this owl in (OP-075): a dropped socket asks for the same one. */
     let copy = 1;
     /** Our id as the server knows it (from the pass), which differs from the scene's local id. */
@@ -471,6 +474,9 @@ export class EdgeTransport implements ParkTransport {
           offset = f.now - localNow;
           offsetKnown = true;
           welcomed = true;
+          if (droppedAt !== null) pageLog?.info('client.net', 'reconnect_ok', 'The room has the owl again after its connection dropped.', { room: roomId, gap_ms: localNow - droppedAt });
+          else pageLog?.info('client.net', 'room_join_ok', 'The room let the owl in.', { room: roomId });
+          droppedAt = null;
           // In: a socket dropped from here on comes back to a room the owl is already in.
           via = undefined;
           selfId = f.id;
@@ -844,6 +850,8 @@ export class EdgeTransport implements ParkTransport {
         heartbeat = null;
         if (ws === socket) ws = null;
         failWaiters();
+        if (opened && !welcomed) pageLog?.info('client.net', 'room_join_refused', 'The room closed the socket before letting the owl in.', { room: roomId, code: ev.code });
+        else pageLog?.info('client.net', 'room_leave', 'The room’s socket closed.', { room: roomId, code: ev.code, ...(closed ? { left: true } : {}) });
         if (closed) return;
         if (ev.code === CLOSE.MOVED) {
           // Restored on another screen (OP-139): the page shows the moved card, and nothing reconnects.
@@ -879,6 +887,7 @@ export class EdgeTransport implements ParkTransport {
         // A refused handshake (bad pass, too many connections) surfaces as 1006 before open:
         // fetch a fresh pass for the next attempt rather than retrying a rejected one for hours.
         if (ev.code === CLOSE.BAD_PASS || !opened) this.pass = null;
+        droppedAt ??= Date.now();
         scheduleReconnect();
       };
       socket.onerror = () => {

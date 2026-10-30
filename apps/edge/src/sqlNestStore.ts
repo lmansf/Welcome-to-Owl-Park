@@ -4,6 +4,7 @@
  * run it against any SQLite with the same `exec(query, ...bindings)` shape. These tables are the only
  * place a nest and its owner's collector id meet; no wrangler migration is needed for them.
  */
+import { moduleLog } from './logs';
 import { sanitizeLayout, sanitizeNestLook, type FurnitureSource, type NestLayout, type NestLook, type NestRow, type NestStore, type StreetDoor } from '@owl-park/shared';
 
 type Row = {
@@ -20,7 +21,8 @@ function parsed(text: string | null): unknown {
   if (!text) return null;
   try {
     return JSON.parse(text) as unknown;
-  } catch {
+  } catch (e) {
+    moduleLog.error('collections', 'read_failed', 'A stored nest field could not be read: it counts as missing.', { error: e });
     return null;
   }
 }
