@@ -499,11 +499,13 @@ describe('the street in the room object', () => {
 describe('the arcade in the room object', () => {
   /**
    * Walk an owl in the arcade to a cabinet (the middle of its spot) and let the walk finish: first
-   * onto the open floor, since an owl appears anywhere near the entrance and a straight walk from
-   * there may meet the floor's edge.
+   * straight down onto the open floor, since an owl appears anywhere near the entrance, perhaps up in
+   * the corner past the west bay's edge, where a straight walk east meets the floor's edge (it did, at
+   * 187,703). The floor at y 850 runs the hall's whole width, and below any point of it.
    */
   async function toCabinet(obj: Obj, ws: FakeSocket, to: { x: number; y: number }) {
-    await send(obj, ws, { t: 'move', to: { x: 300, y: 850 }, seq: 1 });
+    const at = ws.last('welcome')!.you.pos;
+    await send(obj, ws, { t: 'move', to: { x: at.x, y: 850 }, seq: 1 });
     clock += 10_000;
     await send(obj, ws, { t: 'move', to, seq: 2 });
     clock += 10_000;
