@@ -99,6 +99,9 @@ export type LogEvent = (typeof LOG_EVENTS)[number];
 /** Events kept for code not in the park yet: the fraud link (OP-053) logs these once it is built in. */
 export const RESERVED_LOG_EVENTS: readonly LogEvent[] = ['fraud_scored', 'fraud_timeout', 'fraud_fail_open', 'fraud_restored'];
 
+/** Events the logger raises itself (its privacy refusal): its own tests fire each, not the Worker's. */
+export const LOGGER_EVENTS: readonly LogEvent[] = ['log_field_refused'];
+
 /** Field names a line refuses: they could carry a person's details. */
 export const REFUSED_FIELDS: readonly string[] = ['email', 'name', 'token', 'ticket_id', 'order_id'];
 

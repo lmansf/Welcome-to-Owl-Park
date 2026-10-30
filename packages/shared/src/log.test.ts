@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOG_COMPONENTS, LOG_EVENTS, createLogger, errorFields, hashForLog, logLevelOf, type LogLevel } from './log';
+import { LOGGER_EVENTS, LOG_COMPONENTS, LOG_EVENTS, createLogger, errorFields, hashForLog, logLevelOf, type LogLevel } from './log';
 
 const T0 = Date.UTC(2026, 9, 29, 18, 0, 0);
 
@@ -40,6 +40,12 @@ describe('structured logging (OP-134)', () => {
       ['warn', 'log_field_refused', 'order_id', 'order_recorded'],
     ]);
     expect(JSON.stringify(lines)).not.toContain('grown.up@family.test');
+  });
+
+  it('raises each of its own events itself, here (the Worker’s tests look for every other event)', () => {
+    const { log, lines } = captured();
+    log.warn('worker.store', 'webhook_rejected', 'A webhook was turned away.', { email: 'grown.up@family.test' });
+    expect(LOGGER_EVENTS.filter((e) => !lines.some((l) => l.line['event'] === e))).toEqual([]);
   });
 
   it('writes an error as its name and message, never its stack', () => {
