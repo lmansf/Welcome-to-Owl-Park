@@ -45,6 +45,10 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'grove-leaves-1', kind: 'leaf-pile', room: 'grove', pos: { x: 2500, y: 835 } },
   { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 2890, y: 845 } },
   { id: 'grove-leaves-3', kind: 'leaf-pile', room: 'grove', pos: { x: 2220, y: 820 } },
+  // ...and up in the east wing's treehouses (OP-084): on the porch, at the top of the ladder, and on
+  // the left tree's treehouse, which only a glide from the loft reaches (the glide's small extra).
+  { id: 'grove-leaves-porch', kind: 'leaf-pile', room: 'grove', pos: { x: 4290, y: 708 }, top: 218 },
+  { id: 'grove-leaves-hut', kind: 'leaf-pile', room: 'grove', pos: { x: 3645, y: 696 }, top: 345 },
   { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 400, y: 705 } },
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
