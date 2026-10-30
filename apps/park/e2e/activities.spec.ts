@@ -4,6 +4,29 @@ import { doAction as act, openPark, state, walkAndStop as walk, walkToJetty } fr
 
 const feathers = (page: Page) => page.evaluate(() => window.owlPark.collection()?.feathers ?? 0);
 
+/**
+ * Reel in from the page itself, in the first frame the line is `line` ('bite': the bobber dips; 'out':
+ * straight after the cast). A fish stays on the hook 1.4 s and bites 2.5 s after the cast at the
+ * soonest, and on a slow runner a look at the page and then a press can take longer than either.
+ */
+const reelWhen = (page: Page, line: 'out' | 'bite') =>
+  page.evaluate(
+    (want) =>
+      new Promise<void>((resolve, reject) => {
+        const until = performance.now() + 12_000;
+        const look = () => {
+          const reel = document.querySelector<HTMLElement>('[data-action="act:reel"]');
+          if (reel && window.owlPark.state()?.play?.line === want) {
+            reel.click();
+            resolve();
+          } else if (performance.now() > until) reject(new Error(`the line was never ${want}`));
+          else requestAnimationFrame(look);
+        };
+        look();
+      }),
+    line,
+  );
+
 test.describe('activities (this device)', () => {
   test('one owl lights the whole lantern beam, and it glows and pays', async ({ page }) => {
     test.slow(); // seven lanterns, each a few seconds after the last
@@ -45,16 +68,15 @@ test.describe('activities (this device)', () => {
     await act(page, 'act:cast');
     await expect.poll(async () => (await state(page)).play?.line).toBe('out');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-fishing.png` });
-    // The bobber dips: reel in now (E, as quick as a visitor at the keyboard).
-    await expect.poll(async () => (await state(page)).play?.line, { timeout: 12_000, intervals: [50] }).toBe('bite');
-    await page.keyboard.press('e');
+    // The bobber dips: reel in at once.
+    await reelWhen(page, 'bite');
     await expect(page.getByText(/^(You caught .+!|You fished out an old boot!)/)).toBeVisible();
     await expect.poll(async () => (await state(page)).play?.line).toBe('idle');
     expect(await feathers(page)).toBeGreaterThanOrEqual(before);
     // Reeling in before the bite loses the fish.
     await page.waitForTimeout(1600);
     await act(page, 'act:cast');
-    await act(page, 'act:reel');
+    await reelWhen(page, 'out');
     await expect(page.getByText('Too soon! Wait for the bobber to dip.')).toBeVisible();
   });
 
