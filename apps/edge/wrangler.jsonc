@@ -62,9 +62,9 @@
     // Standings stay private until the owner decides otherwise; admin routes need: wrangler secret put ADMIN_KEY
     "VOTE_TALLY_PUBLIC": "false",
     // Accounts without passwords (OP-139): friend codes, one screen at a time, an owl protected by an
-    // email and restored by a magic link. "on" once the owner has set ACCOUNT_SECRET, RESEND_API_KEY and
-    // MAIL_FROM (secrets, below) and approved the words; "off" leaves every page as it was.
-    "ACCOUNTS": "off",
+    // email and restored by a magic link. On since 2026-10-31, the owner's go once ACCOUNT_SECRET,
+    // RESEND_API_KEY and MAIL_FROM (secrets, below) were set; "off" leaves every page as it was before.
+    "ACCOUNTS": "on",
     // How much the Worker and the room server log (OP-134): one JSON line per event, "info" in
     // production; "debug" adds a line for every pass taken and for the realms switch reaching each room object.
     "LOG_LEVEL": "info",
