@@ -10,7 +10,7 @@
  * it is the spawn shifted along the doorway back by the owl's lane, and the room server keeps that
  * point when it is on the floor, out of an exit and near the spawn.
  */
-import { isWalkable, pointInRect } from './geometry';
+import { isWalkable, pointInRect, type Rect } from './geometry';
 import { nestDoorIndex } from './homes';
 import type { Vec2 } from './protocol';
 import { findSpawn, type DoorDef, type RoomDef } from './room';
@@ -26,6 +26,41 @@ export interface Lane {
 
 export function doorAxis(room: RoomDef, door: DoorDef): DoorAxis {
   return door.rect.x <= 0 || door.rect.x + door.rect.w >= room.size.w ? 'y' : 'x';
+}
+
+/**
+ * Where a step from `from` to `to` came into `rect`: its first point inside it, or null when the step
+ * never touches it. A page reads its owl's place once a frame, so on a slow device the first place
+ * found in a doorway can be a frame's walk past where the owl crossed in, a turnstile further along at
+ * the gate, and a narrow stretch of doorway can be crossed between two looks (OP-124). A step that
+ * began inside comes in where it ends, `to`, or nowhere when it ends outside.
+ *
+ * TODO-DOCS (OP-124): docs/ARCHITECTURE.md's doorway paragraph ("A walk goes through a doorway only
+ * when..."): the page takes a doorway from where the owl's step since its last look came into it, a
+ * step right across it included, so a slow frame neither carries the owl a turnstile along nor past
+ * a narrow doorway. Held keys against an edge of the floor slide along it (steerTarget).
+ */
+export function entryPoint(rect: Rect, from: Vec2, to: Vec2): Vec2 | null {
+  if (pointInRect(from, rect)) return pointInRect(to, rect) ? to : null;
+  // The step is inside while it is between both pairs of edges: from the later of the times it gets
+  // between a pair to the earlier of the times it leaves one.
+  let enter = 0;
+  let leave = 1;
+  for (const [a, b, lo, hi] of [
+    [from.x, to.x, rect.x, rect.x + rect.w],
+    [from.y, to.y, rect.y, rect.y + rect.h],
+  ] as const) {
+    if (a === b) {
+      if (a < lo || a > hi) return null;
+      continue;
+    }
+    const t0 = (lo - a) / (b - a);
+    const t1 = (hi - a) / (b - a);
+    enter = Math.max(enter, Math.min(t0, t1));
+    leave = Math.min(leave, Math.max(t0, t1));
+  }
+  if (enter > leave) return null;
+  return { x: from.x + enter * (to.x - from.x), y: from.y + enter * (to.y - from.y) };
 }
 
 /** The lane an owl standing at `p` takes through `door`. */

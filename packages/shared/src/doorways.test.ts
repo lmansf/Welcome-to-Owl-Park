@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalPoint, doorAxis, inExit, laneThrough } from './doorways';
+import { arrivalPoint, doorAxis, entryPoint, inExit, laneThrough } from './doorways';
 import type { RoomDef } from './room';
 
 /** A room with one doorway back to `other`: in the far wall, or in the west wall. */
@@ -69,5 +69,39 @@ describe('doorways keep the lane (OP-124)', () => {
     expect(inExit(r, { x: 800, y: 480 })).toBe(true);
     expect(inExit(r, { x: 150, y: 650 })).toBe(false);
     expect(inExit(r, { x: 350, y: 650 })).toBe(true);
+  });
+});
+
+describe('a step into a doorway (OP-124)', () => {
+  const rect = { x: 2350, y: 650, w: 440, h: 64 };
+
+  it('comes in where it crossed the edge, however long the step', () => {
+    // Along the floor's edge, one slow frame: from 30 px short of the left edge to 80 px past it.
+    expect(entryPoint(rect, { x: 2320, y: 706 }, { x: 2430, y: 706 })).toEqual({ x: 2350, y: 706 });
+    // Up and to the right, across the lower edge first and the left one after: the later crossing.
+    const p = entryPoint(rect, { x: 2300, y: 760 }, { x: 2400, y: 660 })!;
+    expect(p.x).toBeCloseTo(2350);
+    expect(p.y).toBeCloseTo(710);
+    // Straight up through the lower edge, and leftward through the right one.
+    expect(entryPoint(rect, { x: 2500, y: 760 }, { x: 2500, y: 700 })).toEqual({ x: 2500, y: 714 });
+    expect(entryPoint(rect, { x: 2850, y: 700 }, { x: 2750, y: 700 })).toEqual({ x: 2790, y: 700 });
+  });
+
+  it('comes in where it crossed, though it ended past the doorway: a slow frame over a narrow stretch of it', () => {
+    // Along a line falling a little to the right, inside the doorway only from x 2350 to 2397.5.
+    const p = entryPoint(rect, { x: 2330, y: 708 }, { x: 2420, y: 716 })!;
+    expect(p.x).toBeCloseTo(2350);
+    expect(p.y).toBeCloseTo(709.78);
+  });
+
+  it('is where the step ends when it began inside, and nowhere when the step ends outside it or never touches it', () => {
+    expect(entryPoint(rect, { x: 2400, y: 700 }, { x: 2450, y: 700 })).toEqual({ x: 2450, y: 700 });
+    expect(entryPoint(rect, { x: 2350, y: 700 }, { x: 2350, y: 700 })).toEqual({ x: 2350, y: 700 });
+    expect(entryPoint(rect, { x: 2400, y: 700 }, { x: 2400, y: 760 })).toBeNull();
+    expect(entryPoint(rect, { x: 2300, y: 760 }, { x: 2340, y: 720 })).toBeNull();
+    // Beneath it, short of it, and up past its left end.
+    expect(entryPoint(rect, { x: 2300, y: 720 }, { x: 2800, y: 720 })).toBeNull();
+    expect(entryPoint(rect, { x: 2300, y: 700 }, { x: 2340, y: 700 })).toBeNull();
+    expect(entryPoint(rect, { x: 2300, y: 760 }, { x: 2300, y: 600 })).toBeNull();
   });
 });
