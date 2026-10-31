@@ -1,10 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
 import { distance, distanceToRect, isWalkable, pointInRect, type Polygon, type Rect, type Shut } from './geometry';
 import { footing } from './perches';
 import type { Vec2 } from './protocol';
 import { resolveTarget } from './resolveTarget';
 import { WAY_SHORT_PX, wayAround } from './wayAround';
+
+declare module 'vitest' {
+  interface ProvidedContext {
+    /** The tests run under Stryker (vitest.stryker.config.mjs). */
+    mutationRun?: boolean;
+  }
+}
+
+/**
+ * The ways the sweep of every room below walks round in each: all it meets under `vitest run`; the
+ * first three under Stryker, where each step of the search is some ninety times slower and the whole
+ * sweep took minutes, past the minute Stryker gives a test (CI's run 277).
+ */
+const WAYS_A_ROOM = inject('mutationRun') ? 3 : Infinity;
 
 const street = ROOMS['homes']!;
 const middle = (r: Rect): Vec2 => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
@@ -132,7 +146,7 @@ describe('the way around a bend in the floor (OP-148)', () => {
         }
       };
       let walkedRound = 0;
-      for (let i = 0; i < 300; i++) {
+      for (let i = 0; i < 300 && walkedRound < WAYS_A_ROOM; i++) {
         const from = pick();
         const to = pick();
         if (distance(resolveTarget(from, to, floor.walkable, floor.shut), to) <= WAY_SHORT_PX) continue;
