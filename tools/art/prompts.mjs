@@ -1302,6 +1302,12 @@ JOBS.push(GLASS_SEAM_JOB);
 // (a little faster). The playfield and the overlay are painted on flat magenta, which the finish
 // stage keys out. The style frame is one screen, the lobby at the trunk's foot (level 1, screen 0),
 // settled before any other screen is painted.
+//
+// Approved by the owner on 2026-10-31 (candidates A, C and B of the three layers): TREE_STYLE and the
+// way the three prompts below are written are the style every later screen of the tree follows.
+// TODO-DOCS (OP-157): docs/MAP.md's style sheet, from these: the shared style and light words, the
+// three layers and what each paints (and leaves out), magenta for the keyed layers, the owl at a sixth
+// of the frame's height, and the screen's edges described so the neighbouring screens stitch.
 
 const TREE_STYLE = `STYLE (the same words in all three layers of every screen of the tree): hand-painted 2D game art for a side-scrolling platformer in a storybook painterly look: clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. A magical night at a colossal ancient living tree. LIGHT (the same in every layer): cool cream moonlight from high on the left; warm gold lantern light and sap-light glowing from within the wood; deep navy shadow on the right-hand sides of forms. PALETTE: night navy #0C1E36 and deep navy #07122A; dusk blue #2E4C7A in the distance; gold #C9A227 and warm gold light #FFD36A for lanterns, sap-light and lit knotholes; cream #F6F1E3 moonlight; bark #2B1C12 to #4A3322; inner wood #5C4632 lifting to #8F8068 in the light; moss #3E5A3A and #6E8B4E; cool shadow #1B2E4C. VIEW: a strict side view like a classic 2D platformer, the camera level with the floor, no perspective floor plane and no vanishing point; every surface a visitor can stand on is seen edge-on, with a clear, readable flat top edge.`;
 

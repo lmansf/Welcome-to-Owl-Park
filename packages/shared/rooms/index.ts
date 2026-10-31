@@ -856,7 +856,8 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('lintel', 582, 730, 196),
       treeLedge('fungus', 508, 641, 282),
     ],
-    spawns: { default: { x: 800, y: TREE_GROUND }, west: { x: 80, y: TREE_GROUND }, east: { x: ROOM_W - 80, y: TREE_GROUND } },
+    // Arrivals from the east stand clear of the leaves the overlay hangs at the right edge.
+    spawns: { default: { x: 800, y: TREE_GROUND }, west: { x: 80, y: TREE_GROUND }, east: { x: 1440, y: TREE_GROUND } },
     doors: [],
   },
 };
