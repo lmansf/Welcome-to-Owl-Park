@@ -77,7 +77,7 @@ import type { Collections } from './Collections';
 import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectLog';
 import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
-import { LIMITS, Room, type Leaver, type Peer, type VisitorState } from './Room';
+import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
 import { isCollectorId } from './pass';
 import type { Env } from './env';
@@ -234,6 +234,8 @@ const TICK_EVERY_MS = 10_000;
 const TICK_SAMPLE_MAX = 2_000;
 /** Emotes dropped for coming too fast are told at most this often per socket, with how many (OP-134). */
 const THROTTLE_TELL_MS = 10_000;
+/** Places the room would not take as a page asked are told at most this often per socket, with how many (OP-149). */
+const REJECTED_TELL_MS = 60_000;
 
 /** The nearest-rank 95th percentile of some times (ms); 0 for none. */
 export function p95(ms: readonly number[]): number {
@@ -278,6 +280,8 @@ export class RoomObject extends DurableObject<Env> {
   private readonly ticks = new Map<string, { since: number; n: number; ms: number[] }>();
   /** Emotes dropped for coming too fast, by socket session, since last told (OP-134's emote_throttled). */
   private readonly throttled = new Map<string, { n: number; toldAt: number }>();
+  /** Places the room would not take as asked, by socket session, since last told (OP-149's position_rejected). */
+  private readonly rejected = new Map<string, { n: number; toldAt: number; why: PositionRejection }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -332,6 +336,7 @@ export class RoomObject extends DurableObject<Env> {
         cap: roomCap(this.env, id),
         counts: () => this.counts(),
         log: this.log,
+        rejected: (owl, why) => this.positionRejected(id, owl, why),
       });
       this.rooms.set(id, r);
       const kept = this.leftBehind.get(id);
@@ -387,11 +392,54 @@ export class RoomObject extends DurableObject<Env> {
     this.throttled.set(att.sid, t);
   }
 
-  /** A socket is done: the emotes it had dropped since last told are told now. */
+  /** A socket is done: the emotes it had dropped since last told are told now, and the places the room would not take. */
   private flushThrottled(att: Attachment): void {
     const t = this.throttled.get(att.sid);
     this.throttled.delete(att.sid);
     if (t?.n) this.logOf(att).info('room.emote', 'emote_throttled', 'Emotes came too fast and were dropped.', { count: t.n });
+    const r = this.rejected.get(att.sid);
+    this.rejected.delete(att.sid);
+    if (r?.n) this.tellRejected(att, r);
+  }
+
+  /**
+   * A place or a stance the room would not take as an owl's page asked for it (OP-149, Room.ts
+   * PositionRejection): told at once, then at most every REJECTED_TELL_MS per socket with how many
+   * since and the last reason. An honest page asks for one now and then (an older copy of a room, a
+   * page back after the room server restarted); a page that keeps asking is in the log once a minute.
+   *
+   * TODO-DOCS (OP-149): docs/LOGGING.md: position_rejected (component room.move), its reason (room,
+   * floor, perch or arrival, Room.ts PositionRejection) and count; docs/ARCHITECTURE.md's room server
+   * rules: a page's word is never an owl's place for the others.
+   */
+  private positionRejected(roomId: string, id: string, why: PositionRejection): void {
+    const att = this.attachmentOf(roomId, id);
+    if (!att) return;
+    const now = Date.now();
+    const r = this.rejected.get(att.sid) ?? { n: 0, toldAt: Number.NEGATIVE_INFINITY, why };
+    r.n += 1;
+    r.why = why;
+    if (now - r.toldAt >= REJECTED_TELL_MS) {
+      this.tellRejected(att, r);
+      r.n = 0;
+      r.toldAt = now;
+    }
+    // Kept per socket until it goes; a flood of sockets never grows it past this.
+    if (this.rejected.size >= 2_000 && !this.rejected.has(att.sid)) this.rejected.clear();
+    this.rejected.set(att.sid, r);
+  }
+
+  private tellRejected(att: Attachment, r: { n: number; why: PositionRejection }): void {
+    this.logOf(att).info('room.move', 'position_rejected', 'The room would not take a place or a stance as an owl’s page asked for it.', { reason: r.why, count: r.n });
+  }
+
+  /** The attachment of a visitor's socket in a room, said hello or not (its first frame may be the one refused). */
+  private attachmentOf(roomId: string, id: string): Attachment | null {
+    for (const ws of this.ctx.getWebSockets(`id:${id}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att?.room === roomId) return att;
+    }
+    return null;
   }
 
   /** An owl's leave (OP-134): why, how long it stayed, and for a goodbye said asleep how long it slept (afk). Before the room lets it go. */

@@ -1,0 +1,18 @@
+{"at":"2026-10-31T12:31:17.834Z","kind":"action","what":"build the client"}
+{"at":"2026-10-31T12:31:21.169Z","kind":"action","what":"start the park and the stand-in store"}
+{"at":"2026-10-31T12:31:43.143Z","kind":"sample","phase":"before","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":27},{"name":"latency","ok":true,"value":7,"n":47},{"name":"errors","ok":true,"value":0,"n":47},{"name":"checkout","ok":true,"value":57,"detail":{"tickets":1,"sent":true}},{"name":"journey","ok":true,"value":2712,"detail":[{"step":"hub","ms":1407},{"step":"grove","ms":2712,"walkMs":2855}]}]}
+{"at":"2026-10-31T12:31:43.144Z","kind":"action","what":"experiment 9 starts"}
+{"at":"2026-10-31T12:31:43.196Z","kind":"action","what":"a walk into the sky, from the console","to":{"x":2400,"y":20}}
+{"at":"2026-10-31T12:31:47.197Z","kind":"action","what":"standing at the lantern beam's height, far from the beam","z":264}
+{"at":"2026-10-31T12:31:48.166Z","kind":"sample","phase":"experiment","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":21},{"name":"latency","ok":true,"value":13,"n":25},{"name":"errors","ok":true,"value":0,"n":25}]}
+{"at":"2026-10-31T12:31:49.198Z","kind":"action","what":"three walks out of the room, from the console","to":{"x":6000,"y":1700}}
+{"at":"2026-10-31T12:31:51.232Z","kind":"action","what":"a hello from the hub's far end","pos":{"x":4720,"y":900}}
+{"at":"2026-10-31T12:31:53.178Z","kind":"sample","phase":"experiment","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":11},{"name":"latency","ok":true,"value":8,"n":27},{"name":"errors","ok":true,"value":0,"n":27}]}
+{"at":"2026-10-31T12:31:53.269Z","kind":"action","what":"a hello from (9999, 9999)"}
+{"at":"2026-10-31T12:31:55.293Z","kind":"observation","what":"places the fleet was told the console's owls are at or walking to","value":"40 told, 0 off the floor","ok":true,"component":"room server","fix":"walk each target from where the room has the owl, on its own floor (Room.ts move), and tell the others only that walk"}
+{"at":"2026-10-31T12:31:55.293Z","kind":"observation","what":"standing in mid-air told to the fleet","value":"not told","ok":true,"component":"room server","fix":"drop a stance up on a perch where no perch that high is near the owl (Room.ts air, perchFor)"}
+{"at":"2026-10-31T12:31:55.293Z","kind":"observation","what":"the page that asked for walks out of the room","value":"closed: code 4003 (too many moves)","ok":true,"component":"room server","fix":"drop a walk to a point outside the room and strike it like a burst of moves (Room.ts move)"}
+{"at":"2026-10-31T12:31:55.293Z","kind":"observation","what":"where the hub let in a page that said it was at its far end","value":"142 px from the spawn, 2466 px from where it said","ok":true,"component":"room server","fix":"take a hello’s place only near the spawn or near where the owl left lately (Room.ts join)"}
+{"at":"2026-10-31T12:31:55.293Z","kind":"observation","what":"a hello from (9999, 9999)","value":"refused: 4002","ok":true,"component":"room server","fix":"refuse a frame with a point outside the biggest room as malformed (packages/shared edge.ts parseClientFrame)"}
+{"at":"2026-10-31T12:31:55.293Z","kind":"action","what":"roll back"}
+{"at":"2026-10-31T12:32:01.731Z","kind":"sample","phase":"after","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":13},{"name":"latency","ok":true,"value":11,"n":53},{"name":"errors","ok":true,"value":0,"n":53},{"name":"checkout","ok":true,"value":36,"detail":{"tickets":1,"sent":true}},{"name":"journey","ok":true,"value":2579,"detail":[{"step":"hub","ms":1108},{"step":"grove","ms":2579,"walkMs":2643}]}]}

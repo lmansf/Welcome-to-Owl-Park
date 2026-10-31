@@ -22,3 +22,5 @@ the doc agent; runs older than 90 days roll up to one line each.
 | 2026-10-30 08:42 | 5. One phone on a 3G network | held | no | yes | 0 | [2026-10-30-slow-phone-2](2026-10-30-slow-phone-2/result.md) |
 | 2026-10-30 08:43 | 6. A visitor's clock 10 minutes fast | held | no | yes | 0 | [2026-10-30-clock-skew-2](2026-10-30-clock-skew-2/result.md) |
 | 2026-10-30 08:44 | 8. The collection log’s database unreachable | held | no | yes | 0 | [2026-10-30-log-sink-down-2](2026-10-30-log-sink-down-2/result.md) |
+| 2026-10-31 12:31 | 9. A visitor's page worked from the console, to put its owl somewhere it cannot walk | held | no | yes | 0 | [2026-10-31-teleport-from-console](2026-10-31-teleport-from-console/result.md) |
+| 2026-10-31 12:32 | 9. A visitor's page worked from the console, to put its owl somewhere it cannot walk | held | no | yes | 0 | [2026-10-31-teleport-from-console-2](2026-10-31-teleport-from-console-2/result.md) |

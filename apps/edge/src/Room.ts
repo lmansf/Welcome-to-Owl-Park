@@ -28,6 +28,9 @@ import {
   inExit,
   positionAlongWalk,
   resolveTarget,
+  snapToWalkable,
+  closestPointOnPolygon,
+  pointInPolygon,
   distance,
   WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
@@ -98,7 +101,24 @@ export interface RoomOptions {
   counts?: () => Record<string, number>;
   /** Where a frame that could not be sent says so (OP-134). */
   log?: Logger;
+  /** Told each place or stance a page asked for that the room would not take as asked (OP-149): the room object logs it. */
+  rejected?: (id: string, why: PositionRejection) => void;
 }
+
+/**
+ * Why the room would not take a place as a page asked for it (OP-149). The room never takes an owl's
+ * place from its page while it plays: a walk is a target, walked from where the room has the owl at
+ * walking pace, and the others are told the room's walk. These are what a page can still ask for:
+ *  - `room`: a walk to a point outside the room altogether, which no tap or key makes: dropped, and
+ *    struck like a burst of moves (three in ten seconds close the socket);
+ *  - `floor`: a walk to a point on no floor the room has: walked as far as the floor goes, as any
+ *    walk is (a page with an older copy of the room, from before a deploy, may ask for one);
+ *  - `perch`: standing at a perch's height with no perch of that height under the owl, nor by it on
+ *    the rest of its walk: dropped, so the others never see an owl standing in mid-air;
+ *  - `arrival`: a hello from a place the room will not have the owl come in at (far from the spawn
+ *    and from where it left): it comes in by the spawn.
+ */
+export type PositionRejection = 'room' | 'floor' | 'perch' | 'arrival';
 
 export const LIMITS = {
   moveBurst: MOVE_BURST,
@@ -130,6 +150,10 @@ export const LIMITS = {
   arrangeEveryMs: 250,
   /** Extra reach the server allows for talks and uses (the client's owl is drawn a little ahead). */
   reachSlackPx: REACH_SLACK,
+  /** How far off a perch's edge an owl the room has there may be and still be standing up on it (OP-149). */
+  perchReachPx: 32,
+  /** How far off every floor a walk's target may be before the room says so (a rounding, an edge). */
+  offFloorPx: 2,
 } as const;
 
 /** Where an owl left a room, and when: one back soon resumes near there (OP-138). */
@@ -230,6 +254,29 @@ export class Room {
     return { x: Math.round(pos.x), y: Math.round(pos.y) };
   }
 
+  /** Whether a point is in the room at all (OP-149): a frame can say any point in the biggest room there is. */
+  private inRoom(p: Vec2): boolean {
+    return p.x >= 0 && p.y >= 0 && p.x <= this.def.size.w && p.y <= this.def.size.h;
+  }
+
+  /**
+   * Whether a perch `z` high is where the visitor stands (OP-149): under the owl, or within
+   * `perchReachPx` of where the room has it now or of the rest of its walk. Its page is a moment ahead
+   * of the room on a walk, and after a welcome the room's copy walks over to where its page has it.
+   */
+  private perchFor(v: Visitor, z: number): boolean {
+    const perches = (this.def.perches ?? []).filter((p) => Math.abs(p.top - z) <= 0.5);
+    if (perches.length === 0) return false;
+    const here = this.currentPos(v);
+    const end = v.st.walk?.to ?? here;
+    const steps = Math.max(1, Math.ceil(distance(here, end) / (LIMITS.perchReachPx / 2)));
+    for (let i = 0; i <= steps; i++) {
+      const p = { x: here.x + ((end.x - here.x) * i) / steps, y: here.y + ((end.y - here.y) * i) / steps };
+      if (perches.some((perch) => pointInPolygon(p, perch.area) || distance(p, closestPointOnPolygon(p, perch.area)) <= LIMITS.perchReachPx)) return true;
+    }
+    return false;
+  }
+
   private occupied(p: Vec2, except?: string): boolean {
     for (const [id, v] of this.visitors) {
       if (id === except) continue;
@@ -299,6 +346,8 @@ export class Room {
     // Where the page has its owl, when that is on this room's floor or a perch (back on a perch it
     // stood on is back where it was: its page tells the room the height, OP-084).
     const told = hello.pos && onSomeFooting(this.def, hello.pos) && !inExit(this.def, hello.pos) ? hello.pos : undefined;
+    // A place the room will not have the owl come in at (OP-149); another owl standing there is no reason to say so.
+    let refused = hello.pos !== undefined;
     if (told) {
       const recent = this.leavers.get(id);
       const nearSpawn = distance(told, spawn) <= LIMITS.resumeRadius;
@@ -306,8 +355,12 @@ export class Room {
       // since (a page walks on while its connection is down, and comes back where its owl is, OP-138).
       const away = recent === undefined ? Infinity : this.now() - recent.leftAt;
       const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(told, recent.pos) <= LIMITS.resumeRadius + (WALK_SPEED * away) / 1000;
-      if ((nearSpawn || nearLeave) && !this.occupied(told)) pos = told;
+      if (nearSpawn || nearLeave) {
+        refused = false;
+        if (!this.occupied(told)) pos = told;
+      }
     }
+    if (refused) this.opts.rejected?.(id, 'arrival');
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault, undefined, told);
 
     const now = this.now();
@@ -409,9 +462,17 @@ export class Room {
     }
     if (msg.seq <= v.seq) return; // stale or replayed
     v.seq = msg.seq;
+    // No tap or key aims outside the room (OP-149): dropped, and struck like a burst of moves.
+    if (!this.inRoom(msg.to)) {
+      this.opts.rejected?.(id, 'room');
+      if (this.strike(v)) v.peer.close(CLOSE.RATE_LIMITED, 'too many moves');
+      return;
+    }
     const from = this.currentPos(v);
     // The page has the owl's height and the footing for it (OP-084): a walk may go wherever an owl can be at some height.
     const to = resolveTarget(from, msg.to, this.anyFooting);
+    // Aimed off every floor here: walked as far as the floor goes, as any walk is, and said (OP-149).
+    if (distance(msg.to, snapToWalkable(msg.to, this.anyFooting)) > LIMITS.offFloorPx) this.opts.rejected?.(id, 'floor');
     const target = { x: Math.round(to.x), y: Math.round(to.y) };
     if (distance(from, target) < LIMITS.minMovePx) {
       // Asking to walk to where the owl already is means stop (letting go of the arrow keys): a walk
@@ -546,6 +607,11 @@ export class Room {
     v.airTokens -= 1;
     const air = checkAir(a, this.airTop, this.standing);
     if (!air) return false;
+    // Standing up there only where a perch that high is (OP-149): the others never see an owl standing in mid-air.
+    if (air.s === GROUNDED && air.z > 0 && !this.perchFor(v, air.z)) {
+      this.opts.rejected?.(id, 'perch');
+      return false;
+    }
     // On the floor the owl has no air to keep; on a perch it is told, and kept, as standing up there.
     if (air.s === GROUNDED && air.z === 0) delete v.st.air;
     else v.st.air = { ...air, at: now };

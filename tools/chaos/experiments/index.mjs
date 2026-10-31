@@ -1,7 +1,8 @@
 /**
- * The chaos experiments (OP-132), in the ticket's order of risk. Each names its hypothesis, blast
- * radius and rollback; the abort rule is the harness's own (lib/runlog.mjs ABORT_RULE). Those not
- * built yet say what they wait on, and the harness records a run of one as not runnable.
+ * The chaos experiments (OP-132), in the ticket's order of risk, then those added since (9, OP-149).
+ * Each names its hypothesis, blast radius and rollback; the abort rule is the harness's own
+ * (lib/runlog.mjs ABORT_RULE). Those not built yet say what they wait on, and the harness records a
+ * run of one as not runnable.
  */
 import roomServerKilled from './01-room-server-killed.mjs';
 import webhookDropped from './03-webhook-dropped.mjs';
@@ -10,6 +11,7 @@ import slowPhone from './05-slow-phone.mjs';
 import clockSkew from './06-clock-skew.mjs';
 import emoteFlood from './07-emote-flood.mjs';
 import logSinkDown from './08-log-sink-down.mjs';
+import teleportFromConsole from './09-teleport-from-console.mjs';
 
 const later = (what) => ({ notRunnable: what, run() {}, rollback() {} });
 
@@ -30,6 +32,7 @@ export const EXPERIMENTS = [
   clockSkew,
   emoteFlood,
   logSinkDown,
+  teleportFromConsole,
 ];
 
 /** An experiment by its id or its number. */

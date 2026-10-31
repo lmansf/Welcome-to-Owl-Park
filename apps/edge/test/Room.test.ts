@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
-import { Room, LIMITS, type Peer, type VisitorState } from '../src/Room';
+import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
 const def: RoomDef = {
   id: 'test',
@@ -340,6 +340,132 @@ describe('Room', () => {
     expect(a.frames).toEqual([]);
     expect(room.count).toBe(1);
     expect(room.snapshot()[0]!.id).toBe('z');
+  });
+});
+
+describe('Room: where an owl is, is the room’s, whatever its page says (OP-149)', () => {
+  let now = 1_000_000;
+  let said: Array<{ id: string; why: PositionRejection }>;
+  let room: Room;
+  // The fixture room with a bench along its back wall (its front face over the floor's back edge).
+  const withBench: RoomDef = { ...def, perches: [{ id: 'bench', area: [{ x: 300, y: 440 }, { x: 600, y: 440 }, { x: 600, y: 520 }, { x: 300, y: 520 }], top: 80, solid: true }] };
+  const standing = { z: 80, vz: 0, s: GROUNDED, f: 0 } as const;
+  beforeEach(() => {
+    now = 1_000_000;
+    said = [];
+    room = new Room(withBench, { now: () => now, random: () => 0.5, cap: 5, rejected: (id, why) => said.push({ id, why }) });
+  });
+
+  it('walks an owl from where the room has it, at a walk: an ask to go far is a walk there, however often it is asked', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const start = room.positionOf('a')!;
+    room.move('a', { t: 'move', to: { x: 1450, y: 860 }, seq: 1 }); // across the room in one ask
+    expect(b.last('move')).toMatchObject({ from: start, to: { x: 1450, y: 860 }, at: now });
+    now += 100;
+    expect(distance(room.positionOf('a')!, start)).toBeLessThanOrEqual(WALK_SPEED * 0.1 + 1);
+    // Asked again and again on the way, each walk starts where the room has the owl by then.
+    for (let i = 2; i <= 5; i++) {
+      now += 200;
+      const here = room.positionOf('a')!;
+      room.move('a', { t: 'move', to: { x: 1450 - i * 10, y: 860 }, seq: i });
+      expect(b.last('move')!.from).toEqual(here);
+    }
+    now += 200;
+    expect(distance(room.positionOf('a')!, start)).toBeLessThanOrEqual(WALK_SPEED * 1.1 + 1);
+    expect(said).toEqual([]);
+  });
+
+  it('drops a walk to a point outside the room, says so, and closes a page that keeps asking for one', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const start = room.positionOf('a');
+    room.move('a', { t: 'move', to: { x: def.size.w + 400, y: 700 }, seq: 1 });
+    expect(a.count('move') + b.count('move')).toBe(0);
+    expect(said).toEqual([{ id: 'a', why: 'room' }]);
+    expect(a.closed).toBeNull();
+    room.move('a', { t: 'move', to: { x: 700, y: def.size.h + 1 }, seq: 2 });
+    room.move('a', { t: 'move', to: { x: 6000, y: 1700 }, seq: 3 });
+    expect(a.closed).toEqual({ code: CLOSE.RATE_LIMITED, reason: 'too many moves' });
+    expect(a.count('move') + b.count('move')).toBe(0);
+    expect(room.positionOf('a')).toEqual(start);
+  });
+
+  it('walks a walk aimed off every floor as far as the floor goes, and says so; a walk on the floor, or onto a perch, says nothing', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    room.move('a', { t: 'move', to: { x: 1200, y: 100 }, seq: 1 }); // into the sky, over the floor's back edge
+    expect(b.last('move')!.to).toEqual({ x: 1200, y: 500 });
+    expect(said).toEqual([{ id: 'a', why: 'floor' }]);
+    room.move('a', { t: 'move', to: { x: 1000, y: 600 }, seq: 2 });
+    room.move('a', { t: 'move', to: { x: 450, y: 470 }, seq: 3 }); // the bench's top
+    room.move('a', { t: 'move', to: { x: 100, y: 880 }, seq: 4 }); // the floor's corner
+    expect(said).toHaveLength(1);
+  });
+
+  it('keeps an owl standing up on a perch only where that perch is: under it, or by it on the rest of its walk', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    // By the spawn, far from the bench: 80 px up there is standing in mid-air.
+    expect(room.air('a', standing)).toBe(false);
+    expect(b.count('air')).toBe(0);
+    expect(said).toEqual([{ id: 'a', why: 'perch' }]);
+    // Under way to the bench, its page a moment ahead and up on it already, the room's copy short of it still.
+    room.move('a', { t: 'move', to: { x: 450, y: 480 }, seq: 1 });
+    now += 300;
+    expect(room.air('a', standing)).toBe(true);
+    expect(b.last('air')!.air).toEqual(standing);
+    // Arrived, on its top: up there for a newcomer too.
+    now += 5000;
+    expect(room.air('a', standing)).toBe(true);
+    expect(room.snapshot().find((o) => o.id === 'a')?.air).toMatchObject(standing);
+    // A step off its front edge, as the room has it a moment behind: still up there; far off, not.
+    room.move('a', { t: 'move', to: { x: 450, y: 520 + LIMITS.perchReachPx - 4 }, seq: 2 });
+    now += 5000;
+    expect(room.air('a', standing)).toBe(true);
+    room.move('a', { t: 'move', to: { x: 1200, y: 800 }, seq: 3 });
+    now += 5000;
+    expect(room.air('a', standing)).toBe(false);
+    expect(said.map((s) => s.why)).toEqual(['perch', 'perch']);
+  });
+
+  it('lets an owl in by its spawn when its page says it is far from there, says so, and shows the others only where the room has it', () => {
+    const a = new FakePeer();
+    const others = new FakePeer();
+    room.join(others, 'o', hello({ pos: { x: 1000, y: 600 } })); // near the spawn: taken, nothing said
+    expect(others.last('welcome')!.you.pos).toEqual({ x: 1000, y: 600 });
+    expect(said).toEqual([]);
+    room.join(a, 'a', hello({ pos: { x: 1400, y: 850 } }));
+    const pos = a.last('welcome')!.you.pos;
+    expect(distance(pos, { x: 1400, y: 850 })).toBeGreaterThan(LIMITS.resumeRadius);
+    expect(others.last('enter')!.owl.pos).toEqual(pos);
+    expect(said).toEqual([{ id: 'a', why: 'arrival' }]);
+    // Off every floor (the room's top corner): by the spawn too.
+    const c = new FakePeer();
+    room.join(c, 'c', hello({ pos: { x: 10, y: 10 } }));
+    expect(distance(c.last('welcome')!.you.pos, withBench.spawns['default']!)).toBeLessThanOrEqual(LIMITS.scatterDefault * 1.5);
+    expect(said.at(-1)).toEqual({ id: 'c', why: 'arrival' });
+  });
+
+  it('takes nothing more from an owl that has left, as for a page changing rooms', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello(), 's0');
+    room.join(b, 'b', hello());
+    room.leave('a', 's0');
+    const seen = b.frames.length;
+    room.move('a', { t: 'move', to: { x: 1000, y: 700 }, seq: 9 });
+    expect(room.air('a', { z: 30, vz: 100, s: AIRBORNE, f: 1 })).toBe(false);
+    expect(b.frames.length).toBe(seen);
+    expect(said).toEqual([]);
   });
 });
 

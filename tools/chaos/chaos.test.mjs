@@ -33,7 +33,7 @@ const experiment = {
 test('every experiment of the ticket is listed once, in order, with what a run needs to name', () => {
   assert.deepEqual(
     EXPERIMENTS.map((e) => e.n),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   for (const e of EXPERIMENTS) {
     for (const field of ['id', 'name', 'hypothesis', 'blastRadius', 'rollback']) assert.ok(e[field], `${e.n} names its ${field}`);

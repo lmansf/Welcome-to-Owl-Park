@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" font-family="sans-serif" font-size="11">
+<rect width="100%" height="100%" fill="#fff"/>
+<line x1="36" y1="73" x2="684" y2="73" stroke="#e67e22" stroke-dasharray="4 3"/>
+<text x="614" y="69" fill="#e67e22">300 ms limit</text>
+<polyline fill="none" stroke="#2c3e50" stroke-width="2" points="36.0,181.4 211.1,179.2 385.8,181.0 684.0,179.9"/>
+
+<text x="36" y="16">Move echo p95 (ms), 0 to 400; red marks: a failing steady-state check</text>
+<text x="36" y="214">12:31:43</text>
+<text x="634" y="214">12:32:01</text>
+</svg>
