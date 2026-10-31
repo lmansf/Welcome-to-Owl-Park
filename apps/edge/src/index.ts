@@ -502,7 +502,7 @@ const park = {
       const draft = parseFeedback(await readJson(request));
       if (!draft) return json({ error: 'bad request' }, 400);
       const ua = request.headers.get('User-Agent')?.slice(0, 300) || null;
-      const r = await collections(env).addFeedback(pass.cid, draft, ua);
+      const r = await collections(env).addFeedback(pass.cid, draft, ua, visitOf(pass, request));
       return json(r, r.ok ? 200 : 429);
     }
     if (url.pathname === '/api/admin/feedback') {
