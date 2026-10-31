@@ -44,7 +44,7 @@ Useful query parameters while developing:
 | --- | --- |
 | `?debug=1` | Draw walkable areas, doors and spawn points |
 | `?room=market` | Start in a given room (`hub`, `grove`, `market`) |
-| `?transport=local` | Force a transport: `local` (tabs on one device), `supabase`, or `edge` (room server) |
+| `?transport=local` | Force a transport: `local` (tabs on one device) or `edge` (room server) |
 | `?id=owl-a&look=%23C9A227,%23F6F1E3,%23FF2AA1` | Fixed id and colours (tests) |
 | `?collector=e2e-a` | Fixed collection when there is no room server (tests) |
 

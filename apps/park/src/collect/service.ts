@@ -211,8 +211,8 @@ export interface NestPushes {
 /**
  * A visitor's collection, feathers and quests. Two implementations share the rules in
  * `@owl-park/shared`:
- *  - LocalCollections: zero backend, everything in this browser's localStorage (local and
- *    Supabase transports, development, the end-to-end tests);
+ *  - LocalCollections: zero backend, everything in this browser's localStorage (the local
+ *    transport, development, the end-to-end tests);
  *  - EdgeCollections: the room server's Collections object (inventory and the shop over HTTP,
  *    quests over the room's WebSocket so the server can check where the owl stands).
  */

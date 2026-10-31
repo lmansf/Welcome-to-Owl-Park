@@ -64,6 +64,8 @@ jobs:
           VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
           VITE_TICKETS_URL: ${{ vars.VITE_TICKETS_URL }}
+      - name: Check the page holds no database client or key (OP-150)
+        run: pnpm security:bundle
       - name: Deploy Worker, Durable Object and static assets
         uses: cloudflare/wrangler-action@v3
         with:
