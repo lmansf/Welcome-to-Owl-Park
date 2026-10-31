@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ROOMS } from '../rooms';
 import { resolveTarget, steerTarget, walkableReach } from './resolveTarget';
 import type { Polygon } from './geometry';
 
@@ -96,5 +97,37 @@ describe('steerTarget', () => {
   });
   it('gives up when every bearing is blocked', () => {
     expect(steerTarget({ x: 396, y: 50 }, { x: 1, y: 0 }, [wide])).toBeNull();
+  });
+  it('slides along an edge more than 45 degrees off the keys, close along it, not away from it (OP-124)', () => {
+    // A top edge falling a degree to the right, like the lobby's turnstile line, with the owl right under it.
+    const sloped: Polygon = [
+      { x: 0, y: 100 },
+      { x: 400, y: 106 },
+      { x: 400, y: 300 },
+      { x: 0, y: 300 },
+    ];
+    const t = steerTarget({ x: 200, y: 103.05 }, { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, [sloped])!;
+    expect(t.x).toBeGreaterThan(390);
+    expect(t.y - (100 + (t.x * 6) / 400)).toBeLessThan(1);
+    // Held up into it, there is nowhere to go: 89 degrees off the keys is no way along it.
+    expect(steerTarget({ x: 200, y: 103.05 }, { x: 0, y: -1 }, [sloped])).toBeNull();
+  });
+
+  it("goes into the lobby's gate held up and right from anywhere under the turnstile line west of it (OP-124)", () => {
+    const lobby = ROOMS['lobby']!;
+    const gate = lobby.doors.find((d) => d.id === 'gate')!.rect;
+    const up = { x: Math.SQRT1_2, y: -Math.SQRT1_2 };
+    // The line falls from (2100, 702) to (2390, 708): an owl held up against it stands within a walk sample below it.
+    const starts = [{ x: 2250, y: 712 }];
+    for (let x = 2110; x <= 2340; x += 10) for (const below of [0.05, 1, 3, 5.9]) starts.push({ x, y: 702 + ((x - 2100) * 6) / 290 + below });
+    for (const from of starts) {
+      const t = steerTarget(from, up, lobby.walkable);
+      expect(t, `from ${from.x}, ${from.y.toFixed(2)}`).not.toBeNull();
+      // Where the walk crosses the gate's left end, it is between the gate's top and bottom.
+      expect(t!.x, `from ${from.x}, ${from.y.toFixed(2)}`).toBeGreaterThan(gate.x);
+      const y = from.y + ((gate.x - from.x) * (t!.y - from.y)) / (t!.x - from.x);
+      expect(y, `from ${from.x}, ${from.y.toFixed(2)}`).toBeGreaterThanOrEqual(gate.y);
+      expect(y, `from ${from.x}, ${from.y.toFixed(2)}`).toBeLessThanOrEqual(gate.y + gate.h);
+    }
   });
 });

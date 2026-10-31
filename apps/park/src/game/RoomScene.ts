@@ -29,7 +29,9 @@ import {
   arrivalPoint,
   backgroundTiles,
   cabinetAt,
+  closestPointOnSegment,
   distance,
+  entryPoint,
   filterOwnedWear,
   foregroundTiles,
   getFurniture,
@@ -255,6 +257,8 @@ export class RoomScene extends Phaser.Scene {
   private atIdol = false;
   /** Going through the lobby's turnstiles (the welcome is playing, or the gate is checking the pass). */
   private passingGate = false;
+  /** Where the owl was at the last look for doorways, and the walk it was on: a doorway takes it from where its step crossed in (OP-124). */
+  private doorLook: { pos: Vec2; walk: Walk | null } | null = null;
   /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
   private actions: Action[] = [];
   private keys: Keys | null = null;
@@ -418,6 +422,7 @@ export class RoomScene extends Phaser.Scene {
     this.leaving = false;
     this.atIdol = false;
     this.passingGate = false;
+    this.doorLook = null;
     this.actions = [];
     this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
     this.keyDir = null;
@@ -2056,6 +2061,14 @@ export class RoomScene extends Phaser.Scene {
 
   private checkDoors(walkFinished: boolean): void {
     const pos = this.me.pos;
+    // The step since the last look, when both ends are on the walk the owl was on then: a straight line,
+    // which a slow frame can carry well into a doorway or right over a narrow stretch of one (OP-124).
+    // A place changed any other way (arriving, put right by the room) is no step.
+    const last = this.doorLook;
+    const walk = last?.walk ?? null;
+    const onWalk = (p: Vec2) => walk !== null && distance(p, closestPointOnSegment(p, walk.from, walk.to)) < 1;
+    const stepFrom = last && onWalk(last.pos) && onWalk(pos) ? last.pos : null;
+    this.doorLook = { pos: { x: pos.x, y: pos.y }, walk: this.me.walk };
     const spots: string[] = [];
     const errand = this.errand;
     if (errand && walkFinished) {
@@ -2073,7 +2086,9 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const door of this.room.doors) {
       const inside = pointInRect(pos, door.rect);
-      if (!inside) continue;
+      // A doorway to another room takes the owl from where its step came in, a step across it included.
+      const cameIn = (door.to && stepFrom ? entryPoint(door.rect, stepFrom, pos) : null) ?? (inside ? pos : null);
+      if (!cameIn) continue;
       const nestDoor = this.room.id === STREET_ROOM ? nestDoorIndex(door.id) : null;
       if (nestDoor !== null) {
         if (takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null) && this.enterNest(nestDoor, walkFinished)) return;
@@ -2085,14 +2100,15 @@ export class RoomScene extends Phaser.Scene {
           if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
           continue;
         }
-        if (!takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null)) continue;
+        // A walk that ended past a doorway it crossed in its last frame goes through only as one that ends there would.
+        if (!takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null)) continue;
         if (door.id === 'gate') {
-          void this.throughGate(door);
+          void this.throughGate(door, cameIn);
           return;
         }
         // Out of a nest, the owl comes back out by the street door it went in by.
         const spawn = isNestRoom(this.room.id) && door.to.room === STREET_ROOM ? streetSpawnBack(this.cameFrom) : door.to.spawn;
-        void this.goTo(door.to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, pos));
+        void this.goTo(door.to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, cameIn));
         return;
       }
       if (this.interactions[door.id]) spots.push(door.id);
@@ -2208,12 +2224,14 @@ export class RoomScene extends Phaser.Scene {
    * (GATE=ticket) they send the owl back out of the turnstile it tried and say why. The owl keeps its
    * lane: it stands still while the turnstiles decide and comes out in the hub as far across (OP-124).
    */
-  private async throughGate(door: DoorDef): Promise<void> {
+  private async throughGate(door: DoorDef, at: Vec2): Promise<void> {
     const to = door.to;
     if (this.passingGate || this.leaving || !to) return;
     this.passingGate = true;
     this.me.walk = null;
-    const lane = laneThrough(this.room, door, this.me.pos);
+    // It stands in the turnstile it came into, not one a slow frame's walk further along (OP-124).
+    if (distance(at, this.me.pos) >= 0.5) this.me.place(at);
+    const lane = laneThrough(this.room, door, at);
     const scan: ScanReply = this.transport.tickets ? await this.transport.tickets.scan() : { ok: false, reason: 'none' };
     if (this.leaving) return;
     const entry = await this.entry();
