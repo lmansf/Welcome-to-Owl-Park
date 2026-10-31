@@ -157,6 +157,16 @@ describe('the Worker’s log (OP-134)', () => {
     expect(JSON.stringify(cap.lines)).not.toContain('wrong-key-wrong-key-0');
   });
 
+  it('takes a keepers’ key of 16 characters or more, and treats a shorter one as none set (OP-131)', async () => {
+    const short = 'keepers-key-012';
+    expect(short).toHaveLength(15);
+    expect((await call(park.env({ ADMIN_KEY: short }), '/api/admin/ping', asKeeper(short))).status).not.toBe(200);
+    logged(cap.lines, 'admin_denied', { route: '/api/admin/ping', reason: 'no-key-set' });
+    const sixteen = 'keepers-key-0123';
+    expect((await call(park.env({ ADMIN_KEY: sixteen }), '/api/admin/ping', asKeeper(sixteen))).status).toBe(200);
+    logged(cap.lines, 'admin_ok', { route: '/api/admin/ping' });
+  });
+
   it('puts a chaos run’s id on every line of a request that names one well', async () => {
     await call(park.env(), '/api/admin/ping', asKeeper(null, { headers: { 'X-Chaos-Run': 'chaos-42' } }));
     logged(cap.lines, 'admin_denied', { run_id: 'chaos-42' });
