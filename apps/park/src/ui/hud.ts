@@ -73,7 +73,7 @@ export interface Hud {
   setCount(n: number): void;
   /** Owls in the whole park, when known (authoritative transports). */
   setParkCount(n: number | null): void;
-  setStatus(s: ConnectionStatus, kind: 'local' | 'supabase' | 'edge'): void;
+  setStatus(s: ConnectionStatus, kind: 'local' | 'edge'): void;
   /** A short message; `accent` colours its edge (rarity colours for rewards). */
   toast(message: string, ms?: number, accent?: string): void;
   /** Wire the emote wheel, the owl builder, the feather count and the shop to the visitor's collection. */

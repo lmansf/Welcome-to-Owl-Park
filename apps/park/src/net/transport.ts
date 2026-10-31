@@ -69,11 +69,10 @@ export interface RoomConnection {
 /**
  * A transport connects one owl to one room at a time. Implementations:
  *  - LocalTransport: BroadcastChannel between tabs of one browser (zero backend).
- *  - SupabaseTransport: Supabase Realtime Presence + Broadcast (shared over the internet, no server code).
  *  - EdgeTransport: the authoritative room server (Cloudflare Durable Object) over one WebSocket.
  */
 export interface ParkTransport {
-  readonly kind: 'local' | 'supabase' | 'edge';
+  readonly kind: 'local' | 'edge';
   join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection>;
   /** Cast a Realm Vote as this visitor; only transports with an authenticated server offer it. */
   vote?(realm: string): Promise<Response>;

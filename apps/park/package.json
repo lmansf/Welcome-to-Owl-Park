@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@owl-park/shared": "workspace:*",
-    "@supabase/supabase-js": "2.118.0",
     "matter-js": "0.20.0",
     "phaser": "3.90.0"
   },

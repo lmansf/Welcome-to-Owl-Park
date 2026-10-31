@@ -22,6 +22,8 @@
     "load": "node tools/load/swarm.mjs",
     "chaos": "node tools/chaos/run.mjs",
     "chaos:test": "node --test tools/chaos/chaos.test.mjs",
+    "security:bundle": "node tools/security/bundle-check.mjs apps/park/dist",
+    "security:test": "node --test tools/security/bundle-check.test.mjs",
     "art:generate": "node tools/art/generate.mjs",
     "art:geometry": "node --experimental-strip-types tools/art/generate.mjs geometry",
     "art:finish": "python3 -B tools/art/postprocess.py",
