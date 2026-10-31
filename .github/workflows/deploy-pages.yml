@@ -3,10 +3,10 @@
 # variable PAGES_DEPLOY=true (Settings -> Secrets and variables -> Actions -> Variables). Without the
 # variable the workflow is skipped, so a repository that deploys to Cloudflare instead stays green.
 # Optional repository variables (Settings -> Secrets and variables -> Actions -> Variables):
-#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  -> internet multiplayer via Supabase Realtime
-#   VITE_SHOP_URL                              -> the gift shop link
-#   VITE_SITE_URL                              -> the site's https origin, for link previews
-# Without them the park still works, with multiplayer limited to tabs on one device.
+#   VITE_SHOP_URL  -> the gift shop link
+#   VITE_SITE_URL  -> the site's https origin, for link previews
+# A park published here has no room server: its multiplayer is tabs on one device. It holds no key to
+# any database (OP-150), and the build is checked for one before anything is published.
 name: Deploy to GitHub Pages
 
 on:
@@ -40,10 +40,9 @@ jobs:
       - run: pnpm build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+      - run: pnpm security:bundle
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

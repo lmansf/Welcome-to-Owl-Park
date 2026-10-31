@@ -1255,6 +1255,26 @@ describe('the room server’s log (OP-134)', () => {
     expect(cap.lines.filter((l) => l.event === 'emote_throttled').map((l) => l['count'])).toEqual([1, 1]);
   });
 
+  it('tells a place the room would not take as a page asked for it: at once, then once a minute with how many, and the rest as the owl leaves (OP-149)', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a', GUEST);
+    // Outside the hub, though inside the biggest room there is (a frame past that is malformed).
+    await send(obj, ws, { t: 'move', to: { x: 6000, y: 1700 }, seq: 1 });
+    logged(cap.lines, 'position_rejected', { component: 'room.move', room: 'hub', ...owl('v_a', GUEST), reason: 'room', count: 1 });
+    await send(obj, ws, { t: 'move', to: { x: 2400, y: 20 }, seq: 2 }); // the hub's sky
+    expect(count('position_rejected')).toBe(1);
+    clock += 60_000;
+    await send(obj, ws, { t: 'move', to: { x: 2400, y: 20 }, seq: 3 });
+    logged(cap.lines, 'position_rejected', { reason: 'floor', count: 2 });
+    await send(obj, ws, { t: 'move', to: { x: 6000, y: 1700 }, seq: 4 });
+    await send(obj, ws, { t: 'bye' });
+    expect(cap.lines.filter((l) => l.event === 'position_rejected').map((l) => [l['reason'], l['count']])).toEqual([
+      ['room', 1],
+      ['floor', 2],
+      ['room', 1],
+    ]);
+  });
+
   it('tells a band of the climb it refused, by the run’s reference', async () => {
     const obj = roomObject();
     const ws = await join(obj, 'hub', 'v_a', OWNER);

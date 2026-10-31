@@ -846,8 +846,14 @@ export class RoomScene extends Phaser.Scene {
     const at = this.roomHas;
     this.roomHas = null;
     if (!at) return;
-    // The room starts the owl on the floor: standing on a perch, or up in the air, it is told (OP-084).
+    this.followUp(at);
+    // The room starts the owl on the floor: standing on a perch, or up in the air, it is told (OP-084),
+    // once the room's copy is on its way over, so the room finds the perch the owl stands on (OP-149).
     this.retellAir();
+  }
+
+  /** The room's copy of the own owl, at `at`, sent over to where the owl is, or the owl to it (catchUpRoom). */
+  private followUp(at: Vec2): void {
     // Where the owl is going: the end of a tap's way round a bend (OP-148), else of the walk under way.
     const target = this.wayTo ?? this.me.walk?.to;
     if (distance(at, this.me.pos) >= 3 && !this.roomCanFollow(at)) {

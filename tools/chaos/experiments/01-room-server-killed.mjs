@@ -69,7 +69,7 @@ export default {
       value: `${far} of ${moved.length} (furthest ${moved.length ? Math.max(...moved) : 0} px)`,
       ok: far === 0,
       component: 'room server',
-      fix: "keep where each owl stood through a restart: the room's memory of owls that left (Room.ts leavers) lives only in memory, so after a restart a hello's position is trusted only near the spawn",
+      fix: "keep where each owl stood through a restart: the room writes where an owl was (Room.ts leavers, kept by the room object) only as the owl leaves, and the owls of a killed room server never left, so after a restart a hello's position is trusted only near the spawn",
     });
   },
   async rollback(ctx) {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, tapRoomPoint, walkAndStop } from './helpers';
+import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, tapRoomPoint, walkAndStop } from './helpers';
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
@@ -29,29 +29,13 @@ const standsAt = (page: Page, top: number) =>
   expect.poll(async () => { const w = await where(page); return [w.s, w.z, w.height]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, top, top]);
 
 /**
- * A jump, and the flap near its top held `ms` (a glide from the flap's top on), pressed in the page as
- * the owl rises from where it stands, however high that is.
+ * A jump held to its top and the flap pressed as it is let go (jumpFlapGlide's `jumpMs`): the rise
+ * ends a third of a second after the press (the jump's speed over gravity, packages/shared jump.ts),
+ * so the jump and the flap go as high as they can, about 250 px over where the owl stands. The roofs
+ * they reach here stand 30 px and more under that, so 15 px of it may go to asking for the flap a
+ * frame sooner on a slow runner (`spare`).
  */
-async function flapAndGlide(page: Page, ms: number): Promise<void> {
-  await page.evaluate(
-    (ms) =>
-      new Promise<void>((resolve) => {
-        const from = window.owlPark.state()!.height;
-        window.owlPark.jump(500);
-        let rising = false;
-        const tick = () => {
-          const s = window.owlPark.state();
-          if (s && s.air.vz > 300) rising = true;
-          if (s && rising && s.height > from + 100 && s.air.vz < 150) {
-            window.owlPark.jump(ms);
-            resolve();
-          } else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }),
-    ms,
-  );
-}
+const TO_THE_TOP = { jumpMs: 340, spare: 15 };
 
 /** Up on the bench: walked to its face, then a jump, the walk carrying on over the top. */
 async function upOnBench(page: Page): Promise<void> {
@@ -138,7 +122,7 @@ test.describe('perches (OP-084)', () => {
     // From the loft's far end, a jump, the flap and a glide west over the rope bridge: down on the far treehouse.
     await page.evaluate(() => window.owlPark.walkTo(4000, 702));
     await expect.poll(async () => (await where(page)).walking, { intervals: [50] }).toBe(false);
-    await flapAndGlide(page, 2_500);
+    await jumpFlapGlide(page, 2_500, TO_THE_TOP);
     await page.evaluate(() => window.owlPark.walkTo(3645, 696));
     await standsAt(page, 345);
     await doAction(page, 'use:grove-leaves-hut');
@@ -181,16 +165,16 @@ test.describe('perches (OP-084)', () => {
     await page.evaluate(() => window.owlPark.walkTo(2300, 780));
     await expect.poll(async () => { const w = await where(page); return [w.walking, w.z]; }, { intervals: [50] }).toEqual([false, 0]);
     await walkAndStop(page, 2700, 741);
-    await jump(page);
-    await expect.poll(async () => { const w = await where(page); return [w.s, w.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 0]);
-    await flapAndGlide(page, 400);
+    expect((await steppedFlight(page, () => jump(page))).takeoffs).toBe(1);
+    expect((await where(page)).z).toBe(0);
+    await jumpFlapGlide(page, 400, TO_THE_TOP);
     await standsAt(page, 209);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-tent.png` });
     // And in front of the food stall's counter, the same.
     await page.evaluate(() => window.owlPark.walkTo(2600, 800));
     await expect.poll(async () => { const w = await where(page); return [w.walking, w.z]; }, { intervals: [50] }).toEqual([false, 0]);
     await walkAndStop(page, 1900, 752);
-    await flapAndGlide(page, 400);
+    await jumpFlapGlide(page, 400, TO_THE_TOP);
     await standsAt(page, 220);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-food.png` });
   });

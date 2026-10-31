@@ -4,7 +4,15 @@
  */
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
 
-export type TransportKind = 'local' | 'supabase' | 'edge';
+/**
+ * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
+ * any database (OP-150): the Supabase transport it once had for a start without a server is gone, and
+ * CI checks the built page for any client or key of one (tools/security/bundle-check.mjs).
+ *
+ * TODO-DOCS (OP-150): docs/ARCHITECTURE.md's transports table, docs/DEPLOY.md's `?transport=` line
+ * and docs/GLOSSARY.md's Edge entry still name a `supabase` transport.
+ */
+export type TransportKind = 'local' | 'edge';
 
 /** A count of seconds from the page's address, or the default when it is missing or not a positive number. */
 function seconds(v: string | null, fallback: number): number {
@@ -14,8 +22,6 @@ function seconds(v: string | null, fallback: number): number {
 
 export interface ParkConfig {
   transport: TransportKind;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   /** Base URL of the room server; empty means same origin as the page. */
   edgeUrl: string;
   shopUrl: string;
@@ -71,23 +77,16 @@ export interface ParkConfig {
 export function readConfig(): ParkConfig {
   const q = new URLSearchParams(globalThis.location?.search ?? '');
   const env = import.meta.env;
-  const supabaseUrl = (env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
-  const supabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? '';
   const requested = q.get('transport') ?? (env.VITE_TRANSPORT as string | undefined)?.trim();
   const edgeUrl = ((env.VITE_EDGE_URL as string | undefined) ?? '').trim();
-  const canSupabase = supabaseUrl.length > 0 && supabaseAnonKey.length > 0;
   let transport: TransportKind;
   if (requested === 'local') transport = 'local';
   else if (requested === 'edge') transport = 'edge';
-  else if (requested === 'supabase' && canSupabase) transport = 'supabase';
   else if (edgeUrl) transport = 'edge';
-  else if (canSupabase) transport = 'supabase';
   else transport = 'local';
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return {
     transport,
-    supabaseUrl,
-    supabaseAnonKey,
     edgeUrl,
     shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
     ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),

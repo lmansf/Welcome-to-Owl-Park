@@ -145,7 +145,7 @@ describe('parseClientFrame', () => {
     for (const odd of [{ z: MAX_RISE + 5, vz: 0, s: 1, f: 0 }, { z: 30, vz: 0, s: 4, f: 0 }, null, 'high'])
       expect(parseClientFrame(JSON.stringify({ t: 'air', air: odd })), JSON.stringify(odd)).toEqual({ t: 'air', air: odd });
     expect(parseServerFrame(JSON.stringify({ t: 'air', id: 'o1', air, at: 5 }))).toEqual({ t: 'air', id: 'o1', air, at: 5 });
-    // Between pages on this device (and the Supabase transport): the same state, on the sender's clock.
+    // Between pages on this device: the same state, on the sender's clock.
     expect(isParkMessage({ t: 'air', id: 'p1', air, at: 5 })).toBe(true);
     expect(isParkMessage({ t: 'air', id: 'p1', air: { ...air, z: -40 }, at: 5 })).toBe(false);
     expect(isParkMessage({ t: 'air', id: 'p1', air })).toBe(false);

@@ -39,6 +39,21 @@ async function watchForJumps(page: Page): Promise<void> {
 
 const fastest = (page: Page) => page.evaluate(() => (window as unknown as { fastest: number }).fastest);
 
+/** Where the other page has its one other owl, every 100 ms for `ms`: the room's walk of it, never that owl's page's word (OP-149). */
+async function watchPeer(page: Page, ms: number): Promise<Array<{ x: number; y: number }>> {
+  const seen: Array<{ x: number; y: number }> = [];
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const p = (await state(page)).peers[0];
+    if (p) seen.push(p.pos);
+    await page.waitForTimeout(100);
+  }
+  return seen;
+}
+
+/** On the hub's floor plan: x 140 to 4720, y 566 to 900 (packages/shared/rooms). */
+const onHubFloor = (p: { x: number; y: number }) => p.x >= 140 && p.x <= 4720 && p.y >= 566 && p.y <= 900;
+
 test.describe('room server', () => {
   test('the page is never cached, so a deploy cannot leave it pointing at a bundle that is gone', async ({ request }) => {
     for (const path of ['/', '/index.html']) {
@@ -249,6 +264,69 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
     expect((await state(a)).pos.y).toBeGreaterThanOrEqual(600);
     await a.context().close();
+  });
+
+  test('an owl put far off from the console is far off on its own page only: the other owl sees it on the floor all along (OP-149)', async ({ browser }) => {
+    const a = await visitor(browser);
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    const was = (await state(a)).pos;
+    await expect.poll(async () => dist((await state(b)).peers[0]!.pos, was), { timeout: 10_000 }).toBeLessThan(6);
+    // The pen-test's console: the page's own owl put at (9999, 9999), and a walk asked of it from there.
+    await a.evaluate(() => (window.owlPark.game.scene.getScene('room') as unknown as { me: { place(p: { x: number; y: number }): void } }).me.place({ x: 9999, y: 9999 }));
+    expect(dist((await state(a)).pos, { x: 9999, y: 9999 })).toBeLessThan(1);
+    const watched = watchPeer(b, 4000);
+    await a.evaluate(() => window.owlPark.walkTo(2600, 780));
+    // The walk asked from out there is walked by the room from where it has the owl, on the floor.
+    await expect.poll(async () => dist((await state(b)).peers[0]!.pos, { x: 2600, y: 780 }), { timeout: 15_000 }).toBeLessThan(6);
+    const seen = await watched;
+    expect(seen.length).toBeGreaterThan(2);
+    expect(seen.filter((p) => !onHubFloor(p))).toEqual([]);
+    await a.context().close();
+    await b.context().close();
+  });
+
+  test('frames sent from the console move no owl off the floor: a walk into the sky ends at the floor, walks out of the room are dropped, and a page that keeps at it is closed (OP-149)', async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const a = await ctx.newPage();
+    // The console's way to the room's socket: each one the page opens, kept, and the code it closed with.
+    await a.addInitScript(() => {
+      const w = window as unknown as { sockets: WebSocket[]; closedWith?: number };
+      const Native = window.WebSocket;
+      w.sockets = [];
+      window.WebSocket = class extends Native {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          w.sockets.push(this);
+          this.addEventListener('close', (e) => (w.closedWith = e.code));
+        }
+      } as typeof WebSocket;
+    });
+    await openPark(a, { transport: 'edge' });
+    const b = await visitor(browser);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    const raw = (frame: object) =>
+      a.evaluate((f) => {
+        const ws = (window as unknown as { sockets: WebSocket[] }).sockets.filter((s) => s.readyState === WebSocket.OPEN).at(-1);
+        ws?.send(JSON.stringify(f));
+      }, frame);
+    // A walk into the hub's sky, past any move the page has made: the room walks it to the floor's edge.
+    let watched = watchPeer(b, 4000);
+    await raw({ t: 'move', to: { x: 2400, y: 20 }, seq: 999_999_000 });
+    let seen = await watched;
+    expect(seen.filter((p) => !onHubFloor(p))).toEqual([]);
+    expect(Math.min(...seen.map((p) => p.y))).toBeLessThan(seen[0]!.y - 40); // it did walk, as far as the floor goes
+    // Three walks out of the room: none walked, and the socket closed (4003, too many moves).
+    watched = watchPeer(b, 3000);
+    for (let i = 1; i <= 3; i++) await raw({ t: 'move', to: { x: 6000, y: 1700 }, seq: 999_999_000 + i });
+    await expect.poll(() => a.evaluate(() => (window as unknown as { closedWith?: number }).closedWith), { timeout: 10_000 }).toBe(4003);
+    seen = await watched;
+    expect(seen.filter((p) => !onHubFloor(p))).toEqual([]);
+    // Its page comes back, as a page does, and the other owl sees it on the floor.
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 20_000 }).toBe(1);
+    expect(onHubFloor((await state(b)).peers[0]!.pos)).toBe(true);
+    await ctx.close();
+    await b.context().close();
   });
 
   test('the Realm Vote refuses guests until tickets exist, and keeps standings private', async ({ browser, request }) => {

@@ -1,6 +1,6 @@
 /**
- * Wire protocol shared by every transport (local tabs, Supabase Realtime,
- * or a future dedicated room server). Version 1 is presence: owls appear,
+ * Wire protocol shared by every transport (local tabs, and the room server's
+ * own frames built on it, edge.ts). Version 1 is presence: owls appear,
  * walk, change their look (colours and collectible wear), play emotes, say
  * a prewritten phrase (by its number, phrases.ts) and leave. Nothing here
  * carries text written by visitors.
