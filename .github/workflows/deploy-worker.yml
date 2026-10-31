@@ -14,7 +14,9 @@
 #      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
 #      and for opening night, OPENING_PASS_CODE (the code that takes half off the annual pass).
 #      The collection log (OP-107) goes up with PARK_LOG_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT
-#      (apps/park-log/README.md).
+#      (apps/park-log/README.md). Accounts (OP-139) need ACCOUNT_SECRET (32+ random characters, never
+#      changed once owls are protected) and the mail sender, RESEND_API_KEY and MAIL_FROM.
+#      Every deploy ends by listing the Worker's secret names (never their values).
 #      See docs/DEPLOY.md for the first deploy and for selling tickets.
 name: Deploy to Cloudflare
 
@@ -47,6 +49,9 @@ jobs:
       PARK_LOG_URL: ${{ secrets.PARK_LOG_URL }}
       FRAUD_SCORE_KEY: ${{ secrets.FRAUD_SCORE_KEY }}
       FRAUD_HASH_SALT: ${{ secrets.FRAUD_HASH_SALT }}
+      ACCOUNT_SECRET: ${{ secrets.ACCOUNT_SECRET }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      MAIL_FROM: ${{ secrets.MAIL_FROM }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -150,3 +155,33 @@ jobs:
             PARK_LOG_URL
             FRAUD_SCORE_KEY
             FRAUD_HASH_SALT
+      - name: Upload the accounts' secret to the Worker
+        if: env.ACCOUNT_SECRET != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            ACCOUNT_SECRET
+      - name: Upload the accounts' mail sender to the Worker
+        if: env.RESEND_API_KEY != '' && env.MAIL_FROM != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            RESEND_API_KEY
+            MAIL_FROM
+      # Whichever way the secrets were set (repository secrets above, or wrangler secret put), the
+      # Worker's secret names as they stand after the deploy.
+      - name: List the Worker's secret names
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
