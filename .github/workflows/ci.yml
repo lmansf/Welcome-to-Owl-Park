@@ -8,7 +8,7 @@ name: CI
 # only docs or Markdown runs nothing. A failed typecheck or unit test run cancels the rest of the run.
 #
 # Beside the browser suite, mutation testing (OP-131) checks that the unit tests catch real bugs, in
-# three scopes (the room server, the Worker, the shared rules) run as four shards side by side: on a
+# three scopes (the room server, the Worker, the shared rules) run as eight shards side by side: on a
 # pull request that touches a shard's code, on main and on a run by hand, only the mutants of what
 # changed since the results kept from the last run; every mutant each night. The scores job puts each
 # scope's score in the run's summary and fails the run when one is under the break threshold; the
@@ -115,7 +115,9 @@ jobs:
           - { shard: climb-1, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
           - { shard: climb-2, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
           - { shard: climb-3, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: rules, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: book, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: moves, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+          - { shard: floor, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
     steps:
       - uses: actions/checkout@v4
       - id: scope
