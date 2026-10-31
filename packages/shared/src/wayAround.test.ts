@@ -4,6 +4,7 @@ import { distance, distanceToRect, isWalkable, pointInRect, type Polygon, type R
 import { footing } from './perches';
 import type { Vec2 } from './protocol';
 import { resolveTarget } from './resolveTarget';
+import { mapOf } from './room';
 import { WAY_SHORT_PX, wayAround } from './wayAround';
 
 declare module 'vitest' {
@@ -162,8 +163,9 @@ describe('the way around a bend in the floor (OP-148)', () => {
         walksThrough(from, legs!, to, floor.walkable, shut);
         walkedRound += 1;
       }
-      // Each room's far taps that a straight walk stops short of, walked round (the nest is one round room).
-      if (room.id !== NEST_ROOM.id) expect(walkedRound, room.id).toBeGreaterThan(0);
+      // Each room's far taps that a straight walk stops short of, walked round (the nest is one round room,
+      // and a room of the tree one straight strip along its ground line).
+      if (room.id !== NEST_ROOM.id && mapOf(room) === 1) expect(walkedRound, room.id).toBeGreaterThan(0);
     }
   });
 });

@@ -1,4 +1,5 @@
 import { isNestRoom } from '../src/homes';
+import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
@@ -31,6 +32,25 @@ export { STREET_DOORS, STREET_ROOM } from '../src/homes';
  * west end. It has no hiding spots.
  */
 export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Our Feathers', 'Hatching Soon'] as const;
+
+/** The tree's ground line on a screen of map 2 (room px; OP-157's painting puts it at 985 of 1152). */
+export const TREE_GROUND = 770;
+/** Half the depth of the tree's floor strip: an owl's spot on the plan stays on the ground line. */
+const TREE_STRIP = 4;
+
+/** A ledge of the tree (map 2): a perch over the ground line from x0 to x1, `top` above it. */
+function treeLedge(id: string, x0: number, x1: number, top: number): Perch {
+  return {
+    id,
+    top,
+    area: [
+      { x: x0, y: TREE_GROUND - TREE_STRIP },
+      { x: x1, y: TREE_GROUND - TREE_STRIP },
+      { x: x1, y: TREE_GROUND + TREE_STRIP },
+      { x: x0, y: TREE_GROUND + TREE_STRIP },
+    ],
+  };
+}
 
 export const ROOMS: Record<string, RoomDef> = {
   hub: {
@@ -795,6 +815,49 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'nest-door-4', rect: { x: 993, y: 682, w: 140, h: 32 }, marker: { x: 1063, y: 405 } },
       { id: 'nest-door-5', rect: { x: 480, y: 700, w: 140, h: 40 }, marker: { x: 550, y: 405 } },
     ],
+  },
+  // ---- The tree (map 2, OP-128): the side-scrolling park around the great trunk, dark until it opens ----
+  //
+  // Level 1, the ground: one room for the level's screens (the cells of the tree's grid), so far its trunk
+  // screen, the lobby at the trunk's foot (OP-157's style frame). It is seen from the side: the floor
+  // is the ground line as a thin strip, and the ledges are perches (their areas strips of it, their
+  // tops their heights over the ground line), measured on the painting at 1600 x 900. Its art is three
+  // layers: the sky plate scrolls at half the camera's pace behind the playfield, and the overlay at
+  // 1.2 in front of the owls. Gated: only a keeper's token (OP-156) or the realms switch lets owls in.
+  l1: {
+    id: 'l1',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: ROOM_W, h: ROOM_H },
+    background: 'tree-l1-0-play',
+    backgrounds: [
+      { key: 'tree-l1-0-bg', x: 0, y: 0, rate: 0.5 },
+      { key: 'tree-l1-0-play', x: 0, y: 0 },
+    ],
+    foregrounds: [{ key: 'tree-l1-0-fg', x: 0, y: 0, rate: 1.2 }],
+    mood: 'hub',
+    // The ground line, from the path west of the trunk through both arches and the lobby to the path east of it.
+    walkable: [
+      [
+        { x: 24, y: TREE_GROUND - TREE_STRIP },
+        { x: ROOM_W - 24, y: TREE_GROUND - TREE_STRIP },
+        { x: ROOM_W - 24, y: TREE_GROUND + TREE_STRIP },
+        { x: 24, y: TREE_GROUND + TREE_STRIP },
+      ],
+    ],
+    // Up the spiral stair (three steps a jump apart) to the balcony; the lintel over the way down, a
+    // flap from the floor; the shelf fungus over it, a jump from the lintel.
+    perches: [
+      treeLedge('stair-1', 953, 1078, 82),
+      treeLedge('stair-2', 961, 1063, 153),
+      treeLedge('stair-3', 922, 1016, 223),
+      treeLedge('balcony', 1000, 1109, 286),
+      treeLedge('lintel', 582, 730, 196),
+      treeLedge('fungus', 508, 641, 282),
+    ],
+    spawns: { default: { x: 800, y: TREE_GROUND }, west: { x: 80, y: TREE_GROUND }, east: { x: ROOM_W - 80, y: TREE_GROUND } },
+    doors: [],
   },
 };
 

@@ -226,7 +226,8 @@ test('every generated asset key in art.ts has a job (directly or derived) and th
     assert.equal(j.prompt, P.PROMPTS[j.key], `${j.key}: prompt is the approved default`);
     assert.ok(!j.prompt.includes('{'), `${j.key}: no unresolved placeholders`);
     if (j.key_colour) assert.ok(j.prompt.includes(j.key_colour), `${j.key}: the prompt names the job's key colour ${j.key_colour}`);
-    if (j.kind === 'room' || j.kind === 'overlay') assert.equal(j.size, '3200x1800', `${j.key}: rooms generate at 2x`);
+    // The tree's layers (map 2) are painted at OP-157's size, 2048x1152; today's rooms at 2x.
+    if (j.kind === 'room' || j.kind === 'overlay') assert.equal(j.size, P.TREE_FRAME_KEYS.includes(j.key) ? '2048x1152' : '3200x1800', `${j.key}: rooms generate at 2x`);
     for (const r of j.refs) assert.ok(/^(refs\/|@guide:|@raw:|@final:|@canvas:|https:\/\/)/.test(r.ref));
   }
   const byKey = Object.fromEntries(jobs.map((j) => [j.key, j]));
@@ -473,7 +474,7 @@ test('selectJobs supports lists and globs and rejects unmatched patterns', () =>
   const flight = Object.keys(P.FLIGHT_MASTERS);
   assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, ...flight, 'owl-wing-right']);
   assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), [...P.SPECIES_MASTER_KEYS, ...flight]);
-  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg']);
+  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'tree-l1-0-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }), [10, 11, 12]);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }, { variants: 2, seed: 50 }), [50, 51]);
@@ -741,7 +742,10 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'lobby', 'market', 'nest']);
+  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'l1', 'lobby', 'market', 'nest']);
+  // The tree's first room (map 2, OP-156): its sky plate and overlay scroll at rates of their own.
+  assert.deepEqual(g.rooms.l1.backgrounds.map((t) => [t.key, t.rate ?? 1]), [['tree-l1-0-bg', 0.5], ['tree-l1-0-play', 1]]);
+  assert.deepEqual(g.rooms.l1.foregrounds.map((t) => [t.key, t.rate]), [['tree-l1-0-fg', 1.2]]);
   assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 4800, h: 900 }, 'arcade']);
   assert.deepEqual(g.rooms.arcade.backgrounds.map((t) => [t.key, t.x]), [['arcade', 0], ['arcade-mid', 1600], ['arcade-end', 3200]]);
   assert.deepEqual(g.rooms.homes.backgrounds.map((t) => [t.key, t.x]), [['homes-west', 0], ['homes', 1600]]);

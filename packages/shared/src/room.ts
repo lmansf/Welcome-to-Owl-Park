@@ -57,6 +57,21 @@ export interface RoomDef {
    * is in that setting's `open`, whatever its doors say. Rooms without this never consult the setting.
    */
   gated?: boolean;
+  /**
+   * Which park the room belongs to (OP-128, OP-156): absent for today's park (map 1), 2 for the tree,
+   * the side-scrolling world around the great trunk. A room of the tree is seen from the side: its
+   * floor is a thin strip along the ground line, what an owl stands on above it are perches (their
+   * areas strips of that floor, their tops the heights of the ledges), and jumping is the flight every
+   * room has (OP-084), so the room server checks walks, perches and flight as in any room.
+   *
+   * TODO-DOCS (OP-155, OP-156): docs/MAP.md (new): the tree's grid of levels and screens and its style
+   * sheet (the three layers and their rates, the owl at a sixth of the screen's height, magenta for
+   * the keyed layers); docs/ARCHITECTURE.md's rooms table gains `map`, `owlScale` and a tile's `rate`,
+   * and says a tree room's camera follows the owl as drawn, its height included.
+   */
+  map?: 2;
+  /** How big owls are drawn here against today's park (the tree's owl stands a sixth of the screen's height: 1.25). */
+  owlScale?: number;
 }
 
 /** One ROOM_W x ROOM_H piece of a room's art, at its top-left corner in room pixels. */
@@ -64,6 +79,11 @@ export interface RoomTile {
   key: string;
   x: number;
   y: number;
+  /**
+   * How fast the tile scrolls with the camera (OP-156, parallax): absent or 1 with the room, 0.5 a far
+   * layer (the tree's sky plate), 1.2 a near one (its foreground overlay). See tilePlacement.
+   */
+  rate?: number;
 }
 
 export interface DoorDef {
@@ -92,6 +112,32 @@ export function backgroundTiles(room: RoomDef): RoomTile[] {
 /** The tiles drawn in front of the owls, in drawing order (none for a room without overlays). */
 export function foregroundTiles(room: RoomDef): RoomTile[] {
   return room.foregrounds ?? (room.foreground ? [{ key: room.foreground, x: 0, y: 0 }] : []);
+}
+
+/** The park a room belongs to: 1 for today's park, 2 for the tree (OP-128). */
+export function mapOf(room: Pick<RoomDef, 'map'>): 1 | 2 {
+  return room.map ?? 1;
+}
+
+/** How much bigger a tile that scrolls slower than the room is drawn, per unit of rate it lags by: its edge never shows. */
+export const TILE_GROW = 0.2;
+
+/**
+ * Where a tile is drawn, in room pixels for its scroll rate (OP-156). A tile scrolling at `rate` lines
+ * up with the room when the camera is centred on the tile's own screen and drifts from there by
+ * (1 - rate) of the camera's move: a far layer lags and a near one leads. A far layer is drawn larger
+ * about its screen's centre (TILE_GROW) so its edge never comes into view while it lags. `view` is the
+ * camera's size in screen pixels: Phaser zooms about the view's middle, so a camera centred on a point
+ * scrolls to that point less half the view, whatever its zoom.
+ */
+export function tilePlacement(t: RoomTile, view: { w: number; h: number }): { x: number; y: number; w: number; h: number } {
+  const rate = t.rate ?? 1;
+  const grow = 1 + Math.max(0, 1 - rate) * TILE_GROW;
+  const w = ROOM_W * grow;
+  const h = ROOM_H * grow;
+  const cx = t.x + ROOM_W / 2;
+  const cy = t.y + ROOM_H / 2;
+  return { x: cx - w / 2 - (1 - rate) * (cx - view.w / 2), y: cy - h / 2 - (1 - rate) * (cy - view.h / 2), w, h };
 }
 
 export function findSpawn(room: RoomDef, name: string | undefined): Vec2 {

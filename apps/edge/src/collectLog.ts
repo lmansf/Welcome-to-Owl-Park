@@ -111,7 +111,7 @@ export type RealmKind = 'realm' | 'hub' | 'nest';
  * rooms every owl passes through (the lobby, the hub, the street of nests). A new room goes in here:
  * the tests hold every room to it.
  */
-export const ROOM_KINDS: Readonly<Record<string, RealmKind>> = { lobby: 'hub', hub: 'hub', homes: 'hub', grove: 'realm', market: 'realm', arcade: 'realm', glass: 'realm' };
+export const ROOM_KINDS: Readonly<Record<string, RealmKind>> = { lobby: 'hub', hub: 'hub', homes: 'hub', grove: 'realm', market: 'realm', arcade: 'realm', glass: 'realm', l1: 'hub' };
 
 /** The kind of place a room the log names (`logRoom`) is: every nest is `nest`. */
 export function realmKind(room: string): RealmKind {

@@ -657,6 +657,20 @@ class TestGuideOverlay(unittest.TestCase):
         self.assertTrue(any("coverage" in v for v in rep2["violations"]))
         self.assertTrue(any("spawn default" in v for v in rep2["violations"]))
 
+    def test_a_layer_behind_the_owls_is_checked_for_key_haze_only(self):
+        # The tree's playfield (OP-156) is drawn behind the owls, who stand on it: it covers the floor
+        # and the spawns by design, but a glow keyed out as magenta would still show.
+        geom = fixture_geometry()
+        bad, _ = key_out(synth_overlay(1600, 900, "#FF00FF", good=False), ChromaParams(key="#FF00FF"))
+        rep = check_overlay(bad, geom, "hub", behind=True)
+        self.assertTrue(rep["ok"], rep["violations"])
+        self.assertTrue(rep["behind"])
+        hazy = bad.copy()
+        ImageDraw.Draw(hazy).ellipse((40, 40, 240, 240), fill=(255, 60, 230, 200))
+        rep2 = check_overlay(hazy, geom, "hub", key_colour="#FF00FF", behind=True)
+        self.assertFalse(rep2["ok"])
+        self.assertTrue(rep2["violations"] and all("haze" in v for v in rep2["violations"]), rep2["violations"])
+
     def test_overlay_rules_keep_sign_boards_readable_and_catch_key_haze(self):
         geom = fixture_geometry()
         good, _ = key_out(synth_overlay(1600, 900, "#FF00FF", good=True), ChromaParams(key="#FF00FF"))

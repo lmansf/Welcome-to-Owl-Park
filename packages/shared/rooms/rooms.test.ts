@@ -3,13 +3,13 @@ import { arrivalPoint, doorAxis, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
-import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, getRoom, roomFor } from './index';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_GROUND, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
-import { FLIGHT_STEP_MS, GROUNDED, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
+import { FLIGHT_STEP_MS, GROUNDED, MAX_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
 import { MAX_PERCH_TOP, PERCH_SLACK, footing, groundAt, type Raised } from '../src/perches';
 import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
@@ -47,8 +47,11 @@ describe('room size and art tiles', () => {
     it(`${room.id}: fits the biggest room and is covered exactly by its background tiles`, () => {
       expect(room.size.w).toBeLessThanOrEqual(ROOM_MAX_W);
       expect(room.size.h).toBeLessThanOrEqual(ROOM_MAX_H);
-      const tiles = backgroundTiles(room);
-      for (const t of [...tiles, ...foregroundTiles(room)]) {
+      // A tile that scrolls at its own rate (the tree's sky plate and overlay, OP-156) is a layer of a
+      // screen the room's own tiles paint: it covers nothing of its own.
+      const tiles = backgroundTiles(room).filter((t) => (t.rate ?? 1) === 1);
+      for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) {
+        if ((t.rate ?? 1) !== 1) expect(tiles.some((o) => o.x === t.x && o.y === t.y), `${t.key} is a layer of a screen of the room`).toBe(true);
         expect(t.x % ROOM_W, `${t.key} sits on the tile grid`).toBe(0);
         expect(t.y % ROOM_H, `${t.key} sits on the tile grid`).toBe(0);
         expect(t.x + ROOM_W, `${t.key} inside the room`).toBeLessThanOrEqual(room.size.w);
@@ -345,8 +348,8 @@ describe('the stained-glass realm (gated)', () => {
   const hub = ROOMS.hub!;
   const glass = ROOMS.glass!;
 
-  it('is the one gated room, two screens wide, with the arch back, the idol and the portal', () => {
-    expect(GATED_ROOMS).toEqual(['glass']);
+  it('is the one gated room of today\'s park, two screens wide, with the arch back, the idol and the portal', () => {
+    expect(GATED_ROOMS.filter((id) => mapOf(getRoom(id)) === 1)).toEqual(['glass']);
     expect(glass.gated).toBe(true);
     expect(glass.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
     expect(glass.doors.map((d) => d.id)).toEqual(['to-hub', 'idol', 'portal']);
@@ -546,5 +549,70 @@ describe('perches (OP-084)', () => {
     expect(glide.pos.y).toBeGreaterThan(850);
     const landed = flyOver(hub, onBench, { x: 900, y: 900 }, [[PRESS, steps(200)], [HOLD, steps(4000)]], standing);
     expect(landed.fl.air).toEqual({ z: 0, vz: 0, s: GROUNDED, f: 0 });
+  });
+});
+
+// ---- The tree (map 2, OP-128 and OP-156): a side-scrolling world, dark until it opens ----
+describe('the tree (map 2)', () => {
+  const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+  const l1 = getRoom('l1');
+  /** The tree's floor strip's y extent, from a polygon of it. */
+  const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
+
+  it('is a room of its own map, gated, with owls a quarter bigger: the lobby at the trunk\'s foot', () => {
+    expect(tree.map((r) => r.id)).toEqual(['l1']);
+    for (const r of tree) {
+      expect(r.gated, `${r.id} is dark until the keepers open it`).toBe(true);
+      expect(GATED_ROOMS).toContain(r.id);
+      expect(r.owlScale).toBe(1.25);
+    }
+    expect(mapOf(getRoom('hub'))).toBe(1);
+    expect(l1.size).toEqual({ w: ROOM_W, h: ROOM_H });
+    expect(backgroundTiles(l1).map((t) => [t.key, t.rate ?? 1])).toEqual([
+      ['tree-l1-0-bg', 0.5],
+      ['tree-l1-0-play', 1],
+    ]);
+    expect(foregroundTiles(l1).map((t) => [t.key, t.rate])).toEqual([['tree-l1-0-fg', 1.2]]);
+  });
+
+  it('has its floor on the ground line, and every ledge is a stretch of that floor, inside the room', () => {
+    for (const r of tree) {
+      expect(r.walkable).toHaveLength(1);
+      const [lo, hi] = yRange(r.walkable[0]!);
+      expect(lo).toBeLessThan(TREE_GROUND);
+      expect(hi).toBeGreaterThan(TREE_GROUND);
+      expect(hi - lo, 'a strip, so an owl stays on the ground line').toBeLessThanOrEqual(8);
+      for (const p of r.perches ?? []) {
+        expect(yRange(p.area), `${r.id} ${p.id} on the ground line`).toEqual([lo, hi]);
+        for (const q of p.area) expect(q.x > 0 && q.x < r.size.w, `${r.id} ${p.id} inside the room`).toBe(true);
+        expect(p.solid, `${r.id} ${p.id}: an owl walks under a ledge and jumps up through it`).toBeUndefined();
+      }
+      for (const [name, s] of Object.entries(r.spawns)) expect(isWalkable(s, r.walkable), `${r.id} spawn ${name}`).toBe(true);
+    }
+  });
+
+  it('lets an owl reach every ledge: each a jump and a flap at most above the floor or a ledge it stands over', () => {
+    const rise = MAX_RISE - 20; // a jump and a flap at the top, without the room the limit keeps to spare
+    for (const r of tree) {
+      const ledges = r.perches ?? [];
+      const span = (id: string): [number, number] => {
+        const xs = ledges.find((p) => p.id === id)!.area.map((q) => q.x);
+        return [Math.min(...xs), Math.max(...xs)];
+      };
+      const reached = new Set<string>();
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const p of ledges) {
+          if (reached.has(p.id)) continue;
+          const [a0, a1] = span(p.id);
+          const from = p.top <= rise || ledges.some((q) => reached.has(q.id) && p.top - q.top <= rise && Math.min(a1, span(q.id)[1]) - Math.max(a0, span(q.id)[0]) > 0);
+          if (from) {
+            reached.add(p.id);
+            grew = true;
+          }
+        }
+      }
+      expect([...reached].sort(), r.id).toEqual(ledges.map((p) => p.id).sort());
+    }
   });
 });

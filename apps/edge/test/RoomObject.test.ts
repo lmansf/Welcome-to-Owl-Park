@@ -34,6 +34,7 @@ import {
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
 import { captureLogs, loggerFor } from '../src/logs';
+import { mintEntry, mintKeeper } from '../src/pass';
 import { roomDef } from '../src/rooms';
 import { TravelBook } from '../src/travelBook';
 import { eventsOf, logged } from './logged';
@@ -811,6 +812,47 @@ describe('the realms switch (the stained-glass climb)', () => {
     expect(b.closed?.code).toBe(CLOSE.REALM_CLOSED);
     await tell(obj, 'nonsense');
     expect((await join(obj, 'glass', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
+});
+
+describe('the tree (map 2), dark until it opens (OP-156)', () => {
+  const KEY = 'keeper-tests-signing-key-0123456789';
+  const helloWith = (obj: Obj, ws: FakeSocket, keeper?: unknown) => send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, ...(keeper === undefined ? {} : { keeper }) });
+  const nowS = () => Math.floor(clock / 1000);
+
+  it('turns away an owl without a keeper’s token and lets a keeper’s owl in, onto the ground line', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const guest = await join(obj, 'l1', 'v_guest');
+    expect(guest.last('closed')).toMatchObject({ t: 'closed', room: 'l1', why: 'realm' });
+    expect(guest.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    const keeper = connect('l1', 'v_keeper');
+    await helloWith(obj, keeper, await mintKeeper(KEY, nowS() + 60));
+    expect(keeper.closed).toBeNull();
+    // Spread from the spawn as every arrival is, and still on the ground line's strip.
+    const at = keeper.last('welcome')!.you.pos;
+    expect(at.x).toBeGreaterThan(24);
+    expect(at.x).toBeLessThan(1576);
+    expect(Math.abs(at.y - 770)).toBeLessThanOrEqual(4);
+  });
+
+  it('takes no token run out, signed with another key or of another kind, and drops a hello whose token is malformed', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    for (const token of [await mintKeeper(KEY, nowS() - 1), await mintKeeper('another-signing-key-0123456789', nowS() + 60), await mintEntry(KEY, 'v_late', nowS() + 60)]) {
+      const late = connect('l1', 'v_late');
+      await helloWith(obj, late, token);
+      expect(late.closed?.code, token).toBe(CLOSE.REALM_CLOSED);
+    }
+    const broken = connect('l1', 'v_broken');
+    await helloWith(obj, broken, 'not a token');
+    expect(broken.closed?.code).toBe(CLOSE.BAD_PROTOCOL);
+  });
+
+  it('opens to every owl with the realms switch, as a gated realm does', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    await obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: { open: ['l1'], portal: false, night: null } }) }));
+    const owl = await join(obj, 'l1', 'v_owl');
+    expect(owl.closed).toBeNull();
+    expect(owl.last('welcome')).toBeDefined();
   });
 });
 

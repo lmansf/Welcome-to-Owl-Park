@@ -20,7 +20,7 @@ import { walletVoter } from './Ledger';
 import { loggerFor } from './logs';
 import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
-import { GUEST_PASS_TTL_S, isCollectorId, mintCollector, mintEntry, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyPass, type PassPayload } from './pass';
+import { GUEST_PASS_TTL_S, KEEPER_TTL_S, isCollectorId, mintCollector, mintEntry, mintKeeper, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
@@ -411,6 +411,16 @@ const park = {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'GET' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       return json({ ok: true });
+    }
+    // ---- A keeper's token: this tab's owl walks the tree (map 2) while it is dark (OP-156) ----
+    //
+    // TODO-DOCS (OP-156): docs/PLAYBOOK.md (or DEPLOY.md's admin routes): to walk a closed realm, open
+    // the park with ?keeper=1 and give the keepers' key once; the page swaps it here for a 12-hour token
+    // kept in that tab only (never the key), and its hello carries the token past the closed arch.
+    if (url.pathname === '/api/admin/keeper') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
+      return json({ token: await mintKeeper(signingSecret(env)), ttl: KEEPER_TTL_S });
     }
     // ---- Collectibles (the collector comes from the pass) ----
     if (url.pathname === '/api/admin/grant') {

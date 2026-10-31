@@ -122,6 +122,11 @@ class Ctx:
                     return rid, t
         return None
 
+    def behind_owls(self, key: str) -> bool:
+        """Whether a room draws the key among its backgrounds, behind the owls (the tree's keyed
+        playfield, OP-156), rather than in front of them as an overlay usually is."""
+        return any(t.get("key") == key for room in self.geometry().get("rooms", {}).values() for t in room.get("backgrounds") or [])
+
     def room_for(self, key: str) -> str:
         if key in PIECE_ANCHOR:
             return PIECE_ANCHOR[key][0]
@@ -543,8 +548,22 @@ def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
 
 
 def finish_overlay(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None, budget_2x: int, dither: str) -> tuple[dict, list[str]]:
-    """The PNG finals of an overlay from its RGBA at 1x (and 2x): (outputs, budget lines)."""
+    """The finals of an overlay from its RGBA at 1x (and 2x): (outputs, budget lines). PNG, or WebP
+    with its alpha for one the table marks ``"format": "webp"``: the tree's painted layers (OP-157),
+    which a palette PNG under budget would band."""
     W, H = logical_size(key, ctx.assets)
+    if ships_as_webp(key, ctx.assets):
+        wfields = ("quality", "mode", "budget_relaxed")
+        data, info = webpmeta.encode_under_budget(one, ctx.budget)
+        outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in wfields}}}
+        tools = [f"budget: WebP q{info['quality']}, {info['bytes']} bytes, alpha kept"]
+        if two is not None:
+            data2, info2 = webpmeta.encode_under_budget(two, max(ctx.budget, budget_2x))
+            outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), max(ctx.budget, budget_2x)), **{k: info2.get(k) for k in wfields}}
+            tools.append(f"budget@2x: WebP q{info2['quality']}, {info2['bytes']} bytes")
+        for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+            note(f"removed stale final {name}")
+        return outputs, tools
     fields = ("colors", "mode", "budget_relaxed", "dither")
     outputs: dict = {}
     data, info = encode_final(one, ctx.budget, None, dither, f"{key}.png")
@@ -598,8 +617,10 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     two = cleared(apply_grade(resize_exact(rgba, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength), 2) if a.with_2x else None
     outputs, lines = finish_overlay(ctx, key, one, two, a.budget_2x, a.dither)
     tools.extend(lines)
-    final = Image.open(ctx.out / f"{key}.png").convert("RGBA")
-    report = check_overlay(final, geom, room, key_colour=cinfo["backdrop"])
+    # The final as written: PNG, or WebP for the tree's layers.
+    final = Image.open(ctx.out / outputs["1x"]["file"]).convert("RGBA")
+    behind = ctx.behind_owls(key)
+    report = check_overlay(final, geom, room, key_colour=cinfo["backdrop"], behind=behind)
     bg = background_for(ctx, key).convert("RGBA")
     bg.alpha_composite(final)
     rv = write_review(ctx, f"{key}.png", review_composite(bg, geom, room, 0.4, ctx.assets))
@@ -607,7 +628,8 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     for k2, o in outputs.items():
         note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" P{o['colors']}" if o.get("colors") else " truecolour"))
     note(f"review: {rel_to_repo(rv)}")
-    note(f"overlay check: coverage {report['coverage'] * 100:.1f} % of the walkable interior; {'ok' if report['ok'] else 'FAILED'}")
+    what = "drawn behind the owls, key haze only" if behind else f"coverage {report['coverage'] * 100:.1f} % of the walkable interior"
+    note(f"overlay check: {what}; {'ok' if report['ok'] else 'FAILED'}")
     for v in report["violations"]:
         note(f"  - {v}")
     if a.check and not report["ok"]:
@@ -1185,14 +1207,16 @@ def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
                 want = latest[name][1].get("sha256")
                 if want and want != sha256_bytes(p.read_bytes()):
                     problems.append(f"{name}: contents differ from the latest provenance line (stale or hand-edited; republish it)")
-        if is_overlay(key, ctx.assets) and f"{key}.png" in pngs:
+        # An overlay is checked as published: PNG, or WebP for the tree's layers.
+        overlay_name = next((n for n in (f"{key}.png", f"{key}.webp") if n in rasters), None)
+        if is_overlay(key, ctx.assets) and overlay_name:
             view = ctx.view_for(key)
             if view is None:
                 warnings.append(f"{key}: no room draws it (its room is wider than one screen and leaves it out of its foregrounds)")
             else:
-                rep = check_overlay(Image.open(pngs[f"{key}.png"]), *view, key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"))
+                rep = check_overlay(Image.open(rasters[overlay_name]), *view, key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"), behind=ctx.behind_owls(key))
                 for v in rep["violations"]:
-                    problems.append(f"{key}.png: {v}")
+                    problems.append(f"{overlay_name}: {v}")
         if key in WING_LAYERS:
             for name in (f"{key}.png", f"{key}@2x.png"):
                 p = pngs.get(name)
