@@ -366,9 +366,19 @@ export class Collections extends DurableObject<Env> {
 
   // ---------- feedback ----------
 
-  /** A visitor's feedback, kept for the park's keepers (feedbackBox.ts). */
-  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null): Promise<FeedbackAdd> {
-    return this.feedbackBox.add(cid, draft, ua, Date.now());
+  /**
+   * A visitor's feedback, kept for the park's keepers (feedbackBox.ts) and, when the log is on, copied
+   * to the owner's analytics project for the morning feedback run (OP-166): into the log's outbox in
+   * this same step, and sent once the step is done, so the note never waits on the log.
+   */
+  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null, visit?: Visit): Promise<FeedbackAdd> {
+    const at = Date.now();
+    const r = this.feedbackBox.add(cid, draft, ua, at);
+    if (r.ok && this.log.on) {
+      this.log.feedback({ cid, id: r.id, kind: draft.kind, text: draft.text, at, visit: { ...visit, room: draft.room } });
+      this.ctx.waitUntil(this.log.flush());
+    }
+    return r;
   }
 
   async feedback(status: FeedbackStatus | 'all', limit: number): Promise<FeedbackRow[]> {

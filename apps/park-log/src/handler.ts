@@ -16,6 +16,9 @@
  *   owl's version as it was when the visit began.
  * - `kind: "realm_visit"` (OP-113): each room a visit went into, into `game.fact_realm_visit`, sent
  *   after the visit's own row; one whose visit is not there is left out.
+ * - `kind: "feedback"` (OP-166): notes visitors sent from the Feedback form, into `game.feedback`,
+ *   for the owner's morning feedback run; one already there (by its event id) is skipped. The only
+ *   rows here that carry words a visitor typed: they are kept as text and never read as anything else.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * The rows are anonymous by construction, and checked again here before anything is kept: the
@@ -92,6 +95,25 @@ export interface RealmVisitRow {
   collectibles_gained: number;
 }
 
+export const FEEDBACK_KINDS = ['bug', 'idea', 'praise', 'other'] as const;
+/** The park's own limits on a note's words (packages/shared feedback.ts). */
+export const FEEDBACK_MIN_CHARS = 3;
+export const FEEDBACK_MAX_CHARS = 1000;
+
+/** A note a visitor sent, for `game.feedback`. */
+export interface FeedbackRow {
+  event_id: string;
+  park_feedback_id: number | null;
+  collector_id: string;
+  session_id: string | null;
+  kind: (typeof FEEDBACK_KINDS)[number];
+  body: string;
+  realm: string | null;
+  realm_kind: (typeof REALM_KINDS)[number] | null;
+  device_class: 'phone' | 'desktop' | null;
+  submitted_at: string;
+}
+
 /** A row of `game.collectible_catalogue`. */
 export interface CatalogueRow {
   collectible_id: string;
@@ -114,6 +136,8 @@ export interface Tables {
   addSessions(rows: SessionRow[]): Promise<number>;
   /** Keeps the times in rooms not there yet whose visit is; returns how many those were. */
   addRealmVisits(rows: RealmVisitRow[]): Promise<number>;
+  /** Keeps the notes not there yet; returns how many those were. */
+  addFeedback(rows: FeedbackRow[]): Promise<number>;
 }
 
 export interface Deps {
@@ -269,6 +293,41 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
   };
 }
 
+/** A note as the table takes it, or the reason it is left out. The words are checked for size and control characters only: they are the visitor's. */
+export function checkFeedback(v: unknown): FeedbackRow | string {
+  const r = obj(v);
+  if (typeof r['event_id'] !== 'string' || !UUID.test(r['event_id'])) return 'event_id';
+  const parkId = r['park_feedback_id'] ?? null;
+  if (parkId !== null && count(parkId, Number.MAX_SAFE_INTEGER) === null) return 'park_feedback_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  const session = r['session_id'] ?? null;
+  if (session !== null && (typeof session !== 'string' || !UUID.test(session))) return 'session_id';
+  if (!FEEDBACK_KINDS.includes(r['kind'] as FeedbackRow['kind'])) return 'kind';
+  const body = r['body'];
+  // The park sends its words cleaned (newlines kept, every other control character out); anything else is not the park's.
+  if (typeof body !== 'string' || body.length < FEEDBACK_MIN_CHARS || body.length > FEEDBACK_MAX_CHARS || /[\u0000-\u0009\u000B-\u001F\u007F]/.test(body)) return 'body';
+  const realm = wordOrNull(r['realm']);
+  if (realm === undefined) return 'realm';
+  const realmKind = r['realm_kind'] ?? null;
+  if (realmKind !== null && !REALM_KINDS.includes(realmKind as (typeof REALM_KINDS)[number])) return 'realm_kind';
+  const device = r['device_class'] ?? null;
+  if (device !== null && device !== 'phone' && device !== 'desktop') return 'device_class';
+  const submitted = iso(r['submitted_at']);
+  if (!submitted) return 'submitted_at';
+  return {
+    event_id: r['event_id'],
+    park_feedback_id: parkId as number | null,
+    collector_id: r['collector_id'],
+    session_id: session as string | null,
+    kind: r['kind'] as FeedbackRow['kind'],
+    body,
+    realm,
+    realm_kind: realmKind as FeedbackRow['realm_kind'],
+    device_class: device as FeedbackRow['device_class'],
+    submitted_at: submitted,
+  };
+}
+
 /** A catalogue entry as the table takes it (the park sends `id`), or null to leave it out. */
 export function checkItem(v: unknown): CatalogueRow | null {
   const i = obj(v);
@@ -330,8 +389,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json({ ok: true, dry_run: true, tables });
   }
   const kind = body['kind'];
-  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit') {
-    return json({ error: 'kind must be collect, catalogue, player, session or realm_visit' }, 400);
+  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback') {
+    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit or feedback' }, 400);
   }
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
   const tables = deps.tables;
@@ -346,6 +405,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkSession, (rows) => tables.addSessions(rows));
       case 'realm_visit':
         return await keepRows(kind, body, checkRealmVisit, (rows) => tables.addRealmVisits(rows));
+      case 'feedback':
+        return await keepRows(kind, body, checkFeedback, (rows) => tables.addFeedback(rows));
       case 'catalogue':
         return await catalogue(body, tables);
     }
@@ -367,6 +428,7 @@ const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, r
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
 const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained';
 const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, entered_at, exited_at, entry_source, collectibles_gained';
+const FEEDBACK_COLUMNS = 'event_id, park_feedback_id, collector_id, session_id, kind, body, realm, realm_kind, device_class, submitted_at';
 
 /**
  * The park's tables in the `game` schema, over a direct connection to the project's database (the
@@ -440,6 +502,14 @@ export function gameTables(db: Db): Tables {
         where exists (select 1 from ${SCHEMA}.fact_session s where s.session_id = r.session_id)
         on conflict (visit_id) do nothing
         returning visit_id`,
+        [JSON.stringify(rows)],
+      );
+      return Array.isArray(kept) ? kept.length : 0;
+    },
+    async addFeedback(rows) {
+      // The words go in the batch's one JSON parameter like every other field: never part of the query.
+      const kept = await db.unsafe(
+        `insert into ${SCHEMA}.feedback (${FEEDBACK_COLUMNS}) select ${FEEDBACK_COLUMNS} from jsonb_populate_recordset(null::${SCHEMA}.feedback, $1::text::jsonb) on conflict (event_id) do nothing returning event_id`,
         [JSON.stringify(rows)],
       );
       return Array.isArray(kept) ? kept.length : 0;

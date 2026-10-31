@@ -12,6 +12,7 @@ import {
   realmKind,
   ROOM_KINDS,
   saltedHash,
+  type FeedbackLogRow,
   type LogConfig,
   type LogRow,
 } from '../src/collectLog';
@@ -249,6 +250,41 @@ describe('the collection log (OP-107)', () => {
     expect(t.fetch).not.toHaveBeenCalled();
   });
 
+  it("sends a visitor's note with its words and kind, and nothing else that could name anyone (OP-166)", async () => {
+    const t = rig();
+    t.log.feedback({ cid: CID, id: 7, kind: 'bug', text: 'The climb resets when I jump.', at: MON, visit: { pass: PASS, device: 'phone', room: 'glass' } });
+    t.log.feedback({ cid: CID, id: 8, kind: 'idea', text: 'A kitchen game please', at: MON + 60_000, visit: { room: 'nest-abc123def4' } });
+    await t.log.flush();
+    const batch = t.sent.find((s) => s.body.kind === 'feedback')!;
+    const rows = batch.body.rows as unknown as FeedbackLogRow[];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      event_id: expect.stringMatching(UUID),
+      park_feedback_id: 7,
+      collector_id: await saltedHash(CONFIG.salt, 'collector', CID),
+      session_id: expect.stringMatching(UUID),
+      kind: 'bug',
+      body: 'The climb resets when I jump.',
+      realm: 'glass',
+      realm_kind: 'realm',
+      device_class: 'phone',
+      submitted_at: new Date(MON).toISOString(),
+    });
+    expect(rows[1]).toMatchObject({ park_feedback_id: 8, session_id: null, device_class: null, realm: 'nest', realm_kind: 'nest' });
+    // The collector's own id and the pass never leave the object.
+    expect(JSON.stringify(batch.body)).not.toContain(CID);
+    expect(JSON.stringify(batch.body)).not.toContain(PASS);
+    expect(t.log.waiting()).toBe(0);
+  });
+
+  it('keeps no note for the log while it is off', async () => {
+    const t = rig({ config: null });
+    t.log.feedback({ cid: CID, id: 1, kind: 'praise', text: 'Lovely park', at: MON });
+    expect(t.log.waiting()).toBe(0);
+    await t.log.flush();
+    expect(t.fetch).not.toHaveBeenCalled();
+  });
+
   it('stops keeping rows for the log once its outbox is full, and the grant goes through all the same', () => {
     const t = rig({ answer: () => new Response('down', { status: 503 }) });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -317,11 +353,13 @@ describe('the collections object and its log', () => {
       waitUntil: (p: Promise<unknown>) => void pending.push(p),
     };
     const sent: LogRow[] = [];
+    const notes: FeedbackLogRow[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url: string, init: RequestInit) => {
         const body = JSON.parse(String(init.body)) as { kind: string; rows?: LogRow[] };
         if (body.kind === 'collect') sent.push(...body.rows!);
+        if (body.kind === 'feedback') notes.push(...(body.rows as unknown as FeedbackLogRow[]));
         return new Response('{"ok":true}');
       }),
     );
@@ -330,7 +368,7 @@ describe('the collections object and its log', () => {
     const settle = async () => {
       while (pending.length) await pending.shift();
     };
-    return { obj, sent, settle, alarm: () => alarm };
+    return { obj, sent, notes, settle, alarm: () => alarm };
   }
 
   afterEach(() => vi.unstubAllGlobals());
@@ -350,6 +388,20 @@ describe('the collections object and its log', () => {
     // A grant by the keepers' route has no visit.
     expect(by('cape~2')).toMatchObject({ collectible_type: 'grant', session_id: null, device_class: null, realm: null });
     expect(await t.obj.logState()).toEqual({ on: true, waiting: 0 });
+  });
+
+  it("copies each note the keepers' table took to the log, in the room it was sent from, and none it refused (OP-166)", async () => {
+    const t = await objectRig();
+    const r = await t.obj.addFeedback(CID, { kind: 'bug', text: 'The door sticks', room: 'market', screen: '390x844' }, 'Mozilla/5.0 (iPhone)', { pass: PASS, device: 'phone' });
+    expect(r.ok).toBe(true);
+    // A second note moments later is refused by the keepers' limits, and so never reaches the log.
+    expect((await t.obj.addFeedback(CID, { kind: 'bug', text: 'Again', room: null, screen: null }, null, { pass: PASS })).ok).toBe(false);
+    await t.settle();
+    expect(t.notes).toHaveLength(1);
+    expect(t.notes[0]).toMatchObject({ park_feedback_id: r.ok ? r.id : -1, kind: 'bug', body: 'The door sticks', realm: 'market', device_class: 'phone' });
+    expect(JSON.stringify(t.notes)).not.toContain('Mozilla');
+    expect(JSON.stringify(t.notes)).not.toContain('390x844');
+    expect((await t.obj.feedback('open', 10)).map((f) => f.text)).toEqual(['The door sticks']);
   });
 
   it('backfills on the owner\'s word', async () => {
