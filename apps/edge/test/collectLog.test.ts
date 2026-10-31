@@ -303,9 +303,13 @@ vi.mock('cloudflare:workers', () => ({
   },
 }));
 
+// Loaded with the file, not inside a test (OP-131): what a module does as it loads then belongs to no test,
+// as Stryker's ignoreStatic expects. Loaded inside this test, every module constant of the Worker's it
+// reached (a pass's id pattern, a ticket's lifetime) was tried against this test alone, which never reads them.
+const { Collections } = await import('../src/Collections');
+
 describe('the collections object and its log', () => {
   async function objectRig() {
-    const { Collections } = await import('../src/Collections');
     const pending: Promise<unknown>[] = [];
     let alarm: number | null = null;
     const ctx = {
