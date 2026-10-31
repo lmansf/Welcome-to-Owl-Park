@@ -4,7 +4,9 @@ import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, tapR
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
  * along its back wall: the root bench, a jump up from the floor, and the lantern beam above it; the
- * grove's east wing has the treetop walk (the ladder, the porch, the loft and the far treehouse).
+ * grove's east wing has the treetop walk (the ladder, the porch, the loft and the far treehouse); the
+ * market has its rooftops (the stall row and its signboards, the shop's roof, the plaza's stalls, the
+ * big tent and the food stall).
  * These run on the local transport, tab to tab; the room server's side is in edge.spec.ts.
  */
 
@@ -142,6 +144,55 @@ test.describe('perches (OP-084)', () => {
     await doAction(page, 'use:grove-leaves-hut');
     await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-hut')?.here, { timeout: 15_000 }).toBe(false);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-hut.png` });
+  });
+
+  test('the market’s stall row: a jump up from the curb onto its roof, along it onto the signboards, and the feather shop’s roof at the robot owl’s feet', async ({ page }) => {
+    test.slow(); // the walk along the street, and two jumps
+    await openPark(page, { room: 'market' });
+    // On the curb under the stall row's roof, a jump: the owl stands on the roof.
+    await walkAndStop(page, 700, 697);
+    await jump(page);
+    await standsAt(page, 136);
+    // Along the roof, which climbs to the right as the street comes nearer, and on, level, onto the
+    // neon signboards at its east end, past where the roof ends.
+    await page.evaluate(() => window.owlPark.walkTo(930, 682));
+    await expect.poll(async () => (await where(page)).walking, { intervals: [50] }).toBe(false);
+    await standsAt(page, 136);
+    expect((await where(page)).x).toBeGreaterThan(900);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-boards.png` });
+    // Off the front, down in the street; along to the curb right of the shop's doorway, and a jump.
+    await page.evaluate(() => window.owlPark.walkTo(900, 780));
+    await expect.poll(async () => { const w = await where(page); return [w.walking, w.z]; }, { intervals: [50] }).toEqual([false, 0]);
+    await walkAndStop(page, 1300, 695);
+    await jump(page);
+    await standsAt(page, 126);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-shop.png` });
+  });
+
+  test('the market’s plaza: a jump up onto the stalls’ roofs, and a jump and the flap up onto the big tent and the food stall', async ({ page }) => {
+    test.slow(); // the walk across the plaza, and five flights
+    await openPark(page, { room: 'market', spawn: 'from-arcade' });
+    await walkAndStop(page, 2700, 790);
+    await walkAndStop(page, 2300, 760);
+    await walkAndStop(page, 2300, 702);
+    await jump(page);
+    await standsAt(page, 130);
+    // Down in front of the big tent's counter: a jump is not enough, the flap at its top is.
+    await page.evaluate(() => window.owlPark.walkTo(2300, 780));
+    await expect.poll(async () => { const w = await where(page); return [w.walking, w.z]; }, { intervals: [50] }).toEqual([false, 0]);
+    await walkAndStop(page, 2700, 741);
+    await jump(page);
+    await expect.poll(async () => { const w = await where(page); return [w.s, w.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 0]);
+    await flapAndGlide(page, 400);
+    await standsAt(page, 209);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-tent.png` });
+    // And in front of the food stall's counter, the same.
+    await page.evaluate(() => window.owlPark.walkTo(2600, 800));
+    await expect.poll(async () => { const w = await where(page); return [w.walking, w.z]; }, { intervals: [50] }).toEqual([false, 0]);
+    await walkAndStop(page, 1900, 752);
+    await flapAndGlide(page, 400);
+    await standsAt(page, 220);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-food.png` });
   });
 
   test('another tab sees the owl stand on the bench, a newcomer finds it up there, and both see it come down', async ({ context }) => {

@@ -10,8 +10,8 @@ import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
 import { FLIGHT_STEP_MS, GROUNDED, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
-import { MAX_PERCH_TOP, footing, groundAt, type Raised } from '../src/perches';
-import { perchTiers } from '../src/routes';
+import { MAX_PERCH_TOP, PERCH_SLACK, footing, groundAt, type Raised } from '../src/perches';
+import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 
@@ -479,6 +479,20 @@ describe('perches (OP-084)', () => {
         const meets = p.area.some((v) => isWalkable(v, room.walkable) || others.some((o) => pointInPolygon(v, o)));
         expect(meets, `${room.id}: ${p.id} meets no floor or perch`).toBe(true);
       }
+    }
+  });
+
+  it('that meet stand level, or one more than PERCH_SLACK above the other: an owl walks across only on the level', () => {
+    // A top a little above where the owl stands would lift it as it walks on (groundAt's slack), with
+    // no landing for its page to draw or tell the room: what meets is level, or a jump up.
+    for (const room of ALL_ROOMS) {
+      const perches = room.perches ?? [];
+      for (const a of perches)
+        for (const b of perches) {
+          if (a === b || gapBetween(a.area, b.area) > 0) continue;
+          const step = Math.abs(a.top - b.top);
+          expect(step === 0 || step > PERCH_SLACK, `${room.id}: ${a.id} and ${b.id} meet ${step} px apart`).toBe(true);
+        }
     }
   });
 
