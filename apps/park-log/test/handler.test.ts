@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_ROWS,
+  checkFeedback,
   checkItem,
   checkPlayer,
   checkRealmVisit,
@@ -10,6 +11,7 @@ import {
   handle,
   type CatalogueRow,
   type Db,
+  type FeedbackRow,
   type LogRow,
   type PlayerRow,
   type RealmVisitRow,
@@ -37,19 +39,26 @@ const row = (i: number, extra: Record<string, unknown> = {}): Record<string, unk
 });
 
 /** The tables in memory, as the database keeps them: one row per event id, and per collector and collectible. */
-function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>; players: PlayerRow[]; sessions: SessionRow[]; realmVisits: RealmVisitRow[] } {
+function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>; players: PlayerRow[]; sessions: SessionRow[]; realmVisits: RealmVisitRow[]; feedback: FeedbackRow[] } {
   const rows: LogRow[] = [];
   const catalogue = new Map<string, CatalogueRow & { in_catalogue: boolean }>();
   const players: PlayerRow[] = [];
   const sessions: SessionRow[] = [];
   const realmVisits: RealmVisitRow[] = [];
+  const feedback: FeedbackRow[] = [];
   return {
     rows,
     catalogue,
     players,
     sessions,
     realmVisits,
+    feedback,
     async check() {},
+    async addFeedback(batch) {
+      let kept = 0;
+      for (const f of batch) if (!feedback.some((x) => x.event_id === f.event_id) && feedback.push(f)) kept++;
+      return kept;
+    },
     async addPlayers(batch) {
       let kept = 0;
       for (const p of batch) if (!players.some((x) => x.event_id === p.event_id) && players.push(p)) kept++;
@@ -282,6 +291,46 @@ describe('time per room (OP-113)', () => {
   });
 });
 
+describe("visitors' feedback (OP-166)", () => {
+  const note = (i: number, extra: Record<string, unknown> = {}) => ({
+    event_id: uuid(i),
+    park_feedback_id: i,
+    collector_id: A,
+    session_id: uuid(10),
+    kind: 'bug',
+    body: 'The climb resets when I jump.\nOn my phone.',
+    realm: 'glass',
+    realm_kind: 'realm',
+    device_class: 'phone',
+    submitted_at: '2026-10-31T16:05:00.000Z',
+    ...extra,
+  });
+
+  it('keeps each note once, however often it is sent', async () => {
+    const tables = memoryTables();
+    expect(await (await post({ kind: 'feedback', rows: [note(1), note(1), note(2)] }, { tables })).json()).toEqual({ ok: true, kept: 2, duplicates: 1, skipped: 0 });
+    expect(tables.feedback[0]).toEqual(note(1));
+  });
+
+  it('takes the words only in the park\'s limits, the kind only from its list, and nothing that could name anyone', () => {
+    expect(checkFeedback(note(1))).toEqual(note(1));
+    expect(checkFeedback(note(1, { kind: 'complaint' }))).toBe('kind');
+    expect(checkFeedback(note(1, { body: 'hi' }))).toBe('body');
+    expect(checkFeedback(note(1, { body: 'x'.repeat(1001) }))).toBe('body');
+    expect(checkFeedback(note(1, { body: 'bell\u0007 here' }))).toBe('body');
+    expect(checkFeedback(note(1, { body: 42 }))).toBe('body');
+    expect(checkFeedback(note(1, { collector_id: 'c_plainToken' }))).toBe('collector_id');
+    expect(checkFeedback(note(1, { session_id: 'v_visitAAAA1' }))).toBe('session_id');
+    expect(checkFeedback(note(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
+    expect(checkFeedback(note(1, { realm_kind: 'castle' }))).toBe('realm_kind');
+    expect(checkFeedback(note(1, { device_class: 'Pixel 9' }))).toBe('device_class');
+    expect(checkFeedback(note(1, { park_feedback_id: -1 }))).toBe('park_feedback_id');
+    expect(checkFeedback(note(1, { submitted_at: 'yesterday' }))).toBe('submitted_at');
+    expect(checkFeedback(note(1, { realm: null, realm_kind: null, session_id: null, device_class: null, park_feedback_id: null }))).toEqual(note(1, { realm: null, realm_kind: null, session_id: null, device_class: null, park_feedback_id: null }));
+    expect(Object.keys(checkFeedback({ ...note(1), ua: 'Mozilla/5.0', screen: '390x844', ip: '203.0.113.9', email: 'a@b.c' }) as object)).toEqual(Object.keys(note(1)));
+  });
+});
+
 describe("the game schema's tables", () => {
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
@@ -321,6 +370,18 @@ describe("the game schema's tables", () => {
     expect(s2.calls[0]!.query).toContain('insert into game.fact_session');
     expect(s2.calls[0]!.query).toContain('d.valid_from <= s.started_at');
     expect(s2.calls[0]!.query).toContain('on conflict (session_id) do nothing');
+  });
+
+  it('keeps a note once by its event id, its words only in the JSON parameter (OP-166)', async () => {
+    const db = recorder([{ event_id: uuid(1) }]);
+    const f = checkFeedback({ event_id: uuid(1), park_feedback_id: 3, collector_id: A, session_id: null, kind: 'idea', body: "'); drop table game.feedback; --", realm: 'hub', realm_kind: 'hub', device_class: 'desktop', submitted_at: '2026-10-31T16:00:00Z' }) as FeedbackRow;
+    expect(await gameTables(db).addFeedback([f])).toBe(1);
+    const { query, params } = db.calls[0]!;
+    expect(query).toContain('insert into game.feedback');
+    expect(query).toContain('jsonb_populate_recordset(null::game.feedback, $1::text::jsonb)');
+    expect(query).toContain('on conflict (event_id) do nothing');
+    expect(params).toEqual([JSON.stringify([f])]);
+    expect(query).not.toContain('drop table');
   });
 
   it("keeps a time in a room only under a visit that is there, tied to the owl's version when it came in (OP-113)", async () => {

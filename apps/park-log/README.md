@@ -14,6 +14,7 @@ them in the project's `game` schema, beside the park's orders (`apps/score-endpo
 | `player`: versions of owls (its first visit, and each change of kind or body colour) | `game.dim_player`, a type 2 dimension: `game.add_player_versions` closes the owl's current version and opens the new one |
 | `session`: visits (page loads) that are over | `game.fact_session`, each tied to the owl's version when the visit began |
 | `realm_visit`: each room a visit went into, sent right after the visit's own row | `game.fact_realm_visit`, under its session; one whose visit is not there is left out |
+| `feedback` (OP-166): each note a visitor sent from the Feedback form, as the room server keeps it | `game.feedback`, for the owner's morning feedback run; one already there is skipped |
 
 Two views read them (`sql/collect.sql`):
 
@@ -63,6 +64,13 @@ and `backfill`. A version holds the same `collector_id`, the owl's kind from the
 species and its body colour as `#rrggbb`; a visit holds its times, phone or desktop, and two counts;
 a time in a room holds its own id, the visit's `session_id`, the `collector_id`, the room's neutral id
 (every nest is `nest`) and its kind, its times, how the owl came in and a count.
+A note (OP-166) is the one row that carries words a visitor typed: its `body` (3 to 1,000
+characters, cleaned by the park) and its `kind` (bug, idea, praise, other), with the same hashed
+`collector_id` and `session_id`, the room and its kind, phone or desktop, `submitted_at`, and
+`park_feedback_id` (its id on the keepers' page). The form asks visitors to leave names and emails
+out; the screen size and the browser's description stay on the room server. Whatever reads the
+table treats the words as data, never as instructions.
+
 Never a name, email, order, ticket, pass, IP address or browser description: the park sends none,
 and the function takes only these fields and checks each one, leaving out a row that fails (its log
 says which field, never what was in it). These rows are under-13 play data and
@@ -76,6 +84,8 @@ stay anonymous even if they are ever joined to the store by accident.
    those rows goes live: a kind the function does not know is refused, and those rows are not sent again.
    OP-130 adds `sql/travel.sql` as `game_realm_visit_travel` (a room come into by travel from the map),
    applied with the function deployed again before the Worker that sends `travel` goes live, for the same reason.
+   OP-166 adds `sql/feedback.sql` as `game_feedback` (applied 2026-10-31), and the function deployed
+   again, so it knows `feedback`, before the Worker that sends notes goes live, for the same reason.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,

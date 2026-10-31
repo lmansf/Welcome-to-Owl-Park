@@ -27,8 +27,13 @@
  * grant is logged when the log is on. docs/DEPLOY.md: PARK_LOG_URL with FRAUD_SCORE_KEY and
  * FRAUD_HASH_SALT turn it on (apps/park-log/README.md, steps 3 to 6), and the backfill
  * (`POST /api/admin/collect-log`).
+ *
+ * TODO-DOCS (OP-166): docs/FEEDBACK.md, "Where notes are kept": with the log on, every note is also
+ * copied to `game.feedback` in the owner's analytics project (the `feedback` kind here and in
+ * apps/park-log), with the words, the kind, the room, phone or desktop and the hashed collector and
+ * visit; never the screen size or the browser's description. The owner's morning run reads it.
  */
-import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FeedbackKind, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
 import { moduleLog } from './logs';
 import { ROOMS } from './rooms';
 
@@ -378,12 +383,62 @@ async function realmVisitRow(salt: string, d: RealmVisitData): Promise<RealmVisi
   };
 }
 
+// ---------- visitors' feedback (OP-166) ----------
+
+/** A note a visitor sent, as the outbox keeps it: raw, in this object only, until it is hashed on its way out. */
+export interface FeedbackData {
+  cid: string;
+  /** The note's id on the room server (feedbackBox.ts), so the keepers' page and the log's row can be matched. */
+  id: number;
+  kind: FeedbackKind;
+  text: string;
+  at: number;
+  pass: string | null;
+  device: DeviceClass | null;
+  room: string | null;
+}
+
+/**
+ * A note as the log takes it: the visitor's own words (the point of it, already cleaned by
+ * `parseFeedback`) and the kind, with the same anonymous parts as every other row. Never the screen
+ * size or the browser's own description, which the room server keeps for the keepers' page.
+ */
+export interface FeedbackLogRow {
+  event_id: string;
+  park_feedback_id: number;
+  collector_id: string;
+  session_id: string | null;
+  kind: FeedbackKind;
+  body: string;
+  realm: string | null;
+  realm_kind: RealmKind | null;
+  device_class: DeviceClass | null;
+  submitted_at: string;
+}
+
+async function feedbackRow(salt: string, d: FeedbackData): Promise<FeedbackLogRow> {
+  return {
+    // One id per note on the room server: a note sent twice lands once.
+    event_id: await saltedUuid(salt, 'feedback', `${d.id}|${d.cid}|${d.at}`),
+    park_feedback_id: d.id,
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    session_id: d.pass ? await saltedUuid(salt, 'session', d.pass) : null,
+    kind: d.kind,
+    body: d.text,
+    realm: d.room,
+    realm_kind: d.room ? realmKind(d.room) : null,
+    device_class: d.device,
+    submitted_at: iso(d.at),
+  };
+}
+
 /** Each kind of row the outbox holds, and how its data becomes the row the log takes. */
 const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   collect: collectRow,
   player: playerRow,
   session: sessionRow,
   realm_visit: realmVisitRow,
+  feedback: feedbackRow,
 };
 
 export class CollectLog {
@@ -453,6 +508,14 @@ export class CollectLog {
   /** Keep a time in one room to send (OP-113): after its visit's own row, which the log keeps first. */
   realmVisit(d: RealmVisitData): void {
     if (this.config) this.keep('realm_visit', d);
+  }
+
+  /** Keep a note a visitor sent to send (OP-166): the room as the log names rooms, the visit hashed on its way out. */
+  feedback(d: { cid: string; id: number; kind: FeedbackKind; text: string; at: number; visit?: Visit | null }): void {
+    if (!this.config) return;
+    const v = cleanVisit(d.visit);
+    const data: FeedbackData = { cid: d.cid, id: d.id, kind: d.kind, text: d.text, at: d.at, ...v };
+    this.keep('feedback', data);
   }
 
   /**
