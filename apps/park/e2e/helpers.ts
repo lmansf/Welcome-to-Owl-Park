@@ -275,27 +275,48 @@ export async function holdSpace(page: Page, ms: number): Promise<void> {
   await page.keyboard.up('Space');
 }
 
+/** How fast an owl still rises once Jump is let go on the way up (JUMP_CUT_SPEED, packages/shared jump.ts). */
+const CUT_SPEED = 180;
+
 /**
- * A jump held to its top and a little past, then the flap, held `ms`: from the flap's top on, a
- * glide (OP-084). Pressed in the page with set holds (owlPark.jump), the flap the moment the owl is
- * near the top by the page's own reckoning, so a slow runner's round trips cannot let the owl come
- * down first and turn the flap into a second jump from the floor. Resolves once the flap is pressed.
+ * A jump held `jumpMs` (by default to its top and a little past), then the flap, held `ms`: from the
+ * flap's top on, a glide (OP-084). Pressed in the page with set holds (owlPark.jump), from wherever
+ * the owl stands. The page keeps one press at a time: a flap asked for while the jump is held goes
+ * down as the jump is let go, at that time to the step however few frames a runner draws, but from
+ * the moment it is asked for the jump counts as let go, and a jump let go while it rises faster than
+ * the cut's speed is cut short. So the flap is asked for in the first frame, read just after the
+ * page's own step, in which letting go costs the flight no more than `spare` px by the time the flap
+ * goes down: once the rise has slowed to the cut's speed, or earlier for a caller with height to
+ * spare. A page's script runs only between its frames, a whole one apart on a slow runner, so the
+ * spare is what lets the flap be asked for a frame sooner. Resolves once the flap is asked for, and
+ * fails, rather than waits on, a jump the page never takes.
  */
-export async function jumpFlapGlide(page: Page, ms: number): Promise<void> {
+export async function jumpFlapGlide(page: Page, ms: number, { jumpMs = 500, spare = 0 }: { jumpMs?: number; spare?: number } = {}): Promise<void> {
   await page.evaluate(
-    (ms) =>
-      new Promise<void>((resolve) => {
-        window.owlPark.jump(500);
-        const tick = () => {
+    ({ ms, jumpMs, spare, cut }) =>
+      new Promise<void>((resolve, reject) => {
+        const before = window.owlPark.state()?.flown.n ?? 0;
+        const pressed = Date.now();
+        if (!window.owlPark.jump(jumpMs)) return reject(new Error('the page would not jump'));
+        let waiting = true;
+        const giveUp = setTimeout(() => {
+          waiting = false;
+          reject(new Error('the page never took the jump off the ground'));
+        }, 5_000);
+        const ask = () => {
+          if (!waiting) return;
           const s = window.owlPark.state();
-          if (s && s.height > 100 && s.air.vz < 150) {
-            window.owlPark.jump(ms);
-            resolve();
-          } else requestAnimationFrame(tick);
+          // Let go now, the owl rises at the cut's speed, not at vz, until the flap goes down.
+          const cost = s ? ((s.air.vz - cut) * Math.max(0, pressed + jumpMs - Date.now())) / 1000 : Infinity;
+          if (!s || s.flown.n <= before || cost > spare) return void requestAnimationFrame(ask);
+          waiting = false;
+          clearTimeout(giveUp);
+          window.owlPark.jump(ms);
+          resolve();
         };
-        requestAnimationFrame(tick);
+        requestAnimationFrame(ask);
       }),
-    ms,
+    { ms, jumpMs, spare, cut: CUT_SPEED },
   );
 }
 
