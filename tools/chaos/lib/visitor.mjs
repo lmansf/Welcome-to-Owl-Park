@@ -14,6 +14,7 @@ const BACKOFF_MIN_MS = 500;
 const BACKOFF_MAX_MS = 8_000;
 const ECHO_TIMEOUT_MS = 5_000;
 const WELCOME_TIMEOUT_MS = 10_000;
+const SAW_KEPT = 500;
 
 const HOP_MIN_PX = 40;
 // A walk over before the fleet's next tap (1.5 s at the soonest), so the owl stands where its visitor
@@ -68,6 +69,19 @@ export class Visitor {
     this.heartbeat = null;
     /** The emotes this visitor saw each other owl play, by its id. */
     this.heardEmotes = new Map();
+    /** Where this visitor was told each other owl is or walks to, by its id (the last SAW_KEPT of each, OP-149). */
+    this.sawAt = new Map();
+    /** How many air states this visitor was told of each other owl, by its id (OP-149). */
+    this.heardAir = new Map();
+  }
+
+  /** Another owl told at `p`: kept, the latest few hundred of each. */
+  saw(id, p) {
+    if (!p) return;
+    const at = this.sawAt.get(id) ?? [];
+    at.push({ x: p.x, y: p.y });
+    if (at.length > SAW_KEPT) at.shift();
+    this.sawAt.set(id, at);
   }
 
   /** A pass for this visitor, as a page asks for one (a new collector each time unless it has a token). */
@@ -161,7 +175,15 @@ export class Visitor {
       this.emit({ kind: back ? 'rejoined' : 'welcome', room: f.room, pos: f.you.pos, ...(back ? { gapMs: Date.now() - this.droppedAt, was: before } : {}) });
       this.droppedAt = null;
       this.pos = f.you.pos;
+      for (const o of f.owls ?? []) {
+        this.saw(o.id, o.pos);
+        this.saw(o.id, o.walk?.to);
+      }
       for (const w of this.waiters.splice(0)) w(f);
+    } else if (f.t === 'enter') {
+      this.saw(f.owl.id, f.owl.pos);
+    } else if (f.t === 'air') {
+      this.heardAir.set(f.id, (this.heardAir.get(f.id) ?? 0) + 1);
     } else if (f.t === 'emote') {
       this.heardEmotes.set(f.id, (this.heardEmotes.get(f.id) ?? 0) + 1);
     } else if (f.t === 'move' && f.id === this.id) {
@@ -171,6 +193,9 @@ export class Visitor {
         this.pending.delete(f.seq);
         p.resolve(Date.now() - p.at);
       }
+    } else if (f.t === 'move') {
+      this.saw(f.id, f.from);
+      this.saw(f.id, f.to);
     }
   }
 
@@ -205,6 +230,11 @@ export class Visitor {
     });
     if (!r.ok) throw new Error(`POST /api/line: HTTP ${r.status}`);
     return r.json();
+  }
+
+  /** Send a frame as it is, as a page's console can (OP-149): whatever the room makes of it. */
+  raw(frame) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(frame));
   }
 
   /** Play an emote (the room may drop it quietly when they come too fast). */

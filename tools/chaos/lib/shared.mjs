@@ -16,7 +16,7 @@ const from = (path) => import(new URL(path, SHARED).href);
 
 export const { EDGE_PROTOCOL_VERSION } = await from('src/edge.ts');
 export const { WALK_SPEED } = await from('src/walk.ts');
-export const { distance, distanceToRect, isWalkable } = await from('src/geometry.ts');
+export const { distance, distanceToRect, isWalkable, snapToWalkable } = await from('src/geometry.ts');
 export const { resolveTarget } = await from('src/resolveTarget.ts');
 export const { ROOMS } = await from('rooms/index.ts');
 export const { STARTER_PACK } = await from('src/collectibles.ts');
