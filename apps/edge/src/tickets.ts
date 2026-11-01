@@ -66,7 +66,7 @@ export function windowed(kind: TicketKind): boolean {
 export const UNUSED_LIFETIME_MS = 365 * DAY_MS;
 
 /**
- * A pass that never runs out (OP-170): the keepers give one through the admin route with
+ * A pass that never runs out (OP-171): the keepers give one through the admin route with
  * `"lifetime": true`, never the store. It is an annual pass a hundred years long, so every rule
  * above still holds; it does not expire unused either, and the wallet shows no time left on it.
  */

@@ -63,7 +63,7 @@ describe('other kinds', () => {
     expect(r.ok && r.ticket.validUntil).toBe(T0 + 366 * DAY_MS);
   });
 
-  it('a lifetime pass (OP-170) never runs out, used or not, and shows no time left', () => {
+  it('a lifetime pass (OP-171) never runs out, used or not, and shows no time left', () => {
     const t = ticket({ kind: 'annual', lengthMs: LIFETIME_MS, order: 'comp-1' });
     expect(lifetime(t)).toBe(true);
     expect(lifetime(ticket({ kind: 'annual', lengthMs: DEFAULT_LENGTH_MS.annual }))).toBe(false);

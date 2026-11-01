@@ -227,7 +227,7 @@ turnstiles let everyone through. The steps, in order:
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
    `"from"` and `"until"`, or an `opening-night` with `"from"`) answers with the claim link. Nothing
    is copied to the store for these. `{"kind": "annual", "lifetime": true}` makes one pass that never
-   runs out (OP-170): it does not expire unused and the wallet shows no time left on it. Open its
+   runs out (OP-171): it does not expire unused and the wallet shows no time left on it. Open its
    link once, on the owl it is for; anyone holding the link can move the pass to their own screen,
    so it goes to no one else.
 10. **Opening night** (C42): the annual pass's 50% discount code (OP-062; an "amount off

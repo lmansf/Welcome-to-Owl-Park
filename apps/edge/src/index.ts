@@ -256,7 +256,7 @@ function compLine(body: Record<string, unknown>): TicketLine | null {
   const hours = body['hours'] === undefined ? null : Number(body['hours']);
   if (!KINDS.includes(kind) || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) return null;
   if (hours !== null && !(hours > 0 && hours <= 24 * 366)) return null;
-  // A pass that never runs out (OP-170): one annual pass, with no hours of its own.
+  // A pass that never runs out (OP-171): one annual pass, with no hours of its own.
   const forever = body['lifetime'] === undefined ? false : body['lifetime'];
   if (forever !== false && (forever !== true || kind !== 'annual' || hours !== null || quantity !== 1)) return null;
   if (forever) return { line: '1', quantity, kind, lengthMs: LIFETIME_MS, validFrom: null, validUntil: null };

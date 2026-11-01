@@ -6,7 +6,7 @@ import { ticketDesk } from '../src/ticketDesk';
 import { LIFETIME_MS } from '../src/tickets';
 import { seq } from './fakeStore';
 
-// ---- A pass that never runs out (OP-170): only the keepers' route makes one, and only one annual pass at a time ----
+// ---- A pass that never runs out (OP-171): only the keepers' route makes one, and only one annual pass at a time ----
 
 vi.mock('cloudflare:workers', () => ({
   DurableObject: class {
@@ -52,7 +52,7 @@ const call = (e: Env, path: string, init: RequestInit = {}) => worker.fetch(new 
 const post = (e: Env, path: string, body: unknown, headers: Record<string, string> = {}) => call(e, path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 const admin = { 'X-Admin-Key': ADMIN };
 
-describe('a lifetime pass from the keepers (OP-170)', () => {
+describe('a lifetime pass from the keepers (OP-171)', () => {
   it('is one annual pass a lifetime long, claimed by its link onto one device, and admits that owl', async () => {
     forgetGate();
     const { env, book } = park();
