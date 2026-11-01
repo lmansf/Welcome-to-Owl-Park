@@ -3,8 +3,9 @@
  * (it refuses to be framed), so the booth opens it in a window of its own over the game: a popup on a
  * computer, a new tab on a phone. The cart carries a one-time token the park made for this owl, and
  * the paid order's tickets land on this owl on the server, with no email needed. This page watches
- * its wallet meanwhile, says when the ticket has come, and closes the checkout window where the
- * browser lets it (the store's page may cut the park's hold on it; then the buyer closes it).
+ * its wallet meanwhile, says when the ticket has come, and tries to close the checkout window. The
+ * window is cut off from the park, so once it shows the store's page most browsers no longer let the
+ * park close it: the note asks the buyer to close checkout.
  */
 import type { WalletEntry } from '../net';
 
@@ -28,8 +29,8 @@ export const CHECKOUT_WORDS = {
   cancelled: 'Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.',
   fallback: 'Checkout is open in another window. Your ticket comes by email: open its link on this device.',
   none: 'Tickets cannot be bought right now. Try again in a minute.',
-  added: 'Ticket added. Walk through the turnstiles to enter the park.',
-  addedHeld: 'Ticket added. It works as soon as the store’s quick check is done.',
+  added: 'Ticket added. Close checkout and walk through the turnstiles to enter the park.',
+  addedHeld: 'Ticket added. Close checkout; the ticket works as soon as the store’s quick check is done.',
 } as const;
 
 export type Opener = (url: string, target: string, features: string) => Window | null;

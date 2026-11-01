@@ -104,9 +104,10 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
       await a.screenshot({ path: `e2e-screenshots/checkout-open-${shot}.png` });
 
       await pay(request, token);
-      await expect(a.getByText('Ticket added. Walk through the turnstiles to enter the park.')).toBeVisible({ timeout: 15_000 });
-      // The park closes the checkout window it opened, and the booth shows the ticket.
-      await expect.poll(() => popup.isClosed(), { timeout: 10_000 }).toBe(true);
+      await expect(a.getByText('Ticket added. Close checkout and walk through the turnstiles to enter the park.')).toBeVisible({ timeout: 15_000 });
+      // The checkout window is cut off from the park, so the browser may not let the park close it
+      // (Chromium does not, once it shows another site); the note asks the buyer to, and they do.
+      if (!popup.isClosed()) await popup.close();
       await expect(a.locator('[data-booth="wallet"] li')).toContainText('Day ticket');
       expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => t.status)).toEqual(['unused']);
       await a.screenshot({ path: `e2e-screenshots/checkout-added-${shot}.png` });
@@ -132,7 +133,7 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     await expect(a.locator('[data-booth="checkout"]')).toHaveText('Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.');
     // Paid just before Cancel: it still lands, and the page still says so.
     await pay(request, token);
-    await expect(a.getByText('Ticket added. Walk through the turnstiles to enter the park.')).toBeVisible({ timeout: 15_000 });
+    await expect(a.getByText('Ticket added. Close checkout and walk through the turnstiles to enter the park.')).toBeVisible({ timeout: 15_000 });
     expect(await a.evaluate(() => window.owlPark.wallet())).toHaveLength(1);
     await a.context().close();
   });
