@@ -248,7 +248,7 @@ describe('rate limits (OP-142)', () => {
     expect(statuses.slice(0, API_LIMITS.public.limit).every((s) => s === 200)).toBe(true);
     expect(statuses.at(-1)).toBe(429);
     logged(cap.lines, 'rate_limited', { limit: 'public' });
-    expect(['/api/pass', '/api/notice', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally', '/api/admin/gate', '/api/account/restore'].every(isPublicCall)).toBe(true);
+    expect(['/api/pass', '/api/notice', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally', '/api/admin/gate', '/api/admin/masks/l1', '/api/masks/l1', '/api/account/restore'].every(isPublicCall)).toBe(true);
     expect(['/api/vote', '/api/entry', '/api/tickets', '/api/collection', '/ws/hub'].some(isPublicCall)).toBe(false);
   });
 

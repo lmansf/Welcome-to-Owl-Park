@@ -4,7 +4,7 @@
  * seconds, not one each, and a quiet night one every half minute. When the object cannot be reached
  * the last answer stands, and before any there is no line: a fault here never keeps owls out.
  */
-import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS } from '@owl-park/shared';
+import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, type SavedMasks } from '@owl-park/shared';
 import { moduleLog } from './logs';
 import type { OverflowState } from './Overflow';
 
@@ -64,4 +64,29 @@ export function countedOneMore(name: string): void {
 
 export function forgetCounts(): void {
   counted.clear();
+}
+
+/**
+ * A tree room's ledge draft (OP-156) as the overflow object last gave it, or that it has none (null),
+ * kept for a few seconds per room: anyone may read a draft back (GET /api/masks/<room>), and the
+ * object also runs the line, so however often that is asked it costs the object one read per room
+ * per Worker every few seconds. A save through this Worker is what it reads back at once; one
+ * through another reaches it within MASKS_KEEP_MS.
+ */
+const masksSeen = new Map<string, { saved: SavedMasks | null; until: number }>();
+export const MASKS_KEEP_MS = 10_000;
+
+/** The draft kept for `room` (null: it has none), or undefined when there is nothing kept to answer from. */
+export function masksKept(room: string, now = Date.now()): SavedMasks | null | undefined {
+  const k = masksSeen.get(room);
+  return k && now < k.until ? k.saved : undefined;
+}
+
+/** What the overflow object said of `room`'s draft, or the draft just saved: kept for MASKS_KEEP_MS. */
+export function keepMasks(room: string, saved: SavedMasks | null, now = Date.now()): void {
+  masksSeen.set(room, { saved, until: now + MASKS_KEEP_MS });
+}
+
+export function forgetMasks(): void {
+  masksSeen.clear();
 }

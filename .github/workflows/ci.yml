@@ -76,6 +76,9 @@ jobs:
       - run: pnpm chaos:test
       # The bundle check's own tests (OP-150).
       - run: pnpm security:test
+      # The ledge painter's pull script (OP-156): it reads the rooms and the draft's check from
+      # packages/shared, so a change there that it cannot load, or prints wrong, fails here.
+      - run: pnpm masks:test
       - name: Cancel the rest of the run
         if: failure()
         run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}

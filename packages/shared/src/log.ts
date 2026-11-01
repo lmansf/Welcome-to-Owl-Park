@@ -76,6 +76,8 @@ export const LOG_EVENTS = [
   'gate_switched',
   'capacity_set',
   'realms_set',
+  'masks_saved',
+  'masks_refused',
   'collect_logged',
   'collect_log_failed',
   'collect_log_retried',

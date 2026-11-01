@@ -1,4 +1,4 @@
-import { isNestRoom, type RoomDef } from '@owl-park/shared';
+import { isNestRoom, isPaintable, type RoomDef } from '@owl-park/shared';
 import { ROOMS as PARK_ROOMS, roomFor } from '@owl-park/shared/rooms';
 import type { Env } from './env';
 import { moduleLog } from './logs';
@@ -16,6 +16,12 @@ export function roomDef(id: string): RoomDef | undefined {
 /** Whether a socket may ask for this room: one of the park's, or any well-formed nest. */
 export function isRoomId(id: string): boolean {
   return roomDef(id) !== undefined;
+}
+
+/** A room the ledge painter keeps a draft for (OP-156): one of the tree's (map 2); null for any other id. */
+export function paintableRoom(id: string): RoomDef | null {
+  const room = roomDef(id);
+  return room && isPaintable(room) ? room : null;
 }
 
 /** Owls in one nest at once, its owner aside: the owner always gets into its own nest. */
