@@ -63,30 +63,38 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await standsAt(page, 282);
   });
 
-  test('the camera follows the owl along the ground line, from the closed gate to the roof run', async ({ page }) => {
+  test('the camera follows the owl along the ground line across the lobby', async ({ page }) => {
     await openPark(page, { room: 'l1' });
     await walkAndStop(page, LOBBY + 100, GROUND);
     const lobbyWest = await settleCamera(page);
     await walkAndStop(page, LOBBY + 1500, GROUND);
     const lobbyEast = await settleCamera(page);
     expect(lobbyEast.viewX).toBeGreaterThan(lobbyWest.viewX + 40);
-    await walkAndStop(page, 900, GROUND);
-    const west = await settleCamera(page);
-    expect(west.viewX).toBeLessThan(lobbyWest.viewX);
-    await walkAndStop(page, 3 * 1600 + 1200, GROUND);
-    const east = await settleCamera(page);
-    expect(east.viewX).toBeGreaterThan(lobbyEast.viewX + 1600);
   });
 
+  // The level's ends, each from its own spawn: a walk the length of the level outlasts a test where
+  // the game draws in software.
+  for (const [spawn, screen] of [['west', 0], ['east', 3]] as const) {
+    test(`the camera shows an owl at the ${spawn} spawn on the level's ${screen ? 'last' : 'first'} screen`, async ({ page }) => {
+      await openPark(page, { room: 'l1', spawn });
+      const at = (await state(page)).pos.x;
+      expect(Math.floor(at / 1600)).toBe(screen);
+      const view = await settleCamera(page);
+      expect(view.viewX).toBeLessThanOrEqual(at);
+      expect(view.viewX + view.viewW).toBeGreaterThanOrEqual(at);
+      expect(Math.floor((view.viewX + view.viewW / 2) / 1600)).toBe(screen);
+    });
+  }
+
   test('the closed gate at the west end turns an owl back with its sign', async ({ page }) => {
-    await openPark(page, { room: 'l1' });
+    await openPark(page, { room: 'l1', spawn: 'west' });
     await walkToDoor(page, 'closed-west');
     await expect(page.locator('[data-toasts]')).toContainText('Not Yet Fledged', { timeout: 15_000 });
     expect((await state(page)).pos.x).toBeGreaterThanOrEqual(600);
   });
 
   test('climbs the roof run in the market, crates a jump a step, up to the high roof by the lantern tower', async ({ page }) => {
-    await openPark(page, { room: 'l1' });
+    await openPark(page, { room: 'l1', spawn: 'east' });
     const RUN = 3 * 1600;
     await walkAndStop(page, RUN + 200, GROUND);
     await jump(page);
