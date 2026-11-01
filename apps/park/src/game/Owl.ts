@@ -148,6 +148,14 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private landedHard = 0;
   private falling = 0;
   private wasFlying = false;
+  /** How high what the owl last stood on is (room px; 0 the floor): kept through a jump until it lands. */
+  private footing = 0;
+  /**
+   * How far back an owl standing on a ledge is drawn (depth), the room's (the tree's, OP-173; 0 elsewhere):
+   * an owl on a ledge is behind the path, so behind an owl on the floor, and behind what the room draws
+   * over ledge-standers only (a stair's banister, which the floor passes in front of).
+   */
+  private raisedBand = 0;
   /** The wings (OP-084): behind the body, a side for each shoulder; folded away on the ground. */
   private readonly wings: Phaser.GameObjects.Container;
   private readonly wingSides: ReadonlyArray<{ side: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image; accent: Phaser.GameObjects.Image; dir: 1 | -1 }>;
@@ -221,6 +229,17 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.applyLook(this.look);
     }
     return this;
+  }
+
+  /** Draw the owl `band` further back while it stands on a ledge, or is in the air off one (OP-173; 0: never). */
+  setRaisedBand(band: number): this {
+    this.raisedBand = band;
+    return this;
+  }
+
+  /** Whether it is drawn in the ledges' band now (OP-173): it stands on a ledge, or jumped off one and has not landed. */
+  get raised(): boolean {
+    return this.raisedBand > 0 && this.footing >= 1;
   }
 
   applyLook(look: OwlLook): void {
@@ -606,7 +625,6 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       }
     }
     this.setPosition(this.pos.x, this.pos.y);
-    this.setDepth(this.pos.y);
 
     // Facing: the art is painted in a slight 3/4 turn to one side; mirroring it reads as turning around.
     let sx = 1;
@@ -620,6 +638,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     const air = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
     this.air = air;
     const flying = air.s !== GROUNDED;
+    // Its place among the room's things: by where it stands, a ledge's band further back (OP-173).
+    if (!flying) this.footing = air.z;
+    this.setDepth(this.pos.y - (this.raised ? this.raisedBand : 0));
     // A landing (OP-084): how hard the owl came down decides its squash, and a hard one its dust.
     if (flying) this.falling = Math.max(0, -air.vz);
     else if (this.wasFlying) this.land(now, air.z);

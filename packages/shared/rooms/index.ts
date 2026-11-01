@@ -52,6 +52,11 @@ function pts(...p: ReadonlyArray<readonly [number, number]>): Polygon {
   return p.map(([x, y]) => ({ x, y }));
 }
 
+/** A polygon from [x, y] pairs measured on one screen's painting (1600 x 900), that screen `screen` screens east (room px). */
+function onScreen(screen: number, ...p: ReadonlyArray<readonly [number, number]>): Polygon {
+  return p.map(([x, y]) => ({ x: screen * ROOM_W + x, y }));
+}
+
 /** A rectangle from x0, y0 to x1, y1 as a polygon (room px). */
 function box(x0: number, y0: number, x1: number, y1: number): Polygon {
   return pts([x0, y0], [x1, y0], [x1, y1], [x0, y1]);
@@ -936,7 +941,10 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('tower-balcony', 3 * ROOM_W + 1258, 3 * ROOM_W + 1500, 530),
     ],
     // What is painted in front of the path, drawn again over the owls (OP-173): the west path's two lamp
-    // posts (their poles and lanterns) and the post in front of the market square's stall.
+    // posts (their poles and lanterns), the post in front of the market square's stall, the lobby stair's
+    // banister and the tower balcony's railing. The banister is raised: drawn over an owl on the stair,
+    // never over one walking by on the floor in front of the stair. Rails and spindles are cut one by one
+    // from the paintings, so what shows between them (the wall, the steps, the tower) stays behind.
     fronts: [
       { id: 'lamp-1', poly: pts([926, 448], [940, 448], [941, 700], [944, 768], [922, 768], [925, 700]) },
       { id: 'lamp-1-lantern-l', poly: pts([868, 560], [906, 560], [914, 572], [914, 598], [906, 610], [868, 610], [860, 598], [860, 572]) },
@@ -952,6 +960,65 @@ export const ROOMS: Record<string, RoomDef> = {
             [993, 352], [955, 350]] as const).map(([x, y]) => [2 * ROOM_W + x, y] as const),
         ),
       },
+      // The lobby stair's banister (raised): its rail round to the foot post, the post, and the spindles under the upper flight.
+      {
+        id: 'banister-rail',
+        raised: true,
+        poly: onScreen(
+          1,
+          [866, 443], [880, 455], [896, 468], [912, 482], [928, 495], [944, 508], [960, 521], [976, 535], [990, 547], [993, 556], [998, 564], [1003, 572],
+          [1007, 580], [1009, 588], [1011, 596], [1012, 604], [1011, 612], [1010, 620], [1008, 628], [1005, 636], [1001, 644], [997, 652], [992, 660], [986, 668],
+          [980, 676], [973, 684], [956, 684], [968, 676], [975, 668], [982, 660], [987, 652], [992, 644], [995, 636], [998, 628], [1000, 620], [1002, 612],
+          [1002, 604], [1002, 596], [1000, 588], [998, 580], [994, 572], [989, 564], [983, 556], [977, 549], [968, 542], [952, 529], [936, 515], [920, 502],
+          [904, 489], [888, 476], [872, 462], [866, 457],
+        ),
+      },
+      { id: 'banister-post', raised: true, poly: onScreen(1, [955, 682], [966, 682], [976, 690], [975, 701], [971, 703], [971, 735], [974, 738], [974, 757], [949, 757], [949, 738], [952, 735], [952, 703], [948, 700], [948, 690]) },
+      {
+        id: 'banister-spindles-1',
+        raised: true,
+        poly: onScreen(
+          1,
+          [868, 460], [868, 477], [869, 478], [868, 489], [889, 506], [892, 506], [891, 505], [892, 502], [890, 501], [891, 500], [890, 480], [893, 479],
+          [884, 472], [874, 471], [874, 469], [877, 466], [870, 460],
+        ),
+      },
+      { id: 'banister-spindle-2', raised: true, poly: onScreen(1, [900, 486], [899, 489], [902, 494], [899, 504], [899, 511], [900, 514], [909, 521], [909, 519], [907, 518], [908, 506], [906, 499], [908, 492]) },
+      { id: 'banister-spindle-3', raised: true, poly: onScreen(1, [916, 499], [915, 503], [917, 505], [917, 513], [915, 517], [915, 525], [919, 530], [923, 532], [925, 531], [923, 530], [924, 518], [922, 507], [925, 506]) },
+      { id: 'banister-spindle-4', raised: true, poly: onScreen(1, [932, 513], [932, 517], [934, 519], [932, 539], [934, 542], [943, 548], [941, 544], [943, 535], [940, 523], [944, 522], [934, 513]) },
+      {
+        id: 'banister-spindles-5',
+        raised: true,
+        poly: onScreen(
+          1,
+          [944, 523], [949, 528], [950, 533], [948, 535], [951, 536], [952, 538], [951, 541], [948, 542], [950, 544], [950, 550], [946, 551], [990, 586],
+          [990, 580], [988, 579], [990, 578], [990, 563], [981, 552], [946, 523],
+        ),
+      },
+      { id: 'banister-spindle-6', raised: true, poly: onScreen(1, [988, 652], [998, 648], [1000, 660], [998, 700], [990, 700], [987, 665]) },
+      // The tower balcony's railing: its two rails and six posts, over an owl on the balcony.
+      {
+        id: 'railing-top',
+        poly: onScreen(
+          3,
+          [1257, 206], [1272, 203], [1300, 199], [1330, 197], [1365, 196], [1395, 196], [1430, 197], [1460, 199], [1490, 203], [1504, 205], [1504, 213], [1490, 211],
+          [1460, 207], [1430, 205], [1395, 204], [1365, 204], [1330, 205], [1300, 207], [1272, 211], [1257, 214],
+        ),
+      },
+      {
+        id: 'railing-middle',
+        poly: onScreen(
+          3,
+          [1257, 223], [1272, 220], [1300, 217], [1330, 215], [1365, 213], [1395, 215], [1430, 216], [1460, 216], [1490, 221], [1504, 223], [1504, 231], [1490, 229],
+          [1460, 224], [1430, 224], [1395, 223], [1365, 221], [1330, 223], [1300, 225], [1272, 228], [1257, 231],
+        ),
+      },
+      { id: 'railing-post-1', poly: onScreen(3, [1257, 198], [1267, 198], [1268, 200], [1268, 247], [1256, 247], [1256, 200]) },
+      { id: 'railing-post-2', poly: onScreen(3, [1284, 193], [1292, 193], [1293, 195], [1293, 247], [1283, 247], [1283, 195]) },
+      { id: 'railing-post-3', poly: onScreen(3, [1344, 190], [1355, 190], [1356, 192], [1356, 247], [1343, 247], [1343, 192]) },
+      { id: 'railing-post-4', poly: onScreen(3, [1410, 188], [1421, 188], [1422, 190], [1422, 247], [1409, 247], [1409, 190]) },
+      { id: 'railing-post-5', poly: onScreen(3, [1473, 191], [1481, 191], [1482, 193], [1482, 247], [1472, 247], [1472, 193]) },
+      { id: 'railing-post-6', poly: onScreen(3, [1494, 196], [1503, 196], [1504, 198], [1504, 247], [1493, 247], [1493, 198]) },
     ],
     // Painted glows that do nothing yet, shaded so they do not read as things to use (OP-173): the
     // closed gate's lit doors, the lobby's booth window, its way down and the nest of eggs over them, the market square's lit stall
