@@ -12,6 +12,13 @@
  *   POST /line/join       {who}: a number in the line (its turn at once while a place is free), or go when there is no line
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
  *   GET  /notice          the ribbon's words and the realms switch now (for the room objects)
+ *   GET  /masks/<room>    a tree room's ledge draft as a keeper last saved it (OP-156), or 404
+ *   POST /masks/<room>    {ledges, walls, hazards, fronts}: keep it as the room's draft, checked again
+ *                         here (checkMasks), with when it was saved; the old draft goes
+ *
+ * The ledge painter's drafts (OP-156) live here because this is the park's one object for what the
+ * keepers set: one row of `overflow_settings` per room, under `masks:<room>`, read only when a
+ * keeper's painter or the pull script asks.
  *
  * TODO-DOCS (OP-075): built. docs/CAPACITY.md still marks the line, the ribbon and the capacity
  * process PLANNED. OP-075's write-up of all three is docs/CAPACITY.md at commit 9f7326a (`git show
@@ -48,12 +55,14 @@ import {
   type RealmsSettings,
   hashForLog,
   type Logger,
+  checkMasks,
+  type SavedMasks,
 } from '@owl-park/shared';
 import { GATED_ROOMS } from '@owl-park/shared/rooms';
 import { roomObjectNames, withCopy } from './copies';
 import { Line, type LineEntry } from './line';
 import { loggerFor, moduleLog } from './logs';
-import { ROOMS } from './rooms';
+import { ROOMS, paintableRoom } from './rooms';
 import type { Env } from './env';
 
 /** A count older than this is taken again before the line decides anything with it. */
@@ -130,6 +139,21 @@ class Settings {
   }
   setRealms(v: RealmsSettings): void {
     this.write('realms', v);
+  }
+
+  /** A tree room's ledge draft (OP-156), kept under `masks:<room>`; null before one is saved. */
+  masks(room: string): SavedMasks | null {
+    const r = this.sql.exec<{ value: string }>(`SELECT value FROM overflow_settings WHERE key = ?`, `masks:${room}`).toArray()[0];
+    if (!r) return null;
+    try {
+      return JSON.parse(r.value) as SavedMasks;
+    } catch (e) {
+      moduleLog.error('overflow', 'read_failed', 'A tree room’s ledge draft in storage could not be read: it reads as none, and the next save replaces it.', { room, error: e });
+      return null;
+    }
+  }
+  setMasks(room: string, v: SavedMasks): void {
+    this.write(`masks:${room}`, v);
   }
 }
 
@@ -300,6 +324,7 @@ export class Overflow extends DurableObject<Env> {
     const now = Date.now();
     if (url.pathname === '/state') return Response.json(await this.state(now));
     if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)), realms: this.settings.realms() });
+    if (url.pathname.startsWith('/masks/')) return this.masks(request, url.pathname.slice('/masks/'.length), now);
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
     const body = (await request.json().catch(() => null)) as unknown;
     if (!isRecord(body)) return Response.json({ error: 'bad request' }, { status: 400 });
@@ -369,6 +394,25 @@ export class Overflow extends DurableObject<Env> {
       return Response.json(this.take(n, who, now));
     }
     return new Response('not found', { status: 404 });
+  }
+
+  /**
+   * A tree room's ledge draft (OP-156): read it, or keep a new one with when it was saved. The Worker
+   * has checked the keeper and the draft; the draft is checked again here, so nothing else is kept.
+   */
+  private async masks(request: Request, roomId: string, now: number): Promise<Response> {
+    const room = paintableRoom(roomId);
+    if (!room) return Response.json({ error: 'not found' }, { status: 404 });
+    if (request.method === 'GET') {
+      const kept = this.settings.masks(roomId);
+      return kept ? Response.json(kept) : Response.json({ error: 'not found' }, { status: 404 });
+    }
+    if (request.method !== 'POST') return new Response('not found', { status: 404 });
+    const checked = checkMasks(await request.json().catch(() => null), room.size);
+    if (!checked.ok) return Response.json({ error: 'bad masks', reason: checked.reason }, { status: 400 });
+    const saved: SavedMasks = { room: roomId, ...checked.draft, savedAt: now };
+    this.settings.setMasks(roomId, saved);
+    return Response.json(saved);
   }
 
   /** While anyone is in the line or has a place held: count the park, move the line, and keep the ribbon in step. */

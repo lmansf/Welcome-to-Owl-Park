@@ -4,7 +4,7 @@
  * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { CLOSE, RIBBON_WORDS, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type TravelState } from '@owl-park/shared';
+import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type TravelState } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
 import { capacityPage } from './capacityPage';
@@ -20,13 +20,13 @@ import { walletVoter } from './Ledger';
 import { loggerFor } from './logs';
 import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
-import { GUEST_PASS_TTL_S, KEEPER_TTL_S, isCollectorId, mintCollector, mintEntry, mintKeeper, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyPass, type PassPayload } from './pass';
+import { GUEST_PASS_TTL_S, KEEPER_TTL_S, isCollectorId, mintCollector, mintEntry, mintKeeper, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyKeeper, verifyPass, type PassPayload } from './pass';
 import { admitted, gateMode, mayEnter } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
 import { health } from './health';
 import { isPage, uncachedPage } from './page';
-import { ROOMS, isRoomId, roomCap } from './rooms';
+import { ROOMS, isRoomId, paintableRoom, roomCap } from './rooms';
 import { GATED_ROOMS } from '@owl-park/shared/rooms';
 import { NIGHTS } from '@owl-park/shared';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
@@ -43,7 +43,7 @@ export { Overflow } from './Overflow';
 // Which pages may read an answer is the front door's to say, as each answer leaves (guard.ts `finished`): the park's own only.
 const CORS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key, X-Collector',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key, X-Collector, X-Keeper-Token',
   'Cache-Control': 'no-store',
 };
 
@@ -112,6 +112,11 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const FEEDBACK_BODY_MAX = 16_384;
 /** An account request is an email or a link's token: anything past this is refused unread. */
 const ACCOUNT_BODY_MAX = 2_048;
+/**
+ * A ledge draft (OP-156) is a few dozen items in practice; four full lists of 200, every front at its
+ * 64 points, come to well under this, and the overflow object keeps it in one row.
+ */
+const MASKS_BODY_MAX = 1_048_576;
 
 async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   try {
@@ -131,6 +136,26 @@ function isAdmin(request: Request, env: Env, log: Logger): boolean {
   if (reason) log.warn('worker.admin', 'admin_denied', 'A keepers’ route was asked without the keepers’ key.', { route, reason });
   else log.info('worker.admin', 'admin_ok', 'A keepers’ route was asked with the keepers’ key.', { route });
   return reason === null;
+}
+
+/**
+ * Who asks a keepers' route that a keeper's token also opens (OP-156, the ledge painter): the token
+ * `?keeper=1` gave this tab (X-Keeper-Token), or else the keepers' key. Logged as isAdmin logs the
+ * key, never the token; a token given that is not good is refused for what it is, unless the key
+ * comes with it.
+ */
+async function keeperOf(request: Request, env: Env, log: Logger): Promise<'keeper' | 'key' | null> {
+  const token = request.headers.get('X-Keeper-Token');
+  const route = new URL(request.url).pathname;
+  if (token !== null && (await verifyKeeper(signingSecret(env), token))) {
+    log.info('worker.admin', 'admin_ok', 'A keepers’ route was asked with a keeper’s token.', { route, by: 'keeper' });
+    return 'keeper';
+  }
+  if (token !== null && !request.headers.has('X-Admin-Key')) {
+    log.warn('worker.admin', 'admin_denied', 'A keepers’ route was asked with a keeper’s token that is not good: run out, or not the park’s.', { route, reason: 'bad-keeper-token' });
+    return null;
+  }
+  return isAdmin(request, env, log) ? 'key' : null;
 }
 
 /** A request's pass token: the Authorization header (Bearer), or the query string. */
@@ -425,6 +450,54 @@ const park = {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       return json({ token: await mintKeeper(signingSecret(env)), ttl: KEEPER_TTL_S });
+    }
+    // ---- The ledge painter (OP-156): a tree room's ledges, walls, hazards and fronts as a keeper painted them ----
+    //
+    // TODO-DOCS (OP-156): docs/ARCHITECTURE.md: POST /api/admin/masks/<room> (a keeper's token in
+    // X-Keeper-Token, or the keepers' key; the draft checked by checkMasks, packages/shared/src/masks.ts)
+    // and GET /api/masks/<room> (public: level geometry only; 404 before a draft is saved), both counted
+    // as calls that need no pass (limits.ts); the draft store, one row per room in the overflow object
+    // under `masks:<room>` with `savedAt`, a new save replacing the old. docs/LOGGING.md: masks_saved
+    // (worker.admin, info: room, by keeper or key, how many ledges, walls, hazards and fronts) and
+    // masks_refused (worker.admin, warn: room when it is a room id, reason, and the list and index of
+    // the item refused); admin_denied's reason bad-keeper-token.
+    if (url.pathname.startsWith('/api/admin/masks/')) {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      const by = request.method === 'POST' ? await keeperOf(request, env, log) : null;
+      if (!by) return json({ error: 'forbidden' }, 403);
+      const roomId = url.pathname.slice('/api/admin/masks/'.length);
+      const refused = (reason: string, status: number, where: { list?: string; index?: number } = {}) => {
+        log.warn('worker.admin', 'masks_refused', 'A ledge draft was refused: nothing was kept.', { ...(MASK_ID.test(roomId) ? { room: roomId } : {}), reason, ...where, by });
+        return json({ error: status === 413 ? 'too large' : 'bad request', reason, ...where }, status);
+      };
+      const room = paintableRoom(roomId);
+      if (!room) return refused('room', 400);
+      if (Number(request.headers.get('Content-Length') ?? 0) > MASKS_BODY_MAX) return refused('too-large', 413);
+      const checked = checkMasks(await readJson(request), room.size);
+      if (!checked.ok) return refused(checked.reason, 400, { ...(checked.list ? { list: checked.list } : {}), ...(checked.index !== undefined ? { index: checked.index } : {}) });
+      const r = await overflow(env).fetch(`https://park/masks/${roomId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checked.draft) });
+      if (!r.ok) {
+        log.error('overflow', 'write_failed', 'A tree room’s ledge draft was not kept: the overflow object refused it.', { room: roomId, status: r.status });
+        return json({ error: 'the draft was not kept' }, 502);
+      }
+      const { savedAt } = (await r.json()) as { savedAt: number };
+      const { ledges, walls, hazards, fronts } = checked.draft;
+      log.info('worker.admin', 'masks_saved', 'A keeper saved a tree room’s ledge draft.', { room: roomId, by, ledges: ledges.length, walls: walls.length, hazards: hazards.length, fronts: fronts.length });
+      return json({ ok: true, room: roomId, savedAt });
+    }
+    if (url.pathname.startsWith('/api/masks/')) {
+      // Anyone may read a draft back (the painter on opening, `pnpm masks:pull`): level geometry, nothing personal.
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'GET') return json({ error: 'not found' }, 404);
+      const roomId = url.pathname.slice('/api/masks/'.length);
+      if (!paintableRoom(roomId)) return json({ error: 'not found' }, 404);
+      const r = await overflow(env).fetch(`https://park/masks/${roomId}`);
+      if (r.status === 404) return json({ error: 'not found' }, 404);
+      if (!r.ok) {
+        log.error('overflow', 'read_failed', 'The overflow object did not give a tree room’s ledge draft: the page is asked to try later.', { room: roomId, status: r.status });
+        return json({ error: 'try-later' }, 503);
+      }
+      return json(await r.json());
     }
     // ---- Collectibles (the collector comes from the pass) ----
     if (url.pathname === '/api/admin/grant') {

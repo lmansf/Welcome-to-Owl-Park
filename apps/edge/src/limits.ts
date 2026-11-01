@@ -39,9 +39,19 @@ export const API_LIMITS = {
 
 export type LimitName = keyof typeof API_LIMITS;
 
-/** The calls that need no pass: the page's first (its pass, the ribbon's words), the health and the counts, the browser's reports, the keepers' (their key instead), the account links (a pass if there is one). */
+/**
+ * The calls that need no pass: the page's first (its pass, the ribbon's words), the health and the
+ * counts, the browser's reports, the keepers' (their key or a keeper's token instead: the ledge
+ * painter's save, /api/admin/masks/<room>, among them), a tree room's ledge draft read back
+ * (/api/masks/<room>, OP-156), the account links (a pass if there is one).
+ */
 export function isPublicCall(pathname: string): boolean {
-  return ['/api/pass', '/api/notice', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally'].includes(pathname) || pathname.startsWith('/api/admin/') || pathname.startsWith('/api/account/');
+  return (
+    ['/api/pass', '/api/notice', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally'].includes(pathname) ||
+    pathname.startsWith('/api/admin/') ||
+    pathname.startsWith('/api/masks/') ||
+    pathname.startsWith('/api/account/')
+  );
 }
 
 /** The calls the `ticket` limit counts. */

@@ -192,6 +192,11 @@ describe('hostile values at every door the Worker has (OP-143)', () => {
     await refusedEach((v) => call(park.env(), `/api/admin/feedback?status=${encodeURIComponent(echoOf(v))}`, { headers: admin }));
     await refusedEach((v) => post(park.env(), '/api/admin/gate', { mode: v }, admin));
     await refusedEach((v) => post(park.env(), '/api/admin/tickets', { kind: v, quantity: v, hours: v }, admin));
+    // The ledge painter's save (OP-156): a hostile room, id, number or list, and a hostile body whole.
+    await refusedEach((v) => post(park.env(), `/api/admin/masks/${encodeURIComponent(echoOf(v))}`, { ledges: [], walls: [], hazards: [], fronts: [] }, admin));
+    await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', { ledges: [{ id: v, x0: 1, x1: 2, top: 3 }], walls: [], hazards: [], fronts: [] }, admin));
+    await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', { ledges: [{ id: 'ledge-1', x0: v, x1: v, top: v }], walls: v, hazards: [], fronts: [{ id: 'front-1', points: v }] }, admin));
+    await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', v, admin));
     expect(park.reached).toEqual([]);
     // A hostile limit on the keepers' list is a number the list keeps between 1 and 500 (feedbackBox.ts), or the default.
     for (const v of HOSTILE) expect((await call(park.env(), `/api/admin/feedback?status=open&limit=${encodeURIComponent(echoOf(v))}`, { headers: admin })).status).toBe(200);
