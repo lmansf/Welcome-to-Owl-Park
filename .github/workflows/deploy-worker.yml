@@ -143,6 +143,14 @@ jobs:
           command: secret list
           secrets: |
             OPENING_PASS_CODE
+      # Whether GitHub passed each of the collection log's secrets to this job, and how long each is,
+      # never the value: the log goes up only when all three arrive, and the key and salt need 16+.
+      - name: Check the collection log's secrets reached the deploy
+        run: |
+          for name in PARK_LOG_URL FRAUD_SCORE_KEY FRAUD_HASH_SALT; do
+            value="${!name}"
+            if [ -n "$value" ]; then echo "$name: set, ${#value} characters"; else echo "$name: not set"; fi
+          done
       - name: Upload the collection log's address, key and salt to the Worker
         if: env.PARK_LOG_URL != '' && env.FRAUD_SCORE_KEY != '' && env.FRAUD_HASH_SALT != ''
         uses: cloudflare/wrangler-action@v3
