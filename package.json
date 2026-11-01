@@ -25,7 +25,7 @@
     "chaos": "node tools/chaos/run.mjs",
     "chaos:test": "node --test tools/chaos/chaos.test.mjs",
     "security:bundle": "node tools/security/bundle-check.mjs apps/park/dist",
-    "security:test": "node --test tools/security/bundle-check.test.mjs",
+    "security:test": "node --test tools/security/bundle-check.test.mjs tools/security/security-test.test.mjs",
     "masks:pull": "node tools/masks/pull.mjs",
     "masks:test": "node --test tools/masks/pull.test.mjs",
     "art:generate": "node tools/art/generate.mjs",

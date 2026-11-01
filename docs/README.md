@@ -69,6 +69,7 @@ Build hat's and goes as a pull request.
 | `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade (and its planned games), three tasks a day, quests in the Menu, emotes and the hop, seasons (planned) | Anything to do in a room |
 | `NESTS.md` | The street of nests, a nest, decorating, furniture and the day's gift, the mirror (Your owl), the room server and the local mode | The nests |
 | `FEEDBACK.md` | Feedback in the Menu, where notes are kept, reading and triaging them, candidates raised by tickets | Reading visitors' notes |
+| `SECURITY.md` | What the park is and is not (no typed chat, no purchases in the park, no passwords), where things are kept, the headers and limits in place, and the security check (`tools/security/security-test.sh`, nightly) | Judging the park's risk, running the security check, or before testing the live park (the owner's written authorisation first) |
 | `ART-PIPELINE.md` | How art is made and replaced: Seedream through `tools/art`, sizes, the owl's layers, provenance | Any art change; the owner picks every image |
 
 Not under `docs/` but read with them: the root `README.md` (how to run and check the park; note
