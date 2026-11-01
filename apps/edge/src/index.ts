@@ -29,7 +29,7 @@ import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId, paintableRoom, roomCap } from './rooms';
 import { GATED_ROOMS } from '@owl-park/shared/rooms';
 import { NIGHTS } from '@owl-park/shared';
-import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
+import { KINDS, passCartLink, ticketCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, orderIdOf, storeWebhook, type Desk, type HookDeps } from './storeHooks';
 import { DEFAULT_LENGTH_MS, HOUR_MS, LIFETIME_MS, OPENING_NIGHT_MS, windowed, type TicketKind } from './tickets';
@@ -743,6 +743,12 @@ const park = {
         log.info('worker.store', 'webhook_received', 'A store webhook was taken.', { ...about, status: r.status, duration_ms: Date.now() - t0 });
         if (r.repeat) log.info('worker.store', 'webhook_duplicate', 'A store webhook came again for work an earlier delivery already did.', about);
         if (r.recorded) log.info('worker.store', 'order_recorded', 'A paid order’s tickets were made.', { ...about, tickets: r.recorded.tickets, held: r.recorded.held });
+        if (r.placed && order) {
+          // The booth's checkout (OP-175): the tickets are on the owl that paid, and the order's email protects it as a claim's does (OP-139).
+          // TODO-DOCS (OP-175): docs/LOGGING.md: claim_moved's via takes checkout (no device_class: the store's webhook carries none).
+          log.info('worker.tickets', 'claim_moved', 'A paid order’s tickets went onto the owl that checked out at the booth.', { via: 'checkout', collector_hash: hashForLog(r.placed.device), order_hash: hashForLog(order), tickets: r.placed.tickets });
+          ctx.waitUntil(protectByOrder(env, log, r.placed.device, order));
+        }
         if (r.mirror) mirrorLater(ctx, env, log, url.origin, { order: r.mirror });
         return json(r.body, r.status);
       } catch (e) {
@@ -790,6 +796,15 @@ const park = {
         return json(rest, status);
       }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
+      if (url.pathname === '/api/tickets/checkout') {
+        // The booth's checkout (OP-175): a cart link with one Day Ticket and a one-time token for this owl, so the paid ticket lands here.
+        const store = storeConfig(env);
+        const variant = store ? (await storeCatalogue(env))?.dayVariant : null;
+        if (!store || !variant) return json({ error: 'not-set-up' }, 503);
+        const r = await desk('/tickets/checkout', { device });
+        if (r.status !== 200 || typeof r.body['token'] !== 'string') return reply(r);
+        return json({ url: ticketCartLink(store.shop, variant, r.body['token']) });
+      }
       if (url.pathname === '/api/tickets/pass') {
         // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
         const r = await desk('/tickets/pass-offer', { id: body['id'], device });

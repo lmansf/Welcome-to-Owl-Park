@@ -21,12 +21,15 @@ export class FakeStore {
   fulfilDelayMs = 0;
   readonly calls: Array<{ op: string; variables: Record<string, unknown> }> = [];
   readonly sent: Array<Record<string, unknown>> = [];
+  /** The cart's attributes on the order (OP-175: the booth's checkout token). */
+  attributes: Array<{ key: string; value: string }> = [];
 
   order(): AdminOrder {
     const risk = this.risk.length > 1 ? this.risk.shift()! : this.risk[0]!;
     return {
       id: 'gid://shopify/Order/1001',
       cancelledAt: null,
+      customAttributes: this.attributes,
       risk: { recommendation: risk === 'LOW' ? 'ACCEPT' : risk === 'PENDING' ? 'NONE' : 'INVESTIGATE', assessments: [{ riskLevel: risk }] },
       lineItems: {
         nodes: [
@@ -71,6 +74,9 @@ export class FakeStore {
         this.sent.push(variables['fulfillment'] as Record<string, unknown>);
         this.ticketsLeft = 0;
         return data({ fulfillmentCreate: { fulfillment: { id: 'gid://shopify/Fulfillment/1', status: 'SUCCESS' }, userErrors: [] } });
+      case 'OwlParkCatalogue':
+        // The Day Ticket on sale (OP-175's checkout link puts its variant in the cart).
+        return data({ products: { nodes: [{ kind: { value: 'day' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/100' }] } }] } });
       case 'OwlParkTicket': {
         const handle = (variables['handle'] as { handle: string }).handle;
         return data({ metaobjectUpsert: { metaobject: { id: `gid://shopify/Metaobject/${handle}` }, userErrors: [] } });

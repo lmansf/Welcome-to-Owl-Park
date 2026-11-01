@@ -2340,6 +2340,14 @@ export class RoomScene extends Phaser.Scene {
             openingNight: tickets.openingNight(),
             passLinks: Object.fromEntries(links.filter((l): l is readonly [string, string] => l[1] !== null)),
             watchPass: (id: string) => this.hud.watchFreePass(() => this.passCame(id)),
+            ...(tickets.checkout
+              ? {
+                  checkout: () => tickets.checkout!(),
+                  // OP-175: the bought ticket lands on this owl; the booth shows it once it has come.
+                  watchCheckout: (win: Window | null, before: ReadonlySet<string>) => this.hud.watchCheckout({ wallet: () => tickets.wallet(), before, win }, () => void this.openBooth()),
+                  cancelCheckout: () => this.hud.cancelCheckout(),
+                }
+              : {}),
           }
         : {}),
     });
