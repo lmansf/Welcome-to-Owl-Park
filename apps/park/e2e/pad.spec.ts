@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { expectStoreCard, mapCard, openPark, state } from './helpers';
+import { mapCard, openPark, state } from './helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -78,9 +78,10 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await expect(interact).toHaveAttribute('aria-label', 'Interact: Gift shop');
     // The first action, which Interact and E do, wears the same '!'.
     await expect(page.locator('[data-action="shop"] .bang svg')).toBeVisible();
-    // Tapped, it does what E does there: the card before the store (OP-153), as the store's page is set here.
+    // Tapped, it does what E does there: with no store's page on this transport, the shop says it opens soon
+    // (storecard.spec.ts has the card before the store, on the room server).
     await interact.tap();
-    await expectStoreCard(page);
+    await expect(page.getByText('The gift shop opens soon.')).toBeVisible();
   });
 
   test('travel home, on the Menu’s map, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {
