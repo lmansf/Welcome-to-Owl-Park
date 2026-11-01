@@ -28,6 +28,7 @@ import { createShopPanel, type ShopPanel } from './shop';
 import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createCheckoutWatch, type CheckoutWatch, type WatchOptions } from './checkout';
 import { createStoreCard, type StoreGo } from './storeCard';
+import { createTurnPhone } from './turnPhone';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
 export interface CollectionActions {
@@ -179,6 +180,12 @@ export interface Hud {
   cancelCheckout(): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
+  /**
+   * Whether that room is played sideways (a tree room, OP-156): while it is, a phone held upright sees
+   * a card over the game asking to turn it. It stays through a room change, so it does not flicker
+   * between two tree rooms; the next room says again, and the home screen never shows it.
+   */
+  setSideways(on: boolean): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
   setActions(actions: HudAction[]): void;
   onAction(cb: (id: string) => void): void;
@@ -582,6 +589,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
   // Which owl are you (OP-076) covers the whole screen, like the owl builder.
   const whichOwl = createWhichOwlScreen(root);
+  // A tree room on a phone held upright (OP-156): a card over the game asking to turn the phone.
+  const turnPhone = createTurnPhone(root);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
 
   /** The big sheets (dialogue, shop, booth, Decorate) share the bottom of the screen: one at a time. */
@@ -975,6 +984,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       questUi?.setRoom(id);
       // The map's "You are here".
       menu.refresh();
+    },
+    setSideways(on) {
+      turnPhone.set(on);
     },
     setActions(list) {
       const key = list.map((a) => `${a.id}:${a.label}`).join('|');

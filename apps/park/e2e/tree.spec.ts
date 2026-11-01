@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { jumpFlapGlide, openPark, settleCamera, state, walkAndStop, walkToDoor } from './helpers';
+import { frames, jumpFlapGlide, openPark, settleCamera, state, walkAndStop, walkToDoor } from './helpers';
 
 /**
  * The tree (map 2, OP-156, OP-162): level 1, four screens seen from the side, west to east: the path to
@@ -18,7 +18,17 @@ const jump = (page: Page, ms = 400) => page.evaluate((ms) => window.owlPark.jump
 const standsAt = (page: Page, top: number) =>
   expect.poll(async () => { const s = await state(page); return [s.air.s, Math.round(s.air.z)]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, top]);
 
+/** The phone project's phone (a Pixel 7), held upright and on its side. */
+const UPRIGHT = { width: 412, height: 839 };
+const ON_ITS_SIDE = { width: 839, height: 412 };
+
 test.describe('the tree, map 2 (OP-156, OP-162)', () => {
+  // Phones play the tree on their side (OP-155 (d)), so the phone's walks here hold it that way; the
+  // card that asks a phone held upright to turn has its own test below.
+  test.beforeEach(async ({ page, isMobile }) => {
+    if (isMobile) await page.setViewportSize(ON_ITS_SIDE);
+  });
+
   test('opens in the lobby on the ground line, each screen in four layers at their own rates, its owl a quarter bigger', async ({ page }) => {
     await openPark(page, { room: 'l1' });
     const s = await state(page);
@@ -131,6 +141,36 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await standsAt(page, 152);
     await jump(page);
     await standsAt(page, 285);
+  });
+
+  test('a phone held upright sees a card asking to turn it, nothing under it takes a tap, and it goes once the phone is turned (OP-156)', async ({ page, isMobile }) => {
+    const card = page.locator('[data-turn-phone]');
+    if (!isMobile) {
+      // A computer's window, however tall, plays as it is.
+      await page.setViewportSize({ width: 700, height: 900 });
+      await openPark(page, { room: 'l1' });
+      await expect(card).toBeHidden();
+      return;
+    }
+    await page.setViewportSize(UPRIGHT);
+    await openPark(page, { room: 'l1', spawn: 'east' });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Turn your phone sideways');
+    // A tap on the card walks no owl.
+    const at = (await state(page)).pos;
+    await page.touchscreen.tap(UPRIGHT.width / 2, UPRIGHT.height * 0.8);
+    await frames(page, 20);
+    const after = await state(page);
+    expect(after.walking).toBe(false);
+    expect(after.pos).toEqual(at);
+    await page.setViewportSize(ON_ITS_SIDE);
+    await expect(card).toBeHidden();
+    await page.setViewportSize(UPRIGHT);
+    await expect(card).toBeVisible();
+    // Today's park plays upright: through the archway into the market, the card is gone.
+    await walkToDoor(page, 'to-market');
+    await expect.poll(async () => (await state(page)).room, { timeout: 15_000 }).toBe('market');
+    await expect(card).toBeHidden();
   });
 
   test('the closed gate at the west end turns an owl back with its sign', async ({ page }) => {

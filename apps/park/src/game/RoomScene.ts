@@ -836,6 +836,8 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setCount(1);
     this.hud.setActions([]);
     this.hud.setRoom(room.id);
+    // Phones play the tree on their side (OP-155 (d)): held upright in a tree room, a card asks to turn them.
+    this.hud.setSideways(mapOf(room) === 2);
     this.showWaysOut();
     // The owl builder's kind and colours: today's pledge and the worn collectibles stay as they are.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
