@@ -752,6 +752,10 @@ export const ROOMS: Record<string, RoomDef> = {
       // (the first turns between the plinth and the first post): through them is the hub.
       { id: 'gate', rect: { x: 2350, y: 650, w: 440, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
     ],
+    // The plaza just in front of the turnstiles (OP-172), 50 px past the gate on each side and down to
+    // the floor's front edge: stopping short of the booth (which ends at x 2060), it is where the owl's
+    // ticket status shows while the gate takes tickets. The owl that comes out of the park lands in it.
+    zones: [{ id: 'gate-approach', rect: { x: 2300, y: 690, w: 540, h: 198 } }],
   },
   homes: {
     id: 'homes',

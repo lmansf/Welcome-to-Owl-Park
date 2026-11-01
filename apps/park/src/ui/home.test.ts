@@ -22,31 +22,49 @@ describe('the home screen (OP-065)', () => {
     expect(holdsOwl(storageWith({ 'owl-park:settings': '{}', 'owl-park:presents-seen': '[]' }))).toBe(false);
   });
 
-  it('says under Play the ticket that matters most', () => {
-    // A running ticket, with its time left; an annual pass by its name.
-    expect(walletSummary([ticket({ status: 'active', msLeft: 5 * H + 12 * 60_000 })], 'ticket', T0)).toBe('Day ticket: 5 h 12 m left');
-    expect(walletSummary([ticket({ kind: 'annual', status: 'active', msLeft: 340 * D })], 'ticket', T0)).toBe('Annual pass');
-    // Ready, held, and a night of its own still to come.
-    expect(walletSummary([ticket()], 'ticket', T0)).toBe(`Day ticket: ${HOME_WORDS.ready}`);
+  it('says under Play only what changes what the owl does (OP-172)', () => {
+    // A running Day or Night ticket with under an hour left: its time.
+    expect(walletSummary([ticket({ status: 'active', msLeft: 40 * 60_000 })], 'ticket', T0)).toBe('Day ticket: 40 m left');
+    expect(walletSummary([ticket({ kind: 'night', status: 'active', msLeft: 59 * 60_000 })], 'open', T0)).toBe('Night ticket: 59 m left');
+    // Waiting on the store's check, whatever the gate.
     expect(walletSummary([ticket({ status: 'held' })], 'open', T0)).toBe(`Day ticket: ${HOME_WORDS.held}`);
+    expect(walletSummary([ticket({ status: 'held' })], 'ticket', T0)).toBe('Day ticket: waiting on a quick check from the store');
+    // A dated event or Opening Night Ticket whose night is still to come.
     const night = ticket({ kind: 'opening-night', msLeft: null, validFrom: T0 + D, validUntil: T0 + 2 * D });
     expect(walletSummary([night], 'ticket', T0, () => 'Dec 2, 7:00 PM')).toBe('Opening Night Ticket: for Dec 2, 7:00 PM');
-    expect(walletSummary([{ ...night, validFrom: T0 - H }], 'ticket', T0)).toBe(`Opening Night Ticket: ${HOME_WORDS.ready}`);
-  });
-
-  it('puts a running ticket first, then the longest', () => {
-    const day = ticket({ status: 'active', msLeft: 2 * H });
-    const annual = ticket({ kind: 'annual', status: 'active', msLeft: 300 * D });
-    expect(walletSummary([ticket(), day, ticket({ status: 'held' })], 'ticket', T0)).toBe('Day ticket: 2 h 0 m left');
-    expect(walletSummary([day, annual], 'ticket', T0)).toBe('Annual pass');
-    // Spent, expired and refunded tickets say nothing.
-    expect(walletSummary([ticket({ status: 'used' }), ticket({ status: 'expired' }), ticket({ status: 'revoked' }), ticket()], 'ticket', T0)).toBe(`Day ticket: ${HOME_WORDS.ready}`);
-  });
-
-  it('points at the booth without a ticket only while the gate takes tickets', () => {
+    expect(walletSummary([ticket({ kind: 'event', msLeft: null, validFrom: T0 + D, validUntil: T0 + D + 4 * H })], 'open', T0, () => 'Dec 2, 7:00 PM')).toBe('Event ticket: for Dec 2, 7:00 PM');
+    // No ticket while the gate takes tickets: where to get one.
     expect(walletSummary([], 'ticket', T0)).toBe(HOME_WORDS.none);
     expect(walletSummary([ticket({ status: 'used' })], 'ticket', T0)).toBe(HOME_WORDS.none);
+  });
+
+  it('shows nothing for a ticket that is fine as it is (OP-172)', () => {
+    // A ready ticket, its night on, a running annual pass, a running ticket with an hour or more left.
+    expect(walletSummary([ticket()], 'ticket', T0)).toBeNull();
+    const night = ticket({ kind: 'opening-night', msLeft: null, validFrom: T0 - H, validUntil: T0 + 3 * H });
+    expect(walletSummary([night], 'ticket', T0)).toBeNull();
+    expect(walletSummary([ticket({ kind: 'annual', status: 'active', msLeft: 340 * D })], 'ticket', T0)).toBeNull();
+    expect(walletSummary([ticket({ kind: 'annual', status: 'active', msLeft: 30 * 60_000 })], 'ticket', T0)).toBeNull();
+    expect(walletSummary([ticket({ status: 'active', msLeft: H })], 'ticket', T0)).toBeNull();
+    expect(walletSummary([ticket({ status: 'active', msLeft: 5 * H })], 'ticket', T0)).toBeNull();
+    expect(walletSummary([ticket({ status: 'active', msLeft: null })], 'ticket', T0)).toBeNull();
+    // A running event ticket says nothing of its time here.
+    expect(walletSummary([ticket({ kind: 'event', status: 'active', msLeft: 20 * 60_000 })], 'ticket', T0)).toBeNull();
+    // No ticket with the gate open: nothing to say.
     expect(walletSummary([], 'open', T0)).toBeNull();
+    expect(walletSummary([ticket({ status: 'expired' })], 'open', T0)).toBeNull();
+  });
+
+  it('is about the ticket that matters most: a running one first, then the longest', () => {
+    const day = ticket({ status: 'active', msLeft: 30 * 60_000 });
+    const annual = ticket({ kind: 'annual', status: 'active', msLeft: 300 * D });
+    expect(walletSummary([ticket(), day, ticket({ status: 'held' })], 'ticket', T0)).toBe('Day ticket: 30 m left');
+    // The annual pass runs longest, so the short Day ticket beside it does not matter.
+    expect(walletSummary([day, annual], 'ticket', T0)).toBeNull();
+    // A ready ticket outranks one waiting on the store.
+    expect(walletSummary([ticket({ status: 'held' }), ticket()], 'ticket', T0)).toBeNull();
+    // Spent, expired and refunded tickets say nothing.
+    expect(walletSummary([ticket({ status: 'used' }), ticket({ status: 'expired' }), ticket({ status: 'revoked' }), ticket({ status: 'held' })], 'ticket', T0)).toBe(`Day ticket: ${HOME_WORDS.held}`);
   });
 });
 

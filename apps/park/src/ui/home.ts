@@ -17,7 +17,7 @@
 import type { Entry, WalletEntry } from '../net';
 import { ACCOUNT_WORDS } from './account';
 import type { PreviewFrame } from './owlBuilder';
-import { KIND_LABEL, timeLeft } from './tickets';
+import { KIND_LABEL, bestTicket, timeLeft } from './tickets';
 
 /** Every word the home screen shows (for the owner's approval). */
 export const HOME_WORDS = {
@@ -30,7 +30,6 @@ export const HOME_WORDS = {
   added: 'Ticket added',
   /** A ticket link whose ticket is already running on another owl (OP-174). */
   inUse: 'Ticket already in use',
-  ready: 'ready at the turnstiles',
   held: 'waiting on a quick check from the store',
   none: 'No ticket yet: the booth is by the gate',
   /** The Menu's way back here from inside the park. */
@@ -60,26 +59,26 @@ export type LineView = { place: number; waitMin: number | null; ticket: boolean 
 
 const shortDate = (ms: number) => new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-/** Running, then ready, then waiting on the store: the ticket the line under Play is about. */
-const RANK: Partial<Record<WalletEntry['status'], number>> = { active: 3, unused: 2, held: 1 };
-/** Time left for ordering: none given sorts with the longest. */
-const left = (t: WalletEntry) => t.msLeft ?? Number.MAX_SAFE_INTEGER;
+const HOUR = 3_600_000;
 
 /**
- * The line under Play: the ticket on this device that matters most (a running one, with its time
- * left; an annual pass by name), or, while the gate takes tickets and the device holds none, where
- * to get one. Null while the gate lets everyone through and there is nothing to say.
+ * The line under Play (OP-172): only when it changes what the owl does. While the gate takes tickets
+ * and the device holds none, where to get one; for the ticket that matters most (bestTicket, as the
+ * gate's status card picks it), a wait on the store's check, a dated event or Opening Night Ticket
+ * whose night is still to come, or a running Day or Night ticket with under an hour left. A running
+ * annual pass, a ready ticket, or an open gate with none: null, and the line is not shown.
  */
 export function walletSummary(tickets: readonly WalletEntry[], gate: Entry['gate'], now: number, date: (ms: number) => string = shortDate): string | null {
-  const best = tickets
-    .filter((t) => RANK[t.status] !== undefined)
-    .sort((a, b) => RANK[b.status]! - RANK[a.status]! || left(b) - left(a))[0];
+  const best = bestTicket(tickets);
   if (!best) return gate === 'ticket' ? HOME_WORDS.none : null;
   const name = KIND_LABEL[best.kind];
-  if (best.status === 'active') return best.kind === 'annual' || best.msLeft === null ? name : `${name}: ${timeLeft(best.msLeft)} left`;
   if (best.status === 'held') return `${name}: ${HOME_WORDS.held}`;
-  if (best.validFrom !== null && best.validFrom > now) return `${name}: for ${date(best.validFrom)}`;
-  return `${name}: ${HOME_WORDS.ready}`;
+  if (best.status === 'unused') {
+    const dated = best.kind === 'event' || best.kind === 'opening-night';
+    return dated && best.validFrom !== null && best.validFrom > now ? `${name}: for ${date(best.validFrom)}` : null;
+  }
+  const short = (best.kind === 'day' || best.kind === 'night') && best.msLeft !== null && best.msLeft < HOUR;
+  return short ? `${name}: ${timeLeft(best.msLeft!)} left` : null;
 }
 
 export interface HomeActions {

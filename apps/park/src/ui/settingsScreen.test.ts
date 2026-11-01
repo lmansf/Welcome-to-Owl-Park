@@ -12,6 +12,8 @@ class FakeEl {
   textContent = '';
   innerHTML = '';
   scrollTop = 0;
+  /** Inline style, as the Tickets row sets it (OP-172). */
+  readonly style: { cssText?: string } = {};
   readonly dataset: Record<string, string> = {};
   readonly children: Array<FakeEl | string> = [];
   private readonly attrs = new Map<string, string>();
