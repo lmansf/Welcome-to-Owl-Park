@@ -11,7 +11,7 @@ what does not exist on `main` yet. Grep `PLANNED` for everything unbuilt. Versio
 activities, nests, prewritten chat, the lobby and tickets, the home screen and the keepers' pages.
 This document names no unreleased realm names and no reference products; the detailed
 reverse-engineering notes behind it live in the team's internal drive, not in this public
-repository. Where this file and a Done ticket or the code disagree, the doc agent files a Finding
+repository. Where this file and a Done ticket or the code disagree, the Docs hat files a Finding
 ticket rather than guessing (`docs/agents.md`).
 
 Sections: 0 the repository · 1 what we replicate · 2 the decision · 3 components and cost ·

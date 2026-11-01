@@ -20,6 +20,10 @@ the conflict for the owner to settle.)
 Where to look for more: a ticket's row on the Board tab (its number plus one), the Bible item it
 names (C31, C35, ...), and the docs it touched.
 
+## Week of 2026-10-26
+
+- OP-176 (2026-11-01): `docs/agents.md`, `docs/README.md` and the Board's Read me describe the Claude Duet model: one agent, the old roles as hats, the Role (was) column; hand-offs by agent name become hat changes (branch claude/duet-docs).
+
 ## Week of 2026-10-19
 
 - OP-099 (2026-10-23): the controls and the Menu as built in `docs/PLAYBOOK.md` section 7, quests on screen and emotes in `docs/ACTIVITIES.md`; the pad and the Menu quests marked PLANNED until OP-082 and OP-083 merge (main 72e4eed; closed as is).

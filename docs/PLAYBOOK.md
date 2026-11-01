@@ -7,8 +7,9 @@
 - Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/ARCHITECTURE.md section 13
 
 The incident playbook for the preview and after (OP-068). Who does what: the owner decides and holds
-the keys (Cloudflare, Shopify, GitHub, the admin key); Claude Code finds the cause and fixes it on a
-branch; Crow posts the words below once the owner approves them; Claude keeps the board.
+the keys (Cloudflare, Shopify, GitHub, the admin key); Claude Duet finds the cause and fixes it on a
+branch (Build hat), posts the words below once the owner approves them (Marketing hat) and keeps the
+board (PM hat).
 
 ## 1. Is it down?
 
