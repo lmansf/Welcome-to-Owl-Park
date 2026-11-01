@@ -43,7 +43,7 @@ export default defineConfig({
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
     // The ledge painter (paint.spec.ts, OP-156) saves to the room server, so it runs here too.
-    { name: 'edge', testMatch: /(edge|opening|gate|checkout|overflow|climb|accounts|travel|policy|paint)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {

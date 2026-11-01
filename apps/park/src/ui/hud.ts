@@ -24,7 +24,7 @@ import { createSayWheel } from './sayWheel';
 import { createSettingsScreen } from './settingsScreen';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
-import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard } from './tickets';
+import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createCheckoutWatch, type CheckoutWatch, type WatchOptions } from './checkout';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
@@ -136,6 +136,8 @@ export interface Hud {
   openBooth(info: BoothInfo): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
+  /** The ticket status in the ticket card's place while the owl stands before the turnstiles (OP-172); null fades it out. */
+  ticketStatus(line: string | null): void;
   /** The arcade's game screen over everything while a run is played (again, if it is open); `handlers` take the play. */
   openArcade(view: ArcadeView, handlers: ArcadeHandlers): void;
   /** The run's score and its line of the moment, as it goes. */
@@ -418,7 +420,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let collectionState: CollectionState | null = null;
   let shop: ShopPanel | null = null;
   let booth: BoothPanel | null = null;
-  let ticketCard: ReturnType<typeof createTicketCard> | null = null;
+  let ticketCard: TicketCard | null = null;
   let freePass: FreePassCard | null = null;
   let checkout: CheckoutWatch | null = null;
   let onCame: () => void = () => {};
@@ -853,6 +855,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     showTicket(card) {
       ticketCard ??= createTicketCard(root);
       ticketCard.show(card);
+    },
+    ticketStatus(line) {
+      if (line === null && !ticketCard) return;
+      ticketCard ??= createTicketCard(root);
+      ticketCard.status(line);
     },
     openArcade(view, handlers) {
       if (!arcade.isOpen()) makeRoom();

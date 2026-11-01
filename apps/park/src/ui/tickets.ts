@@ -3,7 +3,7 @@
  * turnstiles scan one, what the turnstiles say when a ticket cannot go through, and what opening
  * a ticket link did. The words are pure functions, so they are unit-tested.
  */
-import type { ScanRefusal, ScanReply, WalletEntry } from '../net';
+import type { Entry, ScanRefusal, ScanReply, WalletEntry } from '../net';
 import type { TicketLink } from '../net/ticketLinks';
 
 export const KIND_LABEL: Readonly<Record<WalletEntry['kind'], string>> = { day: 'Day ticket', night: 'Night ticket', annual: 'Annual pass', event: 'Event ticket', 'opening-night': 'Opening Night Ticket' };
@@ -69,6 +69,102 @@ export function walletLine(t: WalletEntry, now: number, date: (ms: number) => st
     case 'revoked':
       return { title, status: 'Refunded', vote, share: false, freePass: null };
   }
+}
+
+/** Running, then ready, then waiting on the store: the ticket the home line and the gate's status card are about. */
+const RANK: Partial<Record<WalletEntry['status'], number>> = { active: 3, unused: 2, held: 1 };
+/** Time left for ordering: none given sorts with the longest. */
+const leftOf = (t: WalletEntry) => t.msLeft ?? Number.MAX_SAFE_INTEGER;
+
+/** The ticket on this device that matters most (a running one, the longest first), or null when none can get in. */
+export function bestTicket(tickets: readonly WalletEntry[]): WalletEntry | null {
+  return tickets.filter((t) => RANK[t.status] !== undefined).sort((a, b) => RANK[b.status]! - RANK[a.status]! || leftOf(b) - leftOf(a))[0] ?? null;
+}
+
+/** The words of the ticket status card at the turnstiles (OP-172), for the owner's approval. */
+export const GATE_STATUS_WORDS = {
+  none: 'No ticket yet: the ticket booth is along the plaza',
+  /** A running annual pass goes by its name and that it runs: its days left are in the booth's wallet. */
+  running: 'Running',
+} as const;
+
+/**
+ * The ticket status card while the owl stands on the plaza in front of the turnstiles (OP-172): the
+ * best ticket in walletLine's words ("Day ticket: Ready, its time starts when the turnstiles scan it",
+ * "Annual pass: Running"), or where the booth is when there is none. Only while the gate takes
+ * tickets: an open gate (null) has nothing to say, nor does one that lets this visitor through
+ * already (admitted) when the device holds no ticket.
+ * TODO-DOCS (OP-172): docs/ARCHITECTURE.md (the lobby): the status card on the plaza before the
+ * turnstiles (the lobby's `gate-approach` zone; RoomDef gains `zones`), not shown to an owl just out of
+ * the park until it walks off and back; docs/PLAYBOOK.md section 7: where a visitor sees a ticket now
+ * (that card, the home line only when it changes what the owl does, Settings' closed Tickets row above
+ * Leaving with the IDs, and one toast in the park at 15 minutes left on a Day or Night ticket).
+ */
+export function gateStatus(tickets: readonly WalletEntry[], entry: Entry, now: number, date: (ms: number) => string = shortDate): string | null {
+  if (entry.gate !== 'ticket') return null;
+  const best = bestTicket(tickets);
+  if (!best) return entry.admitted ? null : GATE_STATUS_WORDS.none;
+  const w = walletLine(best, now, date);
+  // One colon to a line: the status's own becomes a comma.
+  const status = best.status === 'active' && best.kind === 'annual' ? GATE_STATUS_WORDS.running : w.status.replace(': ', ', ');
+  return `${w.title}: ${status}`;
+}
+
+/**
+ * Where the owl stands against the plaza in front of the turnstiles (OP-172): in it or not, whether
+ * walking in shows the status card (armed), and whether it shows. An owl that starts in it (it has
+ * just come out of the park) or has gone through the turnstiles is not shown it until it walks out of
+ * the plaza and back.
+ */
+export interface GateApproach {
+  inside: boolean;
+  armed: boolean;
+  shown: boolean;
+}
+
+/** The owl placed in the room: inside the plaza already, walking in does not count until it walks out. */
+export function approachStart(inside: boolean): GateApproach {
+  return { inside, armed: !inside, shown: false };
+}
+
+/** The owl moved: in or out of the plaza. */
+export function approachMove(a: GateApproach, inside: boolean): GateApproach {
+  if (inside === a.inside) return a;
+  return inside ? { inside, armed: a.armed, shown: a.armed } : { inside, armed: true, shown: false };
+}
+
+/** The owl stepped into the turnstiles: the scan card (or the refusal) takes over until it walks out and back. */
+export function approachThrough(a: GateApproach): GateApproach {
+  return { ...a, armed: false, shown: false };
+}
+
+/** A Day or Night ticket the turnstiles just took, for the one toast in the park as its time runs low (OP-172). */
+export interface TicketRun {
+  kind: 'day' | 'night';
+  /** When its time runs out (ms). */
+  until: number;
+  /** The toast has been shown this visit. */
+  warned: boolean;
+}
+
+/** How long before a Day or Night ticket runs out the park says so, once a visit. */
+export const LOW_TIME_MS = 15 * MIN;
+
+/** The visit a scan starts: a Day or Night ticket with an end gets the low-time toast; anything else none. */
+export function ticketRun(scan: Extract<ScanReply, { ok: true }>): TicketRun | null {
+  return (scan.kind === 'day' || scan.kind === 'night') && scan.validUntil !== null ? { kind: scan.kind, until: scan.validUntil, warned: false } : null;
+}
+
+/** In how many ms the low-time toast is due (0: now), or null when none is (none this visit, shown already, or run out). */
+export function lowTimeDue(run: TicketRun | null, now: number): number | null {
+  if (!run || run.warned || run.until <= now) return null;
+  return Math.max(0, run.until - LOW_TIME_MS - now);
+}
+
+/** The quiet toast as a running Day or Night ticket gets low (OP-172), for the owner's approval. */
+export function lowTimeToast(kind: TicketRun['kind'], msLeft: number): string {
+  const min = Math.max(1, Math.round(msLeft / MIN));
+  return `Your ${KIND_LABEL[kind]} has ${min} ${min === 1 ? 'minute' : 'minutes'} left.`;
 }
 
 export interface GateCard {
@@ -137,11 +233,22 @@ const CSS = `
 #hud .ticket-card .kind{font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
 #hud .ticket-card .tid{font:700 22px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.06em}
 #hud .ticket-card .line{font-size:14px;font-weight:600}
+#hud .ticket-card.status{transform:translateX(-50%);transition:opacity .35s ease}
+#hud .ticket-card.status .kind,#hud .ticket-card.status .tid{display:none}
 @media (prefers-reduced-motion:reduce){#hud .ticket-card{transition:opacity .25s}}
 `;
 
-/** The ticket card, shown for a moment as the turnstiles take the ticket. */
-export function createTicketCard(root: HTMLElement): { show(card: GateCard, ms?: number): void } {
+export interface TicketCard {
+  show(card: GateCard, ms?: number): void;
+  /**
+   * The ticket status at the turnstiles (OP-172), in the scan card's place and style: fades in with
+   * `line`, out with null. A scan card takes the place over; null never hides one.
+   */
+  status(line: string | null): void;
+}
+
+/** The ticket card, shown for a moment as the turnstiles take the ticket, and the status card before them. */
+export function createTicketCard(root: HTMLElement): TicketCard {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -163,12 +270,32 @@ export function createTicketCard(root: HTMLElement): { show(card: GateCard, ms?:
       kind.textContent = card.kind;
       id.textContent = card.id;
       line.textContent = card.line;
+      // The scan card replaces the status card: one card in this place, never two.
+      el.classList.remove('status');
+      delete el.dataset['ticketStatus'];
       // Restart the flip when a card is still up.
       el.classList.remove('up');
       void el.offsetWidth;
       el.classList.add('up');
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => el.classList.remove('up'), ms);
+    },
+    status(text) {
+      if (text === null) {
+        if (!el.classList.contains('status')) return;
+        delete el.dataset['ticketStatus'];
+        el.classList.remove('up');
+        return;
+      }
+      // A scan card still up keeps its moment.
+      if (el.classList.contains('up') && !el.classList.contains('status')) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      line.textContent = text;
+      el.dataset['ticketStatus'] = '';
+      el.classList.add('status');
+      void el.offsetWidth;
+      el.classList.add('up');
     },
   };
 }

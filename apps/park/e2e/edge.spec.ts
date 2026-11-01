@@ -473,7 +473,8 @@ test.describe('room server', () => {
       await expect(a.locator('[data-home-btn="play"]')).toBeVisible({ timeout: 20_000 });
       expect(await a.evaluate(() => window.owlPark.home())).toEqual({ shown: true, loggedIn: true });
       await expect(a.locator('[data-home-note]')).toHaveText('Ticket added');
-      await expect(a.locator('[data-home-wallet]')).toHaveText('Day ticket: ready at the turnstiles');
+      // A ready ticket changes nothing the owl does, so the line under Play says nothing (OP-172).
+      await expect(a.locator('[data-home-wallet]')).toBeHidden();
       await a.screenshot({ path: `e2e-screenshots/edge-home-ticket-link-${name === 'a phone' ? 'phone' : 'desktop'}.png` });
 
       // Play (OP-105): the owl's own nest, which the room server makes on first sight.

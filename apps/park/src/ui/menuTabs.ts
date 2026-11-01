@@ -426,6 +426,9 @@ export interface SettingsTabDeps {
   account?: HTMLElement[] | null;
 }
 
+/** The Settings tab's closed row of the tickets on this device (OP-172), for the owner's approval. */
+export const SETTINGS_TICKET_WORDS = { row: 'Tickets' } as const;
+
 /** The tickets on this device, in a line each: for an owl asking the keepers about a ticket (OP-086). */
 export function ticketLines(list: readonly WalletEntry[], now: number): string[] {
   if (!list.length) return ['No ticket on this device yet. A ticket belongs to the device that opened its link.'];
@@ -441,12 +444,15 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
   syncSettings(wrap, deps.settings.get());
   panel.appendChild(wrap);
 
-  const tickets = card('Tickets on this device');
+  // The tickets on this device (OP-172): a closed row just above Leaving, opened for the lines with
+  // their IDs when an owl asks the keepers about a ticket.
+  const tickets = el('details', 'mcard');
   tickets.dataset['tickets'] = '';
+  const summary = el('summary', '', SETTINGS_TICKET_WORDS.row);
+  summary.style.cssText = 'font-weight:800;cursor:pointer;min-height:var(--m-target);display:list-item;line-height:var(--m-target)';
   const lines = el('div', 'mlines');
   lines.appendChild(note('Looking…'));
-  tickets.appendChild(lines);
-  panel.appendChild(tickets);
+  tickets.append(summary, lines);
   void deps.tickets().then(
     (list) => {
       lines.innerHTML = '';
@@ -470,6 +476,7 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
   helpRow.appendChild(actionButton('Feedback', 'feedback', deps.feedback));
   help.appendChild(helpRow);
   panel.appendChild(help);
+  panel.appendChild(tickets);
 
   const out = card('Leaving');
   const outRow = el('div', 'mrow');
