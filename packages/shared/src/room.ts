@@ -113,6 +113,17 @@ export interface DoorDef {
   rect: Rect;
   /** Open doors lead somewhere. Closed doors show an under-construction sign. */
   to?: { room: string; spawn: string };
+  /**
+   * Where the doorway leads an owl walking the tree (map 2, OP-162) instead of `to`: a realm of today's
+   * park that a level of the tree opens into (TREE_REALMS) sends a tree owl back out to that level.
+   */
+  toTree?: { room: string; spawn: string };
+  /**
+   * In a room seen from the side (the tree), the height over the ground line the doorway stands at:
+   * an owl goes through it only standing at that height (within PERCH_SLACK), so one up on a ledge
+   * over the doorway walks on past it (OP-162). Without it, height does not matter.
+   */
+  top?: number;
   /** Public sign wording for closed realms (approved phrases only). */
   closedSign?: string;
   /** Where to place a visual hint (sign, glow) for the door. */

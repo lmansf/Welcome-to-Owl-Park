@@ -35,8 +35,12 @@ export interface Perch {
  */
 export const PERCH_SLACK = 4;
 
-/** The highest a perch's top may be (room px above the floor): what a page or the room believes an owl's height can be follows from it. */
-export const MAX_PERCH_TOP = 480;
+/**
+ * The highest a perch's top may be (room px above the floor): what a page or the room believes an owl's
+ * height can be follows from it (each room's own limit is its highest top, Room.ts). 540 since OP-162's
+ * roof run, whose lantern tower has its balcony 530 up (it was 480).
+ */
+export const MAX_PERCH_TOP = 540;
 
 type Levels = Pick<RoomDef, 'walkable' | 'perches'>;
 

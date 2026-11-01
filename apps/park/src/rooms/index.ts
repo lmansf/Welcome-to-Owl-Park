@@ -1,1 +1,1 @@
-export { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, TREE_GROUND, getRoom, roomFor } from '@owl-park/shared/rooms';
+export { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from '@owl-park/shared/rooms';
