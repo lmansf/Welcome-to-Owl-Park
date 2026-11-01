@@ -65,6 +65,18 @@ export function windowed(kind: TicketKind): boolean {
 /** An unused ticket expires a year after purchase (C35). */
 export const UNUSED_LIFETIME_MS = 365 * DAY_MS;
 
+/**
+ * A pass that never runs out (OP-170): the keepers give one through the admin route with
+ * `"lifetime": true`, never the store. It is an annual pass a hundred years long, so every rule
+ * above still holds; it does not expire unused either, and the wallet shows no time left on it.
+ */
+export const LIFETIME_MS = 100 * 365 * DAY_MS;
+
+/** Whether a ticket never runs out: an open-dated ticket a lifetime long. */
+export function lifetime(t: Pick<Ticket, 'kind' | 'lengthMs'>): boolean {
+  return !windowed(t.kind) && t.lengthMs !== null && t.lengthMs >= LIFETIME_MS;
+}
+
 /** Visual IDs use no 0, O, 1 or I, so they survive being read aloud or copied by hand. */
 export const ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const ID_RE = /^OWL-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
@@ -89,7 +101,7 @@ export function statusOf(t: Ticket, now: number): TicketStatus {
     if (t.validFrom !== null && now < t.validFrom) return 'unused';
     return t.firstScan !== null ? 'active' : 'unused';
   }
-  if (t.firstScan === null) return now < t.created + UNUSED_LIFETIME_MS ? 'unused' : 'expired';
+  if (t.firstScan === null) return lifetime(t) || now < t.created + UNUSED_LIFETIME_MS ? 'unused' : 'expired';
   return t.validUntil !== null && now < t.validUntil ? 'active' : 'used';
 }
 
@@ -117,7 +129,7 @@ export function scan(t: Ticket, now: number): ScanResult {
 /** What a ticket still has: time left once it is running, or until an unused one expires. */
 export function timeLeft(t: Ticket, now: number): { status: TicketStatus; msLeft: number | null } {
   const status = statusOf(t, now);
-  if (status === 'active') return { status, msLeft: t.validUntil === null ? null : Math.max(0, t.validUntil - now) };
-  if (status === 'unused') return { status, msLeft: windowed(t.kind) ? null : Math.max(0, t.created + UNUSED_LIFETIME_MS - now) };
+  if (status === 'active') return { status, msLeft: t.validUntil === null || lifetime(t) ? null : Math.max(0, t.validUntil - now) };
+  if (status === 'unused') return { status, msLeft: windowed(t.kind) || lifetime(t) ? null : Math.max(0, t.created + UNUSED_LIFETIME_MS - now) };
   return { status, msLeft: 0 };
 }

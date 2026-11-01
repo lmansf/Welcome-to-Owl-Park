@@ -32,7 +32,7 @@ import { NIGHTS } from '@owl-park/shared';
 import { KINDS, passCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
 import { claimLink, mirrorTickets, orderIdOf, storeWebhook, type Desk, type HookDeps } from './storeHooks';
-import { DEFAULT_LENGTH_MS, HOUR_MS, OPENING_NIGHT_MS, windowed, type TicketKind } from './tickets';
+import { DEFAULT_LENGTH_MS, HOUR_MS, LIFETIME_MS, OPENING_NIGHT_MS, windowed, type TicketKind } from './tickets';
 import type { Env } from './env';
 
 export { RoomObject } from './RoomObject';
@@ -256,6 +256,10 @@ function compLine(body: Record<string, unknown>): TicketLine | null {
   const hours = body['hours'] === undefined ? null : Number(body['hours']);
   if (!KINDS.includes(kind) || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) return null;
   if (hours !== null && !(hours > 0 && hours <= 24 * 366)) return null;
+  // A pass that never runs out (OP-170): one annual pass, with no hours of its own.
+  const forever = body['lifetime'] === undefined ? false : body['lifetime'];
+  if (forever !== false && (forever !== true || kind !== 'annual' || hours !== null || quantity !== 1)) return null;
+  if (forever) return { line: '1', quantity, kind, lengthMs: LIFETIME_MS, validFrom: null, validUntil: null };
   const from = typeof body['from'] === 'string' ? Date.parse(body['from']) : NaN;
   // Opening night lasts its 24 hours unless an end is given.
   const until = typeof body['until'] === 'string' ? Date.parse(body['until']) : kind === 'opening-night' ? from + OPENING_NIGHT_MS : NaN;
