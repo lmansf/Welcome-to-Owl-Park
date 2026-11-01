@@ -37,7 +37,7 @@ export interface ParkState {
   /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
   soft: string[];
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
-  layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number }>;
+  layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
   owlScale: number;
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;

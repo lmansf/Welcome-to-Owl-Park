@@ -14,6 +14,7 @@ import {
   NEST_SPOTS,
   NIGHTS,
   PLAY_FEATHERS_PER_DAY,
+  ROOM_W,
   NestBook,
   STARTER_FURNITURE,
   STARTER_LAYOUT,
@@ -828,10 +829,12 @@ describe('the tree (map 2), dark until it opens (OP-156)', () => {
     const keeper = connect('l1', 'v_keeper');
     await helloWith(obj, keeper, await mintKeeper(KEY, nowS() + 60));
     expect(keeper.closed).toBeNull();
-    // Spread from the spawn as every arrival is, and still on the ground line's strip.
+    // Spread from the spawn as every arrival is, still within the screen the spawn is on (the lobby,
+    // the level's second), and on the ground line's strip.
     const at = keeper.last('welcome')!.you.pos;
-    expect(at.x).toBeGreaterThan(24);
-    expect(at.x).toBeLessThan(1576);
+    const screen = Math.floor(roomDef('l1')!.spawns['default']!.x / ROOM_W) * ROOM_W;
+    expect(at.x).toBeGreaterThan(screen + 24);
+    expect(at.x).toBeLessThan(screen + ROOM_W - 24);
     expect(Math.abs(at.y - 770)).toBeLessThanOrEqual(4);
   });
 

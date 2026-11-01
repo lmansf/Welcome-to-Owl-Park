@@ -1337,3 +1337,161 @@ const TREE_FRAME_JOBS = [
 }));
 Object.assign(PROMPTS, TREE_PROMPTS);
 JOBS.push(...TREE_FRAME_JOBS);
+
+// ---- The tree, level 1 (OP-162): the screens either side of the lobby ring, in the style frame's words ----
+// The lobby ring (screen 0) is the approved style frame; these screens continue its ground line, its
+// path and its sky. West of it (screen -1, `w1`) the path ends at a closed gate; east of it (+1, `e1`)
+// is a lantern-lit market's common square, then (+2, `e2`) a run over the market's roofs toward the
+// street it leads into. The game draws the statue, the guardian, the stall game and the barrier
+// itself, so the paintings leave their places bare. The moon is only in the lobby's sky.
+
+/** The three prompts of one screen of the tree, in the approved style frame's wording (OP-157). */
+function treeScreen({ composition, far, scene, props }) {
+  return {
+    bg: `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's three layers, which the game scrolls at half speed behind the others. Paint ONLY the far distance, edge to edge, with no empty areas and no flat backdrop: ${far} At the horizon in the lower third, a far forest of rounded misty tree crowns in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy and dark brown shadow with no detail (the game covers it with the ground). The horizon, the clouds and the forest band run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no ground, no path, no floor, no stairs, no stalls, no ledges, no railings, no lanterns on posts, no gate, and no trunk or roots in front, because the game's nearer layers paint everything near. Keep it calm and low in contrast so the nearer layers read in front of it. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any ground, floor, path or platform; anything in the foreground; a moon; daylight; a sun; busy detailed texture; exact mirror symmetry.`,
+    play: `The playfield layer for one screen of a side-scrolling 2D game: the layer a small visitor walks and jumps on, which the game draws over a separate sky painting. Paint everything a visitor can stand on, walk past or touch, and paint the open sky as FLAT PURE MAGENTA #FF00FF: every part of the frame where the night sky or the far distance would show is one flat, solid, uniform pure magenta #FF00FF, with no gradient, no clouds, no stars, no moon, no glow, no haze and no cast shadow, so the game can cut it out. ${composition} Everything solid is painted fully and opaquely, with crisp clean edges against the magenta: no soft glow, haze or light halo bleeding onto the magenta, no semi-transparent edges, no magenta tint on the painting. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing on the gate, the stalls, the awnings or anywhere; any owls, birds, animals, people, faces, statues or characters; any sky, moon, stars, clouds or distant scenery (all of that is flat magenta); a gradient or vignette on the magenta; a sloping or curving floor; perspective; exact mirror symmetry.`,
+    fg: `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's three layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is ${scene}, with a walking floor four fifths of the way down the frame. Props only, at the edges of the screen, nearer than everything else: ${props} The whole middle of the frame, and every place a visitor walks or jumps, stays completely empty magenta. The props are darker and a little larger than the scene behind them, rim-lit by cream moonlight from the upper left and warm gold from the lanterns. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; any sky, trunk, floor or scenery; magenta tint on the props; soft or feathered edges.`,
+  };
+}
+
+const TREE_L1_SCREENS = {
+  // Screen -1: the path west of the tree's foot ends at a closed gate (its barrier is the game's). Its
+  // right edge continues the lobby's left edge (the path, a low stone wall, a lamp post); the first
+  // round's playfields put a second trunk there.
+  w1: treeScreen({
+    composition: `THE SCREEN (the same composition in all three layers, 2048x1152): a mossy path west of a colossal tree, seen from the side; the tree stands in the neighbouring screen to the right, and no part of it, no trunk and no root, is in this frame. The walking floor is one level mossy packed-earth path across the whole width of the frame, a flat strip seen side-on, its top edge five sixths of the way down; under it, solid dark earth fills the frame down to the bottom edge. Along the back of the path, from the right edge to the gate, runs a low wall of dark grey dressed stone with square stone pillars, about a visitor and a half tall. The path leaves the right edge at exactly the floor's height, past a curly black iron lamp post hung with two round paper lanterns, and a second lantern post stands halfway along. On the left, the path ends at a closed gate in an ink-wash style: two tall posts of black lacquered wood under a sweeping roof of dark tiles, about three times a visitor's height, closed by a pair of tall folding screens of pale paper painted with soft grey ink-wash mountains and mist, with a narrow dark gap where the two screens meet near the ground; in front of the gate the path widens into a flat apron of worn grey stone slabs where a barrier can stand. Beyond the gate, at the far left edge, a low wall of dark stacked stone with a thicket of bamboo behind it closes the path. Between the lamp posts and the gate: a low flat-topped boulder about a visitor's height tall, and a fallen log lying along the path with a flat top about half a visitor's height tall, both standable, a short hop up. A visitor added later by the game stands about one sixth of the frame's height tall; every hop and ledge is sized for it.`,
+    far: `a moonlit night sky (the moon itself hangs in the neighbouring screen to the right and is not in this frame), a scatter of small stars and soft navy clouds lit cream on their upper edges; far away on the right, the dark silhouette of one of the colossal tree's lower boughs reaching in from the right edge, hung with a few tiny warm gold lantern points; toward the left, beyond the far forest, faint pale ink-wash mountains rising out of soft grey mist.`,
+    scene: 'the ground beside the foot of a colossal tree at night, with a closed gate in an ink-wash style on the left',
+    props: `along the top edge, a few hanging strands of bamboo leaves and one round paper lantern on a cord, no further down than a fifth of the frame; on the far left edge, a single tall dark bamboo stalk no wider than a twentieth of the frame; on the far right edge, a dark near root no wider than a tenth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame), a few tufts of tall grass and smooth pebbles.`,
+  }),
+  // Screen +1: the market's common square (the statue, the stall game and the guardian are the game's).
+  // Its left edge continues the lobby's right edge: the path, crates and a lamp post, no trunk.
+  e1: treeScreen({
+    composition: `THE SCREEN (the same composition in all three layers, 2048x1152): the common square of a lantern-lit market east of a colossal tree, seen from the side; the tree stands in the neighbouring screen to the left, and no part of it, no trunk and no root, is in this frame. The walking floor is one level surface across the whole width of the frame, a flat strip seen side-on, its top edge five sixths of the way down; under it, solid dark earth fills the frame down to the bottom edge. At the left edge the floor is a mossy packed-earth path with a few flat stepping stones, arriving at exactly that height past a stack of wooden crates and a curly black iron lamp post hung with two round paper lanterns; under the market it becomes a floor of worn wooden boards and flat stones. In the square, from left to right: a round stone plinth with a flat top about a visitor's height tall, bare (a statue is placed on it later); a long low wooden stall counter under a striped scalloped awning in deep red and cream, its counter bare (a game is set on it later); a crooked wooden post with a flat round perch on top about twice a visitor's height tall, bare (a guardian owl sits there later). Behind the square, the fronts of three closed market stalls with dark lattice windows glowing warm gold from inside and striped awnings; their flat roofs, about two visitors' heights up, are standable, reached by a stair of stacked crates. Strings of round paper lanterns zig-zag between tall poles above the square. At the right edge the floor leaves at the same height into the next screen, a narrowing lane between stalls going east. A visitor added later by the game stands about one sixth of the frame's height tall; every crate, roof and ledge is sized for it.`,
+    far: `a moonlit night sky (the moon itself hangs in the neighbouring screen to the left and is not in this frame), a scatter of small stars and soft navy clouds lit cream on their upper edges, the clouds larger and fuller toward the left; low over the far forest on the right, a soft warm gold glow from distant market lanterns.`,
+    scene: 'the common square of a lantern-lit market among the roots of a colossal tree at night',
+    props: `along the top edge, a sagging string of round red and gold paper lanterns on a dark cord running across the frame, no further down than a fifth of the frame; on the far right edge, a dark near wooden pole hung with one lantern, no wider than a twentieth of the frame; on the far left edge, a dark near root and a fern frond, each no wider than a tenth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame), the tops of two wooden crates, a basket of round fruit and tufts of grass.`,
+  }),
+  // Screen +2: the market's roof run, three steps of difficulty, and the way on into the market street.
+  e2: treeScreen({
+    composition: `THE SCREEN (the same composition in all three layers, 2048x1152): further east along the lantern-lit market's lane, seen from the side: a run over the stall roofs. The walking floor is one level surface of worn wooden boards across the whole width of the frame, a flat strip seen side-on, its top edge five sixths of the way down, arriving from the left edge at exactly that height; under it, solid dark earth fills the frame down to the bottom edge. Above the lane, standable tops rise from left to right in three steps of difficulty: first a stair of stacked crates and barrels, each step about half a visitor's height, up to a row of flat stall roofs about two visitors' heights above the floor; then a clear gap between two roofs, about two visitors wide, to a higher roof about three visitors' heights up; then, at the far right and high up, a small round balcony on a tall lantern tower about four visitors' heights up, bare (a reward appears there later), reached by gliding across from the higher roof. Under the roofs, closed stall fronts with lattice windows glowing warm gold and striped awnings in deep red and cream, and ropes hung with round paper lanterns strung between poles. At floor level at the right edge, a wide wooden archway hung with lanterns leads on east into the rest of the market street. A visitor added later by the game stands about one sixth of the frame's height tall; every crate, roof, gap and ledge is sized for it.`,
+    far: `a moonlit night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon and no boughs in this frame; low over the far forest, the soft warm gold glow of a distant market's lanterns and two or three tiny far-off lantern towers.`,
+    scene: 'a run over the stall roofs of a lantern-lit market at night',
+    // The second round keeps the top right and bottom right clear: the first round's pennants hung
+    // over the tower's balcony (the reward) and its barrels stood in front of the archway.
+    props: `along the top edge, across the left two thirds of the frame only, a string of small triangular cloth pennants in red and cream and two round paper lanterns, no further down than a fifth of the frame; the top right third of the frame stays completely empty magenta, because a high balcony stands there in the scene behind; from the upper left corner, the dark near corner of an awning, no further down than a sixth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame) and only in the left two thirds of the frame, a coil of rope, the top of a barrel and a few tufts of grass; the bottom right third stays empty magenta, because a doorway stands there in the scene behind.`,
+  }),
+};
+
+/** Level 1's new screens, each in three layers: `tree-l1-<screen>-bg|play|fg` (OP-162). */
+const TREE_L1_PROMPTS = Object.fromEntries(
+  Object.entries(TREE_L1_SCREENS).flatMap(([s, p]) => [
+    [`tree-l1-${s}-bg`, p.bg],
+    [`tree-l1-${s}-play`, p.play],
+    [`tree-l1-${s}-fg`, p.fg],
+  ]),
+);
+export const TREE_L1_KEYS = Object.keys(TREE_L1_PROMPTS);
+
+/** Seeds by screen (the lobby's are 3101, 3201, 3301; each job's four candidates take seed to seed + 3). */
+const TREE_L1_SEEDS = { w1: 11, e1: 21, e2: 31 };
+const TREE_L1_JOBS = Object.entries(TREE_L1_SEEDS).flatMap(([s, n]) => [
+  { key: `tree-l1-${s}-bg`, kind: 'room', seed: 3100 + n },
+  { key: `tree-l1-${s}-play`, kind: 'overlay', seed: 3200 + n, key_colour: '#FF00FF' },
+  { key: `tree-l1-${s}-fg`, kind: 'overlay', seed: 3300 + n, key_colour: '#FF00FF' },
+]).map((j) => ({
+  ...j,
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L1_PROMPTS[j.key],
+}));
+Object.assign(PROMPTS, TREE_L1_PROMPTS);
+JOBS.push(...TREE_L1_JOBS);
+
+// ---- Level 1's middle distance (OP-162, on Logan's ask): a fourth layer between the sky and the
+// playfield, scrolled at three quarters of the camera's pace. Keyed like the playfield, and finished
+// at half size (800x450, drawn twice as large): it is soft and far, and stays light to load and draw.
+// It shows only above the playfield's skyline, so its shapes rise to three fifths of the way up; its
+// side edges stay empty, because neighbouring tiles at that pace overlap and the game fades them.
+function treeMid(shapes) {
+  return `Middle-distance layer for one screen of a side-scrolling 2D game: the layer between the far sky and the playfield, which the game scrolls at three quarters of the camera's pace, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette and no cast shadows, 16:9, 2048x1152. Paint only middle-distance silhouettes standing on an unseen horizon: ${shapes} They rise from the bottom edge of the frame to at most three fifths of the way up, and the top two fifths of the frame are empty magenta. Toward the left and right edges they thin out, and the outer tenth of the frame on each side is empty magenta, so neighbouring screens blend. Flat shapes in muted, desaturated night blues and blue-greys, paler and softer than anything near so they read as distant, with only a few tiny warm gold lantern points; crisp clean opaque edges against the magenta, no soft haze, glow or mist bleeding onto the backdrop, no semi-transparent edges, no magenta tint on the shapes. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters or writing; any owls, birds, animals, people, faces or characters; a moon; clouds; stars; any ground, floor, path or ledge in front; anything in the top two fifths of the frame; bright saturated colours; busy detailed texture; exact mirror symmetry.`;
+}
+const TREE_L1_MIDS = {
+  // Behind the closed gate's wall.
+  w1: treeMid('a misty grove of tall bamboo and, among it, the sweeping dark-tiled roofs of a quiet pavilion and a slender tiered tower in an ink-wash style, with two or three tiny lantern points.'),
+  // Behind the lobby: its trunk stands in front of the middle, so the shapes keep to the sides.
+  0: treeMid('in the left third and the right third of the frame, the dark rounded crowns and trunks of other great trees far away, with a few tiny warm lantern points among their roots; the middle third stays almost empty.'),
+  // Behind the market square.
+  e1: treeMid('the rooftops, peaked tents and two slender lantern towers of the rest of a lantern-lit market, with strings of tiny lantern points draped between them.'),
+  // Behind the roof run, the market street going on east.
+  e2: treeMid('taller market buildings with curved roofs, one tall lantern tower, and a distant rope bridge between two of the roofs hung with tiny lantern points.'),
+};
+const TREE_L1_MID_PROMPTS = Object.fromEntries(Object.entries(TREE_L1_MIDS).map(([s, p]) => [`tree-l1-${s}-mid`, p]));
+export const TREE_L1_MID_KEYS = Object.keys(TREE_L1_MID_PROMPTS);
+const TREE_L1_MID_SEEDS = { w1: 11, 0: 1, e1: 21, e2: 31 };
+const TREE_L1_MID_JOBS = Object.entries(TREE_L1_MID_SEEDS).map(([s, n]) => ({
+  key: `tree-l1-${s}-mid`,
+  kind: 'overlay',
+  seed: 3400 + n,
+  key_colour: '#FF00FF',
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L1_MID_PROMPTS[`tree-l1-${s}-mid`],
+}));
+Object.assign(PROMPTS, TREE_L1_MID_PROMPTS);
+JOBS.push(...TREE_L1_MID_JOBS);
+
+// The joins between level 1's playfields (OP-162). The four screens were painted apart, so where two
+// meet, the floor, the walls and the props stop in a hard vertical line. As for the glass realm's
+// seam (OP-125), an edit repaints a band across each join. The four selected playfields are laid side
+// by side, west to east (8192x1152, the joins at x 2048, 4096 and 6144), and a square across a join is
+// cut out (`pnpm art:finish cut tree-l1-seam-<pair> --base-key tree-l1-w1-play --base <w1>,<0>,<e1>,<e2>
+// --box <J-576>,0,<J+576>,1152 --half`). Its middle half is repainted, `patch --threshold 0 --join 96`
+// pastes each edit back into the row of four in turn, and each screen is finished from the patched row
+// with `overlay tree-l1-<screen>-play --crop <i/3>,0.5` (i = 0..3, west to east).
+// TODO-DOCS (OP-162): docs/ART-PIPELINE.md's "cut and patch" section: the same recipe for keyed layers,
+// four screens in one row, and a screen finished from the row with --crop fx,fy.
+function treeSeam(left, right, middle) {
+  return `Edit this painting: a square crop of the playfield layer of a side-scrolling 2D game, in which the open sky is flat pure magenta #FF00FF so that the game can cut it out. It was made from two paintings set side by side, and they meet in a hard vertical line down the exact middle of the frame where nothing continues: on the left ${left}; on the right ${right}. Repaint only the middle half of the frame, a quarter of the width either side of that line, so that the two sides become one continuous scene with no line, seam or change of style anywhere: ${middle} The walking floor runs on unbroken across the whole width at exactly the height it has at both sides, its flat top edge level, open and uncluttered, so that a visitor can walk straight across, and the dark earth below it runs on at the same depth. Wherever the sky would show, the frame stays one flat, solid, uniform pure magenta #FF00FF, the same magenta as at the top of the frame now, with no gradient, no clouds, no stars, no moon, no glow and no haze. Keep the left and right quarters of the frame exactly as they are, and match their colours, light and brushwork in the repainted middle: the same strict side view with no perspective tilt, hand-painted 2D game art with clean cel-shaded shapes, soft painted gradients and crisp clean edges against the magenta. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+}
+const TREE_L1_SEAM_PROMPTS = {
+  'tree-l1-seam-w1-0': treeSeam(
+    'a low wall of pale grey stone blocks topped with moss, a square stone pillar and an iron lamp post hung with two glowing paper lanterns, standing on a floor of grassy earth',
+    'a packed-earth path that leads back past small iron lamp posts and a little stone gate with steps in the distance, and the dark bark of a colossal tree\'s root arching over the path',
+    'the stone wall on the left ends at its last square pillar a little left of the middle; past the pillar the wall steps down into a few tumbled stones and dark shrubs, so the little gate, the steps and the lamp posts on the right stay small in the distance behind the path; the grassy earth on the left becomes the packed-earth path on the right without a step, with a few flat stones and tufts of moss along it.',
+  ),
+  'tree-l1-seam-0-e1': treeSeam(
+    'the dark bark of a colossal tree\'s root arching down to the ground, and beyond it, small in the distance, iron lamp posts with glowing lanterns and the roofs of market stalls along a path of earth and flat stones',
+    'a stack of four large wooden crates with moss on their lids, standing on a floor of earth, grass and flat stepping stones',
+    'the tree\'s root on the left reaches down and ends in the earth; the path of earth and flat stones runs on from under the root into the floor of the market on the right; the far lamp posts and stall roofs sink out of sight behind the stacked wooden crates, which stand on the same floor at the same height.',
+  ),
+  'tree-l1-seam-e1-e2': treeSeam(
+    'a lane of wooden planks between market buildings, one with a red and white striped awning, a pale stone building corner and a wooden fence, behind a wooden boardwalk edged with flat grey flagstones',
+    'a stack of wooden crates and small barrels standing on a plain wooden boardwalk of long planks',
+    'the lane between the buildings on the left ends behind the wooden fence and the stone building\'s corner; the wooden boardwalk in front runs on unbroken into the boardwalk on the right, one level of planks of one size with one straight front edge, the flagstones giving way to plain planks; the stack of crates and barrels on the right begins a little right of the middle, standing on the boardwalk.',
+  ),
+};
+export const TREE_L1_SEAM_KEYS = Object.keys(TREE_L1_SEAM_PROMPTS);
+const TREE_L1_SEAM_JOBS = TREE_L1_SEAM_KEYS.map((key, i) => ({
+  key,
+  // A detail edit, not a screen of a room: a helper, patched into the screens either side of its join.
+  kind: 'anchor',
+  derives: key.replace('tree-l1-seam-', '').split('-').map((s) => `tree-l1-${s}-play`),
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 3601 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the level's playfields", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L1_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L1_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L1_SEAM_KEYS);
+JOBS.push(...TREE_L1_SEAM_JOBS);
