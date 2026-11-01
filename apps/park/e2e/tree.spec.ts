@@ -64,6 +64,7 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
   });
 
   test('the camera follows the owl along the ground line across the lobby', async ({ page }) => {
+    test.slow(); // a 1400 px walk drawn in software WebGL: 30 to 49 s on CI runners, against a 45 s limit
     await openPark(page, { room: 'l1' });
     await walkAndStop(page, LOBBY + 100, GROUND);
     const lobbyWest = await settleCamera(page);
