@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalPoint, doorAxis, inExit, laneThrough } from '../src/doorways';
+import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
-import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_GROUND, getRoom, roomFor } from './index';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -93,10 +93,16 @@ describe('doors and spawns', () => {
   for (const room of ALL_ROOMS) {
     it(`${room.id}: every open door leads to a spawn that is there, and every marker is on the room's own screens`, () => {
       for (const d of room.doors) {
-        if (d.to) {
-          const to = roomFor(d.to.room);
+        for (const way of [d.to, d.toTree]) {
+          if (!way) continue;
+          const to = roomFor(way.room);
           expect(to, `${room.id} ${d.id} leads to a room`).toBeDefined();
-          expect(Object.hasOwn(to?.spawns ?? {}, d.to.spawn), `${room.id} ${d.id} leads to ${d.to.room} ${d.to.spawn}`).toBe(true);
+          expect(Object.hasOwn(to?.spawns ?? {}, way.spawn), `${room.id} ${d.id} leads to ${way.room} ${way.spawn}`).toBe(true);
+        }
+        // The tree's way back goes to the tree, from a doorway that also leads somewhere for today's park.
+        if (d.toTree) {
+          expect(mapOf(roomFor(d.toTree.room)!), `${room.id} ${d.id}'s way for the tree`).toBe(2);
+          expect(d.to, `${room.id} ${d.id}'s way for today's park`).toBeDefined();
         }
         if (!d.marker) continue;
         expect(d.marker.x, `${room.id} ${d.id} marker`).toBeGreaterThanOrEqual(0);
@@ -112,6 +118,49 @@ describe('doors and spawns', () => {
       for (const [name, p] of Object.entries(room.spawns)) for (const d of ways) expect(pointInRect(p, d.rect), `${room.id} spawn ${name} in ${d.id}`).toBe(false);
     });
   }
+});
+
+describe("the tree's ways into today's park (OP-162)", () => {
+  it('the roof run opens into the market, whose way out leads a tree owl back to the archway and everyone else to the hub', () => {
+    const arch = ROOMS['l1']!.doors.find((d) => d.id === 'to-market')!;
+    expect(arch.to).toEqual({ room: 'market', spawn: 'default' });
+    const out = ROOMS['market']!.doors.find((d) => d.id === 'to-hub')!;
+    expect(doorTarget(out, 1)).toEqual({ room: 'hub', spawn: 'from-market' });
+    expect(doorTarget(out, 2)).toEqual({ room: 'l1', spawn: 'market' });
+    // Doorways without a way for the tree lead a tree owl where they lead everyone.
+    expect(doorTarget(arch, 2)).toEqual(arch.to);
+    // The arrival stands on the ground line just short of the archway, out of it.
+    const back = ROOMS['l1']!.spawns['market']!;
+    expect(back.y).toBe(TREE_GROUND);
+    expect(arch.rect.x - back.x).toBeGreaterThan(0);
+    expect(arch.rect.x - back.x).toBeLessThan(120);
+  });
+
+  it("the realms the tree opens into are the market and the rooms it leads to, never today's park's own streets", () => {
+    expect([...TREE_REALMS].sort()).toEqual(['arcade', 'market']);
+    for (const id of ['hub', 'lobby', STREET_ROOM]) expect(TREE_REALMS.has(id), id).toBe(false);
+  });
+
+  it("a side view's doorways stand at a height, so a ledge over one is walked along without going through", () => {
+    for (const room of ALL_ROOMS) {
+      if (mapOf(room) !== 2) continue;
+      for (const d of room.doors) if (d.to) expect(d.top, `${room.id} ${d.id}`).toBe(0);
+    }
+    // The archway lies under the high roof's end and the balcony: both pass over it.
+    const l1 = ROOMS['l1']!;
+    const arch = l1.doors.find((d) => d.id === 'to-market')!;
+    for (const id of ['roof-high', 'tower-balcony']) {
+      const p = l1.perches!.find((x) => x.id === id)!;
+      expect(p.area.some((v) => v.x >= arch.rect.x && v.x <= arch.rect.x + arch.rect.w) || (Math.min(...p.area.map((v) => v.x)) < arch.rect.x && Math.max(...p.area.map((v) => v.x)) > arch.rect.x), id).toBe(true);
+    }
+  });
+
+  it('the arrival from the market by the archway is where an owl coming back through it stands', () => {
+    const l1 = ROOMS['l1']!;
+    expect(arrivalPoint(l1, 'market', 'market', { axis: 'y', t: 0.5 })).toEqual(l1.spawns['market']);
+    const market = ROOMS['market']!;
+    expect(arrivalPoint(market, 'default', 'l1', { axis: 'x', t: 0.5 })).toEqual(market.spawns['default']);
+  });
 });
 
 describe('the street and the nests', () => {

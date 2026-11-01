@@ -1,7 +1,7 @@
 import { isNestRoom } from '../src/homes';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_W, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_W, mapOf, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
@@ -501,7 +501,8 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
     spawns: { 'default': { x: 330, y: 740 }, 'from-arcade': { x: 3090, y: 770 } },
     doors: [
-      { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, marker: { x: 70, y: 580 } },
+      // Its way out: to the hub, or for an owl walking the tree (OP-162), back to the roof run's archway.
+      { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, toTree: { room: 'l1', spawn: 'market' }, marker: { x: 70, y: 580 } },
       // The arcade's doorway on the pavement where the street bends away, under its joystick sign.
       { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, marker: { x: 3126, y: 640 } },
       { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
@@ -887,26 +888,32 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('crate', 2 * ROOM_W + 1165, 2 * ROOM_W + 1240, 205),
       treeLedge('stall-roofs', 2 * ROOM_W + 465, 2 * ROOM_W + 1240, 350),
       // The roof run: a stair of crates and barrels a half-visitor a step, the long roof over the
-      // stalls, and the higher one by the lantern tower. (The tower's balcony, at 525, is above the
-      // highest ledge the flight rules allow, so it is scenery until they reach it.)
+      // stalls, the higher one by the lantern tower, and the tower's balcony, a jump up from that
+      // roof's end under it, the highest ledge of the level.
       treeLedge('crates-1', 3 * ROOM_W + 80, 3 * ROOM_W + 245, 95),
       treeLedge('crates-2', 3 * ROOM_W + 160, 3 * ROOM_W + 390, 170),
       treeLedge('crates-3', 3 * ROOM_W + 265, 3 * ROOM_W + 425, 250),
       treeLedge('roof-low', 3 * ROOM_W + 410, 3 * ROOM_W + 965, 310),
       treeLedge('roof-high', 3 * ROOM_W + 955, 3 * ROOM_W + 1340, 402),
+      treeLedge('tower-balcony', 3 * ROOM_W + 1258, 3 * ROOM_W + 1500, 530),
     ],
     // Owls come in at the lobby's middle; the west end's spawn stands where the overlay's grass leaves
-    // the path clear.
+    // the path clear; one back from the market comes out just short of the tower's archway.
     spawns: {
       default: { x: ROOM_W + 800, y: TREE_GROUND },
       west: { x: 720, y: TREE_GROUND },
       east: { x: 3 * ROOM_W + 1100, y: TREE_GROUND },
+      market: { x: 3 * ROOM_W + 1230, y: TREE_GROUND },
     },
     doors: [
       // The closed gate at the west end: a blockade on the stone apron in front of it, its phrase on
       // its board; the door turns owls back at the apron's edge, where the overlay's grass leaves the
       // path clear.
       { id: 'closed-west', rect: { x: 630, y: 750, w: 60, h: 40 }, closedSign: 'Not Yet Fledged', marker: { x: 415, y: TREE_GROUND } },
+      // The archway at the foot of the lantern tower, at the roof run's east end: into the market's
+      // own screens (OP-155's grid), whose way out brings a tree owl back here. Taken on the
+      // ground only, so an owl on the high roof or the balcony over it walks on past.
+      { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0 },
     ],
   },
 };
@@ -1023,6 +1030,26 @@ export const GUARDIANS: readonly GuardianDef[] = [
 
 /** The rooms the realms setting gates, as the keepers' page lists them. */
 export const GATED_ROOMS: readonly string[] = Object.values(ROOMS).filter((r) => r.gated).map((r) => r.id);
+
+/**
+ * The rooms of today's park an owl walking the tree can go into (OP-162): the realms a level of the
+ * tree opens into, and every room their doorways lead to, each doorway taken the tree's way
+ * (`toTree` before `to`). An owl in one of them keeps walking the tree; one anywhere else of map 1
+ * walks today's park.
+ */
+export const TREE_REALMS: ReadonlySet<string> = (() => {
+  const seen = new Set<string>();
+  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+  for (let room = next.pop(); room; room = next.pop()) {
+    for (const d of room.doors) {
+      const to = roomFor((d.toTree ?? d.to)?.room ?? '');
+      if (!to || mapOf(to) === 2 || seen.has(to.id)) continue;
+      seen.add(to.id);
+      next.push(to);
+    }
+  }
+  return seen;
+})();
 
 /**
  * The rooms' layout. Positions saved under an older one (the quest items already handed out) move
