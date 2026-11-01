@@ -14,7 +14,7 @@ import type { LineAnswer, OverflowState } from './Overflow';
 import { countIn, countedOneMore, forgetOverflow, keepMasks, masksKept, overflowNow } from './overflowState';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
 import { feedbackPage } from './feedbackPage';
-import { CSP_REPORT_PATH, REPORT_BODY_MAX, finished, frontDoor, guardedPage, noteViolation, tooMany, violationOf } from './guard';
+import { CSP_REPORT_PATH, REPORT_BODY_MAX, finished, frontDoor, guardedPage, noteViolation, sameKey, tooMany, violationOf } from './guard';
 import { limitsOn, overLimit } from './limits';
 import { walletVoter } from './Ledger';
 import { loggerFor } from './logs';
@@ -132,7 +132,7 @@ function isAdmin(request: Request, env: Env, log: Logger): boolean {
   const key = env.ADMIN_KEY;
   const given = request.headers.get('X-Admin-Key') ?? '';
   const route = new URL(request.url).pathname;
-  const reason = !key || key.length < 16 ? 'no-key-set' : !given ? 'no-key-given' : given !== key ? 'wrong-key' : null;
+  const reason = !key || key.length < 16 ? 'no-key-set' : !given ? 'no-key-given' : !sameKey(given, key) ? 'wrong-key' : null;
   if (reason) log.warn('worker.admin', 'admin_denied', 'A keepers’ route was asked without the keepers’ key.', { route, reason });
   else log.info('worker.admin', 'admin_ok', 'A keepers’ route was asked with the keepers’ key.', { route });
   return reason === null;
