@@ -33,6 +33,19 @@ export interface RoomDef {
    * height. Reached by jumping; a room without has only its floor.
    */
   perches?: Perch[];
+  /**
+   * In a room seen from the side (the tree, OP-173): shapes of its playfield (the 1x tile they lie in)
+   * that are painted in front of where the owls walk, a lamp post on the path or a post in front of a
+   * stall, drawn again over the owls so an owl passes behind them. Each hugs its thing's outline, as
+   * whatever else it covers is drawn in front too.
+   */
+  fronts?: Array<{ id: string; poly: Polygon }>;
+  /**
+   * In a room seen from the side (OP-173): shapes of the playfield shaded darker by `alpha` (0 to 1),
+   * painted glows that do nothing (a closed gate's lit doors, a lit window), so they do not read as
+   * things to use.
+   */
+  shades?: Array<{ id: string; poly: Polygon; alpha: number }>;
   /** Named spawn points; `default` is required. */
   spawns: Record<string, Vec2>;
   /**
@@ -124,6 +137,8 @@ export interface DoorDef {
    * over the doorway walks on past it (OP-162). Without it, height does not matter.
    */
   top?: number;
+  /** In a room seen from the side (OP-173): where the doorway's mark (the bright, simple sign of a way through) stands, over its arch. */
+  markAt?: Vec2;
   /** Public sign wording for closed realms (approved phrases only). */
   closedSign?: string;
   /** Where to place a visual hint (sign, glow) for the door. */
