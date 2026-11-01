@@ -2,9 +2,11 @@
 /**
  * The ledge painter's draft as room data (OP-156): fetches a tree room's saved draft from the park
  * (GET /api/masks/<room>, which anyone may read) and prints its ledges as treeLedge(...) lines to
- * paste into the room's perches in packages/shared/rooms/index.ts, its walls, hazards and fronts as
- * JSON (the game has no place for those yet), and what differs from the room's ledges as the tree
- * has them now. It prints and writes nothing: a ledge becomes the park's in a pull request.
+ * paste into the room's perches in packages/shared/rooms/index.ts and its fronts as lines to paste
+ * into the room's fronts there (OP-173: shapes drawn over the owls), its walls and hazards as JSON
+ * (the game has no place for those yet), and what differs from the room's ledges and fronts as the
+ * tree has them now. It prints and writes nothing: a ledge or a front becomes the park's in a pull
+ * request.
  *
  *   pnpm masks:pull <room> [--base <url>]
  *
@@ -20,7 +22,7 @@ import { parseArgs } from 'node:util';
 register(new URL('../chaos/lib/ts-hooks.mjs', import.meta.url));
 const SHARED = new URL('../../packages/shared/', import.meta.url);
 export const { roomFor } = await import(new URL('rooms/index.ts', SHARED).href);
-export const { checkMasks, isPaintable, ledgesOf } = await import(new URL('src/masks.ts', SHARED).href);
+export const { checkMasks, frontsOf, isPaintable, ledgesOf } = await import(new URL('src/masks.ts', SHARED).href);
 const { ROOM_W } = await import(new URL('src/room.ts', SHARED).href);
 
 export const DEFAULT_BASE = 'http://localhost:8787';
@@ -43,6 +45,15 @@ export function ledgeLine(l) {
   return `treeLedge('${l.id}', ${roomX(l.x0)}, ${roomX(l.x1, l.x0)}, ${l.top}),`;
 }
 
+/**
+ * A front as a line of the room's fronts: each point [x, y], x against the screen its leftmost point is
+ * on; `raised` (the room's own flag for a front of that id, which a draft cannot carry) kept.
+ */
+export function frontLine(f, raised = false) {
+  const from = Math.min(...f.points.map((p) => p.x));
+  return `{ id: '${f.id}',${raised ? ' raised: true,' : ''} poly: pts(${f.points.map((p) => `[${roomX(p.x, from)}, ${p.y}]`).join(', ')}) },`;
+}
+
 /** What differs between the room's ledges now and the draft's, by id. */
 export function ledgeDiff(now, drafted) {
   const was = new Map(now.map((l) => [l.id, l]));
@@ -61,6 +72,25 @@ export function ledgeDiff(now, drafted) {
   return { added, removed, changed, same };
 }
 
+/** What differs between the room's fronts now and the draft's, by id: a front is changed when it has more or fewer points, or any of them moved. */
+export function frontDiff(now, drafted) {
+  const was = new Map(now.map((f) => [f.id, f]));
+  const is = new Set(drafted.map((f) => f.id));
+  const added = drafted.filter((f) => !was.has(f.id)).map((f) => f.id);
+  const removed = now.filter((f) => !is.has(f.id)).map((f) => f.id);
+  const changed = [];
+  let same = 0;
+  for (const f of drafted) {
+    const o = was.get(f.id);
+    if (!o) continue;
+    const moved = f.points.filter((p, i) => p.x !== o.points[i]?.x || p.y !== o.points[i]?.y).length;
+    if (o.points.length !== f.points.length) changed.push(`${f.id} (${o.points.length} -> ${f.points.length} points)`);
+    else if (moved) changed.push(`${f.id} (${moved} of ${f.points.length} points moved)`);
+    else same += 1;
+  }
+  return { added, removed, changed, same };
+}
+
 /** The summary line of a diff. */
 export function diffWords(d) {
   const list = (ids) => (ids.length ? `: ${ids.join(', ')}` : '');
@@ -71,19 +101,22 @@ export function diffWords(d) {
 export function printout(room, saved, base) {
   const when = new Date(saved.savedAt).toISOString().replace('T', ' ').slice(0, 16);
   const json = (v) => JSON.stringify(v, null, 2);
+  const raised = new Set((room.fronts ?? []).filter((f) => f.raised).map((f) => f.id));
   return [
     `// ${room.id}: the ledge draft saved ${when} UTC, from ${base}`,
     `// Ledges (${saved.ledges.length}), for the room's perches in packages/shared/rooms/index.ts:`,
     ...saved.ledges.map(ledgeLine),
     '',
+    `// Fronts (${saved.fronts.length}), for the room's fronts there (drawn over the owls):`,
+    ...saved.fronts.map((f) => frontLine(f, raised.has(f.id))),
+    '',
     `// Walls (${saved.walls.length}):`,
     json(saved.walls),
     `// Hazards (${saved.hazards.length}):`,
     json(saved.hazards),
-    `// Fronts (${saved.fronts.length}):`,
-    json(saved.fronts),
     '',
     `// Against ${room.id}'s ledges now: ${diffWords(ledgeDiff(ledgesOf(room), saved.ledges))}.`,
+    `// Against ${room.id}'s fronts now: ${diffWords(frontDiff(frontsOf(room), saved.fronts))}.`,
   ].join('\n');
 }
 

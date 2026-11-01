@@ -88,7 +88,28 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
 
   test('reads at a glance: an edge on every ledge, the shapes in front and the shaded glows drawn, and the archway marked (OP-173)', async ({ page }) => {
     await openPark(page, { room: 'l1' });
-    expect((await state(page)).tree).toEqual({ fronts: 7, shades: 6, lips: 25, marks: 1 });
+    // The fronts: the west path's lamps, the square's post, the stair's banister (raised) and the tower's railing.
+    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 6, lips: 25, marks: 1, behind: false });
+  });
+
+  test('the stair’s banister is in front of an owl climbing the stair, and behind one walking by on the floor (OP-173)', async ({ page }) => {
+    test.slow(); // a climb up and down with a look at the drawing order at each step: 20 s here
+    await openPark(page, { room: 'l1' });
+    const behind = async () => (await state(page)).tree!.behind;
+    // On the floor at the stair's foot, the owl is in front of the banister's post and rail.
+    await walkAndStop(page, LOBBY + 962, GROUND);
+    expect(await behind()).toBe(false);
+    // Up the stair a step and another: behind the banister.
+    await walkAndStop(page, LOBBY + 1042, GROUND);
+    for (const top of [82, 153]) {
+      await jump(page);
+      await standsAt(page, top);
+      expect(await behind()).toBe(true);
+    }
+    // Off the stair's far end and down onto the floor: in front again.
+    await walkAndStop(page, LOBBY + 1300, GROUND);
+    await standsAt(page, 0);
+    expect(await behind()).toBe(false);
   });
 
   test('the west wall\'s top is a ledge: a hop up from the boulder', async ({ page }) => {

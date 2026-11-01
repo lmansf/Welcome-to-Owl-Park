@@ -55,20 +55,50 @@ async function dragRoom(page: Page, a: Pt, b: Pt): Promise<void> {
   await page.mouse.up();
 }
 
-/** Whether a line of the draft comes within `px` of the span x0..x1 at room y. */
-const nearAny = (d: Paint['draft'], x0: number, x1: number, y: number, px: number) =>
-  [...d.ledges, ...d.hazards].some((l) => Math.abs(GROUND - l.top - y) < px && l.x1 > x0 - px && l.x0 < x1 + px) || d.walls.some((w) => w.x > x0 - px && w.x < x1 + px && w.y1 > y - px && w.y0 < y + px);
+/** How far point p is from the segment a to b (room px). */
+function segmentDistance(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = dx || dy ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** Whether p is inside the polygon (even-odd). */
+function inside(p: Pt, poly: Pt[]): boolean {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) hit = !hit;
+  }
+  return hit;
+}
+
+/** Whether a line of the draft, or a front (inside it or near its outline), comes within `px` of the span x0..x1 at room y. */
+const nearAny = (d: Paint['draft'], x0: number, x1: number, y: number, px: number) => {
+  const n = Math.max(2, Math.ceil((x1 - x0) / 5) + 1);
+  const along: Pt[] = Array.from({ length: n }, (_, i) => ({ x: x0 + ((x1 - x0) * i) / (n - 1), y }));
+  return (
+    [...d.ledges, ...d.hazards].some((l) => Math.abs(GROUND - l.top - y) < px && l.x1 > x0 - px && l.x0 < x1 + px) ||
+    d.walls.some((w) => w.x > x0 - px && w.x < x1 + px && w.y1 > y - px && w.y0 < y + px) ||
+    d.fronts.some((f) => along.some((p) => inside(p, f.points) || f.points.some((a, i) => segmentDistance(p, a, f.points[(i + 1) % f.points.length]!) < px)))
+  );
+};
 
 test.describe('the ledge painter (OP-156)', () => {
   test('a keeper sees the tree’s ledges, draws one, stands on it at once and saves the draft', async ({ browser, request }) => {
     test.slow(); // the tree drawn with software WebGL, each look at the page a frame or more: 39 s here
     const page = await painter(browser);
-    // Every ledge of the room's own (or of a draft saved before) is drawn, each with its height.
+    // Every ledge of the room's own (or of a draft saved before) is drawn, each with its height, and
+    // every front of its own, the shapes the game draws over the owls (OP-173).
     const first = await paint(page);
     expect(first.own.length).toBeGreaterThan(0);
     expect(first.draft.ledges.map((l) => l.id)).toEqual(expect.arrayContaining(first.own));
     expect(first.drawn.ledges).toEqual(first.draft.ledges.map((l) => l.id));
     expect(first.labels).toBe(first.draft.ledges.length);
+    expect(first.ownFronts.length).toBeGreaterThan(0);
+    expect(first.draft.fronts.map((f) => f.id)).toEqual(expect.arrayContaining(first.ownFronts));
+    expect(first.drawn.fronts).toEqual(first.draft.fronts.map((f) => f.id));
     // A ledge beside the lobby's stair, a jump over the floor, drawn with the mouse where nothing is drawn yet.
     const span = { x0: LOBBY + 770, x1: LOBBY + 880 };
     const top = [100, 70, 130].find((t) => !nearAny(first.draft, span.x0, span.x1, GROUND - t, 30));

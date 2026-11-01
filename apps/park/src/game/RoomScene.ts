@@ -122,7 +122,7 @@ import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
 import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_GROUND, getRoom } from '../rooms';
-import { dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
+import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
@@ -780,14 +780,15 @@ export class RoomScene extends Phaser.Scene {
     if (mapOf(room) === 2) {
       this.treeDress = dressTreeRoom(this, room, playTiles, {
         ground: TREE_GROUND,
-        depths: { shade: -0.9, lip: -0.8, front: room.size.h + 50, mark: room.size.h + 60 },
+        // A raised front lies between the owls on ledges (drawn TREE_RAISED_BAND back) and those on the floor.
+        depths: { shade: -0.9, lip: -0.8, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
         open: (door) => !this.realmClosed(this.doorTo(door)?.room),
         calm: this.calm(),
         onMarkTap: (door) => this.walkToDoorway(door.id),
       });
     }
 
-    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1);
+    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1).setRaisedBand(this.raisedBand());
     this.me.groundUnder = this.groundUnder;
     this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
@@ -1084,7 +1085,7 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     let owl = this.peers.get(s.id);
     if (!owl) {
-      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1);
+      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1).setRaisedBand(this.raisedBand());
       owl.groundUnder = this.groundUnder;
       owl.calm = () => this.calm();
       owl.setAlpha(0);
@@ -1370,6 +1371,11 @@ export class RoomScene extends Phaser.Scene {
     return (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false;
   }
 
+  /** How far back this room draws an owl standing on a ledge (OP-173): the tree's rooms only, so today's park draws as ever. */
+  private raisedBand(): number {
+    return mapOf(this.room) === 2 ? TREE_RAISED_BAND : 0;
+  }
+
   /**
    * An idle owl (OP-126). With no key, touch, click or scroll for a while, no walk under way and no
    * stick held, it falls asleep where it stands, for everyone; anything its visitor does wakes it.
@@ -1624,8 +1630,8 @@ export class RoomScene extends Phaser.Scene {
     layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
     /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
     owlScale: number;
-    /** In a room of the tree, what it drew to read at a glance (OP-173): fronts, shades, ledge edges and doorway marks. */
-    tree: TreeDress | null;
+    /** In a room of the tree, what it drew to read at a glance (OP-173): fronts (raised ones among them), shades, ledge edges and doorway marks; and whether the own owl is drawn behind the raised fronts now (it stands on a ledge). */
+    tree: (TreeDress & { behind: boolean }) | null;
     /** Where the camera's view is, in room pixels (OP-156: a tree room's camera follows the owl as drawn). */
     view: { x: number; y: number; w: number; h: number };
     /** The ledge painter, when it is up (OP-156, `?paint=1`). */
@@ -1653,7 +1659,7 @@ export class RoomScene extends Phaser.Scene {
         .filter(({ img }) => (img.getData('fade') ?? 'middle') === 'middle')
         .map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight, fade: tileFade(t) })),
       owlScale: this.me.scaleX / (OWL_SCALE * speciesOf(this.look).size),
-      tree: this.treeDress && { fronts: this.treeDress.fronts, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks },
+      tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, behind: this.me.depth < this.treeDress.raisedDepth },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
