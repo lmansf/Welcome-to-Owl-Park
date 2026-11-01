@@ -1,8 +1,8 @@
 # The tree (map 2)
 
-- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); level 1 BUILT; levels 0, 2, 3, 4 and 5 PLANNED (OP-158 to OP-161, OP-163); the spot placer, the entries setting and the turn-your-phone card PLANNED (OP-156)
-- Verified against: main fda7507 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged); the Ticket Board as read 2026-11-01
-- Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts; apps/park/src/game/treeView.ts, game/ledgePainter.ts, paint/; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
+- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); level 1 BUILT; levels 0, 2, 3, 4 and 5 PLANNED (OP-158 to OP-161, OP-163); the entries setting and the turn-your-phone card BUILT, the spot placer PLANNED (OP-156)
+- Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting and the turn-your-phone card, OP-156); the Ticket Board as read 2026-11-01
+- Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
 - Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173
 - Related: docs/ARCHITECTURE.md (rooms, the room server), docs/ART-PIPELINE.md (how art is made), docs/ACTIVITIES.md (the arcade, the climb), docs/NESTS.md
 
@@ -32,8 +32,9 @@ reaches it (section 9).
   over the ground line, at most `MAX_PERCH_TOP` (540) (`packages/shared/src/perches.ts`).
 - **Movement.** Jump, double flap and glide (OP-084) work everywhere; dash and pogo stay in the climb;
   the wall-kick turns on per realm where a lock needs it.
-- **Phones play the tree in landscape only** (OP-155, decision (d)); a phone held upright sees a card
-  asking to turn it. PLANNED (OP-156). QA's device matrix (OP-095) adds landscape on every device.
+- **Phones play the tree in landscape only** (OP-155, decision (d)); a phone held upright in a tree
+  room sees a card over the game asking to turn it [BUILT: OP-156]; a tablet or a computer plays as it
+  is. QA's device matrix (OP-095) adds landscape on every device.
 - **Every realm's branch has one shape** (OP-152): its common area and its game at the base, near the
   trunk; its adventure out toward the tip; its payoff at the tip, reachable with single jumps (Tier 1).
 
@@ -239,7 +240,8 @@ the market's common square (`e1`, +1) and its roof run (`e2`, +2). Each screen h
   swaps it for a keeper's token for that tab only (`KEEPER_TTL_S`, 12 hours), and the room server lets
   that owl into a gated tree room. Add `room=<id>` to start in a tree room, e.g. `?room=l1&keeper=1`.
 - **The realms switch [BUILT].** A tree room is `gated`: closed to everyone but keepers until its id is in
-  the realms switch's `open` list on the keepers' capacity page.
+  the realms switch's `open` list on the keepers' capacity page, or while the tree takes a share of new
+  owls (the entries setting, below).
 - **The ledge painter [BUILT: OP-156].** Keepers only: add `&paint=1` with the keeper's token. It shows
   the room's ledges with their heights, suggests ledges from the playfield in view, and lets a keeper
   draw, move and delete ledges, walls, hazards and fronts, with undo; Try lets the keeper's owl stand on
@@ -247,13 +249,27 @@ the market's common square (`e1`, +1) and its roof run (`e2`, +2). Each screen h
   room, checked by `checkMasks`); `GET /api/masks/<room>` reads it back. `pnpm masks:pull <room>` prints
   it as room data to paste into `packages/shared/rooms/index.ts`, with what differs from the room now.
   The game never reads a draft: a ledge is the park's once it is in the room data.
+  Suggest reads the tops of what is painted against the keyed-out sky. On level 1 it found 8 of the 25
+  ledges: the wall's top, three of the crate stacks, the stall roofs, the barrel and the roof run's two
+  roofs. It also offered 54 tops that are not ledges (lanterns, signs, the gate's roof, the tree's
+  crown), which stay untaken. A ledge painted over other solid art (the stair inside the trunk, the
+  boulder before the wall, the plinth and its steps) gets no suggestion: draw it by hand.
 - **The spot placer.** PLANNED (OP-156): in the same painter, a keeper picks a name from the room's list
   (section 4) and taps the playfield to place it, then saves; the pull script prints the room's
   `places`.
-- **The entries setting.** PLANNED (OP-156): a keepers' setting beside the opening switch that sends new
-  arrivals to map 1, to map 2, or a share of them to each. While it says map 1, the tree stays dark.
-- **The turn-your-phone card.** PLANNED (OP-156): a phone held upright in a tree room sees a card asking
-  to turn it to landscape.
+- **The entries setting [BUILT: OP-156].** A card on the keepers' capacity page, beside the realms
+  switch: of every hundred new owls, how many start in the tree (0 to 100, kept with the realms switch as
+  `tree`). At 0, as deployed, the tree is dark and only a keeper's token reaches it. Above 0 its gated
+  rooms are open to every owl the front gate lets in. Play still lands every owl in its own nest; for
+  an owl the tree takes (about the share, each owl the same way every visit), the nest's door leads to
+  the tree's arrival (`TREE_ARRIVAL`: level 1 until level 5 is built). A guest pass while the park
+  takes tickets always starts in today's park. Back to 0, every owl in the tree is sent to the hub, and
+  an owl of the tree takes today's park's ways again. The same setting answers to the admin API as
+  `{"realms": {"tree": n}}`.
+- **The turn-your-phone card [BUILT: OP-156].** In a tree room, a phone held upright (a touch screen
+  under 600 CSS pixels across) sees a card over the game asking to turn it sideways, and nothing under
+  it takes a tap; it goes once the phone is turned. The cards that ask the visitor something ("Still
+  here?", the account screens) stay above it. Its words wait on the owner's approval.
 
 ## 10. Building a level, step by step
 
