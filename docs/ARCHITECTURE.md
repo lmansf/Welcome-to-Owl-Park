@@ -401,6 +401,20 @@ when the gate closes stays in: a pass carries when it was made (`iat`), and one 
 switch closed the gate stays admitted until it expires; the next pass applies the rule at the
 turnstiles.
 
+**The nightly restart** (OP-181, `apps/edge/src/crons.ts`): once inside, an owl is never sent out
+when its ticket runs out; it is only not let back in. Every day at 09:00 UTC (4:00 AM Eastern in
+winter, 5:00 AM in summer) a cron restarts the park: the vote ledger keeps the restart's time beside
+the opening switch, and every room object sends its sockets a short notice (`RESTART_NOTICE`), then
+closes them about ten seconds later with `CLOSE.RESTART` (4016) by its alarm. The page does not
+reconnect: it goes to the home screen with a calm line (`RESTART_HOME`) and drops its pass, so Play
+starts on a fresh guest pass. While the gate takes tickets, no pass made before the last restart
+goes past the turnstiles, and `/api/entry` says it is not admitted: the owl walks through them
+again, they scan its ticket again, and an expired one is refused there. The pass they admit with is
+dated at the scan. With the gate open nothing changes. The keepers can restart by hand with
+`POST /api/admin/restart` (the admin key), to try it on staging. With one object per room, nests
+are their own objects and are not told; their owls are not sent home, and go past the turnstiles
+only by scanning again.
+
 The ticket flow (C35; the Worker's side is built, OP-071, and tested against a stand-in store;
 the store's own setup, the app, its secrets and the webhooks, is PLANNED (OP-024); the
 products are PLANNED (OP-009, OP-047, OP-063); see `docs/DEPLOY.md`, Selling tickets): Shopify sells tickets and passes and keeps the buyer. Its webhooks reach
