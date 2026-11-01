@@ -119,7 +119,8 @@ import type { Ribbon } from '../ui/ribbon';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_GROUND, getRoom } from '../rooms';
+import { dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
@@ -253,6 +254,8 @@ export class RoomScene extends Phaser.Scene {
   private built = false;
   /** The room's art tiles that scroll at a rate of their own (OP-156), put back in place when the camera is fitted. */
   private parallax: Array<{ t: RoomTile; img: Phaser.GameObjects.Image }> = [];
+  /** What a room of the tree drew to read at a glance (OP-173), for the debug state. */
+  private treeDress: TreeDressing | null = null;
   /** The point a tree room's camera follows: the own owl as drawn (OP-156). */
   private readonly camAt = { x: 0, y: 0 };
   private conn: RoomConnection | null = null;
@@ -440,6 +443,7 @@ export class RoomScene extends Phaser.Scene {
     this.actions = [];
     // The scene is reused room after room: the last room's tiles went with its display list and art.
     this.parallax = [];
+    this.treeDress = null;
     this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
     this.keyDir = null;
     this.keyWalk = false;
@@ -587,8 +591,10 @@ export class RoomScene extends Phaser.Scene {
       if (!live()) return;
       if (await sharpenArt(this, key, await copy, live, () => this.still())) {
         this.soft.delete(key);
-        // A sharper copy has a bigger frame: the strips of a fading tile are cut again from it.
+        // A sharper copy has a bigger frame: the strips of a fading tile are cut again from it, and so
+        // are the tree's shapes in front of the owls (OP-173).
         for (const { t, img } of this.parallax) if (t.key === key) this.cropFade(t, img);
+        this.treeDress?.recut(key);
       }
     }
   }
@@ -665,7 +671,13 @@ export class RoomScene extends Phaser.Scene {
 
     // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
     // hairline of the clear colour shows at a join while the camera scrolls.
-    for (const t of backgroundTiles(room)) for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) this.placeTile(t, img);
+    const playTiles: Phaser.GameObjects.Image[] = [];
+    for (const t of backgroundTiles(room)) {
+      for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) {
+        this.placeTile(t, img);
+        if ((t.rate ?? 1) === 1) playTiles.push(img);
+      }
+    }
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
@@ -711,6 +723,17 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const t of foregroundTiles(room)) {
       if (this.textures.exists(t.key)) for (const img of this.tileImages(t, room.size.h + 100, ROOM_W, ROOM_H)) this.placeTile(t, img);
+    }
+    // A room of the tree reads at a glance (OP-173): its ledges' edges and the shades over the playfield
+    // under the owls, the shapes painted in front of the path over them, under the overlay.
+    if (mapOf(room) === 2) {
+      this.treeDress = dressTreeRoom(this, room, playTiles, {
+        ground: TREE_GROUND,
+        depths: { shade: -0.9, lip: -0.8, front: room.size.h + 50, mark: room.size.h + 60 },
+        open: (door) => !this.realmClosed(this.doorTo(door)?.room),
+        calm: this.calm(),
+        onMarkTap: (door) => this.walkToDoorway(door.id),
+      });
     }
 
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1);
@@ -1546,6 +1569,8 @@ export class RoomScene extends Phaser.Scene {
     layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
     /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
     owlScale: number;
+    /** In a room of the tree, what it drew to read at a glance (OP-173): fronts, shades, ledge edges and doorway marks. */
+    tree: TreeDress | null;
     /** Where the camera's view is, in room pixels (OP-156: a tree room's camera follows the owl as drawn). */
     view: { x: number; y: number; w: number; h: number };
   } | null {
@@ -1571,6 +1596,7 @@ export class RoomScene extends Phaser.Scene {
         .filter(({ img }) => (img.getData('fade') ?? 'middle') === 'middle')
         .map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight, fade: tileFade(t) })),
       owlScale: this.me.scaleX / (OWL_SCALE * speciesOf(this.look).size),
+      tree: this.treeDress && { fronts: this.treeDress.fronts, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
