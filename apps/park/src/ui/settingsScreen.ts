@@ -46,12 +46,42 @@ export function syncSettings(root: ParentNode, s: Settings): void {
 }
 
 /**
- * The settings themselves, as rows, for the home screen's Settings and the Menu's Settings tab
- * (OP-108): the thumbstick (touch screens), the bubbles of what owls say, the park's sounds, calm
- * motion, full screen where the browser allows it, and which keys and touches do what. `redraw`
- * draws them again (full screen changed).
+ * The Send feedback row's words (OP-167): the first row of Settings, wherever they open.
+ *
+ * TODO-DOCS (OP-167): docs/FEEDBACK.md and PLAYBOOK.md section 7: Feedback is Send feedback, the first
+ * row of Settings, in the Menu's Settings tab and in the home screen's Settings (before the park,
+ * with no way back to a Menu); the same form and the same sending as before.
  */
-export function settingsRows(store: SettingsStore, redraw: () => void): HTMLElement[] {
+export const FEEDBACK_ROW_WORDS = {
+  title: 'Something wrong? An idea?',
+  note: 'Tell the park’s keepers: they read every note.',
+  button: 'Send feedback',
+} as const;
+
+/** A row of Settings with a button at its end: its words on the left, a note under them. */
+function buttonRow(title: string, note: string, label: string, onClick: () => void): { row: HTMLElement; button: HTMLButtonElement } {
+  const row = document.createElement('div');
+  row.className = 'opt';
+  const text = document.createElement('span');
+  text.append(title);
+  const small = document.createElement('small');
+  small.textContent = note;
+  text.appendChild(small);
+  const button = document.createElement('button');
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  row.append(text, button);
+  return { row, button };
+}
+
+/**
+ * The settings themselves, as rows, for the home screen's Settings and the Menu's Settings tab
+ * (OP-108): first Send feedback, which opens the Feedback form (OP-167), then the thumbstick (touch
+ * screens), the bubbles of what owls say, the park's sounds, calm motion, full screen where the
+ * browser allows it, and which keys and touches do what. `redraw` draws them again (full screen
+ * changed). Every place Settings open draws these rows, so each has Send feedback first.
+ */
+export function settingsRows(store: SettingsStore, redraw: () => void, feedback: () => void): HTMLElement[] {
   if (!styled) {
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -86,7 +116,12 @@ export function settingsRows(store: SettingsStore, redraw: () => void): HTMLElem
       e.textContent = t;
       return e;
     };
+    const fb = buttonRow(FEEDBACK_ROW_WORDS.title, FEEDBACK_ROW_WORDS.note, FEEDBACK_ROW_WORDS.button, feedback);
+    fb.row.dataset['feedbackRow'] = '';
+    fb.button.dataset['screen'] = 'feedback';
+    fb.button.dataset['key'] = 'feedback';
     rows.push(
+      fb.row,
       h('On screen'),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
       toggle('bubbles', 'Show what owls say', ''),
@@ -96,22 +131,12 @@ export function settingsRows(store: SettingsStore, redraw: () => void): HTMLElem
       toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
     );
     if (document.fullscreenEnabled) {
-      const row = document.createElement('div');
-      row.className = 'opt';
-      const text = document.createElement('span');
-      text.append('Full screen');
-      const small = document.createElement('small');
-      small.textContent = 'The park fills the whole screen. Esc or the browser’s own button leaves it.';
-      text.appendChild(small);
-      const b = document.createElement('button');
-      b.dataset['fullscreen'] = '';
-      b.textContent = document.fullscreenElement ? 'Leave' : 'Go full screen';
-      b.addEventListener('click', () => {
+      const full = buttonRow('Full screen', 'The park fills the whole screen. Esc or the browser’s own button leaves it.', document.fullscreenElement ? 'Leave' : 'Go full screen', () => {
         if (document.fullscreenElement) void document.exitFullscreen().then(redraw, redraw);
         else void document.documentElement.requestFullscreen().then(redraw, redraw);
       });
-      row.append(text, b);
-      rows.push(h('Screen'), row);
+      full.button.dataset['fullscreen'] = '';
+      rows.push(h('Screen'), full.row);
     }
     rows.push(h('Controls'));
     const keys = document.createElement('div');
@@ -137,15 +162,20 @@ export function settingsRows(store: SettingsStore, redraw: () => void): HTMLElem
   return rows;
 }
 
-/** Settings from the home screen, before the park (in the park they are the Menu's Settings tab). */
-export function createSettingsScreen(root: HTMLElement, store: SettingsStore): SettingsScreen {
+/**
+ * Settings from the home screen, before the park (in the park they are the Menu's Settings tab).
+ * `feedback` opens the Feedback form; it is given the button that opened Settings, which takes the
+ * focus back when the form closes.
+ */
+export function createSettingsScreen(root: HTMLElement, store: SettingsStore, feedback: (opener: HTMLElement | null) => void): SettingsScreen {
   const modal = createModal(root, { name: 'settings', label: 'Settings', layout: 'card' });
   const box = modal.box;
+  let openedBy: HTMLElement | null = null;
 
   const render = () => {
     box.innerHTML = '';
     box.appendChild(modalHeader('Settings', { onClose: () => modal.close(), closeLabel: 'Close settings' }));
-    box.append(...settingsRows(store, render));
+    box.append(...settingsRows(store, render, () => feedback(openedBy)));
     syncSettings(box, store.get());
   };
   store.onChange((s) => syncSettings(box, s));
@@ -155,6 +185,7 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore): S
 
   return {
     open(opener) {
+      openedBy = opener ?? null;
       render();
       modal.open(opener);
     },
