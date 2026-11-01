@@ -214,3 +214,84 @@ describe('hostile values at every door the Worker has (OP-143)', () => {
     expect(line['blocked']).toBe('<img src=x onerror=alert(1)>');
   });
 });
+
+// ---- No database address or key in anything the Worker answers (OP-150, item 2) ----
+//
+// The bundle check (tools/security/bundle-check.mjs) reads the built page. This reads the other half
+// the pen-test pointed at: what the Worker itself says back. Every route index.ts names is asked as
+// a stranger, as an owl with a pass and as a keeper with the keepers' key, by GET and by POST, with
+// the collection log's Supabase address and a JWT-shaped key set as the Worker's secrets, and with
+// any upstream call (the store, the log) answering with that address and key. No answer may hold
+// either, nor the word, in its body or its headers.
+
+/** Made up here, so no string in this file looks like a key to a scanner. */
+const part = (c: string) => c.repeat(16);
+const JWT_SHAPED = ['eyJ' + part('a'), 'eyJ' + part('b'), part('c')].join('.');
+const JWT = /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/;
+const LOG_HOST = 'abcdefghijklmnop.' + 'supa' + 'base.co';
+const DATABASE = /supabase/i;
+
+/** Every path index.ts routes on, read from the source so a new route is covered the day it lands. */
+async function routes(): Promise<string[]> {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (path: string, encoding: string) => string };
+  const source = readFileSync('src/index.ts', 'utf8');
+  const found = new Set<string>(['/', '/api/account/protect', '/api/account/restore', '/api/account/confirm', '/api/account/owls', '/api/account/bind']);
+  for (const m of source.matchAll(/pathname(?: === |\.startsWith\()'(\/[^']*)'/g)) found.add(m[1]!.endsWith('/') ? `${m[1]}l1` : m[1]!);
+  return [...found].filter((p) => !p.startsWith('/ws')).sort();
+}
+
+describe('no database address or key in any answer the Worker gives (OP-150)', () => {
+  it('every route, asked every way, says nothing of the database or its key', async () => {
+    const e = park.env({
+      PARK_LOG_URL: `https://${LOG_HOST}/functions/v1/owl-park-log`,
+      FRAUD_SCORE_URL: `https://${LOG_HOST}/functions/v1/owl-park-score`,
+      FRAUD_SCORE_KEY: JWT_SHAPED,
+      FRAUD_HASH_SALT: 'salt-0123456789abcdef0123456789',
+    });
+    // The keepers' capacity page counts owls in every room: here each room answers it holds none.
+    (e as unknown as { ROOMS: unknown }).ROOMS = { idFromName: (name: string) => name, get: () => ({ fetch: async () => Response.json({}) }) };
+    const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ url: `https://${LOG_HOST}`, key: JWT_SHAPED }));
+    try {
+      const paths = await routes();
+      // The reading of index.ts found the routes (a regex that stopped matching would pass vacuously).
+      expect(paths.length).toBeGreaterThan(30);
+      expect(paths).toContain('/api/health');
+      expect(paths).toContain('/api/admin/collect-log');
+      const askers: Record<string, Record<string, string>> = {
+        stranger: {},
+        owl: { Authorization: `Bearer ${await passFor(false)}` },
+        keeper: { 'X-Admin-Key': ADMIN, Authorization: `Bearer ${await passFor()}` },
+      };
+      let asked = 0;
+      let thrown = 0;
+      for (const path of paths) {
+        for (const [who, headers] of Object.entries(askers)) {
+          for (const method of ['GET', 'POST']) {
+            const init: RequestInit = method === 'GET' ? { headers } : { method, headers: { 'Content-Type': 'application/json', ...headers }, body: '{}' };
+            // The fakes behind the Worker answer every object call with {}: a route that needs more
+            // throws here, which the platform turns into its own bare error page, holding nothing of ours.
+            const r = await call(e, path, init).catch(() => null);
+            if (!r) {
+              thrown += 1;
+              continue;
+            }
+            const text = await r.text();
+            const head = [...r.headers].map(([k, v]) => `${k}: ${v}`).join('\n');
+            const where = `${method} ${path} as ${who} -> ${r.status}`;
+            for (const said of [text, head]) {
+              expect(DATABASE.test(said), `${where} names the database`).toBe(false);
+              expect(JWT.test(said), `${where} holds a JWT-shaped string`).toBe(false);
+              expect(said.includes(JWT_SHAPED), `${where} holds the log's key`).toBe(false);
+            }
+            asked += 1;
+          }
+        }
+      }
+      // Nearly every door answered for itself, so the sweep read real answers, not the fakes failing.
+      expect(asked + thrown).toBe(paths.length * 6);
+      expect(thrown).toBeLessThan(asked / 10);
+    } finally {
+      upstream.mockRestore();
+    }
+  });
+});
