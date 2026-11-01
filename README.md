@@ -84,7 +84,7 @@ Start with [docs/README.md](docs/README.md): the map of every file below, a star
 table, and the Ticket Board conventions. Agents new to the project read
 [docs/agents.md](docs/agents.md) first, then [docs/GLOSSARY.md](docs/GLOSSARY.md).
 
-- [docs/agents.md](docs/agents.md): who does what: every agent and human, what each may write to and never does, how work moves.
+- [docs/agents.md](docs/agents.md): who does what: Logan and Claude Duet, the role hats it wears, what each may write to and never does, how work moves.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the system as built, section by section, each tagged BUILT or PLANNED: the repository, the room server, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, and a diagram from a ticket purchase to the hub.
 - [docs/DEPLOY.md](docs/DEPLOY.md): Cloudflare, GitHub Pages and Supabase setup, all on free tiers; where to run commands (bash and PowerShell); the error table; selling tickets through the store.
 - [docs/PLAYBOOK.md](docs/PLAYBOOK.md): when the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits; the controls and the Menu as a visitor has them.
