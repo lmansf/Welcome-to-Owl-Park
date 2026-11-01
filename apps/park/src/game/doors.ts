@@ -1,4 +1,4 @@
-import { STREET_ROOM, distanceToRect, nestDoorIndex, pointInRect, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { STREET_ROOM, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
 import { NEST_ROOM, roomFor } from '../rooms';
 
 /**
@@ -27,10 +27,13 @@ export const WAY_DOOR_PX = 8;
  * street) but the one the tap is aimed at, a little wider than drawn, and none the owl at `pos`
  * already stands in. A leg that ended by one on its way would go through it.
  */
-export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean): Rect[] {
+export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean, map: 1 | 2 = 1): Rect[] {
   const m = WAY_DOOR_PX;
   return room.doors
-    .filter((d) => (d.to ? !closed(d.to.room) : room.id === STREET_ROOM && nestDoorIndex(d.id) !== null))
+    .filter((d) => {
+      const to = doorTarget(d, map);
+      return to ? !closed(to.room) : room.id === STREET_ROOM && nestDoorIndex(d.id) !== null;
+    })
     .filter((d) => distanceToRect(aim, d.rect) > DOOR_AIM_PX)
     .map((d) => ({ x: d.rect.x - m, y: d.rect.y - m, w: d.rect.w + 2 * m, h: d.rect.h + 2 * m }))
     .filter((r) => !pointInRect(pos, r));
@@ -49,14 +52,15 @@ export const AHEAD_PX = 100;
  * art); a doorway into a room that is `closed` (a realm not open yet) or back into this room leads
  * nowhere new.
  */
-export function roomsAhead(room: RoomDef, pos: Vec2, walkTo: Vec2 | null, fromKeys: boolean, closed: (roomId: string) => boolean): RoomDef[] {
+export function roomsAhead(room: RoomDef, pos: Vec2, walkTo: Vec2 | null, fromKeys: boolean, closed: (roomId: string) => boolean, map: 1 | 2 = 1): RoomDef[] {
   const out: RoomDef[] = [];
   if (!walkTo) return out;
   for (const door of room.doors) {
     const aimed = distanceToRect(walkTo, door.rect) <= 2 * DOOR_AIM_PX;
     const near = fromKeys && distanceToRect(pos, door.rect) <= AHEAD_PX;
     if (!aimed && !near) continue;
-    const to = door.to ? (closed(door.to.room) ? undefined : roomFor(door.to.room)) : room.id === STREET_ROOM && nestDoorIndex(door.id) !== null ? NEST_ROOM : undefined;
+    const way = doorTarget(door, map);
+    const to = way ? (closed(way.room) ? undefined : roomFor(way.room)) : room.id === STREET_ROOM && nestDoorIndex(door.id) !== null ? NEST_ROOM : undefined;
     if (to && to.id !== room.id && !out.includes(to)) out.push(to);
   }
   return out;

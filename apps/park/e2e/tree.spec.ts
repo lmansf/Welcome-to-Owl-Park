@@ -93,7 +93,21 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     expect((await state(page)).pos.x).toBeGreaterThanOrEqual(600);
   });
 
-  test('climbs the roof run in the market, crates a jump a step, up to the high roof by the lantern tower', async ({ page }) => {
+  test('the archway at the roof run’s east end goes into the market, whose way out leads back to the archway', async ({ page }) => {
+    await openPark(page, { room: 'l1', spawn: 'east' });
+    await walkToDoor(page, 'to-market');
+    await expect.poll(async () => (await state(page)).room, { timeout: 15_000 }).toBe('market');
+    // In the market, the way out leads this owl, walking the tree, back to the tree.
+    expect((await state(page)).doors.find((d) => d.id === 'to-hub')?.to).toBe('l1');
+    await walkToDoor(page, 'to-hub');
+    await expect.poll(async () => (await state(page)).room, { timeout: 15_000 }).toBe('l1');
+    const s = await state(page);
+    expect(Math.abs(s.pos.x - (3 * 1600 + 1230))).toBeLessThan(60);
+    expect(s.pos.y).toBe(GROUND);
+  });
+
+  test('climbs the roof run in the market, crates a jump a step, up to the high roof and on to the lantern tower’s balcony', async ({ page }) => {
+    test.slow(); // seven ledges a walk and a jump apart, drawn with software WebGL
     await openPark(page, { room: 'l1', spawn: 'east' });
     const RUN = 3 * 1600;
     await walkAndStop(page, RUN + 200, GROUND);
@@ -112,5 +126,12 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await standsAt(page, 310);
     await jump(page);
     await standsAt(page, 402);
+    // Along the high roof to its end under the tower's balcony, a jump up, and off the balcony's far end.
+    await walkAndStop(page, RUN + 1300, GROUND);
+    await standsAt(page, 402);
+    await jump(page);
+    await standsAt(page, 530);
+    await walkAndStop(page, RUN + 1560, GROUND);
+    await standsAt(page, 0);
   });
 });

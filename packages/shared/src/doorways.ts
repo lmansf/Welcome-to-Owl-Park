@@ -75,6 +75,11 @@ export function laneThrough(room: RoomDef, door: DoorDef, p: Vec2): Lane {
  * Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. A
  * nest door on the street leads into a nest though it has no `to` (each visitor's door goes to its own place).
  */
+/** Where `door` leads an owl walking `map`: its way back to the tree for a tree owl, where it has one, else its own (OP-162). */
+export function doorTarget(door: DoorDef, map: 1 | 2): DoorDef['to'] {
+  return map === 2 && door.toTree ? door.toTree : door.to;
+}
+
 export function inExit(room: RoomDef, p: Vec2): boolean {
   return room.doors.some((d) => (d.to !== undefined || nestDoorIndex(d.id) !== null) && pointInRect(p, d.rect));
 }
@@ -87,7 +92,7 @@ export function inExit(room: RoomDef, p: Vec2): boolean {
  */
 export function arrivalPoint(room: RoomDef, spawnName: string | undefined, from: string | undefined, lane: Lane | undefined): Vec2 {
   const spawn = findSpawn(room, spawnName);
-  const back = from === undefined ? undefined : room.doors.find((d) => d.to?.room === from);
+  const back = from === undefined ? undefined : room.doors.find((d) => d.to?.room === from || d.toTree?.room === from);
   if (!lane || !back || doorAxis(room, back) !== lane.axis) return { ...spawn };
   const shift = (lane.t - 0.5) * (lane.axis === 'x' ? back.rect.w : back.rect.h);
   for (const k of [1, 0.75, 0.5, 0.25]) {
