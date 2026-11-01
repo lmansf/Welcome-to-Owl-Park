@@ -439,14 +439,35 @@ setInterval(() => {
 }, 60_000);
 const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   logIn: (opener) => {
-    // The owl is made on this device, and the builder opens on it before anything else.
-    loggedIn = true;
-    keepLook(lookNow());
-    startCollection();
-    home.show(true);
-    drawOwl(home.frame(), false);
-    void refreshWallet();
-    hud.openOwl(opener);
+    // Which owl are you (OP-076) first: the owl is made on this device at its reveal (or at Skip),
+    // then Keep it goes into its nest and Make it yours (or Skip) opens the builder on it.
+    const makeOwl = (look: OwlLook) => {
+      if (!loggedIn) {
+        loggedIn = true;
+        startCollection();
+        void refreshWallet();
+      }
+      keepLook(look);
+      hud.setLook(look);
+    };
+    hud.openWhichOwl(
+      {
+        firstRun: true,
+        seed: playerId,
+        base: lookNow,
+        reveal: makeOwl,
+        done: (end) => {
+          if (!atHome) return;
+          if (end.kind === 'skip') makeOwl(lookNow());
+          if (end.kind === 'keep' || end.kind === 'make') keepLook(end.look);
+          home.show(loggedIn);
+          if (loggedIn) drawOwl(home.frame(), false);
+          if (end.kind === 'keep') startPlay();
+          else if (end.kind === 'make' || end.kind === 'skip') hud.openOwl(opener);
+        },
+      },
+      opener,
+    );
   },
   play: () => startPlay(),
   settings: (opener) => hud.openSettings(opener),
