@@ -156,7 +156,7 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await page.setViewportSize(UPRIGHT);
     await openPark(page, { room: 'l1', spawn: 'east' });
     await expect(card).toBeVisible();
-    await expect(card).toContainText('Turn your phone sideways');
+    await expect(card).toHaveText('This part of the park plays with your phone on its side.');
     // A tap on the card walks no owl.
     const at = (await state(page)).pos;
     await page.touchscreen.tap(UPRIGHT.width / 2, UPRIGHT.height * 0.8);

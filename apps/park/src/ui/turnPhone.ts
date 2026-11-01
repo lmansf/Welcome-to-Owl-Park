@@ -13,11 +13,9 @@ export interface TurnPhone {
   shown(): boolean;
 }
 
-/** Every word the card shows (for the owner's approval). */
+/** Every word the card shows: one line under the picture of a phone turning (the owner's pick, 2026-11-01). */
 export const TURN_PHONE_WORDS = {
-  title: 'Turn your phone sideways',
   text: 'This part of the park plays with your phone on its side.',
-  stuck: 'If the screen does not turn, check your phone’s screen rotation setting.',
 } as const;
 
 /** A phone, not a tablet: its short side is under this many CSS pixels (the largest phones are about 430). */
@@ -34,9 +32,7 @@ const CSS = `
 #hud.at-home .turn-phone.open{display:none}
 #hud .turn-phone .card{display:flex;flex-direction:column;align-items:center;gap:12px;width:min(320px,calc(100vw - 32px));padding:20px 16px;text-align:center;color:#F6F1E3}
 #hud .turn-phone svg{width:104px;height:104px}
-#hud .turn-phone h2{margin:0;font-size:22px}
-#hud .turn-phone p{margin:0;font-size:16px;line-height:1.35;opacity:.9}
-#hud .turn-phone p.stuck{font-size:14px;opacity:.7}
+#hud .turn-phone h2{margin:0;font-size:21px;line-height:1.3}
 `;
 
 /** A phone upright, faint, and the same phone on its side, with the arrow between them. */
@@ -62,18 +58,13 @@ export function createTurnPhone(root: HTMLElement): TurnPhone {
   layer.dataset['turnPhone'] = '';
   layer.setAttribute('role', 'dialog');
   layer.setAttribute('aria-modal', 'true');
-  layer.setAttribute('aria-label', TURN_PHONE_WORDS.title);
+  layer.setAttribute('aria-label', TURN_PHONE_WORDS.text);
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = ICON;
-  const title = document.createElement('h2');
-  title.textContent = TURN_PHONE_WORDS.title;
-  const text = document.createElement('p');
+  const text = document.createElement('h2');
   text.textContent = TURN_PHONE_WORDS.text;
-  const stuck = document.createElement('p');
-  stuck.className = 'stuck';
-  stuck.textContent = TURN_PHONE_WORDS.stuck;
-  card.append(title, text, stuck);
+  card.append(text);
   layer.append(card);
   root.append(layer);
 
