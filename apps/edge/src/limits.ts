@@ -33,7 +33,7 @@ export const API_LIMITS = {
   refused: { limit: 60, windowMs: 60_000 },
   /** Calls with a pass, by its owl's collection (or the pass, before it has one). */
   visitor: { limit: 120, windowMs: 60_000 },
-  /** A claim, a share, a scan at the gate, the pass link, the booth's checkout link and the account links, by owl (or address). */
+  /** A claim, a share, a scan at the gate, the pass link, the gate's checkout link and the account links, by owl (or address). */
   ticket: { limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, Limit>;
 

@@ -5,7 +5,8 @@
  * an owl's Opening Night Ticket has gone through the gate, the park gives it a cart link with the
  * pass, the code and the ticket's ID (`from_ticket`); the pass order comes back through the usual
  * webhook and the ticket book keeps the link and what the pass sold for (storeHooks.ts,
- * TicketBook.ts). The booth says passes are half price while the night runs.
+ * TicketBook.ts). While the night runs, an owl that buys a Day Ticket at the gate is offered the
+ * same pass (OP-180).
  *
  * The store's ticket products are asked for at most every few minutes and kept in this isolate.
  */

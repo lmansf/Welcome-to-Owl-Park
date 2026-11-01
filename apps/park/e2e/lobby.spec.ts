@@ -3,26 +3,18 @@ import { expect, test } from './fixtures';
 import { state } from './helpers';
 
 test.describe('the lobby (this device)', () => {
-  test('straight into the park with no room asked for, the lobby: the booth window, then the turnstiles into the hub', { tag: '@smoke' }, async ({ page }) => {
+  test('straight into the park with no room asked for, the lobby: no ticket booth (OP-180), and the turnstiles into the hub', { tag: '@smoke' }, async ({ page }) => {
     // Past the home screen (home=0) with no room asked for: the park's front entrance.
     await page.goto('/?transport=local&home=0');
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     const s = await state(page);
     expect(s.room).toBe('lobby');
-    expect(s.doors.map((d) => d.id).sort()).toEqual(['booth', 'gate', 'to-homes']);
+    expect(s.doors.map((d) => d.id).sort()).toEqual(['gate', 'to-homes']);
     expect(s.doors.find((d) => d.id === 'to-homes')?.to).toBe('homes');
     await expect(page.getByText('Walk through the turnstiles')).toBeVisible();
 
-    // The booth: tickets are not on sale yet, so it says they are coming and the gate is open.
-    const booth = s.doors.find((d) => d.id === 'booth')!;
-    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: booth.x, y: booth.y });
-    const boothButton = page.locator('[data-action="booth"]');
-    await expect(boothButton).toBeVisible({ timeout: 15_000 });
-    await boothButton.click();
-    await expect(page.locator('[data-booth="say"]')).toContainText('coming soon');
-    await expect(page.locator('[data-booth="buy"]')).toHaveCount(0);
-    await page.keyboard.press('Escape');
-    await expect(page.locator('[data-booth="say"]')).toBeHidden();
+    // No booth to walk to (OP-180): the turnstiles sell a ticket when the gate takes them.
+    await expect(page.locator('[data-action="booth"]')).toHaveCount(0);
 
     // The turnstiles: walking into them welcomes the owl and takes it into the hub.
     const gate = s.doors.find((d) => d.id === 'gate')!;

@@ -25,8 +25,8 @@ const say = (t) => { $('#say').textContent = t; };
 const locked = (yes) => { $('#key').hidden = !yes; $('#board').hidden = yes; };
 const eastern = (ms) => new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' ET';
 const ASK = {
-  ticket: 'Take tickets now? Owls without a ticket stop at the turnstiles and the booth sells tickets. Owls already inside stay in.',
-  open: 'Open the gate to everyone? The turnstiles let every owl through and the booth stops selling.',
+  ticket: 'Take tickets now? Owls without a ticket stop at the turnstiles, which sell them a Day Ticket. Owls already inside stay in.',
+  open: 'Open the gate to everyone? The turnstiles let every owl through and stop selling tickets.',
   deployed: 'Hand the gate back to the deployed setting (GATE in wrangler.jsonc)?',
 };
 
@@ -55,8 +55,8 @@ async function call(method, body) {
 function show(g) {
   $('#mode').textContent = g.mode === 'ticket' ? 'The gate takes tickets' : 'The gate is open to everyone';
   $('#what').textContent = g.mode === 'ticket'
-    ? 'Only owls with a ticket go through the turnstiles, and the booth sells tickets.'
-    : 'The turnstiles let every owl through, and the booth says tickets are coming soon.';
+    ? 'Only owls with a ticket go through the turnstiles, which sell a Day Ticket to an owl without one.'
+    : 'The turnstiles let every owl through, and sell nothing.';
   $('#since').textContent = g.set ? 'Set by this switch on ' + eastern(g.set.at) + '.' : 'As deployed (GATE in wrangler.jsonc: ' + g.deployed + ').';
   for (const b of document.querySelectorAll('[data-mode]')) {
     const m = b.dataset.mode;

@@ -251,7 +251,7 @@ describe('the Worker’s log (OP-134)', () => {
     expect(park.book.get(tickets[0]!.id)?.device).toBe('c_first00001');
   });
 
-  it('gives an owl the booth’s checkout link, and tells the paid order’s tickets landing on that owl (OP-175)', async () => {
+  it('gives an owl the gate’s checkout link, and tells the paid order’s tickets landing on that owl (OP-175)', async () => {
     const store = new FakeStore();
     vi.stubGlobal('fetch', store.fetch);
     const e = park.env({ SHOPIFY_SHOP: SHOP, SHOPIFY_ADMIN_TOKEN: 'shpat_test', SHOPIFY_WEBHOOK_SECRET: HOOKS });
@@ -277,11 +277,49 @@ describe('the Worker’s log (OP-134)', () => {
     expect(JSON.stringify(cap.lines)).not.toContain(token);
   });
 
-  it('answers the booth’s checkout as not set up without a store or a Day Ticket on sale (OP-175)', async () => {
+  it('answers the gate’s checkout as not set up without a store or a Day Ticket on sale (OP-175)', async () => {
     const pass = await mintPass(KEY, { id: 'v_buyer00002', exp: nowS() + 600, adm: false, cid: 'c_buyer00002' });
     const r = await call(park.env(), '/api/tickets/checkout', { method: 'POST', headers: { Authorization: `Bearer ${pass}` }, body: '{}' });
     expect(r.status).toBe(503);
     expect(await r.json()).toEqual({ error: 'not-set-up' });
+  });
+
+  it('offers a Day ticket’s owl the half-price pass only while opening night runs, and not without the code (OP-180)', async () => {
+    const night = false;
+    const catalogue = async (_url: string, init: RequestInit) => {
+      const { query } = JSON.parse(String(init.body)) as { query: string };
+      if (!query.includes('OwlParkCatalogue')) return Response.json({ data: null });
+      const nodes = [
+        { kind: { value: 'day' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/100' }] } },
+        { kind: { value: 'annual' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/200' }] } },
+        ...(night ? [{ kind: { value: 'opening-night' }, start: { value: new Date(Date.now() - 3_600_000).toISOString() }, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/300' }] } }] : []),
+      ];
+      return Response.json({ data: { products: { nodes } } });
+    };
+    vi.stubGlobal('fetch', catalogue);
+    const { claim, tickets } = await park.book.issue('1101', [{ line: 'D1', quantity: 1, kind: 'day', lengthMs: DEFAULT_LENGTH_MS.day, validFrom: null, validUntil: null }], false, Date.now());
+    await park.book.claim(claim!, 'c_buyer00003');
+    const id = tickets[0]!.id;
+    const pass = await mintPass(KEY, { id: 'v_buyer00003', exp: nowS() + 600, adm: false, cid: 'c_buyer00003' });
+    const ask = (e: Env) => call(e, '/api/tickets/pass', { method: 'POST', headers: { Authorization: `Bearer ${pass}` }, body: JSON.stringify({ id }) });
+    const store = { SHOPIFY_SHOP: SHOP, SHOPIFY_ADMIN_TOKEN: 'shpat_test', SHOPIFY_TEST_ORIGIN: 'http://localhost:8799' };
+    // Without the code, nothing to offer.
+    const unset = await ask(park.env(store));
+    expect(unset.status).toBe(503);
+    expect(await unset.json()).toEqual({ ok: false, reason: 'not-set-up' });
+    // With it, any day of the season (not only opening night): the pass's cart link, with the code and the Day ticket it comes from.
+    const e = park.env({ ...store, OPENING_PASS_CODE: 'OPENTONIGHT' });
+    const r = await ask(e);
+    expect(r.status).toBe(200);
+    const link = new URL(((await r.json()) as { url: string }).url);
+    expect(link.origin + link.pathname).toBe(`https://${SHOP}/cart/200:1`);
+    expect(link.searchParams.get('discount')).toBe('OPENTONIGHT');
+    expect(link.searchParams.get('attributes[from_ticket]')).toBe(id);
+    // Another owl may not have this ticket's offer.
+    const other = await mintPass(KEY, { id: 'v_buyer00004', exp: nowS() + 600, adm: false, cid: 'c_buyer00004' });
+    const theirs = await call(e, '/api/tickets/pass', { method: 'POST', headers: { Authorization: `Bearer ${other}` }, body: JSON.stringify({ id }) });
+    expect(theirs.status).toBe(409);
+    expect(await theirs.json()).toEqual({ ok: false, reason: 'not-yours' });
   });
 
   it('tells each store webhook: turned away, taken, an order recorded, a repeat, and one that failed', async () => {

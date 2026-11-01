@@ -39,8 +39,8 @@ board (PM hat).
 
 ## 3. Pause ticket sales
 
-- `/admin/gate` → **Open to everyone**: within ten seconds the booth stops selling and every owl walks
-  through the turnstiles. Tickets already sold keep working; a ticket's time runs from its first scan
+- `/admin/gate` → **Open to everyone**: within ten seconds the turnstiles stop selling Day Tickets
+  and every owl walks through them. Tickets already sold keep working; a ticket's time runs from its first scan
   as always.
 - To stop the store as well: in Shopify, set the ticket products to Draft; they leave the store at
   once.
@@ -80,18 +80,27 @@ its own cap of 80.
 
 Nothing more specific (no times, no refunds, no causes) without the owner's word.
 
-## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077)]
+## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077, OP-180)]
 
 What a visitor has in hand on main 8a1bbb9. Nothing a visitor does needs typing.
 
 **On a phone, the pad** (`apps/park/src/ui/hud.ts`, `joystick.ts`): tap where you want to walk, or
 hold the see-through thumbstick in the bottom-right corner. On the left, two round buttons on a
 diagonal: **Interact** (nearer the middle) does what the owl stands at, the same as E on a keyboard
-(talk to an NPC owl, flop in a leaf pile, browse a stall, the booth, Decorate, Look in the mirror),
+(talk to an NPC owl, flop in a leaf pile, browse a stall, the gift shop, Decorate, Look in the mirror),
 and rests dimmed where there is nothing; **Jump** (nearer the corner) hops. The **Menu** is a smaller,
 darker round button tucked in the bottom-left corner, and **Emotes** sits above the pad. All are
 see-through like the stick, each at least 44 px, none overlapping. Standing at something to do also
 shows its own labelled button (Light a lantern, Cast a line, Vote for this realm, the gift shop).
+
+**Tickets** (OP-180): there is no ticket booth to walk up to. While the gate takes tickets, a
+turnstile reached without a ticket that works says why and offers a Day Ticket on the card before
+the store ("Ask a grown-up", once, right before the purchase); Continue opens checkout in its own
+window, and a small card over the game keeps Back to checkout and Cancel until the ticket lands.
+During opening night the annual pass at half price follows the Day Ticket once. A ticket's status
+shows only at the turnstiles; the Menu's Settings keep the tickets in a closed row (Tickets), with
+their IDs for the keepers. A ticket is the owl's, not the screen's (OP-183): it lets the owl in on
+any screen it plays on.
 
 **On a computer**: WASD or the arrow keys walk while held; E uses whatever the owl stands at; the
 space bar hops; T opens Say; 1 to 8 play an emote as the wheel numbers them; M opens the Menu; Q

@@ -14,7 +14,7 @@
  *   opening a link moves it. Once scanned, a ticket stays with the owl it admitted (OP-174): no
  *   link moves a running ticket, so a forwarded email cannot let a second owl in on it.
  * - The gate scans a ticket held on this device; the first scan starts its time.
- * - The booth's checkout (OP-175): an owl asks for a one-time checkout token, which rides in the
+ * - The gate's checkout (OP-175, OP-180): an owl asks for a one-time checkout token, which rides in the
  *   cart as an attribute. A paid order that carries a known, unexpired, unused token puts its
  *   never-scanned tickets on that owl at once, with no email needed; the token then names that
  *   order and moves nothing again. The book keeps only the token's hash.
@@ -22,6 +22,10 @@
  *   to the Opening Night Ticket it came from, and goes with that ticket if the ticket is switched
  *   off. The book counts the night: tickets issued and scanned, passes claimed through the link and
  *   without it, and what the passes sold for.
+ * - The gate's Day Ticket (OP-180): a Day or Night ticket on the owl may have the same half-price
+ *   pass offered (the Worker offers it only while opening night runs), once per ticket and never to
+ *   an owl that already holds an annual pass. A pass from its link is linked and counted as above,
+ *   but stays if that ticket is refunded: the ticket was paid for, unlike the free Opening Night Ticket.
  */
 import { isTicketId, scan, statusOf, timeLeft, visualId, type ScanResult, type Ticket, type TicketKind, type TicketStatus } from './tickets';
 import type { TicketLine } from './shopify';
@@ -53,7 +57,7 @@ export interface PassLink {
   cents: number | null;
 }
 
-/** A checkout the booth opened for an owl (OP-175): the token's hash, the owl, and the order it went to once paid. */
+/** A checkout the gate opened for an owl (OP-175): the token's hash, the owl, and the order it went to once paid. */
 export interface CheckoutRecord {
   hash: string;
   device: string;
@@ -103,10 +107,20 @@ export interface WalletTicket {
   /**
    * An Opening Night Ticket's pass offer (C42; free at first, half price since OP-062): `ready` once
    * the ticket has gone through the gate and while its night runs, `claimed` once a pass came from
-   * it through the link.
+   * it through the link. A Day or Night ticket (OP-180) shows only `claimed`: its offer follows its
+   * purchase at the gate, not the wallet.
    */
   freePass?: 'ready' | 'claimed';
 }
+
+/** The kinds whose holder may be offered opening night's half-price pass (C42; OP-180: a Day or Night ticket too). */
+export const PASS_OFFER_KINDS: ReadonlySet<TicketKind> = new Set<TicketKind>(['opening-night', 'day', 'night']);
+
+/** Why a ticket's holder is not offered the pass now. */
+export type PassOfferRefusal = 'unknown' | 'not-yours' | 'not-ready' | 'claimed' | 'has-pass';
+
+/** A ticket whose time has not run out, nor been switched off: it can still let its owl in. */
+const live = (status: TicketStatus): boolean => status === 'unused' || status === 'held' || status === 'active';
 
 /** Opening night's count (C42), for the keepers' page. Switched-off tickets are left out. */
 export interface OpeningCounts {
@@ -157,7 +171,7 @@ function secret(random: Random): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** How long a booth checkout token works (OP-175): a cart left open overnight still lands its ticket. */
+/** How long a gate checkout token works (OP-175): a cart left open overnight still lands its ticket. */
 export const CHECKOUT_TTL_MS = 24 * 60 * 60_000;
 /** How long a checkout is remembered at all, so a late repeat of its webhook still finds it used. */
 export const CHECKOUT_KEEP_MS = 7 * 24 * 60 * 60_000;
@@ -291,6 +305,7 @@ export class TicketBook {
     }
     const out: TicketRecord[] = pick.map((t) => ({ ...t, revoked: now }));
     for (const t of out) this.store.putTicket(t);
+    // Only the free Opening Night Ticket takes its pass with it; a paid Day ticket's refund leaves the pass (OP-180).
     for (const t of out.filter((x) => x.kind === 'opening-night')) {
       for (const l of this.store.passLinksFrom(t.id)) out.push(...this.revoke(l.order, 'all', now));
     }
@@ -298,9 +313,9 @@ export class TicketBook {
   }
 
   /**
-   * A pass order from opening night's offer (C42), kept once: the Opening Night Ticket the park's
-   * link named, when that ticket went through the gate and still works; otherwise it counts as a
-   * pass without a link (the code used some other way). A linked pass that is on no device yet goes
+   * A pass order from opening night's offer (C42), kept once: the ticket the park's link named, when
+   * it may have the offer (an Opening Night Ticket through the gate, or a Day or Night ticket, OP-180)
+   * and still works; otherwise it counts as a pass without a link (the code used some other way). A linked pass that is on no device yet goes
    * onto the ticket's, so the owl finds it in the wallet it claimed it from. `cents`: what the
    * order's passes sold for (OP-062).
    */
@@ -309,7 +324,7 @@ export class TicketBook {
     const known = this.store.passLink(order);
     if (known) return known;
     const from = fromTicket ? this.get(fromTicket) : null;
-    const linked = from !== null && from.kind === 'opening-night' && from.firstScan !== null && from.revoked === null ? from : null;
+    const linked = from !== null && this.offers(from, now) ? from : null;
     const link: PassLink = { order, fromTicket: linked?.id ?? null, at: now, cents };
     this.store.putPassLink(link);
     if (linked?.device) {
@@ -318,20 +333,43 @@ export class TicketBook {
     return link;
   }
 
-  /** The pass offer of an Opening Night Ticket, as its wallet line shows it (undefined for other tickets). */
-  private freePass(t: TicketRecord, status: TicketStatus): WalletTicket['freePass'] {
-    if (t.kind !== 'opening-night') return undefined;
-    if (this.store.passLinksFrom(t.id).length) return 'claimed';
-    return status === 'active' ? 'ready' : undefined;
+  /**
+   * Whether a pass order may come from this ticket: an Opening Night Ticket that went through the
+   * gate and still works (C42), or a Day or Night ticket that still works, scanned or not (OP-180:
+   * the offer follows its purchase at the gate, before the first scan).
+   */
+  private offers(t: TicketRecord, now: number): boolean {
+    if (!PASS_OFFER_KINDS.has(t.kind) || t.revoked !== null) return false;
+    return t.kind === 'opening-night' ? t.firstScan !== null : live(statusOf(t, now));
   }
 
-  /** Whether an Opening Night Ticket on this device may claim its pass now (C42). */
-  passOffer(id: string, device: string, now: number): { ok: true } | { ok: false; reason: 'unknown' | 'not-yours' | 'not-ready' | 'claimed' } {
+  /** The pass offer of a ticket, as its wallet line shows it (undefined for other tickets). */
+  private freePass(t: TicketRecord, status: TicketStatus): WalletTicket['freePass'] {
+    if (!PASS_OFFER_KINDS.has(t.kind)) return undefined;
+    if (this.store.passLinksFrom(t.id).length) return 'claimed';
+    return t.kind === 'opening-night' && status === 'active' ? 'ready' : undefined;
+  }
+
+  /** Whether this owl holds an annual pass that can still let it in: it is never offered another (OP-180). */
+  private holdsPass(device: string, now: number): boolean {
+    return this.store.onDevice(device).some((t) => t.kind === 'annual' && live(statusOf(t, now)));
+  }
+
+  /**
+   * Whether the holder of this ticket on this owl may be offered the half-price pass now: an Opening
+   * Night Ticket through the gate while its night runs (C42), or a Day or Night ticket that still
+   * works (OP-180; the Worker adds that opening night must be on). Once per ticket (`claimed` after a
+   * pass came from it), and never to an owl that holds an annual pass already (`has-pass`).
+   */
+  passOffer(id: string, device: string, now: number): { ok: true; kind: TicketKind } | { ok: false; reason: PassOfferRefusal } {
     const t = this.get(id);
-    if (!t || t.kind !== 'opening-night') return { ok: false, reason: 'unknown' };
+    if (!t || !PASS_OFFER_KINDS.has(t.kind)) return { ok: false, reason: 'unknown' };
     if (t.device !== device) return { ok: false, reason: 'not-yours' };
-    const pass = this.freePass(t, statusOf(t, now));
-    return pass === 'ready' ? { ok: true } : { ok: false, reason: pass === 'claimed' ? 'claimed' : 'not-ready' };
+    if (this.store.passLinksFrom(t.id).length) return { ok: false, reason: 'claimed' };
+    if (this.holdsPass(device, now)) return { ok: false, reason: 'has-pass' };
+    const status = statusOf(t, now);
+    const ready = t.kind === 'opening-night' ? status === 'active' : live(status);
+    return ready ? { ok: true, kind: t.kind } : { ok: false, reason: 'not-ready' };
   }
 
   /**

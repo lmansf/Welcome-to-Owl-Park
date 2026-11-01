@@ -1,22 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WalletEntry } from '../net';
-import { pointInRect } from '@owl-park/shared';
 import { getRoom } from '../rooms';
-import {
-  GATE_STATUS_WORDS,
-  LINK_WORDS,
-  OPENING_WORDS,
-  approachMove,
-  approachStart,
-  approachThrough,
-  bestTicket,
-  gateCard,
-  gateRefusal,
-  gateStatus,
-  linkToast,
-  timeLeft,
-  walletLine,
-} from './tickets';
+import { LINK_WORDS, OPENING_WORDS, PASS_WORDS, bestTicket, gateCard, gateRefusal, linkToast, timeLeft, walletLine } from './tickets';
 
 const T0 = Date.UTC(2026, 10, 1, 12, 0, 0);
 const H = 3_600_000;
@@ -52,10 +37,11 @@ describe('tickets in words', () => {
     expect(walletLine({ ...night, status: 'expired' }, T0).status).toBe('Its night has passed');
     expect(walletLine({ ...night, status: 'revoked', freePass: 'claimed' }, T0).freePass).toBeNull();
     expect(gateCard({ ok: true, id: 'OWL-7K3Q-PX9M', kind: 'opening-night', started: true, validUntil: T0 + 4 * H }, T0)).toEqual({ kind: 'Opening Night Ticket', id: 'OWL-7K3Q-PX9M', line: 'Your night starts now' });
-    expect(gateRefusal('not-yet', 'opening-night')).toBe('Your Opening Night Ticket opens the turnstiles on opening night. See you then!');
+    expect(gateRefusal('not-yet', 'opening-night')).toEqual({ line: 'Your Opening Night Ticket opens the turnstiles on opening night. See you then!', buy: false });
     // The owner's words (the pass at half price since OP-062).
     expect(`${OPENING_WORDS.offer} ${OPENING_WORDS.claim}`).toBe('Your pass is half price tonight. Claim it');
-    expect(OPENING_WORDS.booth).toBe('Opening night: every pass is half price');
+    // The booth's line went with the booth (OP-180).
+    expect(Object.keys(OPENING_WORDS)).toEqual(['offer', 'claim', 'claimed']);
     expect(OPENING_WORDS.claimed).toBe('Your annual pass is in your wallet');
   });
 
@@ -65,17 +51,26 @@ describe('tickets in words', () => {
     expect(gateCard({ ok: true, id: 'OWL-7K3Q-PX9M', kind: 'event', started: true, validUntil: T0 + 4 * H }, T0).line).toBe('Your night starts now');
   });
 
-  it('says why the turnstiles stay shut', () => {
-    expect(gateRefusal('none')).toContain('ticket booth');
-    expect(gateRefusal('held')).toContain('quick check');
-    expect(gateRefusal('not-yet')).toContain('on its night');
-    expect(gateRefusal('revoked')).toContain('refunded');
-    expect(gateRefusal('offline')).toContain('could not reach');
+  it('says why the turnstiles stay shut, and offers a Day Ticket right there to an owl with none that works (OP-180)', () => {
+    expect(gateRefusal('none')).toEqual({ line: 'You need a ticket to go in.', buy: true });
+    expect(gateRefusal('elsewhere')).toEqual(gateRefusal('none'));
+    expect(gateRefusal('used')).toEqual({ line: "This ticket's time has run out.", buy: true });
+    expect(gateRefusal('expired')).toEqual({ line: 'This ticket expired before it was used.', buy: true });
+    expect(gateRefusal('revoked')).toEqual({ line: 'This ticket was refunded.', buy: true });
+    expect(gateRefusal('held')).toMatchObject({ buy: false, line: expect.stringContaining('quick check') });
+    expect(gateRefusal('not-yet')).toMatchObject({ buy: false, line: expect.stringContaining('on its night') });
+    expect(gateRefusal('offline')).toMatchObject({ buy: false, line: expect.stringContaining('could not reach') });
+    // No line points at a booth any more.
+    for (const r of ['none', 'unknown', 'elsewhere', 'held', 'used', 'expired', 'revoked', 'not-yet', 'no-length', 'offline'] as const) expect(gateRefusal(r).line).not.toMatch(/booth/i);
+  });
+
+  it('offers the annual pass after a Day Ticket at the turnstiles in plain words (OP-180)', () => {
+    expect(PASS_WORDS).toEqual({ offer: 'Come back all year! The annual pass is half price tonight.', get: 'Get the pass', close: 'No thanks' });
   });
 
   it('says what a ticket link did', () => {
     expect(linkToast('claim', [ticket()])).toBe('Your ticket is in your wallet. Walk through the turnstiles to use it.');
-    expect(linkToast('claim', [ticket(), ticket({ id: 'OWL-2222-3333' })])).toContain('Pass the extra ones on');
+    expect(linkToast('claim', [ticket(), ticket({ id: 'OWL-2222-3333' })])).toBe('Your tickets are in your wallet. Walk through the turnstiles to use one.');
     expect(linkToast('take', [ticket()])).toContain('passed on to you');
     expect(linkToast('claim', null)).toContain('newest email');
     expect(linkToast('take', null)).toContain('already taken');
@@ -86,33 +81,8 @@ describe('tickets in words', () => {
   });
 });
 
-describe('the ticket status at the turnstiles (OP-172)', () => {
-  const taking = { gate: 'ticket', admitted: false } as const;
-
-  it('says the best ticket in the wallet’s words while the gate takes tickets', () => {
-    expect(gateStatus([ticket()], taking, T0)).toBe('Day ticket: Ready, its time starts when the turnstiles scan it');
-    expect(gateStatus([ticket({ kind: 'annual', status: 'active', msLeft: 340 * D })], taking, T0)).toBe('Annual pass: Running');
-    expect(gateStatus([ticket({ status: 'active', msLeft: 5 * H + 12 * 60_000 })], taking, T0)).toBe('Day ticket: Running, 5 h 12 m left');
-    expect(gateStatus([ticket({ kind: 'night', status: 'active', msLeft: null })], taking, T0)).toBe('Night ticket: Running');
-    expect(gateStatus([ticket({ status: 'held' })], taking, T0)).toBe('Day ticket: Waiting on a quick check from the store; it works as soon as that is done');
-    expect(gateStatus([ticket({ kind: 'event', msLeft: null, validFrom: T0 + D, validUntil: T0 + D + 4 * H })], taking, T0, () => 'Nov 2, 7:00 PM')).toBe('Event ticket: For Nov 2, 7:00 PM');
-    expect(gateStatus([ticket({ kind: 'opening-night', msLeft: null, validFrom: T0 - H, validUntil: T0 + 3 * H })], taking, T0)).toBe('Opening Night Ticket: Its night is on, walk through the turnstiles');
-    // The same pick as the home line: running first, then the longest; spent tickets never.
-    expect(gateStatus([ticket(), ticket({ status: 'active', msLeft: 2 * H }), ticket({ status: 'used' })], taking, T0)).toBe('Day ticket: Running, 2 h 0 m left');
-  });
-
-  it('points at the booth without a ticket, and says nothing with the gate open', () => {
-    expect(gateStatus([], taking, T0)).toBe(GATE_STATUS_WORDS.none);
-    expect(GATE_STATUS_WORDS.none).toBe('No ticket yet: the ticket booth is along the plaza');
-    expect(gateStatus([ticket({ status: 'expired' }), ticket({ status: 'revoked' })], taking, T0)).toBe(GATE_STATUS_WORDS.none);
-    expect(gateStatus([], { gate: 'open', admitted: true }, T0)).toBeNull();
-    expect(gateStatus([ticket()], { gate: 'open', admitted: false }, T0)).toBeNull();
-    // Let through already (no ticket on this device to show): the gate turns no one back, so nothing.
-    expect(gateStatus([], { gate: 'ticket', admitted: true }, T0)).toBeNull();
-    expect(gateStatus([ticket()], { gate: 'ticket', admitted: true }, T0)).toBe('Day ticket: Ready, its time starts when the turnstiles scan it');
-  });
-
-  it('picks the ticket that matters most', () => {
+describe('the ticket that matters most', () => {
+  it('picks a running one first, the longest, then a ready one, then one waiting on the store', () => {
     expect(bestTicket([])).toBeNull();
     expect(bestTicket([ticket({ status: 'used' })])).toBeNull();
     const annual = ticket({ id: 'A', kind: 'annual', status: 'active', msLeft: 300 * D });
@@ -120,55 +90,12 @@ describe('the ticket status at the turnstiles (OP-172)', () => {
     const ready = ticket({ id: 'R' });
     expect(bestTicket([ticket({ status: 'held' }), ready])).toBe(ready);
   });
-
-  it('shows on walking onto the plaza and fades on walking off it', () => {
-    let a = approachStart(false);
-    expect(a.shown).toBe(false);
-    a = approachMove(a, true);
-    expect(a).toEqual({ inside: true, armed: true, shown: true });
-    // Moving about on the plaza changes nothing.
-    expect(approachMove(a, true)).toBe(a);
-    a = approachMove(a, false);
-    expect(a.shown).toBe(false);
-    expect(approachMove(a, true).shown).toBe(true);
-  });
-
-  it('is not shown to an owl that comes out of the park onto the plaza until it walks off and back', () => {
-    let a = approachStart(true);
-    expect(a).toEqual({ inside: true, armed: false, shown: false });
-    a = approachMove(a, true);
-    expect(a.shown).toBe(false);
-    a = approachMove(a, false);
-    expect(a.shown).toBe(false);
-    a = approachMove(a, true);
-    expect(a.shown).toBe(true);
-  });
-
-  it('gives way to the turnstiles: gone through (or turned back), it shows again only after a walk off and back', () => {
-    let a = approachThrough(approachMove(approachStart(false), true));
-    expect(a).toEqual({ inside: true, armed: false, shown: false });
-    // Turned back onto the plaza: still nothing.
-    a = approachMove(a, true);
-    expect(a.shown).toBe(false);
-    a = approachMove(approachMove(a, false), true);
-    expect(a.shown).toBe(true);
-  });
-
-  it('has its plaza in the lobby’s room data: before the turnstiles, short of the booth, where an owl out of the park lands', () => {
-    const lobby = getRoom('lobby');
-    const zone = lobby.zones?.find((z) => z.id === 'gate-approach');
-    expect(zone).toBeDefined();
-    const gate = lobby.doors.find((d) => d.id === 'gate')!;
-    const booth = lobby.doors.find((d) => d.id === 'booth')!;
-    expect(zone!.rect.x).toBeLessThanOrEqual(gate.rect.x);
-    expect(zone!.rect.x + zone!.rect.w).toBeGreaterThanOrEqual(gate.rect.x + gate.rect.w);
-    expect(zone!.rect.x).toBeGreaterThan(booth.rect.x + booth.rect.w);
-    // The owl that comes out of the park lands on it; one arriving from the street does not.
-    expect(pointInRect(lobby.spawns['from-hub']!, zone!.rect)).toBe(true);
-    expect(pointInRect(lobby.spawns['default']!, zone!.rect)).toBe(false);
-    // In front of each turnstile, just below the gate.
-    expect(pointInRect({ x: gate.rect.x + 20, y: gate.rect.y + gate.rect.h + 10 }, zone!.rect)).toBe(true);
-    expect(pointInRect({ x: gate.rect.x + gate.rect.w - 20, y: gate.rect.y + gate.rect.h + 10 }, zone!.rect)).toBe(true);
-  });
 });
 
+describe('the lobby without the booth (OP-180)', () => {
+  it('has no booth to walk up to and no plaza card before the turnstiles: the turnstiles sell', () => {
+    const lobby = getRoom('lobby');
+    expect(lobby.doors.map((d) => d.id).sort()).toEqual(['gate', 'to-homes']);
+    expect('zones' in lobby).toBe(false);
+  });
+});

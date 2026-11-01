@@ -214,7 +214,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
       scene.tweens.add({ targets: ring, alpha: 0.34, scaleX: 2.5, scaleY: 0.48, duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.to) {
       doorGlow(scene, m, door.to.room);
-    } else if (door.id === 'shop' || door.id === 'booth') {
+    } else if (door.id === 'shop') {
       const chevron = scene.add.image(m.x, m.y, 'fx-chevron').setTint(0xc9a227).setDepth(m.y + 1);
       scene.tweens.add({ targets: chevron, y: m.y + 14, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else if (door.id === 'idol') {

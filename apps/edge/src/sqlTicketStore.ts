@@ -81,7 +81,7 @@ export class SqlTicketStore implements TicketStore {
       if (!/duplicate column/i.test(errorFields(e).message)) moduleLog.error('worker.tickets', 'write_failed', 'A table could not be brought up to date.', { table: 'opening_passes', column: 'cents', error: e });
     }
     sql.exec(`CREATE INDEX IF NOT EXISTS opening_passes_from ON opening_passes (from_ticket)`);
-    // The booth's checkouts (OP-175): a token's hash, the owl it was made for, and the order it went to once paid.
+    // The gate's checkouts (OP-175, OP-180): a token's hash, the owl it was made for, and the order it went to once paid.
     sql.exec(`CREATE TABLE IF NOT EXISTS ticket_checkouts (hash TEXT PRIMARY KEY, device TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, order_id TEXT)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS ticket_checkouts_created ON ticket_checkouts (created)`);
     // Refunds already applied (OP-145): the store's refund id, so a repeated refunds/create switches nothing off twice.

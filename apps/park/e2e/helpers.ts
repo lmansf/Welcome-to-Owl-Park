@@ -135,7 +135,7 @@ export const E2E_STORE = {
   token: 'e2e-only-store-token-not-a-secret',
   webhookKey: 'e2e-only-webhook-key-not-a-secret',
   passCode: 'E2E-OPENING-NIGHT',
-  /** The store's ticket page the room server's client is built with (the booth sells while the gate takes tickets). */
+  /** The store's ticket page the room server's client is built with (where checkout goes when the park cannot make an owl's cart link, OP-180). */
   ticketsUrl: 'https://owl-e2e.myshopify.com/collections/tickets',
   /** The store's page the gift shop's door opens, in the room server's client. */
   shopUrl: 'https://owl-e2e.myshopify.com/collections/gifts',
