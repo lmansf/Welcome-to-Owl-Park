@@ -3,7 +3,7 @@ import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, hashForLog } from '@ow
 import type { Env } from '../src/env';
 import { forgetGate } from '../src/gateSwitch';
 import { captureLogs } from '../src/logs';
-import { storeCatalogue } from '../src/opening';
+import { forgetCatalogue, storeCatalogue } from '../src/opening';
 import type { OverflowState } from '../src/Overflow';
 import { forgetCounts, forgetOverflow, overflowNow } from '../src/overflowState';
 import { forgetLimits } from '../src/limits';
@@ -111,6 +111,7 @@ beforeEach(() => {
   forgetOverflow();
   forgetCounts();
   forgetLimits();
+  forgetCatalogue();
   cap = captureLogs();
 });
 
@@ -232,6 +233,39 @@ describe('the Worker’s log (OP-134)', () => {
     logged(cap.lines, 'claim_moved', { component: 'worker.tickets', via: 'claim', tickets: 2, from_other_device: 0, device_class: 'phone', order_hash: hashForLog('1001') });
     await claimOn('c_desk000001', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
     logged(cap.lines, 'claim_moved', { via: 'claim', tickets: 2, from_other_device: 2, device_class: 'desktop' });
+  });
+
+  it('gives an owl the booth’s checkout link, and tells the paid order’s tickets landing on that owl (OP-175)', async () => {
+    const store = new FakeStore();
+    vi.stubGlobal('fetch', store.fetch);
+    const e = park.env({ SHOPIFY_SHOP: SHOP, SHOPIFY_ADMIN_TOKEN: 'shpat_test', SHOPIFY_WEBHOOK_SECRET: HOOKS });
+    const pass = await mintPass(KEY, { id: 'v_buyer00001', exp: nowS() + 600, adm: false, cid: 'c_buyer00001' });
+    const auth = { Authorization: `Bearer ${pass}` };
+    // No pass, no link.
+    expect((await call(e, '/api/tickets/checkout', { method: 'POST', body: '{}' })).status).toBe(401);
+    const r = await call(e, '/api/tickets/checkout', { method: 'POST', headers: auth, body: '{}' });
+    expect(r.status).toBe(200);
+    const link = new URL(((await r.json()) as { url: string }).url);
+    expect(link.origin + link.pathname).toBe(`https://${SHOP}/cart/100:1`);
+    const token = link.searchParams.get('attributes[owl_checkout]')!;
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    // The owl is nowhere in the link.
+    expect(link.href).not.toContain('c_buyer00001');
+    store.attributes = [{ key: 'owl_checkout', value: token }];
+    const body = JSON.stringify({ id: 1001, admin_graphql_api_id: 'gid://shopify/Order/1001', tags: '' });
+    const hook = await call(e, '/api/store/webhook', { method: 'POST', headers: { 'X-Shopify-Hmac-Sha256': await webhookSignature(HOOKS, body), 'X-Shopify-Topic': 'orders/paid', 'X-Shopify-Shop-Domain': SHOP }, body });
+    expect(hook.status).toBe(200);
+    logged(cap.lines, 'claim_moved', { component: 'worker.tickets', via: 'checkout', tickets: 2, collector_hash: hashForLog('c_buyer00001'), order_hash: hashForLog('1001') });
+    const wallet = (await (await call(e, '/api/tickets', { headers: auth })).json()) as { tickets: unknown[] };
+    expect(wallet.tickets).toHaveLength(2);
+    expect(JSON.stringify(cap.lines)).not.toContain(token);
+  });
+
+  it('answers the booth’s checkout as not set up without a store or a Day Ticket on sale (OP-175)', async () => {
+    const pass = await mintPass(KEY, { id: 'v_buyer00002', exp: nowS() + 600, adm: false, cid: 'c_buyer00002' });
+    const r = await call(park.env(), '/api/tickets/checkout', { method: 'POST', headers: { Authorization: `Bearer ${pass}` }, body: '{}' });
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'not-set-up' });
   });
 
   it('tells each store webhook: turned away, taken, an order recorded, a repeat, and one that failed', async () => {

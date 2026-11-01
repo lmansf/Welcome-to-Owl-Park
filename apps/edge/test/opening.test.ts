@@ -114,7 +114,7 @@ describe("opening night's fields in the store", () => {
     expect(paidFor(free, ticketLines(free), 'annual')).toBe(0);
   });
 
-  it("finds the annual pass and the night's window among the ticket products on sale", () => {
+  it("finds the annual pass, the Day Ticket (OP-175) and the night's window among the ticket products on sale", () => {
     const c = catalogueOf({
       products: {
         nodes: [
@@ -124,8 +124,8 @@ describe("opening night's fields in the store", () => {
         ],
       },
     });
-    expect(c).toEqual({ passVariant: '200', opening: { from: W0, until: W0 + DAY_MS } });
-    expect(catalogueOf({ products: { nodes: [] } })).toEqual({ passVariant: null, opening: null });
+    expect(c).toEqual({ passVariant: '200', dayVariant: '100', opening: { from: W0, until: W0 + DAY_MS } });
+    expect(catalogueOf({ products: { nodes: [] } })).toEqual({ passVariant: null, dayVariant: null, opening: null });
   });
 
   it('makes the cart link: the pass, the code that takes half off it, and the ticket it comes from', () => {

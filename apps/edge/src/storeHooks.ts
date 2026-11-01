@@ -14,7 +14,7 @@
  */
 import { hashForLog, type Logger } from '@owl-park/shared';
 import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
-import { freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, usedCode, type AdminOrder } from './shopify';
+import { checkoutTokenOf, freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, usedCode, type AdminOrder } from './shopify';
 
 /** The order tag that releases a held order: the owner's fraud check passed it. */
 export const RELEASE_TAG = 'owl-park-release';
@@ -45,6 +45,8 @@ export interface HookResult {
   recorded?: { tickets: number; held: boolean };
   /** The webhook came again for work an earlier delivery already did (OP-134's webhook_duplicate). */
   repeat?: true;
+  /** The booth's checkout put the order's tickets on this owl just now (OP-175): the Worker protects it by the order's email, as a claim does. */
+  placed?: { device: string; tickets: number };
 }
 
 /** The link the shipping email carries; the page reads the secret from the fragment. */
@@ -113,6 +115,26 @@ async function sendLink(deps: HookDeps, id: string, lines: string[], tickets: st
   await deskOk(deps, '/tickets/sent', { order: id });
 }
 
+/**
+ * The booth's checkout (OP-175): a paid order that carries the owl's checkout token puts its
+ * tickets on that owl at once. Never fails the webhook: a placement that does not happen leaves
+ * the claim email, which goes out as always, to do it.
+ */
+async function place(deps: HookDeps, id: string, order: AdminOrder): Promise<HookResult['placed']> {
+  const token = checkoutTokenOf(order);
+  if (!token) return undefined;
+  try {
+    const r = await deps.desk('/tickets/place', { order: id, token });
+    const n = Number(r.body['placed']);
+    const device = r.body['device'];
+    if (r.status === 200 && n > 0 && typeof device === 'string') return { device, tickets: n };
+    if (r.status !== 200) deps.log?.warn('worker.tickets', 'write_failed', 'A paid order’s tickets were not put on the owl that checked out: its claim email still does it.', { order_hash: hashForLog(id), status: r.status });
+  } catch (e) {
+    deps.log?.warn('worker.tickets', 'write_failed', 'A paid order’s tickets were not put on the owl that checked out: its claim email still does it.', { order_hash: hashForLog(id), error: e });
+  }
+  return undefined;
+}
+
 /** Whether an order's tickets go out at once: the store rated it low risk, or it is free (C42: nothing to rate). */
 const clears = (order: AdminOrder) => lowRisk(order) || freeOrder(order);
 
@@ -135,9 +157,12 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
   // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one, with what it sold for.
   const from = fromTicketOf(order);
   if (lines.some((l) => l.kind === 'annual') && (from || usedCode(order, deps.openingCode))) await deskOk(deps, '/tickets/link-pass', { order: id, from, cents: paidFor(order, lines, 'annual') });
-  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id, ...made, ...again };
+  // Before the email goes out, so the owl that paid holds the tickets first; a held order's tickets wait on it, held (OP-175).
+  const placed = await place(deps, id, order);
+  const onOwl = placed ? { placed } : {};
+  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id, ...made, ...again, ...onOwl };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
-  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id, ...made, ...again };
+  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id, ...made, ...again, ...onOwl };
 }
 
 /** A held order changed or got a new rating: release it if the owner tagged it or the store now rates it low. */

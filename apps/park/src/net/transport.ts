@@ -158,6 +158,8 @@ export interface TicketWallet {
   openingNight(): boolean;
   /** Opening night's half-price pass for an Opening Night Ticket on this device: the store's cart link; null when there is none to have. */
   freePass(id: string): Promise<string | null>;
+  /** The booth's checkout (OP-175): a Day Ticket's cart link carrying a one-time token for this owl, so the paid ticket lands here; null when there is none to have. */
+  checkout?(): Promise<string | null>;
 }
 
 /** The front gate: `open` lets everyone through; `ticket` lets through admitted passes only. */
