@@ -99,7 +99,8 @@ export const GATE_STATUS_WORDS = {
  * turnstiles (the lobby's `gate-approach` zone; RoomDef gains `zones`), not shown to an owl just out of
  * the park until it walks off and back; docs/PLAYBOOK.md section 7: where a visitor sees a ticket now
  * (that card, the home line only when it changes what the owl does, Settings' closed Tickets row above
- * Leaving with the IDs, and one toast in the park at 15 minutes left on a Day or Night ticket).
+ * Leaving with the IDs). Nothing of the ticket shows inside the park: an owl whose ticket runs out
+ * there is not sent out, it just is not let back in through the turnstiles (Logan, Nov 1).
  */
 export function gateStatus(tickets: readonly WalletEntry[], entry: Entry, now: number, date: (ms: number) => string = shortDate): string | null {
   if (entry.gate !== 'ticket') return null;
@@ -137,35 +138,6 @@ export function approachMove(a: GateApproach, inside: boolean): GateApproach {
 /** The owl stepped into the turnstiles: the scan card (or the refusal) takes over until it walks out and back. */
 export function approachThrough(a: GateApproach): GateApproach {
   return { ...a, armed: false, shown: false };
-}
-
-/** A Day or Night ticket the turnstiles just took, for the one toast in the park as its time runs low (OP-172). */
-export interface TicketRun {
-  kind: 'day' | 'night';
-  /** When its time runs out (ms). */
-  until: number;
-  /** The toast has been shown this visit. */
-  warned: boolean;
-}
-
-/** How long before a Day or Night ticket runs out the park says so, once a visit. */
-export const LOW_TIME_MS = 15 * MIN;
-
-/** The visit a scan starts: a Day or Night ticket with an end gets the low-time toast; anything else none. */
-export function ticketRun(scan: Extract<ScanReply, { ok: true }>): TicketRun | null {
-  return (scan.kind === 'day' || scan.kind === 'night') && scan.validUntil !== null ? { kind: scan.kind, until: scan.validUntil, warned: false } : null;
-}
-
-/** In how many ms the low-time toast is due (0: now), or null when none is (none this visit, shown already, or run out). */
-export function lowTimeDue(run: TicketRun | null, now: number): number | null {
-  if (!run || run.warned || run.until <= now) return null;
-  return Math.max(0, run.until - LOW_TIME_MS - now);
-}
-
-/** The quiet toast as a running Day or Night ticket gets low (OP-172), for the owner's approval. */
-export function lowTimeToast(kind: TicketRun['kind'], msLeft: number): string {
-  const min = Math.max(1, Math.round(msLeft / MIN));
-  return `Your ${KIND_LABEL[kind]} has ${min} ${min === 1 ? 'minute' : 'minutes'} left.`;
 }
 
 export interface GateCard {

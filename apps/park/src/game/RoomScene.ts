@@ -129,7 +129,7 @@ import type { SettingsStore } from '../settings';
 import type { Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
-import { approachMove, approachStart, approachThrough, gateCard, gateRefusal, gateStatus, lowTimeDue, lowTimeToast, ticketRun, type GateApproach, type TicketRun } from '../ui/tickets';
+import { approachMove, approachStart, approachThrough, gateCard, gateRefusal, gateStatus, type GateApproach } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
@@ -169,8 +169,6 @@ const TAP_SLOP = 16;
 const LEAVE_FADE_MS = 220;
 /** The lobby's plaza in front of the turnstiles (a zone of its room data), where the ticket status shows (OP-172). */
 const GATE_APPROACH = 'gate-approach';
-/** The registry's record of the visit the turnstiles last started on this page, for the low-time toast (OP-172). */
-const TICKET_RUN_KEY = 'ticketRun';
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
 export const RESTARTED_KEY = 'restarted';
 /** The restart's notice stays up until the room closes, near enough (the room waits ten seconds, OP-181). */
@@ -288,8 +286,6 @@ export class RoomScene extends Phaser.Scene {
   private approach: GateApproach | null = null;
   /** The latest ask for the ticket status shown there: an older answer that comes late is dropped. */
   private approachAsk = 0;
-  /** The low-time toast of a running Day or Night ticket (OP-172), waiting in this room. */
-  private lowTimeTimer: Phaser.Time.TimerEvent | null = null;
   /** Where the owl was at the last look for doorways, and the walk it was on: a doorway takes it from where its step crossed in (OP-124). */
   private doorLook: { pos: Vec2; walk: Walk | null } | null = null;
   /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
@@ -463,7 +459,6 @@ export class RoomScene extends Phaser.Scene {
     this.atIdol = false;
     this.passingGate = false;
     this.approach = null;
-    this.lowTimeTimer = null;
     this.doorLook = null;
     this.actions = [];
     // The scene is reused room after room: the last room's tiles went with its display list and art.
@@ -850,7 +845,6 @@ export class RoomScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
-    this.watchTicketTime();
   }
 
   override update(): void {
@@ -2461,25 +2455,6 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * The one quiet toast of a visit as a running Day or Night ticket gets down to 15 minutes (OP-172),
-   * in whichever room the owl is then: nothing else of the ticket shows in the park. The visit is the
-   * one the turnstiles last started on this page.
-   */
-  private watchTicketTime(): void {
-    const run = (this.registry.get(TICKET_RUN_KEY) as TicketRun | null | undefined) ?? null;
-    const due = lowTimeDue(run, Date.now());
-    if (!run || due === null) return;
-    this.lowTimeTimer = this.time.delayedCall(due, () => {
-      this.lowTimeTimer = null;
-      if (this.leaving || run.warned || this.registry.get(TICKET_RUN_KEY) !== run) return;
-      const left = run.until - Date.now();
-      if (left <= 0) return;
-      run.warned = true;
-      this.hud.toast(lowTimeToast(run.kind, left), 4000);
-    });
-  }
-
-  /**
    * The lobby's turnstiles scan a ticket this device holds (its first scan starts its time, C35):
    * the ticket card flips up and the owl goes on into the hub. Without a ticket that goes through,
    * the turnstiles let everyone in while the gate is open; once the park takes tickets
@@ -2513,8 +2488,6 @@ export class RoomScene extends Phaser.Scene {
     this.pieces.gate?.react();
     if (scan.ok) this.hud.showTicket(gateCard(scan, Date.now()));
     else this.hud.toast('Welcome to Owl Park!', 2600);
-    // A new visit: a Day or Night ticket gets its one low-time toast in it (OP-172).
-    this.registry.set(TICKET_RUN_KEY, scan.ok ? ticketRun(scan) : null);
     if (scan.ok && scan.kind === 'opening-night') void this.offerFreePass(scan.id);
     // The card stays up a moment before the walk on into the hub.
     this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
@@ -2548,8 +2521,6 @@ export class RoomScene extends Phaser.Scene {
     this.approach = null;
     this.approachAsk += 1;
     this.hud.ticketStatus(null);
-    this.lowTimeTimer?.remove();
-    this.lowTimeTimer = null;
     this.fitOverlay?.destroy();
     this.fitOverlay = null;
     this.painter?.destroy();
