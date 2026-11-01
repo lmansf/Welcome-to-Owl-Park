@@ -13,12 +13,13 @@
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
  *   GET  /notice          the ribbon's words and the realms switch now (for the room objects)
  *   GET  /masks/<room>    a tree room's ledge draft as a keeper last saved it (OP-156), or 404
- *   POST /masks/<room>    {ledges, walls, hazards, fronts}: keep it as the room's draft, checked again
- *                         here (checkMasks), with when it was saved; the old draft goes
+ *   POST /masks/<room>    {ledges, walls, hazards, fronts, spots}: keep it as the room's draft, checked
+ *                         again here (checkMasks), with when it was saved; the old draft goes
  *
  * The ledge painter's drafts (OP-156) live here because this is the park's one object for what the
  * keepers set: one row of `overflow_settings` per room, under `masks:<room>`, read only when a
- * keeper's painter or the pull script asks.
+ * keeper's painter or the pull script asks. A draft kept before spots (OP-156, part 3) reads back with
+ * none (`spots: []`).
  *
  * TODO-DOCS (OP-075): built. docs/CAPACITY.md still marks the line, the ribbon and the capacity
  * process PLANNED. OP-075's write-up of all three is docs/CAPACITY.md at commit 9f7326a (`git show
@@ -142,12 +143,13 @@ class Settings {
     this.write('realms', v);
   }
 
-  /** A tree room's ledge draft (OP-156), kept under `masks:<room>`; null before one is saved. */
+  /** A tree room's ledge draft (OP-156), kept under `masks:<room>`; null before one is saved. One kept before spots has none. */
   masks(room: string): SavedMasks | null {
     const r = this.sql.exec<{ value: string }>(`SELECT value FROM overflow_settings WHERE key = ?`, `masks:${room}`).toArray()[0];
     if (!r) return null;
     try {
-      return JSON.parse(r.value) as SavedMasks;
+      const kept = JSON.parse(r.value) as (Omit<SavedMasks, 'spots'> & Partial<Pick<SavedMasks, 'spots'>>) | null;
+      return kept && { ...kept, spots: kept.spots ?? [] };
     } catch (e) {
       moduleLog.error('overflow', 'read_failed', 'A tree room’s ledge draft in storage could not be read: it reads as none, and the next save replaces it.', { room, error: e });
       return null;

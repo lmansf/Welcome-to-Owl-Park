@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FRONT_POINTS_MAX, MAX_PERCH_TOP, checkMasks, emptyMasks, groundAt, type MaskDraft } from '@owl-park/shared';
-import { MIN_SPAN, PaintEditor, UNDO_STEPS, dragged, drawnMark, hitTest, nextId, readout, trialPerches, type Frame, type Hit } from './editor';
+import { MIN_SPAN, PaintEditor, UNDO_STEPS, dragged, drawnMark, hitTest, nextId, readout, trialPerches, withSpot, type Frame, type Hit } from './editor';
 
 // The ledge painter's editing (OP-156), in room px over a room 6400 x 900 with its ground line at 770.
 
@@ -17,8 +17,12 @@ const DRAFT: MaskDraft = {
   walls: [{ id: 'wall-1', x: 500, y0: 300, y1: 700 }],
   hazards: [{ id: 'hazard-1', x0: 700, x1: 800, top: 20 }],
   fronts: [{ id: 'front-1', points: SQUARE }],
+  spots: [{ id: 'booth-lobby', x: 2431, y: G }],
 };
 const ledge = (d: MaskDraft, id = 'stair-1') => d.ledges.find((l) => l.id === id)!;
+const spot = (d: MaskDraft, id = 'booth-lobby') => d.spots.find((s) => s.id === id);
+/** A level's names, as the painter gives them to the editor (treeSpotsFor). */
+const NAMES = ['closed-west', 'stair-l2-l1', 'booth-lobby', 'to-market'];
 
 describe('the painter’s ids (OP-156)', () => {
   it('gives a new item the next number of its kind across the draft', () => {
@@ -53,6 +57,29 @@ describe('what a press lands on (OP-156)', () => {
   });
 });
 
+describe('what a press lands on, spots among them (OP-156, part 3)', () => {
+  it('is a spot by its point, or by its pin’s head over it, before an end or a line', () => {
+    expect(hitTest(DRAFT, { x: 2434, y: G - 4 }, 10, G)).toEqual({ kind: 'spot', id: 'booth-lobby', part: 'point' });
+    // The pin's head, 20 room px over the point: only when the press knows where the head is drawn.
+    expect(hitTest(DRAFT, { x: 2431, y: G - 21 }, 10, G)).toBeNull();
+    expect(hitTest(DRAFT, { x: 2431, y: G - 21 }, 10, G, { lift: 20 })).toEqual({ kind: 'spot', id: 'booth-lobby', part: 'point' });
+    // A spot by a ledge's end: the nearer is taken.
+    const d: MaskDraft = { ...DRAFT, spots: [{ id: 'stair-l2-l1', x: 106, y: G - 100 }] };
+    expect(hitTest(d, { x: 103, y: G - 100 }, 10, G)).toEqual({ kind: 'ledge', id: 'stair-1', part: 'start' });
+    expect(hitTest(d, { x: 105, y: G - 100 }, 10, G)).toEqual({ kind: 'spot', id: 'stair-l2-l1', part: 'point' });
+  });
+
+  it('is only what a tool may take: the spot tool’s spots, the front tool’s fronts, the nearer of another kind passed over', () => {
+    const d: MaskDraft = { ...DRAFT, spots: [{ id: 'stair-l2-l1', x: 108, y: G - 100 }], fronts: [{ id: 'front-1', points: [{ x: 98, y: G - 104 }, { x: 60, y: G - 104 }, { x: 60, y: G - 40 }] }] };
+    expect(hitTest(d, { x: 101, y: G - 100 }, 10, G)).toEqual({ kind: 'ledge', id: 'stair-1', part: 'start' });
+    expect(hitTest(d, { x: 101, y: G - 100 }, 10, G, { kinds: ['spot'] })).toEqual({ kind: 'spot', id: 'stair-l2-l1', part: 'point' });
+    expect(hitTest(d, { x: 101, y: G - 100 }, 10, G, { kinds: ['front'] })).toEqual({ kind: 'front', id: 'front-1', part: 'point', point: 0 });
+    expect(hitTest(d, { x: 70, y: G - 90 }, 2, G, { kinds: ['front'] })).toEqual({ kind: 'front', id: 'front-1', part: 'inside' });
+    expect(hitTest(d, { x: 70, y: G - 90 }, 2, G, { kinds: ['spot'] })).toBeNull();
+    expect(hitTest(d, { x: 200, y: G - 100 }, 10, G, { kinds: ['spot'] })).toBeNull();
+  });
+});
+
 describe('dragging what was pressed (OP-156)', () => {
   const drag = (hit: Omit<Hit, 'kind' | 'id'> & Partial<Hit>, dx: number, dy: number) => dragged(DRAFT, { kind: 'ledge', id: 'stair-1', ...hit } as Hit, { x: 0, y: 0 }, { x: dx, y: dy }, FRAME);
   it('moves a ledge’s ends along it and its line up and down, never past each other, the room or a perch’s reach', () => {
@@ -83,6 +110,23 @@ describe('dragging what was pressed (OP-156)', () => {
     expect(front({ part: 'point', point: 1 }, 20, -10)).toEqual([SQUARE[0], { x: 1120, y: 290 }, SQUARE[2], SQUARE[3]]);
     expect(front({ part: 'inside' }, 10, 20)).toEqual(SQUARE.map((q) => ({ x: q.x + 10, y: q.y + 20 })));
     expect(front({ part: 'inside' }, 0, -1000)).toEqual(SQUARE.map((q) => ({ x: q.x, y: q.y - 300 })));
+  });
+});
+
+describe('placing a spot (OP-156, part 3)', () => {
+  it('drags a spot anywhere in the room, to whole pixels, and nothing else with it', () => {
+    const drag = (dx: number, dy: number) => dragged(DRAFT, { kind: 'spot', id: 'booth-lobby', part: 'point' }, { x: 0, y: 0 }, { x: dx, y: dy }, FRAME);
+    expect(spot(drag(40.4, -10.6))).toEqual({ id: 'booth-lobby', x: 2471, y: G - 11 });
+    expect(spot(drag(-9000, 900))).toEqual({ id: 'booth-lobby', x: 0, y: 900 });
+    expect(spot(drag(9000, -900))).toEqual({ id: 'booth-lobby', x: 6400, y: 0 });
+    expect({ ...drag(40, 0), spots: [] }).toEqual({ ...DRAFT, spots: [] });
+    expect(spot(DRAFT)).toEqual({ id: 'booth-lobby', x: 2431, y: G });
+  });
+
+  it('places a name anew at the list’s end, or moves it when it is placed already, at a whole pixel inside the room', () => {
+    expect(withSpot(DRAFT, 'to-market', { x: 6165.6, y: 769.5 }, FRAME).spots).toEqual([...DRAFT.spots, { id: 'to-market', x: 6166, y: 770 }]);
+    expect(withSpot(DRAFT, 'booth-lobby', { x: 2440, y: G }, FRAME).spots).toEqual([{ id: 'booth-lobby', x: 2440, y: G }]);
+    expect(withSpot(emptyMasks(), 'closed-west', { x: -20, y: 950 }, FRAME).spots).toEqual([{ id: 'closed-west', x: 0, y: 900 }]);
   });
 });
 
@@ -147,7 +191,7 @@ describe('the painter’s editor (OP-156)', () => {
     const e = new PaintEditor(DRAFT, false);
     expect(e.unsaved).toBe(true);
     // Saved as sent, whatever order its lists were written in.
-    e.markSaved({ fronts: DRAFT.fronts, hazards: DRAFT.hazards, walls: DRAFT.walls, ledges: DRAFT.ledges });
+    e.markSaved({ spots: DRAFT.spots, fronts: DRAFT.fronts, hazards: DRAFT.hazards, walls: DRAFT.walls, ledges: DRAFT.ledges });
     expect(e.unsaved).toBe(false);
     e.add('hazard', { x0: 10, x1: 30, top: 5 });
     expect(e.unsaved).toBe(true);
@@ -199,5 +243,67 @@ describe('trying the draft (OP-156)', () => {
     expect(perches).toEqual([{ id: 'ledge-1', top: 100, area: [{ x: 2370, y: G - 4 }, { x: 2480, y: G - 4 }, { x: 2480, y: G + 4 }, { x: 2370, y: G + 4 }] }]);
     expect(groundAt(perches, { x: 2420, y: G }, 140)).toBe(100);
     expect(groundAt(perches, { x: 2500, y: G }, 140)).toBe(0);
+  });
+});
+
+describe('the spot tool (OP-156, part 3)', () => {
+  it('places a picked name of the room’s, picks it, moves it, deletes it, and undoes each a step at a time', () => {
+    const e = new PaintEditor({ ...DRAFT, spots: [] }, true, NAMES);
+    e.setTool('spot');
+    expect(e.naming).toBeNull();
+    // Picking a name places nothing yet; a tap does, and picks it.
+    expect(e.pickName('closed-west')).toBe(true);
+    expect([e.naming, e.selected, e.unsaved]).toEqual(['closed-west', null, false]);
+    expect(e.place('closed-west', { x: 660.4, y: 770.2 }, FRAME)).toEqual({ kind: 'spot', id: 'closed-west' });
+    expect(e.draft.spots).toEqual([{ id: 'closed-west', x: 660, y: 770 }]);
+    expect(e.selected).toEqual({ kind: 'spot', id: 'closed-west' });
+    expect(readout(e.draft, e.selected!)).toBe('closed-west  x 660  y 770');
+    expect(e.unsaved).toBe(true);
+    // Placed again: moved, one more step.
+    e.place('closed-west', { x: 700, y: 760 }, FRAME);
+    expect(e.draft.spots).toEqual([{ id: 'closed-west', x: 700, y: 760 }]);
+    // A second name; then the first dragged by its pin, a step for the whole drag.
+    e.place('to-market', { x: 6165, y: 770 }, FRAME);
+    const before = e.draft;
+    const hit: Hit = { kind: 'spot', id: 'closed-west', part: 'point' };
+    for (const dx of [5, 10, 15]) e.preview(dragged(before, hit, { x: 0, y: 0 }, { x: dx, y: 10 }, FRAME));
+    e.settle(before);
+    expect(e.draft.spots).toEqual([{ id: 'closed-west', x: 715, y: 770 }, { id: 'to-market', x: 6165, y: 770 }]);
+    // Picking a placed name picks its spot, and Delete takes it away.
+    expect(e.pickName('to-market')).toBe(true);
+    expect(e.selected).toEqual({ kind: 'spot', id: 'to-market' });
+    expect(e.remove()).toBe(true);
+    expect(e.draft.spots).toEqual([{ id: 'closed-west', x: 715, y: 770 }]);
+    expect(e.selected).toBeNull();
+    expect(e.naming).toBe('to-market');
+    expect(checkMasks(e.draft, FRAME.size).ok).toBe(true);
+    // Undo: back through the delete, the drag, the second name, the move and the first placing.
+    const back = () => (e.undo(), e.draft.spots);
+    expect(back()).toEqual([{ id: 'closed-west', x: 715, y: 770 }, { id: 'to-market', x: 6165, y: 770 }]);
+    expect(back()).toEqual([{ id: 'closed-west', x: 700, y: 760 }, { id: 'to-market', x: 6165, y: 770 }]);
+    expect(back()).toEqual([{ id: 'closed-west', x: 700, y: 760 }]);
+    expect(back()).toEqual([{ id: 'closed-west', x: 660, y: 770 }]);
+    expect(back()).toEqual([]);
+    expect([e.unsaved, e.canUndo, e.undo()]).toEqual([false, false, false]);
+  });
+
+  it('places only the room’s own names', () => {
+    const e = new PaintEditor(DRAFT, false, NAMES);
+    for (const id of ['idol-market', 'ledge-1', 'stair-1', 'Booth-Lobby', '']) {
+      expect(e.pickName(id), id).toBe(false);
+      expect(e.place(id, { x: 100, y: G }, FRAME), id).toBeNull();
+    }
+    expect([e.naming, e.selected, e.draft, e.canUndo]).toEqual([null, null, DRAFT, false]);
+    // A painter that has no names for its room (none given) places none.
+    expect(new PaintEditor(DRAFT, false).place('booth-lobby', { x: 100, y: G }, FRAME)).toBeNull();
+    // A spot the draft has under another name (a saved draft's) is moved and deleted as any item is.
+    const stray: MaskDraft = { ...DRAFT, spots: [{ id: 'old-door', x: 50, y: G }] };
+    const f = new PaintEditor(stray, true, NAMES);
+    f.preview(dragged(stray, { kind: 'spot', id: 'old-door', part: 'point' }, { x: 0, y: 0 }, { x: 10, y: 0 }, FRAME));
+    f.settle(stray);
+    expect(spot(f.draft, 'old-door')).toEqual({ id: 'old-door', x: 60, y: G });
+    f.selected = { kind: 'spot', id: 'old-door' };
+    expect(f.remove()).toBe(true);
+    expect(f.draft.spots).toEqual([]);
   });
 });

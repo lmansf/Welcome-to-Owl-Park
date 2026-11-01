@@ -5,7 +5,7 @@ import { draftJson, loadMasks, saveMasks } from './masks';
 // The ledge painter's drafts on the park's server (OP-156): read back by anyone, saved with a keeper's token.
 
 const ROOM = { id: 'l1', size: { w: 6400, h: 900 } };
-const DRAFT: MaskDraft = { ...emptyMasks(), ledges: [{ id: 'ledge-1', x0: 2370, x1: 2480, top: 100 }] };
+const DRAFT: MaskDraft = { ...emptyMasks(), ledges: [{ id: 'ledge-1', x0: 2370, x1: 2480, top: 100 }], spots: [{ id: 'booth-lobby', x: 2431, y: 770 }] };
 const answer = (status: number, body: unknown) => vi.fn(async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })) as unknown as typeof fetch;
 
 describe('reading a draft back (OP-156)', () => {
@@ -24,6 +24,14 @@ describe('reading a draft back (OP-156)', () => {
     }) as unknown as typeof fetch;
     expect(await loadMasks('', ROOM, down)).toEqual({ kind: 'failed', why: 'no answer from the park' });
   });
+
+  it('reads a draft saved before spots as one with none, and refuses spots that break the rules (OP-156, part 3)', async () => {
+    const { spots: _none, ...old } = DRAFT;
+    expect(await loadMasks('', ROOM, answer(200, { room: 'l1', ...old, savedAt: 1 }))).toEqual({ kind: 'saved', masks: { room: 'l1', ...DRAFT, spots: [], savedAt: 1 } });
+    for (const spots of [[{ id: 'booth-lobby', x: 7000, y: 770 }], [{ id: 'ledge-1', x: 1, y: 1 }], 'none']) {
+      expect(await loadMasks('', ROOM, answer(200, { room: 'l1', ...DRAFT, spots, savedAt: 1 })), JSON.stringify(spots)).toEqual({ kind: 'failed', why: 'the saved draft does not read' });
+    }
+  });
 });
 
 describe('saving a draft (OP-156)', () => {
@@ -33,7 +41,7 @@ describe('saving a draft (OP-156)', () => {
     expect(f).toHaveBeenCalledWith('https://park.example/api/admin/masks/l1', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Keeper-Token': 'tok.en' },
-      body: JSON.stringify({ ledges: DRAFT.ledges, walls: [], hazards: [], fronts: [] }),
+      body: JSON.stringify({ ledges: DRAFT.ledges, walls: [], hazards: [], fronts: [], spots: DRAFT.spots }),
       cache: 'no-store',
     });
   });
