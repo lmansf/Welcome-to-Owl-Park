@@ -6,7 +6,7 @@
 #        variables: CLOUDFLARE_DEPLOY=true   (the switch that enables this workflow)
 #                   VITE_SHOP_URL            (optional gift shop link)
 #                   VITE_SITE_URL            (optional: the park's https origin, for link previews)
-#                   VITE_TICKETS_URL         (optional: the store's ticket page, once tickets sell)
+#                   VITE_TICKETS_URL         (optional: the store's ticket page; defaults to the Day Ticket's page, OP-170)
 #   3. The Worker's own secrets, PASS_SIGNING_KEY (32+ random characters) and ADMIN_KEY (16+), can be
 #      added as repository secrets too: the workflow uploads each one it finds to the Worker after the
 #      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
@@ -68,7 +68,9 @@ jobs:
           VITE_TRANSPORT: edge
           VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
-          VITE_TICKETS_URL: ${{ vars.VITE_TICKETS_URL }}
+          # The booth's Get a ticket button (OP-170): the store's Day Ticket page unless the repository variable says otherwise.
+          # The booth offers it only while the gate takes tickets (the opening switch on /admin/gate).
+          VITE_TICKETS_URL: ${{ vars.VITE_TICKETS_URL || 'https://nvzhyb-kr.myshopify.com/products/day-ticket' }}
       - name: Check the page holds no database client or key (OP-150)
         run: pnpm security:bundle
       - name: Deploy Worker, Durable Object and static assets
