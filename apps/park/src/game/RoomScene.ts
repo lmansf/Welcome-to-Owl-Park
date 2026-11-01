@@ -433,6 +433,8 @@ export class RoomScene extends Phaser.Scene {
     this.passingGate = false;
     this.doorLook = null;
     this.actions = [];
+    // The scene is reused room after room: the last room's tiles went with its display list and art.
+    this.parallax = [];
     this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
     this.keyDir = null;
     this.keyWalk = false;
