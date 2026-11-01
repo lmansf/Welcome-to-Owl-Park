@@ -100,6 +100,18 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await standsAt(page, 190);
   });
 
+  test('the square\'s plinth takes a jump and a flap, and a jump from it reaches the top of the steps beside it', async ({ page }) => {
+    test.slow(); // a walk from the lobby into the square, drawn with software WebGL
+    await openPark(page, { room: 'l1' });
+    await walkAndStop(page, 2 * 1600 + 560, GROUND);
+    await jumpFlapGlide(page, 200, { jumpMs: 340, spare: 15 });
+    await standsAt(page, 152);
+    await walkAndStop(page, 2 * 1600 + 452, GROUND);
+    await standsAt(page, 152);
+    await jump(page);
+    await standsAt(page, 285);
+  });
+
   test('the closed gate at the west end turns an owl back with its sign', async ({ page }) => {
     await openPark(page, { room: 'l1', spawn: 'west' });
     await walkToDoor(page, 'closed-west');
@@ -136,6 +148,10 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await walkAndStop(page, RUN + 418, GROUND);
     await jump(page);
     await standsAt(page, 310);
+    // Up onto the barrel on the low roof, and on along the roof past it.
+    await walkAndStop(page, RUN + 572, GROUND);
+    await jump(page);
+    await standsAt(page, 383);
     await walkAndStop(page, RUN + 960, GROUND);
     await standsAt(page, 310);
     await jump(page);
