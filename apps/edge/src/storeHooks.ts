@@ -45,7 +45,7 @@ export interface HookResult {
   recorded?: { tickets: number; held: boolean };
   /** The webhook came again for work an earlier delivery already did (OP-134's webhook_duplicate). */
   repeat?: true;
-  /** The booth's checkout put the order's tickets on this owl just now (OP-175): the Worker protects it by the order's email, as a claim does. */
+  /** The gate's checkout put the order's tickets on this owl just now (OP-175): the Worker protects it by the order's email, as a claim does. */
   placed?: { device: string; tickets: number };
 }
 
@@ -116,7 +116,7 @@ async function sendLink(deps: HookDeps, id: string, lines: string[], tickets: st
 }
 
 /**
- * The booth's checkout (OP-175): a paid order that carries the owl's checkout token puts its
+ * The gate's checkout (OP-175, OP-180): a paid order that carries the owl's checkout token puts its
  * tickets on that owl at once. Never fails the webhook: a placement that does not happen leaves
  * the claim email, which goes out as always, to do it.
  */

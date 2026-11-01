@@ -21,6 +21,7 @@ function seq(): (n: number) => Uint8Array {
 
 const nightLine = (line = 'N1', quantity = 1) => ({ line, quantity, kind: 'opening-night' as const, lengthMs: null, ...NIGHT });
 const passLine = (line = 'P1') => ({ line, quantity: 1, kind: 'annual' as const, lengthMs: DEFAULT_LENGTH_MS.annual, validFrom: null, validUntil: null });
+const dayLine = (line = 'D1') => ({ line, quantity: 1, kind: 'day' as const, lengthMs: DAY_MS as number, validFrom: null, validUntil: null });
 
 describe('the Opening Night Ticket (C42)', () => {
   const ticket: Ticket = { id: 'OWL-AAAA-AAAA', kind: 'opening-night', lengthMs: null, order: '1', line: 'N1', unit: 1, created: W0 - DAY_MS, held: false, firstScan: null, revoked: null, ...NIGHT };
@@ -174,15 +175,59 @@ for (const [name, make] of STORES) {
       expect(b.linkPass('nope', night, T0)).toBeNull();
     });
 
-    it('counts a pass without a link when its ticket never went through the gate, or is no Opening Night Ticket', async () => {
+    it('counts a pass without a link when its Opening Night Ticket never went through the gate, or its ticket may have no offer', async () => {
       const b = book();
       const { tickets } = await b.issue('502', [nightLine()], false, W0 - HOUR_MS);
       await b.issue('602', [passLine()], false, T0);
       expect(b.linkPass('602', tickets[0]!.id, T0)!.fromTicket).toBeNull();
       expect(b.orderOf('602')!.tickets[0]!.device).toBeNull();
-      const day = await b.issue('503', [{ ...passLine('D1'), kind: 'day', lengthMs: DAY_MS }], false, T0);
+      // An annual pass is no ticket the offer comes from; nor is a Day ticket switched off.
+      const annual = await b.issue('503', [passLine('A1')], false, T0);
       await b.issue('603', [passLine()], false, T0);
-      expect(b.linkPass('603', day.tickets[0]!.id, T0)!.fromTicket).toBeNull();
+      expect(b.linkPass('603', annual.tickets[0]!.id, T0)!.fromTicket).toBeNull();
+      const gone = await b.issue('507', [dayLine()], false, T0);
+      b.revoke('507', 'all', T0);
+      await b.issue('607', [passLine()], false, T0);
+      expect(b.linkPass('607', gone.tickets[0]!.id, T0)!.fromTicket).toBeNull();
+    });
+
+    it('offers the pass to a Day or Night ticket on its own owl, scanned or not, once, and never to an owl that holds a pass (OP-180)', async () => {
+      const b = book();
+      const { claim, tickets } = await b.issue('531', [dayLine()], false, T0);
+      const day = tickets[0]!.id;
+      await b.claim(claim!, 'c_owl');
+      // Bought just now and not scanned yet: the offer is there, though the wallet shows none.
+      expect(b.passOffer(day, 'c_owl', T0)).toEqual({ ok: true, kind: 'day' });
+      expect(b.wallet('c_owl', T0)[0]!.freePass).toBeUndefined();
+      expect(b.passOffer(day, 'c_other', T0)).toEqual({ ok: false, reason: 'not-yours' });
+      // A Night ticket too.
+      const night = await b.issue('532', [{ ...dayLine('G1'), kind: 'night', lengthMs: 6 * HOUR_MS }], false, T0);
+      await b.claim((await b.newClaim('532'))!, 'c_owl');
+      expect(b.passOffer(night.tickets[0]!.id, 'c_owl', T0)).toEqual({ ok: true, kind: 'night' });
+      // Scanned, still running: still offered. Run out: not.
+      expect(b.scan(day, 'c_owl', T0).ok).toBe(true);
+      expect(b.passOffer(day, 'c_owl', T0 + HOUR_MS)).toEqual({ ok: true, kind: 'day' });
+      expect(b.passOffer(day, 'c_owl', T0 + DAY_MS + HOUR_MS)).toEqual({ ok: false, reason: 'not-ready' });
+      // The pass comes through its link: linked, on this owl, and offered no more for that ticket.
+      await b.issue('631', [passLine()], false, T0);
+      expect(b.linkPass('631', day, T0, 749)!.fromTicket).toBe(day);
+      expect(b.orderOf('631')!.tickets[0]!.device).toBe('c_owl');
+      expect(b.passOffer(day, 'c_owl', T0)).toEqual({ ok: false, reason: 'claimed' });
+      expect(b.wallet('c_owl', T0).find((t) => t.id === day)!.freePass).toBe('claimed');
+      // An owl holding an annual pass is not offered another, from any ticket.
+      expect(b.passOffer(night.tickets[0]!.id, 'c_owl', T0)).toEqual({ ok: false, reason: 'has-pass' });
+      // The linked pass counts in the night's count as a pass through the link.
+      expect(b.opening(T0).counts).toMatchObject({ linkedPasses: 1, passRevenue: 749 });
+    });
+
+    it('leaves a pass that came from a Day ticket when that ticket is refunded (OP-180)', async () => {
+      const b = book();
+      const { claim, tickets } = await b.issue('541', [dayLine()], false, T0);
+      await b.claim(claim!, 'c_owl');
+      await b.issue('641', [passLine()], false, T0);
+      b.linkPass('641', tickets[0]!.id, T0);
+      expect(b.revoke('541', 'all', T0 + HOUR_MS).map((t) => t.order)).toEqual(['541']);
+      expect(b.status(b.orderOf('641')!.tickets[0]!.id, T0 + HOUR_MS)).toBe('unused');
     });
 
     it('offers the pass once the ticket is through the gate, while the night runs, to its own wallet', async () => {
@@ -194,7 +239,7 @@ for (const [name, make] of STORES) {
       expect(b.passOffer(id, 'c_owl', T0)).toEqual({ ok: false, reason: 'not-ready' });
       b.scan(id, 'c_owl', T0);
       expect(b.wallet('c_owl', T0)[0]!.freePass).toBe('ready');
-      expect(b.passOffer(id, 'c_owl', T0)).toEqual({ ok: true });
+      expect(b.passOffer(id, 'c_owl', T0)).toEqual({ ok: true, kind: 'opening-night' });
       expect(b.passOffer(id, 'c_other', T0)).toEqual({ ok: false, reason: 'not-yours' });
       expect(b.passOffer('OWL-2222-2222', 'c_owl', T0)).toEqual({ ok: false, reason: 'unknown' });
       // After the night the offer is gone.

@@ -19,6 +19,6 @@ describe('the early preview warning', () => {
   });
 
   it('names the full opening date', () => {
-    expect(PREVIEW_WORDS.booth).toContain('December 1');
+    expect(PREVIEW_WORDS.gate).toContain('December 1');
   });
 });

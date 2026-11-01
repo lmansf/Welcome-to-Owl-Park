@@ -4,12 +4,13 @@ import { expect, test } from './fixtures';
 import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
 
 /**
- * Buying a ticket without leaving the park (OP-175), through the room server and the stand-in store
- * (e2e/standInStore.mjs). The booth's Get a ticket opens the store's checkout in a window of its own
- * with this owl's one-time token in the cart; the store's own checkout page is stood in for here
- * (the test never reaches a real store), the paid order comes in as a signed webhook, and the ticket
- * lands on the owl with no email opened. Each way to checkout asks first (the card before the store,
- * OP-153; storecard.spec.ts): these press Continue.
+ * Buying a ticket without leaving the park (OP-175), at the turnstiles (OP-180), through the room
+ * server and the stand-in store (e2e/standInStore.mjs). A turnstile reached without a ticket asks
+ * the card before the store once (OP-153; storecard.spec.ts), and its Continue opens the store's
+ * checkout in a window of its own with this owl's one-time token in the cart; the store's own
+ * checkout page is stood in for here (the test never reaches a real store), the paid order comes in
+ * as a signed webhook, and the ticket lands on the owl with no email opened. Opening night is off
+ * here, so no pass is offered after it (opening.spec.ts has that).
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
@@ -17,6 +18,8 @@ const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
 const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
 /** The Day Ticket in the stand-in store's catalogue. */
 const DAY_VARIANT = '41001';
+/** What the turnstiles say above the card's line, for an owl with no ticket (OP-180). */
+const DAY_TICKET = 'You need a ticket to go in. You can get a Day Ticket right here.';
 
 let made = 0;
 /** A new order number: the room server keeps its ticket book from one test run to the next. */
@@ -47,11 +50,15 @@ async function arrive(browser: Browser, device: BrowserContextOptions, blockPopu
   return page;
 }
 
-async function openBooth(page: Page): Promise<void> {
-  await walkToDoor(page, 'booth');
-  await page.locator('[data-action="booth"]').click({ timeout: 15_000 });
-  await expect(page.locator('[data-booth="buy"]')).toHaveText('Get a ticket');
+/** Into a turnstile with no ticket: it turns the owl back and offers a Day Ticket, on the card before the store. */
+async function buyAtGate(page: Page): Promise<void> {
+  await walkToDoor(page, 'gate');
+  await expect(page.locator(STORE_CARD)).toBeVisible({ timeout: 15_000 });
+  await expectStoreCard(page);
+  await expect(page.locator(`${STORE_CARD} [data-store="say"]`)).toContainText(DAY_TICKET);
 }
+
+const status = (page: Page) => page.locator('[data-gate-sale] [data-checkout="status"]');
 
 /** The token the cart link carries, from its address. */
 function tokenOf(url: string): string {
@@ -93,16 +100,16 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     ['a computer', COMPUTER],
     ['a phone', PHONE],
   ] as const) {
-    test(`on ${name}: Get a ticket opens checkout in its own window, and the paid ticket lands on the owl with no email`, async ({ browser, request }) => {
+    test(`on ${name}: a turnstile without a ticket opens checkout in its own window, and the paid ticket lands on the owl with no email`, async ({ browser, request }) => {
       await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';
-      await openBooth(a);
-      await a.locator('[data-booth="buy"]').click();
+      await buyAtGate(a);
       const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
-      await expect(a.locator('[data-booth="checkout"]')).toContainText('Checkout is open in its own window');
+      await expect(status(a)).toContainText('Checkout is open in its own window');
       await popup.waitForURL(/\/cart\//);
       const token = tokenOf(popup.url());
+      expect((await state(a)).room).toBe('lobby');
       await a.screenshot({ path: `e2e-screenshots/checkout-open-${shot}.png` });
 
       await pay(request, token);
@@ -110,35 +117,34 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
       // The checkout window is cut off from the park, so the browser may not let the park close it
       // (Chromium does not, once it shows another site); the note asks the buyer to, and they do.
       if (!popup.isClosed()) await popup.close();
-      await expect(a.locator('[data-booth="wallet"] li')).toContainText('Day ticket');
-      expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => t.status)).toEqual(['unused']);
+      await expect(a.locator('[data-gate-sale]')).toBeHidden();
+      expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['day', 'unused']]);
+      // Not opening night: no pass offer follows.
+      await expect(a.locator('[data-free-pass]')).toBeHidden();
       await a.screenshot({ path: `e2e-screenshots/checkout-added-${shot}.png` });
 
-      // And the turnstiles take it.
-      await a.keyboard.press('Escape');
+      // And the turnstiles take it, with no card before the store.
       await walkToDoor(a, 'gate');
+      await expect(a.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
+      await expect(a.locator(STORE_CARD)).toBeHidden();
       await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
       await a.context().close();
     });
   }
 
-  test('a blocked checkout window gives a link to tap, and Cancel says the ticket still lands if it was paid', async ({ browser, request }) => {
+  test('a blocked checkout window gives a link to tap with no second card, and Cancel says the ticket still lands if it was paid', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER, true);
-    await openBooth(a);
-    await a.locator('[data-booth="buy"]').click();
+    await buyAtGate(a);
     await storeContinue(a);
-    await expect(a.locator('[data-booth="checkout"]')).toContainText('Your browser blocked the checkout window');
-    const link = a.locator('[data-booth="checkout-link"]');
+    await expect(status(a)).toContainText('Your browser blocked the checkout window');
+    const link = a.locator('[data-gate-sale] [data-checkout="link"]');
     await expect(link).toHaveText('Open checkout');
-    // Open checkout asks first too: the card's Continue is the link to the cart.
-    await link.click();
-    await expectStoreCard(a);
-    const token = tokenOf((await a.locator(`${STORE_CARD} [data-store="continue"]`).getAttribute('href'))!);
-    await a.locator(`${STORE_CARD} [data-store="not-now"]`).click();
+    // The card asked once, right before the purchase: the link is the cart, and asks nothing more.
+    const token = tokenOf((await link.getAttribute('href'))!);
+    await a.locator('[data-gate-sale] [data-checkout="cancel"]').click();
+    await expect(status(a)).toHaveText('Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.');
     await expect(a.locator(STORE_CARD)).toBeHidden();
-    await a.locator('[data-booth="checkout-cancel"]').click();
-    await expect(a.locator('[data-booth="checkout"]')).toHaveText('Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.');
     // Paid just before Cancel: it still lands, and the page still says so.
     await pay(request, token);
     await expect(a.getByText('Ticket added. Close checkout and walk through the turnstiles to enter the park.')).toBeVisible({ timeout: 15_000 });

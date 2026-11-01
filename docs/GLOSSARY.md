@@ -14,7 +14,7 @@ defines it. Alphabetical. Grep the term.
 - **Activity**: a thing to do in a room that pays feathers under a shared daily cap (lanterns, the stage quiz, fishing, the copy game); `packages/shared/src/activities.ts`, `docs/ACTIVITIES.md`.
 - **Arcade**: the room off the neon street's east end with three cabinets; public name "Neon Roost" or "the Owl Park arcade"; `packages/shared/src/arcade.ts`.
 - **Blockade** (closed sign): the painted barricade in a closed realm's arch; it may show only a phrase from `CLOSED_SIGNS` (`packages/shared/rooms/index.ts`): "Not Yet Fledged", "Closed for Molting", "Pardon Our Feathers", "Hatching Soon".
-- **Booth**: the ticket booth in the lobby; sells only while the gate takes tickets; `apps/park/src/ui/booth.ts`.
+- **Booth**: the ticket booth painted in the lobby's art; scenery since OP-180, when the turnstiles took over selling tickets.
 - **Cap**: the most owls a room holds; `ROOM_CAPS` or the defaults in `apps/edge/src/rooms.ts`; `docs/CAPACITY.md`.
 - **Colourway**: one of the hue rotations of a wearable or pet; variant id `<item>~<n>`; `docs/COLLECTIBLES.md`.
 - **Collectible**: a wearable, pet, effect or emote an owl can own; `CATALOGUE` in `packages/shared/src/collectibles.ts`.
@@ -22,7 +22,7 @@ defines it. Alphabetical. Grep the term.
 - **Duplicate**: a collectible earned again; pays feathers by rarity (`DUPLICATE_FEATHERS`).
 - **Emote**: a short animation an owl plays, seen by the room; owned like any collectible; one per 1.5 s per owl.
 - **Feathers**: the park's free currency; earned from quests, leaf piles, activities and duplicates; spent in the shop; never sold for money (C31).
-- **Gate** (the turnstiles): where a ticket is scanned on the way from the lobby into the hub; `apps/edge/src/gate.ts`.
+- **Gate** (the turnstiles): where a ticket is scanned on the way from the lobby into the hub, and, while the gate takes tickets, where an owl without one buys a Day Ticket (OP-180); `apps/edge/src/gate.ts`, `apps/park/src/ui/gateSale.ts`.
 - **Grove**: the room id of the storybook realm (public description: the treehouse clearing). Realm names stay out of this repository.
 - **Guardian**: the storybook realm's mythical owl, its idol for the Realm Vote; a different character from the mascot (C25).
 - **Homes**: the room id of the street of nests outside the turnstiles; `docs/NESTS.md`. Tickets call the area "the Village", a working name visitors never see.
@@ -31,7 +31,7 @@ defines it. Alphabetical. Grep the term.
 - **Idol**: a realm's mythical owl, tapped to cast the Realm Vote; `docs/ARCHITECTURE.md` section 7.
 - **Interactable**: a leaf pile, stall or moonbeam an owl uses with one action; `packages/shared/src/interactables.ts`.
 - **Keepers**: the people who run the park (the owner and the agents); the keepers' pages are `/admin/*`.
-- **Lobby**: the room id where every visitor arrives: the booth, the turnstiles, the lane to the nests.
+- **Lobby**: the room id where every visitor arrives: the turnstiles and the lane to the nests.
 - **Market**: the room id of the neon market realm (public description: the neon street); holds Nova's shop and the robot owl.
 - **Mascot**: the great horned owl of the feed and the home screen; not the guardian (C25).
 - **Menu**: the one button that opens Say, Quests, Settings, Feedback and the ways out; on a phone the small dark button in the pad's corner; `apps/park/src/ui/menu.ts`.

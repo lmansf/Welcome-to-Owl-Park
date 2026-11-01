@@ -165,7 +165,7 @@ for (const [name, make] of STORES) {
       });
     });
 
-    describe('the booth’s checkout (OP-175)', () => {
+    describe('the gate’s checkout (OP-175)', () => {
       it('a paid order with the owl’s token puts its tickets on that owl at once, and the token works once', async () => {
         const b = book();
         const token = await b.newCheckout('c_buyer', T0);

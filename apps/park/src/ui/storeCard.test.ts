@@ -1,12 +1,8 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { boothBuy } from './booth';
-import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, type Opener, type Started } from './checkout';
-import { STORE_WORDS, goOn, type StoreGo } from './storeCard';
-
-const CART = 'https://owl-test.myshopify.com/cart/100:1?attributes%5Bowl_checkout%5D=tok';
-const PAGE = 'https://owl-test.myshopify.com/collections/tickets';
+import type { Opener } from './checkout';
+import { STORE_WORDS, goOn, type LinkMaker, type StoreGo } from './storeCard';
 
 /** An opener that writes down each window asked for, and hands back a stand-in window. */
 function opener() {
@@ -36,6 +32,16 @@ describe('the card before the store (OP-153)', () => {
     expect(o.calls).toEqual([['https://store.example/', '_blank', 'noopener']]);
   });
 
+  it('a way that opens a window is handed the link maker too, for what follows the same purchase (OP-180)', () => {
+    const o = opener();
+    const made: string[] = [];
+    const link: LinkMaker = (url) => (made.push(url), {} as HTMLAnchorElement);
+    let got: LinkMaker | null = null;
+    goOn({ run: (_open, l) => (got = l) }, o.open, link);
+    expect(got).toBe(link);
+    expect(made).toEqual([]);
+  });
+
   it('a link opens by itself: Continue only runs what follows it, and opens no window of its own', () => {
     const o = opener();
     let followed = 0;
@@ -43,39 +49,6 @@ describe('the card before the store (OP-153)', () => {
     goOn({ link: 'https://store.example/cart' }, o.open);
     expect(followed).toBe(1);
     expect(o.calls).toEqual([]);
-  });
-});
-
-describe('the booth’s Get a ticket behind the card (OP-153)', () => {
-  it('asking opens nothing: the way only runs on Continue', () => {
-    const o = opener();
-    let began = 0;
-    boothBuy(PAGE, () => Promise.resolve(CART), { begin: () => began++, started: () => {} });
-    boothBuy(PAGE, undefined, { started: () => {} });
-    expect(began).toBe(0);
-    expect(o.calls).toEqual([]);
-  });
-
-  it('Continue opens checkout’s window at once, then sends it to the cart link with the owl’s token, as before', async () => {
-    const o = opener();
-    let release!: (url: string) => void;
-    const link = () => new Promise<string | null>((r) => (release = r));
-    const began: string[] = [];
-    let started: Started | null = null;
-    const go = boothBuy(PAGE, link, { begin: () => began.push('begin'), started: (s) => (started = s) });
-    goOn(go, o.open);
-    expect(began).toEqual(['begin']);
-    expect(o.calls).toEqual([['', CHECKOUT_WINDOW, CHECKOUT_FEATURES]]);
-    release(CART);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(started).toEqual({ kind: 'popup', url: CART, win: o.win });
-    expect(o.win.location.href).toBe(CART);
-  });
-
-  it('without the park’s server, Continue opens the store’s ticket page in a new tab, as before', () => {
-    const o = opener();
-    goOn(boothBuy(PAGE, undefined, { started: () => {} }), o.open);
-    expect(o.calls).toEqual([[PAGE, '_blank', 'noopener']]);
   });
 });
 

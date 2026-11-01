@@ -415,7 +415,7 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
 
 export interface SettingsTabDeps {
   settings: SettingsStore;
-  /** The tickets on this device, when the park's server keeps them (null: none to show here). */
+  /** The tickets on this owl, when the park's server keeps them (null: none to show here). */
   tickets(): Promise<WalletEntry[] | null>;
   /** Shown where the owl is: leaving the park (inside it). */
   canLeave: boolean;
@@ -430,11 +430,14 @@ export interface SettingsTabDeps {
 }
 
 /** The Settings tab's closed row of the tickets on this device (OP-172), for the owner's approval. */
-export const SETTINGS_TICKET_WORDS = { row: 'Tickets' } as const;
+export const SETTINGS_TICKET_WORDS = { row: 'Tickets', none: 'No ticket yet. You can get one at the turnstiles.' } as const;
 
-/** The tickets on this device, in a line each: for an owl asking the keepers about a ticket (OP-086). */
+/**
+ * The tickets on this owl, in a line each: for an owl asking the keepers about a ticket (OP-086). A
+ * ticket belongs to the owl (its collector id), whichever screen it plays on (OP-183).
+ */
 export function ticketLines(list: readonly WalletEntry[], now: number): string[] {
-  if (!list.length) return ['No ticket on this device yet. A ticket belongs to the device that opened its link.'];
+  if (!list.length) return [SETTINGS_TICKET_WORDS.none];
   return list.map((t) => {
     const w = walletLine(t, now);
     return `${w.title} ${t.id}: ${w.status}`;
@@ -448,7 +451,7 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
   syncSettings(wrap, deps.settings.get());
   panel.appendChild(wrap);
 
-  // The tickets on this device (OP-172): a closed row just above Leaving, opened for the lines with
+  // The tickets on this owl (OP-172): a closed row just above Leaving, opened for the lines with
   // their IDs when an owl asks the keepers about a ticket.
   const tickets = el('details', 'mcard');
   tickets.dataset['tickets'] = '';

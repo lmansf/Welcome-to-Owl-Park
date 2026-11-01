@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { mapCard, openPark, state } from './helpers';
+import { expectStoreCard, mapCard, openPark, state } from './helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -62,20 +62,21 @@ test.describe('the pad (OP-082, OP-114)', () => {
 
   test('Interact does what the owl stands at, as E does, and rests where there is nothing', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
-    await page.goto('/?transport=local&home=0');
-    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    // The market, by its gift shop (the lobby's ticket booth, which this used, went with OP-180).
+    await openPark(page, { room: 'market' });
     const interact = page.locator('[data-pad-interact]');
     // Nothing to do yet: it rests, dimmed.
     await expect(interact).toHaveAttribute('aria-disabled', 'true');
     await expect(interact).toHaveClass(/idle/);
-    const booth = (await state(page)).doors.find((d) => d.id === 'booth')!;
-    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: booth.x, y: booth.y });
+    const shop = (await state(page)).doors.find((d) => d.id === 'shop')!;
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: shop.x, y: shop.y });
     await expect(interact).toHaveAttribute('aria-disabled', 'false', { timeout: 15_000 });
-    await expect(interact).toHaveAttribute('aria-label', 'Interact: Ticket booth');
+    await expect(interact).toHaveAttribute('aria-label', 'Interact: Gift shop');
     // The first action, which Interact and E do, wears the same '!'.
-    await expect(page.locator('[data-action="booth"] .bang svg')).toBeVisible();
+    await expect(page.locator('[data-action="shop"] .bang svg')).toBeVisible();
+    // Tapped, it does what E does there: the card before the store (OP-153), as the store's page is set here.
     await interact.tap();
-    await expect(page.locator('[data-booth="say"]')).toContainText('coming soon');
+    await expectStoreCard(page);
   });
 
   test('travel home, on the Menu’s map, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {

@@ -49,7 +49,7 @@ describe('the store webhooks', () => {
     expect(book.orderOf('1001')!.tickets).toHaveLength(2);
   });
 
-  it('a paid order from the booth’s checkout puts its tickets on the owl that paid, and the claim email still goes (OP-175)', async () => {
+  it('a paid order from the gate’s checkout puts its tickets on the owl that paid, and the claim email still goes (OP-175)', async () => {
     const store = new FakeStore();
     const { book, deps } = park(store);
     store.attributes = [{ key: 'owl_checkout', value: await book.newCheckout('c_buyer', T0) }];
@@ -77,7 +77,7 @@ describe('the store webhooks', () => {
     expect(book.wallet('c_buyer', T0)).toHaveLength(0);
   });
 
-  it('a held order from the booth’s checkout waits on the owl, held, with no email until it is released (OP-175)', async () => {
+  it('a held order from the gate’s checkout waits on the owl, held, with no email until it is released (OP-175)', async () => {
     const store = new FakeStore();
     store.risk = ['MEDIUM'];
     const { book, deps } = park(store);

@@ -1,11 +1,13 @@
 /**
- * Buying a ticket without leaving the park (OP-175). The store's checkout cannot sit inside the park
- * (it refuses to be framed), so the booth opens it in a window of its own over the game: a popup on a
- * computer, a new tab on a phone. The cart carries a one-time token the park made for this owl, and
- * the paid order's tickets land on this owl on the server, with no email needed. This page watches
- * its wallet meanwhile, says when the ticket has come, and tries to close the checkout window. The
- * window is cut off from the park, so once it shows the store's page most browsers no longer let the
- * park close it: the note asks the buyer to close checkout.
+ * Buying a ticket without leaving the park (OP-175), at the turnstiles since OP-180. The store's
+ * checkout cannot sit inside the park (it refuses to be framed), so a turnstile reached without a
+ * ticket opens it in a window of its own over the game, after the card before the store: a popup on a
+ * computer, a new tab on a phone. The cart carries a one-time token the park made for this owl (its
+ * collector id, so the ticket is the owl's on any screen it plays on), and the paid order's tickets
+ * land on this owl on the server, with no email needed. This page watches the wallet meanwhile, says
+ * when the ticket has come, and tries to close the checkout window. The window is cut off from the
+ * park, so once it shows the store's page most browsers no longer let the park close it: the note
+ * asks the buyer to close checkout.
  */
 import type { WalletEntry } from '../net';
 
@@ -27,7 +29,7 @@ export const CHECKOUT_WORDS = {
   back: 'Back to checkout',
   cancel: 'Cancel',
   cancelled: 'Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.',
-  fallback: 'Checkout is open in another window. Your ticket comes by email: open its link on this device.',
+  fallback: 'Checkout is open in another window. Your ticket comes by email: open its link here to add it to this owl.',
   none: 'Tickets cannot be bought right now. Try again in a minute.',
   added: 'Ticket added. Close checkout and walk through the turnstiles to enter the park.',
   addedHeld: 'Ticket added. Close checkout; the ticket works as soon as the store’s quick check is done.',
@@ -38,7 +40,7 @@ export type Opener = (url: string, target: string, features: string) => Window |
 export type Started =
   /** Checkout is open in its own window, with this owl's token in the cart. */
   | { kind: 'popup'; url: string; win: Window }
-  /** The browser blocked the window: the booth offers the same link to tap. */
+  /** The browser blocked the window: the turnstiles offer the same link to tap. */
   | { kind: 'blocked'; url: string }
   /** No token could be had: the store's ticket page instead (the ticket then comes by email). */
   | { kind: 'fallback'; url: string; win: Window | null }
@@ -83,7 +85,7 @@ export async function startCheckout(d: StartDeps): Promise<Started> {
   return { kind: 'none' };
 }
 
-/** The ticket that came since the booth opened: one not in the wallet before, still to be used. */
+/** The ticket that came since checkout opened: one not in the wallet before, still to be used. */
 export function newTicket(wallet: readonly WalletEntry[], before: ReadonlySet<string>): WalletEntry | null {
   return wallet.find((t) => !before.has(t.id) && (t.status === 'unused' || t.status === 'held' || t.status === 'active')) ?? null;
 }
@@ -132,10 +134,10 @@ const pageClock: WatchClock = {
 
 /**
  * Watches the wallet while checkout is open (OP-175): every few seconds, and at once when the page
- * comes back into view. When the bought ticket is there it says so (`came`) and closes the checkout
- * window; Cancel says checkout closed and looks a little longer.
+ * comes back into view. When the bought ticket is there it says so (`came`: that ticket) and closes
+ * the checkout window; Cancel says checkout closed (`came` null) and looks a little longer.
  */
-export function createCheckoutWatch(say: (message: string, came: boolean) => void, clock: WatchClock = pageClock): CheckoutWatch {
+export function createCheckoutWatch(say: (message: string, came: WalletEntry | null) => void, clock: WatchClock = pageClock): CheckoutWatch {
   let run: { o: WatchOptions; until: number; timer: unknown; unhook: () => void; looking: boolean } | null = null;
   const stop = () => {
     if (!run) return;
@@ -160,7 +162,7 @@ export function createCheckoutWatch(say: (message: string, came: boolean) => voi
         } catch {
           // The store's page cut the park's hold on the window: the buyer closes it.
         }
-        say(t.status === 'held' ? CHECKOUT_WORDS.addedHeld : CHECKOUT_WORDS.added, true);
+        say(t.status === 'held' ? CHECKOUT_WORDS.addedHeld : CHECKOUT_WORDS.added, t);
       },
       () => {
         r.looking = false;
@@ -178,7 +180,7 @@ export function createCheckoutWatch(say: (message: string, came: boolean) => voi
     cancel() {
       if (!run) return;
       run.until = Math.min(run.until, clock.now() + AFTER_CANCEL_MS);
-      say(CHECKOUT_WORDS.cancelled, false);
+      say(CHECKOUT_WORDS.cancelled, null);
     },
     active: () => run !== null,
   };

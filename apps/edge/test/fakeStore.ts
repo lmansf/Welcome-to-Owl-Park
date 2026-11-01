@@ -21,7 +21,7 @@ export class FakeStore {
   fulfilDelayMs = 0;
   readonly calls: Array<{ op: string; variables: Record<string, unknown> }> = [];
   readonly sent: Array<Record<string, unknown>> = [];
-  /** The cart's attributes on the order (OP-175: the booth's checkout token). */
+  /** The cart's attributes on the order (OP-175: the gate's checkout token). */
   attributes: Array<{ key: string; value: string }> = [];
 
   order(): AdminOrder {

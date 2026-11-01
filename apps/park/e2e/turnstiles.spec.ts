@@ -1,20 +1,19 @@
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, state, walkAndStop, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, STORE_CARD, state, walkAndStop, walkToDoor } from './helpers';
 
 /**
- * The ticket status before the turnstiles (OP-172), through the room server: walking onto the plaza in
- * front of the gate fades in a card with the best ticket on this device (or where the booth is) while
- * the gate takes tickets, walking off fades it, going through hands its place to the scan card, and an
- * owl that comes out of the park sees it only after a walk off the plaza and back. With the gate open
- * it never shows. Every test hands the gate back to the deployed setting (open) when it ends.
+ * A ticket's status shows only at the turnstiles (OP-180, in place of OP-172's card on the plaza),
+ * through the room server: nothing comes up on the plaza before the gate, ticket or none; going
+ * through shows the scan card; an owl without a ticket is offered a Day Ticket by the card before the
+ * store (gate.spec.ts, storecard.spec.ts). The Menu's Settings keep the tickets in a closed row. With
+ * the gate open nothing shows at all. Every test hands the gate back to the deployed setting (open)
+ * when it ends.
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
-/** On the plaza before the middle turnstile, and well off it toward the booth (the lobby's zone `gate-approach`). */
+/** On the plaza before the middle turnstile, where OP-172's status card used to come up. */
 const PLAZA = { x: 2570, y: 800 };
-const OFF_PLAZA = { x: 1700, y: 800 };
-const NO_TICKET = 'No ticket yet: the ticket booth is along the plaza';
-const TURNED_BACK = 'The park is open to ticket-holders. The ticket booth is along the plaza.';
+const DAY_TICKET = 'You need a ticket to go in. You can get a Day Ticket right here.';
 
 async function flip(request: APIRequestContext, mode: 'open' | 'ticket' | 'deployed'): Promise<Record<string, unknown>> {
   const r = await request.post('/api/admin/gate', { headers: ADMIN, data: { mode } });
@@ -36,54 +35,53 @@ async function arrive(browser: Browser, hash = ''): Promise<Page> {
   return page;
 }
 
-const status = (page: Page) => page.locator('[data-ticket-status]');
+const ticketCard = (page: Page) => page.locator('[data-ticket-card]');
 
-/** Nothing shows for a while (the card asks the gate and the wallet first, so give it time to be wrong). */
+/** Nothing of a ticket comes up for a while (give a card time to be wrong): no ticket card raised, no card before the store. */
 async function staysHidden(page: Page): Promise<void> {
   for (let i = 0; i < 6; i++) {
-    await expect(status(page)).toHaveCount(0);
+    await expect(page.locator('[data-ticket-status]')).toHaveCount(0);
+    await expect(ticketCard(page)).not.toHaveClass(/\bup\b/);
+    await expect(page.locator(STORE_CARD)).toBeHidden();
     await page.waitForTimeout(250);
   }
 }
 
-test.describe('the ticket status before the turnstiles (OP-172)', () => {
+test.describe('ticket status only at the turnstiles (OP-180)', () => {
   test.afterEach(async ({ request }) => {
     await flip(request, 'deployed');
   });
 
-  test('with the gate taking tickets and no ticket: where the booth is, gone off the plaza and at the turnstiles', async ({ browser, request }) => {
+  test('with the gate taking tickets and no ticket: nothing on the plaza, and the turnstiles offer a Day Ticket', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser);
-    // Arriving from the street, the owl is not on the plaza yet.
     await staysHidden(a);
-
     await walkAndStop(a, PLAZA.x, PLAZA.y);
-    await expect(status(a)).toHaveText(NO_TICKET, { timeout: 10_000 });
-    await expect(a.locator('[data-ticket-card]')).toHaveClass(/\bup\b/);
-    await a.screenshot({ path: 'e2e-screenshots/turnstiles-status-no-ticket.png' });
+    await staysHidden(a);
+    await a.screenshot({ path: 'e2e-screenshots/turnstiles-plaza-no-ticket.png' });
 
-    // Off the plaza it fades.
-    await walkAndStop(a, OFF_PLAZA.x, OFF_PLAZA.y);
-    await expect(status(a)).toHaveCount(0);
-    await expect(a.locator('[data-ticket-card]')).not.toHaveClass(/\bup\b/);
-
-    // Back on, and into the turnstiles: the refusal says why, and the card does not stand beside it.
-    await walkAndStop(a, PLAZA.x, PLAZA.y);
-    await expect(status(a)).toHaveText(NO_TICKET, { timeout: 10_000 });
+    // Into the turnstiles: they say why, with the Day Ticket on the card before the store.
     await walkToDoor(a, 'gate');
-    await expect(a.getByText(TURNED_BACK)).toBeVisible({ timeout: 15_000 });
-    await expect(status(a)).toHaveCount(0);
-    // Turned back onto the plaza, it stays away until the owl walks off and back.
+    await expect(a.locator(STORE_CARD)).toBeVisible({ timeout: 15_000 });
+    await expect(a.locator(`${STORE_CARD} [data-store="say"]`)).toContainText(DAY_TICKET);
+    await a.locator(`${STORE_CARD} [data-store="not-now"]`).click();
+    await expect(a.locator(STORE_CARD)).toBeHidden();
     await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
     expect((await state(a)).room).toBe('lobby');
+    // Back on the plaza, nothing of the ticket stays up.
     await staysHidden(a);
-    await walkAndStop(a, OFF_PLAZA.x, OFF_PLAZA.y);
-    await walkAndStop(a, PLAZA.x, PLAZA.y);
-    await expect(status(a)).toHaveText(NO_TICKET, { timeout: 10_000 });
+
+    // The Menu's Settings say where a ticket is had.
+    await a.locator('[data-menu-btn]').click();
+    const menu = a.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="settings"]').click();
+    const row = menu.locator('details[data-tickets]');
+    await row.locator('summary').click();
+    await expect(row.locator('.mnote')).toHaveText('No ticket yet. You can get one at the turnstiles.');
     await a.context().close();
   });
 
-  test('with a ticket: ready before the turnstiles, the scan card in its place, and running for an owl that comes back out', async ({ browser, request }) => {
+  test('with a ticket: nothing on the plaza, the scan card at the turnstiles, and the ticket in Settings', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const issued = await request.post('/api/admin/tickets', { headers: ADMIN, data: { kind: 'day' } });
     expect(issued.status()).toBe(200);
@@ -92,28 +90,21 @@ test.describe('the ticket status before the turnstiles (OP-172)', () => {
     await expect(a.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 10_000 });
 
     await walkAndStop(a, PLAZA.x, PLAZA.y);
-    await expect(status(a)).toHaveText('Day ticket: Ready, its time starts when the turnstiles scan it', { timeout: 10_000 });
-    await a.screenshot({ path: 'e2e-screenshots/turnstiles-status-ready.png' });
+    await staysHidden(a);
 
-    // Through the turnstiles: the scan card takes the status card's place.
+    // Through the turnstiles: the scan card says the visit starts, and no card before the store asks.
     await walkToDoor(a, 'gate');
-    await expect(a.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
-    await expect(status(a)).toHaveCount(0);
+    await expect(ticketCard(a)).toContainText('Your visit starts now', { timeout: 15_000 });
+    await a.screenshot({ path: 'e2e-screenshots/turnstiles-scan.png' });
+    await expect(a.locator(STORE_CARD)).toBeHidden();
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
-    // Nothing of the ticket stays up in the park.
-    await expect(status(a)).toHaveCount(0);
 
-    // Out of the park the way owls come in: onto the plaza, where the card waits for a walk off and back.
+    // Out of the park the way owls come in: onto the plaza, where nothing comes up.
     await walkToDoor(a, 'to-lobby');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
     await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
-    const out = (await state(a)).pos;
-    expect(out.x).toBeGreaterThan(2300);
-    expect(out.x).toBeLessThan(2840);
+    await expect(ticketCard(a)).not.toHaveClass(/\bup\b/, { timeout: 10_000 });
     await staysHidden(a);
-    await walkAndStop(a, OFF_PLAZA.x, OFF_PLAZA.y);
-    await walkAndStop(a, PLAZA.x, PLAZA.y);
-    await expect(status(a)).toHaveText(/^Day ticket: Running, \d+ h \d+ m left$/, { timeout: 10_000 });
 
     // The Menu's Settings keep the ticket with its ID in a closed row, just above Leaving.
     await a.locator('[data-menu-btn]').click();
@@ -128,12 +119,14 @@ test.describe('the ticket status before the turnstiles (OP-172)', () => {
     await a.context().close();
   });
 
-  test('with the gate open: nothing shows before the turnstiles, ticket or none', async ({ browser, request }) => {
+  test('with the gate open: nothing shows at the turnstiles, ticket or none', async ({ browser, request }) => {
     await flip(request, 'open');
     const a = await arrive(browser);
     await walkAndStop(a, PLAZA.x, PLAZA.y);
     await staysHidden(a);
-    await walkAndStop(a, OFF_PLAZA.x, OFF_PLAZA.y);
+    await walkToDoor(a, 'gate');
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    await expect(a.locator(STORE_CARD)).toBeHidden();
     await a.context().close();
 
     const issued = await request.post('/api/admin/tickets', { headers: ADMIN, data: { kind: 'day' } });

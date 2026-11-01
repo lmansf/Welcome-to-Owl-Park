@@ -412,7 +412,7 @@ const park = {
     }
 
     if (url.pathname === '/api/entry') {
-      // The front gate as it is now, for this pass: the booth's words and the turnstiles ask before they act.
+      // The front gate as it is now, for this pass: the turnstiles ask before they act (and before they sell a Day Ticket, OP-180).
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
@@ -744,9 +744,9 @@ const park = {
         if (r.repeat) log.info('worker.store', 'webhook_duplicate', 'A store webhook came again for work an earlier delivery already did.', about);
         if (r.recorded) log.info('worker.store', 'order_recorded', 'A paid order’s tickets were made.', { ...about, tickets: r.recorded.tickets, held: r.recorded.held });
         if (r.placed && order) {
-          // The booth's checkout (OP-175): the tickets are on the owl that paid, and the order's email protects it as a claim's does (OP-139).
+          // The gate's checkout (OP-175, OP-180): the tickets are on the owl that paid, and the order's email protects it as a claim's does (OP-139).
           // TODO-DOCS (OP-175): docs/LOGGING.md: claim_moved's via takes checkout (no device_class: the store's webhook carries none).
-          log.info('worker.tickets', 'claim_moved', 'A paid order’s tickets went onto the owl that checked out at the booth.', { via: 'checkout', collector_hash: hashForLog(r.placed.device), order_hash: hashForLog(order), tickets: r.placed.tickets });
+          log.info('worker.tickets', 'claim_moved', 'A paid order’s tickets went onto the owl that checked out at the gate.', { via: 'checkout', collector_hash: hashForLog(r.placed.device), order_hash: hashForLog(order), tickets: r.placed.tickets });
           ctx.waitUntil(protectByOrder(env, log, r.placed.device, order));
         }
         if (r.mirror) mirrorLater(ctx, env, log, url.origin, { order: r.mirror });
@@ -770,8 +770,8 @@ const park = {
       if (url.pathname === '/api/tickets' && request.method === 'GET') {
         const [r, catalogue] = await Promise.all([desk(`/tickets/wallet?device=${encodeURIComponent(device)}`), storeCatalogue(env)]);
         if (r.status !== 200) return reply(r);
-        // Opening night (C42): the booth says passes are half price, and a scanned Opening Night
-        // Ticket offers its pass only when the park can make the link.
+        // Opening night (C42): a scanned Opening Night Ticket offers its pass only when the park can
+        // make the link.
         const ready = passLinkReady(env, catalogue);
         const tickets = (r.body['tickets'] as Array<Record<string, unknown>>).map((t) => (t['freePass'] === 'ready' && !(ready.code && ready.pass) ? { ...t, freePass: undefined } : t));
         return json({ tickets, openingNight: openingOn(catalogue, Date.now()) });
@@ -810,7 +810,7 @@ const park = {
       }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
       if (url.pathname === '/api/tickets/checkout') {
-        // The booth's checkout (OP-175): a cart link with one Day Ticket and a one-time token for this owl, so the paid ticket lands here.
+        // The gate's checkout (OP-175, OP-180): a cart link with one Day Ticket and a one-time token for this owl, so the paid ticket lands here.
         const store = storeConfig(env);
         const variant = store ? (await storeCatalogue(env))?.dayVariant : null;
         if (!store || !variant) return json({ error: 'not-set-up' }, 503);
@@ -819,14 +819,18 @@ const park = {
         return json({ url: ticketCartLink(store.shop, variant, r.body['token']) });
       }
       if (url.pathname === '/api/tickets/pass') {
-        // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this device that went through the gate tonight.
+        // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this owl that went through
+        // the gate tonight, or a Day or Night ticket on it (OP-180: offered right after a Day Ticket bought at the gate).
         const r = await desk('/tickets/pass-offer', { id: body['id'], device });
         if (r.status !== 200) return reply(r);
         if (r.body['ok'] !== true) return json(r.body, 409);
         const store = storeConfig(env);
         const code = env.OPENING_PASS_CODE?.trim();
-        const variant = (await storeCatalogue(env))?.passVariant;
+        const catalogue = await storeCatalogue(env);
+        const variant = catalogue?.passVariant;
         if (!store || !code || !variant) return json({ ok: false, reason: 'not-set-up' }, 503);
+        // The half price is opening night's (OP-062): a Day or Night ticket has it offered only while the night runs.
+        if (r.body['kind'] !== 'opening-night' && !openingOn(catalogue, Date.now())) return json({ ok: false, reason: 'not-tonight' }, 409);
         return json({ ok: true, url: passCartLink(store.shop, variant, code, body['id'] as string) });
       }
       if (url.pathname === '/api/tickets/scan') {

@@ -90,19 +90,6 @@ test.describe('a touch never zooms the page (OP-104)', () => {
     expect(await zoomable(page)).toEqual([]);
   });
 
-  test("the lobby's booth scrolls but never zooms", async ({ page }) => {
-    await page.goto('/?transport=local&home=0');
-    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
-    const booth = (await state(page)).doors.find((d) => d.id === 'booth')!;
-    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: booth.x, y: booth.y });
-    const interact = page.locator('[data-pad-interact]');
-    await expect(interact).toHaveAttribute('aria-disabled', 'false', { timeout: 15_000 });
-    await interact.tap();
-    await expect(page.locator('section.booth')).toBeVisible();
-    expect(await zoomable(page), 'the booth').toEqual([]);
-    expect(await scale(page)).toBe(1);
-  });
-
   test('the Menu and its tabs, Feedback, the wheels and Your owl scroll but never zoom, and take quick taps', async ({ page }) => {
     test.slow(); // the Menu's five tabs and four screens, each opened and closed by touch
     // The Menu on each of its tabs, Feedback from its Settings, Say and the emote wheel.

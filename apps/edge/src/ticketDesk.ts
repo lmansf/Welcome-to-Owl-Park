@@ -169,7 +169,7 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       return json({ tickets: wallet(device), order, moved, claimed: r.length, inUse });
     }
     case '/checkout': {
-      // The booth's checkout (OP-175): a one-time token for this owl, to ride in the cart.
+      // The gate's checkout (OP-175, OP-180): a one-time token for this owl, to ride in the cart.
       if (!device) return bad();
       return json({ token: await book.newCheckout(device, now) });
     }
@@ -209,7 +209,7 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
     }
     case '/link-pass': {
-      // A pass order from opening night's offer: the ticket its link named (or none) and what its passes sold for, kept once.
+      // A pass order from opening night's offer (C42, OP-180): the ticket its link named (or none) and what its passes sold for, kept once.
       const from = body['from'] === null || body['from'] === undefined ? null : str(body['from'], 20);
       const cents = body['cents'] === undefined || body['cents'] === null ? null : body['cents'];
       if (!order || (body['from'] !== null && body['from'] !== undefined && !from)) return bad();
@@ -218,7 +218,7 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       return l ? json({ linked: l.fromTicket !== null, from: l.fromTicket }) : json({ error: 'unknown order' }, 404);
     }
     case '/pass-offer': {
-      // Whether an Opening Night Ticket on this device may claim its pass now.
+      // Whether the holder of this ticket on this owl may be offered the half-price pass now, and the ticket's kind (OP-180).
       const id = str(body['id'], 20);
       if (!id || !device) return bad();
       return json(book.passOffer(id, device, now));

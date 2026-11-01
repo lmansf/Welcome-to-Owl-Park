@@ -64,7 +64,7 @@ export default defineConfig({
     {
       // The admin key lets the ticket tests issue tickets without a store, and the store is the
       // stand-in above; these settings exist only on this test server. The client is built with the
-      // store's ticket page, which the booth offers while the gate takes tickets, and the store's page
+      // store's ticket page, where the turnstiles' checkout goes when no cart link can be had, and the store's page
       // for the gift shop's door (both behind the card before the store, OP-153).
       // Each run starts the room server empty, as CI does: in a storage folder of its own, so what an
       // earlier run (or `pnpm dev:edge`) left behind, such as the day's best scores, never decides a test.
