@@ -48,6 +48,19 @@ export interface RoomDef {
    * things to use.
    */
   shades?: Array<{ id: string; poly: Polygon; alpha: number }>;
+  /**
+   * In a level of the tree (OP-156): its placed spots, each of its level's named spots (TREE_SPOTS,
+   * treeSpots.ts) at the point of the playfield where its thing stands, in whole room pixels: a door's
+   * or a stair's threshold middle on the walking surface, an idol's, a booth's or a guardian's base
+   * centre. A keeper places them with the ledge painter and `pnpm masks:pull` prints them to paste
+   * here. The game does not read them yet: each level's own ticket wires its doors, booth, idols and
+   * the rest from them. (Not `spots`, the finds' hiding spots.)
+   *
+   * TODO-DOCS (OP-156): docs/ARCHITECTURE.md's rooms table gains `places`; docs/MAP.md: the tree's
+   * named spots (TREE_SPOTS: a level and a screen each, a stair on both its levels) and that a keeper
+   * places them with the painter's Spot tool.
+   */
+  places?: Array<{ id: string; at: Vec2 }>;
   /** Named spawn points; `default` is required. */
   spawns: Record<string, Vec2>;
   /**

@@ -37,6 +37,7 @@ export * from './climbPilot';
 export * from './flight';
 export * from './perches';
 export * from './masks';
+export * from './treeSpots';
 export * from './routes';
 export * from './sprites';
 export * from './owlFacts';
