@@ -40,6 +40,8 @@ export interface ParkState {
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
   owlScale: number;
+  /** Where the camera's view is, in room pixels (OP-156). */
+  view: { x: number; y: number; w: number; h: number };
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
   /** Where the owl's eyes are, left (-) or right (+) of its feet. */
   eyes: number;
@@ -69,6 +71,27 @@ export interface ParkState {
   mirror: { x: number; y: number; stage: { x: number; y: number; w: number; h: number } | null } | null;
   /** The map's places walked into, and whether the owl is through the front gate, as the page has them (OP-130). */
   travel: { places: string[]; gate: boolean };
+  /** The ledge painter, when it is up (OP-156, `?paint=1` with a keeper's token): game/ledgePainter.ts's PaintDebug. */
+  paint: {
+    tool: string;
+    state: 'loading' | 'saved' | 'unsaved' | 'saving' | 'error';
+    status: string;
+    readout: string;
+    own: string[];
+    drawn: { ledges: string[]; walls: string[]; hazards: string[]; fronts: string[] };
+    labels: number;
+    selected: ({ kind: string; id: string } & Record<string, unknown>) | null;
+    suggestions: Array<{ x0: number; x1: number; top: number }>;
+    pending: number;
+    trying: boolean;
+    unsaved: boolean;
+    draft: {
+      ledges: Array<{ id: string; x0: number; x1: number; top: number }>;
+      walls: Array<{ id: string; x: number; y0: number; y1: number }>;
+      hazards: Array<{ id: string; x0: number; x1: number; top: number }>;
+      fronts: Array<{ id: string; points: Array<{ x: number; y: number }> }>;
+    };
+  } | null;
 }
 
 /** The Menu opened on its map (OP-130) and one place's card on it, open. */

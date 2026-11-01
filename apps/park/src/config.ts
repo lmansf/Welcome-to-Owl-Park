@@ -77,6 +77,11 @@ export interface ParkConfig {
    * for a token that lets this tab's owl into the tree (map 2, `?room=l1`) while it is dark.
    */
   keeper: boolean;
+  /**
+   * The ledge painter (OP-156, `?paint=1`) over a room of the tree, for a tab that holds a keeper's
+   * token (`?keeper=1`, now or earlier in the tab): game/ledgePainter.ts.
+   */
+  paint: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -114,5 +119,6 @@ export function readConfig(): ParkConfig {
     boxes: q.get('boxes') === '1' && (env.DEV || ((env.VITE_BOXES as string | undefined) ?? '').trim() === 'on'),
     pos: q.get('pos') === '1',
     keeper: q.get('keeper') === '1',
+    paint: q.get('paint') === '1',
   };
 }

@@ -73,6 +73,7 @@ import {
   type NestSpotId,
   type NestView,
   type OwlLook,
+  type Perch,
   type PlayerState,
   type QuestBoard,
   type QuestUpdate,
@@ -115,6 +116,7 @@ import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply } from '../net';
 import type { Ribbon } from '../ui/ribbon';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
+import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
 import { GATED_ROOMS, NEST_MIRROR, ROOMS, getRoom } from '../rooms';
@@ -133,6 +135,7 @@ import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, 
 import { SpeechBubbles } from './bubbles';
 import { doorwaysOff, roomsAhead, takesDoorway } from './doors';
 import { FitOverlay } from './fitOverlay';
+import type { LedgePainter, PaintDebug } from './ledgePainter';
 import { placeHints } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
@@ -391,6 +394,10 @@ export class RoomScene extends Phaser.Scene {
   private decor: NestDecor | null = null;
   /** The fit overlay (OP-127, `?boxes=1`). */
   private fitOverlay: FitOverlay | null = null;
+  /** The ledge painter (OP-156, `?paint=1` with a keeper's token), over a room of the tree. */
+  private painter: LedgePainter | null = null;
+  /** The room as the park has it: `room` is this with the painter's draft's ledges while the painter tries them (OP-156). */
+  private ownRoom!: RoomDef;
   /** In a nest, its mirror (OP-077); and while Your owl is open at it, the builder's stage, where the camera frames the owl. */
   private mirror: NestMirror | null = null;
   private mirrorFrame: PreviewFrame | null = null;
@@ -417,6 +424,8 @@ export class RoomScene extends Phaser.Scene {
 
   init(data: RoomStart): void {
     this.room = getRoom(data.room);
+    this.ownRoom = this.room;
+    this.painter = null;
     this.cfg = this.registry.get('config') as ParkConfig;
     this.hud = this.registry.get('hud') as Hud;
     this.transport = this.registry.get('transport') as ParkTransport;
@@ -561,6 +570,41 @@ export class RoomScene extends Phaser.Scene {
     void overlay.then((o) => {
       if (gen === this.gen) this.posOverlay = o;
     });
+  }
+
+  /**
+   * The ledge painter (OP-156): `?paint=1` over a room of the tree, for a tab that holds a keeper's
+   * token. With `?keeper=1` the token is the one the page asks for as the room opens, so the painter
+   * waits for that answer. Its code is fetched only then: no visitor's page loads it.
+   */
+  private openPainter(): void {
+    if (!this.cfg.paint || mapOf(this.room) !== 2) return;
+    const gen = this.gen;
+    const live = () => gen === this.gen && !this.leaving && this.scene.isActive();
+    void keeperToken(this.cfg.edgeUrl, this.cfg.keeper).then(async (token) => {
+      if (!live()) return;
+      if (!token) {
+        this.hud.toast('The painter needs a keeper’s token: open the park with ?keeper=1&paint=1.', 6000);
+        return;
+      }
+      const { LedgePainter } = await import('./ledgePainter');
+      if (!live()) return;
+      this.painter = new LedgePainter({
+        scene: this,
+        room: this.ownRoom,
+        base: this.cfg.edgeUrl,
+        token,
+        pixelRatio: this.cfg.pixelRatio,
+        hud: document.getElementById('hud') ?? document.body,
+        tryPerches: (perches) => this.tryPerches(perches),
+      });
+    });
+  }
+
+  /** The painter's Try (OP-156): the owl stands on these perches in this page, or on the room's own again (null). */
+  private tryPerches(perches: Perch[] | null): void {
+    this.room = perches ? { ...this.ownRoom, perches } : this.ownRoom;
+    this.reSteer = true;
   }
 
   /**
@@ -727,6 +771,7 @@ export class RoomScene extends Phaser.Scene {
 
     this.setupCamera();
     this.setupInput();
+    this.openPainter();
     if (this.cfg.debug) this.drawDebug();
     if (this.cfg.boxes) {
       this.fitOverlay = new FitOverlay(this, {
@@ -784,6 +829,7 @@ export class RoomScene extends Phaser.Scene {
     for (const owl of this.peers.values()) owl.tick(now);
     this.bubbles?.tick(now);
     this.fitOverlay?.draw();
+    this.painter?.draw();
     for (const npc of this.npcs.values()) npc.tick(now);
     for (const pile of this.piles.values()) pile.tick(now);
     this.play?.tick();
@@ -1072,6 +1118,7 @@ export class RoomScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_UP, (p: Phaser.Input.Pointer) => {
       if (this.leaving || this.passingGate || this.decorating || !this.onCanvas(p)) return;
       if (Date.now() - this.tapTakenAt < 100) return; // the idol or an NPC took this tap
+      if (this.painter?.took(p)) return; // the ledge painter took this press (OP-156)
       if (p.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return; // a drag, not a tap
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
@@ -1541,6 +1588,8 @@ export class RoomScene extends Phaser.Scene {
     owlScale: number;
     /** Where the camera's view is, in room pixels (OP-156: a tree room's camera follows the owl as drawn). */
     view: { x: number; y: number; w: number; h: number };
+    /** The ledge painter, when it is up (OP-156, `?paint=1`). */
+    paint: PaintDebug | null;
   } | null {
     if (!this.built) return null;
     return {
@@ -1580,6 +1629,7 @@ export class RoomScene extends Phaser.Scene {
       mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
       soft: [...this.soft],
       travel: this.travelNow(),
+      paint: this.painter?.debug() ?? null,
     };
   }
 
@@ -2364,6 +2414,8 @@ export class RoomScene extends Phaser.Scene {
   private async teardown(): Promise<void> {
     this.fitOverlay?.destroy();
     this.fitOverlay = null;
+    this.painter?.destroy();
+    this.painter = null;
     this.endDecorating(false);
     this.decor?.destroy();
     this.decor = null;
