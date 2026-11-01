@@ -19,6 +19,8 @@
     "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
     "build:edge": "node tools/build-edge.mjs",
     "deploy:edge": "pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy",
+    "dev:ig": "pnpm --filter @owl-park/ig-connector dev",
+    "deploy:ig": "pnpm --filter @owl-park/ig-connector exec wrangler deploy",
     "load": "node tools/load/swarm.mjs",
     "chaos": "node tools/chaos/run.mjs",
     "chaos:test": "node --test tools/chaos/chaos.test.mjs",
