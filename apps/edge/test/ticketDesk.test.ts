@@ -80,6 +80,45 @@ describe('the ticket desk', () => {
     expect((await call(book, '/take', { secret: share.body['secret'], device: 'c_other' })).status).toBe(404);
   });
 
+  it('answers a claim after the first scan "in use" and moves nothing; before it, the claim still moves the ticket (OP-174)', async () => {
+    const book = new TicketBook(new MemoryTicketStore(), seq());
+    const { body } = await call(book, '/issue', { order: '2010', lines: [{ ...LINE, quantity: 1 }], held: false });
+    const secret = body['claim'];
+    const id = (body['tickets'] as string[])[0]!;
+    // Before the visit: a new device takes the ticket over.
+    await call(book, '/claim', { secret, device: 'c_laptop' });
+    const before = await call(book, '/claim', { secret, device: 'c_one' });
+    expect(before.status).toBe(200);
+    expect(before.body).toMatchObject({ claimed: 1, moved: 1, inUse: 0 });
+    expect((before.body['tickets'] as WalletTicket[]).map((t) => t.id)).toEqual([id]);
+    // The first scan; then the email is forwarded.
+    expect((await call(book, '/scan', { device: 'c_one' }, T0 + HOUR_MS)).body).toMatchObject({ ok: true, started: true });
+    const forwarded = await call(book, '/claim', { secret, device: 'c_two' }, T0 + 2 * HOUR_MS);
+    expect(forwarded.status).toBe(409);
+    expect(forwarded.body).toEqual({ error: 'in use', order: '2010', inUse: 1 });
+    expect((await call(book, '/wallet?device=c_two', undefined, T0 + 2 * HOUR_MS)).body['tickets']).toEqual([]);
+    expect((await call(book, '/scan', { device: 'c_two' }, T0 + 2 * HOUR_MS)).body).toEqual({ ok: false, reason: 'none' });
+    expect((await call(book, '/wallet?device=c_one', undefined, T0 + 2 * HOUR_MS)).body['tickets']).toMatchObject([{ id, status: 'active' }]);
+    // The owl it let in can open its own link again and is answered with its wallet.
+    const own = await call(book, '/claim', { secret, device: 'c_one' }, T0 + 2 * HOUR_MS);
+    expect(own.status).toBe(200);
+    expect(own.body).toMatchObject({ claimed: 0, moved: 0, inUse: 0 });
+    // An unknown link is still unknown.
+    expect((await call(book, '/claim', { secret: 'A'.repeat(43), device: 'c_two' })).status).toBe(404);
+  });
+
+  it('answers a share link "in use" once its ticket was scanned (OP-174)', async () => {
+    const book = new TicketBook(new MemoryTicketStore(), seq());
+    const { body } = await call(book, '/issue', { order: '2011', lines: [{ ...LINE, quantity: 1 }], held: false });
+    const id = (body['tickets'] as string[])[0]!;
+    await call(book, '/claim', { secret: body['claim'], device: 'c_buyer' });
+    const share = await call(book, '/share', { id, device: 'c_buyer' });
+    await call(book, '/scan', { device: 'c_buyer', id }, T0 + HOUR_MS);
+    const taken = await call(book, '/take', { secret: share.body['secret'], device: 'c_friend' }, T0 + HOUR_MS);
+    expect(taken).toEqual({ status: 409, body: { error: 'in use' } });
+    expect((await call(book, '/wallet?device=c_friend', undefined, T0 + HOUR_MS)).body['tickets']).toEqual([]);
+  });
+
   it('holds an order until it is released, and revokes on a refund', async () => {
     const book = new TicketBook(new MemoryTicketStore(), seq());
     const held = await call(book, '/issue', { order: '2004', lines: [LINE], held: true });

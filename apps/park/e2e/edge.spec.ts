@@ -425,6 +425,14 @@ test.describe('room server', () => {
     const started = (await a.evaluate(() => window.owlPark.wallet()))[0]!;
     expect(started.status).toBe('active');
 
+    // The ticket email forwarded once the visit has started (OP-174): the second owl is told the ticket is in use, and gets nothing.
+    const b = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    await b.goto(`/?transport=edge#claim=${link.split('#claim=')[1] ?? ''}`);
+    await expect(b.getByText('That ticket is already in use by another owl')).toBeVisible({ timeout: 20_000 });
+    expect(await b.evaluate(() => window.owlPark.wallet())).toEqual([]);
+    await b.context().close();
+    expect((await a.evaluate(() => window.owlPark.wallet()))[0]).toMatchObject({ id: started.id, status: 'active' });
+
     // Out of the park from the Menu's Settings: the card asks, and the owl stands outside the gate.
     await a.locator('[data-menu-btn]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();

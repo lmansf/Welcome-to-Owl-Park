@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WalletEntry } from '../net';
-import { OPENING_WORDS, gateCard, gateRefusal, linkToast, timeLeft, walletLine } from './tickets';
+import { LINK_WORDS, OPENING_WORDS, gateCard, gateRefusal, linkToast, timeLeft, walletLine } from './tickets';
 
 const T0 = Date.UTC(2026, 10, 1, 12, 0, 0);
 const H = 3_600_000;
@@ -64,5 +64,8 @@ describe('tickets in words', () => {
     expect(linkToast('claim', null)).toContain('newest email');
     expect(linkToast('take', null)).toContain('already taken');
     expect(linkToast('claim', [ticket({ status: 'revoked' })])).toContain('refunded');
+    // OP-174: a ticket already running on another owl stays with it.
+    expect(linkToast('claim', 'in-use')).toBe(LINK_WORDS.inUse);
+    expect(linkToast('take', 'in-use')).toContain('already in use');
   });
 });

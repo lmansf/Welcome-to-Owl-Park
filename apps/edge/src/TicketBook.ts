@@ -11,7 +11,8 @@
  *   switches off all of them. Votes already cast stay counted.
  * - The claim link puts the order's tickets on the device that opens it. A ticket lives on one
  *   device at a time: a holder can pass one on with a share link before its first scan, and
- *   opening a link moves it.
+ *   opening a link moves it. Once scanned, a ticket stays with the owl it admitted (OP-174): no
+ *   link moves a running ticket, so a forwarded email cannot let a second owl in on it.
  * - The gate scans a ticket held on this device; the first scan starts its time.
  * - The booth's checkout (OP-175): an owl asks for a one-time checkout token, which rides in the
  *   cart as an attribute. A paid order that carries a known, unexpired, unused token puts its
@@ -160,6 +161,15 @@ export const CHECKOUT_KEEP_MS = 7 * 24 * 60 * 60_000;
 
 /** How long one webhook may work on an order before another may take it over (one that died part way). */
 export const ORDER_LEASE_MS = 20_000;
+
+/** Whether a link may move this ticket to another owl: only a live one never scanned (OP-174). */
+export const movable = (t: TicketRecord): boolean => t.revoked === null && t.firstScan === null;
+
+/**
+ * Of a claim link's live tickets, those already running on another owl: they stay there (OP-174), and
+ * a claim that finds only these, and none of the order on this owl, is answered "already in use".
+ */
+export const inUseElsewhere = (live: readonly TicketRecord[], device: string): number => live.filter((t) => t.firstScan !== null && t.device !== null && t.device !== device).length;
 
 export class TicketBook {
   /** Orders a webhook is working on now. Kept in memory: a lease lasts seconds, never across a restart. */
@@ -373,7 +383,7 @@ export class TicketBook {
     if (!this.store.order(order)) return { refused: 'no-order' };
     const out = this.store
       .ticketsOf(order)
-      .filter((t) => t.revoked === null && t.firstScan === null)
+      .filter(movable)
       .map((t) => ({ ...t, device: c.device, shareHash: null }));
     for (const t of out) this.store.putTicket(t);
     this.store.putCheckout({ ...c, order });
@@ -386,11 +396,15 @@ export class TicketBook {
     return o ? this.store.ticketsOf(o.order).filter((t) => t.revoked === null) : null;
   }
 
-  /** The emailed link: the order's live tickets move onto this device. Null for an unknown secret. */
+  /**
+   * The emailed link: the order's live tickets that have never been scanned move onto this device
+   * (OP-174). A running ticket stays with the owl it admitted, as with a share link: a forwarded
+   * email puts no second owl in on it. Returns the tickets it moved; null for an unknown secret.
+   */
   async claim(claimSecret: string, device: string): Promise<TicketRecord[] | null> {
     const live = await this.claimable(claimSecret);
     if (!live) return null;
-    const out = live.map((t) => ({ ...t, device, shareHash: null }));
+    const out = live.filter(movable).map((t) => ({ ...t, device, shareHash: null }));
     for (const t of out) this.store.putTicket(t);
     return out;
   }
@@ -408,10 +422,14 @@ export class TicketBook {
     return s;
   }
 
-  /** Opening a share link: the ticket moves to this device. */
-  async take(shareSecret: string, device: string): Promise<TicketRecord | null> {
+  /**
+   * Opening a share link: the ticket moves to this device. `in-use` once the ticket has been scanned
+   * (OP-174): a link made before the visit stops moving it when the visit starts.
+   */
+  async take(shareSecret: string, device: string): Promise<TicketRecord | 'in-use' | null> {
     const t = this.store.ticketByShare(await this.hash(shareSecret));
     if (!t || t.revoked !== null) return null;
+    if (!movable(t)) return t.device === device ? t : 'in-use';
     const moved = { ...t, device, shareHash: null };
     this.store.putTicket(moved);
     return moved;

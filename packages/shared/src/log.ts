@@ -52,6 +52,7 @@ export const LOG_EVENTS = [
   'pass_verified',
   'pass_rejected',
   'claim_moved',
+  'claim_in_use',
   'room_join_ok',
   'room_join_refused',
   'room_leave',

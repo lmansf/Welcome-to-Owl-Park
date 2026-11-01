@@ -28,6 +28,8 @@ export const HOME_WORDS = {
   play: 'Play',
   settings: 'Settings',
   added: 'Ticket added',
+  /** A ticket link whose ticket is already running on another owl (OP-174). */
+  inUse: 'Ticket already in use',
   ready: 'ready at the turnstiles',
   held: 'waiting on a quick check from the store',
   none: 'No ticket yet: the booth is by the gate',

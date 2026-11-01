@@ -700,15 +700,28 @@ const park = {
       if (url.pathname === '/api/tickets/claim' || url.pathname === '/api/tickets/take') {
         const { status, body: answer } = await desk(url.pathname.slice(4), { secret: body['secret'], device });
         // The claimed order stays with the Worker: its email protects this owl (OP-139). How many tickets moved is the log's.
-        const { order, moved, claimed, ...rest } = answer;
+        const { order, moved, claimed, inUse, ...rest } = answer;
+        const share = url.pathname === '/api/tickets/take';
+        const deviceClassNow = () => deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile'));
         if (status === 200) {
-          const share = url.pathname === '/api/tickets/take';
+          // TODO-DOCS (OP-174): docs/LOGGING.md: claim_moved (via claim) gains in_use, the order's running tickets left on another owl.
           log.info('worker.tickets', 'claim_moved', share ? 'A share link moved a ticket onto this device.' : 'A claim link moved its order’s tickets onto this device.', {
             via: share ? 'share' : 'claim',
             collector_hash: hashForLog(device),
-            device_class: deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile')),
+            device_class: deviceClassNow(),
             ...(typeof order === 'string' ? { order_hash: hashForLog(order) } : {}),
-            ...(share ? { tickets: 1 } : { tickets: claimed, from_other_device: moved }),
+            ...(share ? { tickets: 1 } : { tickets: claimed, from_other_device: moved, in_use: inUse }),
+          });
+        }
+        if (status === 409) {
+          // A link that tried to move a ticket already running on another owl (OP-174): the sign of a forwarded email.
+          // TODO-DOCS (OP-174): docs/LOGGING.md: claim_in_use (worker.tickets, info): via (claim or share), collector_hash, device_class, order_hash (claim only), in_use.
+          log.info('worker.tickets', 'claim_in_use', share ? 'A share link named a ticket already in use; it stayed where it was.' : 'A claim link found its order’s tickets already in use on another owl; nothing moved.', {
+            via: share ? 'share' : 'claim',
+            collector_hash: hashForLog(device),
+            device_class: deviceClassNow(),
+            ...(typeof order === 'string' ? { order_hash: hashForLog(order) } : {}),
+            in_use: typeof inUse === 'number' ? inUse : 1,
           });
         }
         if (status === 200 && typeof order === 'string') ctx.waitUntil(protectByOrder(env, log, device, order));

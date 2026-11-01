@@ -112,7 +112,14 @@ export function gateRefusal(reason: ScanRefusal, kind?: WalletEntry['kind']): st
 }
 
 /** What opening a ticket link did (`tickets` is this device's wallet afterwards; null when the link no longer works). */
-export function linkToast(kind: TicketLink['kind'], tickets: WalletEntry[] | null): string {
+/** What the park says when a ticket link names a ticket already in use (OP-174), for the owner's approval. */
+export const LINK_WORDS = {
+  inUse: 'That ticket is already in use by another owl, so it stays with them. Each ticket lets in one owl.',
+} as const;
+
+export function linkToast(kind: TicketLink['kind'], tickets: WalletEntry[] | 'in-use' | null): string {
+  // OP-174: a ticket stays with the owl it let in, so a forwarded link cannot let in a second one.
+  if (tickets === 'in-use') return LINK_WORDS.inUse;
   if (tickets === null) {
     return kind === 'claim' ? 'That ticket link no longer works. The newest email from the store has the one that does.' : 'That ticket was already taken, or its link was replaced by a newer one.';
   }

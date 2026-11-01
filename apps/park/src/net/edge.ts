@@ -226,6 +226,7 @@ export class EdgeTransport implements ParkTransport {
     },
     open: async (link) => {
       const res = await this.api(`/api/tickets/${link.kind}`, { method: 'POST', body: JSON.stringify({ secret: link.secret }) });
+      if (res.status === 409) return 'in-use';
       return res.ok ? ((await res.json()) as { tickets: WalletEntry[] }).tickets : null;
     },
     share: async (id) => {

@@ -232,7 +232,23 @@ describe('the Worker’s log (OP-134)', () => {
     expect(await first.json()).not.toHaveProperty('moved');
     logged(cap.lines, 'claim_moved', { component: 'worker.tickets', via: 'claim', tickets: 2, from_other_device: 0, device_class: 'phone', order_hash: hashForLog('1001') });
     await claimOn('c_desk000001', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-    logged(cap.lines, 'claim_moved', { via: 'claim', tickets: 2, from_other_device: 2, device_class: 'desktop' });
+    logged(cap.lines, 'claim_moved', { via: 'claim', tickets: 2, from_other_device: 2, device_class: 'desktop', in_use: 0 });
+  });
+
+  it('tells a claim link that found its order already in use on another owl, and moved nothing (OP-174)', async () => {
+    const { claim, tickets } = await park.book.issue('1002', [{ line: '11', quantity: 1, kind: 'day', lengthMs: DEFAULT_LENGTH_MS.day, validFrom: null, validUntil: null }], false, Date.now());
+    const claimOn = async (cid: string) => {
+      const pass = await mintPass(KEY, { id: `v_${cid.slice(2, 12)}`, exp: nowS() + 600, adm: false, cid });
+      return call(park.env(), '/api/tickets/claim', { method: 'POST', headers: { Authorization: `Bearer ${pass}`, 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }, body: JSON.stringify({ secret: claim }) });
+    };
+    expect((await claimOn('c_first00001')).status).toBe(200);
+    expect(park.book.scan(tickets[0]!.id, 'c_first00001', Date.now()).ok).toBe(true);
+    const forwarded = await claimOn('c_second0001');
+    expect(forwarded.status).toBe(409);
+    // The order stays with the Worker.
+    expect(await forwarded.json()).toEqual({ error: 'in use' });
+    logged(cap.lines, 'claim_in_use', { component: 'worker.tickets', via: 'claim', in_use: 1, collector_hash: hashForLog('c_second0001'), order_hash: hashForLog('1002'), device_class: 'phone' });
+    expect(park.book.get(tickets[0]!.id)?.device).toBe('c_first00001');
   });
 
   it('gives an owl the booth’s checkout link, and tells the paid order’s tickets landing on that owl (OP-175)', async () => {
