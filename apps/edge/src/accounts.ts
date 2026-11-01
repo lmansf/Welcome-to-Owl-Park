@@ -361,7 +361,7 @@ export type OrderOffer = 'mailed' | 'mail-failed' | 'already' | 'no-email' | 'of
 
 export interface OrderOfferDeps {
   /** The collections object's call: a ticket's protect link noted for the owl, or null (accountBook.orderLink). */
-  rpc: { accountOrderLink(cid: string, emailHash: string, orderHash: string, nonce: string): Promise<number | null> };
+  rpc: { accountOrderLink(cid: string, orderHash: string, nonce: string): Promise<number | null> };
   /** Signs the link. */
   secret: string;
   keys: Promise<EmailKeys> | null;
@@ -373,7 +373,7 @@ export interface OrderOfferDeps {
 
 /**
  * A ticket's order email (`email`, as the store gave it), as the ticket lands on an owl (a claim, or the
- * booth's checkout): its buyer is mailed one link that protects that owl when opened, unless that email
+ * booth's checkout): its buyer is mailed one link that protects that owl when opened, unless an email
  * protects it already or this order offered it one before. The park keeps nothing about the address:
  * the link carries it sealed, and the account store notes the owl and the order's keyed hash only.
  */
@@ -389,7 +389,7 @@ export async function offerOrderProtect(d: OrderOfferDeps, cid: string, order: s
   }
   const keys = await d.keys;
   const nonce = randomNonce();
-  const exp = await d.rpc.accountOrderLink(cid, await keyed(keys, 'e', to), await keyed(keys, 'o', order), nonce);
+  const exp = await d.rpc.accountOrderLink(cid, await keyed(keys, 'o', order), nonce);
   if (exp === null) return 'already';
   const link = accountLink(d.origin, 'protect', await mintLink(d.secret, 'protect', nonce, Math.floor(exp / 1000), await seal(keys, to)));
   if (await d.mail(orderProtectMail(to, link))) {

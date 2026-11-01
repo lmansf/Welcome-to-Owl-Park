@@ -67,7 +67,7 @@ function park() {
   const offer = (cid: string, order: string, email: string | null, over: Partial<OrderOfferDeps> = {}) =>
     offerOrderProtect(
       {
-        rpc: { accountOrderLink: async (c, h, o, n) => book.orderLink(c, h, o, n, now) },
+        rpc: { accountOrderLink: async (c, o, n) => book.orderLink(c, o, n, now) },
         secret: SECRET,
         keys: emailKeys({ ACCOUNT_SECRET }),
         mail: async (m) => {
@@ -312,6 +312,11 @@ describe('accounts without passwords, the Worker’s half (OP-139)', () => {
     // Good once; and an owl the email protects already is offered nothing on its next order.
     expect((await p.call('confirm', { token: link.token }, { now: T0 + ORDER_LINK_MS - 30_000 }))?.status).toBe(410);
     expect(await p.offer('c_buyer0000000', '1003', 'buyer@example.com')).toBe('already');
+    // Nor is an owl another email protects: it keeps that email, and the gift's buyer is mailed nothing.
+    expect(await p.offer('c_buyer0000000', '1004', 'grandparent@example.com')).toBe('already');
+    expect(p.mails).toHaveLength(1);
+    expect(p.book.owlsOf(hash).map((a) => a.cid)).toEqual(['c_buyer0000000']);
+    expect(stored()).not.toContain('grandparent@example.com');
     // A sibling's owl takes the next order on the same email: it gets its own link, and both are the family's once it is opened.
     p.at(T0 + ORDER_LINK_MS);
     expect(await p.offer('c_sibling00000', '1002', 'buyer@example.com')).toBe('mailed');

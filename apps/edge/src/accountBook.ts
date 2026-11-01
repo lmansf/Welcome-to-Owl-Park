@@ -232,12 +232,14 @@ export class AccountBook {
 
   /**
    * A one-tap protect link for the owl that took a ticket, to be mailed to its order's email (OP-186):
-   * its expiry (ms), or null when that email protects the owl already or this order offered this owl
-   * one before. The email's hash is only compared here, never written: the link's row names the owl,
-   * and the Worker puts the address, sealed, in the link itself.
+   * its expiry (ms), or null when an email protects the owl already or this order offered this owl one
+   * before. Nothing about the email comes here: the link's row names the owl, and the Worker puts the
+   * address, sealed, in the link itself.
    */
-  orderLink(cid: string, emailHash: string, orderHash: string, nonce: string, now: number): number | null {
-    if (this.row(cid)?.['email_hash'] === emailHash) return null;
+  orderLink(cid: string, orderHash: string, nonce: string, now: number): number | null {
+    // A protected owl keeps its email: the mail would tell the buyer it is not protected, and opening
+    // the link would move it to theirs. Its grown-up can still change it in the Menu.
+    if (this.row(cid)?.['email_hash']) return null;
     this.sql.exec('DELETE FROM account_order_offers WHERE at <= ?', now - ORDER_LINK_MS - LINKS_KEPT_MS);
     if (this.sql.exec('SELECT 1 FROM account_order_offers WHERE order_hash = ? AND cid = ?', orderHash, cid).toArray().length) return null;
     this.sql.exec('INSERT INTO account_order_offers (order_hash, cid, at) VALUES (?, ?, ?)', orderHash, cid, now);

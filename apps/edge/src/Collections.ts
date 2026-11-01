@@ -420,8 +420,8 @@ export class Collections extends DurableObject<Env> {
     this.accounts.setLook(cid, look, Date.now());
   }
 
-  async accountOrderLink(cid: string, emailHash: string, orderHash: string, nonce: string): Promise<number | null> {
-    return this.accounts.orderLink(cid, emailHash, orderHash, nonce, Date.now());
+  async accountOrderLink(cid: string, orderHash: string, nonce: string): Promise<number | null> {
+    return this.accounts.orderLink(cid, orderHash, nonce, Date.now());
   }
 
   async accountProtectLink(cid: string, emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<number | null> {
