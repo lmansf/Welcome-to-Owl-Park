@@ -84,6 +84,8 @@ export class SqlTicketStore implements TicketStore {
     // The booth's checkouts (OP-175): a token's hash, the owl it was made for, and the order it went to once paid.
     sql.exec(`CREATE TABLE IF NOT EXISTS ticket_checkouts (hash TEXT PRIMARY KEY, device TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, order_id TEXT)`);
     sql.exec(`CREATE INDEX IF NOT EXISTS ticket_checkouts_created ON ticket_checkouts (created)`);
+    // Refunds already applied (OP-145): the store's refund id, so a repeated refunds/create switches nothing off twice.
+    sql.exec(`CREATE TABLE IF NOT EXISTS ticket_refunds (refund_id TEXT PRIMARY KEY, order_id TEXT NOT NULL, at INTEGER NOT NULL)`);
   }
 
   order(id: string) {
@@ -142,5 +144,11 @@ export class SqlTicketStore implements TicketStore {
   }
   dropCheckouts(before: number) {
     this.sql.exec(`DELETE FROM ticket_checkouts WHERE created < ?`, before);
+  }
+  refundSeen(refund: string) {
+    return this.sql.exec(`SELECT 1 FROM ticket_refunds WHERE refund_id = ?`, refund).toArray().length > 0;
+  }
+  putRefund(refund: string, order: string, at: number) {
+    this.sql.exec(`INSERT OR IGNORE INTO ticket_refunds (refund_id, order_id, at) VALUES (?, ?, ?)`, refund, order, at);
   }
 }

@@ -419,6 +419,26 @@ mode asks its own book). Out of the nest the owl is on the street in front of do
 changes nothing on a ticket: its time keeps running from its first scan, the pass stays admitted,
 and coming back through the turnstiles is the quick scan ("Welcome back").
 
+### The gate's trust boundary (OP-145)
+
+The Worker trusts the store only through a signed webhook. It checks the HMAC over the raw body,
+with the store's key or the app's secret, and the shop domain, before it reads anything
+(`webhookSigned` in `apps/edge/src/shopify.ts`). An unsigned or mismatched webhook is answered 401
+and logged as `webhook_rejected`; nothing reaches the ticket book. The webhook only names an order:
+the Worker reads the order's lines, price and risk from the Admin API itself.
+
+Every webhook is safe to receive twice. The book makes an order's tickets once, so a repeated
+`orders/paid` changes nothing (`webhook_duplicate`), and one order's webhooks run one at a time
+(the lease in `storeHooks.ts`). A refund is kept by the store's refund id, so a repeated
+`refunds/create` switches nothing off a second time; a cancellation switches off whatever is still
+live. A claim link carries a secret the book keeps only as a hash; it moves unscanned tickets only,
+and a running ticket stays with the owl it let in (OP-174). A scan answers with a reason and never
+with another ticket. A $0 order takes the same path but is not held for the fraud check (C42).
+
+Not covered yet: an owl already inside keeps its entry pass until it runs out (at most 12 hours)
+when its ticket is refunded or cancelled; the refund stops the next scan. Tests:
+`apps/edge/test/gateHardening.test.ts`.
+
 ## 10. Feedback from visitors [BUILT]
 
 Feedback in the Menu (picked out in gold) opens a short form: what kind of note (bug, idea, praise, other) and up
