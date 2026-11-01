@@ -171,6 +171,10 @@ const LEAVE_FADE_MS = 220;
 const GATE_APPROACH = 'gate-approach';
 /** The registry's record of the visit the turnstiles last started on this page, for the low-time toast (OP-172). */
 const TICKET_RUN_KEY = 'ticketRun';
+/** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
+export const RESTARTED_KEY = 'restarted';
+/** The restart's notice stays up until the room closes, near enough (the room waits ten seconds, OP-181). */
+const RESTART_NOTICE_MS = 9_000;
 /** Where Play and travel home land the owl in its own nest (OP-105, OP-130): before its mirror. */
 export const NEST_SPAWN = 'mirror';
 /** Travel from the map fades out slower than a doorway, so going home or across the park is not a jolt (OP-114, OP-130). */
@@ -951,6 +955,8 @@ export class RoomScene extends Phaser.Scene {
       onRealms: (realms) => live() && this.setRealms(realms),
       onRealmClosed: (sign) => live() && this.onRealmClosed(sign),
       onNotThroughGate: () => live() && this.notThroughGate(),
+      onRestartNotice: (words) => live() && this.hud.toast(words, RESTART_NOTICE_MS),
+      onRestart: () => live() && this.restarted(),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -1080,6 +1086,19 @@ export class RoomScene extends Phaser.Scene {
   private queued(): void {
     if (this.leaving) return;
     this.registry.set('queued', true);
+    void this.leaveRoom().then((left) => {
+      if (left) this.scene.start('home');
+    });
+  }
+
+  /**
+   * The park restarted for the night (OP-181): out of the room as through a door, to the home screen,
+   * which says so calmly. Play brings the owl back in, to its own nest; past the turnstiles only with
+   * a ticket that is still good, while the gate takes tickets.
+   */
+  private restarted(): void {
+    if (this.leaving) return;
+    this.registry.set(RESTARTED_KEY, true);
     void this.leaveRoom().then((left) => {
       if (left) this.scene.start('home');
     });

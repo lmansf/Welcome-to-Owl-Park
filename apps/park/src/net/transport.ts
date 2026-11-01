@@ -48,6 +48,10 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onRealmClosed?(sign: string): void;
   /** A travel into the park was turned away (OP-130): the owl has not walked through the front gate since it was last outside. */
   onNotThroughGate?(): void;
+  /** The park restarts for the night in a moment (OP-181): the room's words, to show. */
+  onRestartNotice?(words: string): void;
+  /** The park restarted for the night (OP-181): the owl goes to the home screen, and Play brings it back in. */
+  onRestart?(): void;
 }
 
 export interface RoomConnection {
