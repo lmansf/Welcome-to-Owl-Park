@@ -56,9 +56,8 @@ export interface RoomDef {
    * here. The game does not read them yet: each level's own ticket wires its doors, booth, idols and
    * the rest from them. (Not `spots`, the finds' hiding spots.)
    *
-   * TODO-DOCS (OP-156): docs/ARCHITECTURE.md's rooms table gains `places`; docs/MAP.md: the tree's
-   * named spots (TREE_SPOTS: a level and a screen each, a stair on both its levels) and that a keeper
-   * places them with the painter's Spot tool.
+   * TODO-DOCS (OP-156): docs/ARCHITECTURE.md's rooms table gains `places` (docs/MAP.md sections 4 and
+   * 9 describe the named spots and the painter's Spot tool).
    */
   places?: Array<{ id: string; at: Vec2 }>;
   /** Named spawn points; `default` is required. */

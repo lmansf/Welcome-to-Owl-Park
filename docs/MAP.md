@@ -1,8 +1,8 @@
 # The tree (map 2)
 
-- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); level 1 BUILT; levels 0, 2, 3, 4 and 5 PLANNED (OP-158 to OP-161, OP-163); the entries setting and the turn-your-phone card BUILT, the spot placer PLANNED (OP-156)
-- Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting and the turn-your-phone card, OP-156); the Ticket Board as read 2026-11-01
-- Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
+- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); level 1 BUILT; levels 0, 2, 3, 4 and 5 PLANNED (OP-158 to OP-161, OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
+- Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting, the turn-your-phone card and the spot placer, OP-156); the Ticket Board as read 2026-11-01
+- Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/treeSpots.ts (`TREE_SPOTS`), packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
 - Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173
 - Related: docs/ARCHITECTURE.md (rooms, the room server), docs/ART-PIPELINE.md (how art is made), docs/ACTIVITIES.md (the arcade, the climb), docs/NESTS.md
 
@@ -91,14 +91,17 @@ Each realm is a branch with the same three parts, so a visitor learns it once.
 The two new base games are the smallest things that meet OP-152 once Neon Roost moves to the cave: one
 mechanic each, drawn in the arcade's neon line art, no new art spend. Each gets its own build ticket.
 
-## 4. Named spots [PLANNED (OP-156): the placer sets their positions]
+## 4. Named spots [the list BUILT as `TREE_SPOTS` (OP-156); placed level by level as each is built]
 
 Every thing an owl uses has a name, so art can move under it (the sprite manifest, OP-127). A name is
 the same on every map; its position is set per room by the spot placer (section 9). A placed spot is
 the point its thing stands on, in whole room pixels: a doorway's or a stair's threshold middle on the
 walking surface, an idol's, a booth's or a guardian's base centre. A stair joins two levels, so its
 name is placed once in each of the two rooms (its two ends). The names are room-data ids, so they use
-hyphens; l1's two existing doors keep their ids.
+hyphens; l1's two existing doors keep their ids. The list below is `TREE_SPOTS`
+(`packages/shared/src/treeSpots.ts`), each with its level and screen. The rooms test refuses a room's
+`places` that are not its level's names, are placed twice, are not in whole pixels or lie outside the
+room. The quest givers join the list when their level is built. Level 1 has no `places` yet.
 
 | Name | Kind | Level and screen | Notes |
 | --- | --- | --- | --- |
@@ -254,9 +257,11 @@ the market's common square (`e1`, +1) and its roof run (`e2`, +2). Each screen h
   roofs. It also offered 54 tops that are not ledges (lanterns, signs, the gate's roof, the tree's
   crown), which stay untaken. A ledge painted over other solid art (the stair inside the trunk, the
   boulder before the wall, the plinth and its steps) gets no suggestion: draw it by hand.
-- **The spot placer.** PLANNED (OP-156): in the same painter, a keeper picks a name from the room's list
-  (section 4) and taps the playfield to place it, then saves; the pull script prints the room's
-  `places`.
+- **The spot placer [BUILT: OP-156].** In the same painter, the Spot tool lists the level's names
+  (section 4) west to east, each placed one ticked. A keeper picks a name and taps the playfield where
+  its thing stands, then saves; `pnpm masks:pull` prints the room's `places` to paste into the room data.
+  The game does not read `places` yet: each level's ticket wires its doors, booth, idols and the rest
+  from them.
 - **The entries setting [BUILT: OP-156].** A card on the keepers' capacity page, beside the realms
   switch: of every hundred new owls, how many start in the tree (0 to 100, kept with the realms switch as
   `tree`). At 0, as deployed, the tree is dark and only a keeper's token reaches it. Above 0 its gated
