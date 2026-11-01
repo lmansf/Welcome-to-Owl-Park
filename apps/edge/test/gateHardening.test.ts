@@ -137,7 +137,7 @@ describe('OP-145: a scan that cannot go through fails closed and changes nothing
     // Used: its 24 hours ran out after the first scan.
     expect((await scan('c_buyer', b, T0 + HOUR_MS)).body).toMatchObject({ ok: true, started: true });
     expect((await scan('c_buyer', b, T0 + HOUR_MS + DAY_MS)).body).toEqual({ ok: false, reason: 'used', id: b, kind: 'day' });
-    // Held for the fraud check, on the owl that checked out at the booth (OP-175).
+    // Held for the fraud check, on the owl that checked out at the gate (OP-175).
     const held = new FakeStore();
     held.risk = ['HIGH'];
     const h = park(held);

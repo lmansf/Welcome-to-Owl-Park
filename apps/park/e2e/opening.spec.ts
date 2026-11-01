@@ -6,8 +6,10 @@ import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeCont
 /**
  * Opening night (C42) through the room server and the stand-in store (e2e/standInStore.mjs): the
  * store's orders come in as signed webhooks, the way the store sends them, and the room server reads
- * each order back from the stand-in.
+ * each order back from the stand-in. Since OP-180 a Day Ticket bought at the turnstiles that night is
+ * offered the same half-price pass, right after it comes.
  */
+const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const HOUR = 3_600_000;
 const FREE = { totalPriceSet: { shopMoney: { amount: '0.0' } } };
 const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
@@ -58,6 +60,17 @@ async function claim(browser: Browser, request: APIRequestContext, order: string
 const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
 const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
 
+async function flip(request: APIRequestContext, mode: 'ticket' | 'deployed'): Promise<Record<string, unknown>> {
+  const r = await request.post('/api/admin/gate', { headers: ADMIN, data: { mode } });
+  expect(r.status(), await r.text()).toBe(200);
+  return (await r.json()) as Record<string, unknown>;
+}
+
+/** Passes are dated to the second: wait until a pass made now is dated after the gate closed. */
+async function pastTheClose(closedAt: number): Promise<void> {
+  await expect.poll(() => Date.now(), { intervals: [50] }).toBeGreaterThanOrEqual(Math.floor(closedAt / 1000) * 1000 + 1000);
+}
+
 test.describe('opening night (C42)', () => {
   // The night's count reads the tickets the tests before it gave out, so these run together and in
   // order, on one runner, however the suite is split (OP-123).
@@ -81,14 +94,6 @@ test.describe('opening night (C42)', () => {
       const a = await claim(browser, request, order, device);
       const [night] = await a.evaluate(() => window.owlPark.wallet());
       expect(night).toMatchObject({ kind: 'opening-night', status: 'unused' });
-
-      // The booth says every pass is half price tonight.
-      await walkToDoor(a, 'booth');
-      await a.locator('[data-action="booth"]').click({ timeout: 15_000 });
-      await expect(a.locator('[data-booth="opening"]')).toHaveText('Opening night: every pass is half price');
-      await expect(a.locator('[data-booth="wallet"] li')).toContainText('Opening Night Ticket');
-      await a.screenshot({ path: `e2e-screenshots/opening-booth-${device === PHONE ? 'phone' : 'desktop'}.png` });
-      await a.keyboard.press('Escape');
 
       // Through the turnstiles: the ticket card, then the pass offer with the store's cart link.
       await walkToDoor(a, 'gate');
@@ -134,6 +139,63 @@ test.describe('opening night (C42)', () => {
       await a.context().close();
     });
   }
+
+  test('a Day Ticket bought at the turnstiles is offered the half-price pass right after it comes, with no second card', async ({ browser, request }) => {
+    await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+    try {
+      const context = await browser.newContext(COMPUTER);
+      await context.route(`https://${E2E_STORE.shop}/**`, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Checkout</title><p>Checkout</p>' }));
+      const a = await context.newPage();
+      await a.goto('/?transport=edge&home=0');
+      await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+
+      // The turnstile asks the card before the store once, and its Continue opens checkout for a Day Ticket.
+      await walkToDoor(a, 'gate');
+      await expectStoreCard(a);
+      await expect(a.locator(`${STORE_CARD} [data-store="say"]`)).toContainText('You need a ticket to go in. You can get a Day Ticket right here.');
+      const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
+      await popup.waitForURL(/\/cart\//);
+      const token = new URL(popup.url()).searchParams.get('attributes[owl_checkout]');
+      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+      // The buyer pays: the Day Ticket lands on the owl.
+      const order = orderId();
+      await putOrder(request, order, [ticketLine(1, 'day')], { totalPriceSet: { shopMoney: { amount: '1.60' } }, ...LOW, customAttributes: [{ key: 'owl_checkout', value: token }] });
+      expect(await webhook(request, 'orders/paid', order)).toEqual({ tickets: 1, sent: true });
+      if (!popup.isClosed()) await popup.close();
+
+      // Right after it, the annual pass at half price, once.
+      const offer = a.locator('[data-free-pass="day"]');
+      await expect(offer).toBeVisible({ timeout: 20_000 });
+      await expect(offer).toContainText('Come back all year! The annual pass is half price tonight.');
+      await expect(offer.getByRole('button', { name: 'No thanks' })).toBeVisible();
+      await a.screenshot({ path: 'e2e-screenshots/opening-day-pass.png' });
+      const [day] = await a.evaluate(() => window.owlPark.wallet());
+      expect(day).toMatchObject({ kind: 'day', status: 'unused' });
+
+      // Get the pass: the cart with the night's code and the Day Ticket, with no second card before the store.
+      const [cart] = await Promise.all([context.waitForEvent('page'), offer.getByRole('button', { name: 'Get the pass' }).click()]);
+      await cart.waitForURL(/\/cart\//);
+      const u = new URL(cart.url());
+      expect(u.origin + u.pathname).toBe(`https://${E2E_STORE.shop}/cart/41002:1`);
+      expect(u.searchParams.get('discount')).toBe(E2E_STORE.passCode);
+      expect(u.searchParams.get('attributes[from_ticket]')).toBe(day!.id);
+      await expect(a.locator(STORE_CARD)).toBeHidden();
+      await cart.close();
+
+      // The pass order comes back linked to the Day Ticket, and the page says so.
+      const pass = orderId();
+      await putOrder(request, pass, [halfPricePass(2)], { ...HALF_PRICE, discountCodes: [E2E_STORE.passCode], customAttributes: [{ key: 'from_ticket', value: day!.id }] });
+      expect(await webhook(request, 'orders/paid', pass)).toEqual({ tickets: 1, sent: true });
+      await expect(a.getByText('Your annual pass is in your wallet')).toBeVisible({ timeout: 20_000 });
+      const wallet = await a.evaluate(() => window.owlPark.wallet());
+      expect(wallet.find((t) => t.kind === 'annual')).toMatchObject({ status: 'unused' });
+      expect(wallet.find((t) => t.id === day!.id)).toMatchObject({ freePass: 'claimed' });
+      await context.close();
+    } finally {
+      await flip(request, 'deployed');
+    }
+  });
 
   test('a ticket for a night that has passed is turned away the day after', async ({ browser, request }) => {
     const order = orderId();
@@ -188,7 +250,8 @@ test.describe('opening night (C42)', () => {
     expect((await request.get('/api/admin/opening')).status()).toBe(403);
     const r = await request.get('/api/admin/opening', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY } });
     const { counts, window, link } = (await r.json()) as { counts: Record<string, number>; window: { from: number; until: number } | null; link: { code: boolean; pass: boolean } };
-    // The tests before this one: two tickets through the gate, each turned into a linked pass.
+    // The tests before this one: two tickets through the gate, each turned into a linked pass, and a
+    // pass linked to a Day Ticket (counted with the linked passes, not in the night's conversion).
     expect(counts['issued']).toBeGreaterThanOrEqual(3);
     expect(counts['scanned']).toBeGreaterThanOrEqual(2);
     expect(counts['linkedPasses']).toBeGreaterThanOrEqual(2);

@@ -70,12 +70,6 @@ export interface RoomDef {
    */
   doors: DoorDef[];
   /**
-   * Named stretches of floor the client watches the owl walk into and out of (OP-172: the plaza in
-   * front of the lobby's turnstiles, where the owl's ticket status shows). They lead nowhere and offer
-   * nothing to press; the room server ignores them.
-   */
-  zones?: ZoneDef[];
-  /**
    * Hiding spots where a visitor's collectible finds can appear (only the finder sees them).
    * Each is on the floor, at least 60 px from every doorway and spot, and reachable by a straight
    * walk from the default spawn that never crosses an exit; or up on a perch single jumps reach
@@ -138,12 +132,6 @@ export interface RoomTile {
 export function tileFade(t: RoomTile): { left: number; right: number } {
   const clamp = (n: number | undefined): number => Math.max(0, Math.min(ROOM_W / 2, Math.round(n ?? 0)));
   return { left: clamp(t.fade?.left), right: clamp(t.fade?.right) };
-}
-
-/** A named stretch of floor (room px) the client watches the owl walk into and out of. */
-export interface ZoneDef {
-  id: string;
-  rect: Rect;
 }
 
 export interface DoorDef {

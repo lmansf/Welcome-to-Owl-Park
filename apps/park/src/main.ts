@@ -233,7 +233,7 @@ declare global {
       say(n: number): boolean;
       /** The home screen (OP-065): whether it is up, and whether this device holds an owl. */
       home(): { shown: boolean; loggedIn: boolean };
-      /** The tickets on this device (empty without the park's server). */
+      /** The tickets on this owl (empty without the park's server). */
       wallet(): Promise<WalletEntry[]>;
       /** The arcade's run under way: its game, its seed and the game itself (null when none). */
       arcade(): ReturnType<RoomScene['arcadeRun']>;
@@ -247,8 +247,10 @@ declare global {
       away(): 'ask' | 'gone' | null;
       /** The load screen (OP-129): up or not, its progress, the fact showing and the owl's hoots. */
       loadScreen(): LoadScreenState;
-      /** The turnstiles scan a ticket on this device (by its ID, or the gate's pick); one that goes through admits this owl. */
+      /** The turnstiles scan a ticket on this owl (by its ID, or the gate's pick); one that goes through admits this owl. */
       scan(id?: string): Promise<ScanReply>;
+      /** A share link's secret for a ticket on this owl (the booth's Pass it on went with it, OP-180); null when it cannot be passed on. */
+      share(id: string): Promise<string | null>;
     };
   }
 }
@@ -617,4 +619,5 @@ window.owlPark = {
   away: () => away.shown(),
   loadScreen: () => loadScreen.state(),
   scan: (id) => transport.tickets?.scan(id) ?? Promise.resolve({ ok: false, reason: 'none' }),
+  share: (id) => transport.tickets?.share(id) ?? Promise.resolve(null),
 };

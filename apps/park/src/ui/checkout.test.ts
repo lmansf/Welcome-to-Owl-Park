@@ -25,7 +25,7 @@ function fakeWindow(opts: { cutOff?: boolean } = {}) {
   return w;
 }
 
-describe('opening checkout from the booth (OP-175)', () => {
+describe('opening checkout from the turnstiles (OP-175, OP-180)', () => {
   it('opens a blank window in the click, cuts it off from the park, then sends it to the cart link with the owl’s token', async () => {
     const w = fakeWindow();
     const opened: string[][] = [];
@@ -52,7 +52,7 @@ describe('opening checkout from the booth (OP-175)', () => {
     expect(lone.closed).toBe(true);
   });
 
-  it('finds the ticket that came since the booth opened, and nothing spent or refunded', () => {
+  it('finds the ticket that came since checkout opened, and nothing spent or refunded', () => {
     const before = new Set(['OWL-AAAA-AAAA']);
     expect(newTicket([ticket('OWL-AAAA-AAAA')], before)).toBeNull();
     expect(newTicket([ticket('OWL-BBBB-BBBB', { status: 'revoked' })], before)).toBeNull();
@@ -95,10 +95,14 @@ function testClock() {
 }
 
 describe('watching for the bought ticket (OP-175)', () => {
-  it('says when the ticket has come and closes the checkout window', async () => {
+  it('says when the ticket has come, with the ticket, and closes the checkout window', async () => {
     const t = testClock();
     const said: Array<[string, boolean]> = [];
-    const watch = createCheckoutWatch((m, came) => said.push([m, came]), t.clock);
+    let ticketCame: WalletEntry | null = null;
+    const watch = createCheckoutWatch((m, came) => {
+      said.push([m, came !== null]);
+      ticketCame = came;
+    }, t.clock);
     let wallet: WalletEntry[] = [];
     const w = fakeWindow();
     watch.start({ wallet: async () => wallet, before: new Set(), win: w as unknown as Window });
@@ -107,6 +111,7 @@ describe('watching for the bought ticket (OP-175)', () => {
     wallet = [ticket('OWL-NEWT-ICKT')];
     await t.advance(LOOK_MS);
     expect(said).toEqual([[CHECKOUT_WORDS.added, true]]);
+    expect(ticketCame).toMatchObject({ id: 'OWL-NEWT-ICKT', kind: 'day' });
     expect(w.closed).toBe(true);
     expect(watch.active()).toBe(false);
     expect(t.running()).toBe(false);
@@ -134,7 +139,7 @@ describe('watching for the bought ticket (OP-175)', () => {
   it('Cancel says checkout closed and looks two minutes more; with nothing, it stops after half an hour', async () => {
     const t = testClock();
     const said: Array<[string, boolean]> = [];
-    const watch = createCheckoutWatch((m, came) => said.push([m, came]), t.clock);
+    const watch = createCheckoutWatch((m, came) => said.push([m, came !== null]), t.clock);
     let wallet: WalletEntry[] = [];
     watch.start({ wallet: async () => wallet, before: new Set(), win: null });
     watch.cancel();

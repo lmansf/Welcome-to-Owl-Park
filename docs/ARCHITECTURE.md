@@ -365,19 +365,38 @@ exception to the mirror. The Menu's Home screen leaves the room as a door does (
 owl's place frees at once, and a ticket keeps running) and comes back to it. An address that
 names a room (`?room=`: tests, the art preview) or says `home=0` goes straight into the park.
 
-Every visitor arrives in the lobby (`lobby`, two screens wide): the ticket booth on one side and
-the turnstile gate into the hub on the other. Open (now), the turnstiles let everyone through and
-the booth says tickets are coming. Taking tickets, `/api/pass` still gives every visitor a guest
-pass, but a pass that is not admitted opens only the rooms outside the turnstiles: the gate turns
-it back toward the booth, and the Worker refuses its socket for any other room and its use of the
-shop (its collection still shows). The booth sells only while the gate takes tickets.
+Every visitor arrives in the lobby (`lobby`, two screens wide): the turnstile gate into the hub,
+and the lane down to the nests. The painted ticket booth in the lobby's art is scenery: since OP-180
+the turnstiles sell tickets and there is no booth to walk up to. Open (now), the turnstiles let
+everyone through and sell nothing. Taking tickets, `/api/pass` still gives every visitor a guest
+pass, but a pass that is not admitted opens only the rooms outside the turnstiles: a turnstile
+reached without a ticket that works turns the owl back and offers it a Day Ticket (below), and the
+Worker refuses its socket for any other room and its use of the shop (its collection still shows).
+A ticket's status shows only at the turnstiles (the scan card, or why they stayed shut); OP-172's
+card on the plaza before them went with OP-180, and the Menu's Settings keep the tickets in a
+closed row.
+
+**Buying at the turnstiles** BUILT (OP-175, OP-180; `apps/park/src/ui/gateSale.ts`): a turnstile
+that stays shut for want of a ticket (none, used up, expired or refunded) shows the card before the
+store (OP-153, `storeCard.ts`) once, with what the turnstiles say above its line ("You need a ticket
+to go in. You can get a Day Ticket right here.", and the early preview's warning while it runs).
+Continue opens a blank window in the click, then asks `POST /api/tickets/checkout` for the Day
+Ticket's cart link with a one-time token for this owl (`owl_checkout`), and sends the window there
+(`checkout.ts`); a blocked window gets a link to tap, and with no token the store's ticket page
+(`VITE_TICKETS_URL`) opens instead. A small card over the game says where checkout stands, with
+Back to checkout and Cancel, while the page reads the wallet; the paid order's ticket lands on the
+owl with no email opened. Only the card before the store opens windows: the opener it hands
+Continue is what Back to checkout, Open checkout and the half-price pass after the purchase use, so
+the card asks once, right before the purchase, and not again. A turnstile that stays shut for
+another reason (a ticket held for the store's check, not yet in its window, offline) says so and
+sells nothing. A ticket belongs to the owl, not the screen (OP-183): every ticket route keys on the
+pass's collector id, so a ticket bought or claimed on one screen admits the same owl on any other.
 
 **The opening switch** BUILT (OP-067, `apps/edge/src/gateSwitch.ts`): the keepers flip the gate on
 `/admin/gate` (or `POST /api/admin/gate` with `{"mode": "ticket" | "open" | "deployed"}`), both
 behind the admin key, with no deploy. The setting lives in the vote ledger's object beside the
 tickets; each Worker reads it at most every ten seconds, so a flip reaches everyone within that.
-Never set, or handed back (`deployed`), `GATE` in `wrangler.jsonc` decides as before. The booth and
-the turnstiles ask `/api/entry` for the gate as it is now before they act. An owl already inside
+Never set, or handed back (`deployed`), `GATE` in `wrangler.jsonc` decides as before. The turnstiles ask `/api/entry` for the gate as it is now before they act. An owl already inside
 when the gate closes stays in: a pass carries when it was made (`iat`), and one made before the
 switch closed the gate stays admitted until it expires; the next pass applies the rule at the
 turnstiles.
@@ -410,8 +429,8 @@ waits until a later low rating or the owner's order tag `owl-park-release` relea
 refund). That release rule is C35's default; C45 supersedes it with the fraud link, PLANNED
 (OP-053), section 12, under which every paid order is scored before any ticket is released. A refund switches off that many tickets of a line, unused ones first, and a cancellation
 all of them; votes already cast stay counted. Opening the link (`#claim=<secret>`, which the page
-takes out of the address bar at once) puts the order's tickets in the wallet on that device, one
-device at a time; a share link (`#take=<secret>`) passes one ticket on. The turnstiles scan a ticket
+takes out of the address bar at once) puts the order's tickets in the wallet of the owl that opened
+it (its collector id, on whichever screen it plays: OP-183), one owl at a time; a share link (`#take=<secret>`) passes one ticket on. The turnstiles scan a ticket
 held on the device: its time starts at its first scan (a day ticket 24 hours, an annual pass 365
 days, a night ticket the store's hours; an unused ticket expires a year after purchase; an event
 ticket works inside its window), and the Worker answers with a pass admitted by that ticket. Votes
@@ -440,16 +459,26 @@ is a field on the product, so a moved date is a store edit. A free order has not
 to rate, so its tickets go out at once (from `orders/create` too, in case the store does not send
 `orders/paid` for it). The gate takes the ticket inside its window only; unscanned by its end, it
 expires. During the window (read from the ticket product on sale, `apps/edge/src/opening.ts`) the
-booth says every pass is half price (OP-062; the pass was free at first). After the scan, the
-ticket card is followed by "Your pass is half price tonight. Claim it": `POST /api/tickets/pass`
+pass is half price (OP-062; the pass was free at first); the booth's line that said so went with
+the booth (OP-180), and the offer itself says it. After the scan, the
+ticket card is followed by "Your pass is half price tonight. Claim it" (after the card before the
+store, as no purchase came right before it): `POST /api/tickets/pass`
 makes a cart link on the store with the annual pass, the code `OPENING_PASS_CODE` (a Worker secret,
 50% off the pass) and the cart attribute `from_ticket`; the store's checkout opens in a new tab. The
 pass order is a paid order, so the store rates it like any other (a pass it does not rate low waits
 in the wallet until the check is done). It comes back through `orders/paid` with that attribute:
 the ticket book links the pass to its Opening Night Ticket (only one that went through the gate
-counts), keeps what the order's passes sold for (each pass line's price less every discount on it,
+counts) or, since OP-180, its Day or Night ticket, keeps what the order's passes sold for (each pass line's price less every discount on it,
 the code's included, before tax), puts the pass straight into that wallet, and switches the pass
-off if the ticket is switched off. A pass bought with the code but without the link counts as a
+off if an Opening Night Ticket is switched off (a pass linked to a paid Day or Night ticket stays).
+Since OP-180 the same offer follows a Day Ticket bought at the turnstiles, all season (Logan, Nov 1):
+"Come back all year! The annual pass is half price tonight.", Get the pass or No thanks, once per
+ticket, with the opener the card before the store handed that purchase, so no second card. The desk
+offers the pass to a Day or Night ticket that still works (unused, held or running) on the owl's own
+wallet, never to an owl that holds an annual pass that still works (`has-pass`); when the half
+price is on is the store code's own dates (a store edit); a store
+that is not set up answers 503 `not-set-up` and the page shows no offer. Prices and products do not
+change. A pass bought with the code but without the link counts as a
 pass without a link. `/admin/opening` (the admin key) counts the night: tickets issued and scanned,
 passes through the link and without one, the conversion rate (tickets scanned that turned into a
 pass), the passes' revenue before tax (less any pass switched off), and a CSV of the night's
@@ -588,17 +617,20 @@ sequenceDiagram
     participant F as Fraud endpoint (planned, OP-052)
     participant R as RoomObject (the hub)
 
-    B->>S: Buy a ticket (checkout opens from the booth)
+    B->>W: At a shut turnstile, after the card before the store: POST /api/tickets/checkout
+    W-->>B: The Day Ticket's cart link with this owl's one-time token (owl_checkout)
+    B->>S: Checkout in its own window (checkout.ts, gateSale.ts)
     S->>W: POST /api/store/webhook orders/paid (HMAC-signed)
     W->>W: Verify the signature (storeHooks.ts, shopify.ts)
     W->>S: Admin API: the order's ticket lines and risk (ORDER_QUERY)
     W-->>F: planned: score the hashed payload, wait up to 2 s (C45)
     W->>T: /tickets/issue: one ticket per unit, held unless low risk or free
     W->>S: Fulfil the ticket lines with the claim link as tracking link
-    S->>B: The store's shipping email, "Your ticket", with the claim link
+    W->>T: With an owl_checkout token: the tickets land on that owl at once
+    B->>W: The page reads the wallet while checkout is open: "Ticket added"
+    S->>B: As always, the store's shipping email, "Your ticket", with the claim link (another screen)
     B->>W: Open the link: POST /api/tickets/claim (the link's secret, device = the collector id)
-    W->>T: /tickets/claim: the order's live tickets move onto this device
-    B->>B: Home screen, "Ticket added"; Play puts the owl in the lobby
+    W->>T: /tickets/claim: the order's live tickets move onto this owl (any screen, OP-183)
     B->>W: GET /api/pass (collector token) and GET /api/entry (the gate now)
     W->>T: Read the opening switch (gateNow, kept 10 s)
     B->>W: At the turnstiles: POST /api/tickets/scan

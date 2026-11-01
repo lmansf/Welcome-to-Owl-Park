@@ -16,8 +16,9 @@ export { STREET_DOORS, STREET_ROOM } from '../src/homes';
  * is its middle screen (the market's first) and the wings were painted out from it, so positions
  * on the painting are its old ones plus one screen in the hub and the grove.
  *
- * The lobby is the park's front entrance, where every visitor arrives: the ticket booth on one
- * side, the turnstile gate into the hub on the other. It is two screens wide, its painting the
+ * The lobby is the park's front entrance, where every visitor arrives: the painted ticket booth on
+ * one side (it sells nothing since OP-180: the turnstiles sell a Day Ticket), the turnstile gate into
+ * the hub on the other. It is two screens wide, its painting the
  * east screen. It is outside the park, so it has no hiding spots and quests never send owls there.
  * The way back out is where the owls come in: the hub's floor at the foot of its spawn, whose
  * bottom edge leads to the lobby, outside the gate (C43, wayout.ts).
@@ -751,16 +752,10 @@ export const ROOMS: Record<string, RoomDef> = {
     doors: [
       // The lane to the street of nests, past the west end of the balustrade.
       { id: 'to-homes', rect: { x: 0, y: 790, w: 110, h: 98 }, to: { room: 'homes', spawn: 'from-lobby' }, marker: { x: 55, y: 790 } },
-      // The ticket window of the birdhouse booth.
-      { id: 'booth', rect: { x: 1890, y: 702, w: 170, h: 88 }, marker: { x: 1960, y: 590 } },
       // The five turnstiles beneath the owls' wings, from the left owl's plinth to the right one's
       // (the first turns between the plinth and the first post): through them is the hub.
       { id: 'gate', rect: { x: 2350, y: 650, w: 440, h: 64 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 2595, y: 600 } },
     ],
-    // The plaza just in front of the turnstiles (OP-172), 50 px past the gate on each side and down to
-    // the floor's front edge: stopping short of the booth (which ends at x 2060), it is where the owl's
-    // ticket status shows while the gate takes tickets. The owl that comes out of the park lands in it.
-    zones: [{ id: 'gate-approach', rect: { x: 2300, y: 690, w: 540, h: 198 } }],
   },
   homes: {
     id: 'homes',

@@ -1,16 +1,30 @@
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, state, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, STORE_CARD, state, walkToDoor } from './helpers';
 
 /**
  * The opening switch (OP-067) through the room server: the keepers flip the front gate with the
- * admin key and no deploy, and the turnstiles and the booth follow it. Every test hands the gate
- * back to the deployed setting (open) when it ends, so the other suites find it as before.
+ * admin key and no deploy, and the turnstiles follow it. Since OP-180 a turnstile that stays shut
+ * offers a Day Ticket through the card before the store (storecard.spec.ts and checkout.spec.ts go
+ * on from there). Every test hands the gate back to the deployed setting (open) when it ends, so the
+ * other suites find it as before.
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
 const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
-const TURNED_BACK = 'The park is open to ticket-holders. The ticket booth is along the plaza.';
+/** What a shut turnstile says above the card before the store, for an owl with no ticket (OP-180). */
+const DAY_TICKET = 'You need a ticket to go in. You can get a Day Ticket right here.';
+
+/** Stopped at a turnstile: the card before the store offers a Day Ticket, and Not now leaves the owl outside. */
+async function stoppedAtTheGate(page: Page): Promise<void> {
+  await expect(page.locator(STORE_CARD)).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(`${STORE_CARD} [data-store="say"]`)).toContainText(DAY_TICKET);
+}
+
+async function notNow(page: Page): Promise<void> {
+  await page.locator(`${STORE_CARD} [data-store="not-now"]`).click();
+  await expect(page.locator(STORE_CARD)).toBeHidden();
+}
 
 /**
  * Passes are dated to the second, and one dated in the second the gate closed counts as made before
@@ -94,20 +108,14 @@ test.describe('the opening switch (OP-067)', () => {
     ['a computer', COMPUTER],
     ['a phone', PHONE],
   ] as const) {
-    test(`on ${name}: with the gate taking tickets, the booth sells and the turnstiles turn an owl without a ticket back`, async ({ browser, request }) => {
+    test(`on ${name}: with the gate taking tickets, the turnstiles offer an owl without a ticket a Day Ticket and keep it out`, async ({ browser, request }) => {
       await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';
-      await walkToDoor(a, 'booth');
-      await a.locator('[data-action="booth"]').click({ timeout: 15_000 });
-      await expect(a.locator('[data-booth="say"]')).toHaveText('The park is open to ticket-holders. Get your ticket here, then walk through the turnstiles.');
-      await expect(a.locator('[data-booth="buy"]')).toHaveText('Get a ticket');
-      await a.screenshot({ path: `e2e-screenshots/gate-closed-booth-${shot}.png` });
-      await a.keyboard.press('Escape');
-
       await walkToDoor(a, 'gate');
-      await expect(a.getByText(TURNED_BACK)).toBeVisible({ timeout: 15_000 });
+      await stoppedAtTheGate(a);
       await a.screenshot({ path: `e2e-screenshots/gate-closed-turnstiles-${shot}.png` });
+      await notNow(a);
       // Turned back, it is still in the lobby a moment later.
       await new Promise((r) => setTimeout(r, 2_500));
       expect((await state(a)).room).toBe('lobby');
@@ -115,16 +123,12 @@ test.describe('the opening switch (OP-067)', () => {
     });
   }
 
-  test('an owl already inside stays in when the gate closes, an owl arriving after stops at the turnstiles, and a ticket goes through', async ({ browser, request }) => {
-    // Open: the booth does not sell yet, though the store's ticket page is set, and the owl walks on in.
+  test('an owl already inside stays in when the gate closes, an owl arriving after is offered a Day Ticket at the turnstiles, and a ticket goes through', async ({ browser, request }) => {
+    // Open: the turnstiles sell nothing and ask nothing, and the owl walks on in.
     const inside = await arrive(browser, COMPUTER);
-    await walkToDoor(inside, 'booth');
-    await inside.locator('[data-action="booth"]').click({ timeout: 15_000 });
-    await expect(inside.locator('[data-booth="say"]')).toHaveText('Tickets and passes are coming soon. Until then the turnstiles let everyone through, so go on in and explore.');
-    await expect(inside.locator('[data-booth="buy"]')).toHaveCount(0);
-    await inside.keyboard.press('Escape');
     await walkToDoor(inside, 'gate');
     await expect.poll(async () => (await state(inside)).room, { timeout: 20_000 }).toBe('hub');
+    await expect(inside.locator(STORE_CARD)).toBeHidden();
 
     // The keepers close the gate: the owl inside goes on from room to room.
     const closed = await flip(request, 'ticket');
@@ -136,7 +140,8 @@ test.describe('the opening switch (OP-067)', () => {
     await pastTheClose(closed['closedAt'] as number);
     const late = await arrive(browser, COMPUTER);
     await walkToDoor(late, 'gate');
-    await expect(late.getByText(TURNED_BACK)).toBeVisible({ timeout: 15_000 });
+    await stoppedAtTheGate(late);
+    await notNow(late);
     // Three parks drawing at once starve a test machine's browser to a few frames a second, which
     // stretches the game's timers (the pause before the hub ran twenty seconds): the holder comes alone.
     for (const p of [inside, late]) await p.context().close();

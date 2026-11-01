@@ -31,7 +31,7 @@ export const HOME_WORDS = {
   /** A ticket link whose ticket is already running on another owl (OP-174). */
   inUse: 'Ticket already in use',
   held: 'waiting on a quick check from the store',
-  none: 'No ticket yet: the booth is by the gate',
+  none: 'No ticket yet: you can get one at the turnstiles',
   /** The Menu's way back here from inside the park. */
   menu: 'Home screen',
 } as const;
@@ -63,8 +63,8 @@ const HOUR = 3_600_000;
 
 /**
  * The line under Play (OP-172): only when it changes what the owl does. While the gate takes tickets
- * and the device holds none, where to get one; for the ticket that matters most (bestTicket, as the
- * gate's status card picks it), a wait on the store's check, a dated event or Opening Night Ticket
+ * and the owl holds none, where to get one (the turnstiles sell a Day Ticket, OP-180); for the
+ * ticket that matters most (bestTicket), a wait on the store's check, a dated event or Opening Night Ticket
  * whose night is still to come, or a running Day or Night ticket with under an hour left. A running
  * annual pass, a ready ticket, or an open gate with none: null, and the line is not shown.
  */

@@ -370,18 +370,12 @@ test.describe('room server', () => {
     expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => t.id).sort()).toEqual([...tickets].sort());
     expect((await state(a)).room).toBe('lobby');
 
-    // The booth shows both, and passes one on with a share link.
-    await walkToDoor(a, 'booth');
-    await a.locator('[data-action="booth"]').click({ timeout: 15_000 });
-    await expect(a.locator('[data-booth="wallet"] li')).toHaveCount(2);
-    await expect(a.locator('[data-booth="say"]')).toContainText('Your ticket is ready');
-    await a.screenshot({ path: 'e2e-screenshots/ticket-booth-wallet.png' });
-    await a.locator('[data-booth="share"]').first().click();
-    const shared = a.locator('[data-booth="wallet"] .shared');
-    await expect(shared).toBeVisible();
-    const shareUrl = (await shared.getAttribute('data-link')) ?? '';
-    expect(shareUrl).toMatch(/\/#take=[A-Za-z0-9_-]{43}$/);
-    await a.keyboard.press('Escape');
+    // One is passed on with a share link (the booth that made these went with OP-180; the park's
+    // server still makes them, so the test asks it the way the booth did).
+    const [first] = await a.evaluate(() => window.owlPark.wallet());
+    const take = await a.evaluate((id) => window.owlPark.share(id), first!.id);
+    expect(take).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const shareUrl = `${new URL(a.url()).origin}/#take=${take}`;
 
     // A friend opens it: the ticket moves to their device, and works once.
     const b = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();

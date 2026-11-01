@@ -23,10 +23,9 @@ import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createSayWheel } from './sayWheel';
 import { createSettingsScreen } from './settingsScreen';
 import { createWhichOwlScreen, type WhichOwlRun } from './whichOwl';
-import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
 import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
-import { createCheckoutWatch, type CheckoutWatch, type WatchOptions } from './checkout';
+import { createGateSale, type GateSale, type GateSalePanel } from './gateSale';
 import { createStoreCard, type StoreGo } from './storeCard';
 import { createTurnPhone } from './turnPhone';
 
@@ -137,8 +136,11 @@ export interface Hud {
   openWhichOwl(run: Omit<WhichOwlRun, 'preview'>, opener: HTMLElement): void;
   /** The feather shop. */
   openShop(): void;
-  /** The lobby's ticket booth. */
-  openBooth(info: BoothInfo): void;
+  /**
+   * A turnstile reached without a ticket that works (OP-180): the card before the store, then
+   * checkout for a Day Ticket over the game, and what follows once the ticket has come.
+   */
+  sellAtGate(sale: GateSale): void;
   /**
    * The card before the store (OP-153): Continue goes on to the store (`go`), Not now back to where
    * the visitor was. Every way from the park to the store asks through it; `opener` gets the focus back.
@@ -146,8 +148,6 @@ export interface Hud {
   askStore(go: StoreGo, opener?: HTMLElement | null): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
-  /** The ticket status in the ticket card's place while the owl stands before the turnstiles (OP-172); null fades it out. */
-  ticketStatus(line: string | null): void;
   /** The arcade's game screen over everything while a run is played (again, if it is open); `handlers` take the play. */
   openArcade(view: ArcadeView, handlers: ArcadeHandlers): void;
   /** The run's score and its line of the moment, as it goes. */
@@ -170,14 +170,11 @@ export interface Hud {
   /** The climb is over: at the clouds, or lost to the room. */
   climbResult(result: ClimbResultView): void;
   closeClimb(): void;
-  /** Opening night (C42): after the ticket card, the half-price pass to claim. */
+  /**
+   * The half-price annual pass (C42, OP-062): after the ticket card on opening night, or right after
+   * a Day Ticket bought at the turnstiles has come (OP-180).
+   */
   offerFreePass(offer: FreePassOffer): void;
-  /** Look for a pass the owl went to claim, and say when it has come. */
-  watchFreePass(claimed: () => Promise<boolean>): void;
-  /** The booth's checkout is open (OP-175): watch the wallet, say when the ticket has come, and call `came` then if the booth is still open. */
-  watchCheckout(o: WatchOptions, came: () => void): void;
-  /** The buyer is done with the booth's checkout: look a little longer, then stop. */
-  cancelCheckout(): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
   /**
@@ -435,11 +432,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let taskState: TaskState | null = null;
   let collectionState: CollectionState | null = null;
   let shop: ShopPanel | null = null;
-  let booth: BoothPanel | null = null;
   let ticketCard: TicketCard | null = null;
   let freePass: FreePassCard | null = null;
-  let checkout: CheckoutWatch | null = null;
-  let onCame: () => void = () => {};
+  let gateSale: GateSalePanel | null = null;
   let roomId = '';
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
@@ -583,7 +578,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
-  /** The card before the store (OP-153), over the booth or the pass offer that asked; it closes alone on Escape. */
+  /** The card before the store (OP-153), before a purchase at the turnstiles, the pass offer or the gift shop; it closes alone on Escape. */
   const storeCard = createStoreCard(root);
   // Its Send feedback opens the same form as the Menu's (OP-167); closed, it gives the focus back to the home screen's Settings button.
   const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
@@ -593,11 +588,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const turnPhone = createTurnPhone(root);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
 
-  /** The big sheets (dialogue, shop, booth, Decorate) share the bottom of the screen: one at a time. */
+  /** The big sheets (dialogue, shop, Decorate) share the bottom of the screen: one at a time. */
   const closeSheets = () => {
     questUi?.closeDialogue();
     shop?.close();
-    booth?.close();
     // Decorating ends with the sheet: the room puts its camera back.
     if (decorate?.isOpen()) decorateActions?.done();
   };
@@ -917,19 +911,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     openShop() {
       shop?.open();
     },
-    openBooth(info) {
-      booth ??= createBoothPanel(root, makeRoom, storeCard.ask);
-      booth.open(info);
+    sellAtGate(sale) {
+      gateSale ??= createGateSale(root, storeCard.ask, (m, ms) => toast(m, ms ?? 4500));
+      gateSale.sell(sale);
     },
     askStore: (go, opener) => storeCard.ask(go, opener),
     showTicket(card) {
       ticketCard ??= createTicketCard(root);
       ticketCard.show(card);
-    },
-    ticketStatus(line) {
-      if (line === null && !ticketCard) return;
-      ticketCard ??= createTicketCard(root);
-      ticketCard.status(line);
     },
     openArcade(view, handlers) {
       if (!arcade.isOpen()) makeRoom();
@@ -962,22 +951,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     offerFreePass(offer) {
       freePass ??= createFreePassCard(root, (m) => toast(m, 5000), storeCard.ask);
       freePass.show(offer);
-    },
-    watchFreePass(claimed) {
-      freePass ??= createFreePassCard(root, (m) => toast(m, 5000), storeCard.ask);
-      freePass.watch(claimed);
-    },
-    watchCheckout(o, came) {
-      onCame = came;
-      checkout ??= createCheckoutWatch((m, yes) => {
-        toast(m, 6000);
-        // The booth, if it is still open, shows the ticket now in its wallet.
-        if (yes && booth?.isOpen()) onCame();
-      });
-      checkout.start(o);
-    },
-    cancelCheckout() {
-      checkout?.cancel();
     },
     setRoom(id) {
       roomId = id;

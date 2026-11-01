@@ -214,14 +214,15 @@ turnstiles let everyone through. The steps, in order:
 7. **Fraud check**: an order the store rates low risk gets its link at once. Any other order waits
    (its tickets show as waiting in the buyer's wallet); a later low rating releases it, or the
    owner adds the order tag `owl-park-release` after checking it, or refunds it.
-8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, for the booth's button; a
-   repository variable for deploys) any time before: the booth offers it only while the gate takes
-   tickets. On the day, open `/admin/gate` with the admin key and press **Take tickets now**: the
-   turnstiles take tickets only and the booth sells, within ten seconds and with no deploy. Owls
+8. **Going on sale**: set `VITE_TICKETS_URL` (the store's ticket page, where the turnstiles'
+   checkout goes when the park cannot make an owl's cart link; a repository variable for deploys)
+   any time before. On the day, open `/admin/gate` with the admin key and press **Take tickets
+   now**: the turnstiles take tickets only and sell a Day Ticket to an owl without one (OP-180),
+   within ten seconds and with no deploy. Owls
    already inside stay in; **Open to everyone** flips it back, and **As deployed** hands it back to
    `GATE` in `wrangler.jsonc`. The same from a terminal: `POST /api/admin/gate` with the
    `X-Admin-Key` header and `{"mode": "ticket"}` (or `"open"`, or `"deployed"`); a `GET` says how it
-   is set. The turnstiles scan a ticket held on the device whichever way the gate is set, and the
+   is set. The turnstiles scan a ticket held by the owl (on any screen, OP-183) whichever way the gate is set, and the
    first scan starts its time.
 9. **Tickets without a store order** (giveaways and tests): `POST /api/admin/tickets` with the
    `X-Admin-Key` header and `{"kind": "day", "quantity": 2}` (or `"hours": 6`, or an `event` with
@@ -234,9 +235,12 @@ turnstiles let everyone through. The steps, in order:
     products" code for the annual pass) goes on the Worker as `OPENING_PASS_CODE`
     (`wrangler secret put`, or a repository secret the deploy uploads), never in a file. The
     Opening Night Ticket needs no code: a free order gets its ticket at once. During the ticket's
-    window the booth says every pass is half price; once an owl's Opening Night Ticket has gone
-    through the gate, the park offers "Your pass is half price tonight. Claim it", a cart link with
-    the annual pass, the code and the cart attribute `from_ticket` (the ticket's ID). The pass order
+    window, once an owl's Opening Night Ticket has gone through the gate, the park offers "Your
+    pass is half price tonight. Claim it", a cart link with the annual pass, the code and the cart
+    attribute `from_ticket` (the ticket's ID). The same offer follows a Day Ticket bought at the
+    turnstiles during the window (OP-180: "Come back all year! The annual pass is half price
+    tonight."), never to an owl that holds an annual pass; outside the window it is not offered,
+    so the code is not given out on other days. The pass order
     is a paid order: it comes back through `orders/paid`, the store rates it like any other (step 7),
     and the pass goes straight into that owl's wallet, working at once when the store rates it low.
     The count is at `/admin/opening` (the admin key, as for feedback): tickets issued and scanned,

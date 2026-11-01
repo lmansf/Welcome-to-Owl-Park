@@ -25,7 +25,7 @@ export interface ParkConfig {
   /** Base URL of the room server; empty means same origin as the page. */
   edgeUrl: string;
   shopUrl: string;
-  /** The store's ticket page; empty until tickets go on sale (the booth then says they are coming). */
+  /** The store's ticket page; empty until tickets go on sale (the turnstiles fall back to it when they cannot make an owl's cart link). */
   ticketsUrl: string;
   /**
    * The home screen comes first (OP-065), and Play goes on to the owl's own nest (OP-105); an
