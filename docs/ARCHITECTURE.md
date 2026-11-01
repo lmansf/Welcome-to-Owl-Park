@@ -197,6 +197,40 @@ variable (defaults in `apps/edge/src/rooms.ts`: lobby and hub 80; grove, market,
 street 40; a nest 12, its owner always admitted). What happens at the cap, and the queue and ribbon
 that are PLANNED (OP-075), are in `docs/CAPACITY.md`.
 
+### Loading the park: the rules that keep it fast (OP-129)
+
+- **Each room loads its own art.** Only the home screen, the visitor's owl and the owl's nest are on
+  the way in. A realm's paintings, audio and its game code load when an owl heads into it, never at
+  park start. A new realm or mini game follows the same rule.
+- **The art budget**, a unit test in CI (`apps/park/src/game/artBudget.test.ts`): no PNG over
+  300 kB, no WebP over 700 kB, and every room's painted screens ship as WebP. An exception is named
+  in the test with its reason (today only `hub-fg@2x.png`); a named exception that shrinks comes off
+  the list.
+- **Long caching.** The script bundles and `/art/*` are cached for a year (`apps/park/public/_headers`).
+  Each picture is asked for with its content's hash (`?v=`, from the art list `vite.config.ts`
+  writes), so a changed picture is a new address. The page itself is never cached.
+- **Art by its real name.** The loader asks for each piece in the format the build ships (no
+  guessing SVG, then WebP, then PNG) and by its encoded name, so Cloudflare answers without a
+  redirect.
+- **The boot's art starts with the page.** A small script in `index.html`'s head
+  (`earlyArtScript`, `apps/park/src/game/artNames.ts`) asks for the owl's pictures at low priority
+  beside the script, and the loader takes those downloads.
+- **Soft first, sharp after.** On a dense phone screen a room the browser does not hold at 2x yet
+  opens on its 1x painting and swaps in the 2x copy in place once it has come and the owl stands
+  still.
+- **Fetch ahead.** The next room's art is fetched as an owl's walk ends at a doorway (or the keys
+  or thumbstick carry it past one), and the nest's art while the home screen waits on Play.
+- **Join while loading.** A page joins a room as the room's art starts to load; what the room says
+  meanwhile waits, in order, until the scene is built (`RoomScene.join`), so the first frame already
+  has the other owls in it.
+- **The load screen** (`index.html`'s `#loader`, `apps/park/src/ui/loader.ts`): an owl on a branch
+  that grows with the bytes that have come against the sizes the art list carries, never a timer.
+  A load under 0.3 s never shows it; owl facts after 2 s; a tap on the owl makes it hoot. Any new
+  wait for art reports its progress to it the same way.
+- **Targets** (a phone on throttled 4G, cold): under 3 s to moving in the nest, under 1 s on a
+  return visit, a realm under 1.5 s. Measure before and after any change that adds art or code on
+  the way in; the method and the numbers so far are in OP-129's notes.
+
 ## 6. Scaling knobs and capacity
 
 1. `ROOM_SHARDING=single` (default): the whole park in one object. Cheapest, and enough while the
