@@ -604,6 +604,9 @@ export class EdgeTransport implements ParkTransport {
         case 'realms':
           handlers.onRealms?.(f.realms);
           break;
+        case 'restart':
+          if (typeof f.words === 'string' && f.words) handlers.onRestartNotice?.(f.words);
+          break;
         case 'lanterns': {
           const lit: Record<string, number> = {};
           for (const [id, t] of Object.entries(f.lit)) lit[id] = t - offset;
@@ -870,6 +873,15 @@ export class EdgeTransport implements ParkTransport {
         if (ev.code === CLOSE.MOVED) {
           // Restored on another screen (OP-139): the page shows the moved card, and nothing reconnects.
           this.markMoved();
+          handlers.onStatus('offline');
+          return;
+        }
+        if (ev.code === CLOSE.RESTART) {
+          // The park's nightly restart (OP-181): home, with a fresh pass for the next Play, so the owl
+          // goes through the turnstiles again with its ticket, as after a reload. Nothing reconnects.
+          this.pass = null;
+          this.ticketId = null;
+          handlers.onRestart?.();
           handlers.onStatus('offline');
           return;
         }

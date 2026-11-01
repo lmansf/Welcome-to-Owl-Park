@@ -62,8 +62,15 @@ export const CLOSE = {
   MOVED: 4014,
   /** Travel into the park before the owl walked through the front gate (OP-130): the page offers the gate. */
   NOT_THROUGH_GATE: 4015,
+  /** The park's nightly restart (OP-181): every owl goes to the home screen, and nothing reconnects on its own. */
+  RESTART: 4016,
   TOO_LARGE: 1009,
 } as const;
+
+/** What a room says a moment before the park's nightly restart closes its socket (OP-181): the owner approves these words. */
+export const RESTART_NOTICE = 'The park closes for the night in a moment. See you soon!';
+/** What the home screen says after the nightly restart sent the owl out (OP-181): the owner approves these words too. */
+export const RESTART_HOME = 'The park closed for the night and is open again. Press Play to come back in.';
 
 export interface ServerWalk {
   from: Vec2;
@@ -429,6 +436,12 @@ export interface ServerClosed {
   why: 'closed' | 'gone' | 'realm' | 'gate';
   sign?: string;
 }
+/** The park restarts for the night (OP-181): the words to show, then the socket closes with 4016 in `ms`. */
+export interface ServerRestart {
+  t: 'restart';
+  words: string;
+  ms: number;
+}
 /** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
 export interface ServerRealms {
   t: 'realms';
@@ -462,6 +475,7 @@ export type ServerFrame =
   | ServerWall
   | ServerClosed
   | ServerNotice
+  | ServerRestart
   | ServerRealms;
 
 // ---- validation (server side, strict) ----
@@ -573,7 +587,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'realms', 'rest', 'air']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

@@ -44,11 +44,15 @@ export class VoteLedger extends DurableObject<Env> {
     }
     if (url.pathname === '/gate') {
       // The opening switch (OP-067): read it, or set it ({"mode": "open" | "ticket"}, or null to clear it).
-      if (request.method !== 'POST') return Response.json({ gate: this.gate.get() });
+      if (request.method !== 'POST') return Response.json({ gate: this.gate.get(), restartAt: this.gate.restartAt() });
       const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
       const mode = body?.mode;
       if (mode !== null && mode !== 'open' && mode !== 'ticket') return Response.json({ error: 'bad request' }, { status: 400 });
       return Response.json({ gate: this.gate.set(mode, now.getTime()) });
+    }
+    if (url.pathname === '/restart' && request.method === 'POST') {
+      // The nightly restart (OP-181): from now, passes from before it open nothing past the turnstiles.
+      return Response.json({ restartAt: this.gate.restart(now.getTime()) });
     }
     if (url.pathname === '/vote' && request.method === 'POST') {
       const body = (await request.json()) as { visitor?: string; realm?: string; ticket?: string | null };

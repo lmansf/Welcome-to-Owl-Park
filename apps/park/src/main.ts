@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LOBBY_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LOBBY_ROOM, RESTART_HOME, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -11,7 +11,7 @@ import { ClimbScene } from './game/ClimbScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
-import { NEST_SPAWN, RoomScene, type RoomStart } from './game/RoomScene';
+import { NEST_SPAWN, RESTARTED_KEY, RoomScene, type RoomStart } from './game/RoomScene';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
@@ -501,6 +501,11 @@ game.events.on(HOME_SHOWN, () => {
   }
   void refreshNotice();
   if (queued) startPlay();
+  // Sent home by the park's nightly restart (OP-181): said once, calmly; Play brings the owl back in.
+  if (game.registry.get(RESTARTED_KEY) === true) {
+    game.registry.set(RESTARTED_KEY, false);
+    hud.toast(RESTART_HOME, 8000);
+  }
 });
 // The Say wheel says a phrase here and for everyone in the room.
 hud.onSay((n) => roomScene()?.say(n) ?? false);

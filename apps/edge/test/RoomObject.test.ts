@@ -14,6 +14,7 @@ import {
   NEST_SPOTS,
   NIGHTS,
   PLAY_FEATHERS_PER_DAY,
+  RESTART_NOTICE,
   ROOM_W,
   NestBook,
   STARTER_FURNITURE,
@@ -55,7 +56,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { RoomObject } = await import('../src/RoomObject');
+const { RESTART_CLOSE_MS, RoomObject } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -1368,5 +1369,100 @@ describe('the room server’s log (OP-134)', () => {
     };
     expect(room.join(gone, 'v_a', { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK }, 'sid')).toBe('ok');
     logged(cap.lines, 'send_failed', { component: 'room.tick', room: 'hub', frame: 'welcome' });
+  });
+});
+
+/** A state whose storage keeps what is put in it and the alarm set, and lets a key go, as the platform's does. */
+class AlarmState extends FakeState {
+  readonly kept = new Map<string, unknown>();
+  alarmAt: number | null = null;
+  override readonly storage = {
+    get: async (key: string) => this.kept.get(key),
+    put: async (key: string, value: unknown) => {
+      this.kept.set(key, value);
+    },
+    delete: async (key: string) => this.kept.delete(key),
+    getAlarm: async () => this.alarmAt,
+    setAlarm: async (at?: number) => {
+      this.alarmAt = at ?? null;
+    },
+  };
+}
+
+describe('the park’s nightly restart (OP-181)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  let alarms: AlarmState;
+  beforeEach(() => {
+    cap = captureLogs();
+    alarms = new AlarmState();
+    state = alarms;
+  });
+  afterEach(() => cap.restore());
+  const restart = async (o: Obj) => (await o.fetch(new Request('https://park/restart', { method: 'POST' }))).json() as Promise<{ owls: number; sockets: number }>;
+
+  it('tells every socket first, then closes each with the restart code at its alarm, and its owl leaves', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a');
+    const b = await join(obj, 'grove', 'v_b', GUEST);
+    expect(await restart(obj)).toEqual({ owls: 2, sockets: 2 });
+    for (const ws of [a, b]) {
+      expect(ws.last('restart')).toEqual({ t: 'restart', words: RESTART_NOTICE, ms: RESTART_CLOSE_MS });
+      expect(ws.closed).toBeNull();
+    }
+    expect(alarms.alarmAt).toBe(clock + RESTART_CLOSE_MS);
+    logged(cap.lines, 'room_restart', { component: 'room.leave', level: 'info', owls: 2, sockets: 2, close_in_ms: RESTART_CLOSE_MS });
+    // Not before its moment.
+    clock += RESTART_CLOSE_MS - 1;
+    await obj.alarm();
+    expect(a.closed).toBeNull();
+    expect(alarms.alarmAt).toBe(MON + RESTART_CLOSE_MS);
+    clock += 1;
+    await obj.alarm();
+    for (const ws of [a, b]) expect(ws.closed).toEqual({ code: CLOSE.RESTART, reason: 'park restart' });
+    logged(cap.lines, 'room_leave', { session_id: hashForLog('v_a'), reason: 'kick', detail: 'restart' });
+    expect(await (await obj.fetch(new Request('https://park/counts'))).json()).toMatchObject({ hub: 0, grove: 0 });
+    expect(alarms.kept.has('restart')).toBe(false);
+    // Owls who come in after it are let be.
+    const later = await join(obj, 'hub', 'v_later');
+    clock += 60_000;
+    await obj.alarm();
+    expect(later.closed).toBeNull();
+  });
+
+  it('closes them though the object slept between the notice and its alarm', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a');
+    await restart(obj);
+    const woken = roomObject();
+    await settle(); // the constructor reads its storage
+    clock += RESTART_CLOSE_MS;
+    await woken.alarm();
+    expect(a.closed?.code).toBe(CLOSE.RESTART);
+  });
+
+  it('keeps an earlier alarm (a quiz question closing) and still closes at its moment after it', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a');
+    alarms.alarmAt = clock + 2_000;
+    await restart(obj);
+    expect(alarms.alarmAt).toBe(clock + 2_000);
+    clock += 2_000;
+    await obj.alarm();
+    expect(a.closed).toBeNull();
+    expect(alarms.alarmAt).toBe(MON + RESTART_CLOSE_MS);
+  });
+
+  it('sets nothing in an object with no sockets, and sends nobody home for a close found long past', async () => {
+    const empty = roomObject();
+    expect(await restart(empty)).toEqual({ owls: 0, sockets: 0 });
+    expect(alarms.alarmAt).toBeNull();
+    logged(cap.lines, 'room_restart', { owls: 0, sockets: 0, close_in_ms: 0 });
+    alarms.kept.set('restart', clock - 10 * 60_000);
+    const woken = roomObject();
+    await settle();
+    const a = await join(woken, 'hub', 'v_a');
+    await woken.alarm();
+    expect(a.closed).toBeNull();
+    expect(alarms.kept.has('restart')).toBe(false);
   });
 });

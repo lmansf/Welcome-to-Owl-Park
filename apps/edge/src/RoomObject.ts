@@ -7,7 +7,8 @@
  * run lives in the collections object, keyed by the collector, like the climb's: it outlasts the
  * object's sleep and the visitor's socket (OP-137). With accounts on (OP-139) a socket from a
  * screen its owl has moved from is sent the moved card, at its hello or at once when the Worker
- * says the owl was restored elsewhere.
+ * says the owl was restored elsewhere. Once a night the Worker restarts the park (OP-181): every
+ * socket is told, then closed a moment later by the object's alarm, and each page goes home.
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -24,6 +25,7 @@ import {
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
   REALMS_DEFAULTS,
+  RESTART_NOTICE,
   RIBBON_MAX_CHARS,
   STREET_DOORS,
   STREET_ROOM,
@@ -158,6 +160,16 @@ const REALMS_KEY = 'realms';
 const LEAVERS_KEY = 'leavers';
 /** The most owls kept there, the latest to leave first: the stored value stays small on a busy night. */
 const LEAVERS_KEPT = 500;
+/**
+ * The nightly restart (OP-181): how long after its notice every socket closes, by the object's alarm.
+ * No shorter than the Worker keeps what it read of the gate (GATE_KEEP_MS), so every Worker knows of
+ * the restart before the owls it sent home can ask to come back in.
+ */
+export const RESTART_CLOSE_MS = 10_000;
+/** A restart's close the alarm finds this late (an alarm long put off) is let go: it sends nobody home. */
+const RESTART_STALE_MS = 5 * 60_000;
+/** Storage key for when the pending restart closes every socket (ms), so a wake from hibernation keeps it. */
+const RESTART_KEY = 'restart';
 
 /** Stored leavers as they should be: anything else is dropped. */
 function cleanLeavers(v: unknown): Record<string, Record<string, Leaver>> {
@@ -272,6 +284,8 @@ export class RoomObject extends DurableObject<Env> {
   /** The player stats are kept only while the analytics log is set up (OP-111): without it, no calls for them. */
   private readonly statsOn: boolean;
   private noticeAt = 0;
+  /** When the park's nightly restart closes every socket here (OP-181); null while none is pending. */
+  private closingAt: number | null = null;
   /** Where owls left each room lately, kept past the rooms themselves (OP-138). */
   private readonly leftBehind = new Map<string, Record<string, Leaver>>();
   /** The room server's log (OP-134), at the deployment's level. */
@@ -318,6 +332,9 @@ export class RoomObject extends DurableObject<Env> {
         this.leftBehind.set(id, kept);
         this.rooms.get(id)?.restoreLeavers(kept);
       }
+      // A restart told but not yet closed (OP-181): the alarm still closes it.
+      const closing = await ctx.storage.get<unknown>(RESTART_KEY);
+      if (typeof closing === 'number') this.closingAt = closing;
     });
   }
 
@@ -509,6 +526,45 @@ export class RoomObject extends DurableObject<Env> {
     for (const roomId of before.open) if (!next.open.includes(roomId) && roomDef(roomId)?.gated) this.sendRealmAway(roomId);
   }
 
+  // ---------- the nightly restart (OP-181) ----------
+
+  /**
+   * The park restarts: every socket here is told so at once, and the alarm closes them all with
+   * CLOSE.RESTART a moment later, sending each page to the home screen. Logged once for the object.
+   */
+  private async restart(): Promise<{ owls: number; sockets: number }> {
+    const sockets = this.ctx.getWebSockets();
+    let owls = 0;
+    for (const ws of sockets) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att?.state) owls += 1;
+      this.send(ws, { t: 'restart', words: RESTART_NOTICE, ms: RESTART_CLOSE_MS });
+    }
+    if (sockets.length) {
+      const closeAt = Date.now() + RESTART_CLOSE_MS;
+      this.closingAt = closeAt;
+      await this.ctx.storage.put(RESTART_KEY, closeAt);
+      const current = await this.ctx.storage.getAlarm();
+      if (current === null || current > closeAt) await this.ctx.storage.setAlarm(closeAt);
+    }
+    // TODO-DOCS (OP-181): docs/LOGGING.md: room_restart (room.leave, info): owls, sockets, close_in_ms; each owl's room_leave follows as a kick, detail restart.
+    this.log.info('room.leave', 'room_restart', 'The park restarts for the night: every owl here was told, and goes to the home screen in a moment.', { owls, sockets: sockets.length, close_in_ms: sockets.length ? RESTART_CLOSE_MS : 0 });
+    return { owls, sockets: sockets.length };
+  }
+
+  /** The restart's moment (the alarm): every socket here closes with CLOSE.RESTART, and its owl leaves its room. */
+  private async closeForRestart(now: number): Promise<void> {
+    const due = this.closingAt;
+    if (due === null || now < due) return;
+    this.closingAt = null;
+    await this.ctx.storage.delete(RESTART_KEY);
+    if (now - due > RESTART_STALE_MS) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      closeSocket(ws, CLOSE.RESTART, 'park restart');
+      this.drop(ws, { reason: 'kick', detail: 'restart' });
+    }
+  }
+
   // ---------- accounts (OP-139) ----------
 
   /** A socket whose owl is on another screen now: closed with the code that shows the moved card. */
@@ -583,6 +639,10 @@ export class RoomObject extends DurableObject<Env> {
       this.setNotice(body?.words, true);
       if (body?.realms !== undefined) this.setRealms(body.realms);
       return Response.json({ ok: true });
+    }
+    if (url.pathname === '/restart' && request.method === 'POST') {
+      // The Worker's word that the park restarts for the night (OP-181).
+      return Response.json(await this.restart());
     }
     if (url.pathname === '/moved' && request.method === 'POST') {
       // The Worker's word that an owl was restored on another screen (OP-139).
@@ -1273,6 +1333,7 @@ export class RoomObject extends DurableObject<Env> {
   /** When the object should wake next: the housekeeping minute, or sooner when a hub quiz question closes. */
   private nextWake(now: number): number {
     let next = now + ALARM_EVERY_MS;
+    if (this.closingAt !== null) next = Math.min(next, this.closingAt);
     if (this.rooms.get(QUIZ_ROOM)?.count) next = Math.min(next, this.activities(QUIZ_ROOM).nextQuizClose());
     return next;
   }
@@ -1474,8 +1535,9 @@ export class RoomObject extends DurableObject<Env> {
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ALARM_EVERY_MS);
   }
 
-  /** Every minute while anyone is connected: close silent sockets and refresh counts; and when a hub quiz question closes. */
+  /** Every minute while anyone is connected: close silent sockets and refresh counts; and when a hub quiz question closes, or the park restarts. */
   override async alarm(): Promise<void> {
+    await this.closeForRestart(Date.now());
     await this.settleQuiz();
     await this.freshNotice();
     const now = Date.now();
@@ -1501,6 +1563,6 @@ export class RoomObject extends DurableObject<Env> {
       .map(sightingOf)
       .filter((s): s is Sighting => s !== null);
     await this.statsAlive(here);
-    if (this.ctx.getWebSockets().length > 0) await this.ctx.storage.setAlarm(this.nextWake(Date.now()));
+    if (this.ctx.getWebSockets().length > 0 || this.closingAt !== null) await this.ctx.storage.setAlarm(this.nextWake(Date.now()));
   }
 }
