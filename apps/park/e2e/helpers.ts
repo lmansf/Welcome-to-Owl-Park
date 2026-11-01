@@ -39,7 +39,8 @@ export interface ParkState {
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** In a room of the tree (OP-173): how many fronts, shades, ledge edges and doorway marks it drew. */
-  tree: { fronts: number; shades: number; lips: number; marks: number } | null;
+  /** In a room of the tree (OP-173): what it drew to read at a glance, and whether the own owl is drawn behind the raised fronts (a stair's banister) now. */
+  tree: { fronts: number; raised: number; shades: number; lips: number; marks: number; behind: boolean } | null;
   /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
   owlScale: number;
   /** Where the camera's view is, in room pixels (OP-156). */
@@ -80,6 +81,7 @@ export interface ParkState {
     status: string;
     readout: string;
     own: string[];
+    ownFronts: string[];
     drawn: { ledges: string[]; walls: string[]; hazards: string[]; fronts: string[] };
     labels: number;
     selected: ({ kind: string; id: string } & Record<string, unknown>) | null;

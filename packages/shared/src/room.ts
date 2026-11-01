@@ -37,9 +37,11 @@ export interface RoomDef {
    * In a room seen from the side (the tree, OP-173): shapes of its playfield (the 1x tile they lie in)
    * that are painted in front of where the owls walk, a lamp post on the path or a post in front of a
    * stall, drawn again over the owls so an owl passes behind them. Each hugs its thing's outline, as
-   * whatever else it covers is drawn in front too.
+   * whatever else it covers is drawn in front too. A `raised` one is drawn only over owls standing on
+   * a ledge (or in the air off one): the floor passes in front of it, as it does a stair's banister,
+   * which a climbing owl is behind and an owl walking by on the floor is in front of.
    */
-  fronts?: Array<{ id: string; poly: Polygon }>;
+  fronts?: Array<{ id: string; poly: Polygon; raised?: boolean }>;
   /**
    * In a room seen from the side (OP-173): shapes of the playfield shaded darker by `alpha` (0 to 1),
    * painted glows that do nothing (a closed gate's lit doors, a lit window), so they do not read as

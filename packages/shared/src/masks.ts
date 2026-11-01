@@ -8,7 +8,7 @@
  * A keeper saves a draft through the Worker (POST /api/admin/masks/<room>), which keeps one per room
  * in the overflow object; anyone may read it back (GET /api/masks/<room>: level geometry, nothing
  * personal), and `pnpm masks:pull <room>` prints it as room data to paste in. The game does not read
- * a draft: a ledge is the park's once it is in packages/shared/rooms.
+ * a draft: a ledge or a front is the park's once it is in packages/shared/rooms.
  *
  * checkMasks is the one check of a draft, the Worker's, the overflow object's and the painter's: all
  * four lists and nothing else, each at most MASK_LIST_MAX items; ids unique across the draft and
@@ -191,4 +191,9 @@ export function ledgesOf(room: Pick<RoomDef, 'perches'>): LedgeMark[] {
     const xs = p.area.map((v) => v.x);
     return { id: p.id, x0: Math.min(...xs), x1: Math.max(...xs), top: p.top };
   });
+}
+
+/** A room's own fronts as the painter starts from them (OP-173): each one's polygon, point by point. */
+export function frontsOf(room: Pick<RoomDef, 'fronts'>): FrontMark[] {
+  return (room.fronts ?? []).map((f) => ({ id: f.id, points: f.poly.map((p) => ({ x: p.x, y: p.y })) }));
 }

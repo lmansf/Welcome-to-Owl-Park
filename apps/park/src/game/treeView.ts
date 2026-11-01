@@ -8,7 +8,10 @@ import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
  * - The playfield is drawn a step quieter (a multiply tint), so what the game draws over it stands out.
  * - Every ledge has the same bright, simple edge along its top, the one look for "an owl can stand here".
  * - Shapes of the playfield painted in front of the path (`fronts`, a lamp post, a post in front of a
- *   stall) are drawn again over the owls, so an owl passes behind them.
+ *   stall) are drawn again over the owls, so an owl passes behind them. A raised one (a stair's banister,
+ *   which the floor runs in front of) is drawn between the owls on ledges and the owls on the floor: the
+ *   owls draw a ledge-stander a band further back (Owl.setRaisedBand), so a climbing owl passes behind
+ *   the banister and one walking by on the floor stays in front of it.
  * - Painted glows that do nothing yet (`shades`) are shaded darker, so they do not read as things to use:
  *   each shade follows the painted shape and fades in over its edge, so it reads as shadow, not a box.
  * - A doorway to another room has a mark over its arch (`markAt`): the bright, simple sign of a way
@@ -17,9 +20,17 @@ import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
  * TODO-DOCS (OP-173): docs/MAP.md (the tree's style sheet): the one look for ledges (the bright edge,
  * drawn by the game), fronts and shades in the room data and what each is for, the doorway mark, and the
  * rule for painting the next levels in layers (back scenery, platforms, front props, overlay, with
- * interactive things as their own sprites); docs/ARCHITECTURE.md's rooms table gains `fronts`, `shades`
- * and a door's `markAt`.
+ * interactive things as their own sprites); that an owl on a ledge is drawn behind the floor's (behind
+ * an owl on the floor) and what a raised front is for; docs/ARCHITECTURE.md's rooms table gains
+ * `fronts` (and `raised`), `shades` and a door's `markAt`.
  */
+
+/**
+ * How far back (depth) the tree's rooms draw an owl standing on a ledge: owls are drawn by their place on
+ * the plan (about the ground line, 770), so one on a ledge goes behind every owl on the floor, still over
+ * the playfield and its dressing (under 0); the raised fronts lie between the two (OP-173).
+ */
+export const TREE_RAISED_BAND = 400;
 
 /** The quieter playfield: a multiply tint on the tree's 1x tiles and on their fronts alike. */
 export const TREE_PLAY_TINT = 0xdedede;
@@ -39,12 +50,16 @@ export interface TreeDepths {
   lip: number;
   /** Over the owls, under the overlay. */
   front: number;
+  /** Over the owls on ledges (drawn a band back), under the owls on the floor. */
+  raised: number;
   mark: number;
 }
 
 /** What was drawn, for the page's debug state and its tests. */
 export interface TreeDress {
   fronts: number;
+  /** Of the fronts, how many are raised (over the owls on ledges only). */
+  raised: number;
   shades: number;
   lips: number;
   marks: number;
@@ -52,6 +67,8 @@ export interface TreeDress {
 
 /** The dressing of a room, and how to cut its fronts again when a tile's picture is swapped for a sharper one. */
 export interface TreeDressing extends TreeDress {
+  /** Where the raised fronts are drawn (depth): an owl drawn under it is behind them. */
+  raisedDepth: number;
   recut(key: string): void;
 }
 
@@ -104,13 +121,13 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
 
   // Each front is cut from its tile's picture once (a small texture of just that shape), so drawing it
   // costs a small image, not the tile again through a mask.
-  const cuts: Array<{ img: Phaser.GameObjects.Image; tile: Phaser.GameObjects.Image; id: string; poly: Polygon }> = [];
+  const cuts: Array<{ img: Phaser.GameObjects.Image; tile: Phaser.GameObjects.Image; id: string; poly: Polygon; raised: boolean }> = [];
   for (const f of room.fronts ?? []) {
     const tile = tileFor(playTiles, f.poly);
     if (!tile) continue;
     const img = cutFront(scene, tile, f.id, f.poly);
     if (!img) continue;
-    cuts.push({ img: img.setTint(TREE_PLAY_TINT).setDepth(opts.depths.front), tile, id: f.id, poly: f.poly });
+    cuts.push({ img: img.setTint(TREE_PLAY_TINT).setDepth(f.raised ? opts.depths.raised : opts.depths.front), tile, id: f.id, poly: f.poly, raised: !!f.raised });
   }
 
   let marks = 0;
@@ -141,6 +158,8 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
 
   return {
     fronts: cuts.length,
+    raised: cuts.filter((c) => c.raised).length,
+    raisedDepth: opts.depths.raised,
     shades,
     lips: perches.length,
     marks,
