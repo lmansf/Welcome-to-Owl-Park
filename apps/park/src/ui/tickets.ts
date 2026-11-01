@@ -291,6 +291,9 @@ export function createTicketCard(root: HTMLElement): TicketCard {
       if (el.classList.contains('up') && !el.classList.contains('status')) return;
       if (timer) clearTimeout(timer);
       timer = null;
+      // The status card is one line: no scan card's name or ID left behind it (OP-172).
+      kind.textContent = '';
+      id.textContent = '';
       line.textContent = text;
       el.dataset['ticketStatus'] = '';
       el.classList.add('status');
