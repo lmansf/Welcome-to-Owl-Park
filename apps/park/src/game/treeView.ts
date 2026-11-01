@@ -9,7 +9,8 @@ import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
  * - Every ledge has the same bright, simple edge along its top, the one look for "an owl can stand here".
  * - Shapes of the playfield painted in front of the path (`fronts`, a lamp post, a post in front of a
  *   stall) are drawn again over the owls, so an owl passes behind them.
- * - Painted glows that do nothing yet (`shades`) are shaded darker, so they do not read as things to use.
+ * - Painted glows that do nothing yet (`shades`) are shaded darker, so they do not read as things to use:
+ *   each shade follows the painted shape and fades in over its edge, so it reads as shadow, not a box.
  * - A doorway to another room has a mark over its arch (`markAt`): the bright, simple sign of a way
  *   through, in the colours of the '!' over an owl to talk to (OP-114).
  *
@@ -22,6 +23,9 @@ import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
 
 /** The quieter playfield: a multiply tint on the tree's 1x tiles and on their fronts alike. */
 export const TREE_PLAY_TINT = 0xdedede;
+
+/** How far a shade's edge fades in (room px, the canvas's shadow blur): soft enough that it reads as shadow. */
+const SHADE_SOFT = 12;
 
 /** A ledge's edge: a soft warm glow under a crisp cream line. */
 const LIP = { glow: 0xffe9a8, glowAlpha: 0.28, glowWidth: 12, line: 0xfff4d2, lineAlpha: 0.95, lineWidth: 4 } as const;
@@ -78,8 +82,14 @@ function tileFor(tiles: readonly Phaser.GameObjects.Image[], poly: Polygon): Pha
 export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: readonly Phaser.GameObjects.Image[], opts: TreeDressOptions): TreeDressing {
   for (const img of playTiles) img.setTint(TREE_PLAY_TINT);
 
-  const shades = scene.add.graphics().setDepth(opts.depths.shade);
-  for (const s of room.shades ?? []) shades.fillStyle(0x000000, s.alpha).fillPoints(s.poly, true);
+  let shades = 0;
+  for (const s of room.shades ?? []) {
+    const tile = tileFor(playTiles, s.poly);
+    const tex = tile && shadeTexture(scene, `${tile.texture.key}:shade:${s.id}`, s.poly, s.alpha);
+    if (!tex) continue;
+    scene.add.image(tex.x, tex.y, tex.key).setOrigin(0).setDepth(opts.depths.shade);
+    shades++;
+  }
 
   const lips = scene.add.graphics().setDepth(opts.depths.lip);
   const perches = room.perches ?? [];
@@ -131,7 +141,7 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
 
   return {
     fronts: cuts.length,
-    shades: room.shades?.length ?? 0,
+    shades,
     lips: perches.length,
     marks,
     // A tile sharpened (sharpenArt swaps its texture): its fronts are cut again from the sharper picture.
@@ -143,6 +153,38 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
       }
     },
   };
+}
+
+/**
+ * A shade as a texture of its own (named under its tile's key, so releasing the room's art lets it go):
+ * `poly` filled at `alpha`, its edge fading in over SHADE_SOFT. The shape is drawn off the canvas and
+ * only its blurred shadow lands on it, which softens an edge in every browser (a canvas filter does not).
+ */
+function shadeTexture(scene: Phaser.Scene, key: string, poly: Polygon, alpha: number): { key: string; x: number; y: number } | null {
+  const pad = SHADE_SOFT * 2;
+  const xs = xsOf(poly);
+  const ys = poly.map((p) => p.y);
+  const x0 = Math.floor(Math.min(...xs)) - pad;
+  const y0 = Math.floor(Math.min(...ys)) - pad;
+  const w = Math.ceil(Math.max(...xs)) + pad - x0;
+  const h = Math.ceil(Math.max(...ys)) + pad - y0;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const off = w + pad;
+  ctx.shadowColor = `rgba(0, 0, 0, ${alpha})`;
+  ctx.shadowBlur = SHADE_SOFT;
+  ctx.shadowOffsetX = off;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  poly.forEach((p, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, p.x - x0 - off, p.y - y0));
+  ctx.closePath();
+  ctx.fill();
+  if (scene.textures.exists(key)) scene.textures.remove(key);
+  scene.textures.addCanvas(key, canvas);
+  return { key, x: x0, y: y0 };
 }
 
 /** The texture of front `id` cut from `tile`'s picture as it is now: the shape's box, clear outside the shape. */

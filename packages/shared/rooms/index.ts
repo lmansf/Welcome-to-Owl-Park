@@ -57,6 +57,24 @@ function box(x0: number, y0: number, x1: number, y1: number): Polygon {
   return pts([x0, y0], [x1, y0], [x1, y1], [x0, y1]);
 }
 
+/** An arched opening from x0 to x1, its round top at y0 and its foot at y1, as a polygon (room px). */
+function arch(x0: number, y0: number, x1: number, y1: number, steps = 12): Polygon {
+  const r = (x1 - x0) / 2;
+  const top = Array.from({ length: steps + 1 }, (_, i) => {
+    const a = Math.PI + (Math.PI * i) / steps;
+    return { x: Math.round(x0 + r + r * Math.cos(a)), y: Math.round(y0 + r + r * Math.sin(a)) };
+  });
+  return [{ x: x0, y: y1 }, ...top, { x: x1, y: y1 }];
+}
+
+/** An oval about cx, cy, rx across and ry up and down from it, as a polygon (room px). */
+function oval(cx: number, cy: number, rx: number, ry: number, steps = 24): Polygon {
+  return Array.from({ length: steps }, (_, i) => {
+    const a = (2 * Math.PI * i) / steps;
+    return { x: Math.round(cx + rx * Math.cos(a)), y: Math.round(cy + ry * Math.sin(a)) };
+  });
+}
+
 /** A ledge of the tree (map 2): a perch over the ground line from x0 to x1, `top` above it. */
 function treeLedge(id: string, x0: number, x1: number, top: number): Perch {
   return {
@@ -939,13 +957,15 @@ export const ROOMS: Record<string, RoomDef> = {
     // closed gate's lit doors, the lobby's booth window, its way down and the nest of eggs over them, the market square's lit stall
     // windows and the roof run's lit stall fronts.
     shades: [
-      { id: 'gate-doors', poly: box(290, 445, 540, 712), alpha: 0.45 },
-      { id: 'booth-window', poly: box(ROOM_W + 795, 595, ROOM_W + 868, 685), alpha: 0.5 },
+      // Each follows the painted shape it quiets (a door, an arch, the nest's bowl, a row of windows);
+      // the game softens its edge, so it reads as shadow over the painting, never as a box.
+      { id: 'gate-doors', poly: box(288, 448, 542, 711), alpha: 0.45 },
+      { id: 'booth-window', poly: arch(ROOM_W + 807, 611, ROOM_W + 855, 674), alpha: 0.5 },
       // The nest of eggs high in the hollow has nothing under it to jump from, so it is quieted rather than made a ledge.
-      { id: 'nest', poly: box(ROOM_W + 760, 296, ROOM_W + 900, 352), alpha: 0.35 },
-      { id: 'way-down', poly: box(ROOM_W + 594, 600, ROOM_W + 740, 755), alpha: 0.4 },
-      { id: 'stall-windows', poly: box(2 * ROOM_W + 560, 515, 2 * ROOM_W + 1095, 605), alpha: 0.35 },
-      { id: 'stall-fronts', poly: box(3 * ROOM_W + 476, 560, 3 * ROOM_W + 1263, 742), alpha: 0.3 },
+      { id: 'nest', poly: oval(ROOM_W + 830, 322, 66, 28), alpha: 0.35 },
+      { id: 'way-down', poly: arch(ROOM_W + 593, 579, ROOM_W + 713, 751), alpha: 0.4 },
+      { id: 'stall-windows', poly: box(2 * ROOM_W + 558, 508, 2 * ROOM_W + 1108, 592), alpha: 0.35 },
+      { id: 'stall-fronts', poly: box(3 * ROOM_W + 492, 614, 3 * ROOM_W + 1232, 698), alpha: 0.35 },
     ],
     // Owls come in at the lobby's middle; the west end's spawn stands where the overlay's grass leaves
     // the path clear; one back from the market comes out just short of the tower's archway.
