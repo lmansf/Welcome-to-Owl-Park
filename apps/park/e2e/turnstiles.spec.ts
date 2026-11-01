@@ -36,12 +36,14 @@ async function arrive(browser: Browser, hash = ''): Promise<Page> {
 }
 
 const ticketCard = (page: Page) => page.locator('[data-ticket-card]');
+/** A ticket card raised: none at all counts as down (the HUD makes the card on first use, and a new room's HUD has none). */
+const raisedCard = (page: Page) => page.locator('[data-ticket-card].up');
 
 /** Nothing of a ticket comes up for a while (give a card time to be wrong): no ticket card raised, no card before the store. */
 async function staysHidden(page: Page): Promise<void> {
   for (let i = 0; i < 6; i++) {
     await expect(page.locator('[data-ticket-status]')).toHaveCount(0);
-    await expect(ticketCard(page)).not.toHaveClass(/\bup\b/);
+    await expect(raisedCard(page)).toHaveCount(0);
     await expect(page.locator(STORE_CARD)).toBeHidden();
     await page.waitForTimeout(250);
   }
@@ -103,7 +105,7 @@ test.describe('ticket status only at the turnstiles (OP-180)', () => {
     await walkToDoor(a, 'to-lobby');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('lobby');
     await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
-    await expect(ticketCard(a)).not.toHaveClass(/\bup\b/, { timeout: 10_000 });
+    await expect(raisedCard(a)).toHaveCount(0, { timeout: 10_000 });
     await staysHidden(a);
 
     // The Menu's Settings keep the ticket with its ID in a closed row, just above Leaving.
