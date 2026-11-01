@@ -45,7 +45,7 @@ export interface HookResult {
   recorded?: { tickets: number; held: boolean };
   /** The webhook came again for work an earlier delivery already did (OP-134's webhook_duplicate). */
   repeat?: true;
-  /** The gate's checkout put the order's tickets on this owl just now (OP-175): the Worker protects it by the order's email, as a claim does. */
+  /** The gate's checkout put the order's tickets on this owl just now (OP-175): the Worker mails the order's email a link to protect it, as a claim does (OP-186). */
   placed?: { device: string; tickets: number };
 }
 

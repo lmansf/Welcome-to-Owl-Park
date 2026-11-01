@@ -8,6 +8,18 @@
  * hash of it, to find its owls, and a sealed copy (AES-GCM), to write to it again. A link's token is
  * signed like a pass (PASS_SIGNING_KEY) and names a nonce the store lets be used once.
  *
+ * A ticket's order email (OP-186) is read from the store as the ticket lands on an owl and kept by
+ * nobody: the buyer is mailed one protect link that carries the address, sealed, in its own token, and
+ * only opening it protects the owl (offerOrderProtect).
+ *
+ * TODO-DOCS (OP-186): docs/SECURITY.md's "No passwords" item: a ticket's order email is read from the
+ * store as its tickets land on an owl and mailed one protect link (good for ORDER_LINK_MS, 7 days, and
+ * used once) that carries it sealed; the park keeps nothing about the address unless the link is
+ * opened, and the mail service keeps its delivery log as for every mail. docs/DEPLOY.md's store step 2
+ * ("the park reads no names, emails or addresses"): the park reads an order's email for that mail
+ * and nothing else, so the app's protected customer data access covers the email only, and is asked
+ * for once this is live.
+ *
  * The routes (POST, JSON):
  *   /api/account/protect  {email}        the pass's owl: mail a link that protects it with this email
  *   /api/account/confirm  {token}        open a protect link: the owl it names, or the pass's own owl
@@ -18,9 +30,9 @@
  *   /api/account/bind     {token, code}  use it: the owl with this friend code is on this screen now,
  *                                        and every other screen it was on finds it moved
  */
-import { MAGIC_LINK_MS, isFriendCode, normalEmail, type OwlPicture } from '@owl-park/shared';
-import type { LinkKind, Protected, Restored } from './accountBook';
-import { mintCollector, mintLink, randomNonce, readCollector, verifyLink, type PassPayload } from './pass';
+import { MAGIC_LINK_MS, ORDER_LINK_MS, hashForLog, isFriendCode, normalEmail, type Logger, type OwlPicture } from '@owl-park/shared';
+import type { CarriedEmail, LinkKind, Protected, Restored } from './accountBook';
+import { mintCollector, mintLink, randomNonce, readCollector, readLink, verifyLink, type PassPayload } from './pass';
 import { adminQuery, type StoreConfig } from './storeApi';
 
 export interface AccountEnv {
@@ -79,8 +91,8 @@ function unb64url(s: string): Uint8Array | null {
   }
 }
 
-/** An email (`e`) or a client address (`i`) as the store keys it: never reversible without the key. */
-export async function keyed(keys: EmailKeys, what: 'e' | 'i', value: string): Promise<string> {
+/** An email (`e`), a client address (`i`) or a store order (`o`) as the store keys it: never reversible without the key. */
+export async function keyed(keys: EmailKeys, what: 'e' | 'i' | 'o', value: string): Promise<string> {
   return b64url(new Uint8Array(await crypto.subtle.sign('HMAC', keys.hash, enc.encode(`${what}:${value}`))));
 }
 
@@ -209,6 +221,23 @@ export function restoreMail(to: string, link: string): Mail {
   );
 }
 
+const ORDER_LINK_DAYS = ORDER_LINK_MS / 86_400_000;
+
+/**
+ * The mail a ticket's buyer gets as the ticket lands on an owl (OP-186): one link that protects that owl
+ * (words for Logan to approve before it goes live).
+ */
+export function orderProtectMail(to: string, link: string): Mail {
+  return letter(
+    to,
+    'Protect the owl that took your ticket',
+    ['Thanks for your Owl Park ticket. It is on an owl now, and that owl lives only on the screen it is on.', `To protect it with this email, so it can come back on another screen, open this link within ${ORDER_LINK_DAYS} days:`],
+    'Protect my owl',
+    link,
+    ['The game keeps nothing about this email unless you open the link. If you didn’t buy an Owl Park ticket, ignore this email and nothing changes.'],
+  );
+}
+
 /** The mail for an email that protects no owl: a link that protects the owl on the screen that opens it. */
 export function noOwlsMail(to: string, link: string): Mail {
   return letter(
@@ -227,7 +256,7 @@ export function noOwlsMail(to: string, link: string): Mail {
 export interface AccountRpc {
   accountProtectLink(cid: string, emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<number | null>;
   accountRestoreLink(emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<{ exp: number; kind: LinkKind } | null>;
-  accountConfirm(nonce: string, opener: string | null): Promise<Protected | 'gone' | 'no-owl'>;
+  accountConfirm(nonce: string, opener: string | null, carried: CarriedEmail | null): Promise<Protected | 'gone' | 'no-owl'>;
   accountOwls(nonce: string): Promise<OwlPicture[] | null>;
   accountBind(nonce: string, code: string, here: { cid: string; dev: string | null } | null): Promise<Restored | 'gone' | 'no-owl'>;
 }
@@ -288,9 +317,18 @@ export async function accountRoute(path: string, body: Record<string, unknown>, 
       return (await d.mail(sent.kind === 'restore' ? restoreMail(email, link) : noOwlsMail(email, link))) ? ok() : no(502, 'mail-failed');
     }
     case 'confirm': {
-      const nonce = await verifyLink(d.secret, body['token'], 'protect', Math.floor(d.now / 1000));
-      if (!nonce) return no(410, 'gone');
-      const r = await d.rpc.accountConfirm(nonce, d.pass?.cid ?? null);
+      const link = await readLink(d.secret, body['token'], 'protect', Math.floor(d.now / 1000));
+      if (!link) return no(410, 'gone');
+      // A ticket's link (OP-186) carries its email sealed: opened, it is read back and kept as any protected owl's is.
+      let carried: CarriedEmail | null = null;
+      if (link.sealed) {
+        if (!d.keys) return no(503, 'not-ready');
+        const keys = await d.keys;
+        const email = normalEmail(await unseal(keys, link.sealed));
+        if (!email) return no(410, 'gone');
+        carried = { emailHash: await keyed(keys, 'e', email), emailSeal: link.sealed };
+      }
+      const r = await d.rpc.accountConfirm(link.nonce, d.pass?.cid ?? null, carried);
       if (r === 'gone') return no(410, 'gone');
       if (r === 'no-owl') return no(401, 'bad-pass');
       return ok({ account: r.account, look: r.look, mine: r.cid === d.pass?.cid });
@@ -314,4 +352,50 @@ export async function accountRoute(path: string, body: Record<string, unknown>, 
     default:
       return null;
   }
+}
+
+// ---------- a ticket's order email (OP-186) ----------
+
+/** What offering a ticket's buyer a protect link came to, for the log (never the address). */
+export type OrderOffer = 'mailed' | 'mail-failed' | 'already' | 'no-email' | 'off';
+
+export interface OrderOfferDeps {
+  /** The collections object's call: a ticket's protect link noted for the owl, or null (accountBook.orderLink). */
+  rpc: { accountOrderLink(cid: string, orderHash: string, nonce: string): Promise<number | null> };
+  /** Signs the link. */
+  secret: string;
+  keys: Promise<EmailKeys> | null;
+  mail: MailSender | null;
+  /** Where the link points: the park's own address. */
+  origin: string;
+  log: Logger;
+}
+
+/**
+ * A ticket's order email (`email`, as the store gave it), as the ticket lands on an owl (a claim, or the
+ * booth's checkout): its buyer is mailed one link that protects that owl when opened, unless an email
+ * protects it already or this order offered it one before. The park keeps nothing about the address:
+ * the link carries it sealed, and the account store notes the owl and the order's keyed hash only.
+ */
+export async function offerOrderProtect(d: OrderOfferDeps, cid: string, order: string, email: string | null): Promise<OrderOffer> {
+  if (!d.keys || !d.mail) return 'off';
+  const about = { collector_hash: hashForLog(cid), order_hash: hashForLog(order) };
+  // TODO-DOCS (OP-186): docs/LOGGING.md: order_protect_mailed (worker.accounts, info) and order_protect_unsent (worker.accounts, warn, reason no-email or mail-failed), each with collector_hash and order_hash.
+  const to = normalEmail(email);
+  if (!to) {
+    // An app not yet allowed customers' emails reads as this on every ticket: the line says so.
+    d.log.warn('worker.accounts', 'order_protect_unsent', 'The store gave no email for a ticket’s order (an app not allowed customers’ emails, the store out of reach, or none given): its buyer was not offered a link to protect their owl.', { ...about, reason: 'no-email' });
+    return 'no-email';
+  }
+  const keys = await d.keys;
+  const nonce = randomNonce();
+  const exp = await d.rpc.accountOrderLink(cid, await keyed(keys, 'o', order), nonce);
+  if (exp === null) return 'already';
+  const link = accountLink(d.origin, 'protect', await mintLink(d.secret, 'protect', nonce, Math.floor(exp / 1000), await seal(keys, to)));
+  if (await d.mail(orderProtectMail(to, link))) {
+    d.log.info('worker.accounts', 'order_protect_mailed', 'A ticket’s buyer was mailed a link to protect the owl that took it; nothing about the address is kept.', about);
+    return 'mailed';
+  }
+  d.log.warn('worker.accounts', 'order_protect_unsent', 'The mail offering a ticket’s buyer a link to protect their owl did not go: the owl stays as it was, and the Menu can still protect it.', { ...about, reason: 'mail-failed' });
+  return 'mail-failed';
 }
