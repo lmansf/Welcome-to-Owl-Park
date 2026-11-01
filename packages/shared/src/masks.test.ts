@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRONT_POINTS_MAX, MASK_LIST_MAX, MASK_REASONS, checkMasks, emptyMasks, isPaintable, ledgesOf, type MaskCheck, type MaskDraft } from './masks';
+import { FRONT_POINTS_MAX, MASK_LIST_MAX, MASK_REASONS, checkMasks, emptyMasks, frontsOf, isPaintable, ledgesOf, type MaskCheck, type MaskDraft } from './masks';
 import { MAX_PERCH_TOP } from './perches';
 import { ROOMS } from '../rooms';
 
@@ -127,5 +127,25 @@ describe('the rooms the painter works over (OP-156)', () => {
     const ledges = ledgesOf(ROOMS['l1']!);
     expect(ledges.map((l) => l.id)).toEqual(ROOMS['l1']!.perches!.map((p) => p.id));
     expect(checkMasks({ ...emptyMasks(), ledges }, ROOMS['l1']!.size).ok).toBe(true);
+  });
+
+  it('starts from a room’s own fronts too, each its polygon’s points, and the tree’s pass the draft’s check (OP-173)', () => {
+    const poly = [
+      { x: 926, y: 448 },
+      { x: 940, y: 448 },
+      { x: 944, y: 768 },
+    ];
+    const fronts = frontsOf({ fronts: [{ id: 'lamp-1', poly }] });
+    expect(fronts).toEqual([{ id: 'lamp-1', points: poly }]);
+    // Copies: the painter moves a point of its draft, never the room's.
+    fronts[0]!.points[0]!.x = 1;
+    expect(poly[0]!.x).toBe(926);
+    expect(frontsOf({})).toEqual([]);
+    // The tree's own fronts and ledges together, whatever they are today, start a draft that passes the check.
+    const l1 = ROOMS['l1']!;
+    const own = frontsOf(l1);
+    expect(own.map((f) => f.id)).toEqual(l1.fronts!.map((f) => f.id));
+    expect(own.length).toBeGreaterThan(0);
+    expect(checkMasks({ ...emptyMasks(), ledges: ledgesOf(l1), fronts: own }, l1.size)).toEqual({ ok: true, draft: { ...emptyMasks(), ledges: ledgesOf(l1), fronts: own } });
   });
 });

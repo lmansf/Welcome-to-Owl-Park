@@ -81,6 +81,7 @@ export interface ParkState {
     status: string;
     readout: string;
     own: string[];
+    ownFronts: string[];
     drawn: { ledges: string[]; walls: string[]; hazards: string[]; fronts: string[] };
     labels: number;
     selected: ({ kind: string; id: string } & Record<string, unknown>) | null;

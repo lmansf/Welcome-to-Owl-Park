@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROOM_W, checkMasks, emptyMasks, ledgesOf, type MaskDraft, type Perch, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { ROOM_W, checkMasks, emptyMasks, frontsOf, ledgesOf, type MaskDraft, type Perch, type RoomDef, type Vec2 } from '@owl-park/shared';
 import { draftJson, loadMasks, saveMasks } from '../net/masks';
 import { PaintEditor, dragged, drawnMark, find, hitTest, readout, trialPerches, type Hit, type MarkKind, type Tool } from '../paint/editor';
 import { notYetLedges, playfieldAt, suggestLedges, type AlphaPicture, type Suggestion } from '../paint/suggest';
@@ -8,7 +8,7 @@ import { mountPaintPanel, type PaintPanel, type PaintState } from '../ui/paintPa
 
 /**
  * The ledge painter (OP-156, part 2; `?paint=1` with a keeper's token, over a room of the tree): the
- * room's ledges, or the draft a keeper saved, drawn over the running room, to be fitted to the art.
+ * room's ledges and fronts, or the draft a keeper saved, drawn over the running room, to be fitted to the art.
  * Green lines with a handle at each end and the height as a label are ledges, red uprights walls,
  * orange lines hazards, and translucent blue polygons fronts (regions to be drawn in front of the
  * owls); dashed lines are what Suggest reads off the screen's playfield. The owl walks and jumps
@@ -49,7 +49,7 @@ const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 /** What the painter needs of the room scene. */
 export interface PainterHost {
   scene: Phaser.Scene;
-  /** The room as the park has it: its own ledges, its size and its floor. */
+  /** The room as the park has it: its own ledges and fronts, its size and its floor. */
   room: RoomDef;
   /** The room server ('' for the page's own). */
   base: string;
@@ -74,8 +74,9 @@ export interface PaintDebug {
   state: PaintState;
   status: string;
   readout: string;
-  /** The room's own ledges, and what the last frame drew of the draft. */
+  /** The room's own ledges and fronts, and what the last frame drew of the draft. */
   own: string[];
+  ownFronts: string[];
   drawn: { ledges: string[]; walls: string[]; hazards: string[]; fronts: string[] };
   /** Height labels shown, one a ledge. */
   labels: number;
@@ -113,8 +114,8 @@ export class LedgePainter {
 
   constructor(private readonly host: PainterHost) {
     const { scene, room } = host;
-    // The room's own ledges until the saved draft is read (presses wait for it: the owl walks meanwhile).
-    this.editor = new PaintEditor({ ...emptyMasks(), ledges: ledgesOf(room) }, false);
+    // The room's own ledges and fronts until the saved draft is read (presses wait for it: the owl walks meanwhile).
+    this.editor = new PaintEditor({ ...emptyMasks(), ledges: ledgesOf(room), fronts: frontsOf(room) }, false);
     this.g = scene.add.graphics().setDepth(room.size.h + 400);
     this.panel = mountPaintPanel(host.hud, room.id, {
       tool: (t) => this.setTool(t),
@@ -545,6 +546,7 @@ export class LedgePainter {
       ...this.statusOf(),
       readout: this.readoutOf(),
       own: ledgesOf(this.host.room).map((l) => l.id),
+      ownFronts: frontsOf(this.host.room).map((f) => f.id),
       drawn: this.drawn,
       labels: this.labels.size,
       selected: item && ed.selected ? { kind: ed.selected.kind, ...item } : null,
