@@ -1,3 +1,4 @@
+import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
@@ -45,6 +46,16 @@ const TREE_STRIP = 4;
 const TREE_SKY_FADE = 220;
 const TREE_MID_FADE = 230;
 const TREE_EDGE_FADE = 120;
+
+/** A polygon from [x, y] pairs (room px). */
+function pts(...p: ReadonlyArray<readonly [number, number]>): Polygon {
+  return p.map(([x, y]) => ({ x, y }));
+}
+
+/** A rectangle from x0, y0 to x1, y1 as a polygon (room px). */
+function box(x0: number, y0: number, x1: number, y1: number): Polygon {
+  return pts([x0, y0], [x1, y0], [x1, y1], [x0, y1]);
+}
 
 /** A ledge of the tree (map 2): a perch over the ground line from x0 to x1, `top` above it. */
 function treeLedge(id: string, x0: number, x1: number, top: number): Perch {
@@ -868,9 +879,11 @@ export const ROOMS: Record<string, RoomDef> = {
       ],
     ],
     perches: [
-      // West: a flat-topped boulder and a fallen log beside the path, each a hop up.
+      // West: a flat-topped boulder and a fallen log beside the path, each a hop up, and the top of
+      // the stone wall behind them, a hop up from either (OP-173: it looked like a ledge, so it is one).
       treeLedge('boulder', 680, 850, 110),
       treeLedge('log', 1010, 1210, 85),
+      treeLedge('wall', 700, 1440, 190),
       // The lobby: up the spiral stair (three steps a jump apart) to the balcony; the lintel over the
       // way down, a flap from the floor; the shelf fungus over it, a jump from the lintel.
       treeLedge('stair-1', ROOM_W + 953, ROOM_W + 1078, 82),
@@ -887,6 +900,12 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('block', 2 * ROOM_W + 1120, 2 * ROOM_W + 1270, 155),
       treeLedge('crate', 2 * ROOM_W + 1165, 2 * ROOM_W + 1240, 205),
       treeLedge('stall-roofs', 2 * ROOM_W + 465, 2 * ROOM_W + 1240, 350),
+      // The round plinth, a jump up, and the steps beside it up to the stall roofs (OP-173: they looked
+      // like a way up, so they are one).
+      treeLedge('plinth', 2 * ROOM_W + 425, 2 * ROOM_W + 590, 152),
+      treeLedge('steps-1', 2 * ROOM_W + 397, 2 * ROOM_W + 462, 190),
+      treeLedge('steps-2', 2 * ROOM_W + 412, 2 * ROOM_W + 476, 238),
+      treeLedge('steps-3', 2 * ROOM_W + 434, 2 * ROOM_W + 496, 285),
       // The roof run: a stair of crates and barrels a half-visitor a step, the long roof over the
       // stalls, the higher one by the lantern tower, and the tower's balcony, a jump up from that
       // roof's end under it, the highest ledge of the level.
@@ -894,8 +913,39 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('crates-2', 3 * ROOM_W + 160, 3 * ROOM_W + 390, 170),
       treeLedge('crates-3', 3 * ROOM_W + 265, 3 * ROOM_W + 425, 250),
       treeLedge('roof-low', 3 * ROOM_W + 410, 3 * ROOM_W + 965, 310),
+      treeLedge('barrel', 3 * ROOM_W + 535, 3 * ROOM_W + 608, 383),
       treeLedge('roof-high', 3 * ROOM_W + 955, 3 * ROOM_W + 1340, 402),
       treeLedge('tower-balcony', 3 * ROOM_W + 1258, 3 * ROOM_W + 1500, 530),
+    ],
+    // What is painted in front of the path, drawn again over the owls (OP-173): the west path's two lamp
+    // posts (their poles and lanterns) and the post in front of the market square's stall.
+    fronts: [
+      { id: 'lamp-1', poly: pts([926, 448], [940, 448], [941, 700], [944, 768], [922, 768], [925, 700]) },
+      { id: 'lamp-1-lantern-l', poly: pts([868, 560], [906, 560], [914, 572], [914, 598], [906, 610], [868, 610], [860, 598], [860, 572]) },
+      { id: 'lamp-1-lantern-r', poly: pts([956, 530], [996, 530], [1004, 542], [1004, 588], [996, 600], [956, 600], [948, 588], [948, 542]) },
+      { id: 'lamp-2', poly: pts([1294, 445], [1306, 445], [1307, 712], [1310, 768], [1290, 768], [1293, 712]) },
+      { id: 'lamp-2-lantern-l', poly: pts([1232, 556], [1272, 556], [1280, 568], [1280, 610], [1272, 622], [1232, 622], [1224, 610], [1224, 568]) },
+      { id: 'lamp-2-lantern-r', poly: pts([1318, 538], [1356, 538], [1364, 550], [1364, 598], [1356, 610], [1318, 610], [1310, 598], [1310, 550]) },
+      {
+        id: 'perch-post',
+        poly: pts(
+          ...([[955, 318], [1102, 318], [1102, 349], [1046, 352], [1042, 400], [1037, 440], [1036, 460], [1030, 480], [1022, 520], [1016, 560], [1012, 580], [1010, 640], [1004, 700],
+            [1005, 760], [1006, 778], [938, 778], [940, 760], [945, 700], [950, 640], [955, 580], [968, 560], [972, 520], [978, 488], [990, 470], [997, 460], [1002, 440], [993, 400],
+            [993, 352], [955, 350]] as const).map(([x, y]) => [2 * ROOM_W + x, y] as const),
+        ),
+      },
+    ],
+    // Painted glows that do nothing yet, shaded so they do not read as things to use (OP-173): the
+    // closed gate's lit doors, the lobby's booth window, its way down and the nest of eggs over them, the market square's lit stall
+    // windows and the roof run's lit stall fronts.
+    shades: [
+      { id: 'gate-doors', poly: box(290, 445, 540, 712), alpha: 0.45 },
+      { id: 'booth-window', poly: box(ROOM_W + 795, 595, ROOM_W + 868, 685), alpha: 0.5 },
+      // The nest of eggs high in the hollow has nothing under it to jump from, so it is quieted rather than made a ledge.
+      { id: 'nest', poly: box(ROOM_W + 760, 296, ROOM_W + 900, 352), alpha: 0.35 },
+      { id: 'way-down', poly: box(ROOM_W + 594, 600, ROOM_W + 740, 755), alpha: 0.4 },
+      { id: 'stall-windows', poly: box(2 * ROOM_W + 560, 515, 2 * ROOM_W + 1095, 605), alpha: 0.35 },
+      { id: 'stall-fronts', poly: box(3 * ROOM_W + 476, 560, 3 * ROOM_W + 1263, 742), alpha: 0.3 },
     ],
     // Owls come in at the lobby's middle; the west end's spawn stands where the overlay's grass leaves
     // the path clear; one back from the market comes out just short of the tower's archway.
@@ -913,7 +963,7 @@ export const ROOMS: Record<string, RoomDef> = {
       // The archway at the foot of the lantern tower, at the roof run's east end: into the market's
       // own screens (OP-155's grid), whose way out brings a tree owl back here. Taken on the
       // ground only, so an owl on the high roof or the balcony over it walks on past.
-      { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0 },
+      { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0, markAt: { x: 3 * ROOM_W + 1365, y: 462 } },
     ],
   },
 };

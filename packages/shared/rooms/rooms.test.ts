@@ -163,6 +163,44 @@ describe("the tree's ways into today's park (OP-162)", () => {
   });
 });
 
+describe('reading the tree at a glance (OP-173)', () => {
+  const playTiles = (room: RoomDef) => backgroundTiles(room).filter((t) => (t.rate ?? 1) === 1);
+
+  it("fronts and shades are shapes inside one tile of a tree room's playfield, each named once", () => {
+    for (const room of ALL_ROOMS) {
+      const shapes = [...(room.fronts ?? []), ...(room.shades ?? [])];
+      if (mapOf(room) !== 2) {
+        expect(shapes, room.id).toEqual([]);
+        continue;
+      }
+      const ids = new Set<string>();
+      for (const s of shapes) {
+        expect(ids.has(s.id), `${room.id} ${s.id} twice`).toBe(false);
+        ids.add(s.id);
+        expect(s.poly.length, s.id).toBeGreaterThanOrEqual(3);
+        const xs = s.poly.map((p) => p.x);
+        const ys = s.poly.map((p) => p.y);
+        expect(playTiles(room).some((t) => Math.min(...xs) >= t.x && Math.max(...xs) <= t.x + ROOM_W), `${room.id} ${s.id} lies in one playfield tile`).toBe(true);
+        expect(Math.min(...ys) >= 0 && Math.max(...ys) <= room.size.h, `${room.id} ${s.id} inside the room`).toBe(true);
+      }
+      for (const s of room.shades ?? []) expect(s.alpha > 0 && s.alpha <= 0.6, `${s.id} shades by ${s.alpha}`).toBe(true);
+    }
+  });
+
+  it("a tree room's doorways to other rooms each have a mark over the arch, and only those", () => {
+    for (const room of ALL_ROOMS) {
+      for (const d of room.doors) {
+        if (mapOf(room) === 2 && d.to) expect(d.markAt, `${room.id} ${d.id}`).toBeDefined();
+        if (!d.markAt) continue;
+        expect(mapOf(room), `${room.id} ${d.id}`).toBe(2);
+        expect(d.to, d.id).toBeDefined();
+        expect(d.markAt.y, `${d.id}'s mark stands over it`).toBeLessThan(d.rect.y);
+        expect(Math.abs(d.markAt.x - (d.rect.x + d.rect.w / 2)), `${d.id}'s mark is over it`).toBeLessThan(80);
+      }
+    }
+  });
+});
+
 describe('the street and the nests', () => {
   const street = ROOMS[STREET_ROOM]!;
   const door = (room: RoomDef, id: string) => room.doors.find((d) => d.id === id)!;

@@ -38,6 +38,8 @@ export interface ParkState {
   soft: string[];
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
+  /** In a room of the tree (OP-173): how many fronts, shades, ledge edges and doorway marks it drew. */
+  tree: { fronts: number; shades: number; lips: number; marks: number } | null;
   /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
   owlScale: number;
   doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;

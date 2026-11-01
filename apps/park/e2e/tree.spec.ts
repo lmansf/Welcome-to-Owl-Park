@@ -86,6 +86,20 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     });
   }
 
+  test('reads at a glance: an edge on every ledge, the shapes in front and the shaded glows drawn, and the archway marked (OP-173)', async ({ page }) => {
+    await openPark(page, { room: 'l1' });
+    expect((await state(page)).tree).toEqual({ fronts: 7, shades: 6, lips: 25, marks: 1 });
+  });
+
+  test('the west wall\'s top is a ledge: a hop up from the boulder', async ({ page }) => {
+    await openPark(page, { room: 'l1', spawn: 'west' });
+    await walkAndStop(page, 770, GROUND);
+    await jump(page);
+    await standsAt(page, 110);
+    await jump(page);
+    await standsAt(page, 190);
+  });
+
   test('the closed gate at the west end turns an owl back with its sign', async ({ page }) => {
     await openPark(page, { room: 'l1', spawn: 'west' });
     await walkToDoor(page, 'closed-west');
