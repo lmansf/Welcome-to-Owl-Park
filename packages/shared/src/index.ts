@@ -42,3 +42,4 @@ export * from './sprites';
 export * from './owlFacts';
 export * from './accounts';
 export * from './log';
+export * from './whichOwl';

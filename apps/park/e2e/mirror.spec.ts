@@ -27,8 +27,9 @@ test.describe('the mirror in the nest (OP-077)', () => {
   test('Play puts the owl before its mirror; Look in the mirror opens Your owl, and the owl in the room is the preview', async ({ page, isMobile }) => {
     await page.goto('/?transport=local');
     await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
-    // A first visit makes its owl (the builder opens on it in place); then Play goes into its nest (OP-105).
+    // A first visit makes its owl (Skip the quiz, and the builder opens on it in place); then Play goes into its nest (OP-105).
     await page.locator('[data-home-btn="login"]').click();
+    await page.locator('[data-wo-skip]').click();
     await expect(builder(page)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(builder(page)).toBeHidden();

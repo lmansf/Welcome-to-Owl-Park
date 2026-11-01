@@ -1,4 +1,4 @@
-import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
+import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
@@ -424,6 +424,8 @@ export interface SettingsTabDeps {
   leave(): void;
   /** The owl's account (OP-139): where a grown-up protects the owl. Null while accounts are off. */
   account?: HTMLElement[] | null;
+  /** Retake the quiz (OP-076): which owl are you, again, for a new kind and colours. Null with no owl yet. */
+  retake?: (() => void) | null;
 }
 
 /** The tickets on this device, in a line each: for an owl asking the keepers about a ticket (OP-086). */
@@ -463,6 +465,15 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
     const owl = card(ACCOUNT_WORDS.friendCode, ...deps.account);
     owl.dataset['account'] = '';
     panel.appendChild(owl);
+  }
+
+  if (deps.retake) {
+    const quiz = card('Which owl are you?', note(WHICH_OWL_WORDS.retakeNote));
+    quiz.dataset['retake'] = '';
+    const row = el('div', 'mrow');
+    row.appendChild(actionButton(WHICH_OWL_WORDS.retake, 'retake', deps.retake));
+    quiz.appendChild(row);
+    panel.appendChild(quiz);
   }
 
   const help = card('Something wrong? An idea?', note('Tell the park’s keepers: they read every note.'));
