@@ -65,7 +65,11 @@ test.describe('the pad (OP-082, OP-114)', () => {
     // The market, by its gift shop (the lobby's ticket booth, which this used, went with OP-180).
     await openPark(page, { room: 'market' });
     const interact = page.locator('[data-pad-interact]');
-    // Nothing to do yet: it rests, dimmed.
+    // The market's spawn is by its first stall, so walk out to the open street first (between the robot
+    // owl and the far stalls, clear of every stall, door and owl to talk to).
+    await page.evaluate(() => window.owlPark.walkTo(1900, 860));
+    await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
+    // Nothing to do here: it rests, dimmed.
     await expect(interact).toHaveAttribute('aria-disabled', 'true');
     await expect(interact).toHaveClass(/idle/);
     const shop = (await state(page)).doors.find((d) => d.id === 'shop')!;
