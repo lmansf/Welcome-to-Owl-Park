@@ -1,6 +1,7 @@
 import type { WalletEntry } from '../net';
 import { shareLink } from '../net/ticketLinks';
 import { OPENING_WORDS, walletLine } from './tickets';
+import { PREVIEW_WORDS, earlyPreview } from './preview';
 
 export interface BoothInfo {
   /** The store's ticket page, once the park has one; the booth sells only while the gate takes tickets. */
@@ -54,6 +55,7 @@ const CSS = `
 #hud .booth .wallet .st,#hud .booth .wallet .vote{font-size:13px;opacity:.92}
 #hud .booth .wallet button{align-self:flex-start;min-height:36px;padding:6px 12px;font-size:13px;margin-top:4px}
 #hud .booth .wallet .shared{font-size:12px;opacity:.88;word-break:break-all;user-select:all}
+#hud .booth .preview{margin:0;padding:8px 12px;border-radius:12px;background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.7);color:#F6F1E3;font-size:14px;line-height:1.4}
 #hud .booth .opening{margin:0;padding:8px 12px;border-radius:12px;background:rgba(201,162,39,.18);border:1px solid #C9A227;color:#FFD36A;font-weight:800;text-align:center}
 #hud .booth .wallet .pass{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#FFD36A}
 #hud .booth .wallet .pass a{display:inline-flex;align-items:center;min-height:36px;padding:6px 14px;border-radius:999px;background:#C9A227;color:#0C1E36;font-weight:800;text-decoration:none}
@@ -187,6 +189,14 @@ export function createBoothPanel(root: HTMLElement, onOpen: () => void): BoothPa
       o.dataset['booth'] = 'opening';
       o.textContent = OPENING_WORDS.booth;
       panel.append(o);
+    }
+    // The early preview (2026-11-01): until the full opening, the booth says not everything is open yet.
+    if (earlyPreview(info.gate)) {
+      const w = document.createElement('p');
+      w.className = 'preview';
+      w.dataset['booth'] = 'preview';
+      w.textContent = PREVIEW_WORDS.booth;
+      panel.append(w);
     }
     panel.append(p);
     if (info.wallet?.length) {
