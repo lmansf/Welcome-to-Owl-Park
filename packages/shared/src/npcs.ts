@@ -70,7 +70,8 @@ export const NPCS: readonly NpcDef[] = [
     name: 'Hazel',
     role: 'Forager of the clearing',
     room: 'grove',
-    pos: { x: 2120, y: 700 },
+    // The grove's west end, a full screen from arrival: quests sit deep in a realm (OP-152).
+    pos: { x: 800, y: 800 },
     facing: 1,
     look: { body: '#8B5A2B', belly: '#F2E1C1', accent: '#81B29A', wear: { head: 'leaf-crown~0', neck: 'bandana~3', pet: 'hedgehog~0' } },
     greetings: ['The leaves are falling just right today.', 'If you hear crunching, that is probably me.', 'Acorns, mushrooms, feathers: the clearing gives if you look.'],
@@ -81,7 +82,8 @@ export const NPCS: readonly NpcDef[] = [
     name: 'Juniper',
     role: 'Treehouse builder',
     room: 'grove',
-    pos: { x: 3050, y: 760 },
+    // The grove's east end (OP-152).
+    pos: { x: 4150, y: 800 },
     facing: -1,
     look: { body: '#A67B5B', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'bucket-hat~0', face: 'round-glasses~0', pet: 'snail~0' } },
     greetings: ['Measure twice, hoot once.', 'That rope bridge? Mine. The wobble is a feature.', 'Every treehouse needs a good view and a better railing.'],
@@ -104,8 +106,9 @@ export const NPCS: readonly NpcDef[] = [
     name: 'Flicker',
     role: 'Tinkerer',
     room: 'market',
-    pos: { x: 520, y: 800 },
-    facing: 1,
+    // East of the market's arrival, deeper in (OP-152).
+    pos: { x: 2800, y: 820 },
+    facing: -1,
     look: { body: '#6B6B6B', belly: '#BFC9D6', accent: '#00E5FF', wear: { head: 'propeller-cap~0', face: 'brass-goggles~0', pet: 'beetle~4' } },
     greetings: ['Do not touch the blinking one. Or do, it is fine, probably.', 'Gears, springs, a little neon: that is all anything is.', 'I dropped something again. I always drop something.'],
     idle: ['tilt', 'spin'],
