@@ -77,6 +77,8 @@ export const LOG_EVENTS = [
   'rate_limited',
   'csp_violation',
   'gate_switched',
+  'park_restart',
+  'room_restart',
   'capacity_set',
   'realms_set',
   'masks_saved',

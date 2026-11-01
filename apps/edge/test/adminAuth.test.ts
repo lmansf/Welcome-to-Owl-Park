@@ -100,6 +100,7 @@ const ROUTES: Array<{ path: string; method: 'GET' | 'POST'; body?: unknown }> = 
   { path: '/api/admin/gate', method: 'POST', body: { mode: 'ticket' } },
   { path: '/api/admin/capacity', method: 'GET' },
   { path: '/api/admin/capacity', method: 'POST', body: { line: { mode: 'on' } } },
+  { path: '/api/admin/restart', method: 'POST' },
   { path: '/api/vote/tally', method: 'GET' },
   { path: '/api/vote/close', method: 'POST' },
 ];

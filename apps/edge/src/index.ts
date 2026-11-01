@@ -21,8 +21,9 @@ import { loggerFor } from './logs';
 import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
 import { GUEST_PASS_TTL_S, KEEPER_TTL_S, isCollectorId, mintCollector, mintEntry, mintKeeper, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyKeeper, verifyPass, type PassPayload } from './pass';
-import { admitted, gateMode, mayEnter } from './gate';
-import { forgetGate, gateFrom, gateNow, type GateSet } from './gateSwitch';
+import { jobOf } from './crons';
+import { admitted, beforeRestart, gateMode, mayEnter } from './gate';
+import { forgetGate, gateFrom, gateNow, type GateRead, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
 import { health } from './health';
 import { isPage, uncachedPage } from './page';
@@ -238,15 +239,65 @@ function visitOf(pass: PassPayload, request: Request): Visit {
   return { pass: pass.id, device: deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile')) };
 }
 
-/** The opening switch as the vote ledger keeps it (OP-067). */
-async function readGate(env: Env): Promise<GateSet> {
+/** The opening switch as the vote ledger keeps it (OP-067), and when the park last restarted (OP-181). */
+async function readGate(env: Env): Promise<GateRead> {
   const r = await votes(env).fetch('https://park/gate');
   if (!r.ok) throw new Error(`the vote ledger answered ${r.status}`);
-  return ((await r.json()) as { gate: GateSet }).gate;
+  const body = (await r.json()) as { gate: GateSet; restartAt?: unknown };
+  return { set: body.gate, restartAt: typeof body.restartAt === 'number' ? body.restartAt : null };
 }
 
 /** The front gate now: the opening switch, or GATE where the switch was never set. */
 const gateOf = (env: Env) => gateNow(() => readGate(env), env.GATE);
+
+/**
+ * The park's nightly restart (OP-181), on its cron or a keeper's word: the vote ledger keeps when it
+ * was, so no pass from before it goes past the turnstiles while the gate takes tickets; then every
+ * room object tells its owls and, a moment later, sends them all to the home screen. Each room
+ * object logs its own line; this logs one for the park. Should the ledger not keep the time, the
+ * rooms restart all the same (the pages drop their passes as they go home).
+ */
+async function restartPark(env: Env, log: Logger, by: 'cron' | 'key'): Promise<{ restartAt: number | null; objects: number; missed: number; owls: number }> {
+  let restartAt: number | null = null;
+  try {
+    const r = await votes(env).fetch('https://park/restart', { method: 'POST' });
+    if (!r.ok) throw new Error(`the vote ledger answered ${r.status}`);
+    const at = ((await r.json()) as { restartAt?: unknown }).restartAt;
+    if (typeof at !== 'number') throw new Error('the vote ledger did not say when the park restarted');
+    restartAt = at;
+  } catch (e) {
+    log.error('worker', 'write_failed', 'The nightly restart’s time was not kept: passes from before it still go past the turnstiles. The rooms restart all the same.', { by, error: e });
+  }
+  forgetGate();
+  const copies = await overflowOf(env)
+    .then((o) => o.copies)
+    .catch((e: unknown) => {
+      log.error('overflow', 'read_failed', 'The overflow object did not say which copies of rooms are open: only the rooms themselves restart.', { error: e });
+      return {};
+    });
+  const names = roomObjectNames(env.ROOM_SHARDING, Object.keys(ROOMS), copies);
+  const told = await Promise.all(
+    names.map(async (name) => {
+      try {
+        const r = await env.ROOMS.get(env.ROOMS.idFromName(name)).fetch('https://park/restart', { method: 'POST' });
+        if (!r.ok) throw new Error(`the room object answered ${r.status}`);
+        const owls = ((await r.json()) as { owls?: unknown }).owls;
+        return typeof owls === 'number' ? owls : 0;
+      } catch (e) {
+        log.error('worker', 'send_failed', 'A room object was not told of the nightly restart: its owls stay until they leave.', { object: name, by, error: e });
+        return null;
+      }
+    }),
+  );
+  const missed = told.filter((n) => n === null).length;
+  const owls = told.reduce<number>((a, n) => a + (n ?? 0), 0);
+  // TODO-DOCS (OP-181): docs/LOGGING.md: park_restart (worker, info; warn when a room object missed it): by (cron or key),
+  // objects, missed, owls, restart_at (when the ledger kept it). Per object, send_failed (worker, error): object, by.
+  const fields = { by, objects: names.length, missed, owls, ...(restartAt !== null ? { restart_at: new Date(restartAt).toISOString() } : {}) };
+  if (missed) log.warn('worker', 'park_restart', 'The park restarted for the night, but not every room object was told.', fields);
+  else log.info('worker', 'park_restart', 'The park restarted for the night: every room object sends its owls to the home screen.', fields);
+  return { restartAt, objects: names.length, missed, owls };
+}
 
 /** The ticket book's internal routes in the vote ledger's object (`ticketDesk.ts`). */
 function deskOf(env: Env): Desk {
@@ -419,7 +470,9 @@ const park = {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
       const pass = await passFrom(request, env, log);
       if (!pass) return json({ error: 'bad-pass' }, 401);
-      return json({ gate: (await gateOf(env)).mode, admitted: pass.adm });
+      // A pass from before the park's nightly restart goes through the turnstiles again (OP-181).
+      const gate = await gateOf(env);
+      return json({ gate: gate.mode, admitted: pass.adm && !beforeRestart(gate, pass) });
     }
 
     if (url.pathname === '/api/travel') {
@@ -644,14 +697,25 @@ const park = {
         }
         forgetGate();
         const set = ((await r.json()) as { gate: GateSet }).gate;
-        log.info('worker.admin', 'gate_switched', 'The opening switch was changed.', { gate: gateFrom(set, env.GATE).mode, by: set ? 'switch' : 'deployed' });
-        return json({ ...gateFrom(set, env.GATE), set, deployed });
+        const { mode: switched, closedAt } = gateFrom(set, env.GATE);
+        log.info('worker.admin', 'gate_switched', 'The opening switch was changed.', { gate: switched, by: set ? 'switch' : 'deployed' });
+        return json({ mode: switched, closedAt, set, deployed });
       }
       if (request.method !== 'GET') return json({ error: 'not found' }, 404);
-      const set = await readGate(env);
-      return json({ ...gateFrom(set, env.GATE), set, deployed });
+      const { set } = await readGate(env);
+      const { mode, closedAt } = gateFrom(set, env.GATE);
+      return json({ mode, closedAt, set, deployed });
     }
     if (url.pathname === '/admin/gate') return gatePage();
+
+    // ---- The nightly restart (OP-181) by hand, to try it on staging: the same as its cron ----
+    // TODO-DOCS (OP-181): docs/DEPLOY.md's admin routes: POST /api/admin/restart (the admin key) restarts
+    // the park now, as the 09:00 UTC cron does; it answers the objects told, those missed and the owls sent home.
+    if (url.pathname === '/api/admin/restart') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+      if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
+      return json(await restartPark(env, log, 'key'));
+    }
 
     // ---- Busy nights (OP-075): the line, the busy ribbon and copies of rooms, with no deploy ----
     if (url.pathname === '/api/line') {
@@ -840,7 +904,8 @@ const park = {
         const nowS = Math.floor(Date.now() / 1000);
         const until = r.body['validUntil'];
         const exp = Math.min(nowS + GUEST_PASS_TTL_S, typeof until === 'number' ? Math.floor(until / 1000) : Infinity);
-        const admittedPass = await mintPass(signingSecret(env), { ...pass, exp, adm: true, tid });
+        // Issued now: the turnstiles admit it after any nightly restart that went before (OP-181).
+        const admittedPass = await mintPass(signingSecret(env), { ...pass, iat: nowS, exp, adm: true, tid });
         if (r.body['started'] === true) mirrorLater(ctx, env, log, url.origin, { id: tid });
         return json({ ...r.body, pass: admittedPass, exp, gate: (await gateOf(env)).mode, adm: true });
       }
@@ -902,8 +967,9 @@ const park = {
       }
       const pass = await passFrom(request, env, log);
       if (!pass) return Response.json({ error: 'bad-pass' }, { status: 401, headers: CORS });
-      // Only ticket-holders vote: a guest pass is refused until the ticket gate admits the visitor.
-      if (!pass.adm) return Response.json({ error: 'tickets-required' }, { status: 403, headers: CORS });
+      // Only ticket-holders vote: a guest pass is refused until the ticket gate admits the visitor
+      // (since the park's last nightly restart, while the gate takes tickets: OP-181).
+      if (!pass.adm || beforeRestart(await gateOf(env), pass)) return Response.json({ error: 'tickets-required' }, { status: 403, headers: CORS });
       if (!pass.cid) return Response.json({ error: 'no-collector' }, { status: 401, headers: CORS });
       // One vote per wallet per park day, however many tickets or passes it holds (C42); the vote
       // keeps the ticket that let the owl in, which votes once a day too.
@@ -1018,9 +1084,12 @@ const park = {
     return isPage(url.pathname) ? guardedPage(uncachedPage(asset), url) : asset;
   },
 
-  /** Month-end: decide the previous park month's Realm Vote. */
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await votes(env).fetch('https://park/close', { method: 'POST' });
+  /** Each cron its own job (crons.ts): month-end decides the previous park month's Realm Vote; every night the park restarts (OP-181). */
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    const job = jobOf(controller.cron);
+    if (job === 'vote-close') await votes(env).fetch('https://park/close', { method: 'POST' });
+    else if (job === 'restart') await restartPark(env, loggerFor(env), 'cron');
+    else throw new Error(`the park has no job for the cron ${controller.cron}`);
   },
 } satisfies ExportedHandler<Env>;
 
@@ -1042,7 +1111,9 @@ export default {
     try {
       await park.scheduled(controller, env);
     } catch (e) {
-      loggerFor(env).error('worker', 'unhandled_error', 'The month-end close of the Realm Vote failed.', { job: 'vote-close', error: e });
+      const job = jobOf(controller.cron);
+      const msg = job === 'vote-close' ? 'The month-end close of the Realm Vote failed.' : job === 'restart' ? 'The nightly restart failed.' : 'A cron ran that the park has no job for.';
+      loggerFor(env).error('worker', 'unhandled_error', msg, { job: job ?? 'none', cron: controller.cron, error: e });
       throw e;
     }
   },

@@ -22,6 +22,7 @@ names (C31, C35, ...), and the docs it touched.
 
 ## Week of 2026-10-26
 
+- OP-181 (2026-11-01): the nightly restart: a 09:00 UTC cron (and `POST /api/admin/restart`) sends every owl home after a short notice, and while the gate takes tickets no pass from before the restart goes past the turnstiles (branch claude/nightly-restart).
 - OP-176 (2026-11-01): `docs/agents.md`, `docs/README.md` and the Board's Read me describe the Claude Duet model: one agent, the old roles as hats, the Role (was) column; hand-offs by agent name become hat changes (branch claude/duet-docs).
 
 ## Week of 2026-10-19
