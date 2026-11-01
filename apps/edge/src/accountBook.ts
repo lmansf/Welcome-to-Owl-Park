@@ -7,9 +7,13 @@
  * (accounts.ts), which alone holds their key; the calls at the end are what the Worker's account
  * routes ask of the collections object. Written without platform APIs beyond `SqlStorage`, so Node
  * tests it.
+ *
+ * A ticket's order email (OP-186) is kept nowhere here until its buyer says so: the owl that took the
+ * ticket is offered a one-tap protect link whose row names the owl and nothing about the email (the
+ * address travels sealed in the link itself), and only opening it protects the owl as the Menu's does.
  */
 import { moduleLog } from './logs';
-import { LINKS_PER_EMAIL_PER_HOUR, LINKS_PER_IP_PER_HOUR, MAGIC_LINK_MS, friendCodeFrom, isLook, portraitLook, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
+import { LINKS_PER_EMAIL_PER_HOUR, LINKS_PER_IP_PER_HOUR, MAGIC_LINK_MS, ORDER_LINK_MS, friendCodeFrom, isLook, portraitLook, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
 
 const HOUR_MS = 3600_000;
 /** Spent and lapsed links are kept this long (for a keeper's question), then dropped. */
@@ -32,9 +36,16 @@ export interface LinkRow {
   kind: LinkKind;
   /** The owl a protect link protects. */
   cid: string | null;
+  /** The email's hash; empty for a ticket's protect link (OP-186), which carries its email itself. */
   emailHash: string;
-  /** A protect link's sealed email, kept by the owl once it is confirmed. */
+  /** A protect link's sealed email, kept by the owl once it is confirmed (none for a ticket's). */
   emailSeal: string | null;
+}
+
+/** The email a ticket's protect link carries (OP-186), read back from it by the Worker: its hash and its seal. */
+export interface CarriedEmail {
+  emailHash: string;
+  emailSeal: string;
 }
 
 /** Where a device stands with its owl: the device it holds it on (`dev`), or moved (another screen has it). */
@@ -89,6 +100,9 @@ export class AccountBook {
     );
     sql.exec('CREATE TABLE IF NOT EXISTS account_sends (key TEXT NOT NULL, at INTEGER NOT NULL)');
     sql.exec('CREATE INDEX IF NOT EXISTS account_sends_by_key ON account_sends (key, at)');
+    // The owls a ticket's order offered a protect link (OP-186), so a claim made again mails no second one:
+    // the order's keyed hash and the owl, nothing of the email.
+    sql.exec('CREATE TABLE IF NOT EXISTS account_order_offers (order_hash TEXT NOT NULL, cid TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (order_hash, cid))');
   }
 
   private row(cid: string): Record<string, unknown> | undefined {
@@ -166,10 +180,10 @@ export class AccountBook {
     return true;
   }
 
-  /** A link sent: good once, for MAGIC_LINK_MS. Its expiry (ms). */
-  noteLink(nonce: string, kind: LinkKind, link: Omit<LinkRow, 'kind'>, now: number): number {
+  /** A link sent: good once, for MAGIC_LINK_MS (or `ttl`). Its expiry (ms). */
+  noteLink(nonce: string, kind: LinkKind, link: Omit<LinkRow, 'kind'>, now: number, ttl = MAGIC_LINK_MS): number {
     this.sql.exec('DELETE FROM account_links WHERE exp <= ?', now - LINKS_KEPT_MS);
-    const exp = now + MAGIC_LINK_MS;
+    const exp = now + ttl;
     this.sql.exec('INSERT INTO account_links (nonce, kind, cid, email_hash, email_seal, exp) VALUES (?, ?, ?, ?, ?, ?)', nonce, kind, link.cid, link.emailHash, link.emailSeal, exp);
     return exp;
   }
@@ -216,10 +230,18 @@ export class AccountBook {
     return stand === 'moved' ? stand : { dev: stand.dev, account: accountView(this.account(cid, now)) };
   }
 
-  /** A ticket's order email protects the owl that claimed it (no link: the store already knows the buyer's email). */
-  protectByOrder(cid: string, emailHash: string, emailSeal: string, now: number): Account {
-    this.protect(cid, emailHash, emailSeal, now);
-    return this.account(cid, now);
+  /**
+   * A one-tap protect link for the owl that took a ticket, to be mailed to its order's email (OP-186):
+   * its expiry (ms), or null when that email protects the owl already or this order offered this owl
+   * one before. The email's hash is only compared here, never written: the link's row names the owl,
+   * and the Worker puts the address, sealed, in the link itself.
+   */
+  orderLink(cid: string, emailHash: string, orderHash: string, nonce: string, now: number): number | null {
+    if (this.row(cid)?.['email_hash'] === emailHash) return null;
+    this.sql.exec('DELETE FROM account_order_offers WHERE at <= ?', now - ORDER_LINK_MS - LINKS_KEPT_MS);
+    if (this.sql.exec('SELECT 1 FROM account_order_offers WHERE order_hash = ? AND cid = ?', orderHash, cid).toArray().length) return null;
+    this.sql.exec('INSERT INTO account_order_offers (order_hash, cid, at) VALUES (?, ?, ?)', orderHash, cid, now);
+    return this.noteLink(nonce, 'protect', { cid, emailHash: '', emailSeal: null }, now, ORDER_LINK_MS);
   }
 
   /** A protect link for the owl, if the limits allow: its expiry (ms), or null. */
@@ -241,15 +263,18 @@ export class AccountBook {
   /**
    * A protect link opened: the owl it names, or the opening page's own owl (`opener`) for a link that
    * names none, is protected by its email from now on. A link that names none, opened without an owl,
-   * stays good.
+   * stays good. A ticket's link (OP-186) has no email here: it protects with the one it carried
+   * (`carried`, as the Worker read it from the link), and is gone without one.
    */
-  confirm(nonce: string, opener: string | null, now: number): Protected | 'gone' | 'no-owl' {
+  confirm(nonce: string, opener: string | null, now: number, carried: CarriedEmail | null = null): Protected | 'gone' | 'no-owl' {
     const link = this.peekLink(nonce, 'protect', now);
-    if (!link?.emailSeal) return 'gone';
+    if (!link) return 'gone';
+    const email = link.emailSeal ? { emailHash: link.emailHash, emailSeal: link.emailSeal } : carried;
+    if (!email) return 'gone';
     const cid = link.cid ?? opener;
     if (!cid) return 'no-owl';
     this.useLink(nonce, 'protect', now);
-    this.protect(cid, link.emailHash, link.emailSeal, now);
+    this.protect(cid, email.emailHash, email.emailSeal, now);
     const a = this.account(cid, now);
     return { cid, account: accountView(a), look: a.look };
   }

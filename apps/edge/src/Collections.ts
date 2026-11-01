@@ -65,7 +65,7 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
-import { AccountBook, type LinkKind, type Protected, type Restored } from './accountBook';
+import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
 import { TravelBook } from './travelBook';
 import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
@@ -420,8 +420,8 @@ export class Collections extends DurableObject<Env> {
     this.accounts.setLook(cid, look, Date.now());
   }
 
-  async accountProtectByOrder(cid: string, emailHash: string, emailSeal: string): Promise<void> {
-    this.accounts.protectByOrder(cid, emailHash, emailSeal, Date.now());
+  async accountOrderLink(cid: string, emailHash: string, orderHash: string, nonce: string): Promise<number | null> {
+    return this.accounts.orderLink(cid, emailHash, orderHash, nonce, Date.now());
   }
 
   async accountProtectLink(cid: string, emailHash: string, emailSeal: string, ipHash: string, nonce: string): Promise<number | null> {
@@ -432,8 +432,8 @@ export class Collections extends DurableObject<Env> {
     return this.accounts.restoreLink(emailHash, emailSeal, ipHash, nonce, Date.now());
   }
 
-  async accountConfirm(nonce: string, opener: string | null): Promise<Protected | 'gone' | 'no-owl'> {
-    return this.accounts.confirm(nonce, opener, Date.now());
+  async accountConfirm(nonce: string, opener: string | null, carried: CarriedEmail | null = null): Promise<Protected | 'gone' | 'no-owl'> {
+    return this.accounts.confirm(nonce, opener, Date.now(), carried);
   }
 
   async accountOwls(nonce: string): Promise<OwlPicture[] | null> {

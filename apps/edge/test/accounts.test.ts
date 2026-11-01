@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LINKS_PER_EMAIL_PER_HOUR, MAGIC_LINK_MS, isFriendCode } from '@owl-park/shared';
+import { LINKS_PER_EMAIL_PER_HOUR, MAGIC_LINK_MS, ORDER_LINK_MS, createLogger, hashForLog, isFriendCode, type LogLine } from '@owl-park/shared';
 import { AccountBook } from '../src/accountBook';
-import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal, unseal, type AccountDeps, type AccountRpc, type Mail } from '../src/accounts';
-import { mintCollector, mintLink, readCollector, verifyCollector, verifyLink, type PassPayload } from '../src/pass';
+import { accountRoute, accountsOn, emailKeys, keyed, mailSender, offerOrderProtect, orderEmail, seal, unseal, type AccountDeps, type AccountRpc, type Mail, type OrderOfferDeps } from '../src/accounts';
+import { mintCollector, mintLink, readCollector, readLink, verifyCollector, verifyLink, type PassPayload } from '../src/pass';
+import { logged } from './logged';
 import { sqlStorage } from './sqlite';
 
 const SECRET = 'test-signing-key-for-the-account-tests';
@@ -32,7 +33,7 @@ function park() {
   const rpc: AccountRpc = {
     accountProtectLink: async (cid, h, s, ip, nonce) => book.protectLink(cid, h, s, ip, nonce, now),
     accountRestoreLink: async (h, s, ip, nonce) => book.restoreLink(h, s, ip, nonce, now),
-    accountConfirm: async (nonce, opener) => book.confirm(nonce, opener, now),
+    accountConfirm: async (nonce, opener, carried) => book.confirm(nonce, opener, now, carried),
     accountOwls: async (nonce) => book.pictures(nonce, now),
     accountBind: async (nonce, code, here) => book.restore(nonce, code, here, newDevice, now),
   };
@@ -60,7 +61,28 @@ function park() {
     const m = /#(protect|restore)=([A-Za-z0-9_.-]+)/.exec(mails.at(-1)?.text ?? '');
     return m ? { kind: m[1], token: m[2]! } : null;
   };
-  return { sql, book, rpc, mails, moved, call, lastLink, newDevice, at: (t: number) => void (now = t) };
+  /** A ticket's protect offer (OP-186) through this park: its mail kept with the others, its log lines here. */
+  const lines: LogLine[] = [];
+  const log = createLogger({ sink: (_level, line) => void lines.push(JSON.parse(line) as LogLine) });
+  const offer = (cid: string, order: string, email: string | null, over: Partial<OrderOfferDeps> = {}) =>
+    offerOrderProtect(
+      {
+        rpc: { accountOrderLink: async (c, h, o, n) => book.orderLink(c, h, o, n, now) },
+        secret: SECRET,
+        keys: emailKeys({ ACCOUNT_SECRET }),
+        mail: async (m) => {
+          mails.push(m);
+          return true;
+        },
+        origin: ORIGIN,
+        log,
+        ...over,
+      },
+      cid,
+      order,
+      email,
+    );
+  return { sql, book, rpc, mails, moved, call, lastLink, newDevice, offer, lines, at: (t: number) => void (now = t) };
 }
 
 describe('accounts without passwords, the Worker’s half (OP-139)', () => {
@@ -258,14 +280,82 @@ describe('accounts without passwords, the Worker’s half (OP-139)', () => {
     expect(await orderEmail(cfg, '1005', store({}, 503))).toBeNull();
   });
 
-  it('protects the owl that claimed a ticket with its order’s email, beside any it already had', async () => {
+  it('offers a ticket’s buyer one link that protects the owl that took it, and keeps nothing about the email until it is opened (OP-186)', async () => {
     const p = park();
     const keys = (await emailKeys({ ACCOUNT_SECRET }))!;
     const hash = await keyed(keys, 'e', 'buyer@example.com');
-    expect(p.book.protectByOrder('c_buyer0000000', hash, await seal(keys, 'buyer@example.com'), T0).protected).toBe(true);
+    /** Every row the account store holds, as text: the address and its hash appear nowhere in it. */
+    const stored = () => JSON.stringify(['owl_accounts', 'account_links', 'account_sends', 'account_order_offers'].map((t) => p.sql.exec(`SELECT * FROM ${t}`).toArray()));
+    expect(await p.offer('c_buyer0000000', '1001', ' Buyer@Example.com ')).toBe('mailed');
+    expect(p.mails).toHaveLength(1);
+    const mail = p.mails[0]!;
+    expect(mail.to).toBe('buyer@example.com');
+    expect(mail.subject).toBe('Protect the owl that took your ticket');
+    expect(mail.text).toContain(`within ${ORDER_LINK_MS / 86_400_000} days`);
+    expect(mail.text.match(/#protect=/g)).toHaveLength(1);
+    expect(stored()).not.toContain(hash);
+    expect(stored()).not.toContain('buyer@example.com');
+    expect(p.book.owlsOf(hash)).toEqual([]);
+    logged(p.lines, 'order_protect_mailed', { collector_hash: hashForLog('c_buyer0000000'), order_hash: hashForLog('1001') });
+    expect(JSON.stringify(p.lines)).not.toContain('buyer@example.com');
+    // The same claim made again mails nothing more.
+    expect(await p.offer('c_buyer0000000', '1001', 'buyer@example.com')).toBe('already');
+    expect(p.mails).toHaveLength(1);
+    // Opened on any screen, days later: the owl that took the ticket is protected by the order's email, as the Menu's Protect does.
+    const link = p.lastLink()!;
+    expect(link.kind).toBe('protect');
+    p.at(T0 + ORDER_LINK_MS - 60_000);
+    const opened = await p.call('confirm', { token: link.token }, { now: T0 + ORDER_LINK_MS - 60_000 });
+    expect(opened?.status).toBe(200);
+    expect(opened?.body).toMatchObject({ ok: true, account: { protected: true }, mine: false });
     expect(p.book.owlsOf(hash).map((a) => a.cid)).toEqual(['c_buyer0000000']);
-    // A sibling's owl claims the next order on the same email: both are the family's.
-    p.book.protectByOrder('c_sibling00000', hash, await seal(keys, 'buyer@example.com'), T0 + 1000);
+    // Good once; and an owl the email protects already is offered nothing on its next order.
+    expect((await p.call('confirm', { token: link.token }, { now: T0 + ORDER_LINK_MS - 30_000 }))?.status).toBe(410);
+    expect(await p.offer('c_buyer0000000', '1003', 'buyer@example.com')).toBe('already');
+    // A sibling's owl takes the next order on the same email: it gets its own link, and both are the family's once it is opened.
+    p.at(T0 + ORDER_LINK_MS);
+    expect(await p.offer('c_sibling00000', '1002', 'buyer@example.com')).toBe('mailed');
+    expect((await p.call('confirm', { token: p.lastLink()!.token }, { now: T0 + ORDER_LINK_MS }))?.status).toBe(200);
     expect(p.book.owlsOf(hash).map((a) => a.cid)).toEqual(['c_buyer0000000', 'c_sibling00000']);
+  });
+
+  it('lets a ticket’s link lapse after its days unused, and offers nothing without an email, keys or a sender (OP-186)', async () => {
+    const p = park();
+    expect(await p.offer('c_late00000000', '2001', 'late@example.com')).toBe('mailed');
+    const { token } = p.lastLink()!;
+    p.at(T0 + ORDER_LINK_MS + 1);
+    expect((await p.call('confirm', { token }, { now: T0 + ORDER_LINK_MS + 1 }))?.status).toBe(410);
+    expect(await p.offer('c_none00000000', '2002', null)).toBe('no-email');
+    expect(await p.offer('c_none00000000', '2002', 'not an email')).toBe('no-email');
+    // The store gave no email (an app not yet allowed customers' emails reads so on every ticket): the log says so.
+    logged(p.lines, 'order_protect_unsent', { collector_hash: hashForLog('c_none00000000'), order_hash: hashForLog('2002'), reason: 'no-email', level: 'warn' });
+    expect(await p.offer('c_none00000000', '2002', 'someone@example.com', { keys: null })).toBe('off');
+    expect(await p.offer('c_none00000000', '2002', 'someone@example.com', { mail: null })).toBe('off');
+    // The sender refuses the mail: the owl stays as it was, the Menu can still protect it, and the log says so (never the address).
+    expect(await p.offer('c_none00000000', '2003', 'someone@example.com', { mail: async () => false })).toBe('mail-failed');
+    logged(p.lines, 'order_protect_unsent', { collector_hash: hashForLog('c_none00000000'), order_hash: hashForLog('2003'), reason: 'mail-failed', level: 'warn' });
+    expect(JSON.stringify(p.lines)).not.toContain('someone@example.com');
+    expect(JSON.stringify(p.lines)).not.toContain('not an email');
+  });
+
+  it('reads a ticket’s link back with the email it carries, and refuses one whose carried email was changed or not sealed by the park (OP-186)', async () => {
+    const p = park();
+    const keys = (await emailKeys({ ACCOUNT_SECRET }))!;
+    const sealed = await seal(keys, 'buyer@example.com');
+    const exp = T0 / 1000 + 600;
+    const token = await mintLink(SECRET, 'protect', 'nonce-of-sixteen-plus', exp, sealed);
+    expect(await readLink(SECRET, token, 'protect', T0 / 1000)).toEqual({ nonce: 'nonce-of-sixteen-plus', sealed });
+    expect(await verifyLink(SECRET, token, 'protect', T0 / 1000)).toBe('nonce-of-sixteen-plus');
+    expect(await readLink(SECRET, await mintLink(SECRET, 'protect', 'nonce-of-sixteen-plus', exp), 'protect', T0 / 1000)).toEqual({ nonce: 'nonce-of-sixteen-plus', sealed: null });
+    // A carried email that is not a seal at all is refused with the link.
+    expect(await readLink(SECRET, await mintLink(SECRET, 'protect', 'nonce-of-sixteen-plus', exp, 'not a seal!'), 'protect', T0 / 1000)).toBeNull();
+    // Sealed with another key, or for a link the store never noted: nothing is protected.
+    const other = (await emailKeys({ ACCOUNT_SECRET: `${ACCOUNT_SECRET}-another` }))!;
+    expect(await p.offer('c_buyer0000000', '3001', 'buyer@example.com')).toBe('mailed');
+    const noted = (await readLink(SECRET, p.lastLink()!.token, 'protect', T0 / 1000))!;
+    const forged = await mintLink(SECRET, 'protect', noted.nonce, exp, await seal(other, 'buyer@example.com'));
+    expect((await p.call('confirm', { token: forged }))?.status).toBe(410);
+    expect((await p.call('confirm', { token: await mintLink(SECRET, 'protect', 'never-noted-nonce-xyz', exp, sealed) }))?.status).toBe(410);
+    expect(p.book.owlsOf(await keyed(keys, 'e', 'buyer@example.com'))).toEqual([]);
   });
 });

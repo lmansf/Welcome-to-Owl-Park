@@ -211,25 +211,43 @@ export interface LinkPayload {
   n: string;
   /** Expiry, Unix seconds. */
   exp: number;
+  /**
+   * The email a ticket's protect link carries (OP-186), sealed with the Worker's account key: the link
+   * mailed to a buyer holds their address itself, so the park keeps nothing about it until it is opened.
+   */
+  s?: string;
 }
 
 const NONCE_RE = /^[A-Za-z0-9_-]{16,64}$/;
+/** A sealed email as a link carries it: base64url, an address's length and the seal's nonce and tag. */
+const SEALED_RE = /^[A-Za-z0-9_-]{24,400}$/;
 
 /** A fresh nonce for a link: 128 random bits. */
 export function randomNonce(): string {
   return b64url(crypto.getRandomValues(new Uint8Array(16)));
 }
 
-export async function mintLink(secret: string, kind: LinkPayload['kind'], nonce: string, exp: number): Promise<string> {
-  return sign(secret, { k: 'acl', kind, n: nonce, exp } satisfies LinkPayload);
+/** A link's token; `sealed` is the email a ticket's protect link carries in it (OP-186). */
+export async function mintLink(secret: string, kind: LinkPayload['kind'], nonce: string, exp: number, sealed?: string): Promise<string> {
+  return sign(secret, { k: 'acl', kind, n: nonce, exp, ...(sealed ? { s: sealed } : {}) } satisfies LinkPayload);
 }
 
-/** A link token's kind and nonce while it is good; null when it is forged, malformed, of another kind or run out. */
-export async function verifyLink(secret: string, token: unknown, kind: LinkPayload['kind'], nowS = Math.floor(Date.now() / 1000)): Promise<string | null> {
+/**
+ * A link token's nonce, and the sealed email it carries if it is a ticket's (OP-186), while it is good;
+ * null when it is forged, malformed, of another kind or run out.
+ */
+export async function readLink(secret: string, token: unknown, kind: LinkPayload['kind'], nowS = Math.floor(Date.now() / 1000)): Promise<{ nonce: string; sealed: string | null } | null> {
   if (typeof token !== 'string') return null;
   const p = await verified(secret, token);
   if (!p || p['k'] !== 'acl' || p['kind'] !== kind || typeof p['n'] !== 'string' || !NONCE_RE.test(p['n']) || typeof p['exp'] !== 'number' || p['exp'] < nowS) return null;
-  return p['n'];
+  const s = p['s'];
+  if (s !== undefined && (typeof s !== 'string' || !SEALED_RE.test(s))) return null;
+  return { nonce: p['n'], sealed: s ?? null };
+}
+
+/** A link token's nonce while it is good; null when it is forged, malformed, of another kind or run out. */
+export async function verifyLink(secret: string, token: unknown, kind: LinkPayload['kind'], nowS = Math.floor(Date.now() / 1000)): Promise<string | null> {
+  return (await readLink(secret, token, kind, nowS))?.nonce ?? null;
 }
 
 /**

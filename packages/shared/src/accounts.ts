@@ -8,9 +8,10 @@
  *   (for friends, OP-050, and parties, OP-115), for every owl, ticket or not;
  * - one screen at a time: the browser's collector token names its device, and the owl's account
  *   names the device it is on; a token for another device finds its owl moved;
- * - the email that protects an owl, never typed by a child: a ticket's order email attaches itself
- *   at the claim, or a grown-up types one in Settings and confirms it by a link. An owl without one
- *   lives only on its screen. One email may protect several owls (siblings);
+ * - the email that protects an owl, never typed by a child: a ticket's order email is mailed a
+ *   one-tap link at the claim (OP-186, good for ORDER_LINK_MS), or a grown-up types one in Settings
+ *   and confirms it by a link. An owl without one lives only on its screen. One email may protect
+ *   several owls (siblings);
  * - magic links: a grown-up types the protecting email on another screen, opens the link sent to it
  *   there and taps the owl's picture, and that screen holds the owl from then on.
  *
@@ -51,6 +52,11 @@ export function friendCodeFrom(bytes: Uint8Array): string | null {
 
 /** A magic link works this long after it is sent, once. */
 export const MAGIC_LINK_MS = 15 * 60_000;
+/**
+ * The one-tap protect link a ticket's buyer is mailed (OP-186) works this long, once: a buyer reads
+ * the mail when they read it, not within the quarter hour of a link they asked for themselves.
+ */
+export const ORDER_LINK_MS = 7 * 24 * 3600_000;
 /** Links sent to one email in an hour, and asked for from one address in an hour, at most. */
 export const LINKS_PER_EMAIL_PER_HOUR = 3;
 export const LINKS_PER_IP_PER_HOUR = 10;

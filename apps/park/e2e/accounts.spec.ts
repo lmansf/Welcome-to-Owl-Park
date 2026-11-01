@@ -156,7 +156,7 @@ test.describe('accounts without passwords (OP-139)', () => {
     await a.context().close();
   });
 
-  test('the email on a ticket’s order protects the owl that claims the ticket, with no link to open', async ({ browser, request }) => {
+  test('a ticket’s order email is mailed one link that protects the owl that claimed the ticket, and nothing is kept until it is opened (OP-186)', async ({ browser, request }) => {
     // A free day ticket in the stand-in store, bought with the family's email; the store's webhook sends its claim link.
     const order = String(Date.now() * 100 + 42);
     const email = freshEmail('buyer');
@@ -169,17 +169,21 @@ test.describe('accounts without passwords (OP-139)', () => {
     });
     expect(sent.status(), await sent.text()).toBe(200);
     const { link } = (await (await request.get(`${E2E_STORE.origin}/test/sent?order=${order}`)).json()) as { link: string };
-    // The claim link opened on a new screen: the ticket lands, and the owl there is protected by the order's email.
+    // The claim link opened on a new screen: the ticket lands, and the order's email is mailed a link to protect the owl there.
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     const claimed = page.waitForResponse((r) => r.url().endsWith('/api/tickets/claim'));
     await page.goto(`/?transport=edge&home=0${new URL(link).hash}`);
     await expect(page.getByText('Your ticket is in your wallet')).toBeVisible({ timeout: 20_000 });
     // The order stays with the room server: the page is told its tickets only.
     expect(Object.keys((await (await claimed).json()) as object)).toEqual(['tickets']);
+    const mail = await mailTo(page, email);
+    expect(mail.subject).toBe('Protect the owl that took your ticket');
     const token = await page.evaluate(() => localStorage.getItem('owl-park:collector'));
-    await expect
-      .poll(async () => ((await (await request.get('/api/pass', { headers: { 'X-Collector': token! } })).json()) as { account?: { protected: boolean } }).account?.protected, { timeout: 15_000 })
-      .toBe(true);
+    const isProtected = async () => ((await (await request.get('/api/pass', { headers: { 'X-Collector': token! } })).json()) as { account?: { protected: boolean } }).account?.protected;
+    // Mailed, not kept: the owl is protected only once the link is opened.
+    expect(await isProtected()).toBe(false);
+    await openLink(page, mail, 'protect');
+    await expect.poll(isProtected, { timeout: 15_000 }).toBe(true);
     await page.context().close();
   });
 });
