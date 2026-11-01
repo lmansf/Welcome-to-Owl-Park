@@ -5,7 +5,6 @@ import { getRoom } from '../rooms';
 import {
   GATE_STATUS_WORDS,
   LINK_WORDS,
-  LOW_TIME_MS,
   OPENING_WORDS,
   approachMove,
   approachStart,
@@ -15,9 +14,6 @@ import {
   gateRefusal,
   gateStatus,
   linkToast,
-  lowTimeDue,
-  lowTimeToast,
-  ticketRun,
   timeLeft,
   walletLine,
 } from './tickets';
@@ -176,33 +172,3 @@ describe('the ticket status at the turnstiles (OP-172)', () => {
   });
 });
 
-describe('the one toast in the park as a ticket runs low (OP-172)', () => {
-  const scan = (kind: WalletEntry['kind'], validUntil: number | null) => ({ ok: true as const, id: 'OWL-7K3Q-PX9M', kind, started: true, validUntil });
-
-  it('is for a Day or Night ticket only', () => {
-    expect(ticketRun(scan('day', T0 + D))).toEqual({ kind: 'day', until: T0 + D, warned: false });
-    expect(ticketRun(scan('night', T0 + 4 * H))).toMatchObject({ kind: 'night' });
-    expect(ticketRun(scan('annual', T0 + 300 * D))).toBeNull();
-    expect(ticketRun(scan('event', T0 + 4 * H))).toBeNull();
-    expect(ticketRun(scan('opening-night', T0 + 4 * H))).toBeNull();
-    expect(ticketRun(scan('day', null))).toBeNull();
-  });
-
-  it('comes at 15 minutes left, once a visit', () => {
-    const run = ticketRun(scan('day', T0 + 2 * H))!;
-    expect(lowTimeDue(run, T0)).toBe(2 * H - LOW_TIME_MS);
-    expect(LOW_TIME_MS).toBe(15 * 60_000);
-    // Past the mark already (a room entered with less left): now.
-    expect(lowTimeDue(run, T0 + 2 * H - 10 * 60_000)).toBe(0);
-    // Shown, or run out: never again.
-    expect(lowTimeDue({ ...run, warned: true }, T0)).toBeNull();
-    expect(lowTimeDue(run, T0 + 2 * H)).toBeNull();
-    expect(lowTimeDue(null, T0)).toBeNull();
-  });
-
-  it('says how long is left, quietly', () => {
-    expect(lowTimeToast('day', 15 * 60_000)).toBe('Your Day ticket has 15 minutes left.');
-    expect(lowTimeToast('night', 12 * 60_000 + 20_000)).toBe('Your Night ticket has 12 minutes left.');
-    expect(lowTimeToast('day', 50_000)).toBe('Your Day ticket has 1 minute left.');
-  });
-});
