@@ -30,6 +30,7 @@ import {
   backgroundTiles,
   mapOf,
   speciesOf,
+  tileFade,
   tilePlacement,
   cabinetAt,
   closestPointOnSegment,
@@ -577,7 +578,11 @@ export class RoomScene extends Phaser.Scene {
     });
     for (const [key, copy] of copies) {
       if (!live()) return;
-      if (await sharpenArt(this, key, await copy, live, () => this.still())) this.soft.delete(key);
+      if (await sharpenArt(this, key, await copy, live, () => this.still())) {
+        this.soft.delete(key);
+        // A sharper copy has a bigger frame: the strips of a fading tile are cut again from it.
+        for (const { t, img } of this.parallax) if (t.key === key) this.cropFade(t, img);
+      }
     }
   }
 
@@ -597,6 +602,37 @@ export class RoomScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const p = tilePlacement(t, { w: cam.width, h: cam.height });
     img.setPosition(p.x, p.y).setDisplaySize(p.w + 1, p.h + 1);
+  }
+
+  /**
+   * The images a tile is drawn with (OP-162): one, or for a tile that fades at its side edges three
+   * crops of its texture placed alike, the edge strips ramping from clear to solid and the middle
+   * solid, so the fade costs no texture of its own. (The ramp is a corner alpha, which WebGL draws; the
+   * canvas renderer draws the strips solid.)
+   */
+  private tileImages(t: RoomTile, depth: number, w: number, h: number): Phaser.GameObjects.Image[] {
+    const make = () => this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(w, h).setDepth(depth);
+    const fade = tileFade(t);
+    if (!fade.left && !fade.right) return [make()];
+    const parts = [...(fade.left ? ['left'] : []), 'middle', ...(fade.right ? ['right'] : [])];
+    return parts.map((part) => {
+      const img = make().setData('fade', part);
+      this.cropFade(t, img);
+      return img;
+    });
+  }
+
+  /** Cuts a fading tile's strip from its texture as it is now (a sharper copy may come later). */
+  private cropFade(t: RoomTile, img: Phaser.GameObjects.Image): void {
+    const part = img.getData('fade') as 'left' | 'middle' | 'right' | undefined;
+    if (!part) return;
+    const { width: fw, height: fh } = img.frame;
+    const fade = tileFade(t);
+    const left = Math.round((fade.left * fw) / ROOM_W);
+    const right = Math.round((fade.right * fw) / ROOM_W);
+    if (part === 'left') img.setCrop(0, 0, left, fh).setAlpha(0, 1, 0, 1);
+    else if (part === 'right') img.setCrop(fw - right, 0, right, fh).setAlpha(1, 0, 1, 0);
+    else img.setCrop(left, 0, fw - left - right, fh);
   }
 
   /**
@@ -622,7 +658,7 @@ export class RoomScene extends Phaser.Scene {
 
     // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
     // hairline of the clear colour shows at a join while the camera scrolls.
-    for (const t of backgroundTiles(room)) this.placeTile(t, this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1));
+    for (const t of backgroundTiles(room)) for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) this.placeTile(t, img);
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
@@ -667,7 +703,7 @@ export class RoomScene extends Phaser.Scene {
       this.mirror = new NestMirror(this, NEST_MIRROR);
     }
     for (const t of foregroundTiles(room)) {
-      if (this.textures.exists(t.key)) this.placeTile(t, this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100));
+      if (this.textures.exists(t.key)) for (const img of this.tileImages(t, room.size.h + 100, ROOM_W, ROOM_H)) this.placeTile(t, img);
     }
 
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1);
@@ -1500,7 +1536,7 @@ export class RoomScene extends Phaser.Scene {
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
     /** The art tiles that scroll at rates of their own (OP-156): each one's key, scroll factor and where it is drawn. */
-    layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number }>;
+    layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
     /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
     owlScale: number;
     /** Where the camera's view is, in room pixels (OP-156: a tree room's camera follows the owl as drawn). */
@@ -1523,7 +1559,10 @@ export class RoomScene extends Phaser.Scene {
       eyes: this.me.anchor('eyes').x,
       owlArt: this.me.artKey,
       owlWorn: this.me.wornKey,
-      layers: this.parallax.map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight })),
+      // One entry a tile: a fading tile's strips are placed alike, so its middle stands for it.
+      layers: this.parallax
+        .filter(({ img }) => (img.getData('fade') ?? 'middle') === 'middle')
+        .map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight, fade: tileFade(t) })),
       owlScale: this.me.scaleX / (OWL_SCALE * speciesOf(this.look).size),
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,

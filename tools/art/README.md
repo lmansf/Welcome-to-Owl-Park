@@ -199,6 +199,10 @@ splits it into the kind's flight body, belly and accent, placed and shaded exact
 published layers. A wing comes after its room is published:
 `canvas` puts the painting's edge on grey, the job paints the grey (3040 x 1368, PNG), and the post
 stage's `wing <room>` stitches the selected wing back onto the painting (`docs/ART-PIPELINE.md`).
+A tree playfield whose painted floor sits above the ground line its neighbouring screens share is
+moved down by the post stage: `shift <key> --dy N` (room pixels) writes a new candidate with the
+painting's top rows mirrored into the gap, so what ran out of the frame still does; `select` it and
+finish it as any other playfield.
 
 ## Output contract (read by the post stage)
 

@@ -635,6 +635,101 @@ class TestFieldGuides(unittest.TestCase):
                 self.assertEqual(postprocess.main(["field", "pinball", "--work", td]), 1)
 
 
+class TestShift(unittest.TestCase):
+    """A tree playfield whose painted floor sits above the shared ground line is moved down (OP-162)."""
+
+    def test_shift_down_drops_the_bottom_rows_and_fills_the_top(self):
+        img = Image.new("RGB", (4, 10))
+        for y in range(10):
+            ImageDraw.Draw(img).line((0, y, 3, y), fill=(y * 20, 0, 0))
+        out = np.asarray(postprocess.shift_down(img, 3))
+        self.assertEqual([int(out[y, 0][0]) for y in range(3)], [60, 40, 20], "the gap mirrors rows 1 to 3")
+        self.assertEqual([int(out[y, 0][0]) for y in range(3, 10)], [y * 20 for y in range(7)])
+        with self.assertRaises(ArtError):
+            postprocess.shift_down(img, 10)
+
+    def test_the_shift_command_writes_a_new_candidate_with_its_record(self):
+        with tempfile.TemporaryDirectory() as td:
+            raw = Path(td) / "base.png"
+            base = Image.new("RGB", (2048, 1152), (248, 2, 200))  # a generated "flat" magenta, never quite #FF00FF
+            ImageDraw.Draw(base).rectangle((100, 900, 2047, 1151), fill=(90, 60, 40))  # the floor and the earth under it
+            ImageDraw.Draw(base).rectangle((40, 0, 60, 400), fill=(30, 50, 30))  # a stalk running out of the top
+            base.save(raw)
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["shift", "tree-l1-w1-play", "--dy", "125", "--raw", str(raw), "--work", td, "--now", "2026-11-01T03:00:00Z"])
+            self.assertEqual(rc, 0, out.getvalue())
+            made = list((Path(td) / "raw" / "tree-l1-w1-play").glob("*.png"))
+            self.assertEqual(len(made), 1)
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["shifted"], {"base": "base.png", "dy_room": 125, "dy_px": 160, "fill": "mirror"})
+            self.assertEqual(sc["now_source"], "shift")
+            px = np.asarray(Image.open(made[0]).convert("RGB"))
+            self.assertEqual(tuple(int(c) for c in px[1059, 500]), (248, 2, 200), "the floor's old top is sky now")
+            self.assertEqual(tuple(int(c) for c in px[1060, 500]), (90, 60, 40), "the floor starts 160 px lower")
+            self.assertEqual(tuple(int(c) for c in px[10, 500]), (248, 2, 200), "the top continues the painting's own sky")
+            self.assertEqual(tuple(int(c) for c in px[0, 50]), (30, 50, 30), "the stalk still runs out of the top")
+            self.assertEqual(tuple(int(c) for c in px[0, 70]), (248, 2, 200), "and stays as wide as it was")
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(postprocess.main(["shift", "tree-l1-w1-play", "--dy", "300", "--raw", str(raw), "--work", td]), 1, "more than a quarter of the height is refused")
+
+
+class TestKeyScreen(unittest.TestCase):
+    """A row of screens laid side by side is keyed one screen at a time (OP-162)."""
+
+    def test_each_screen_of_a_row_is_keyed_on_its_own_shade_of_the_key(self):
+        # Two screens painted apart: a dark magenta sky (as generated) and a light one, each with a post.
+        row = Image.new("RGB", (640, 180), (205, 40, 170))
+        ImageDraw.Draw(row).rectangle((320, 0, 639, 179), fill=(255, 40, 255))
+        for x in (140, 460):
+            ImageDraw.Draw(row).rectangle((x, 60, x + 40, 179), fill=(70, 50, 30))
+        params = ChromaParams(key="#FF00FF")
+        for crop, post in (("0,0.5", 140), ("1,0.5", 140)):
+            with mock.patch("sys.stderr", io.StringIO()):
+                rgba, _ = postprocess.key_screen(row, 1600, 900, crop, 0, params)
+            a = np.asarray(rgba.getchannel("A"))
+            self.assertEqual(rgba.size, (320, 180))
+            self.assertEqual(int(a[10:50, :].max()), 0, f"{crop}: the sky keys out whole")
+            self.assertEqual(int(a[80:170, post + 5:post + 35].min()), 255, f"{crop}: the post stays")
+        # Keyed as one row, the light screen's backdrop wins and the dark screen's sky stays mostly opaque.
+        with mock.patch("sys.stderr", io.StringIO()):
+            whole, _ = key_out(row, params)
+        self.assertGreater(int(np.asarray(whole.getchannel("A"))[10:50, :320].mean()), 128)
+
+
+class TestClearPolygon(unittest.TestCase):
+    """An overlay's prop cut by the frame is cleared by hand (OP-162)."""
+
+    def test_the_polygon_turns_clear_and_the_rest_stays(self):
+        img = Image.new("RGBA", (200, 100), (30, 40, 60, 255))
+        out, n = postprocess.clear_polygon(img, "0,0,100,0,0,80")
+        a = np.asarray(out.getchannel("A"))
+        self.assertEqual(int(a[10, 10]), 0, "inside")
+        self.assertEqual(int(a[90, 150]), 255, "outside")
+        self.assertTrue(0 < int(a[40, 50]) < 255, "feathered along the edge")
+        self.assertEqual(out.getpixel((150, 90))[:3], (30, 40, 60))
+        self.assertGreater(n, 3000)
+        two, _ = postprocess.clear_polygon(img.resize((400, 200)), "0,0,100,0,0,80", scale=2)
+        self.assertEqual(int(np.asarray(two.getchannel("A"))[20, 20]), 0, "scaled for the 2x final")
+        with self.assertRaises(ArtError):
+            postprocess.clear_polygon(img, "0,0,10,10")
+
+
+class TestSnapAlpha(unittest.TestCase):
+    """The tree's WebP layers drop the faint alpha Lanczos rings around every edge (OP-162)."""
+
+    def test_alpha_within_the_margin_of_clear_or_opaque_snaps_and_the_colour_stays(self):
+        img = Image.new("RGBA", (8, 1))
+        for x, a in enumerate((0, 1, 4, 5, 250, 251, 254, 255)):
+            img.putpixel((x, 0), (10 * x, 20, 30, a))
+        out, n = postprocess.snap_alpha(img)
+        self.assertEqual([out.getpixel((x, 0))[3] for x in range(8)], [0, 0, 0, 5, 250, 255, 255, 255])
+        self.assertEqual([out.getpixel((x, 0))[:3] for x in range(8)], [img.getpixel((x, 0))[:3] for x in range(8)])
+        self.assertEqual(n, 4)
+        same, none = postprocess.snap_alpha(out)
+        self.assertEqual((none, same.tobytes()), (0, out.tobytes()), "nothing left to snap")
+
+
 class TestGuideOverlay(unittest.TestCase):
     def test_guide_renders_from_the_fixture(self):
         geom = fixture_geometry()

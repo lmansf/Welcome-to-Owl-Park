@@ -66,6 +66,23 @@ export const ART: Record<string, ArtSpec> = {
   'tree-l1-0-bg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   'tree-l1-0-play': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   'tree-l1-0-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // Level 1's other screens (OP-162): the closed gate to the west, the market's square and its roof run
+  // to the east. Placeholders until the owner picks.
+  'tree-l1-w1-bg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-w1-play': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-w1-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-e1-bg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-e1-play': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-e1-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-e2-bg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-e2-play': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-e2-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // The middle distance between each screen's sky and playfield, at half the room's size (drawn twice as
+  // large): soft and far, and light to load and draw.
+  'tree-l1-w1-mid': { w: 800, h: 450, kind: 'room' },
+  'tree-l1-0-mid': { w: 800, h: 450, kind: 'room' },
+  'tree-l1-e1-mid': { w: 800, h: 450, kind: 'room' },
+  'tree-l1-e2-mid': { w: 800, h: 450, kind: 'room' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
   // The stained-glass realm's idol, on the plinth of its west screen.
@@ -520,7 +537,7 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
   const { w, h } = spec;
   switch (spec.kind) {
     case 'room': {
-      if (key.endsWith('-fg')) break; // transparent overlay
+      if (key.endsWith('-fg') || key.endsWith('-mid')) break; // a transparent overlay or middle distance (OP-162)
       if (key.startsWith('tree-')) {
         // The tree's layers (map 2): the playfield is its ground under the ground line, the sky left to
         // the plate behind it; the plate is the night.

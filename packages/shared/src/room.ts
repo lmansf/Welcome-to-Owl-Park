@@ -81,9 +81,30 @@ export interface RoomTile {
   y: number;
   /**
    * How fast the tile scrolls with the camera (OP-156, parallax): absent or 1 with the room, 0.5 a far
-   * layer (the tree's sky plate), 1.2 a near one (its foreground overlay). See tilePlacement.
+   * layer (the tree's sky plate), 0.75 its middle distance, 1.2 a near one (its foreground overlay).
+   * See tilePlacement.
    */
   rate?: number;
+  /**
+   * Room pixels at the tile's left and right edges over which it fades in from clear (OP-162). Tiles
+   * that scroll at their own rate do not meet their neighbours edge to edge: a slower one overlaps the
+   * next screen's (the sky, the middle distance) and a faster one ends partway across the view (the
+   * overlay), so their edges fade instead of showing a hard cut. The tile drawn on top of a neighbour
+   * fades over it.
+   *
+   * TODO-DOCS (OP-162): docs/MAP.md: a tree level's four layers per screen (sky 0.5, middle distance
+   * 0.75 painted at half size and drawn twice as big, playfield 1 with the owls, overlay 1.2), how a
+   * slower tile is drawn bigger about its screen's centre (tilePlacement), each layer's edge fades
+   * (sky 220 where it lies over a neighbour, middle distance 230, overlay 120) and the skies' order
+   * (the lobby's on top); docs/ARCHITECTURE.md's rooms table gains a tile's `fade`.
+   */
+  fade?: { left?: number; right?: number };
+}
+
+/** The room pixels a tile fades over at each side edge, at most half the tile each (OP-162). */
+export function tileFade(t: RoomTile): { left: number; right: number } {
+  const clamp = (n: number | undefined): number => Math.max(0, Math.min(ROOM_W / 2, Math.round(n ?? 0)));
+  return { left: clamp(t.fade?.left), right: clamp(t.fade?.right) };
 }
 
 export interface DoorDef {
