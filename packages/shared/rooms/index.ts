@@ -37,6 +37,14 @@ export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Ou
 export const TREE_GROUND = 770;
 /** Half the depth of the tree's floor strip: an owl's spot on the plan stays on the ground line. */
 const TREE_STRIP = 4;
+/**
+ * Room pixels over which the tree's slower and faster layers fade at their side edges (OP-162): a sky
+ * plate's over the next one beneath it, the middle distance's over its neighbours (they overlap by
+ * nearly a third), and the overlay's where its faster tile ends partway across the view.
+ */
+const TREE_SKY_FADE = 220;
+const TREE_MID_FADE = 230;
+const TREE_EDGE_FADE = 120;
 
 /** A ledge of the tree (map 2): a perch over the ground line from x0 to x1, `top` above it. */
 function treeLedge(id: string, x0: number, x1: number, top: number): Perch {
@@ -818,47 +826,88 @@ export const ROOMS: Record<string, RoomDef> = {
   },
   // ---- The tree (map 2, OP-128): the side-scrolling park around the great trunk, dark until it opens ----
   //
-  // Level 1, the ground: one room for the level's screens (the cells of the tree's grid), so far its trunk
-  // screen, the lobby at the trunk's foot (OP-157's style frame). It is seen from the side: the floor
-  // is the ground line as a thin strip, and the ledges are perches (their areas strips of it, their
-  // tops their heights over the ground line), measured on the painting at 1600 x 900. Its art is three
-  // layers: the sky plate scrolls at half the camera's pace behind the playfield, and the overlay at
-  // 1.2 in front of the owls. Gated: only a keeper's token (OP-156) or the realms switch lets owls in.
+  // Level 1, the ground: one room for the level's screens (the cells of the tree's grid, OP-155), seen
+  // from the side, four screens west to east (OP-162): the path to a closed gate, the lobby at the
+  // trunk's foot (OP-157's style frame), the market's common square, and its roof run. The floor is the
+  // ground line as a thin strip, and the ledges are perches (their areas strips of it, their tops their
+  // heights over the ground line), measured on the paintings at 1600 x 900. Each screen's art is four
+  // layers: the sky plate at half the camera's pace, the middle distance at three quarters, the
+  // playfield with the room, and the overlay at 1.2 in front of the owls. The slower layers overlap the
+  // next screen's and fade over it, the lobby's on top so its own view stays as approved; the overlay
+  // ends partway across the view between screens, so it fades at its sides. Gated: only a keeper's
+  // token (OP-156) or the realms switch lets owls in.
   l1: {
     id: 'l1',
     map: 2,
     gated: true,
     owlScale: 1.25,
-    size: { w: ROOM_W, h: ROOM_H },
+    size: { w: 4 * ROOM_W, h: ROOM_H },
     background: 'tree-l1-0-play',
     backgrounds: [
-      { key: 'tree-l1-0-bg', x: 0, y: 0, rate: 0.5 },
-      { key: 'tree-l1-0-play', x: 0, y: 0 },
+      // The skies, farthest from the lobby first: each lies over the one beyond it and fades into it.
+      { key: 'tree-l1-e2-bg', x: 3 * ROOM_W, y: 0, rate: 0.5 },
+      { key: 'tree-l1-e1-bg', x: 2 * ROOM_W, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      { key: 'tree-l1-w1-bg', x: 0, y: 0, rate: 0.5 },
+      { key: 'tree-l1-0-bg', x: ROOM_W, y: 0, rate: 0.5, fade: { left: TREE_SKY_FADE, right: TREE_SKY_FADE } },
+      // The middle distance, each screen's fading into its neighbours'.
+      ...['w1', '0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l1-${s}-mid`, x: i * ROOM_W, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } })),
+      // The playfields, edge to edge, their floors on the one ground line.
+      ...['w1', '0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l1-${s}-play`, x: i * ROOM_W, y: 0 })),
     ],
-    foregrounds: [{ key: 'tree-l1-0-fg', x: 0, y: 0, rate: 1.2 }],
+    foregrounds: ['w1', '0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l1-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
     mood: 'hub',
-    // The ground line, from the path west of the trunk through both arches and the lobby to the path east of it.
+    // The ground line, from the barrier in front of the closed gate in the west, past the lobby and
+    // through the market's square, to the archway at the east end of the roof run.
     walkable: [
       [
-        { x: 24, y: TREE_GROUND - TREE_STRIP },
-        { x: ROOM_W - 24, y: TREE_GROUND - TREE_STRIP },
-        { x: ROOM_W - 24, y: TREE_GROUND + TREE_STRIP },
-        { x: 24, y: TREE_GROUND + TREE_STRIP },
+        { x: 600, y: TREE_GROUND - TREE_STRIP },
+        { x: 4 * ROOM_W - 24, y: TREE_GROUND - TREE_STRIP },
+        { x: 4 * ROOM_W - 24, y: TREE_GROUND + TREE_STRIP },
+        { x: 600, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
-    // Up the spiral stair (three steps a jump apart) to the balcony; the lintel over the way down, a
-    // flap from the floor; the shelf fungus over it, a jump from the lintel.
     perches: [
-      treeLedge('stair-1', 953, 1078, 82),
-      treeLedge('stair-2', 961, 1063, 153),
-      treeLedge('stair-3', 922, 1016, 223),
-      treeLedge('balcony', 1000, 1109, 286),
-      treeLedge('lintel', 582, 730, 196),
-      treeLedge('fungus', 508, 641, 282),
+      // West: a flat-topped boulder and a fallen log beside the path, each a hop up.
+      treeLedge('boulder', 680, 850, 110),
+      treeLedge('log', 1010, 1210, 85),
+      // The lobby: up the spiral stair (three steps a jump apart) to the balcony; the lintel over the
+      // way down, a flap from the floor; the shelf fungus over it, a jump from the lintel.
+      treeLedge('stair-1', ROOM_W + 953, ROOM_W + 1078, 82),
+      treeLedge('stair-2', ROOM_W + 961, ROOM_W + 1063, 153),
+      treeLedge('stair-3', ROOM_W + 922, ROOM_W + 1016, 223),
+      treeLedge('balcony', ROOM_W + 1000, ROOM_W + 1109, 286),
+      treeLedge('lintel', ROOM_W + 582, ROOM_W + 730, 196),
+      treeLedge('fungus', ROOM_W + 508, ROOM_W + 641, 282),
+      // The market's square: crates stacked by the path in from the lobby; a stone block and the crate
+      // on it, the way up onto the stall roofs. (The plinth, the stall's counter and the perch post
+      // are the statue's, the game's and the guardian's, so no owl stands there.)
+      treeLedge('crates-low', 2 * ROOM_W + 105, 2 * ROOM_W + 275, 125),
+      treeLedge('crates-high', 2 * ROOM_W + 60, 2 * ROOM_W + 240, 225),
+      treeLedge('block', 2 * ROOM_W + 1120, 2 * ROOM_W + 1270, 155),
+      treeLedge('crate', 2 * ROOM_W + 1165, 2 * ROOM_W + 1240, 205),
+      treeLedge('stall-roofs', 2 * ROOM_W + 465, 2 * ROOM_W + 1240, 350),
+      // The roof run: a stair of crates and barrels a half-visitor a step, the long roof over the
+      // stalls, and the higher one by the lantern tower. (The tower's balcony, at 525, is above the
+      // highest ledge the flight rules allow, so it is scenery until they reach it.)
+      treeLedge('crates-1', 3 * ROOM_W + 80, 3 * ROOM_W + 245, 95),
+      treeLedge('crates-2', 3 * ROOM_W + 160, 3 * ROOM_W + 390, 170),
+      treeLedge('crates-3', 3 * ROOM_W + 265, 3 * ROOM_W + 425, 250),
+      treeLedge('roof-low', 3 * ROOM_W + 410, 3 * ROOM_W + 965, 310),
+      treeLedge('roof-high', 3 * ROOM_W + 955, 3 * ROOM_W + 1340, 402),
     ],
-    // Arrivals from the east stand clear of the leaves the overlay hangs at the right edge.
-    spawns: { default: { x: 800, y: TREE_GROUND }, west: { x: 80, y: TREE_GROUND }, east: { x: 1440, y: TREE_GROUND } },
-    doors: [],
+    // Owls come in at the lobby's middle; the west end's spawn stands where the overlay's grass leaves
+    // the path clear.
+    spawns: {
+      default: { x: ROOM_W + 800, y: TREE_GROUND },
+      west: { x: 720, y: TREE_GROUND },
+      east: { x: 3 * ROOM_W + 1100, y: TREE_GROUND },
+    },
+    doors: [
+      // The closed gate at the west end: a blockade on the stone apron in front of it, its phrase on
+      // its board; the door turns owls back at the apron's edge, where the overlay's grass leaves the
+      // path clear.
+      { id: 'closed-west', rect: { x: 630, y: 750, w: 60, h: 40 }, closedSign: 'Not Yet Fledged', marker: { x: 415, y: TREE_GROUND } },
+    ],
   },
 };
 

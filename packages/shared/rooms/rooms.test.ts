@@ -3,7 +3,7 @@ import { arrivalPoint, doorAxis, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
 import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_GROUND, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
@@ -559,7 +559,7 @@ describe('the tree (map 2)', () => {
   /** The tree's floor strip's y extent, from a polygon of it. */
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
 
-  it('is a room of its own map, gated, with owls a quarter bigger: the lobby at the trunk\'s foot', () => {
+  it('is a room of its own map, gated, with owls a quarter bigger: level 1, four screens with the lobby second', () => {
     expect(tree.map((r) => r.id)).toEqual(['l1']);
     for (const r of tree) {
       expect(r.gated, `${r.id} is dark until the keepers open it`).toBe(true);
@@ -567,12 +567,44 @@ describe('the tree (map 2)', () => {
       expect(r.owlScale).toBe(1.25);
     }
     expect(mapOf(getRoom('hub'))).toBe(1);
-    expect(l1.size).toEqual({ w: ROOM_W, h: ROOM_H });
-    expect(backgroundTiles(l1).map((t) => [t.key, t.rate ?? 1])).toEqual([
-      ['tree-l1-0-bg', 0.5],
-      ['tree-l1-0-play', 1],
-    ]);
-    expect(foregroundTiles(l1).map((t) => [t.key, t.rate])).toEqual([['tree-l1-0-fg', 1.2]]);
+    expect(l1.size).toEqual({ w: 4 * ROOM_W, h: ROOM_H });
+    // West to east: the closed gate, the lobby at the trunk's foot, the market's square, its roof run.
+    const screens = ['w1', '0', 'e1', 'e2'];
+    const at = (t: { key: string; x: number }) => [t.key, t.x / ROOM_W];
+    expect(backgroundTiles(l1).filter((t) => (t.rate ?? 1) === 1).map(at)).toEqual(screens.map((s, i) => [`tree-l1-${s}-play`, i]));
+    expect(backgroundTiles(l1).filter((t) => t.rate === 0.75).map(at)).toEqual(screens.map((s, i) => [`tree-l1-${s}-mid`, i]));
+    expect(foregroundTiles(l1).map((t) => [...at(t), t.rate])).toEqual(screens.map((s, i) => [`tree-l1-${s}-fg`, i, 1.2]));
+    // The skies are drawn farthest from the lobby first, so each lies over the one beyond it, and the
+    // lobby's on top of both its neighbours: its own view stays the approved painting.
+    expect(backgroundTiles(l1).filter((t) => t.rate === 0.5).map(at)).toEqual([['tree-l1-e2-bg', 3], ['tree-l1-e1-bg', 2], ['tree-l1-w1-bg', 0], ['tree-l1-0-bg', 1]]);
+    // The layers are drawn sky, middle distance, playfield: farthest first.
+    expect(backgroundTiles(l1).map((t) => t.rate ?? 1)).toEqual([0.5, 0.5, 0.5, 0.5, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 1]);
+  });
+
+  it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {
+    const tile = (key: string) => [...backgroundTiles(l1), ...foregroundTiles(l1)].find((t) => t.key === key)!;
+    // A sky fades over the one beneath it: the lobby's over both neighbours, the square's over the roof run's.
+    expect(tileFade(tile('tree-l1-0-bg'))).toEqual({ left: 220, right: 220 });
+    expect(tileFade(tile('tree-l1-e1-bg'))).toEqual({ left: 0, right: 220 });
+    expect(tileFade(tile('tree-l1-w1-bg'))).toEqual({ left: 0, right: 0 });
+    expect(tileFade(tile('tree-l1-e2-bg'))).toEqual({ left: 0, right: 0 });
+    // Neighbouring tiles at half and three-quarter pace overlap (by 960 and 480 view px): each fade, drawn
+    // as big as its tile, stays inside the overlap, so no gap opens between them.
+    const view = { w: ROOM_W, h: ROOM_H };
+    for (const [rate, fade] of [[0.5, 220], [0.75, 230]] as const) {
+      const a = tilePlacement({ key: 'a', x: ROOM_W, y: 0, rate }, view);
+      const b = tilePlacement({ key: 'b', x: 2 * ROOM_W, y: 0, rate }, view);
+      const overlap = a.x + a.w - b.x;
+      expect(overlap, `tiles at ${rate} overlap`).toBeGreaterThan(0);
+      expect(fade * (a.w / ROOM_W), `the fade at ${rate} stays inside the overlap`).toBeLessThan(overlap);
+    }
+    for (const s of ['w1', '0', 'e1', 'e2']) {
+      expect(tileFade(tile(`tree-l1-${s}-mid`)), `${s}: the middle distance fades into its neighbours`).toEqual({ left: 230, right: 230 });
+      expect(tileFade(tile(`tree-l1-${s}-fg`)), `${s}: the overlay fades where it ends mid-view`).toEqual({ left: 120, right: 120 });
+      expect(tileFade(tile(`tree-l1-${s}-play`)), `${s}: the playfields meet edge to edge`).toEqual({ left: 0, right: 0 });
+    }
+    // A fade is at most half the tile's width.
+    expect(tileFade({ key: 'x', x: 0, y: 0, fade: { left: 5000, right: -3 } })).toEqual({ left: ROOM_W / 2, right: 0 });
   });
 
   it('has its floor on the ground line, and every ledge is a stretch of that floor, inside the room', () => {

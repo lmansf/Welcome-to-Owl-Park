@@ -15,6 +15,7 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
   cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
   patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
+  shift <key> --dy N   a keyed candidate moved N room px down, its top rows mirrored into the gap: a new raw candidate
   field [game...]      the arcade games' field guides at 2x (the generator's @canvas:arcade-<game>-bg)
   canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
   wing <room>         stitch the room's picked wings onto its painting; finish every screen and the end overlays
@@ -55,7 +56,7 @@ if str(_HERE) not in sys.path:
 
 try:
     import numpy as np  # noqa: E402
-    from PIL import Image, ImageDraw, ImageFont, ImageOps  # noqa: E402
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: E402
 except ImportError as _missing:  # pragma: no cover - depends on the machine
     print(f"pnpm art:finish needs Pillow 12 and numpy ({_missing.name or 'a module'} is missing): python3 -m pip install pillow numpy (a venv is fine)", file=sys.stderr)
     sys.exit(2)
@@ -72,7 +73,7 @@ from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.patch import cut as cut_crop, patch as patch_edit  # noqa: E402
-from artlib.resize import downsample, fit_contain, resize_exact  # noqa: E402
+from artlib.resize import crop_to_aspect, downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
 import owl_layers  # noqa: E402
@@ -547,6 +548,28 @@ def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+#: How close to clear (0) or opaque (255) a WebP layer's alpha snaps to that end. Lanczos rings at
+#: every edge of a cut-out, leaving faint alpha (1 to 4) outside it and nearly opaque alpha (251 to
+#: 254) inside it: under 2 % either way, never seen, yet libwebp keeps the colour under any alpha
+#: above 0 and codes every step exactly, so the ringing cost the tree's bamboo screen 60 KB (OP-162).
+ALPHA_SNAP = 4
+
+
+def snap_alpha(img: Image.Image, margin: int = ALPHA_SNAP) -> tuple[Image.Image, int]:
+    """``img`` (RGBA) with alpha at most ``margin`` set to 0 and at least 255 - ``margin`` set to
+    255, and how many pixels changed; colour untouched."""
+    rgba = img.convert("RGBA")
+    a = np.asarray(rgba.getchannel("A"))
+    low, high = (a > 0) & (a <= margin), (a < 255) & (a >= 255 - margin)
+    if not (low.any() or high.any()):
+        return rgba, 0
+    out = a.copy()
+    out[low], out[high] = 0, 255
+    rgba = rgba.copy()
+    rgba.putalpha(Image.fromarray(out, "L"))
+    return rgba, int(low.sum() + high.sum())
+
+
 def finish_overlay(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None, budget_2x: int, dither: str) -> tuple[dict, list[str]]:
     """The finals of an overlay from its RGBA at 1x (and 2x): (outputs, budget lines). PNG, or WebP
     with its alpha for one the table marks ``"format": "webp"``: the tree's painted layers (OP-157),
@@ -554,9 +577,12 @@ def finish_overlay(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None
     W, H = logical_size(key, ctx.assets)
     if ships_as_webp(key, ctx.assets):
         wfields = ("quality", "mode", "budget_relaxed")
+        one, snapped = snap_alpha(one)
+        two = snap_alpha(two)[0] if two is not None else None
         data, info = webpmeta.encode_under_budget(one, ctx.budget)
         outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in wfields}}}
-        tools = [f"budget: WebP q{info['quality']}, {info['bytes']} bytes, alpha kept"]
+        tools = [f"alpha: {snapped} px within {ALPHA_SNAP} of clear or opaque snapped to it",
+                 f"budget: WebP q{info['quality']}, {info['bytes']} bytes, alpha kept"]
         if two is not None:
             data2, info2 = webpmeta.encode_under_budget(two, max(ctx.budget, budget_2x))
             outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), max(ctx.budget, budget_2x)), **{k: info2.get(k) for k in wfields}}
@@ -585,6 +611,42 @@ def overlay_view(ctx: Ctx, key: str) -> tuple[dict, str]:
     return view
 
 
+def clear_polygon(img: Image.Image, poly: str, scale: float = 1) -> tuple[Image.Image, int]:
+    """``img`` (RGBA) made transparent inside the polygon ``poly`` (``x,y,x,y,...`` in room pixels of
+    the 1x final, scaled for a larger one), its edge feathered over a pixel or two; and how many
+    pixels lost alpha. For a prop cut by the frame's edge: an overlay scrolls faster than the room,
+    so between screens a prop the frame cut in half floats in mid-view (OP-162).
+
+    TODO-DOCS (OP-162): docs/ART-PIPELINE.md's overlay section: `--clear-poly x,y,...` (repeatable,
+    recorded in the post record's tools), and that an overlay is keyed one screen at a time
+    (key_screen), so a row of screens laid side by side finishes each screen with `--crop fx,fy`."""
+    try:
+        v = [int(x) for x in poly.split(",")]
+    except ValueError:
+        v = []
+    if len(v) < 6 or len(v) % 2:
+        raise ArtError(f"--clear-poly takes at least three x,y points as comma-separated integers, not {poly!r}")
+    rgba = img.convert("RGBA")
+    mask = Image.new("L", rgba.size, 0)
+    ImageDraw.Draw(mask).polygon([(x * scale, y * scale) for x, y in zip(v[::2], v[1::2])], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(1.0 * scale))
+    a = np.asarray(rgba.getchannel("A")).astype(np.float32)
+    out = np.round(a * (1.0 - np.asarray(mask).astype(np.float32) / 255.0)).astype(np.uint8)
+    rgba = rgba.copy()
+    rgba.putalpha(Image.fromarray(out, "L"))
+    return rgba, int((out < a).sum())
+
+
+def key_screen(img: Image.Image, w: int, h: int, crop: str, shift_y: int, params: ChromaParams) -> tuple[Image.Image, dict]:
+    """The screen of ``img`` an overlay finishes (its w:h window at ``crop``), keyed on its own backdrop.
+
+    A candidate is usually one screen, and the window is all of it. A row of screens laid side by side
+    (their joins repainted across them, OP-162) is not keyed as one: each screen was painted on its own
+    shade of the key colour, and one backdrop estimated for the whole row leaves a darker screen's sky
+    half opaque."""
+    return key_out(crop_to_aspect(img, w, h, crop, shift_y), params)
+
+
 def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
     if not is_overlay(key, ctx.assets):
@@ -594,7 +656,7 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
     raw, sc = resolve_raw(ctx, key, a.raw)
     img = open_raw(raw)
     kc = key_colour_for(ctx, key, a.key_colour, sc)
-    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    rgba, cinfo = key_screen(img, W, H, a.crop, a.shift_y, chroma_params(a, kc))
     pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
     tools = [f"overlay: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} crop={a.crop}"]
     if gline:
@@ -611,6 +673,10 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
             im, n = clear_sign_boards(im, geom, room, scale)
             if scale == 1:
                 tools.append(f"overlay: clear-signs {n} px")
+        for poly in a.clear_poly or []:
+            im, n = clear_polygon(im, poly, scale)
+            if scale == 1:
+                tools.append(f"overlay: clear-poly {poly} {n} px")
         return im
 
     one = cleared(apply_grade(resize_exact(rgba, W, H, a.crop, a.shift_y), pal, strength), 1)
@@ -957,6 +1023,52 @@ def cmd_patch(ctx: Ctx, a: argparse.Namespace) -> int:
     (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
     note(f"patch {key}: {rel_to_repo(d / f'{h}.png')}, {rep['patched_px']} px from {edit.name} in x {rep['patch_bbox'][0]}..{rep['patch_bbox'][2]}, "
          f"y {rep['patch_bbox'][1]}..{rep['patch_bbox'][3]}, tone shift {rep['tone_shift']}; select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def shift_down(img: Image.Image, n: int) -> Image.Image:
+    """The image moved down n pixels: its bottom n rows fall off, and the gap at the top mirrors the
+    painting's own top rows (rows 1 to n, upside down). What ran out of the frame (a bamboo stalk, a
+    branch) still runs out of it, and the border the keyer reads keeps the painting's own shades of
+    the key colour: a generated "flat" magenta is rarely the exact #FF00FF and varies across the sky.
+    Repeating the first row drew stalks as flat bars and swayed the keyer's estimate of the backdrop."""
+    if not 0 < n < img.height:
+        raise ArtError(f"a shift of {n} px does not fit an image {img.height} px tall")
+    src = img.convert("RGB")
+    out = Image.new("RGB", src.size)
+    out.paste(src.crop((0, 1, src.width, n + 1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
+    out.paste(src.crop((0, 0, src.width, src.height - n)), (0, n))
+    return out
+
+
+def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A keyed candidate moved down by --dy room pixels, the strip it leaves at the top mirroring its top rows,
+    written as a new raw candidate of the key (select it with generate.mjs select). For a tree playfield
+    whose painted floor sits above the ground line its neighbouring screens share (OP-162).
+
+    TODO-DOCS (OP-162): docs/ART-PIPELINE.md: `shift <key> --dy N` (a tree playfield whose floor sits
+    above the shared ground line, moved down with its top rows mirrored into the gap, then selected
+    and finished as usual), and that the tree's WebP layers snap alpha within ALPHA_SNAP of clear or
+    opaque before encoding (the Lanczos ringing that cost bytes nobody sees)."""
+    key = validate_key(a.key, assets=ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    if not ((sc or {}).get("key_colour") or ctx.assets.get(key, {}).get("key_colour")):
+        raise ArtError(f"{key}: shift is for a keyed layer, whose top is the keyed-out sky, and the key has no key colour")
+    img = open_raw(raw)
+    _, h_room = logical_size(key, ctx.assets)
+    n = int(round(a.dy * img.height / h_room))
+    if not 0 < n <= img.height // 4:
+        raise ArtError(f"--dy {a.dy} is {n} px of a {img.height} px candidate: give a drop above 0 and at most a quarter of the height")
+    out = shift_down(img, n)
+    data = pngmeta.encode(out, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{out.width}x{out.height}", "width": out.width, "height": out.height, "format": "png",
+              "source_url": None, "generated_at": ctx.now, "now_source": "shift", "cost_estimate_usd": 0, "provider_meta": {},
+              "shifted": {"base": raw.name, "dy_room": a.dy, "dy_px": n, "fill": "mirror"}}
+    (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
+    note(f"shift {key}: {rel_to_repo(d / f'{h}.png')}, {raw.name} moved down {n} px ({a.dy} room px); select it with: node tools/art/generate.mjs select {key} {h}")
     return 0
 
 
@@ -1457,6 +1569,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--check", action="store_true", help="fail when the overlay rules are violated")
     sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze (keyed glow) transparent")
     sp.add_argument("--clear-signs", action="store_true", help="make the overlay transparent over closed signs' lettered boards")
+    sp.add_argument("--clear-poly", action="append", default=None, help="x,y,x,y,...: a polygon in room pixels of the final where the overlay is made transparent (a prop the frame cut, which would float mid-view); repeatable")
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_overlay)
@@ -1485,6 +1598,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--join", type=int, default=0, help="px at the box's left and right sides within which the edit joins the painting along the cheapest top-to-bottom cut (a band across a seam; with --threshold 0 the whole box)")
     add_common(sp)
     sp.set_defaults(fn=cmd_patch)
+
+    sp = sub.add_parser("shift", help="move a keyed candidate down, its top rows mirrored into the gap; writes a new raw candidate of <key>")
+    sp.add_argument("key")
+    sp.add_argument("--dy", type=int, required=True, help="room pixels to move the painting down (its floor onto the ground line)")
+    sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_shift)
 
     sp = sub.add_parser("field", help="layout guides of the arcade games' fields (the generator's @canvas:arcade-<game>-bg)")
     sp.add_argument("games", nargs="*", help=f"games (default: all of {', '.join(FIELD_GAMES)})")

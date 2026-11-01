@@ -1690,7 +1690,20 @@
     },
     "tree-l1-0-bg": {"w": 1600, "h": 900, "kind": "room"},
     "tree-l1-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"}
+    "tree-l1-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-w1-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l1-w1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-w1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-e1-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l1-e1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-e1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-e2-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l1-e2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-e2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-w1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-e1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-e2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"}
   },
   "helpers": {
     "tree-master": {
