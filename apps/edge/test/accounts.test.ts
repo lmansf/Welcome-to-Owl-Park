@@ -292,6 +292,8 @@ describe('accounts without passwords, the Worker’s half (OP-139)', () => {
     expect(mail.to).toBe('buyer@example.com');
     expect(mail.subject).toBe('Protect the owl that took your ticket');
     expect(mail.text).toContain(`within ${ORDER_LINK_MS / 86_400_000} days`);
+    // The words the owner approved: what the game keeps, said plainly.
+    expect(mail.text).toContain('The game keeps nothing about this email unless you open the link.');
     expect(mail.text.match(/#protect=/g)).toHaveLength(1);
     expect(stored()).not.toContain(hash);
     expect(stored()).not.toContain('buyer@example.com');

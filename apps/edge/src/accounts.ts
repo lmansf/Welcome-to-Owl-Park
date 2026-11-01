@@ -234,7 +234,7 @@ export function orderProtectMail(to: string, link: string): Mail {
     ['Thanks for your Owl Park ticket. It is on an owl now, and that owl lives only on the screen it is on.', `To protect it with this email, so it can come back on another screen, open this link within ${ORDER_LINK_DAYS} days:`],
     'Protect my owl',
     link,
-    ['Owl Park keeps nothing about this email unless you open the link. If you didn’t buy an Owl Park ticket, ignore this email and nothing changes.'],
+    ['The game keeps nothing about this email unless you open the link. If you didn’t buy an Owl Park ticket, ignore this email and nothing changes.'],
   );
 }
 
