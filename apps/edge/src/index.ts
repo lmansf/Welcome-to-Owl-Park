@@ -893,8 +893,7 @@ const park = {
         const catalogue = await storeCatalogue(env);
         const variant = catalogue?.passVariant;
         if (!store || !code || !variant) return json({ ok: false, reason: 'not-set-up' }, 503);
-        // The half price is opening night's (OP-062): a Day or Night ticket has it offered only while the night runs.
-        if (r.body['kind'] !== 'opening-night' && !openingOn(catalogue, Date.now())) return json({ ok: false, reason: 'not-tonight' }, 409);
+        // The half price runs all season after a Day or Night ticket (Logan, Nov 1); when it is on is the store's code's dates.
         return json({ ok: true, url: passCartLink(store.shop, variant, code, body['id'] as string) });
       }
       if (url.pathname === '/api/tickets/scan') {

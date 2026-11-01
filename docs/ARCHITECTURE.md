@@ -471,12 +471,12 @@ the ticket book links the pass to its Opening Night Ticket (only one that went t
 counts) or, since OP-180, its Day or Night ticket, keeps what the order's passes sold for (each pass line's price less every discount on it,
 the code's included, before tax), puts the pass straight into that wallet, and switches the pass
 off if an Opening Night Ticket is switched off (a pass linked to a paid Day or Night ticket stays).
-Since OP-180 the same offer follows a Day Ticket bought at the turnstiles while opening night runs:
+Since OP-180 the same offer follows a Day Ticket bought at the turnstiles, all season (Logan, Nov 1):
 "Come back all year! The annual pass is half price tonight.", Get the pass or No thanks, once per
 ticket, with the opener the card before the store handed that purchase, so no second card. The desk
 offers the pass to a Day or Night ticket that still works (unused, held or running) on the owl's own
-wallet, never to an owl that holds an annual pass that still works (`has-pass`), and only while
-the night runs (`not-tonight` otherwise, so the night's code is not given out every day); a store
+wallet, never to an owl that holds an annual pass that still works (`has-pass`); when the half
+price is on is the store code's own dates (a store edit); a store
 that is not set up answers 503 `not-set-up` and the page shows no offer. Prices and products do not
 change. A pass bought with the code but without the link counts as a
 pass without a link. `/admin/opening` (the admin key) counts the night: tickets issued and scanned,

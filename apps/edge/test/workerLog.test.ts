@@ -285,7 +285,7 @@ describe('the Worker’s log (OP-134)', () => {
   });
 
   it('offers a Day ticket’s owl the half-price pass only while opening night runs, and not without the code (OP-180)', async () => {
-    let night = false;
+    const night = false;
     const catalogue = async (_url: string, init: RequestInit) => {
       const { query } = JSON.parse(String(init.body)) as { query: string };
       if (!query.includes('OwlParkCatalogue')) return Response.json({ data: null });
@@ -307,13 +307,8 @@ describe('the Worker’s log (OP-134)', () => {
     const unset = await ask(park.env(store));
     expect(unset.status).toBe(503);
     expect(await unset.json()).toEqual({ ok: false, reason: 'not-set-up' });
-    // With it, but not on opening night: the half price is the night's.
+    // With it, any day of the season (not only opening night): the pass's cart link, with the code and the Day ticket it comes from.
     const e = park.env({ ...store, OPENING_PASS_CODE: 'OPENTONIGHT' });
-    const day = await ask(e);
-    expect(day.status).toBe(409);
-    expect(await day.json()).toEqual({ ok: false, reason: 'not-tonight' });
-    // On the night: the pass's cart link, with the code and the Day ticket it comes from.
-    night = true;
     const r = await ask(e);
     expect(r.status).toBe(200);
     const link = new URL(((await r.json()) as { url: string }).url);

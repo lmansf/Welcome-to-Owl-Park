@@ -9,8 +9,9 @@ import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeCont
  * the card before the store once (OP-153; storecard.spec.ts), and its Continue opens the store's
  * checkout in a window of its own with this owl's one-time token in the cart; the store's own
  * checkout page is stood in for here (the test never reaches a real store), the paid order comes in
- * as a signed webhook, and the ticket lands on the owl with no email opened. Opening night is off
- * here, so no pass is offered after it (opening.spec.ts has that).
+ * as a signed webhook, and the ticket lands on the owl with no email opened. The half-price annual
+ * pass is offered right after it, all season (Logan, Nov 1); No thanks puts it away (opening.spec.ts
+ * follows Get the pass).
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
@@ -119,7 +120,10 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
       if (!popup.isClosed()) await popup.close();
       await expect(a.locator('[data-gate-sale]')).toBeHidden();
       expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['day', 'unused']]);
-      // Not opening night: no pass offer follows.
+      // The annual pass offer follows, any night of the season; No thanks puts it away.
+      const offer = a.locator('[data-free-pass="day"]');
+      await expect(offer).toBeVisible({ timeout: 20_000 });
+      await offer.getByRole('button', { name: 'No thanks' }).click();
       await expect(a.locator('[data-free-pass]')).toBeHidden();
       await a.screenshot({ path: `e2e-screenshots/checkout-added-${shot}.png` });
 
