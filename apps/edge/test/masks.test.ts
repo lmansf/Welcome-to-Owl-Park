@@ -4,6 +4,7 @@ import type { Env } from '../src/env';
 import { forgetViolations } from '../src/guard';
 import { API_LIMITS, forgetLimits } from '../src/limits';
 import { captureLogs } from '../src/logs';
+import { MASKS_KEEP_MS, forgetMasks } from '../src/overflowState';
 import { mintKeeper, mintPass } from '../src/pass';
 import { logged } from './logged';
 import { sqlStorage } from './sqlite';
@@ -87,6 +88,7 @@ let cap: ReturnType<typeof captureLogs>;
 beforeEach(() => {
   forgetLimits();
   forgetViolations();
+  forgetMasks();
   cap = captureLogs();
 });
 afterEach(() => {
@@ -201,6 +203,32 @@ describe('reading a ledge draft back (OP-156)', () => {
     expect((await read(env)).status).toBe(200);
     expect((await read(env, 'hub')).status).toBe(404);
     expect((await call(env, '/api/masks/l1', { method: 'POST', body: '{}' })).status).toBe(404);
+  });
+
+  it('asks the overflow object, which also runs the line, at most once a room every few seconds; a save through this Worker reads back at once', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-01T12:00:00Z'));
+    const { obj } = park();
+    const asked: string[] = [];
+    const { env } = park({}, (req) => {
+      asked.push(`${req.method} ${new URL(req.url).pathname}`);
+      return obj.fetch(req);
+    });
+    expect((await read(env)).status).toBe(404);
+    expect((await read(env)).status).toBe(404);
+    expect(asked).toEqual(['GET /masks/l1']);
+    expect((await save(env, DRAFT, { 'X-Admin-Key': ADMIN })).status).toBe(200);
+    const back = await read(env);
+    expect(back.status).toBe(200);
+    expect(await back.json()).toEqual({ room: 'l1', ...DRAFT, savedAt: Date.parse('2026-11-01T12:00:00Z') });
+    expect(asked).toEqual(['GET /masks/l1', 'POST /masks/l1']);
+    // Past MASKS_KEEP_MS this copy of the Worker asks again: a save through another copy reaches it then.
+    vi.setSystemTime(Date.now() + MASKS_KEEP_MS - 1);
+    expect((await read(env)).status).toBe(200);
+    expect(asked).toHaveLength(2);
+    vi.setSystemTime(Date.now() + 1);
+    expect((await read(env)).status).toBe(200);
+    expect(asked).toEqual(['GET /masks/l1', 'POST /masks/l1', 'GET /masks/l1']);
   });
 });
 

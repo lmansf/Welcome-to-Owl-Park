@@ -4,14 +4,14 @@
  * the keepers' page, takes the store's webhooks, and upgrades /ws/<room> to a WebSocket held by the
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
-import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type TravelState } from '@owl-park/shared';
+import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type SavedMasks, type TravelState } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
 import { copiesIn, copyObjectName, pickCopy, roomObjectNames } from './copies';
 import type { LineAnswer, OverflowState } from './Overflow';
-import { countIn, countedOneMore, forgetOverflow, overflowNow } from './overflowState';
+import { countIn, countedOneMore, forgetOverflow, keepMasks, masksKept, overflowNow } from './overflowState';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from './feedbackBox';
 import { feedbackPage } from './feedbackPage';
 import { CSP_REPORT_PATH, REPORT_BODY_MAX, finished, frontDoor, guardedPage, noteViolation, tooMany, violationOf } from './guard';
@@ -455,7 +455,8 @@ const park = {
     //
     // TODO-DOCS (OP-156): docs/ARCHITECTURE.md: POST /api/admin/masks/<room> (a keeper's token in
     // X-Keeper-Token, or the keepers' key; the draft checked by checkMasks, packages/shared/src/masks.ts)
-    // and GET /api/masks/<room> (public: level geometry only; 404 before a draft is saved), both counted
+    // and GET /api/masks/<room> (public: level geometry only; 404 before a draft is saved; what the
+    // overflow object said kept 10 s per room in each copy of the Worker, a save through it at once), both counted
     // as calls that need no pass (limits.ts); the draft store, one row per room in the overflow object
     // under `masks:<room>` with `savedAt`, a new save replacing the old. docs/LOGGING.md: masks_saved
     // (worker.admin, info: room, by keeper or key, how many ledges, walls, hazards and fronts) and
@@ -480,7 +481,9 @@ const park = {
         log.error('overflow', 'write_failed', 'A tree room’s ledge draft was not kept: the overflow object refused it.', { room: roomId, status: r.status });
         return json({ error: 'the draft was not kept' }, 502);
       }
-      const { savedAt } = (await r.json()) as { savedAt: number };
+      const saved = (await r.json()) as SavedMasks;
+      keepMasks(roomId, saved);
+      const { savedAt } = saved;
       const { ledges, walls, hazards, fronts } = checked.draft;
       log.info('worker.admin', 'masks_saved', 'A keeper saved a tree room’s ledge draft.', { room: roomId, by, ledges: ledges.length, walls: walls.length, hazards: hazards.length, fronts: fronts.length });
       return json({ ok: true, room: roomId, savedAt });
@@ -491,13 +494,18 @@ const park = {
       if (request.method !== 'GET') return json({ error: 'not found' }, 404);
       const roomId = url.pathname.slice('/api/masks/'.length);
       if (!paintableRoom(roomId)) return json({ error: 'not found' }, 404);
-      const r = await overflow(env).fetch(`https://park/masks/${roomId}`);
-      if (r.status === 404) return json({ error: 'not found' }, 404);
-      if (!r.ok) {
-        log.error('overflow', 'read_failed', 'The overflow object did not give a tree room’s ledge draft: the page is asked to try later.', { room: roomId, status: r.status });
-        return json({ error: 'try-later' }, 503);
+      // Kept a few seconds (overflowState.ts): the object that keeps the drafts also runs the line.
+      let saved = masksKept(roomId);
+      if (saved === undefined) {
+        const r = await overflow(env).fetch(`https://park/masks/${roomId}`);
+        if (r.status !== 404 && !r.ok) {
+          log.error('overflow', 'read_failed', 'The overflow object did not give a tree room’s ledge draft: the page is asked to try later.', { room: roomId, status: r.status });
+          return json({ error: 'try-later' }, 503);
+        }
+        saved = r.status === 404 ? null : ((await r.json()) as SavedMasks);
+        keepMasks(roomId, saved);
       }
-      return json(await r.json());
+      return saved ? json(saved) : json({ error: 'not found' }, 404);
     }
     // ---- Collectibles (the collector comes from the pass) ----
     if (url.pathname === '/api/admin/grant') {
