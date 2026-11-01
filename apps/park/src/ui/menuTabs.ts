@@ -419,6 +419,7 @@ export interface SettingsTabDeps {
   tickets(): Promise<WalletEntry[] | null>;
   /** Shown where the owl is: leaving the park (inside it). */
   canLeave: boolean;
+  /** Opens the Feedback form: Send feedback, the tab's first row (OP-167). */
   feedback(): void;
   title(): void;
   leave(): void;
@@ -437,7 +438,8 @@ export function ticketLines(list: readonly WalletEntry[], now: number): string[]
 
 export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw: () => void): void {
   const wrap = el('div', 'settings');
-  wrap.append(...settingsRows(deps.settings, redraw));
+  // Send feedback is the first row (OP-167), as it is in the home screen's Settings.
+  wrap.append(...settingsRows(deps.settings, redraw, deps.feedback));
   syncSettings(wrap, deps.settings.get());
   panel.appendChild(wrap);
 
@@ -464,12 +466,6 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
     owl.dataset['account'] = '';
     panel.appendChild(owl);
   }
-
-  const help = card('Something wrong? An idea?', note('Tell the park’s keepers: they read every note.'));
-  const helpRow = el('div', 'mrow');
-  helpRow.appendChild(actionButton('Feedback', 'feedback', deps.feedback));
-  help.appendChild(helpRow);
-  panel.appendChild(help);
 
   const out = card('Leaving');
   const outRow = el('div', 'mrow');
