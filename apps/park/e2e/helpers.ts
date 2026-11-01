@@ -137,7 +137,29 @@ export const E2E_STORE = {
   passCode: 'E2E-OPENING-NIGHT',
   /** The store's ticket page the room server's client is built with (the booth sells while the gate takes tickets). */
   ticketsUrl: 'https://owl-e2e.myshopify.com/collections/tickets',
+  /** The store's page the gift shop's door opens, in the room server's client. */
+  shopUrl: 'https://owl-e2e.myshopify.com/collections/gifts',
 } as const;
+
+/** The card before the store (OP-153): every way from the park to the store shows it first. */
+export const STORE_CARD = '[data-store-card]';
+export const STORE_LINE = 'Ask a grown-up before buying';
+
+/** The card before the store is up, its line shown and the focus on it (not on Continue). */
+export async function expectStoreCard(page: Page): Promise<void> {
+  const card = page.locator(STORE_CARD);
+  await expect(card).toBeVisible();
+  await expect(card).toContainText(STORE_LINE);
+  await expect(card.locator('[data-store="continue"]')).toHaveText('Continue');
+  await expect(card.locator('[data-store="not-now"]')).toHaveText('Not now');
+}
+
+/** Continue on the card before the store (OP-153). */
+export async function storeContinue(page: Page): Promise<void> {
+  await expectStoreCard(page);
+  await page.locator(`${STORE_CARD} [data-store="continue"]`).click();
+  await expect(page.locator(STORE_CARD)).toBeHidden();
+}
 
 export async function walkToDoor(page: Page, doorId: string): Promise<void> {
   const s = await state(page);

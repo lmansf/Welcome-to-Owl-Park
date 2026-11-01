@@ -211,3 +211,14 @@ export function noteViolation(log: Logger, v: Violation, now: number): void {
 export function forgetViolations(): void {
   violations.clear();
 }
+
+/**
+ * Whether two keys match, taking the same time whatever the first differing character (OP-092): a
+ * plain `!==` stops at the first difference, which a patient caller could time. Only the length
+ * can show, and the length is no secret.
+ */
+export function sameKey(given: string, key: string): boolean {
+  let diff = given.length ^ key.length;
+  for (let i = 0; i < key.length; i++) diff |= key.charCodeAt(i) ^ (i < given.length ? given.charCodeAt(i) : 0);
+  return diff === 0;
+}

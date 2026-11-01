@@ -1,4 +1,4 @@
-import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
+import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
@@ -419,12 +419,18 @@ export interface SettingsTabDeps {
   tickets(): Promise<WalletEntry[] | null>;
   /** Shown where the owl is: leaving the park (inside it). */
   canLeave: boolean;
+  /** Opens the Feedback form: Send feedback, the tab's first row (OP-167). */
   feedback(): void;
   title(): void;
   leave(): void;
   /** The owl's account (OP-139): where a grown-up protects the owl. Null while accounts are off. */
   account?: HTMLElement[] | null;
+  /** Retake the quiz (OP-076): which owl are you, again, for a new kind and colours. Null with no owl yet. */
+  retake?: (() => void) | null;
 }
+
+/** The Settings tab's closed row of the tickets on this device (OP-172), for the owner's approval. */
+export const SETTINGS_TICKET_WORDS = { row: 'Tickets' } as const;
 
 /** The tickets on this device, in a line each: for an owl asking the keepers about a ticket (OP-086). */
 export function ticketLines(list: readonly WalletEntry[], now: number): string[] {
@@ -437,16 +443,20 @@ export function ticketLines(list: readonly WalletEntry[], now: number): string[]
 
 export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw: () => void): void {
   const wrap = el('div', 'settings');
-  wrap.append(...settingsRows(deps.settings, redraw));
+  // Send feedback is the first row (OP-167), as it is in the home screen's Settings.
+  wrap.append(...settingsRows(deps.settings, redraw, deps.feedback));
   syncSettings(wrap, deps.settings.get());
   panel.appendChild(wrap);
 
-  const tickets = card('Tickets on this device');
+  // The tickets on this device (OP-172): a closed row just above Leaving, opened for the lines with
+  // their IDs when an owl asks the keepers about a ticket.
+  const tickets = el('details', 'mcard');
   tickets.dataset['tickets'] = '';
+  const summary = el('summary', '', SETTINGS_TICKET_WORDS.row);
+  summary.style.cssText = 'font-weight:800;cursor:pointer;min-height:var(--m-target);display:list-item;line-height:var(--m-target)';
   const lines = el('div', 'mlines');
   lines.appendChild(note('Looking…'));
-  tickets.appendChild(lines);
-  panel.appendChild(tickets);
+  tickets.append(summary, lines);
   void deps.tickets().then(
     (list) => {
       lines.innerHTML = '';
@@ -465,11 +475,15 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
     panel.appendChild(owl);
   }
 
-  const help = card('Something wrong? An idea?', note('Tell the park’s keepers: they read every note.'));
-  const helpRow = el('div', 'mrow');
-  helpRow.appendChild(actionButton('Feedback', 'feedback', deps.feedback));
-  help.appendChild(helpRow);
-  panel.appendChild(help);
+  if (deps.retake) {
+    const quiz = card('Which owl are you?', note(WHICH_OWL_WORDS.retakeNote));
+    quiz.dataset['retake'] = '';
+    const row = el('div', 'mrow');
+    row.appendChild(actionButton(WHICH_OWL_WORDS.retake, 'retake', deps.retake));
+    quiz.appendChild(row);
+    panel.appendChild(quiz);
+  }
+  panel.appendChild(tickets);
 
   const out = card('Leaving');
   const outRow = el('div', 'mrow');

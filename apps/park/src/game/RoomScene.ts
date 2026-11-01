@@ -129,7 +129,7 @@ import type { SettingsStore } from '../settings';
 import type { Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
-import { gateCard, gateRefusal } from '../ui/tickets';
+import { approachMove, approachStart, approachThrough, gateCard, gateRefusal, gateStatus, lowTimeDue, lowTimeToast, ticketRun, type GateApproach, type TicketRun } from '../ui/tickets';
 import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
@@ -167,6 +167,10 @@ export interface RoomStart {
 const TAP_SLOP = 16;
 /** How long the room fades out on the way to another. */
 const LEAVE_FADE_MS = 220;
+/** The lobby's plaza in front of the turnstiles (a zone of its room data), where the ticket status shows (OP-172). */
+const GATE_APPROACH = 'gate-approach';
+/** The registry's record of the visit the turnstiles last started on this page, for the low-time toast (OP-172). */
+const TICKET_RUN_KEY = 'ticketRun';
 /** Where Play and travel home land the owl in its own nest (OP-105, OP-130): before its mirror. */
 export const NEST_SPAWN = 'mirror';
 /** Travel from the map fades out slower than a doorway, so going home or across the park is not a jolt (OP-114, OP-130). */
@@ -276,6 +280,12 @@ export class RoomScene extends Phaser.Scene {
   private atIdol = false;
   /** Going through the lobby's turnstiles (the welcome is playing, or the gate is checking the pass). */
   private passingGate = false;
+  /** The owl against the plaza in front of the turnstiles (OP-172): null until it stands in the built room. */
+  private approach: GateApproach | null = null;
+  /** The latest ask for the ticket status shown there: an older answer that comes late is dropped. */
+  private approachAsk = 0;
+  /** The low-time toast of a running Day or Night ticket (OP-172), waiting in this room. */
+  private lowTimeTimer: Phaser.Time.TimerEvent | null = null;
   /** Where the owl was at the last look for doorways, and the walk it was on: a doorway takes it from where its step crossed in (OP-124). */
   private doorLook: { pos: Vec2; walk: Walk | null } | null = null;
   /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
@@ -448,6 +458,8 @@ export class RoomScene extends Phaser.Scene {
     this.leaving = false;
     this.atIdol = false;
     this.passingGate = false;
+    this.approach = null;
+    this.lowTimeTimer = null;
     this.doorLook = null;
     this.actions = [];
     // The scene is reused room after room: the last room's tiles went with its display list and art.
@@ -835,6 +847,7 @@ export class RoomScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
+    this.watchTicketTime();
   }
 
   override update(): void {
@@ -852,6 +865,7 @@ export class RoomScene extends Phaser.Scene {
     if (!this.leaving) {
       this.steer();
       this.checkDoors(finished);
+      this.checkApproach();
       this.checkItems(now);
       this.updateHints();
       this.rest(now);
@@ -2403,6 +2417,56 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
+   * The plaza in front of the lobby's turnstiles (OP-172): walking in fades in the ticket status card
+   * (gateStatus) while the gate takes tickets, walking out fades it. An owl that starts there (it has
+   * just come out of the park) or went through the turnstiles sees it only once it walks out and back.
+   */
+  private checkApproach(): void {
+    const zone = this.room.zones?.find((z) => z.id === GATE_APPROACH);
+    // While the turnstiles decide, the owl's steps there are theirs: it stays gone through until it walks off.
+    if (!zone || this.passingGate) return;
+    const inside = pointInRect(this.me.pos, zone.rect);
+    if (!this.approach) {
+      this.approach = approachStart(inside);
+      return;
+    }
+    const was = this.approach.shown;
+    this.approach = approachMove(this.approach, inside);
+    if (this.approach.shown === was) return;
+    this.approachAsk += 1;
+    if (this.approach.shown) void this.showGateStatus(this.approachAsk);
+    else this.hud.ticketStatus(null);
+  }
+
+  /** Ask the gate and the wallet, and show the status card if the owl is still on the plaza. */
+  private async showGateStatus(ask: number): Promise<void> {
+    const tickets = this.transport.tickets;
+    if (!tickets) return;
+    const [entry, wallet] = await Promise.all([this.entry(), tickets.wallet().catch(() => null)]);
+    if (ask !== this.approachAsk || !this.approach?.shown || this.leaving || this.passingGate || !wallet) return;
+    this.hud.ticketStatus(gateStatus(wallet, entry, Date.now()));
+  }
+
+  /**
+   * The one quiet toast of a visit as a running Day or Night ticket gets down to 15 minutes (OP-172),
+   * in whichever room the owl is then: nothing else of the ticket shows in the park. The visit is the
+   * one the turnstiles last started on this page.
+   */
+  private watchTicketTime(): void {
+    const run = (this.registry.get(TICKET_RUN_KEY) as TicketRun | null | undefined) ?? null;
+    const due = lowTimeDue(run, Date.now());
+    if (!run || due === null) return;
+    this.lowTimeTimer = this.time.delayedCall(due, () => {
+      this.lowTimeTimer = null;
+      if (this.leaving || run.warned || this.registry.get(TICKET_RUN_KEY) !== run) return;
+      const left = run.until - Date.now();
+      if (left <= 0) return;
+      run.warned = true;
+      this.hud.toast(lowTimeToast(run.kind, left), 4000);
+    });
+  }
+
+  /**
    * The lobby's turnstiles scan a ticket this device holds (its first scan starts its time, C35):
    * the ticket card flips up and the owl goes on into the hub. Without a ticket that goes through,
    * the turnstiles let everyone in while the gate is open; once the park takes tickets
@@ -2414,6 +2478,10 @@ export class RoomScene extends Phaser.Scene {
     if (this.passingGate || this.leaving || !to) return;
     this.passingGate = true;
     this.me.walk = null;
+    // The scan card (or the refusal) takes the status card's place until the owl walks out and back.
+    if (this.approach) this.approach = approachThrough(this.approach);
+    this.approachAsk += 1;
+    this.hud.ticketStatus(null);
     // It stands in the turnstile it came into, not one a slow frame's walk further along (OP-124).
     if (distance(at, this.me.pos) >= 0.5) this.me.place(at);
     const lane = laneThrough(this.room, door, at);
@@ -2432,13 +2500,17 @@ export class RoomScene extends Phaser.Scene {
     this.pieces.gate?.react();
     if (scan.ok) this.hud.showTicket(gateCard(scan, Date.now()));
     else this.hud.toast('Welcome to Owl Park!', 2600);
+    // A new visit: a Day or Night ticket gets its one low-time toast in it (OP-172).
+    this.registry.set(TICKET_RUN_KEY, scan.ok ? ticketRun(scan) : null);
     if (scan.ok && scan.kind === 'opening-night') void this.offerFreePass(scan.id);
     // The card stays up a moment before the walk on into the hub.
     this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
   }
 
+  /** The gift shop's door: the store, after the card before the store (OP-153); soon, until it has a page. */
   private openShop(): void {
-    if (this.cfg.shopUrl) window.open(this.cfg.shopUrl, '_blank', 'noopener');
+    const url = this.cfg.shopUrl;
+    if (url) this.hud.askStore({ run: (open) => void open(url, '_blank', 'noopener') });
     else this.hud.toast('The gift shop opens soon.');
   }
 
@@ -2460,6 +2532,11 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async teardown(): Promise<void> {
+    this.approach = null;
+    this.approachAsk += 1;
+    this.hud.ticketStatus(null);
+    this.lowTimeTimer?.remove();
+    this.lowTimeTimer = null;
     this.fitOverlay?.destroy();
     this.fitOverlay = null;
     this.painter?.destroy();

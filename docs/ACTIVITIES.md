@@ -3,7 +3,7 @@
 - Status: the first wave BUILT (C36); quests in the Menu and the hop BUILT (OP-082, OP-083); the arcade's games and seasons PLANNED
 - Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
 - Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, book.ts; apps/park/src/game/activities.ts; apps/park/src/ui/activities.ts
-- Tickets: OP-004, OP-026, OP-037, OP-082, OP-083; planned OP-038, OP-059, OP-074, OP-084
+- Tickets: OP-004, OP-026, OP-037, OP-082, OP-083, OP-152; planned OP-038, OP-059, OP-074, OP-084
 - Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7
 
 The first wave of activities (C30): lanterns that a room lights together under the great tree, a
@@ -12,6 +12,14 @@ clearing, the neon street's robot owl and its copy game, and three small tasks a
 and every visitor-facing word below is a default waiting on the owner's approval. Each activity
 stands where the paintings already have it: the glows, the bobber and the line are drawn, there is
 no new art.
+
+Where things sit in a realm (OP-152, the owner's rule of 2026-10-31): the screen an owl arrives on
+holds the realm's quick, repeatable fun (leaf piles and fishing in the grove, the robot owl's copy
+game in the market, the climb's portal in the glass realm), and quest givers and payoffs sit at
+least a full screen from arrival. A realm is under 25 s of walking end to end, so the old 45 s
+target is restated as "payoff on the farthest screen". Hazel stands at the grove's west end
+(800, 800), Juniper at its east end (4150, 800), and Flicker east in the market (2800, 820); Nova
+and the feather shop stay by the market's arrival, and the idols stay at each entrance.
 
 The rules are data and functions in `packages/shared/src`, so the room server and the
 zero-backend local mode run the same ones and Node tests them:

@@ -3,6 +3,7 @@ import { shareLink } from '../net/ticketLinks';
 import { OPENING_WORDS, walletLine } from './tickets';
 import { PREVIEW_WORDS, earlyPreview } from './preview';
 import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, startCheckout, type Started } from './checkout';
+import type { AskStore, StoreGo } from './storeCard';
 
 export interface BoothInfo {
   /** The store's ticket page, once the park has one; the booth sells only while the gate takes tickets. */
@@ -69,10 +70,10 @@ const CSS = `
 #hud .booth .checkout{display:flex;flex-direction:column;gap:8px}
 #hud .booth .checkout p{margin:0;font-size:14px;line-height:1.4}
 #hud .booth .checkout .row{display:flex;flex-wrap:wrap;gap:8px}
-#hud .booth .checkout a{display:inline-flex;align-items:center;min-height:40px;padding:6px 16px;border-radius:999px;background:#C9A227;color:#0C1E36;font-weight:800;text-decoration:none}
+#hud .booth .checkout .row button{min-height:44px}
 #hud .booth .opening{margin:0;padding:8px 12px;border-radius:12px;background:rgba(201,162,39,.18);border:1px solid #C9A227;color:#FFD36A;font-weight:800;text-align:center}
 #hud .booth .wallet .pass{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#FFD36A}
-#hud .booth .wallet .pass a{display:inline-flex;align-items:center;min-height:36px;padding:6px 14px;border-radius:999px;background:#C9A227;color:#0C1E36;font-weight:800;text-decoration:none}
+#hud .booth .wallet .pass button{align-self:center;min-height:44px;margin:0;padding:6px 16px;font-size:13px;font-weight:800}
 `;
 
 /** The page's address for share links, on the park's own address. */
@@ -92,7 +93,7 @@ async function handOn(link: string): Promise<'shared' | 'copied' | 'shown'> {
   }
 }
 
-function walletList(info: BoothInfo): HTMLElement {
+function walletList(info: BoothInfo, ask: AskStore): HTMLElement {
   const ul = document.createElement('ul');
   ul.className = 'wallet';
   ul.dataset['booth'] = 'wallet';
@@ -119,13 +120,11 @@ function walletList(info: BoothInfo): HTMLElement {
       pass.dataset['booth'] = 'free-pass';
       if (line.freePass === 'claimed') pass.textContent = OPENING_WORDS.claimed;
       else {
-        const a = document.createElement('a');
-        a.textContent = OPENING_WORDS.claim;
-        a.href = link!;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.addEventListener('click', () => info.watchPass?.(t.id));
-        pass.append(OPENING_WORDS.offer, a);
+        // OP-153: the store's checkout opens only from the card's Continue.
+        const claim = document.createElement('button');
+        claim.textContent = OPENING_WORDS.claim;
+        claim.addEventListener('click', () => ask({ link: link!, then: () => info.watchPass?.(t.id) }, claim));
+        pass.append(OPENING_WORDS.offer, claim);
       }
       li.appendChild(pass);
     }
@@ -171,22 +170,38 @@ const para = (text: string): HTMLParagraphElement => {
   return p;
 };
 
-/** A link that opens checkout in its own window (a tap on a link gets past a popup blocker). */
-const checkoutLink = (url: string): HTMLAnchorElement => {
-  const a = document.createElement('a');
-  a.textContent = CHECKOUT_WORDS.openLink;
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.dataset['booth'] = 'checkout-link';
-  return a;
+/**
+ * Open checkout, after the card (OP-153): its Continue is the link, which opens checkout in its own
+ * tab (a tap on a link gets past a popup blocker).
+ */
+const checkoutLink = (url: string, ask: AskStore): HTMLButtonElement => {
+  const b = document.createElement('button');
+  b.textContent = CHECKOUT_WORDS.openLink;
+  b.dataset['booth'] = 'checkout-link';
+  b.addEventListener('click', () => ask({ link: url }, b));
+  return b;
 };
+
+/**
+ * What Get a ticket's Continue does (OP-153), in Continue's click: checkout in its own window with
+ * this owl's token (OP-175), its window opened before anything is awaited; or, without the park's
+ * server, the store's ticket page in a new tab. `begin` runs as checkout starts, `started` once it has.
+ */
+export function boothBuy(ticketsUrl: string, checkout: BoothInfo['checkout'], on: { begin?: () => void; started: (s: Started) => void }): StoreGo {
+  if (!checkout) return { run: (open) => void open(ticketsUrl, '_blank', 'noopener') };
+  return {
+    run: (open) => {
+      on.begin?.();
+      void startCheckout({ open, link: checkout, fallbackUrl: ticketsUrl }).then(on.started);
+    },
+  };
+}
 
 /**
  * What the booth says once Buy has opened checkout (OP-175): checkout is open in its own window,
  * the browser blocked it (a link instead), or only the store's page could be opened.
  */
-function checkoutStatus(status: HTMLElement, started: Started, info: BoothInfo, before: ReadonlySet<string>, done: () => void): void {
+function checkoutStatus(status: HTMLElement, started: Started, info: BoothInfo, before: ReadonlySet<string>, ask: AskStore, done: () => void): void {
   status.innerHTML = '';
   const row = document.createElement('div');
   row.className = 'row';
@@ -210,8 +225,9 @@ function checkoutStatus(status: HTMLElement, started: Started, info: BoothInfo, 
       back.textContent = CHECKOUT_WORDS.back;
       back.dataset['booth'] = 'checkout-back';
       back.addEventListener('click', () => {
+        // Checkout still open: back to it. Closed: opening it again asks first (OP-153).
         if (!started.win.closed) started.win.focus();
-        else window.open(started.url, CHECKOUT_WINDOW, CHECKOUT_FEATURES);
+        else ask({ run: (open) => void open(started.url, CHECKOUT_WINDOW, CHECKOUT_FEATURES) }, back);
       });
       row.append(back, cancel());
       status.append(para(CHECKOUT_WORDS.open), row);
@@ -219,13 +235,13 @@ function checkoutStatus(status: HTMLElement, started: Started, info: BoothInfo, 
       return;
     }
     case 'blocked':
-      row.append(checkoutLink(started.url), cancel());
+      row.append(checkoutLink(started.url, ask), cancel());
       status.append(para(CHECKOUT_WORDS.blocked), row);
       info.watchCheckout?.(null, before);
       return;
     case 'fallback':
       status.append(para(CHECKOUT_WORDS.fallback));
-      if (!started.win) status.append(checkoutLink(started.url));
+      if (!started.win) status.append(checkoutLink(started.url, ask));
       done();
       return;
     case 'none':
@@ -237,9 +253,10 @@ function checkoutStatus(status: HTMLElement, started: Started, info: BoothInfo, 
 /**
  * The ticket booth's window in the lobby. Tickets sell in the store, whose checkout opens in a window
  * of its own over the game (OP-175); the booth says whether they are on sale yet and what the gate
- * needs, and shows the tickets on this device.
+ * needs, and shows the tickets on this device. Every way from it to the store asks first (`ask`, the
+ * card before the store, OP-153).
  */
-export function createBoothPanel(root: HTMLElement, onOpen: () => void): BoothPanel {
+export function createBoothPanel(root: HTMLElement, onOpen: () => void, ask: AskStore): BoothPanel {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -286,7 +303,7 @@ export function createBoothPanel(root: HTMLElement, onOpen: () => void): BoothPa
     if (info.wallet?.length) {
       const h3 = document.createElement('h3');
       h3.textContent = 'Your tickets';
-      panel.append(h3, walletList(info));
+      panel.append(h3, walletList(info, ask));
     }
     if (buy && info.ticketsUrl) {
       const b = document.createElement('button');
@@ -296,21 +313,20 @@ export function createBoothPanel(root: HTMLElement, onOpen: () => void): BoothPa
       const status = document.createElement('div');
       status.className = 'checkout';
       status.dataset['booth'] = 'checkout';
-      const link = info.checkout;
-      b.addEventListener('click', () => {
-        if (!link) {
-          window.open(url, '_blank', 'noopener');
-          return;
-        }
+      let before: ReadonlySet<string> = new Set();
+      const go = boothBuy(url, info.checkout, {
         // OP-175: checkout opens over the game, and the paid ticket lands on this owl.
-        b.disabled = true;
-        const before = new Set((info.wallet ?? []).map((t) => t.id));
-        void startCheckout({ open: (u, t, f) => window.open(u, t, f), link, fallbackUrl: url }).then((started) => {
-          checkoutStatus(status, started, info, before, () => {
+        begin: () => {
+          b.disabled = true;
+          before = new Set((info.wallet ?? []).map((t) => t.id));
+        },
+        started: (started) =>
+          checkoutStatus(status, started, info, before, ask, () => {
             b.disabled = false;
-          });
-        });
+          }),
       });
+      // OP-153: the card first, every time; Continue opens checkout as Get a ticket did before.
+      b.addEventListener('click', () => ask(go, b));
       panel.append(b, status);
     }
   };
