@@ -3,7 +3,7 @@
 - Status: current
 - Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged); the Ticket Board as read 2026-10-23
 - Code: none
-- Tickets: OP-101, OP-102
+- Tickets: OP-101, OP-102, OP-176
 - Related: docs/agents.md, docs/GLOSSARY.md
 
 The map of `docs/`: which file answers which question, how the files are written so an agent can
@@ -18,7 +18,7 @@ here: read `agents.md` first, then `GLOSSARY.md`.
 | Pick up any ticket that touches code | `ARCHITECTURE.md` section 0, then the section for the area | the area doc below; `CHANGELOG.md` for what shipped |
 | Deploy, set a secret, set up the store | `DEPLOY.md` | `PLAYBOOK.md` if something breaks |
 | The park is down or slow | `PLAYBOOK.md` | `CAPACITY.md` |
-| Review or test a ticket (QA) | the ticket's Done-when; `ARCHITECTURE.md` for the mechanism | `agents.md` (QA agent), `CAPACITY.md` (OP-088) |
+| Review or test a ticket (QA) | the ticket's Done-when; `ARCHITECTURE.md` for the mechanism | `agents.md` (QA hat), `CAPACITY.md` (OP-088) |
 | Answer a visitor's question | `PLAYBOOK.md` section 7 | `ACTIVITIES.md`, `QUESTS.md`, `NESTS.md` |
 | Change art | `ART-PIPELINE.md`, `CLAUDE.md` | `tools/art/README.md` |
 | Find what a word means | `GLOSSARY.md` | the file it points to |
@@ -42,21 +42,23 @@ here: read `agents.md` first, then `GLOSSARY.md`.
   exists. No history beyond a ticket ID and a date; the history is `CHANGELOG.md` and the board.
 - **Sources**: a rule names the ticket or Bible item it comes from (OP-###, C##). A doc never
   decides anything; where the sources disagree it writes an `OPEN QUESTION` line.
-- **Who writes**: the doc agent, under `docs/` only. Claude Code leaves `TODO-DOCS` comments in
-  code. When the code and a Done ticket disagree, the doc agent files a Finding instead of guessing.
+- **Who writes**: Claude Duet under the Docs hat, under `docs/` only. Under the Build hat it leaves
+  `TODO-DOCS` comments in code. When the code and a Done ticket disagree, the Docs hat files a
+  Finding instead of guessing.
 
-Who updates what: the doc agent keeps every file under `docs/` and is the only writer here
-(OP-081; `agents.md`). Claude Code leaves a `TODO-DOCS` comment in code when a change needs a doc
-change, and appends one line to `CHANGELOG.md` when a ticket goes Done (OP-103). Claude reviews
-doc tickets. The owner approves every visitor-facing word the docs quote. Anything outside `docs/`
-(the root `README.md`, `CLAUDE.md`, `tools/art/README.md`, code comments) is Claude Code's.
+Who updates what: Claude Duet keeps every file under `docs/` under the Docs hat (OP-081,
+OP-176; `agents.md`). Under the Build hat it leaves a `TODO-DOCS` comment in code when a change
+needs a doc change, and appends one line to `CHANGELOG.md` when a ticket goes Done (OP-103). The
+PM hat reviews doc tickets. The owner approves every visitor-facing word the docs quote. Anything
+outside `docs/` (the root `README.md`, `CLAUDE.md`, `tools/art/README.md`, code comments) is the
+Build hat's and goes as a pull request.
 
 ## The files
 
 | File | What it is for | Read it when |
 | --- | --- | --- |
 | `GLOSSARY.md` | Every term the code, the board and the Bible use, one line each, with the file that defines it | A word is unclear |
-| `agents.md` | Who does what: the owner, Claude, Claude Code, Crow, the QA agent, the doc agent, Red Team and the Shopify agent; what each may write to and never does; how work moves; the board's columns and statuses | You are new, or handing work to another agent |
+| `agents.md` | Who does what: the owner and Claude Duet, with one hat per old role (PM, Build, Marketing, QA, Docs, Shopify, Red team); what each may write to and never does; how work moves; the board's columns and statuses | You are new, or handing work to another agent |
 | `ARCHITECTURE.md` | The system: the repository's packages, the room server and its Durable Objects, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, a diagram from purchase to the hub, open questions | Before any ticket that touches code |
 | `DEPLOY.md` | Cloudflare, GitHub and Supabase setup; where to run commands (bash and PowerShell); the error table; deploys from GitHub; selling tickets (the store's app, secrets, webhooks, products, opening night) | Deploying, setting a secret, setting up the store |
 | `PLAYBOOK.md` | When the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits, words for visitors; the controls (the phone pad, the hop, the keys), the Menu and quest news as a visitor has them | Something is wrong, or a visitor asks how to do something |
@@ -67,6 +69,7 @@ doc tickets. The owner approves every visitor-facing word the docs quote. Anythi
 | `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade (and its planned games), three tasks a day, quests in the Menu, emotes and the hop, seasons (planned) | Anything to do in a room |
 | `NESTS.md` | The street of nests, a nest, decorating, furniture and the day's gift, the mirror (Your owl), the room server and the local mode | The nests |
 | `FEEDBACK.md` | Feedback in the Menu, where notes are kept, reading and triaging them, candidates raised by tickets | Reading visitors' notes |
+| `SECURITY.md` | What the park is and is not (no typed chat, no purchases in the park, no passwords), where things are kept, the headers and limits in place, and the security check (`tools/security/security-test.sh`, nightly) | Judging the park's risk, running the security check, or before testing the live park (the owner's written authorisation first) |
 | `ART-PIPELINE.md` | How art is made and replaced: Seedream through `tools/art`, sizes, the owl's layers, provenance | Any art change; the owner picks every image |
 
 Not under `docs/` but read with them: the root `README.md` (how to run and check the park; note
@@ -84,13 +87,19 @@ Everything is a ticket; if it is not on the board, it is not work.
   dropdown options; add a row to add an option, never rename a header).
 - **IDs**: `OP-###`. On the Board tab a ticket's row is its number plus one (OP-101 is row 102).
   The Dashboard shows the next free ID.
-- **Columns A to Q**: A Ticket ID · B Title · C Status · D Owner (exactly one agent) · E Priority
+- **Columns A to R**: A Ticket ID · B Title · C Status · D Owner (exactly one: Logan or Claude
+  Duet on open tickets) · E Priority
   (P0 Urgent, P1 High, P2 Normal, P3 Low) · F Type (Build, Art, Content, Store, Data, Research,
   Decision, Bug, Canon, Admin, QA, Finding; the doc tickets use Docs) · G Area (Park app, Art,
   Social, Store, Pipeline, Canon, Ops, Drive; the doc tickets use Docs) · H Requested by ·
   I Reviewer · J Flags · K Created · L Due · M Last update · N Description and acceptance criteria
   (the goal, the inputs as links, and a "Done when" line someone else could check) · O Deliverable
-  link · P Blocked by (ticket IDs) · Q Notes (the current state, dated lines appended).
+  link · P Blocked by (ticket IDs) · Q Notes (the current state, dated lines appended) · R Role
+  (was) (the hat Claude Duet wears for the ticket: PM, Build, Marketing, QA, Docs, Shopify, Red team,
+  or Logan; OP-176).
+- **Owners** (OP-176, 2026-11-01): open tickets belong to **Logan** or **Claude Duet**, one agent
+  that wears the old agents' roles as hats (`agents.md`). Done and Dropped tickets keep their
+  historical owner (Claude, Claude Code, Crow, QA agent, Doc agent); the board is a record.
 - **Statuses**, exactly as the board uses them: **Backlog** (not fully specified) · **Ready**
   (someone could start now; set by the requester or a hand-off) · **In progress** (set by the
   ticket's owner on pick-up) · **In review** (waiting for the reviewer; the ticket's owner sets it,
@@ -103,10 +112,10 @@ Everything is a ticket; if it is not on the board, it is not work.
   naming, Deletion, Customer data.
 - **Filing a ticket**: take the next free ID from the Dashboard, fill every column (Requested by =
   you), leave it in Backlog if it is not Ready, and add an Activity Log row with Action = Created.
-- **Filing a Finding** (OP-080's format, used by QA and Red Team): a NEW ticket for Claude Code,
+- **Filing a Finding** (OP-080's format, under the QA or Red team hat): a NEW ticket for the Build hat,
   Type = Finding, the check or question it came from and the exact path in the description, and a
   flag of To-do (something must change) or Informational (worth knowing, no action). One Finding per
-  problem. The doc agent files a Finding when the code and a Done ticket disagree.
+  problem. The Docs hat files a Finding when the code and a Done ticket disagree.
 - **Every session**: read your queue on the Dashboard and the Activity Log rows since you last
   worked; take the highest-priority Ready ticket; set In progress and Last update, log Picked up;
   before stopping, update Status, Last update and Notes on every ticket you touched and log what
@@ -117,7 +126,8 @@ Everything is a ticket; if it is not on the board, it is not work.
 
 The Google Doc **Owl Park — Creative Bible (shared canon)**: canon, PROPOSALS (numbered C1, C2,
 ...), the MERGE LOG and the AGENT DISCUSSION. Append-only; a proposal becomes canon when the owner
-approves it and Crow merges it from a fresh re-read. The doc agent reads it and never writes it.
+approves it and Claude Duet merges it from a fresh re-read (PM hat). The Docs hat reads it and
+never writes it.
 
 Bible items that are load-bearing in code:
 

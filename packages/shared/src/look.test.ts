@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK, hexToInt, isHexColour, lookFromSeed, sanitizeLook } from './look';
+import { DEFAULT_LOOK, VOTABLE_REALMS, hexToInt, isHexColour, isPledge, lookFromSeed, sanitizeLook } from './look';
 import { isParkMessage } from './validate';
 
 describe('looks', () => {
@@ -13,6 +13,12 @@ describe('looks', () => {
     expect(sanitizeLook({ ...DEFAULT_LOOK, pledge: 'grove' }).pledge).toBe('grove');
     expect(sanitizeLook({ ...DEFAULT_LOOK, pledge: 'Hoot<script>' }).pledge).toBeUndefined();
     expect(sanitizeLook({ ...DEFAULT_LOOK })).not.toHaveProperty('pledge');
+  });
+
+  it('takes only a votable realm as a pledge, so no free text rides on a look (OP-093)', () => {
+    for (const realm of VOTABLE_REALMS) expect(isPledge(realm)).toBe(true);
+    for (const bad of ['hello-everyone', 'abc', 'grove2', '', 'GROVE', 42, null]) expect(isPledge(bad)).toBe(false);
+    expect(sanitizeLook({ ...DEFAULT_LOOK, pledge: 'call-me-now' }).pledge).toBeUndefined();
   });
 
   it('sanitizes untrusted input field by field', () => {

@@ -189,7 +189,10 @@ async function refunded(deps: HookDeps, id: string, payload: Record<string, unkn
     .map((li) => ({ line: String(li['line_item_id'] ?? ''), quantity: Number(li['quantity']) }))
     .filter((w) => /^\d{1,20}$/.test(w.line) && Number.isInteger(w.quantity) && w.quantity > 0);
   if (!which.length) return { status: 200, body: { revoked: 0 } };
-  const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which }))['revoked'] as string[]).length;
+  // The refund's own id, so the book switches tickets off once for it however often the store sends it (OP-145).
+  const rawRefund = payload['id'];
+  const refund = typeof rawRefund === 'number' ? String(rawRefund) : typeof rawRefund === 'string' ? gidTail(rawRefund) : '';
+  const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which, ...(/^\d{1,20}$/.test(refund) ? { refund } : {}) }))['revoked'] as string[]).length;
   return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
 }
 

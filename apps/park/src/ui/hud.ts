@@ -22,10 +22,12 @@ import { createOwlBuilder, type OwlBuilder, type PreviewFrame } from './owlBuild
 import { createQuestUi, type QuestActions, type QuestUi } from './quests';
 import { createSayWheel } from './sayWheel';
 import { createSettingsScreen } from './settingsScreen';
+import { createWhichOwlScreen, type WhichOwlRun } from './whichOwl';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
 import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createCheckoutWatch, type CheckoutWatch, type WatchOptions } from './checkout';
+import { createStoreCard, type StoreGo } from './storeCard';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
 export interface CollectionActions {
@@ -130,10 +132,17 @@ export interface Hud {
   /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
   openOwl(opener: HTMLElement): void;
   openSettings(opener: HTMLElement): void;
+  /** Which owl are you (OP-076): a new owl's first run (from Make your owl), drawn over everything. */
+  openWhichOwl(run: Omit<WhichOwlRun, 'preview'>, opener: HTMLElement): void;
   /** The feather shop. */
   openShop(): void;
   /** The lobby's ticket booth. */
   openBooth(info: BoothInfo): void;
+  /**
+   * The card before the store (OP-153): Continue goes on to the store (`go`), Not now back to where
+   * the visitor was. Every way from the park to the store asks through it; `opener` gets the focus back.
+   */
+  askStore(go: StoreGo, opener?: HTMLElement | null): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
   /** The ticket status in the ticket card's place while the owl stands before the turnstiles (OP-172); null fades it out. */
@@ -558,7 +567,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         render: (panel) =>
           renderSettings(
             panel,
-            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards() },
+            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null },
             () => menu.refresh(),
           ),
       },
@@ -567,7 +576,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
-  const settingsScreen = createSettingsScreen(root, settings);
+  /** The card before the store (OP-153), over the booth or the pass offer that asked; it closes alone on Escape. */
+  const storeCard = createStoreCard(root);
+  // Its Send feedback opens the same form as the Menu's (OP-167); closed, it gives the focus back to the home screen's Settings button.
+  const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
+  // Which owl are you (OP-076) covers the whole screen, like the owl builder.
+  const whichOwl = createWhichOwlScreen(root);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
 
   /** The big sheets (dialogue, shop, booth, Decorate) share the bottom of the screen: one at a time. */
@@ -607,11 +621,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     sayWheel.close();
     builder?.close();
     settingsScreen.close();
+    whichOwl.close();
     feedback?.close();
     accountScreens?.close();
     leaveCard.close();
+    storeCard.close();
   };
-  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  const isBlocking = () => storeCard.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
   /** The account's cards for the Menu (OP-139): none while accounts are off. */
   function accountCards(): HTMLElement[] | null {
     if (!account || !accountScreens) return null;
@@ -626,6 +642,49 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     closeSheets();
     closeScreens();
   };
+
+  /** Which owl are you over everything (OP-076): the preview draws the result where the screen leaves room for it. */
+  function openWhichOwl(run: Omit<WhichOwlRun, 'preview'>, opener: HTMLElement): void {
+    makeRoom();
+    root.classList.add('covered');
+    whichOwl.open(
+      {
+        ...run,
+        preview: (frame) => previewCb?.(frame, false),
+        // Uncovered before the run's end is told, since that may open the builder (which covers again).
+        done: (end) => {
+          root.classList.remove('covered');
+          run.done(end);
+        },
+      },
+      opener,
+    );
+  }
+  /**
+   * Retake the quiz (the Menu's Settings tab): only the kind and colours change, never the owl's id,
+   * friend code or wear. The result shows on the owl at the reveal, and goes back as it was unless
+   * Keep it or Make it yours takes it on.
+   */
+  function retakeQuiz(): void {
+    const before: OwlLook = { ...(collectionActions?.look() ?? look) };
+    const apply = (l: OwlLook) => {
+      look = { ...l };
+      lookCb?.(look);
+    };
+    openWhichOwl(
+      {
+        firstRun: false,
+        seed: `retake-${Date.now().toString(36)}`,
+        base: () => ({ ...before }),
+        reveal: apply,
+        done: (end) => {
+          if (end.kind === 'make') openScreen('owl', false, menuBtn);
+          else if (end.kind !== 'keep') apply(before);
+        },
+      },
+      menuBtn,
+    );
+  }
 
   /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button); `mirror`: Your owl opened at a mirror. */
   function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn, mirror = false) {
@@ -845,13 +904,15 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     openOwl: (opener) => openScreen('owl', false, opener),
     openSettings: (opener) => openScreen('settings', false, opener),
+    openWhichOwl,
     openShop() {
       shop?.open();
     },
     openBooth(info) {
-      booth ??= createBoothPanel(root, makeRoom);
+      booth ??= createBoothPanel(root, makeRoom, storeCard.ask);
       booth.open(info);
     },
+    askStore: (go, opener) => storeCard.ask(go, opener),
     showTicket(card) {
       ticketCard ??= createTicketCard(root);
       ticketCard.show(card);
@@ -890,11 +951,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     climbResult: (r) => climb.result(r),
     closeClimb: () => climb.close(),
     offerFreePass(offer) {
-      freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
+      freePass ??= createFreePassCard(root, (m) => toast(m, 5000), storeCard.ask);
       freePass.show(offer);
     },
     watchFreePass(claimed) {
-      freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
+      freePass ??= createFreePassCard(root, (m) => toast(m, 5000), storeCard.ask);
       freePass.watch(claimed);
     },
     watchCheckout(o, came) {

@@ -91,14 +91,16 @@ defines it. Alphabetical. Grep the term.
 
 ## The project
 
-- **Bible** (Creative Bible): the Google Doc of canon, PROPOSALS, the MERGE LOG and the AGENT DISCUSSION; append-only; Crow merges.
+- **Bible** (Creative Bible): the Google Doc of canon, PROPOSALS, the MERGE LOG and the AGENT DISCUSSION; append-only; Claude Duet merges approved proposals (PM hat).
 - **Board** (Ticket Board): the Google Sheet with every ticket; `docs/README.md`, The Ticket Board.
-- **C-number** (C35, C45): a numbered proposal in the Bible; canon once the owner approves and Crow merges it.
+- **C-number** (C35, C45): a numbered proposal in the Bible; canon once the owner approves and Claude Duet merges it.
 - **Canon**: what the Bible states as decided; changes only through a proposal.
-- **Finding**: a ticket of Type Finding filed by QA or Red Team for Claude Code (OP-080's format).
+- **Claude Duet**: the one agent that owns every ticket that is not Logan's, wearing the old agents' roles as hats (OP-176; `agents.md`).
+- **Finding**: a ticket of Type Finding filed under the QA or Red team hat for the Build hat (OP-080's format).
 - **Flags**: Money, Account, Price, Public-facing, Legal or naming, Deletion, Customer data; a flagged ticket goes to the owner first.
+- **Hat**: one of Claude Duet's roles (PM, Build, Marketing, QA, Docs, Shopify, Red team), named in the Board's Role (was) column; each keeps that role's rules.
 - **Needs Logan**: the board status for a decision or approval only the owner can give.
 - **OP-###**: a ticket id on the board; its row is the number plus one.
 - **Provenance**: `tools/art/provenance.jsonl`, one line per published art file saying how it was made.
 - **Seedream**: the image model the art comes from, through fal.ai (C29); `docs/ART-PIPELINE.md`.
-- **TODO-DOCS**: the comment Claude Code leaves in code when a change needs a doc change (OP-081).
+- **TODO-DOCS**: the comment the Build hat leaves in code when a change needs a doc change (OP-081).

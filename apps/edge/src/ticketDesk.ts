@@ -146,7 +146,10 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       if (which === 'all') w = 'all';
       else if (Array.isArray(which) && which.every((x) => str((x as Record<string, unknown>)?.['line'], 40) && Number.isInteger((x as Record<string, unknown>)['quantity']))) w = which as Array<{ line: string; quantity: number }>;
       else return bad();
-      return json({ revoked: book.revoke(order, w, now).map((t) => t.id) });
+      // A refund names itself (OP-145), so a repeated refunds/create switches nothing off twice.
+      const refund = body['refund'] === undefined ? undefined : str(body['refund'], 40);
+      if (refund === null || (refund !== undefined && !/^\d{1,20}$/.test(refund))) return bad();
+      return json({ revoked: book.revoke(order, w, now, refund).map((t) => t.id) });
     }
     case '/claim': {
       const secret = str(body['secret'], 64);

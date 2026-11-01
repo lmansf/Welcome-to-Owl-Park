@@ -5,6 +5,7 @@
  */
 import type { Entry, ScanRefusal, ScanReply, WalletEntry } from '../net';
 import type { TicketLink } from '../net/ticketLinks';
+import type { AskStore } from './storeCard';
 
 export const KIND_LABEL: Readonly<Record<WalletEntry['kind'], string>> = { day: 'Day ticket', night: 'Night ticket', annual: 'Annual pass', event: 'Event ticket', 'opening-night': 'Opening Night Ticket' };
 
@@ -309,8 +310,8 @@ const PASS_CSS = `
 #hud .free-pass.open{display:flex}
 #hud .free-pass p{margin:0;font-size:16px;font-weight:700}
 #hud .free-pass .row{display:flex;gap:10px}
-#hud .free-pass a{display:inline-flex;align-items:center;min-height:44px;padding:8px 22px;border-radius:999px;background:#C9A227;color:#0C1E36;font-weight:800;text-decoration:none}
 #hud .free-pass button{min-height:44px;color:#0C1E36;border-color:rgba(12,30,54,.3)}
+#hud .free-pass button.claim{padding:8px 22px;font-weight:800}
 `;
 
 /** How often, and how long, the page looks for the pass once the owl has gone to claim it. */
@@ -333,10 +334,11 @@ export interface FreePassCard {
 
 /**
  * Opening night's pass offer (C42): after the ticket card, "Your pass is half price tonight." and
- * Claim it, which opens the store's checkout in a new tab with the pass, its code and the ticket. The
- * page then looks for the pass in the wallet for a while, and says when it has come.
+ * Claim it, which asks first (the card before the store, OP-153) and then opens the store's checkout
+ * in a new tab with the pass, its code and the ticket. The page then looks for the pass in the wallet
+ * for a while, and says when it has come.
  */
-export function createFreePassCard(root: HTMLElement, toast: (message: string) => void): FreePassCard {
+export function createFreePassCard(root: HTMLElement, toast: (message: string) => void, ask: AskStore): FreePassCard {
   const style = document.createElement('style');
   style.textContent = PASS_CSS;
   document.head.appendChild(style);
@@ -349,10 +351,10 @@ export function createFreePassCard(root: HTMLElement, toast: (message: string) =
   p.textContent = OPENING_WORDS.offer;
   const row = document.createElement('div');
   row.className = 'row';
-  const claim = document.createElement('a');
+  const claim = document.createElement('button');
+  claim.className = 'claim';
+  claim.dataset['claim'] = '';
   claim.textContent = OPENING_WORDS.claim;
-  claim.target = '_blank';
-  claim.rel = 'noopener noreferrer';
   const close = document.createElement('button');
   close.className = 'ghost';
   close.textContent = 'Close';
@@ -381,12 +383,12 @@ export function createFreePassCard(root: HTMLElement, toast: (message: string) =
   };
   close.addEventListener('click', () => el.classList.remove('open'));
   claim.addEventListener('click', () => {
-    if (offer) watch(offer.claimed);
+    const o = offer;
+    if (o) ask({ link: o.link, then: () => watch(o.claimed) }, claim);
   });
   return {
     show(o) {
       offer = o;
-      claim.href = o.link;
       el.classList.add('open');
     },
     hide() {

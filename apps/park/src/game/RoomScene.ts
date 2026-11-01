@@ -2501,8 +2501,10 @@ export class RoomScene extends Phaser.Scene {
     this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
   }
 
+  /** The gift shop's door: the store, after the card before the store (OP-153); soon, until it has a page. */
   private openShop(): void {
-    if (this.cfg.shopUrl) window.open(this.cfg.shopUrl, '_blank', 'noopener');
+    const url = this.cfg.shopUrl;
+    if (url) this.hud.askStore({ run: (open) => void open(url, '_blank', 'noopener') });
     else this.hud.toast('The gift shop opens soon.');
   }
 
