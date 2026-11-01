@@ -61,7 +61,7 @@ test.describe('the entries setting (OP-156)', () => {
     await page.context().close();
   });
 
-  test('an owl of the tree in its nest when the tree goes dark finds its door leads to the street, as every owl’s does while the tree takes no share', async ({ browser, request }) => {
+  test('an owl of the tree in its nest when the tree goes dark finds its door leads to the street (`homes`), as every owl’s does while the tree takes no share', async ({ browser, request }) => {
     test.slow(); // a visit through the room server, drawn with software WebGL
     await share(request, 100);
     const page = await newOwlPlays(browser);
@@ -69,9 +69,9 @@ test.describe('the entries setting (OP-156)', () => {
     expect(await door()).toBe('l1');
     await share(request, 0);
     // The room server tells the nest at once: the way out is today's park's again.
-    await expect.poll(door, { timeout: 15_000 }).toBe('street');
+    await expect.poll(door, { timeout: 15_000 }).toBe('homes');
     await walkToDoor(page, 'to-street');
-    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('street');
+    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('homes');
     await page.context().close();
   });
 });
