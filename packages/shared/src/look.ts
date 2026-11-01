@@ -10,10 +10,12 @@ export const ACCENT_COLOURS = ['#C9A227', '#FF2AA1', '#00E5FF', '#6E3AFF', '#E07
 export const DEFAULT_LOOK: OwlLook = { body: '#8B5A2B', belly: '#F6F1E3', accent: '#C9A227' };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
-const PLEDGE = /^[a-z][a-z0-9-]{0,23}$/;
+/** Realms with an idol to vote at, in the park's fixed order (neutral ids, never public names). */
+export const VOTABLE_REALMS: readonly string[] = ['grove', 'market', 'glass'];
 
+/** A pledge is one of the votable realms' ids and nothing else, so no free text rides on a look (OP-093). */
 export function isPledge(s: unknown): s is string {
-  return typeof s === 'string' && PLEDGE.test(s);
+  return typeof s === 'string' && VOTABLE_REALMS.includes(s);
 }
 
 export function isHexColour(s: unknown): s is string {

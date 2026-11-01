@@ -11,9 +11,10 @@ import { SqlVoteStore } from './sqlVoteStore';
 import { TicketBook } from './TicketBook';
 import { ticketDesk } from './ticketDesk';
 import type { Env } from './env';
+import { VOTABLE_REALMS } from '@owl-park/shared';
 
-/** Realms with an idol to vote at, in the park's fixed order (neutral ids, never public names). */
-export const VOTABLE_REALMS = ['grove', 'market', 'glass'];
+/** Realms with an idol to vote at; the list lives in shared so a look's pledge is checked against it. */
+export { VOTABLE_REALMS };
 
 export class VoteLedger extends DurableObject<Env> {
   private readonly ledger: Ledger;
@@ -24,7 +25,7 @@ export class VoteLedger extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.tz = env.PARK_TZ || 'America/New_York';
-    this.ledger = new Ledger(new SqlVoteStore(ctx.storage.sql), VOTABLE_REALMS);
+    this.ledger = new Ledger(new SqlVoteStore(ctx.storage.sql), [...VOTABLE_REALMS]);
     this.tickets = new TicketBook(new SqlTicketStore(ctx.storage.sql));
     this.gate = new GateSetting(ctx.storage.sql);
   }
