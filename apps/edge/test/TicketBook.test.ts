@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CHECKOUT_KEEP_MS, CHECKOUT_TTL_MS, MemoryTicketStore, ORDER_LEASE_MS, TicketBook, type TicketStore } from '../src/TicketBook';
+import { CHECKOUT_KEEP_MS, CHECKOUT_TTL_MS, MemoryTicketStore, ORDER_LEASE_MS, TicketBook, inUseElsewhere, type TicketStore } from '../src/TicketBook';
 import { SqlTicketStore } from '../src/sqlTicketStore';
 import type { TicketLine } from '../src/shopify';
 import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, isTicketId } from '../src/tickets';
@@ -90,7 +90,7 @@ for (const [name, make] of STORES) {
         const id = tickets[1]!.id;
         expect(await b.share(id, 'c_friend', T0)).toBeNull();
         const link = (await b.share(id, 'c_buyer', T0))!;
-        expect((await b.take(link, 'c_friend'))!.device).toBe('c_friend');
+        expect(await b.take(link, 'c_friend')).toMatchObject({ device: 'c_friend' });
         expect(b.wallet('c_buyer', T0).map((w) => w.id)).toEqual([tickets[0]!.id]);
         expect(b.wallet('c_friend', T0).map((w) => w.id)).toEqual([id]);
         // A share link works once.
@@ -101,6 +101,67 @@ for (const [name, make] of STORES) {
         // A running ticket stays with the visitor it admitted.
         b.scan(id, 'c_buyer', T0 + HOUR_MS);
         expect(await b.share(id, 'c_buyer', T0 + 2 * HOUR_MS)).toBeNull();
+      });
+    });
+
+    describe('a running ticket stays with the owl it let in (OP-174)', () => {
+      it('a claim after the first scan moves nothing: the forwarded email lets no second owl in', async () => {
+        const b = book();
+        const { claim, tickets } = await b.issue('3001', [day(1)], false, T0);
+        await b.claim(claim!, 'c_first');
+        expect(b.scan(tickets[0]!.id, 'c_first', T0 + HOUR_MS).ok).toBe(true);
+        // The link is forwarded: it moves nothing, and the ticket still admits only the first owl.
+        expect(await b.claim(claim!, 'c_second')).toEqual([]);
+        expect(b.get(tickets[0]!.id)?.device).toBe('c_first');
+        expect(b.wallet('c_second', T0 + HOUR_MS)).toEqual([]);
+        expect(b.scan(tickets[0]!.id, 'c_second', T0 + 2 * HOUR_MS)).toEqual({ ok: false, reason: 'elsewhere' });
+        expect(b.scan(tickets[0]!.id, 'c_first', T0 + 2 * HOUR_MS)).toMatchObject({ ok: true, started: false });
+        // Each owl that tries again gets the same: the ticket never changes hands while it runs, or after.
+        expect(await b.claim(claim!, 'c_third')).toEqual([]);
+        expect(await b.claim(claim!, 'c_second')).toEqual([]);
+        expect(b.get(tickets[0]!.id)?.device).toBe('c_first');
+      });
+
+      it('a claim before the first scan still moves the ticket (a new device before the visit)', async () => {
+        const b = book();
+        const { claim, tickets } = await b.issue('3002', [day(1)], false, T0);
+        await b.claim(claim!, 'c_laptop');
+        expect((await b.claim(claim!, 'c_phone'))!.map((t) => t.device)).toEqual(['c_phone']);
+        expect(b.wallet('c_laptop', T0)).toEqual([]);
+        expect(b.scan(tickets[0]!.id, 'c_phone', T0 + HOUR_MS).ok).toBe(true);
+      });
+
+      it('in an order with both, moves only the tickets never scanned', async () => {
+        const b = book();
+        const { claim, tickets } = await b.issue('3003', [day(2)], false, T0);
+        await b.claim(claim!, 'c_first');
+        b.scan(tickets[0]!.id, 'c_first', T0 + HOUR_MS);
+        expect((await b.claim(claim!, 'c_friend'))!.map((t) => t.id)).toEqual([tickets[1]!.id]);
+        expect(b.wallet('c_first', T0 + HOUR_MS).map((t) => t.id)).toEqual([tickets[0]!.id]);
+        expect(b.wallet('c_friend', T0 + HOUR_MS).map((t) => t.id)).toEqual([tickets[1]!.id]);
+      });
+
+      it('a share link made before the visit stops moving its ticket once it is scanned', async () => {
+        const b = book();
+        const { claim, tickets } = await b.issue('3004', [day(1)], false, T0);
+        await b.claim(claim!, 'c_first');
+        const link = (await b.share(tickets[0]!.id, 'c_first', T0))!;
+        b.scan(tickets[0]!.id, 'c_first', T0 + HOUR_MS);
+        expect(await b.take(link, 'c_second')).toBe('in-use');
+        expect(b.get(tickets[0]!.id)?.device).toBe('c_first');
+        // Its own holder opening it changes nothing either.
+        expect(await b.take(link, 'c_first')).toMatchObject({ device: 'c_first' });
+      });
+
+      it('counts the running tickets a claim leaves on another owl', async () => {
+        const b = book();
+        const { claim, tickets } = await b.issue('3005', [day(3)], false, T0);
+        await b.claim(claim!, 'c_first');
+        b.scan(tickets[0]!.id, 'c_first', T0 + HOUR_MS);
+        b.scan(tickets[1]!.id, 'c_first', T0 + HOUR_MS);
+        const live = (await b.claimable(claim!))!;
+        expect(inUseElsewhere(live, 'c_second')).toBe(2);
+        expect(inUseElsewhere(live, 'c_first')).toBe(0);
       });
     });
 

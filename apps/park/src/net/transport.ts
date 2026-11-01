@@ -148,8 +148,11 @@ export type ScanReply = { ok: true; id: string; kind: WalletEntry['kind']; start
 
 export interface TicketWallet {
   wallet(): Promise<WalletEntry[]>;
-  /** An emailed claim link or a share link: its tickets move onto this device. Null for a link that no longer works. */
-  open(link: TicketLink): Promise<WalletEntry[] | null>;
+  /**
+   * An emailed claim link or a share link: its tickets move onto this device. Null for a link that no
+   * longer works; `in-use` when its tickets are already running on another owl, which keeps them (OP-174).
+   */
+  open(link: TicketLink): Promise<WalletEntry[] | 'in-use' | null>;
   /** A share secret for one ticket this device holds; null when it cannot be passed on. */
   share(id: string): Promise<string | null>;
   /** The gate scans a ticket (the server picks one when none is named); a ticket that goes through admits this visitor. */

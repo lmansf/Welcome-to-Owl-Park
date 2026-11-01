@@ -5,7 +5,7 @@
  */
 import { KINDS, type TicketLine } from './shopify';
 import type { TicketMirror } from './storeApi';
-import type { TicketBook, TicketRecord, WalletTicket } from './TicketBook';
+import { inUseElsewhere, type TicketBook, type TicketRecord, type WalletTicket } from './TicketBook';
 import { isTicketId, statusOf, windowed, type TicketKind, type TicketStatus } from './tickets';
 
 /**
@@ -154,9 +154,16 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       // Where the link's tickets were, for the Worker's log (OP-134): how many it moves from another device.
       const before = await book.claimable(secret);
       const r = await book.claim(secret, device);
-      const moved = (before ?? []).filter((t) => t.device !== null && t.device !== device).length;
+      if (!r || !before) return json({ error: 'unknown link' }, 404);
+      const movedIds = new Set(r.map((t) => t.id));
+      const moved = before.filter((t) => movedIds.has(t.id) && t.device !== null && t.device !== device).length;
+      // Running tickets stay with the owl they admitted (OP-174). A link that finds only those, and none
+      // of its order on this owl, is a forwarded email: "already in use", and nothing changes hands.
+      const inUse = inUseElsewhere(before, device);
+      const order = before[0]?.order ?? null;
+      if (r.length === 0 && inUse > 0 && !before.some((t) => t.device === device)) return json({ error: 'in use', order, inUse }, 409);
       // The order, for the Worker alone (OP-139: its email protects the owl that claimed it).
-      return r ? json({ tickets: wallet(device), order: r[0]?.order ?? null, moved, claimed: r.length }) : json({ error: 'unknown link' }, 404);
+      return json({ tickets: wallet(device), order, moved, claimed: r.length, inUse });
     }
     case '/checkout': {
       // The booth's checkout (OP-175): a one-time token for this owl, to ride in the cart.
@@ -174,6 +181,7 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       const secret = str(body['secret'], 64);
       if (!secret || !device) return bad();
       const r = await book.take(secret, device);
+      if (r === 'in-use') return json({ error: 'in use' }, 409);
       return r ? json({ tickets: wallet(device) }) : json({ error: 'unknown link' }, 404);
     }
     case '/share': {

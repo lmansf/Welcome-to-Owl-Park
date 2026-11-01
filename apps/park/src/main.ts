@@ -76,7 +76,8 @@ if (ticketLink) {
     void tickets.open(ticketLink).then(
       (wallet) => {
         hud.toast(linkToast(ticketLink.kind, wallet), 5000);
-        if (wallet?.some((t) => t.status === 'unused' || t.status === 'active' || t.status === 'held')) home.note(HOME_WORDS.added);
+        if (wallet === 'in-use') home.note(HOME_WORDS.inUse);
+        else if (wallet?.some((t) => t.status === 'unused' || t.status === 'active' || t.status === 'held')) home.note(HOME_WORDS.added);
         void refreshWallet();
       },
       () => hud.toast('Your ticket could not be loaded just now. Open the link again in a moment.', 5000),
