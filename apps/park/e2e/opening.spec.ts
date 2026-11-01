@@ -170,8 +170,10 @@ test.describe('opening night (C42)', () => {
       await expect(offer).toContainText('Come back all year! The annual pass is half price tonight.');
       await expect(offer.getByRole('button', { name: 'No thanks' })).toBeVisible();
       await a.screenshot({ path: 'e2e-screenshots/opening-day-pass.png' });
+      // The owl stood at the turnstiles when the ticket came, so it went through with it by itself (OP-190).
+      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
       const [day] = await a.evaluate(() => window.owlPark.wallet());
-      expect(day).toMatchObject({ kind: 'day', status: 'unused' });
+      expect(day).toMatchObject({ kind: 'day', status: 'active' });
 
       // Get the pass: the cart with the night's code and the Day Ticket, with no second card before the store.
       const [cart] = await Promise.all([context.waitForEvent('page'), offer.getByRole('button', { name: 'Get the pass' }).click()]);

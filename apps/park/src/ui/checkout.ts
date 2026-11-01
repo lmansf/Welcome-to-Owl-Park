@@ -4,10 +4,11 @@
  * ticket opens it in a window of its own over the game, after the card before the store: a popup on a
  * computer, a new tab on a phone. The cart carries a one-time token the park made for this owl (its
  * collector id, so the ticket is the owl's on any screen it plays on), and the paid order's tickets
- * land on this owl on the server, with no email needed. This page watches the wallet meanwhile, says
- * when the ticket has come, and tries to close the checkout window. The window is cut off from the
- * park, so once it shows the store's page most browsers no longer let the park close it: the note
- * asks the buyer to close checkout.
+ * land on this owl on the server, with no email needed. This page watches the wallet meanwhile and,
+ * when the ticket comes, says so and takes the owl through the turnstiles (OP-190). The window is cut
+ * off from the park, so once it shows the store's page most browsers no longer let the park close it:
+ * the store sends the buyer back to the park's return address instead (checkoutReturn.ts), which
+ * tells this page at once and closes itself where the browser lets it.
  */
 import type { WalletEntry } from '../net';
 
@@ -31,9 +32,24 @@ export const CHECKOUT_WORDS = {
   cancelled: 'Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.',
   fallback: 'Checkout is open in another window. Your ticket comes by email: open its link here to add it to this owl.',
   none: 'Tickets cannot be bought right now. Try again in a minute.',
-  added: 'Ticket added. Close checkout and walk through the turnstiles to enter the park.',
-  addedHeld: 'Ticket added. Close checkout; the ticket works as soon as the store’s quick check is done.',
+  /** The ticket came with the owl at the turnstiles: it goes through them by itself (OP-190). */
+  added: 'Your ticket is here. In you go!',
+  /** The ticket came with the owl somewhere else: it works at the turnstiles. */
+  addedAway: 'Your ticket is here. It works at the turnstiles.',
+  /** The ticket came while the home screen is up (back from checkout in a new page): Play takes the owl in. */
+  addedHome: 'Your ticket is here. Press Play and in you go!',
+  /** The ticket came held for the store's check: no owl goes in on it until it works. */
+  addedHeld: 'Your ticket is here. It works as soon as the store’s quick check is done.',
 } as const;
+
+/**
+ * What the page says when the bought ticket has come (OP-190): held for the store's check, the owl
+ * going through the turnstiles with it, or the owl elsewhere (the ticket works at the turnstiles).
+ */
+export function arrivedWords(ticket: Pick<WalletEntry, 'status'>, goingIn: boolean): string {
+  if (ticket.status === 'held') return CHECKOUT_WORDS.addedHeld;
+  return goingIn ? CHECKOUT_WORDS.added : CHECKOUT_WORDS.addedAway;
+}
 
 export type Opener = (url: string, target: string, features: string) => Window | null;
 
@@ -100,6 +116,8 @@ export interface WatchOptions {
 
 export interface CheckoutWatch {
   start(o: WatchOptions): void;
+  /** Look at the wallet now (the buyer came back from checkout, OP-190); nothing when no watch is running. */
+  look(): void;
   /** The buyer says they are done with checkout: look a little longer, then stop. */
   cancel(): void;
   active(): boolean;
@@ -134,8 +152,9 @@ const pageClock: WatchClock = {
 
 /**
  * Watches the wallet while checkout is open (OP-175): every few seconds, and at once when the page
- * comes back into view. When the bought ticket is there it says so (`came`: that ticket) and closes
- * the checkout window; Cancel says checkout closed (`came` null) and looks a little longer.
+ * comes back into view (or when told, `look`). When the bought ticket is there it says so (`came`:
+ * that ticket; the words as for an owl going in, which the caller may change) and closes the checkout
+ * window; Cancel says checkout closed (`came` null) and looks a little longer.
  */
 export function createCheckoutWatch(say: (message: string, came: WalletEntry | null) => void, clock: WatchClock = pageClock): CheckoutWatch {
   let run: { o: WatchOptions; until: number; timer: unknown; unhook: () => void; looking: boolean } | null = null;
@@ -162,7 +181,7 @@ export function createCheckoutWatch(say: (message: string, came: WalletEntry | n
         } catch {
           // The store's page cut the park's hold on the window: the buyer closes it.
         }
-        say(t.status === 'held' ? CHECKOUT_WORDS.addedHeld : CHECKOUT_WORDS.added, t);
+        say(arrivedWords(t, true), t);
       },
       () => {
         r.looking = false;
@@ -177,6 +196,7 @@ export function createCheckoutWatch(say: (message: string, came: WalletEntry | n
       r.timer = clock.every(look, LOOK_MS);
       r.unhook = clock.onReturn(look);
     },
+    look,
     cancel() {
       if (!run) return;
       run.until = Math.min(run.until, clock.now() + AFTER_CANCEL_MS);

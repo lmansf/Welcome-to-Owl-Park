@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WalletEntry } from '../net';
-import { AFTER_CANCEL_MS, CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, LOOK_FOR_MS, LOOK_MS, createCheckoutWatch, newTicket, startCheckout, type WatchClock } from './checkout';
+import { AFTER_CANCEL_MS, CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, LOOK_FOR_MS, LOOK_MS, arrivedWords, createCheckoutWatch, newTicket, startCheckout, type WatchClock } from './checkout';
 
 const CART = 'https://owl-test.myshopify.com/cart/100:1?attributes%5Bowl_checkout%5D=tok';
 const PAGE = 'https://owl-test.myshopify.com/products/day-ticket';
@@ -153,5 +153,33 @@ describe('watching for the bought ticket (OP-175)', () => {
     quiet.start({ wallet: async () => [], before: new Set(), win: null });
     await t.advance(LOOK_FOR_MS + 1);
     expect(quiet.active()).toBe(false);
+  });
+
+  it('looks at once when told (the store’s return page, OP-190), and not without a watch running', async () => {
+    const t = testClock();
+    const said: string[] = [];
+    let looks = 0;
+    const watch = createCheckoutWatch((m) => said.push(m), t.clock);
+    watch.look();
+    watch.start({ wallet: async () => (looks++, [ticket('OWL-NEWT-ICKT')]), before: new Set(), win: null });
+    expect(looks).toBe(0);
+    watch.look();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(looks).toBe(1);
+    expect(said).toEqual([CHECKOUT_WORDS.added]);
+    watch.look();
+    expect(looks).toBe(1);
+  });
+});
+
+describe('what the page says when the ticket comes (OP-190)', () => {
+  it('in you go at the turnstiles, where it works when the owl is elsewhere, Play on the home screen, and the store’s check for a held one', () => {
+    expect(arrivedWords({ status: 'unused' }, true)).toBe('Your ticket is here. In you go!');
+    expect(arrivedWords({ status: 'unused' }, false)).toBe('Your ticket is here. It works at the turnstiles.');
+    expect(arrivedWords({ status: 'held' }, true)).toBe('Your ticket is here. It works as soon as the store’s quick check is done.');
+    expect(arrivedWords({ status: 'held' }, false)).toBe(CHECKOUT_WORDS.addedHeld);
+    expect(CHECKOUT_WORDS.addedHome).toBe('Your ticket is here. Press Play and in you go!');
+    // Nothing asks the buyer to close checkout or walk through the turnstiles any more.
+    for (const words of Object.values(CHECKOUT_WORDS)) expect(words).not.toMatch(/Close checkout|walk through the turnstiles/);
   });
 });

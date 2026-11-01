@@ -4,14 +4,17 @@
  * line, and its Continue opens the store's checkout for one Day Ticket in a window of its own
  * (OP-175, checkout.ts). A small card over the game then says where checkout stands, with Back to
  * checkout and Cancel, while the page watches the wallet. When the ticket comes the card closes, the
- * page says so, and what follows the purchase (the half-price pass offer on opening night) gets the
- * opener the card handed out, so the card is asked once, right before the purchase, and not again.
+ * owl goes through the turnstiles with it if it is still at them (OP-190), the page says so, and what
+ * follows the purchase (the half-price pass offer) gets the opener the card handed out, so the card is
+ * asked once, right before the purchase, and not again. The store's return address
+ * (checkoutReturn.ts) tells this page that checkout is done, and it looks at the wallet at once.
  *
  * The ticket is the owl's, not the screen's: the checkout token names the owl's collector id, as the
  * claim and share links do, so it lets the owl in on any screen it plays on.
  */
 import type { WalletEntry } from '../net';
-import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, createCheckoutWatch, startCheckout, type CheckoutWatch, type Opener, type Started, type WatchClock } from './checkout';
+import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, arrivedWords, createCheckoutWatch, startCheckout, type CheckoutWatch, type Opener, type Started, type WatchClock } from './checkout';
+import { ANSWER_AFTER_MS, answerReturns, pageChannel, type MakeChannel } from './checkoutReturn';
 import { PREVIEW_WORDS } from './preview';
 import type { AskStore, LinkMaker, StoreGo } from './storeCard';
 import { GATE_WORDS } from './tickets';
@@ -29,8 +32,11 @@ export interface GateSale {
   wallet: () => Promise<WalletEntry[]>;
   /** The tickets on this owl before checkout opened: the bought one is the one not among them. */
   before: ReadonlySet<string>;
-  /** The bought ticket has come: what follows the purchase gets the opener the card handed out. */
-  bought?: (ticket: WalletEntry, open: Opener) => void;
+  /**
+   * The bought ticket has come: the owl goes through the turnstiles with it where it can (true when it
+   * does, OP-190), and what follows the purchase gets the opener the card handed out.
+   */
+  bought?: (ticket: WalletEntry, open: Opener) => boolean;
 }
 
 /** What the card says above its own line: why the turnstiles stayed shut and that they sell a Day Ticket, then the early preview's warning. */
@@ -70,11 +76,22 @@ export interface GateSalePanel {
   busy(): boolean;
 }
 
+/** What the page does when the return page says checkout is done: asks for the focus (most browsers keep it where it is). */
+const askFocus = () => {
+  try {
+    globalThis.focus?.();
+  } catch {
+    // Nothing to do: the return page says where the ticket is.
+  }
+};
+
 /**
  * The turnstiles' sale: the card before the store, then the small card that says where checkout
- * stands. `toast` says when the ticket has come (or checkout closed).
+ * stands. `toast` says when the ticket has come (or checkout closed). While a checkout is watched,
+ * the store's return page (checkoutReturn.ts, on `channel`) gets an answer, and the wallet is looked
+ * at at once.
  */
-export function createGateSale(root: HTMLElement, ask: AskStore, toast: (message: string, ms?: number) => void, clock?: WatchClock): GateSalePanel {
+export function createGateSale(root: HTMLElement, ask: AskStore, toast: (message: string, ms?: number) => void, clock?: WatchClock, channel: MakeChannel = pageChannel, focus: () => void = askFocus): GateSalePanel {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -88,13 +105,25 @@ export function createGateSale(root: HTMLElement, ask: AskStore, toast: (message
   let opener: Opener | null = null;
   /** The buyer pressed Cancel: the ticket is still watched for a little, but the turnstiles may sell again. */
   let cancelled = false;
+  const now = () => clock?.now() ?? Date.now();
+  /** When the bought ticket last came: the store's return page still gets an answer a while after. */
+  let cameAt: number | null = null;
   const watch: CheckoutWatch = createCheckoutWatch((message, came) => {
-    toast(message, 6000);
-    if (!came) return;
+    if (!came) return toast(message, 6000);
+    cameAt = now();
     el.classList.remove('open');
     const s = sale;
-    if (s && opener) s.bought?.(came, opener);
+    // In through the turnstiles with it where the owl still stands at them (never on a held ticket), else where it works.
+    const goingIn = s && opener && s.bought ? s.bought(came, opener) : false;
+    toast(arrivedWords(came, goingIn), 6000);
   }, clock);
+  answerReturns(channel, () => {
+    const lately = cameAt !== null && now() - cameAt < ANSWER_AFTER_MS;
+    if (!watch.active() && !lately) return false;
+    watch.look();
+    focus();
+    return true;
+  });
 
   const button = (text: string, what: string, run: () => void): HTMLButtonElement => {
     const b = document.createElement('button');

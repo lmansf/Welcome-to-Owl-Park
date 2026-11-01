@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LOBBY_ROOM, RESTART_HOME, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -19,6 +19,8 @@ import { readAccountLink, withoutAccountLink } from './net/accountLinks';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
 import { createHud } from './ui/hud';
+import { CHECKOUT_WORDS, arrivedWords, createCheckoutWatch } from './ui/checkout';
+import { checkoutReturnPage, isCheckoutReturn, pageChannel, returnId, showReturnScreen, withoutCheckoutReturn } from './ui/checkoutReturn';
 import { attachKeyboard, type Keys } from './ui/keyboard';
 import { createLoadScreen, type LoadScreenState } from './ui/loader';
 import { announcePresents } from './ui/presents';
@@ -27,6 +29,20 @@ import { linkToast } from './ui/tickets';
 import { createRibbon } from './ui/ribbon';
 import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
+
+// Back from the store's checkout (OP-190, ui/checkoutReturn.ts): the store sends the buyer to
+// `?checkout=done`. A game page watching for the ticket answers, and this window (checkout's own)
+// closes or says the ticket is waiting in the park window, with Play here instead; with no answer
+// the park starts here, and Play takes the owl through the turnstiles once the ticket is on it.
+const checkoutBack = isCheckoutReturn(location.search)
+  ? await checkoutReturnPage({
+      make: pageChannel,
+      id: returnId(),
+      clean: () => history.replaceState(history.state, '', withoutCheckoutReturn(location.href)),
+      close: () => window.close(),
+      screen: (play) => showReturnScreen(document, play),
+    })
+  : null;
 
 const cfg = readConfig();
 const playerId = loadPlayerId(cfg);
@@ -324,12 +340,25 @@ function leaveHome(start: RoomStart): void {
   drawOwl(null, false);
   game.scene.getScene('home').scene.start('room', start satisfies RoomStart);
 }
+/** Back from checkout in this page (OP-190), until Play takes the owl in with the ticket; and the ticket, once it has come. */
+let backFromCheckout = false;
+let backWith: WalletEntry | null = null;
+/** What to say once the home screen is up, when the ticket came while the park was still starting. */
+let backSay: string | null = null;
 /**
  * Where Play lands the owl (OP-105): in its own nest, standing before its mirror, where Your owl is
  * (OP-077), every visit and on coming back alike. A first visit's nest is made as it is asked for.
  * Should the nests not answer, the lobby, outside the turnstiles, so that Play always gets the owl in.
+ * Back from checkout in this page (OP-190), the lobby before the turnstiles, with the ticket once it has come.
  */
 async function playStart(): Promise<RoomStart> {
+  if (backFromCheckout) {
+    // Back from checkout in this page (OP-190): in front of the turnstiles, and through them with the ticket.
+    const ticket = backWith ?? undefined;
+    if (ticket) backFromCheckout = false;
+    backWith = null;
+    return { room: LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
+  }
   const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
   return room ? { room, spawn: NEST_SPAWN } : { room: LOBBY_ROOM, spawn: undefined };
@@ -502,6 +531,11 @@ game.events.on(HOME_SHOWN, () => {
     void refreshWallet();
   }
   void refreshNotice();
+  // Back from checkout (OP-190): the ticket came while the park was starting.
+  if (backSay) {
+    hud.toast(backSay, 6000);
+    backSay = null;
+  }
   if (queued) startPlay();
   // Sent home by the park's nightly restart (OP-181): said once, calmly; Play brings the owl back in.
   if (game.registry.get(RESTARTED_KEY) === true) {
@@ -557,6 +591,37 @@ takeAccountLink();
 window.addEventListener('hashchange', takeAccountLink);
 // The Menu's Settings tab says which tickets this device holds (OP-108), where the park's server keeps them.
 hud.attachTickets(() => (transport.tickets ? transport.tickets.wallet() : Promise.resolve(null)));
+// Back from checkout in this page (OP-190): the wallet is watched for the bought ticket. On the home
+// screen it is said, and Play lands the owl in front of the turnstiles and on through them with it;
+// in the lobby the owl goes through by itself; held for the store's check, it is only said.
+if (checkoutBack && loggedIn && transport.tickets) {
+  const tickets = transport.tickets;
+  backFromCheckout = true;
+  const back = createCheckoutWatch((_message, came) => {
+    if (!came) return;
+    void refreshWallet();
+    const say = (words: string) => (home.isShown() || !atHome ? hud.toast(words, 6000) : (backSay = words));
+    if (came.status === 'held') {
+      backFromCheckout = false;
+      return say(CHECKOUT_WORDS.addedHeld);
+    }
+    if (atHome) {
+      backWith = came;
+      home.note(HOME_WORDS.added);
+      return say(CHECKOUT_WORDS.addedHome);
+    }
+    backFromCheckout = false;
+    // On the way in (the lobby still loading), it waits for the room, a little while.
+    const inRoom = (tries: number) => {
+      const room = roomScene();
+      if (!room && !atHome && tries < 40) return void setTimeout(() => inRoom(tries + 1), 500);
+      hud.toast(arrivedWords(came, room?.ticketCame(came) ?? false), 6000);
+    };
+    inRoom(0);
+  });
+  back.start({ wallet: () => tickets.wallet(), before: new Set(), win: null });
+  back.look();
+}
 // The collection loads in the background, once there is an owl to collect for.
 if (!cfg.home || loggedIn) startCollection();
 collection.onChange(() => roomScene()?.pruneWear());

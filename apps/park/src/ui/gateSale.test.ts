@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WalletEntry } from '../net';
 import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, LOOK_MS, type Opener, type Started, type WatchClock } from './checkout';
+import { ANSWER_AFTER_MS, RETURN_CHANNEL, askForGamePage, type ReturnChannel, type ReturnMessage } from './checkoutReturn';
 import { createGateSale, gateBuy, saleLines, type GateSale } from './gateSale';
 import { PREVIEW_WORDS } from './preview';
 import { goOn, type AskStore, type LinkMaker, type StoreGo } from './storeCard';
@@ -78,6 +79,25 @@ const link: LinkMaker = (url, text) => {
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
+/** BroadcastChannels of one browser, as the pages see them (checkoutReturn.ts): each hears what the others post. */
+function fakeChannels() {
+  const open: FakeChannel[] = [];
+  class FakeChannel implements ReturnChannel {
+    readonly name = RETURN_CHANNEL;
+    onmessage: ((ev: { data: unknown }) => void) | null = null;
+    constructor() {
+      open.push(this);
+    }
+    postMessage(message: ReturnMessage): void {
+      for (const c of [...open]) if (c !== this) c.onmessage?.({ data: structuredClone(message) });
+    }
+    close(): void {
+      open.splice(open.indexOf(this), 1);
+    }
+  }
+  return { make: () => new FakeChannel(), open };
+}
+
 describe('a Day Ticket at the turnstiles (OP-180)', () => {
   it('says why the turnstiles stayed shut, that a Day Ticket can be had right here, and the early preview’s warning while it runs', () => {
     expect(GATE_WORDS.buy).toBe('You can get a Day Ticket right here.');
@@ -146,18 +166,21 @@ describe('the turnstiles’ sale on the page (OP-180)', () => {
     vi.unstubAllGlobals();
   });
 
-  function setup(o = opener()) {
+  function setup(o = opener(), goingIn = true) {
     const root = new FakeEl('div');
     const asked: Array<{ go: StoreGo; say: readonly string[] | undefined }> = [];
     const ask: AskStore = (go, _opener, say) => asked.push({ go, say });
     const toasts: string[] = [];
     const t = testClock();
-    const panel = createGateSale(root as unknown as HTMLElement, ask, (m) => toasts.push(m), t.clock);
+    const channel = fakeChannels();
+    let focused = 0;
+    const panel = createGateSale(root as unknown as HTMLElement, ask, (m) => toasts.push(m), t.clock, channel.make, () => focused++);
     const card = () => root.find('gateSale', '')!;
     let wallet: WalletEntry[] = [];
     const bought: Array<[WalletEntry, Opener]> = [];
-    const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, checkout: async () => CART, wallet: async () => wallet, before: new Set(), bought: (tk, open) => bought.push([tk, open]) };
-    return { root, asked, toasts, t, panel, card, sale, bought, o, setWallet: (w: WalletEntry[]) => (wallet = w) };
+    let looks = 0;
+    const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, checkout: async () => CART, wallet: async () => (looks++, wallet), before: new Set(), bought: (tk, open) => (bought.push([tk, open]), goingIn && tk.status !== 'held') };
+    return { root, asked, toasts, t, panel, card, sale, bought, o, channel, looks: () => looks, focused: () => focused, setWallet: (w: WalletEntry[]) => (wallet = w) };
   }
 
   it('asks once, right before the purchase; checkout open, the ticket comes, and what follows gets the card’s opener', async () => {
@@ -184,9 +207,51 @@ describe('the turnstiles’ sale on the page (OP-180)', () => {
     s.setWallet([ticket('OWL-DAYT-ICKT')]);
     await s.t.advance(LOOK_MS);
     expect(s.toasts.at(-1)).toBe(CHECKOUT_WORDS.added);
+    expect(CHECKOUT_WORDS.added).toBe('Your ticket is here. In you go!');
     expect(s.card().classList.contains('open')).toBe(false);
     expect(s.bought.map(([t, open]) => [t.id, open])).toEqual([['OWL-DAYT-ICKT', s.o.open]]);
     expect(s.panel.busy()).toBe(false);
+  });
+
+  it('the owl wandered off from the turnstiles: the ticket is here and works at them; held, it waits on the store’s check', async () => {
+    const away = setup(opener(), false);
+    away.panel.sell(away.sale);
+    goOn(away.asked[0]!.go, away.o.open, link);
+    await settle();
+    away.setWallet([ticket('OWL-DAYT-ICKT')]);
+    await away.t.advance(LOOK_MS);
+    expect(away.bought).toHaveLength(1);
+    expect(away.toasts.at(-1)).toBe('Your ticket is here. It works at the turnstiles.');
+    const held = setup();
+    held.panel.sell(held.sale);
+    goOn(held.asked[0]!.go, held.o.open, link);
+    await settle();
+    held.setWallet([ticket('OWL-HELD-TCKT', { status: 'held' })]);
+    await held.t.advance(LOOK_MS);
+    expect(held.toasts.at(-1)).toBe('Your ticket is here. It works as soon as the store’s quick check is done.');
+  });
+
+  it('answers the store’s return page while checkout is watched, looks at the wallet at once and asks for the focus; not before, nor after', async () => {
+    const s = setup();
+    // No checkout yet: the return page hears nothing, and becomes the park.
+    expect(await askForGamePage(s.channel.make, 'r1', 400, () => settle().then(() => {}))).toBe(false);
+    s.panel.sell(s.sale);
+    goOn(s.asked[0]!.go, s.o.open, link);
+    await settle();
+    const looked = s.looks();
+    expect(await askForGamePage(s.channel.make, 'r2', 400, () => new Promise(() => {}))).toBe(true);
+    expect(s.looks()).toBe(looked + 1);
+    expect(s.focused()).toBe(1);
+    // The look finds the ticket: the owl goes in, at once, with no wait for the next look.
+    s.setWallet([ticket('OWL-DAYT-ICKT')]);
+    expect(await askForGamePage(s.channel.make, 'r3', 400, () => new Promise(() => {}))).toBe(true);
+    await settle();
+    expect(s.toasts.at(-1)).toBe(CHECKOUT_WORDS.added);
+    expect(s.panel.busy()).toBe(false);
+    // The ticket came before the store sent the buyer back: the return page still hears this page for a while, then no more.
+    expect(await askForGamePage(s.channel.make, 'r4', 400, () => new Promise(() => {}))).toBe(true);
+    await s.t.advance(ANSWER_AFTER_MS);
+    expect(await askForGamePage(s.channel.make, 'r5', 400, () => settle().then(() => {}))).toBe(false);
   });
 
   it('a blocked window gives the card’s link to tap; Cancel says so, and the turnstiles may sell again', async () => {
