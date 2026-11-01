@@ -44,8 +44,9 @@ export default defineConfig({
     // that chain runs close to a minute, so this project gets a longer per-test budget.
     // The ledge painter (paint.spec.ts, OP-156) saves to the room server, so it runs here too, and so
     // does a note sent from the home screen's Settings (feedback.spec.ts, OP-167), and the card before the
-    // store (storecard.spec.ts, OP-153), whose ways need the store's pages.
-    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    // store (storecard.spec.ts, OP-153), whose ways need the store's pages, and the keepers' entries
+    // setting (entries.spec.ts, OP-156), which the Worker reads when it writes a pass.
+    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart|entries)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {

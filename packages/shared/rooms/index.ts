@@ -1060,6 +1060,13 @@ export const ROOMS: Record<string, RoomDef> = {
 };
 
 /**
+ * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer
+ * (OP-156's entries setting): the lobby ring at the trunk's foot, until the canopy's street (level 5,
+ * OP-158) is built and takes its place.
+ */
+export const TREE_ARRIVAL = { room: 'l1', spawn: 'default' } as const;
+
+/**
  * The nest every owl has: a cosy round room inside a trunk, one screen. It is a template rather than
  * a room of the registry: each nest is this room under its own id, `nest-<nestId>`, as roomFor gives
  * it (homes.ts has the nest ids and the spots where the furniture stands).
@@ -1110,7 +1117,8 @@ export const NEST_ROOM: RoomDef = {
     // The round door in the west wall, out to the street: its rect is the doorway's floor. The owl
     // comes out by the nest door it went in by (`from-nest-<n>`, which only the visit knows), else
     // by door 0, its own nest's.
-    { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, marker: { x: 290, y: 580 } },
+    // An owl walking the tree (OP-156) goes out into the tree instead: the nests' street is in its canopy.
+    { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, toTree: { ...TREE_ARRIVAL }, marker: { x: 290, y: 580 } },
     // The floor in front of the mirror (NEST_MIRROR): standing here, Look in the mirror opens Your owl.
     { id: 'mirror', rect: { x: 560, y: 686, w: 140, h: 64 } },
   ],

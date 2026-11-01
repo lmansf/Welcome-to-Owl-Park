@@ -858,6 +858,22 @@ describe('the tree (map 2), dark until it opens (OP-156)', () => {
     expect(owl.closed).toBeNull();
     expect(owl.last('welcome')).toBeDefined();
   });
+
+  it('opens to every owl while the tree takes a share of new arrivals, and sends them out when it goes dark (OP-156)', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const realms = (r: unknown) => obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: r }) }));
+    await realms({ open: [], portal: false, night: null, tree: 30 });
+    const owl = await join(obj, 'l1', 'v_owl');
+    expect(owl.closed).toBeNull();
+    expect(owl.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null, tree: 30 });
+    // Today's gated realm keeps to its own checkbox.
+    expect((await join(obj, 'glass', 'v_glass')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+    // Back to 0: the tree goes dark, and the owl in it is told so and sent out.
+    await realms({ open: [], portal: false, night: null });
+    expect(owl.last('closed')).toMatchObject({ t: 'closed', room: 'l1', why: 'realm' });
+    expect(owl.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    expect((await join(obj, 'l1', 'v_late')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
 });
 
 describe('flight in the room object (OP-084)', () => {

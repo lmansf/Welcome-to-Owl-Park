@@ -29,6 +29,7 @@ import {
   arrivalPoint,
   backgroundTiles,
   mapOf,
+  realmShut,
   speciesOf,
   tileFade,
   tilePlacement,
@@ -121,7 +122,7 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_GROUND, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom } from '../rooms';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
@@ -1227,7 +1228,7 @@ export class RoomScene extends Phaser.Scene {
   private prefetchNear(now: number): void {
     if (now < this.prefetchAt) return;
     this.prefetchAt = now + 500;
-    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), walkingMap())) prefetchRoomArt(this, to, this.cfg);
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking())) prefetchRoomArt(this, to, this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */
@@ -2229,7 +2230,7 @@ export class RoomScene extends Phaser.Scene {
     // the first leg now (OP-148). A perch's top asked for from the floor has no way round: its face.
     const aim = snapToWalkable(target, f.walkable);
     if (!fromKeys && distance(to, aim) > WAY_SHORT_PX) {
-      const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id), walkingMap())]);
+      const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id), this.walking())]);
       if (legs?.[0]) {
         to = resolveTarget({ ...this.me.pos }, legs[0], f.walkable, f.shut);
         this.wayTo = aim;
@@ -2644,13 +2645,24 @@ export class RoomScene extends Phaser.Scene {
    */
   private realmClosed(roomId: string | undefined): boolean {
     const room = roomId ? ROOMS[roomId] : undefined;
-    if (!room || room.gated !== true || this.realms.open.includes(room.id)) return false;
+    // The switch's own rule (realmShut): the tree is open too while it takes a share of the arrivals (OP-156).
+    if (!room || !realmShut(room, this.realms)) return false;
     return !(mapOf(room) === 2 && storedKeeper() !== null);
   }
 
   /** Where `door` leads this owl: the tree's way for an owl walking the tree (OP-162). */
   private doorTo(door: DoorDef): DoorDef['to'] {
-    return doorTarget(door, walkingMap());
+    return doorTarget(door, this.walking());
+  }
+
+  /**
+   * The park this owl walks (walkingMap), while it can: with the tree shut to it (dark again, and no
+   * keeper's token), an owl of the tree takes today's park's ways, so its nest's door and a realm's
+   * way out still lead somewhere rather than to a closed tree (OP-156).
+   */
+  private walking(): 1 | 2 {
+    const map = walkingMap();
+    return map === 2 && this.realmClosed(TREE_ARRIVAL.room) ? 1 : map;
   }
 
   /** Whether the owl stands at the height `door` is taken at (a side view's doorway, OP-162); any height for a doorway without one. */

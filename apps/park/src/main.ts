@@ -12,6 +12,8 @@ import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
 import { NEST_SPAWN, RESTARTED_KEY, RoomScene, type RoomStart } from './game/RoomScene';
+import { startWalking } from './game/walkingMap';
+import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
@@ -326,11 +328,16 @@ function leaveHome(start: RoomStart): void {
  * Where Play lands the owl (OP-105): in its own nest, standing before its mirror, where Your owl is
  * (OP-077), every visit and on coming back alike. A first visit's nest is made as it is asked for.
  * Should the nests not answer, the lobby, outside the turnstiles, so that Play always gets the owl in.
+ * An owl the keepers send into the tree (OP-156's entries setting, its pass says so) walks the tree
+ * from here: its nest's door leads out into the tree, and without a nest it starts at the tree's arrival.
  */
 async function playStart(): Promise<RoomStart> {
+  const map = transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  startWalking(map);
   const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
-  return room ? { room, spawn: NEST_SPAWN } : { room: LOBBY_ROOM, spawn: undefined };
+  if (room) return { room, spawn: NEST_SPAWN };
+  return map === 2 ? { room: TREE_ARRIVAL.room, spawn: TREE_ARRIVAL.spawn } : { room: LOBBY_ROOM, spawn: undefined };
 }
 let collecting = false;
 /** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */

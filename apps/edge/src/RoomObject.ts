@@ -50,7 +50,10 @@ import {
   portraitLook,
   cleanRealms,
   climbRef,
+  mapOf,
+  realmShut,
   sameRealms,
+  treeShare,
   startRun,
   wearVariants,
   type ClientAct,
@@ -501,9 +504,13 @@ export class RoomObject extends DurableObject<Env> {
     for (const room of this.rooms.values()) room.broadcast({ t: 'notice', words: w });
   }
 
-  /** A gated room not in the switch's `open` (the stained-glass climb). Rooms without `gated` are never closed this way. */
+  /**
+   * A gated room the switch keeps shut (realmShut): not in its `open` (the stained-glass climb), and for
+   * a room of the tree, while the tree takes no share of the arrivals (OP-156). Rooms without `gated`
+   * are never closed this way.
+   */
   private realmClosed(roomId: string): boolean {
-    return roomDef(roomId)?.gated === true && !this.realms.open.includes(roomId);
+    return realmShut(roomDef(roomId), this.realms);
   }
 
   /** The approved phrase the hub's door into `roomId` shows while it is closed. */
@@ -520,10 +527,14 @@ export class RoomObject extends DurableObject<Env> {
     if (sameRealms(next, this.realms)) return;
     const before = this.realms;
     this.realms = next;
-    this.log.debug('room.realms', 'realms_set', 'The realms switch reached this room object.', { open: next.open, portal: next.portal, ...(next.night ? { night: next.night } : {}) });
+    this.log.debug('room.realms', 'realms_set', 'The realms switch reached this room object.', { open: next.open, portal: next.portal, ...(next.night ? { night: next.night } : {}), ...(treeShare(next) ? { tree: treeShare(next) } : {}) });
     void this.ctx.storage.put(REALMS_KEY, next);
     for (const room of this.rooms.values()) room.broadcast({ t: 'realms', realms: next });
     for (const roomId of before.open) if (!next.open.includes(roomId) && roomDef(roomId)?.gated) this.sendRealmAway(roomId);
+    // The tree went dark (its share of the arrivals back to 0): its gated rooms close as a realm does (OP-156).
+    if (treeShare(before) > 0 && treeShare(next) === 0) {
+      for (const room of Object.values(ROOMS)) if (mapOf(room) === 2 && room.gated && !next.open.includes(room.id) && !before.open.includes(room.id)) this.sendRealmAway(room.id);
+    }
   }
 
   // ---------- the nightly restart (OP-181) ----------

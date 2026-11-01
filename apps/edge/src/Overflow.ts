@@ -51,6 +51,7 @@ import {
   REALMS_DEFAULTS,
   isNightKey,
   sameRealms,
+  treeShare,
   withRealmsChanges,
   type RealmsSettings,
   hashForLog,
@@ -337,7 +338,7 @@ export class Overflow extends DurableObject<Env> {
       if (body['realms'] !== undefined) {
         const next = withRealmsChanges(realms, body['realms'], (r) => GATED_ROOMS.includes(r), isNightKey);
         if (!next) return Response.json({ error: 'bad realms' }, { status: 400 });
-        if (!sameRealms(next, realms)) this.log.info('overflow', 'realms_set', 'The keepers changed the realms switch.', { open: next.open, portal: next.portal, night: next.night ?? 'moon' });
+        if (!sameRealms(next, realms)) this.log.info('overflow', 'realms_set', 'The keepers changed the realms switch.', { open: next.open, portal: next.portal, night: next.night ?? 'moon', tree: treeShare(next) });
         realms = next;
       }
       if (body['line'] !== undefined) {

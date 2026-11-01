@@ -1,4 +1,4 @@
-import { mapOf, type RoomDef } from '@owl-park/shared';
+import { isNestRoom, mapOf, type RoomDef } from '@owl-park/shared';
 import { TREE_REALMS } from '../rooms';
 
 /**
@@ -21,10 +21,21 @@ export function walkingMap(): 1 | 2 {
   }
 }
 
-/** The owl has come into `room`: the park it walks follows, unless the room is a realm both parks share. */
+/**
+ * The owl has come into `room`: the park it walks follows, unless the room is one both parks share: a
+ * realm the tree opens into, or a nest (an owl of the tree comes out of its nest into the tree, OP-156).
+ */
 export function enteredRoom(room: Pick<RoomDef, 'id' | 'map'>): void {
-  const map = mapOf(room) === 2 ? 2 : TREE_REALMS.has(room.id) ? null : 1;
-  if (map === null) return;
+  const map = mapOf(room) === 2 ? 2 : TREE_REALMS.has(room.id) || isNestRoom(room.id) ? null : 1;
+  if (map !== null) keep(map);
+}
+
+/** The park an owl starts walking as Play brings it in (OP-156's entries setting): its pass says which. */
+export function startWalking(map: 1 | 2): void {
+  keep(map);
+}
+
+function keep(map: 1 | 2): void {
   try {
     sessionStorage.setItem(STORE, String(map));
   } catch {

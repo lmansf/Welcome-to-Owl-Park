@@ -5,7 +5,7 @@
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
 import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type SavedMasks, type TravelState } from '@owl-park/shared';
-import { SOURCES, type Source } from '@owl-park/shared';
+import { SOURCES, entryMap, treeShare, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, mailSender, offerOrderProtect, orderEmail } from './accounts';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
@@ -28,7 +28,7 @@ import { gatePage } from './gatePage';
 import { health } from './health';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId, paintableRoom, roomCap } from './rooms';
-import { GATED_ROOMS } from '@owl-park/shared/rooms';
+import { GATED_ROOMS, TREE_ARRIVAL } from '@owl-park/shared/rooms';
 import { NIGHTS } from '@owl-park/shared';
 import { KINDS, passCartLink, ticketCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
@@ -462,7 +462,11 @@ const park = {
       const pass = await mintPass(secret, payload);
       log.info('worker.pass', 'pass_issued', 'A guest pass went out.', { session_id: hashForLog(payload.id), collector_hash: hashForLog(cid), new_collector: !known });
       // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
-      return Response.json({ pass, exp, collector, gate: (await gateOf(env)).mode, adm: payload.adm, ...(account ? { account } : {}) }, { headers: CORS });
+      const gate = await gateOf(env);
+      // The entries setting (OP-156): an owl the keepers send into the tree starts there, if the front
+      // gate would let it into the tree's arrival at all (a guest pass is not, while the park takes tickets).
+      const map = entryMap(cid, treeShare((await overflowOf(env)).realms)) === 2 && mayEnter(gate, payload, TREE_ARRIVAL.room) ? 2 : 1;
+      return Response.json({ pass, exp, collector, gate: gate.mode, adm: payload.adm, ...(map === 2 ? { map } : {}), ...(account ? { account } : {}) }, { headers: CORS });
     }
 
     if (url.pathname === '/api/entry') {

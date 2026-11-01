@@ -87,6 +87,11 @@ export interface ParkTransport {
    * goes through. Transports without a server have an open gate.
    */
   entry?(): Promise<Entry>;
+  /**
+   * Which park this owl starts in (OP-156's entries setting): 2 when the keepers send it into the tree,
+   * else 1. Transports without a server have only today's park.
+   */
+  entryMap?(): Promise<1 | 2>;
   /** The ticket wallet on this device (C35); only the room server keeps tickets. */
   readonly tickets?: TicketWallet;
   /** The line in front of the park on busy nights (OP-075); only the room server has one. */

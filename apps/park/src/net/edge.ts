@@ -61,6 +61,8 @@ interface Pass {
   adm?: boolean;
   /** The owl's account (OP-139), while the park has accounts on. */
   account?: OwlAccount;
+  /** The park this owl starts in, 2 when the keepers send it into the tree (OP-156); absent is today's park. */
+  map?: 1 | 2;
 }
 
 /** The park says this screen's owl is on another screen now (OP-139). */
@@ -352,6 +354,11 @@ export class EdgeTransport implements ParkTransport {
     }
     const pass = await this.getPass();
     return pass.gate === 'ticket' ? { gate: 'ticket', admitted: pass.adm === true } : OPEN_ENTRY;
+  }
+
+  /** Which park this owl starts in, as its pass says (OP-156's entries setting). */
+  async entryMap(): Promise<1 | 2> {
+    return (await this.getPass()).map === 2 ? 2 : 1;
   }
 
   /** POST a vote with this visitor's pass; the server decides admission and the daily limit. */
