@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, ID_ALPHABET, UNUSED_LIFETIME_MS, isTicketId, scan, statusOf, timeLeft, visualId, type Ticket } from '../src/tickets';
+import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, ID_ALPHABET, LIFETIME_MS, UNUSED_LIFETIME_MS, isTicketId, lifetime, scan, statusOf, timeLeft, visualId, type Ticket } from '../src/tickets';
 
 const T0 = Date.UTC(2026, 10, 1, 12, 0, 0);
 
@@ -61,6 +61,23 @@ describe('other kinds', () => {
   it('an annual pass lasts 365 days from its first scan', () => {
     const r = scan(ticket({ kind: 'annual', lengthMs: DEFAULT_LENGTH_MS.annual }), T0 + DAY_MS);
     expect(r.ok && r.ticket.validUntil).toBe(T0 + 366 * DAY_MS);
+  });
+
+  it('a lifetime pass (OP-171) never runs out, used or not, and shows no time left', () => {
+    const t = ticket({ kind: 'annual', lengthMs: LIFETIME_MS, order: 'comp-1' });
+    expect(lifetime(t)).toBe(true);
+    expect(lifetime(ticket({ kind: 'annual', lengthMs: DEFAULT_LENGTH_MS.annual }))).toBe(false);
+    // Never scanned, it does not expire after the year an unused ticket gets.
+    expect(statusOf(t, T0 + 5 * UNUSED_LIFETIME_MS)).toBe('unused');
+    expect(timeLeft(t, T0 + DAY_MS)).toEqual({ status: 'unused', msLeft: null });
+    const r = scan(t, T0 + 2 * UNUSED_LIFETIME_MS);
+    if (!r.ok) throw new Error('scan refused');
+    expect(statusOf(r.ticket, T0 + 50 * 365 * DAY_MS)).toBe('active');
+    expect(timeLeft(r.ticket, T0 + 50 * 365 * DAY_MS)).toEqual({ status: 'active', msLeft: null });
+    const again = scan(r.ticket, T0 + 60 * 365 * DAY_MS);
+    expect(again.ok && !again.started).toBe(true);
+    // Refunded or revoked, it stops like any other ticket.
+    expect(statusOf({ ...r.ticket, revoked: T0 + 3 * UNUSED_LIFETIME_MS }, T0 + 3 * UNUSED_LIFETIME_MS)).toBe('revoked');
   });
 
   it('a night ticket needs its hours from the store before it can start', () => {
