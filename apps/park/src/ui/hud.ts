@@ -568,7 +568,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
-  const settingsScreen = createSettingsScreen(root, settings);
+  // Its Send feedback opens the same form as the Menu's (OP-167); closed, it gives the focus back to the home screen's Settings button.
+  const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
   // Which owl are you (OP-076) covers the whole screen, like the owl builder.
   const whichOwl = createWhichOwlScreen(root);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
