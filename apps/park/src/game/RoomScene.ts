@@ -28,6 +28,9 @@ import {
   STREET_ROOM,
   arrivalPoint,
   backgroundTiles,
+  mapOf,
+  speciesOf,
+  tilePlacement,
   cabinetAt,
   closestPointOnSegment,
   distance,
@@ -77,6 +80,7 @@ import {
   type Rect,
   type Shut,
   type RoomDef,
+  type RoomTile,
   type Vec2,
   type Walk,
   type Wear,
@@ -135,7 +139,7 @@ import { NestMirror } from './mirror';
 import { NestDecor, pieceThumb } from './nest';
 import { firstGlint, firstNestWelcome, streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
 import { NpcOwl } from './Npc';
-import { Owl } from './Owl';
+import { OWL_SCALE, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 
@@ -242,6 +246,10 @@ export class RoomScene extends Phaser.Scene {
   private me!: Owl;
   private peers = new Map<string, Owl>();
   private built = false;
+  /** The room's art tiles that scroll at a rate of their own (OP-156), put back in place when the camera is fitted. */
+  private parallax: Array<{ t: RoomTile; img: Phaser.GameObjects.Image }> = [];
+  /** The point a tree room's camera follows: the own owl as drawn (OP-156). */
+  private readonly camAt = { x: 0, y: 0 };
   private conn: RoomConnection | null = null;
   /**
    * What the room says while its art loads (OP-129): the page joins as the art starts to load, and
@@ -573,6 +581,35 @@ export class RoomScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * A tile of the room's art: one that scrolls at a rate of its own (the tree's sky plate and overlay,
+   * OP-156) is drawn with that scroll factor where tilePlacement puts it for the camera's size, and put
+   * back there whenever the camera is fitted again.
+   */
+  private placeTile(t: RoomTile, img: Phaser.GameObjects.Image): void {
+    if ((t.rate ?? 1) === 1) return;
+    img.setScrollFactor(t.rate ?? 1);
+    this.parallax.push({ t, img });
+    this.placeParallax(t, img);
+  }
+
+  private placeParallax(t: RoomTile, img: Phaser.GameObjects.Image): void {
+    const cam = this.cameras.main;
+    const p = tilePlacement(t, { w: cam.width, h: cam.height });
+    img.setPosition(p.x, p.y).setDisplaySize(p.w + 1, p.h + 1);
+  }
+
+  /**
+   * What the camera follows: the owl's spot on the floor, or in a room of the tree (map 2, seen from the
+   * side) the owl as drawn, its height included, so the camera climbs with it and the layers' rates show.
+   */
+  private followed(): { x: number; y: number } {
+    if (mapOf(this.room) !== 2) return this.me;
+    this.camAt.x = this.me.x;
+    this.camAt.y = this.me.y - this.flier.air.z;
+    return this.camAt;
+  }
+
   /** Whether the owl stands still: no walk under way, no key or stick held, on the ground. */
   private still(): boolean {
     return !this.me.walking && !this.keys?.direction() && this.flier.air.s === GROUNDED;
@@ -585,7 +622,7 @@ export class RoomScene extends Phaser.Scene {
 
     // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
     // hairline of the clear colour shows at a join while the camera scrolls.
-    for (const t of backgroundTiles(room)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1);
+    for (const t of backgroundTiles(room)) this.placeTile(t, this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W + 1, ROOM_H + 1).setDepth(-1));
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
@@ -630,10 +667,10 @@ export class RoomScene extends Phaser.Scene {
       this.mirror = new NestMirror(this, NEST_MIRROR);
     }
     for (const t of foregroundTiles(room)) {
-      if (this.textures.exists(t.key)) this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100);
+      if (this.textures.exists(t.key)) this.placeTile(t, this.add.image(t.x, t.y, t.key).setOrigin(0).setDisplaySize(ROOM_W, ROOM_H).setDepth(room.size.h + 100));
     }
 
-    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio));
+    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1);
     this.me.groundUnder = this.groundUnder;
     this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
@@ -693,6 +730,8 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     this.fly(now);
     let finished = this.me.tick(now);
+    this.camAt.x = this.me.x;
+    this.camAt.y = this.me.y - this.flier.air.z;
     // A leg of a way around a bend done (OP-148): the next sets off at once, and the walk goes on.
     if (finished && this.wayTo && this.walkOn()) finished = false;
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
@@ -925,7 +964,7 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     let owl = this.peers.get(s.id);
     if (!owl) {
-      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio));
+      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1);
       owl.groundUnder = this.groundUnder;
       owl.calm = () => this.calm();
       owl.setAlpha(0);
@@ -1304,7 +1343,7 @@ export class RoomScene extends Phaser.Scene {
     const cam = this.cameras.main;
     if (frame) cam.stopFollow();
     this.fitCamera();
-    if (!frame) cam.startFollow(this.me, true, 0.12, 0.12);
+    if (!frame) cam.startFollow(this.followed(), true, 0.12, 0.12);
   }
 
   /**
@@ -1460,6 +1499,12 @@ export class RoomScene extends Phaser.Scene {
     soft: string[];
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
+    /** The art tiles that scroll at rates of their own (OP-156): each one's key, scroll factor and where it is drawn. */
+    layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number }>;
+    /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
+    owlScale: number;
+    /** Where the camera's view is, in room pixels (OP-156: a tree room's camera follows the owl as drawn). */
+    view: { x: number; y: number; w: number; h: number };
   } | null {
     if (!this.built) return null;
     return {
@@ -1478,6 +1523,9 @@ export class RoomScene extends Phaser.Scene {
       eyes: this.me.anchor('eyes').x,
       owlArt: this.me.artKey,
       owlWorn: this.me.wornKey,
+      layers: this.parallax.map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight })),
+      owlScale: this.me.scaleX / (OWL_SCALE * speciesOf(this.look).size),
+      view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
@@ -2470,7 +2518,7 @@ export class RoomScene extends Phaser.Scene {
     this.hud.closeDecorate();
     if (!camera) return;
     this.fitCamera();
-    this.cameras.main.startFollow(this.me, true, 0.12, 0.12);
+    this.cameras.main.startFollow(this.followed(), true, 0.12, 0.12);
   }
 
   /** A spot was chosen, in the room (a tap on its ring) or on the sheet. */
@@ -2551,7 +2599,7 @@ export class RoomScene extends Phaser.Scene {
   private setupCamera(): void {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, this.room.size.w, this.room.size.h);
-    cam.startFollow(this.me, true, 0.12, 0.12);
+    cam.startFollow(this.followed(), true, 0.12, 0.12);
     const fit = () => this.fitCamera();
     fit();
     this.scale.on(Phaser.Scale.Events.RESIZE, fit);
@@ -2578,6 +2626,7 @@ export class RoomScene extends Phaser.Scene {
     const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
     cam.setViewport(0, 0, width, h);
     cam.setZoom(Math.max(width / this.room.size.w, h / this.room.size.h));
+    for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }
 
   private drawDebug(): void {

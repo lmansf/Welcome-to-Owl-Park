@@ -11,7 +11,7 @@ import Phaser from 'phaser';
 import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
-import { ROOMS, roomFor } from '../rooms';
+import { ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { loadSvgTexture } from './svgLoader';
@@ -61,6 +61,11 @@ export const ART: Record<string, ArtSpec> = {
   'climb-ledge-b': { w: 240, h: 60, kind: 'climb' },
   'climb-balcony': { w: 480, h: 120, kind: 'climb' },
   'climb-cloud-cap': { w: 480, h: 220, kind: 'climb' },
+  // The tree (map 2, OP-128): a screen's three layers, the sky plate, the playfield the owl stands on and
+  // the overlay in front of it (OP-157's style frame, level 1's trunk screen). Placeholders until approved.
+  'tree-l1-0-bg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-0-play': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  'tree-l1-0-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
   // The stained-glass realm's idol, on the plinth of its west screen.
@@ -516,6 +521,14 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
   switch (spec.kind) {
     case 'room': {
       if (key.endsWith('-fg')) break; // transparent overlay
+      if (key.startsWith('tree-')) {
+        // The tree's layers (map 2): the playfield is its ground under the ground line, the sky left to
+        // the plate behind it; the plate is the night.
+        g.fillStyle(key.endsWith('-play') ? 0x4a3322 : 0x0c1e36, 1);
+        if (key.endsWith('-play')) g.fillRect(0, TREE_GROUND, w, h - TREE_GROUND);
+        else g.fillRect(0, 0, w, h);
+        break;
+      }
       const fill: Record<string, number> = { hub: 0x163157, grove: 0x3b2a4a, market: 0x0b0b16 };
       g.fillStyle(fill[key] ?? 0x0c1e36, 1);
       g.fillRect(0, 0, w, h);

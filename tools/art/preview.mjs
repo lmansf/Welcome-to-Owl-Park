@@ -3,11 +3,12 @@
  * Preview finished art in the real game before it is published.
  *
  *   pnpm art:preview [--finals work/art/final] [--rooms hub,grove,market] [--out work/art/preview]
- *                    [--owls 4] [--views desktop,phone] [--keep-site]
+ *                    [--owls 4] [--views desktop,phone,landscape] [--keep-site]
  *
- * Builds the client once and makes two copies of it: "current", with the art in
- * apps/park/public/art as it is now, and "new", with every final PNG and WebP from the finals folder laid
- * over it (the matching placeholder SVG removed, since the loader prefers an SVG). Both are served
+ * Builds the client twice: "current", with the art in apps/park/public/art as it is now, and "new",
+ * with every final PNG and WebP from the finals folder laid over it (the matching placeholder SVG
+ * removed, since the loader prefers an SVG). The new copy is built against that art folder, since the
+ * client asks only for the files its build lists (OP-129), a new key's or format's too. Both are served
  * locally and each room is opened in a headless browser with a few visitor owls walking about
  * (local transport, no server or account). When the finals include a species' own layers
  * (`owl-barn-body` and so on), the visitors are owls of those species in their natural colours,
@@ -25,7 +26,7 @@ import { parseArgs } from 'node:util';
 
 export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
-export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest', 'glass'];
+export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest', 'glass', 'l1'];
 
 /** Which room shows each key. Owl layers and the blockades show in the hub (owls show everywhere). */
 const ROOM_OF = {
@@ -35,12 +36,15 @@ const ROOM_OF = {
   // The climb's tower pieces show in their own screen over the glass realm, not in a room; the realm stands in for them.
   'climb-sky': 'glass', 'climb-column': 'glass', 'climb-ledge-a': 'glass', 'climb-ledge-b': 'glass', 'climb-balcony': 'glass', 'climb-cloud-cap': 'glass',
 };
-/** Furniture (`decor-<id>`) stands in a nest. */
-const roomOfKey = (k) => ROOM_OF[k] ?? (k.startsWith('decor-') ? 'nest' : ROOMS.find((r) => k === r || k.startsWith(`${r}-`)));
+/** Furniture (`decor-<id>`) stands in a nest; a layer of the tree (`tree-l1-0-play`) in its level's room (`l1`, OP-156). */
+const roomOfKey = (k) =>
+  ROOM_OF[k] ?? (k.startsWith('decor-') ? 'nest' : (/^tree-(l\d+)-/.exec(k)?.[1] ?? ROOMS.find((r) => k === r || k.startsWith(`${r}-`))));
 
 export const VIEWS = {
   desktop: { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, isMobile: false, hasTouch: false, showWidth: 960 },
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, showWidth: 360 },
+  // A phone on its side: the tree is played in landscape on phones (OP-155).
+  landscape: { viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, showWidth: 720 },
 };
 
 /** Visitor looks from the client's own colour lists (packages/shared/src/look.ts). */
@@ -135,9 +139,10 @@ export function serve(root) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` })));
 }
 
-function buildSite(outDir) {
+/** The client built into `outDir`; with `artDir`, listing that art folder's files in place of public/art's. */
+function buildSite(outDir, artDir) {
   const r = spawnSync('pnpm', ['--filter', '@owl-park/park', 'exec', 'vite', 'build', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'], {
-    cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, VITE_TRANSPORT: 'local' },
+    cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, VITE_TRANSPORT: 'local', ...(artDir ? { PARK_ART_DIR: artDir } : {}) },
   });
   if (r.status !== 0) throw new Error(`client build failed:\n${r.stderr || r.stdout}`);
 }
@@ -258,9 +263,13 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
     const current = path.join(site, 'current');
     const next = path.join(site, 'new');
     buildSite(current);
-    fs.cpSync(current, next, { recursive: true });
-    const removed = overlayFinals(next, finalsDir, files);
+    // The art folder with the finals laid over, for the new copy's build to list; then the files themselves.
+    const merged = path.join(site, 'merged');
+    fs.cpSync(path.join(current, 'art'), path.join(merged, 'art'), { recursive: true });
+    const removed = overlayFinals(merged, finalsDir, files);
     if (removed.length) out(`replaced in the new copy: ${removed.join(', ')}`);
+    buildSite(next, path.join(merged, 'art'));
+    overlayFinals(next, finalsDir, files);
 
     const a = await serve(current);
     const b = await serve(next);

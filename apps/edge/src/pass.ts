@@ -231,3 +231,28 @@ export async function verifyLink(secret: string, token: unknown, kind: LinkPaylo
   if (!p || p['k'] !== 'acl' || p['kind'] !== kind || typeof p['n'] !== 'string' || !NONCE_RE.test(p['n']) || typeof p['exp'] !== 'number' || p['exp'] < nowS) return null;
   return p['n'];
 }
+
+/**
+ * A keeper's token (OP-156): a keeper who gave the admin key walks the tree (map 2) while it is dark.
+ * Signed like a pass and saying only until when, it lets its owl into a gated room the realms switch
+ * keeps closed; the page keeps it for one tab and never the key itself.
+ */
+export interface KeeperPayload {
+  k: 'kpr';
+  /** Expiry, Unix seconds. */
+  exp: number;
+}
+
+/** How long a keeper's token lets its tab into the dark rooms: an evening's work. */
+export const KEEPER_TTL_S = 12 * 60 * 60;
+
+export async function mintKeeper(secret: string, exp = Math.floor(Date.now() / 1000) + KEEPER_TTL_S): Promise<string> {
+  return sign(secret, { k: 'kpr', exp } satisfies KeeperPayload);
+}
+
+/** Whether this is a keeper's token, good now (a pass, an entry or any other token never is). */
+export async function verifyKeeper(secret: string, token: unknown, nowS = Math.floor(Date.now() / 1000)): Promise<boolean> {
+  if (typeof token !== 'string') return false;
+  const p = await verified(secret, token);
+  return !!p && p['k'] === 'kpr' && typeof p['exp'] === 'number' && p['exp'] >= nowS;
+}

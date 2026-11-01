@@ -79,7 +79,7 @@ import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
-import { isCollectorId } from './pass';
+import { isCollectorId, signingSecret, verifyKeeper } from './pass';
 import type { Env } from './env';
 
 interface Attachment {
@@ -673,8 +673,9 @@ export class RoomObject extends DurableObject<Env> {
         // v2 hook: the Worker marks admitted passes; guests are refused when the gate is closed.
       }
       if (!isNestRoom(att.room)) {
-        if (this.realmClosed(att.room)) {
-          // A gated realm the keepers have not opened: the page walks the owl back to the hub.
+        // A gated realm the keepers have not opened: the page walks the owl back to the hub. A keeper's
+        // token (OP-156) lets its owl in, to walk the tree (map 2) while it is dark.
+        if (this.realmClosed(att.room) && !(await verifyKeeper(signingSecret(this.env), frame.keeper))) {
           this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a realm the keepers have not opened.', { reason: 'realm' });
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');

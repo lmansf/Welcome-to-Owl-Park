@@ -96,6 +96,8 @@ export interface ClientHello {
   pos?: Vec2;
   /** Come by travel from the map (OP-130): into the park, only once the owl has walked through the gate. */
   via?: 'travel';
+  /** A keeper's token (OP-156): the room lets its owl into a gated room the keepers keep closed (the tree, map 2, while it is dark). */
+  keeper?: string;
 }
 export interface ClientMove {
   t: 'move';
@@ -465,6 +467,8 @@ export type ServerFrame =
 // ---- validation (server side, strict) ----
 
 const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
+/** A keeper's token as the Worker signs it: two base64url parts, short enough for a hello. */
+const KEEPER_TOKEN = /^[A-Za-z0-9_-]{1,200}\.[A-Za-z0-9_-]{43}$/;
 const OBJECT_ID = /^[a-z][a-z0-9-]{0,47}$/;
 
 const isRequest = (r: unknown): r is number => typeof r === 'number' && Number.isInteger(r) && r >= 0 && r <= 1e9;
@@ -496,6 +500,10 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (v['via'] !== undefined) {
         if (v['via'] !== 'travel') return null;
         out.via = 'travel';
+      }
+      if (v['keeper'] !== undefined) {
+        if (typeof v['keeper'] !== 'string' || !KEEPER_TOKEN.test(v['keeper'])) return null;
+        out.keeper = v['keeper'];
       }
       return out;
     }

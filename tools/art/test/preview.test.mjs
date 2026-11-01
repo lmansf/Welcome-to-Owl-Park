@@ -36,6 +36,8 @@ test('roomsTouched maps keys to rooms in park order; owls and blockades alone me
   assert.deepEqual(V.roomsTouched(['market-east-fg', 'grove-west']), ['grove', 'market']);
   assert.deepEqual(V.roomsTouched(['homes-west', 'decor-rug']), ['homes', 'nest']);
   assert.deepEqual(V.roomsTouched(['nest', 'decor-wall-clock']), ['nest']);
+  // The tree's layers show in their level's room, after today's park (OP-156).
+  assert.deepEqual(V.roomsTouched(['tree-l1-0-fg', 'tree-l1-0-bg', 'hub']), ['hub', 'l1']);
 });
 
 test('overlayFinals copies the finals and hides the placeholder SVG the loader would prefer', () => {

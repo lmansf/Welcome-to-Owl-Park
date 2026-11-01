@@ -1687,7 +1687,10 @@
       "kind": "item",
       "key_colour": "#00FF00",
       "with_2x": true
-    }
+    },
+    "tree-l1-0-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l1-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l1-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"}
   },
   "helpers": {
     "tree-master": {

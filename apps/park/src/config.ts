@@ -72,6 +72,11 @@ export interface ParkConfig {
    * drawn, and every jump. It shows only once the keepers' key it asks for checks out with the room server.
    */
   pos: boolean;
+  /**
+   * Ask for a keeper's token (OP-156, `?keeper=1`): the page asks for the keepers' key and trades it
+   * for a token that lets this tab's owl into the tree (map 2, `?room=l1`) while it is dark.
+   */
+  keeper: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -108,5 +113,6 @@ export function readConfig(): ParkConfig {
     awayAnswerMs: seconds(q.get('answer'), 60) * 1000,
     boxes: q.get('boxes') === '1' && (env.DEV || ((env.VITE_BOXES as string | undefined) ?? '').trim() === 'on'),
     pos: q.get('pos') === '1',
+    keeper: q.get('keeper') === '1',
   };
 }

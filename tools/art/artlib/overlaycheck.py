@@ -84,7 +84,14 @@ def key_spill(img: Image.Image, key_colour: str, hue_window: float = 45.0, min_s
 
 
 def check_overlay(img: Image.Image, geom: dict, room_id: str, erode_px: int = 60, max_cover: float = 0.05, disc_r: int = 24, alpha_threshold: int = 64, sign_max_cover: float = 0.5,
-                  board_max_cover: float = 0.01, key_colour: str | None = None, spill_max: float = 0.005) -> dict:
+                  board_max_cover: float = 0.01, key_colour: str | None = None, spill_max: float = 0.005, behind: bool = False) -> dict:
+    """What would make an overlay wrong over its room. A layer drawn in front of the owls must keep the
+    walkable floor, the spawns, the doorways and the closed signs clear; one drawn behind them
+    (``behind``: the tree's playfield, OP-156, which the owls stand on) is checked for key haze only.
+
+    TODO-DOCS (OP-157): docs/ART-PIPELINE.md's overlay section: a room layer the table marks
+    ``"overlay": true`` is finished like a ``-fg`` (keyed out of its backdrop), as WebP with its alpha
+    when it is also marked webp, and one a room draws behind the owls is checked for key haze only."""
     room = room_of(geom, room_id)
     if img.mode != "RGBA":
         img = img.convert("RGBA")
@@ -96,35 +103,38 @@ def check_overlay(img: Image.Image, geom: dict, room_id: str, erode_px: int = 60
     denom = int(interior.sum())
     coverage = float((opaque & interior).sum()) / denom if denom else 0.0
     report: dict = {"room": room_id, "coverage": round(coverage, 4), "max_cover": max_cover, "violations": []}
-    if coverage > max_cover:
-        report["violations"].append(f"opaque coverage of the walkable interior is {coverage * 100:.1f} % (limit {max_cover * 100:.0f} %)")
+    if behind:
+        report["behind"] = True
+    else:
+        if coverage > max_cover:
+            report["violations"].append(f"opaque coverage of the walkable interior is {coverage * 100:.1f} % (limit {max_cover * 100:.0f} %)")
 
-    points: list[tuple[str, float, float]] = []
-    for name, p in (room.get("spawns") or {}).items():
-        x, y = pt(p)
-        points.append((f"spawn {name}", x, y))
-    for door in room.get("doors", []):
-        x0, y0, x1, y1 = rect_of(door["rect"])
-        points.append((f"door {door.get('id')} centre", (x0 + x1) / 2, (y0 + y1) / 2))
-        if door.get("marker"):
-            mx, my = pt(door["marker"])
-            points.append((f"{door.get('id')} marker", mx, my))
-            if door.get("closedSign"):
-                sx0, sy0 = int(max(0, mx - SIGN_W / 2)), int(max(0, my - SIGN_H))
-                sx1, sy1 = int(min(ROOM_W, mx + SIGN_W / 2)), int(min(ROOM_H, my))
-                patch = opaque[sy0:sy1, sx0:sx1]
-                frac = float(patch.mean()) if patch.size else 0.0
-                if frac > sign_max_cover:
-                    report["violations"].append(f"sign footprint at {door.get('id')} is {frac * 100:.0f} % covered")
-                bx0, by0, bx1, by1 = sign_board_rect(mx, my)
-                board = opaque[by0:by1, bx0:bx1]
-                bfrac = float(board.mean()) if board.size else 0.0
-                if bfrac > board_max_cover:
-                    report["violations"].append(f"sign board at {door.get('id')} is {bfrac * 100:.1f} % covered (limit {board_max_cover * 100:.0f} %): the phrase must stay readable")
-    for name, x, y in points:
-        n = int((opaque & _disc(opaque.shape, x, y, disc_r)).sum())
-        if n:
-            report["violations"].append(f"{name} at ({x:.0f}, {y:.0f}) has {n} opaque px within {disc_r} px")
+        points: list[tuple[str, float, float]] = []
+        for name, p in (room.get("spawns") or {}).items():
+            x, y = pt(p)
+            points.append((f"spawn {name}", x, y))
+        for door in room.get("doors", []):
+            x0, y0, x1, y1 = rect_of(door["rect"])
+            points.append((f"door {door.get('id')} centre", (x0 + x1) / 2, (y0 + y1) / 2))
+            if door.get("marker"):
+                mx, my = pt(door["marker"])
+                points.append((f"{door.get('id')} marker", mx, my))
+                if door.get("closedSign"):
+                    sx0, sy0 = int(max(0, mx - SIGN_W / 2)), int(max(0, my - SIGN_H))
+                    sx1, sy1 = int(min(ROOM_W, mx + SIGN_W / 2)), int(min(ROOM_H, my))
+                    patch = opaque[sy0:sy1, sx0:sx1]
+                    frac = float(patch.mean()) if patch.size else 0.0
+                    if frac > sign_max_cover:
+                        report["violations"].append(f"sign footprint at {door.get('id')} is {frac * 100:.0f} % covered")
+                    bx0, by0, bx1, by1 = sign_board_rect(mx, my)
+                    board = opaque[by0:by1, bx0:bx1]
+                    bfrac = float(board.mean()) if board.size else 0.0
+                    if bfrac > board_max_cover:
+                        report["violations"].append(f"sign board at {door.get('id')} is {bfrac * 100:.1f} % covered (limit {board_max_cover * 100:.0f} %): the phrase must stay readable")
+        for name, x, y in points:
+            n = int((opaque & _disc(opaque.shape, x, y, disc_r)).sum())
+            if n:
+                report["violations"].append(f"{name} at ({x:.0f}, {y:.0f}) has {n} opaque px within {disc_r} px")
     if key_colour:
         spill = key_spill(img, key_colour)
         report["key_spill"] = round(spill, 4)

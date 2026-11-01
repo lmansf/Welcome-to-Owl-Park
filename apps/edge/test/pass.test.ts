@@ -3,15 +3,18 @@ import { captureLogs } from '../src/logs';
 import {
   ENTRY_TTL_S,
   GUEST_PASS_TTL_S,
+  KEEPER_TTL_S,
   isCollectorId,
   mintCollector,
   mintEntry,
+  mintKeeper,
   mintLink,
   mintPass,
   passRefusal,
   readCollector,
   signingSecret,
   verifyEntry,
+  verifyKeeper,
   verifyLink,
   verifyPass,
   type PassPayload,
@@ -168,5 +171,35 @@ describe('the clock a token is read by when none is given', () => {
     const n = 'n0nce-n0nce-n0nce';
     expect(await verifyLink(SECRET, await mintLink(SECRET, 'restore', n, NOW_S), 'restore')).toBe(n);
     expect(await verifyLink(SECRET, await mintLink(SECRET, 'restore', n, NOW_S - 1), 'restore')).toBeNull();
+  });
+});
+
+describe('a keeper token (OP-156)', () => {
+  it('lasts twelve hours, good until the second it runs out, from the park\'s own key', async () => {
+    expect(KEEPER_TTL_S).toBe(43_200);
+    const token = await mintKeeper(SECRET, NOW_S);
+    expect(bodyOf(token)).toStrictEqual({ k: 'kpr', exp: NOW_S });
+    expect(await verifyKeeper(SECRET, token, NOW_S)).toBe(true);
+    expect(await verifyKeeper(SECRET, token, NOW_S + 1)).toBe(false);
+    expect(await verifyKeeper('another-signing-key-0123456789', token, NOW_S)).toBe(false);
+    for (const t of [null, undefined, 42, '', 'not.a-token']) expect(await verifyKeeper(SECRET, t, NOW_S)).toBe(false);
+  });
+
+  it('is never a token of another kind, and no other kind is a keeper\'s', async () => {
+    const token = await mintKeeper(SECRET, NOW_S + 60);
+    expect(await verifyPass(SECRET, token, NOW_S)).toBeNull();
+    expect(await verifyEntry(SECRET, token, 'c_abcd1234', NOW_S)).toBe(false);
+    expect(await readCollector(SECRET, token)).toBeNull();
+    for (const k of [undefined, 'ent', 'col', 'acl']) expect(await verifyKeeper(SECRET, await signed({ k, exp: NOW_S + 60 }), NOW_S)).toBe(false);
+    expect(await verifyKeeper(SECRET, await signed({ k: 'kpr', exp: 'soon' }), NOW_S)).toBe(false);
+    expect(await verifyKeeper(SECRET, await mintEntry(SECRET, 'c_abcd1234', NOW_S + 60), NOW_S)).toBe(false);
+  });
+
+  it('is made for twelve hours from now, and read against now, when no clock is given', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_S * 1000 + 999);
+    const token = await mintKeeper(SECRET);
+    expect(bodyOf(token)['exp']).toBe(NOW_S + KEEPER_TTL_S);
+    expect(await verifyKeeper(SECRET, token)).toBe(true);
+    expect(await verifyKeeper(SECRET, await mintKeeper(SECRET, NOW_S - 1))).toBe(false);
   });
 });

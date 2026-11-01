@@ -129,13 +129,16 @@ PIECE_KEYS = ("guardian", "robot-owl")
 
 
 def is_overlay(key: str, assets: dict) -> bool:
-    """Room art drawn in front of the owls: ``<room>-fg``, or an end screen's ``<room>-<side>-fg``."""
-    return key.endswith("-fg") and assets.get(key, {}).get("kind") == "room"
+    """Room art keyed out of its backdrop and drawn over another layer: ``<room>-fg`` in front of the
+    owls, an end screen's ``<room>-<side>-fg``, or a layer the table marks ``"overlay": true`` (the
+    tree's playfield, OP-157, drawn over its sky plate)."""
+    spec = assets.get(key, {})
+    return spec.get("kind") == "room" and (key.endswith("-fg") or spec.get("overlay") is True)
 
 
 def is_room_background(key: str, assets: dict) -> bool:
     """One screen of a room's painting, shipped as WebP: ``<room>``, ``<room>-west`` or ``<room>-east``."""
-    return assets.get(key, {}).get("kind") == "room" and not key.endswith("-fg")
+    return assets.get(key, {}).get("kind") == "room" and not is_overlay(key, assets)
 
 
 def ships_as_webp(key: str, assets: dict) -> bool:

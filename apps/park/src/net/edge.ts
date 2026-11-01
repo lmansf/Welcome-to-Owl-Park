@@ -27,6 +27,7 @@ import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, Qu
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { MoveBudget } from './budget';
+import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
 import { OPEN_ENTRY, type AccountConfirm, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
@@ -111,8 +112,12 @@ export class EdgeTransport implements ParkTransport {
   readonly kind = 'edge' as const;
   private readonly base: string;
 
-  constructor(baseUrl: string) {
+  /** Whether this page load asks for a keeper's token (`?keeper=1`, OP-156). */
+  private readonly askKeeper: boolean;
+
+  constructor(baseUrl: string, opts: { keeper?: boolean } = {}) {
     this.base = baseUrl.replace(/\/$/, '');
+    this.askKeeper = opts.keeper === true;
   }
 
   /** The pass lives in memory only: one visitor identity per page load, never shared by a duplicated tab. */
@@ -813,6 +818,8 @@ export class EdgeTransport implements ParkTransport {
         if (!(e instanceof MovedError)) scheduleReconnect();
         return;
       }
+      // A keeper's token (OP-156) goes with every hello: the room reads it at the door of a dark room.
+      const keeper = await keeperToken(this.base, this.askKeeper);
       if (closed) return;
       welcomed = false;
       opened = false;
@@ -826,6 +833,7 @@ export class EdgeTransport implements ParkTransport {
         const hello: ClientFrame = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: current.look };
         if (spawn) hello.spawn = spawn;
         if (via) hello.via = via;
+        if (keeper) hello.keeper = keeper;
         const pos = handlers.here?.() ?? currentPos();
         hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));

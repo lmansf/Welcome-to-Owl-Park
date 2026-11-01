@@ -63,7 +63,9 @@ const siteUrl = (process.env['VITE_SITE_URL'] ?? '').trim().replace(/\/+$/, '');
 // address and the art can be cached for a year (public/_headers; OP-129). Each file's size comes
 // too (`sizes`), for the load screen's progress, and the page asks for the boot's art alongside
 // the script (earlyArtScript). The dev server reloads the list when art comes, goes or changes.
-const ART_DIR = resolve(import.meta.dirname, 'public/art');
+// The art preview (tools/art/preview.mjs) builds its "new" copy against public/art with the finals
+// laid over, named by PARK_ART_DIR, so the list has the finals' names too.
+const ART_DIR = process.env['PARK_ART_DIR'] ? resolve(process.env['PARK_ART_DIR']) : resolve(import.meta.dirname, 'public/art');
 const ART_FILES_ID = 'virtual:art-files';
 function artFiles(): Plugin {
   const resolved = `\0${ART_FILES_ID}`;

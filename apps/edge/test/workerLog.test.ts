@@ -7,7 +7,7 @@ import { storeCatalogue } from '../src/opening';
 import type { OverflowState } from '../src/Overflow';
 import { forgetCounts, forgetOverflow, overflowNow } from '../src/overflowState';
 import { forgetLimits } from '../src/limits';
-import { mintPass } from '../src/pass';
+import { mintPass, verifyKeeper } from '../src/pass';
 import { webhookSignature } from '../src/shopify';
 import { MemoryTicketStore, TicketBook } from '../src/TicketBook';
 import { ticketDesk } from '../src/ticketDesk';
@@ -155,6 +155,20 @@ describe('the Worker’s log (OP-134)', () => {
     logged(cap.lines, 'admin_ok', { route: '/api/admin/ping' });
     expect(JSON.stringify(cap.lines)).not.toContain(ADMIN);
     expect(JSON.stringify(cap.lines)).not.toContain('wrong-key-wrong-key-0');
+  });
+
+  it('gives a keeper a token for the tree only for the keepers’ key, by POST, and never logs the key or the token (OP-156)', async () => {
+    expect((await call(park.env(), '/api/admin/keeper', asKeeper(ADMIN))).status).toBe(403); // asked by GET
+    expect((await call(park.env(), '/api/admin/keeper', asKeeper(null, { method: 'POST' }))).status).toBe(403);
+    expect((await call(park.env(), '/api/admin/keeper', asKeeper('wrong-key-wrong-key-0', { method: 'POST' }))).status).toBe(403);
+    const r = await call(park.env(), '/api/admin/keeper', asKeeper(ADMIN, { method: 'POST' }));
+    expect(r.status).toBe(200);
+    const { token, ttl } = (await r.json()) as { token: string; ttl: number };
+    expect(ttl).toBe(12 * 60 * 60);
+    expect(await verifyKeeper(KEY, token)).toBe(true);
+    logged(cap.lines, 'admin_ok', { route: '/api/admin/keeper' });
+    expect(JSON.stringify(cap.lines)).not.toContain(ADMIN);
+    expect(JSON.stringify(cap.lines)).not.toContain(token.split('.')[1]);
   });
 
   it('takes a keepers’ key of 16 characters or more, and treats a shorter one as none set (OP-131)', async () => {

@@ -121,6 +121,12 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
     // Come by travel from the map (OP-130).
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, spawn: 'default', via: 'travel' }))).toEqual({ t: 'hello', v: V, look, spawn: 'default', via: 'travel' });
+    // A keeper's token (OP-156): two base64url parts, the second a signature's 43 characters.
+    const keeper = `${'eyJrIjoia3By'.padEnd(40, 'A')}.${'s'.repeat(43)}`;
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, keeper }))).toEqual({ t: 'hello', v: V, look, keeper });
+    for (const bad of ['not a token', `${'a'.repeat(201)}.${'s'.repeat(43)}`, `abc.${'s'.repeat(42)}`, `abc.${'s'.repeat(43)}=`, 42, null]) {
+      expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, keeper: bad })), String(bad)).toBeNull();
+    }
     // An owl asleep or awake (OP-126): a plain yes or no, nothing else.
     expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: true }))).toEqual({ t: 'rest', asleep: true });
     expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: false, extra: 1 }))).toEqual({ t: 'rest', asleep: false });

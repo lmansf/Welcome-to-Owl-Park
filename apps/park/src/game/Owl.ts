@@ -119,6 +119,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private dir: -1 | 1 = 1;
   /** Drawn size relative to the great horned owl (the species' size). */
   private size = 1;
+  /** How much bigger than in today's park the room draws its owls (the tree's: 1.25, RoomDef.owlScale). */
+  private roomScale = 1;
   private layers: readonly string[] = LAYERS;
   private nextBlinkAt = 0;
   private eyesClosedUntil = 0;
@@ -212,10 +214,19 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     scene.add.existing(this);
   }
 
+  /** Draw the owl `k` times as big as in today's park (a room of the tree, OP-156): its pet, its lift and its shadow follow. */
+  setRoomScale(k: number): this {
+    if (k !== this.roomScale) {
+      this.roomScale = k;
+      this.applyLook(this.look);
+    }
+    return this;
+  }
+
   applyLook(look: OwlLook): void {
     this.look = look;
     this.pledgeMark.setAlpha(look.pledge ? 0.75 : 0);
-    this.size = speciesOf(look).size;
+    this.size = speciesOf(look).size * this.roomScale;
     this.setScale(OWL_SCALE * this.size);
     this.pet?.setOwlSize(this.size);
     const layers = layersFor(this.scene, look);
