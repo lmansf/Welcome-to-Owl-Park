@@ -49,6 +49,44 @@ describe('the store webhooks', () => {
     expect(book.orderOf('1001')!.tickets).toHaveLength(2);
   });
 
+  it('a paid order from the booth’s checkout puts its tickets on the owl that paid, and the claim email still goes (OP-175)', async () => {
+    const store = new FakeStore();
+    const { book, deps } = park(store);
+    store.attributes = [{ key: 'owl_checkout', value: await book.newCheckout('c_buyer', T0) }];
+    const r = await storeWebhook('orders/paid', PAID, deps);
+    expect(r).toMatchObject({ status: 200, body: { tickets: 2, sent: true }, placed: { device: 'c_buyer', tickets: 2 } });
+    expect(book.wallet('c_buyer', T0)).toHaveLength(2);
+    expect(store.sent).toHaveLength(1);
+    // Again: nothing moves a second time.
+    expect(await storeWebhook('orders/paid', PAID, deps)).not.toHaveProperty('placed');
+  });
+
+  it('a checkout token that does not work, or a desk that fails to place, never fails the webhook: the email does it (OP-175)', async () => {
+    const store = new FakeStore();
+    const { book, deps } = park(store);
+    store.attributes = [{ key: 'owl_checkout', value: 'B'.repeat(43) }];
+    expect(await storeWebhook('orders/paid', PAID, deps)).not.toHaveProperty('placed');
+    expect(store.sent).toHaveLength(1);
+    const other = new FakeStore();
+    const p2 = park(other);
+    other.attributes = [{ key: 'owl_checkout', value: await p2.book.newCheckout('c_buyer', T0) }];
+    const broken: HookDeps = { ...p2.deps, desk: async (path, body) => (path === '/tickets/place' ? Promise.reject(new Error('desk away')) : p2.deps.desk(path, body)) };
+    expect(await storeWebhook('orders/paid', PAID, broken)).toMatchObject({ status: 200, body: { tickets: 2, sent: true } });
+    expect(other.sent).toHaveLength(1);
+    expect(p2.book.wallet('c_buyer', T0)).toHaveLength(0);
+    expect(book.wallet('c_buyer', T0)).toHaveLength(0);
+  });
+
+  it('a held order from the booth’s checkout waits on the owl, held, with no email until it is released (OP-175)', async () => {
+    const store = new FakeStore();
+    store.risk = ['MEDIUM'];
+    const { book, deps } = park(store);
+    store.attributes = [{ key: 'owl_checkout', value: await book.newCheckout('c_buyer', T0) }];
+    expect(await storeWebhook('orders/paid', PAID, deps)).toMatchObject({ body: { tickets: 2, held: true }, placed: { device: 'c_buyer', tickets: 2 } });
+    expect(book.wallet('c_buyer', T0).map((t) => t.status)).toEqual(['held', 'held']);
+    expect(store.sent).toHaveLength(0);
+  });
+
   it('the store sending an order’s webhook twice at once: one link goes out, and it opens the tickets', async () => {
     // A free order's orders/create and orders/paid come together (C42); a paid order's webhook can come twice.
     const store = new FakeStore();

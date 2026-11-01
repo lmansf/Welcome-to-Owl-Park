@@ -158,6 +158,18 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       // The order, for the Worker alone (OP-139: its email protects the owl that claimed it).
       return r ? json({ tickets: wallet(device), order: r[0]?.order ?? null, moved, claimed: r.length }) : json({ error: 'unknown link' }, 404);
     }
+    case '/checkout': {
+      // The booth's checkout (OP-175): a one-time token for this owl, to ride in the cart.
+      if (!device) return bad();
+      return json({ token: await book.newCheckout(device, now) });
+    }
+    case '/place': {
+      // A paid order carried a checkout token: its never-scanned tickets go onto that owl (OP-175).
+      const token = str(body['token'], 64);
+      if (!order || !token) return bad();
+      const r = await book.placeByCheckout(order, token, now);
+      return 'refused' in r ? json({ placed: 0, refused: r.refused }) : json({ placed: r.tickets.length, device: r.device });
+    }
     case '/take': {
       const secret = str(body['secret'], 64);
       if (!secret || !device) return bad();

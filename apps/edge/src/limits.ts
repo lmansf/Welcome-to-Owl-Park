@@ -33,7 +33,7 @@ export const API_LIMITS = {
   refused: { limit: 60, windowMs: 60_000 },
   /** Calls with a pass, by its owl's collection (or the pass, before it has one). */
   visitor: { limit: 120, windowMs: 60_000 },
-  /** A claim, a share, a scan at the gate, the pass link and the account links, by owl (or address). */
+  /** A claim, a share, a scan at the gate, the pass link, the booth's checkout link and the account links, by owl (or address). */
   ticket: { limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, Limit>;
 
@@ -46,7 +46,7 @@ export function isPublicCall(pathname: string): boolean {
 
 /** The calls the `ticket` limit counts. */
 export function isTicketCall(pathname: string): boolean {
-  return ['/api/tickets/claim', '/api/tickets/take', '/api/tickets/share', '/api/tickets/scan', '/api/tickets/pass'].includes(pathname) || pathname.startsWith('/api/account/');
+  return ['/api/tickets/claim', '/api/tickets/take', '/api/tickets/share', '/api/tickets/scan', '/api/tickets/pass', '/api/tickets/checkout'].includes(pathname) || pathname.startsWith('/api/account/');
 }
 
 /** One call over a limit: wait this many seconds; `first` when it is the first over in its window (the one the log tells). */
