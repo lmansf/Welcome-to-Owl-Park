@@ -11,7 +11,7 @@ what does not exist on `main` yet. Grep `PLANNED` for everything unbuilt. Versio
 activities, nests, prewritten chat, the lobby and tickets, the home screen and the keepers' pages.
 This document names no unreleased realm names and no reference products; the detailed
 reverse-engineering notes behind it live in the team's internal drive, not in this public
-repository. Where this file and a Done ticket or the code disagree, the doc agent files a Finding
+repository. Where this file and a Done ticket or the code disagree, the Docs hat files a Finding
 ticket rather than guessing (`docs/agents.md`).
 
 Sections: 0 the repository · 1 what we replicate · 2 the decision · 3 components and cost ·
@@ -196,6 +196,40 @@ reading "Hatching Soon", and standing at it says so. Art is referenced by key; a
 variable (defaults in `apps/edge/src/rooms.ts`: lobby and hub 80; grove, market, arcade and the
 street 40; a nest 12, its owner always admitted). What happens at the cap, and the queue and ribbon
 that are PLANNED (OP-075), are in `docs/CAPACITY.md`.
+
+### Loading the park: the rules that keep it fast (OP-129)
+
+- **Each room loads its own art.** Only the home screen, the visitor's owl and the owl's nest are on
+  the way in. A realm's paintings, audio and its game code load when an owl heads into it, never at
+  park start. A new realm or mini game follows the same rule.
+- **The art budget**, a unit test in CI (`apps/park/src/game/artBudget.test.ts`): no PNG over
+  300 kB, no WebP over 700 kB, and every room's painted screens ship as WebP. An exception is named
+  in the test with its reason (today only `hub-fg@2x.png`); a named exception that shrinks comes off
+  the list.
+- **Long caching.** The script bundles and `/art/*` are cached for a year (`apps/park/public/_headers`).
+  Each picture is asked for with its content's hash (`?v=`, from the art list `vite.config.ts`
+  writes), so a changed picture is a new address. The page itself is never cached.
+- **Art by its real name.** The loader asks for each piece in the format the build ships (no
+  guessing SVG, then WebP, then PNG) and by its encoded name, so Cloudflare answers without a
+  redirect.
+- **The boot's art starts with the page.** A small script in `index.html`'s head
+  (`earlyArtScript`, `apps/park/src/game/artNames.ts`) asks for the owl's pictures at low priority
+  beside the script, and the loader takes those downloads.
+- **Soft first, sharp after.** On a dense phone screen a room the browser does not hold at 2x yet
+  opens on its 1x painting and swaps in the 2x copy in place once it has come and the owl stands
+  still.
+- **Fetch ahead.** The next room's art is fetched as an owl's walk ends at a doorway (or the keys
+  or thumbstick carry it past one), and the nest's art while the home screen waits on Play.
+- **Join while loading.** A page joins a room as the room's art starts to load; what the room says
+  meanwhile waits, in order, until the scene is built (`RoomScene.join`), so the first frame already
+  has the other owls in it.
+- **The load screen** (`index.html`'s `#loader`, `apps/park/src/ui/loader.ts`): an owl on a branch
+  that grows with the bytes that have come against the sizes the art list carries, never a timer.
+  A load under 0.3 s never shows it; owl facts after 2 s; a tap on the owl makes it hoot. Any new
+  wait for art reports its progress to it the same way.
+- **Targets** (a phone on throttled 4G, cold): under 3 s to moving in the nest, under 1 s on a
+  return visit, a realm under 1.5 s. Measure before and after any change that adds art or code on
+  the way in; the method and the numbers so far are in OP-129's notes.
 
 ## 6. Scaling knobs and capacity
 
@@ -418,6 +452,26 @@ anywhere but the owl's own nest: straight to that nest, whose id the page asks f
 mode asks its own book). Out of the nest the owl is on the street in front of door 0. Leaving
 changes nothing on a ticket: its time keeps running from its first scan, the pass stays admitted,
 and coming back through the turnstiles is the quick scan ("Welcome back").
+
+### The gate's trust boundary (OP-145)
+
+The Worker trusts the store only through a signed webhook. It checks the HMAC over the raw body,
+with the store's key or the app's secret, and the shop domain, before it reads anything
+(`webhookSigned` in `apps/edge/src/shopify.ts`). An unsigned or mismatched webhook is answered 401
+and logged as `webhook_rejected`; nothing reaches the ticket book. The webhook only names an order:
+the Worker reads the order's lines, price and risk from the Admin API itself.
+
+Every webhook is safe to receive twice. The book makes an order's tickets once, so a repeated
+`orders/paid` changes nothing (`webhook_duplicate`), and one order's webhooks run one at a time
+(the lease in `storeHooks.ts`). A refund is kept by the store's refund id, so a repeated
+`refunds/create` switches nothing off a second time; a cancellation switches off whatever is still
+live. A claim link carries a secret the book keeps only as a hash; it moves unscanned tickets only,
+and a running ticket stays with the owl it let in (OP-174). A scan answers with a reason and never
+with another ticket. A $0 order takes the same path but is not held for the fraud check (C42).
+
+Not covered yet: an owl already inside keeps its entry pass until it runs out (at most 12 hours)
+when its ticket is refunded or cancelled; the refund stops the next scan. Tests:
+`apps/edge/test/gateHardening.test.ts`.
 
 ## 10. Feedback from visitors [BUILT]
 

@@ -85,6 +85,9 @@ export interface TicketStore {
   putCheckout(c: CheckoutRecord): void;
   /** Forgets checkouts made before this time. */
   dropCheckouts(before: number): void;
+  /** Whether a refund (the store's refund id) has already switched tickets off (OP-145). */
+  refundSeen(refund: string): boolean;
+  putRefund(refund: string, order: string, at: number): void;
 }
 
 export interface WalletTicket {
@@ -268,9 +271,15 @@ export class TicketBook {
   /**
    * A refund (that many units of each line) or a cancellation (`all`): those tickets stop working.
    * Unused tickets go first. Votes they cast stay counted. A pass that came from an Opening Night
-   * Ticket through the park's link goes with it (C42).
+   * Ticket through the park's link goes with it (C42). A refund named by its store id switches
+   * tickets off once: the store may send refunds/create again, and a second delivery must not take
+   * another ticket of the line (OP-145).
    */
-  revoke(order: string, which: 'all' | Array<{ line: string; quantity: number }>, now: number): TicketRecord[] {
+  revoke(order: string, which: 'all' | Array<{ line: string; quantity: number }>, now: number, refund?: string): TicketRecord[] {
+    if (refund !== undefined) {
+      if (this.store.refundSeen(refund)) return [];
+      this.store.putRefund(refund, order, now);
+    }
     const tickets = this.store.ticketsOf(order).filter((t) => t.revoked === null);
     const pick: TicketRecord[] = [];
     if (which === 'all') pick.push(...tickets);
@@ -480,6 +489,7 @@ export class MemoryTicketStore implements TicketStore {
   private readonly tickets = new Map<string, TicketRecord>();
   private readonly links = new Map<string, PassLink>();
   private readonly checkouts = new Map<string, CheckoutRecord>();
+  private readonly refunds = new Set<string>();
   order(order: string) {
     return this.orders.get(order) ?? null;
   }
@@ -531,5 +541,11 @@ export class MemoryTicketStore implements TicketStore {
   }
   dropCheckouts(before: number) {
     for (const [h, c] of this.checkouts) if (c.created < before) this.checkouts.delete(h);
+  }
+  refundSeen(refund: string) {
+    return this.refunds.has(refund);
+  }
+  putRefund(refund: string) {
+    this.refunds.add(refund);
   }
 }
