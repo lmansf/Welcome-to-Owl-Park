@@ -6,7 +6,7 @@
  */
 import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type SavedMasks, type TravelState } from '@owl-park/shared';
 import { SOURCES, type Source } from '@owl-park/shared';
-import { accountRoute, accountsOn, emailKeys, keyed, mailSender, orderEmail, seal } from './accounts';
+import { accountRoute, accountsOn, emailKeys, mailSender, offerOrderProtect, orderEmail } from './accounts';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
 import { copiesIn, copyObjectName, pickCopy, roomObjectNames } from './copies';
@@ -215,20 +215,23 @@ async function tellMoved(env: Env, log: Logger, cid: string, dev: string): Promi
 }
 
 /**
- * A ticket's order email protects the owl that claimed its tickets (OP-139, with ACCOUNTS on): the store
- * says whose order it was, after the page has its answer. A ticket the park gave away has no order in
- * the store, and an owl whose email the store will not tell stays as it was.
+ * A ticket's order email, as its tickets land on an owl (a claim, or the booth's checkout), is offered a
+ * one-tap link that protects that owl (OP-186, with ACCOUNTS on): the store says whose order it was,
+ * after the page has its answer, and the park keeps nothing about the address unless the link is opened.
+ * A ticket the park gave away has no order in the store, and an owl whose email the store will not tell
+ * stays as it was.
  */
-async function protectByOrder(env: Env, log: Logger, cid: string, order: string): Promise<void> {
+async function offerProtectByOrder(env: Env, log: Logger, origin: string, cid: string, order: string): Promise<void> {
   const keys = accountsOn(env) ? emailKeys(env) : null;
+  const mail = mailSender(env);
   const store = storeConfig(env);
-  if (!keys || !store || order.startsWith('comp-')) return;
-  const email = await orderEmail(store, order);
-  if (!email) return;
-  const k = await keys;
-  await collections(env)
-    .accountProtectByOrder(cid, await keyed(k, 'e', email), await seal(k, email))
-    .catch((e: unknown) => log.error('worker.accounts', 'write_failed', 'An owl was not protected by its ticket order’s email: it stays as it was.', { collector_hash: hashForLog(cid), order_hash: hashForLog(order), error: e }));
+  if (!keys || !mail || !store || order.startsWith('comp-')) return;
+  const deps = { rpc: collections(env), secret: signingSecret(env), keys, mail, origin, log };
+  await orderEmail(store, order)
+    .then((email) => offerOrderProtect(deps, cid, order, email))
+    .catch((e: unknown) =>
+      log.error('worker.accounts', 'write_failed', 'A ticket’s buyer could not be offered a link to protect their owl: it stays as it was.', { collector_hash: hashForLog(cid), order_hash: hashForLog(order), error: e }),
+    );
 }
 
 /** The visit a call comes in, for the collection log (OP-107): its pass's id (one per page load) and the device's class. */
@@ -808,10 +811,10 @@ const park = {
         if (r.repeat) log.info('worker.store', 'webhook_duplicate', 'A store webhook came again for work an earlier delivery already did.', about);
         if (r.recorded) log.info('worker.store', 'order_recorded', 'A paid order’s tickets were made.', { ...about, tickets: r.recorded.tickets, held: r.recorded.held });
         if (r.placed && order) {
-          // The booth's checkout (OP-175): the tickets are on the owl that paid, and the order's email protects it as a claim's does (OP-139).
+          // The booth's checkout (OP-175): the tickets are on the owl that paid, and its buyer is offered a link to protect it, as a claim's is (OP-186).
           // TODO-DOCS (OP-175): docs/LOGGING.md: claim_moved's via takes checkout (no device_class: the store's webhook carries none).
           log.info('worker.tickets', 'claim_moved', 'A paid order’s tickets went onto the owl that checked out at the booth.', { via: 'checkout', collector_hash: hashForLog(r.placed.device), order_hash: hashForLog(order), tickets: r.placed.tickets });
-          ctx.waitUntil(protectByOrder(env, log, r.placed.device, order));
+          ctx.waitUntil(offerProtectByOrder(env, log, url.origin, r.placed.device, order));
         }
         if (r.mirror) mirrorLater(ctx, env, log, url.origin, { order: r.mirror });
         return json(r.body, r.status);
@@ -869,7 +872,7 @@ const park = {
             in_use: typeof inUse === 'number' ? inUse : 1,
           });
         }
-        if (status === 200 && typeof order === 'string') ctx.waitUntil(protectByOrder(env, log, device, order));
+        if (status === 200 && typeof order === 'string') ctx.waitUntil(offerProtectByOrder(env, log, url.origin, device, order));
         return json(rest, status);
       }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
