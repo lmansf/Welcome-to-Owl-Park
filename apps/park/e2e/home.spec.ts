@@ -20,9 +20,10 @@ async function openHome(page: Page): Promise<void> {
   await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
 }
 
-/** A first visit: Make your owl makes the owl and opens the builder on it; closing it leaves the owl beside Play. */
+/** A first visit: Make your owl, Skip the quiz (which owl are you, OP-076), and the builder opens on the owl; closing it leaves the owl beside Play. */
 async function logIn(page: Page): Promise<void> {
   await button(page, 'login').click();
+  await page.locator('[data-wo-skip]').click();
   const builder = page.getByRole('dialog', { name: 'Your owl' });
   await expect(builder).toBeVisible();
   await page.keyboard.press('Escape');
@@ -70,8 +71,10 @@ test.describe('the home screen (OP-065)', () => {
     expect(await page.evaluate(() => localStorage.getItem('owl-park:look'))).toBeNull();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-first-visit.png` });
 
-    // Make your owl: the owl is kept on this device, and the builder opens on it before anything else.
+    // Make your owl: which owl are you first (OP-076); Skip makes the owl on this device, and the builder opens on it.
     await button(page, 'login').click();
+    await expect(page.getByRole('dialog', { name: 'Which owl are you?' })).toBeVisible();
+    await page.locator('[data-wo-skip]').click();
     const builder = page.getByRole('dialog', { name: 'Your owl' });
     await expect(builder).toBeVisible();
     // The builder covers the home screen, as it covers the park.

@@ -48,8 +48,9 @@ Start with the `owl-park-elephant` skill (`.claude/skills/owl-park-elephant`) to
 - **Artifacts.** `EGM artifact directory: EGM`. Briefs, drafts and review reports go to `EGM/`,
   which git ignores except its README. A brief may name unreleased realms; nothing from `EGM/` is
   committed or quoted into a public file without the screening the rules above require.
-- **Design docs.** EGM defaults to `docs/designs/<feature>.md`. `docs/` is the doc agent's
-  (`docs/README.md`), so confirm the folder with the owner before the first design doc is written.
+- **Design docs.** EGM defaults to `docs/designs/<feature>.md`. `docs/` is the Docs hat's
+  (`docs/README.md`, `docs/agents.md`), so confirm the folder with the owner before the first design
+  doc is written.
 - **Bootstrap.** `/egm:egm-bootstrap <path>` writes per-directory README contracts (interface,
   invariants, side effects, verification) bottom-up and spawns workers for trees over five
   directories; it asks before running on more than fifteen. Human READMEs exist at the root,
