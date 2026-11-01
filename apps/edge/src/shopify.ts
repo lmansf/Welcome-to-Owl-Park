@@ -186,6 +186,15 @@ export function fromTicketOf(order: AdminOrder): string | null {
   return isTicketId(v) ? v : null;
 }
 
+/** The cart attribute the booth's checkout link sets (OP-175): a one-time token naming the owl the tickets go to. */
+export const CHECKOUT_ATTRIBUTE = 'owl_checkout';
+
+/** The booth's checkout token on an order (OP-175), when it is one the park could have made. */
+export function checkoutTokenOf(order: AdminOrder): string | null {
+  const v = (order.customAttributes ?? []).find((a) => a.key === CHECKOUT_ATTRIBUTE)?.value?.trim() ?? '';
+  return /^[A-Za-z0-9_-]{43}$/.test(v) ? v : null;
+}
+
 /** Whether the buyer used this discount code (the store's codes ignore case). */
 export function usedCode(order: AdminOrder, code: string | undefined): boolean {
   const want = code?.trim().toLowerCase();
@@ -215,7 +224,8 @@ export function paidFor(order: AdminOrder, lines: readonly TicketLine[], kind: T
 
 /**
  * The ticket products on sale: the annual pass (the opening-night link puts its first variant in
- * the cart) and the Opening Night Ticket's window (the booth says passes are half price inside it).
+ * the cart), the Day Ticket (the booth's checkout link, OP-175) and the Opening Night Ticket's
+ * window (the booth says passes are half price inside it).
  */
 export const CATALOGUE_QUERY = `query OwlParkCatalogue {
   products(first: 20, query: "product_type:Ticket AND status:active") {
@@ -242,25 +252,28 @@ export interface AdminCatalogue {
 export interface Catalogue {
   /** The annual pass's variant (the number at the end of its id), for the cart link. */
   passVariant: string | null;
+  /** The Day Ticket's variant, for the booth's checkout link (OP-175). */
+  dayVariant: string | null;
   /** Opening night's window (ms), from the Opening Night Ticket on sale. */
   opening: { from: number; until: number } | null;
 }
 
 export function catalogueOf(data: AdminCatalogue): Catalogue {
   let passVariant: string | null = null;
+  let dayVariant: string | null = null;
   let opening: Catalogue['opening'] = null;
   for (const p of data.products.nodes) {
     const kind = (p.kind?.value ?? '').trim().toLowerCase();
-    if (kind === 'annual' && passVariant === null) {
-      const v = gidTail(p.variants?.nodes[0]?.id ?? '');
-      if (/^\d{1,20}$/.test(v)) passVariant = v;
-    }
+    const v = gidTail(p.variants?.nodes[0]?.id ?? '');
+    const variant = /^\d{1,20}$/.test(v) ? v : null;
+    if (kind === 'annual' && passVariant === null) passVariant = variant;
+    if (kind === 'day' && dayVariant === null) dayVariant = variant;
     if (kind === 'opening-night' && opening === null) {
       const w = windowOf('opening-night', p.start?.value, p.end?.value);
       if (w) opening = { from: w[0], until: w[1] };
     }
   }
-  return { passVariant, opening };
+  return { passVariant, dayVariant, opening };
 }
 
 /**
@@ -269,5 +282,15 @@ export function catalogueOf(data: AdminCatalogue): Catalogue {
  */
 export function passCartLink(shop: string, variant: string, code: string, ticketId: string): string {
   const q = new URLSearchParams({ discount: code, 'attributes[from_ticket]': ticketId });
+  return `https://${shop}/cart/${variant}:1?${q.toString()}`;
+}
+
+/**
+ * The booth's checkout link (OP-175): one Day Ticket in the cart, and the owl's one-time checkout
+ * token as a cart attribute, so the paid order's tickets land on that owl. The legacy /cart/ link
+ * keeps cart attributes (the newer /buy/ links drop them). The owl itself is never in the link.
+ */
+export function ticketCartLink(shop: string, variant: string, token: string): string {
+  const q = new URLSearchParams({ [`attributes[${CHECKOUT_ATTRIBUTE}]`]: token });
   return `https://${shop}/cart/${variant}:1?${q.toString()}`;
 }

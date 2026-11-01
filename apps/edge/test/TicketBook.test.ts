@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { MemoryTicketStore, ORDER_LEASE_MS, TicketBook, type TicketStore } from '../src/TicketBook';
+import { CHECKOUT_KEEP_MS, CHECKOUT_TTL_MS, MemoryTicketStore, ORDER_LEASE_MS, TicketBook, type TicketStore } from '../src/TicketBook';
 import { SqlTicketStore } from '../src/sqlTicketStore';
 import type { TicketLine } from '../src/shopify';
 import { DAY_MS, DEFAULT_LENGTH_MS, HOUR_MS, isTicketId } from '../src/tickets';
@@ -101,6 +101,57 @@ for (const [name, make] of STORES) {
         // A running ticket stays with the visitor it admitted.
         b.scan(id, 'c_buyer', T0 + HOUR_MS);
         expect(await b.share(id, 'c_buyer', T0 + 2 * HOUR_MS)).toBeNull();
+      });
+    });
+
+    describe('the booth’s checkout (OP-175)', () => {
+      it('a paid order with the owl’s token puts its tickets on that owl at once, and the token works once', async () => {
+        const b = book();
+        const token = await b.newCheckout('c_buyer', T0);
+        expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        await b.issue('2001', [day(2)], false, T0 + 60_000);
+        const r = await b.placeByCheckout('2001', token, T0 + 60_000);
+        expect(r).toEqual({ device: 'c_buyer', tickets: expect.any(Array) });
+        expect(b.wallet('c_buyer', T0 + 60_000).map((t) => t.status)).toEqual(['unused', 'unused']);
+        // The same order's webhook again moves nothing; another order with the same token gets nothing.
+        expect(await b.placeByCheckout('2001', token, T0 + 70_000)).toEqual({ refused: 'repeat' });
+        await b.issue('2002', [day(1)], false, T0 + 80_000);
+        expect(await b.placeByCheckout('2002', token, T0 + 80_000)).toEqual({ refused: 'used' });
+        expect(b.wallet('c_buyer', T0 + 80_000)).toHaveLength(2);
+      });
+
+      it('refuses a token it never made, one past its day, and an order it does not know (and keeps that token for the order)', async () => {
+        const b = book();
+        await b.issue('2003', [day(1)], false, T0);
+        expect(await b.placeByCheckout('2003', 'A'.repeat(43), T0)).toEqual({ refused: 'unknown' });
+        const late = await b.newCheckout('c_late', T0);
+        expect(await b.placeByCheckout('2003', late, T0 + CHECKOUT_TTL_MS + 1)).toEqual({ refused: 'expired' });
+        const early = await b.newCheckout('c_early', T0);
+        expect(await b.placeByCheckout('9999', early, T0)).toEqual({ refused: 'no-order' });
+        expect(await b.placeByCheckout('2003', early, T0)).toMatchObject({ device: 'c_early' });
+      });
+
+      it('moves only tickets never scanned (OP-174’s rule), and a held order’s tickets wait on the owl, held', async () => {
+        const b = book();
+        const { claim, tickets } = await b.issue('2004', [day(2)], false, T0);
+        await b.claim(claim!, 'c_first');
+        expect(b.scan(tickets[0]!.id, 'c_first', T0 + HOUR_MS).ok).toBe(true);
+        const token = await b.newCheckout('c_second', T0);
+        const r = await b.placeByCheckout('2004', token, T0 + HOUR_MS);
+        expect('tickets' in r && r.tickets.map((t) => t.id)).toEqual([tickets[1]!.id]);
+        expect(b.wallet('c_first', T0 + HOUR_MS).map((t) => t.id)).toEqual([tickets[0]!.id]);
+        const held = await b.newCheckout('c_held', T0);
+        await b.issue('2005', [day(1)], true, T0);
+        await b.placeByCheckout('2005', held, T0);
+        expect(b.wallet('c_held', T0).map((t) => t.status)).toEqual(['held']);
+      });
+
+      it('forgets checkouts a week old when it makes a new one', async () => {
+        const b = book();
+        const old = await b.newCheckout('c_old', T0);
+        await b.newCheckout('c_new', T0 + CHECKOUT_KEEP_MS + 1);
+        await b.issue('2006', [day(1)], false, T0);
+        expect(await b.placeByCheckout('2006', old, T0)).toEqual({ refused: 'unknown' });
       });
     });
 

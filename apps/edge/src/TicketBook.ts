@@ -13,6 +13,10 @@
  *   device at a time: a holder can pass one on with a share link before its first scan, and
  *   opening a link moves it.
  * - The gate scans a ticket held on this device; the first scan starts its time.
+ * - The booth's checkout (OP-175): an owl asks for a one-time checkout token, which rides in the
+ *   cart as an attribute. A paid order that carries a known, unexpired, unused token puts its
+ *   never-scanned tickets on that owl at once, with no email needed; the token then names that
+ *   order and moves nothing again. The book keeps only the token's hash.
  * - Opening night (C42): a pass order from the park's pass link (half price, OP-062) keeps the link
  *   to the Opening Night Ticket it came from, and goes with that ticket if the ticket is switched
  *   off. The book counts the night: tickets issued and scanned, passes claimed through the link and
@@ -48,6 +52,19 @@ export interface PassLink {
   cents: number | null;
 }
 
+/** A checkout the booth opened for an owl (OP-175): the token's hash, the owl, and the order it went to once paid. */
+export interface CheckoutRecord {
+  hash: string;
+  device: string;
+  created: number;
+  expires: number;
+  /** The paid order the token placed tickets from; null until then. */
+  order: string | null;
+}
+
+/** Why a paid order's checkout token placed nothing (OP-175): the claim email is the way then. */
+export type PlaceRefusal = 'unknown' | 'expired' | 'used' | 'repeat' | 'no-order';
+
 export interface TicketStore {
   order(order: string): OrderRecord | null;
   orderByClaim(claimHash: string): OrderRecord | null;
@@ -63,6 +80,10 @@ export interface TicketStore {
   passLinksFrom(ticketId: string): PassLink[];
   passLinks(): PassLink[];
   putPassLink(l: PassLink): void;
+  checkout(hash: string): CheckoutRecord | null;
+  putCheckout(c: CheckoutRecord): void;
+  /** Forgets checkouts made before this time. */
+  dropCheckouts(before: number): void;
 }
 
 export interface WalletTicket {
@@ -131,6 +152,11 @@ function secret(random: Random): string {
   for (const b of random(32)) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+
+/** How long a booth checkout token works (OP-175): a cart left open overnight still lands its ticket. */
+export const CHECKOUT_TTL_MS = 24 * 60 * 60_000;
+/** How long a checkout is remembered at all, so a late repeat of its webhook still finds it used. */
+export const CHECKOUT_KEEP_MS = 7 * 24 * 60 * 60_000;
 
 /** How long one webhook may work on an order before another may take it over (one that died part way). */
 export const ORDER_LEASE_MS = 20_000;
@@ -325,6 +351,35 @@ export class TicketBook {
     };
   }
 
+  /** A one-time checkout token for this owl (OP-175); the book keeps only its hash. */
+  async newCheckout(device: string, now: number): Promise<string> {
+    this.store.dropCheckouts(now - CHECKOUT_KEEP_MS);
+    const token = secret(this.random);
+    this.store.putCheckout({ hash: await this.hash(token), device, created: now, expires: now + CHECKOUT_TTL_MS, order: null });
+    return token;
+  }
+
+  /**
+   * A paid order carried a checkout token (OP-175): its live tickets that have never been scanned
+   * go onto the owl that opened the checkout, as a claim would put them (OP-174's rule: a running
+   * ticket stays where it is). A token works for one order, once: a repeat of the same order's
+   * webhook moves nothing again (a claim may have moved the tickets since).
+   */
+  async placeByCheckout(order: string, token: string, now: number): Promise<{ device: string; tickets: TicketRecord[] } | { refused: PlaceRefusal }> {
+    const c = this.store.checkout(await this.hash(token));
+    if (!c) return { refused: 'unknown' };
+    if (c.order !== null) return { refused: c.order === order ? 'repeat' : 'used' };
+    if (now > c.expires) return { refused: 'expired' };
+    if (!this.store.order(order)) return { refused: 'no-order' };
+    const out = this.store
+      .ticketsOf(order)
+      .filter((t) => t.revoked === null && t.firstScan === null)
+      .map((t) => ({ ...t, device: c.device, shareHash: null }));
+    for (const t of out) this.store.putTicket(t);
+    this.store.putCheckout({ ...c, order });
+    return { device: c.device, tickets: out };
+  }
+
   /** The emailed link's live tickets as they stand, before a claim moves them. Null for an unknown secret. */
   async claimable(claimSecret: string): Promise<TicketRecord[] | null> {
     const o = this.store.orderByClaim(await this.hash(claimSecret));
@@ -406,6 +461,7 @@ export class MemoryTicketStore implements TicketStore {
   private readonly orders = new Map<string, OrderRecord>();
   private readonly tickets = new Map<string, TicketRecord>();
   private readonly links = new Map<string, PassLink>();
+  private readonly checkouts = new Map<string, CheckoutRecord>();
   order(order: string) {
     return this.orders.get(order) ?? null;
   }
@@ -447,5 +503,15 @@ export class MemoryTicketStore implements TicketStore {
   }
   putPassLink(l: PassLink) {
     this.links.set(l.order, { ...l });
+  }
+  checkout(hash: string) {
+    const c = this.checkouts.get(hash);
+    return c ? { ...c } : null;
+  }
+  putCheckout(c: CheckoutRecord) {
+    this.checkouts.set(c.hash, { ...c });
+  }
+  dropCheckouts(before: number) {
+    for (const [h, c] of this.checkouts) if (c.created < before) this.checkouts.delete(h);
   }
 }

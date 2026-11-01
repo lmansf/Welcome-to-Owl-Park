@@ -25,6 +25,7 @@ import { createSettingsScreen } from './settingsScreen';
 import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
 import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard } from './tickets';
+import { createCheckoutWatch, type CheckoutWatch, type WatchOptions } from './checkout';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
 export interface CollectionActions {
@@ -161,6 +162,10 @@ export interface Hud {
   offerFreePass(offer: FreePassOffer): void;
   /** Look for a pass the owl went to claim, and say when it has come. */
   watchFreePass(claimed: () => Promise<boolean>): void;
+  /** The booth's checkout is open (OP-175): watch the wallet, say when the ticket has come, and call `came` then if the booth is still open. */
+  watchCheckout(o: WatchOptions, came: () => void): void;
+  /** The buyer is done with the booth's checkout: look a little longer, then stop. */
+  cancelCheckout(): void;
   /** The room the owl is in (the lobby shows its welcome instead of the quest hints). */
   setRoom(roomId: string): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
@@ -415,6 +420,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let booth: BoothPanel | null = null;
   let ticketCard: ReturnType<typeof createTicketCard> | null = null;
   let freePass: FreePassCard | null = null;
+  let checkout: CheckoutWatch | null = null;
+  let onCame: () => void = () => {};
   let roomId = '';
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
@@ -882,6 +889,18 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     watchFreePass(claimed) {
       freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
       freePass.watch(claimed);
+    },
+    watchCheckout(o, came) {
+      onCame = came;
+      checkout ??= createCheckoutWatch((m, yes) => {
+        toast(m, 6000);
+        // The booth, if it is still open, shows the ticket now in its wallet.
+        if (yes && booth?.isOpen()) onCame();
+      });
+      checkout.start(o);
+    },
+    cancelCheckout() {
+      checkout?.cancel();
     },
     setRoom(id) {
       roomId = id;

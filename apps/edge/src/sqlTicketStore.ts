@@ -5,7 +5,7 @@
  */
 import { errorFields } from '@owl-park/shared';
 import { moduleLog } from './logs';
-import type { OrderRecord, PassLink, TicketRecord, TicketStore } from './TicketBook';
+import type { CheckoutRecord, OrderRecord, PassLink, TicketRecord, TicketStore } from './TicketBook';
 import type { TicketKind } from './tickets';
 
 type OrderRow = {
@@ -32,6 +32,10 @@ type TicketRow = {
   device: string | null;
   share_hash: string | null;
 };
+
+type CheckoutRow = { hash: string; device: string; created: number; expires: number; order_id: string | null };
+
+const checkout = (r: CheckoutRow): CheckoutRecord => ({ hash: r.hash, device: r.device, created: r.created, expires: r.expires, order: r.order_id });
 
 type LinkRow = { order_id: string; from_ticket: string | null; at: number; cents: number | null };
 
@@ -77,6 +81,9 @@ export class SqlTicketStore implements TicketStore {
       if (!/duplicate column/i.test(errorFields(e).message)) moduleLog.error('worker.tickets', 'write_failed', 'A table could not be brought up to date.', { table: 'opening_passes', column: 'cents', error: e });
     }
     sql.exec(`CREATE INDEX IF NOT EXISTS opening_passes_from ON opening_passes (from_ticket)`);
+    // The booth's checkouts (OP-175): a token's hash, the owl it was made for, and the order it went to once paid.
+    sql.exec(`CREATE TABLE IF NOT EXISTS ticket_checkouts (hash TEXT PRIMARY KEY, device TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, order_id TEXT)`);
+    sql.exec(`CREATE INDEX IF NOT EXISTS ticket_checkouts_created ON ticket_checkouts (created)`);
   }
 
   order(id: string) {
@@ -125,5 +132,15 @@ export class SqlTicketStore implements TicketStore {
       `INSERT OR REPLACE INTO tickets (id, kind, length_ms, order_id, line, unit, created, held, first_scan, valid_from, valid_until, revoked, device, share_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       t.id, t.kind, t.lengthMs, t.order, t.line, t.unit, t.created, t.held ? 1 : 0, t.firstScan, t.validFrom, t.validUntil, t.revoked, t.device, t.shareHash,
     );
+  }
+  checkout(hash: string) {
+    const r = this.sql.exec<CheckoutRow>(`SELECT * FROM ticket_checkouts WHERE hash = ?`, hash).toArray()[0];
+    return r ? checkout(r) : null;
+  }
+  putCheckout(c: CheckoutRecord) {
+    this.sql.exec(`INSERT OR REPLACE INTO ticket_checkouts (hash, device, created, expires, order_id) VALUES (?, ?, ?, ?, ?)`, c.hash, c.device, c.created, c.expires, c.order);
+  }
+  dropCheckouts(before: number) {
+    this.sql.exec(`DELETE FROM ticket_checkouts WHERE created < ?`, before);
   }
 }
