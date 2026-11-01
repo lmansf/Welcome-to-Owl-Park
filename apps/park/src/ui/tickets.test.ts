@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import type { WalletEntry } from '../net';
-import { LINK_WORDS, OPENING_WORDS, gateCard, gateRefusal, linkToast, timeLeft, walletLine } from './tickets';
+import { pointInRect } from '@owl-park/shared';
+import { getRoom } from '../rooms';
+import {
+  GATE_STATUS_WORDS,
+  LINK_WORDS,
+  LOW_TIME_MS,
+  OPENING_WORDS,
+  approachMove,
+  approachStart,
+  approachThrough,
+  bestTicket,
+  gateCard,
+  gateRefusal,
+  gateStatus,
+  linkToast,
+  lowTimeDue,
+  lowTimeToast,
+  ticketRun,
+  timeLeft,
+  walletLine,
+} from './tickets';
 
 const T0 = Date.UTC(2026, 10, 1, 12, 0, 0);
 const H = 3_600_000;
@@ -67,5 +87,122 @@ describe('tickets in words', () => {
     // OP-174: a ticket already running on another owl stays with it.
     expect(linkToast('claim', 'in-use')).toBe(LINK_WORDS.inUse);
     expect(linkToast('take', 'in-use')).toContain('already in use');
+  });
+});
+
+describe('the ticket status at the turnstiles (OP-172)', () => {
+  const taking = { gate: 'ticket', admitted: false } as const;
+
+  it('says the best ticket in the wallet’s words while the gate takes tickets', () => {
+    expect(gateStatus([ticket()], taking, T0)).toBe('Day ticket: Ready, its time starts when the turnstiles scan it');
+    expect(gateStatus([ticket({ kind: 'annual', status: 'active', msLeft: 340 * D })], taking, T0)).toBe('Annual pass: Running');
+    expect(gateStatus([ticket({ status: 'active', msLeft: 5 * H + 12 * 60_000 })], taking, T0)).toBe('Day ticket: Running, 5 h 12 m left');
+    expect(gateStatus([ticket({ kind: 'night', status: 'active', msLeft: null })], taking, T0)).toBe('Night ticket: Running');
+    expect(gateStatus([ticket({ status: 'held' })], taking, T0)).toBe('Day ticket: Waiting on a quick check from the store; it works as soon as that is done');
+    expect(gateStatus([ticket({ kind: 'event', msLeft: null, validFrom: T0 + D, validUntil: T0 + D + 4 * H })], taking, T0, () => 'Nov 2, 7:00 PM')).toBe('Event ticket: For Nov 2, 7:00 PM');
+    expect(gateStatus([ticket({ kind: 'opening-night', msLeft: null, validFrom: T0 - H, validUntil: T0 + 3 * H })], taking, T0)).toBe('Opening Night Ticket: Its night is on, walk through the turnstiles');
+    // The same pick as the home line: running first, then the longest; spent tickets never.
+    expect(gateStatus([ticket(), ticket({ status: 'active', msLeft: 2 * H }), ticket({ status: 'used' })], taking, T0)).toBe('Day ticket: Running, 2 h 0 m left');
+  });
+
+  it('points at the booth without a ticket, and says nothing with the gate open', () => {
+    expect(gateStatus([], taking, T0)).toBe(GATE_STATUS_WORDS.none);
+    expect(GATE_STATUS_WORDS.none).toBe('No ticket yet: the ticket booth is along the plaza');
+    expect(gateStatus([ticket({ status: 'expired' }), ticket({ status: 'revoked' })], taking, T0)).toBe(GATE_STATUS_WORDS.none);
+    expect(gateStatus([], { gate: 'open', admitted: true }, T0)).toBeNull();
+    expect(gateStatus([ticket()], { gate: 'open', admitted: false }, T0)).toBeNull();
+    // Let through already (no ticket on this device to show): the gate turns no one back, so nothing.
+    expect(gateStatus([], { gate: 'ticket', admitted: true }, T0)).toBeNull();
+    expect(gateStatus([ticket()], { gate: 'ticket', admitted: true }, T0)).toBe('Day ticket: Ready, its time starts when the turnstiles scan it');
+  });
+
+  it('picks the ticket that matters most', () => {
+    expect(bestTicket([])).toBeNull();
+    expect(bestTicket([ticket({ status: 'used' })])).toBeNull();
+    const annual = ticket({ id: 'A', kind: 'annual', status: 'active', msLeft: 300 * D });
+    expect(bestTicket([ticket({ status: 'active', msLeft: H }), annual, ticket()])).toBe(annual);
+    const ready = ticket({ id: 'R' });
+    expect(bestTicket([ticket({ status: 'held' }), ready])).toBe(ready);
+  });
+
+  it('shows on walking onto the plaza and fades on walking off it', () => {
+    let a = approachStart(false);
+    expect(a.shown).toBe(false);
+    a = approachMove(a, true);
+    expect(a).toEqual({ inside: true, armed: true, shown: true });
+    // Moving about on the plaza changes nothing.
+    expect(approachMove(a, true)).toBe(a);
+    a = approachMove(a, false);
+    expect(a.shown).toBe(false);
+    expect(approachMove(a, true).shown).toBe(true);
+  });
+
+  it('is not shown to an owl that comes out of the park onto the plaza until it walks off and back', () => {
+    let a = approachStart(true);
+    expect(a).toEqual({ inside: true, armed: false, shown: false });
+    a = approachMove(a, true);
+    expect(a.shown).toBe(false);
+    a = approachMove(a, false);
+    expect(a.shown).toBe(false);
+    a = approachMove(a, true);
+    expect(a.shown).toBe(true);
+  });
+
+  it('gives way to the turnstiles: gone through (or turned back), it shows again only after a walk off and back', () => {
+    let a = approachThrough(approachMove(approachStart(false), true));
+    expect(a).toEqual({ inside: true, armed: false, shown: false });
+    // Turned back onto the plaza: still nothing.
+    a = approachMove(a, true);
+    expect(a.shown).toBe(false);
+    a = approachMove(approachMove(a, false), true);
+    expect(a.shown).toBe(true);
+  });
+
+  it('has its plaza in the lobby’s room data: before the turnstiles, short of the booth, where an owl out of the park lands', () => {
+    const lobby = getRoom('lobby');
+    const zone = lobby.zones?.find((z) => z.id === 'gate-approach');
+    expect(zone).toBeDefined();
+    const gate = lobby.doors.find((d) => d.id === 'gate')!;
+    const booth = lobby.doors.find((d) => d.id === 'booth')!;
+    expect(zone!.rect.x).toBeLessThanOrEqual(gate.rect.x);
+    expect(zone!.rect.x + zone!.rect.w).toBeGreaterThanOrEqual(gate.rect.x + gate.rect.w);
+    expect(zone!.rect.x).toBeGreaterThan(booth.rect.x + booth.rect.w);
+    // The owl that comes out of the park lands on it; one arriving from the street does not.
+    expect(pointInRect(lobby.spawns['from-hub']!, zone!.rect)).toBe(true);
+    expect(pointInRect(lobby.spawns['default']!, zone!.rect)).toBe(false);
+    // In front of each turnstile, just below the gate.
+    expect(pointInRect({ x: gate.rect.x + 20, y: gate.rect.y + gate.rect.h + 10 }, zone!.rect)).toBe(true);
+    expect(pointInRect({ x: gate.rect.x + gate.rect.w - 20, y: gate.rect.y + gate.rect.h + 10 }, zone!.rect)).toBe(true);
+  });
+});
+
+describe('the one toast in the park as a ticket runs low (OP-172)', () => {
+  const scan = (kind: WalletEntry['kind'], validUntil: number | null) => ({ ok: true as const, id: 'OWL-7K3Q-PX9M', kind, started: true, validUntil });
+
+  it('is for a Day or Night ticket only', () => {
+    expect(ticketRun(scan('day', T0 + D))).toEqual({ kind: 'day', until: T0 + D, warned: false });
+    expect(ticketRun(scan('night', T0 + 4 * H))).toMatchObject({ kind: 'night' });
+    expect(ticketRun(scan('annual', T0 + 300 * D))).toBeNull();
+    expect(ticketRun(scan('event', T0 + 4 * H))).toBeNull();
+    expect(ticketRun(scan('opening-night', T0 + 4 * H))).toBeNull();
+    expect(ticketRun(scan('day', null))).toBeNull();
+  });
+
+  it('comes at 15 minutes left, once a visit', () => {
+    const run = ticketRun(scan('day', T0 + 2 * H))!;
+    expect(lowTimeDue(run, T0)).toBe(2 * H - LOW_TIME_MS);
+    expect(LOW_TIME_MS).toBe(15 * 60_000);
+    // Past the mark already (a room entered with less left): now.
+    expect(lowTimeDue(run, T0 + 2 * H - 10 * 60_000)).toBe(0);
+    // Shown, or run out: never again.
+    expect(lowTimeDue({ ...run, warned: true }, T0)).toBeNull();
+    expect(lowTimeDue(run, T0 + 2 * H)).toBeNull();
+    expect(lowTimeDue(null, T0)).toBeNull();
+  });
+
+  it('says how long is left, quietly', () => {
+    expect(lowTimeToast('day', 15 * 60_000)).toBe('Your Day ticket has 15 minutes left.');
+    expect(lowTimeToast('night', 12 * 60_000 + 20_000)).toBe('Your Night ticket has 12 minutes left.');
+    expect(lowTimeToast('day', 50_000)).toBe('Your Day ticket has 1 minute left.');
   });
 });
