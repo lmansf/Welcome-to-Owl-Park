@@ -42,8 +42,9 @@ export default defineConfig({
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
-    // The ledge painter (paint.spec.ts, OP-156) saves to the room server, so it runs here too.
-    { name: 'edge', testMatch: /(edge|opening|gate|checkout|overflow|climb|accounts|travel|policy|paint)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    // The ledge painter (paint.spec.ts, OP-156) saves to the room server, so it runs here too, and so
+    // does the card before the store (storecard.spec.ts, OP-153), whose ways need the store's pages.
+    { name: 'edge', testMatch: /(edge|opening|gate|checkout|overflow|climb|accounts|travel|policy|paint|storecard)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {
@@ -62,10 +63,11 @@ export default defineConfig({
     {
       // The admin key lets the ticket tests issue tickets without a store, and the store is the
       // stand-in above; these settings exist only on this test server. The client is built with the
-      // store's ticket page, which the booth offers while the gate takes tickets.
+      // store's ticket page, which the booth offers while the gate takes tickets, and the store's page
+      // for the gift shop's door (both behind the card before the store, OP-153).
       // Each run starts the room server empty, as CI does: in a storage folder of its own, so what an
       // earlier run (or `pnpm dev:edge`) left behind, such as the day's best scores, never decides a test.
-      command: `VITE_TICKETS_URL=${E2E_STORE.ticketsUrl} pnpm build && rm -rf ../edge/.wrangler/e2e && pnpm --filter @owl-park/edge dev --persist-to .wrangler/e2e ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
+      command: `VITE_TICKETS_URL=${E2E_STORE.ticketsUrl} VITE_SHOP_URL=${E2E_STORE.shopUrl} pnpm build && rm -rf ../edge/.wrangler/e2e && pnpm --filter @owl-park/edge dev --persist-to .wrangler/e2e ${Object.entries(EDGE_VARS).map(([k, v]) => `--var ${k}:${v}`).join(' ')}`,
       url: 'http://localhost:8787/api/counts',
       reuseExistingServer: true,
       timeout: 180_000,
