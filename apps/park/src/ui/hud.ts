@@ -27,7 +27,6 @@ import { createBoothPanel, type BoothInfo, type BoothPanel } from './booth';
 import { createShopPanel, type ShopPanel } from './shop';
 import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createCheckoutWatch, type CheckoutWatch, type WatchOptions } from './checkout';
-import { createStoreCard, type StoreGo } from './storeCard';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
 export interface CollectionActions {
@@ -138,11 +137,6 @@ export interface Hud {
   openShop(): void;
   /** The lobby's ticket booth. */
   openBooth(info: BoothInfo): void;
-  /**
-   * The card before the store (OP-153): Continue goes on to the store (`go`), Not now back to where
-   * the visitor was. Every way from the park to the store asks through it; `opener` gets the focus back.
-   */
-  askStore(go: StoreGo, opener?: HTMLElement | null): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
   /** The ticket status in the ticket card's place while the owl stands before the turnstiles (OP-172); null fades it out. */
@@ -576,8 +570,6 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
-  /** The card before the store (OP-153), over the booth or the pass offer that asked; it closes alone on Escape. */
-  const storeCard = createStoreCard(root);
   // Its Send feedback opens the same form as the Menu's (OP-167); closed, it gives the focus back to the home screen's Settings button.
   const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
   // Which owl are you (OP-076) covers the whole screen, like the owl builder.
@@ -625,9 +617,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     feedback?.close();
     accountScreens?.close();
     leaveCard.close();
-    storeCard.close();
   };
-  const isBlocking = () => storeCard.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  const isBlocking = () => menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
   /** The account's cards for the Menu (OP-139): none while accounts are off. */
   function accountCards(): HTMLElement[] | null {
     if (!account || !accountScreens) return null;
@@ -909,10 +900,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       shop?.open();
     },
     openBooth(info) {
-      booth ??= createBoothPanel(root, makeRoom, storeCard.ask);
+      booth ??= createBoothPanel(root, makeRoom);
       booth.open(info);
     },
-    askStore: (go, opener) => storeCard.ask(go, opener),
     showTicket(card) {
       ticketCard ??= createTicketCard(root);
       ticketCard.show(card);
@@ -951,11 +941,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     climbResult: (r) => climb.result(r),
     closeClimb: () => climb.close(),
     offerFreePass(offer) {
-      freePass ??= createFreePassCard(root, (m) => toast(m, 5000), storeCard.ask);
+      freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
       freePass.show(offer);
     },
     watchFreePass(claimed) {
-      freePass ??= createFreePassCard(root, (m) => toast(m, 5000), storeCard.ask);
+      freePass ??= createFreePassCard(root, (m) => toast(m, 5000));
       freePass.watch(claimed);
     },
     watchCheckout(o, came) {

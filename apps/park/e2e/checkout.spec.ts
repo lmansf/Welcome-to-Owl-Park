@@ -1,15 +1,14 @@
 import { createHmac } from 'node:crypto';
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, E2E_STORE, state, walkToDoor } from './helpers';
 
 /**
  * Buying a ticket without leaving the park (OP-175), through the room server and the stand-in store
  * (e2e/standInStore.mjs). The booth's Get a ticket opens the store's checkout in a window of its own
  * with this owl's one-time token in the cart; the store's own checkout page is stood in for here
  * (the test never reaches a real store), the paid order comes in as a signed webhook, and the ticket
- * lands on the owl with no email opened. Each way to checkout asks first (the card before the store,
- * OP-153; storecard.spec.ts): these press Continue.
+ * lands on the owl with no email opened.
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
@@ -98,8 +97,7 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';
       await openBooth(a);
-      await a.locator('[data-booth="buy"]').click();
-      const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
+      const [popup] = await Promise.all([a.waitForEvent('popup'), a.locator('[data-booth="buy"]').click()]);
       await expect(a.locator('[data-booth="checkout"]')).toContainText('Checkout is open in its own window');
       await popup.waitForURL(/\/cart\//);
       const token = tokenOf(popup.url());
@@ -127,16 +125,10 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     const a = await arrive(browser, COMPUTER, true);
     await openBooth(a);
     await a.locator('[data-booth="buy"]').click();
-    await storeContinue(a);
     await expect(a.locator('[data-booth="checkout"]')).toContainText('Your browser blocked the checkout window');
     const link = a.locator('[data-booth="checkout-link"]');
     await expect(link).toHaveText('Open checkout');
-    // Open checkout asks first too: the card's Continue is the link to the cart.
-    await link.click();
-    await expectStoreCard(a);
-    const token = tokenOf((await a.locator(`${STORE_CARD} [data-store="continue"]`).getAttribute('href'))!);
-    await a.locator(`${STORE_CARD} [data-store="not-now"]`).click();
-    await expect(a.locator(STORE_CARD)).toBeHidden();
+    const token = tokenOf((await link.getAttribute('href'))!);
     await a.locator('[data-booth="checkout-cancel"]').click();
     await expect(a.locator('[data-booth="checkout"]')).toHaveText('Checkout closed. If you paid, the ticket still lands on this owl, and your email has its link too.');
     // Paid just before Cancel: it still lands, and the page still says so.

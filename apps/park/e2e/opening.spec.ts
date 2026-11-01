@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, E2E_STORE, state, walkToDoor } from './helpers';
 
 /**
  * Opening night (C42) through the room server and the stand-in store (e2e/standInStore.mjs): the
@@ -96,29 +96,16 @@ test.describe('opening night (C42)', () => {
       const offer = a.locator('[data-free-pass]');
       await expect(offer).toBeVisible({ timeout: 15_000 });
       await expect(offer).toContainText('Your pass is half price tonight.');
-      const claimIt = offer.getByRole('button', { name: 'Claim it' });
-      await a.screenshot({ path: `e2e-screenshots/opening-free-pass-${device === PHONE ? 'phone' : 'desktop'}.png` });
-
-      // Claim it asks first (the card before the store, OP-153), whose Continue is the cart link.
-      let pages = 0;
-      a.context().on('page', () => pages++);
-      await claimIt.click();
-      await expectStoreCard(a);
-      const cart = new URL((await a.locator(`${STORE_CARD} [data-store="continue"]`).getAttribute('href'))!);
+      const claimIt = offer.getByRole('link', { name: 'Claim it' });
+      const cart = new URL((await claimIt.getAttribute('href'))!);
       expect(cart.origin + cart.pathname).toBe(`https://${E2E_STORE.shop}/cart/41002:1`);
       expect(cart.searchParams.get('discount')).toBe(E2E_STORE.passCode);
       expect(cart.searchParams.get('attributes[from_ticket]')).toBe(night!.id);
-      // Not now: back to the offer, and no checkout.
-      await a.locator(`${STORE_CARD} [data-store="not-now"]`).click();
-      await expect(a.locator(STORE_CARD)).toBeHidden();
-      await expect(offer).toBeVisible();
-      await expect(claimIt).toBeFocused();
-      expect(pages).toBe(0);
+      await a.screenshot({ path: `e2e-screenshots/opening-free-pass-${device === PHONE ? 'phone' : 'desktop'}.png` });
 
-      // Claim it, Continue: the store's checkout opens in a new tab (a stand-in page here).
+      // Claim it: the store's checkout opens in a new tab (a stand-in page here).
       await a.context().route(`https://${E2E_STORE.shop}/**`, (route) => route.fulfill({ contentType: 'text/html', body: '<p>Checkout</p>' }));
-      await claimIt.click();
-      const [checkout] = await Promise.all([a.context().waitForEvent('page'), storeContinue(a)]);
+      const [checkout] = await Promise.all([a.context().waitForEvent('page'), claimIt.click()]);
       await checkout.close();
 
       // The buyer checks out: a half-price pass order with the code and the ticket, back through the webhook.
