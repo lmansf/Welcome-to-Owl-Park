@@ -196,6 +196,8 @@ describe('hostile values at every door the Worker has (OP-143)', () => {
     await refusedEach((v) => post(park.env(), `/api/admin/masks/${encodeURIComponent(echoOf(v))}`, { ledges: [], walls: [], hazards: [], fronts: [] }, admin));
     await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', { ledges: [{ id: v, x0: 1, x1: 2, top: 3 }], walls: [], hazards: [], fronts: [] }, admin));
     await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', { ledges: [{ id: 'ledge-1', x0: v, x1: v, top: v }], walls: v, hazards: [], fronts: [{ id: 'front-1', points: v }] }, admin));
+    await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', { ledges: [], walls: [], hazards: [], fronts: [], spots: [{ id: v, x: v, y: v }] }, admin));
+    await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', { ledges: [], walls: [], hazards: [], fronts: [], spots: [{ id: 'booth-lobby', x: v, y: 770 }] }, admin));
     await refusedEach((v) => post(park.env(), '/api/admin/masks/l1', v, admin));
     expect(park.reached).toEqual([]);
     // A hostile limit on the keepers' list is a number the list keeps between 1 and 500 (feedbackBox.ts), or the default.

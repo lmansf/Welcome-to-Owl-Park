@@ -1,9 +1,10 @@
 /**
  * The ledge painter's panel (OP-156, `?paint=1` with a keeper's token): the tools (select, ledge,
- * wall, hazard, front), Suggest, Undo, Delete, Save and Try, the picked item's numbers, and a line
- * saying whether the draft is saved. It sits at the right under the top bar, under the Menu and the
- * screens that open over the room, and takes taps on itself only. Its buttons never keep the
- * keyboard, so the space bar still jumps and the arrow keys still walk.
+ * wall, hazard, front, spot), with the spot tool the room's named spots to pick from (each placed one
+ * ticked), Suggest, Undo, Delete, Save and Try, the picked item's numbers, and a line saying whether
+ * the draft is saved. It sits at the right under the top bar, under the Menu and the screens that open
+ * over the room, and takes taps on itself only. Its buttons never keep the keyboard, so the space bar
+ * still jumps and the arrow keys still walk.
  */
 import { TOOLS, type Tool } from '../paint/editor';
 
@@ -22,6 +23,15 @@ export interface PaintView {
   trying: boolean;
   /** Reading or saving: the buttons that change the draft wait. */
   busy: boolean;
+  /** The name the spot tool places next, and those of the room's names placed in the draft. */
+  naming: string | null;
+  placed: readonly string[];
+}
+
+/** One of the room's named spots as the list shows it: its id, and what it is (shown on hover). */
+export interface PanelName {
+  id: string;
+  hint: string;
 }
 
 export interface PaintActions {
@@ -31,6 +41,8 @@ export interface PaintActions {
   remove(): void;
   save(): void;
   tryDraft(on: boolean): void;
+  /** A name picked in the spot tool's list. */
+  name(id: string): void;
 }
 
 export interface PaintPanel {
@@ -38,9 +50,9 @@ export interface PaintPanel {
   destroy(): void;
 }
 
-const TOOL_WORDS: Record<Tool, string> = { select: 'Select', ledge: 'Ledge', wall: 'Wall', hazard: 'Hazard', front: 'Front' };
+const TOOL_WORDS: Record<Tool, string> = { select: 'Select', ledge: 'Ledge', wall: 'Wall', hazard: 'Hazard', front: 'Front', spot: 'Spot' };
 /** Each tool's colour, as its items are drawn. */
-const TOOL_COLOURS: Record<Tool, string> = { select: '#F6F1E3', ledge: '#5BE37D', wall: '#FF4D4D', hazard: '#FF9F1C', front: '#3D8BFF' };
+const TOOL_COLOURS: Record<Tool, string> = { select: '#F6F1E3', ledge: '#5BE37D', wall: '#FF4D4D', hazard: '#FF9F1C', front: '#3D8BFF', spot: '#C77DFF' };
 
 // Inside #hud, so the Menu and the screens over the room (z-index 20 there) cover it; #hud's own button style is put back to the panel's.
 const CSS = `
@@ -54,6 +66,10 @@ const CSS = `
 #hud .paint-panel button[data-tool]::before{content:'';display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:50%;background:var(--c)}
 #hud .paint-panel button[aria-pressed=true]{background:#C9A227;color:#0C1E36;border-color:#C9A227}
 #hud .paint-panel button:disabled{opacity:.45;cursor:default}
+#hud .paint-panel .names{max-height:136px;overflow-y:auto}
+#hud .paint-panel .names[hidden]{display:none}
+#hud .paint-panel .names button{min-height:28px;padding:2px 7px;font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace}
+#hud .paint-panel .names button[data-placed=true]{border-color:#C77DFF}
 #hud .paint-panel .readout{min-height:1.35em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
 #hud .paint-panel .status{font-weight:700}
 #hud .paint-panel .status[data-state=saved]{color:#9CFF57}
@@ -61,8 +77,8 @@ const CSS = `
 #hud .paint-panel .status[data-state=error]{color:#FF8A80}
 `;
 
-/** The panel, in `parent` (the HUD), for the room `room`. */
-export function mountPaintPanel(parent: HTMLElement, room: string, actions: PaintActions): PaintPanel {
+/** The panel, in `parent` (the HUD), for the room `room` and its named spots, west to east. */
+export function mountPaintPanel(parent: HTMLElement, room: string, actions: PaintActions, names: readonly PanelName[] = []): PaintPanel {
   const style = document.createElement('style');
   style.textContent = CSS;
   const panel = document.createElement('div');
@@ -91,6 +107,21 @@ export function mountPaintPanel(parent: HTMLElement, room: string, actions: Pain
     return b;
   });
   tools.append(...toolButtons);
+  // The spot tool's names: one to pick, then a tap on the playfield places it.
+  const list = document.createElement('div');
+  list.className = 'row names';
+  list.dataset.paintNames = '';
+  list.setAttribute('role', 'group');
+  list.setAttribute('aria-label', 'Named spots');
+  list.hidden = true;
+  const nameButtons = names.map((n) => {
+    const b = button(n.id, () => actions.name(n.id), { spot: n.id, placed: 'false' });
+    b.title = n.hint;
+    b.setAttribute('aria-pressed', 'false');
+    return b;
+  });
+  if (nameButtons.length) list.append(...nameButtons);
+  else list.textContent = 'This room has no named spots.';
   const acts = document.createElement('div');
   acts.className = 'row';
   const suggest = button('Suggest', () => actions.suggest(), { paint: 'suggest' });
@@ -108,7 +139,7 @@ export function mountPaintPanel(parent: HTMLElement, room: string, actions: Pain
   status.className = 'status';
   status.dataset.paintStatus = '';
   status.setAttribute('aria-live', 'polite');
-  panel.append(title, tools, acts, readout, status);
+  panel.append(title, tools, list, acts, readout, status);
   parent.append(panel);
   document.head.append(style);
   return {
@@ -122,6 +153,16 @@ export function mountPaintPanel(parent: HTMLElement, room: string, actions: Pain
       if (readout.textContent !== v.readout) readout.textContent = v.readout;
       if (status.textContent !== v.status) status.textContent = v.status;
       status.dataset.state = v.state;
+      list.hidden = v.tool !== 'spot';
+      for (const b of nameButtons) {
+        const id = b.dataset['spot'] ?? '';
+        const placed = v.placed.includes(id);
+        const words = placed ? `✓ ${id}` : id;
+        if (b.textContent !== words) b.textContent = words;
+        b.dataset['placed'] = String(placed);
+        b.setAttribute('aria-pressed', String(v.naming === id));
+        b.disabled = v.busy;
+      }
     },
     destroy() {
       panel.remove();

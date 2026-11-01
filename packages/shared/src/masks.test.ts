@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { FRONT_POINTS_MAX, MASK_LIST_MAX, MASK_REASONS, checkMasks, emptyMasks, frontsOf, isPaintable, ledgesOf, type MaskCheck, type MaskDraft } from './masks';
+import { FRONT_POINTS_MAX, MASK_LIST_MAX, MASK_REASONS, checkMasks, draftOf, emptyMasks, frontsOf, isPaintable, ledgesOf, placesOf, type MaskCheck, type MaskDraft } from './masks';
 import { MAX_PERCH_TOP } from './perches';
+import { mapOf } from './room';
+import { treeLevelOf, treeSpotsFor } from './treeSpots';
 import { ROOMS } from '../rooms';
 
 // The ledge painter's draft (OP-156): the one check the Worker, the overflow object and the painter make.
@@ -16,34 +18,63 @@ const GOOD: MaskDraft = {
   walls: [{ id: 'wall-1', x: 640, y0: 300, y1: 770 }],
   hazards: [{ id: 'hazard-1', x0: 900, x1: 1000, top: 1 }],
   fronts: [{ id: 'front-1', points: TRI }],
+  spots: [{ id: 'booth-lobby', x: 2431, y: 770 }],
 };
+/** GOOD as a draft from before spots (OP-156, part 2) had it: the four lists. */
+const { spots: _none, ...BEFORE_SPOTS } = GOOD;
 /** GOOD with one list's first item changed (or replaced, given a non-object). */
 const withItem = (list: keyof MaskDraft, change: unknown): unknown => ({ ...GOOD, [list]: [change !== null && typeof change === 'object' && !Array.isArray(change) ? { ...GOOD[list][0], ...change } : change] });
 const refusal = (c: MaskCheck) => (c.ok ? null : { reason: c.reason, list: c.list, index: c.index });
 
 describe('a ledge draft (OP-156)', () => {
-  it('takes four lists of items inside the room, copying only their own fields', () => {
+  it('takes five lists of items inside the room, copying only their own fields', () => {
     const c = checkMasks(JSON.parse(JSON.stringify(GOOD)), SIZE);
     expect(c).toEqual({ ok: true, draft: GOOD });
-    // Edges of the room and of the rules are in: a ledge the room's whole width, a top at the highest perch's, a wall the room's height.
-    const edges = { ...emptyMasks(), ledges: [{ id: 'a', x0: 0, x1: 6400, top: MAX_PERCH_TOP }], walls: [{ id: 'b', x: 6400, y0: 0, y1: 900 }], fronts: [{ id: 'c', points: [{ x: 0, y: 0 }, { x: 6400, y: 0 }, { x: 6400, y: 900 }] }] };
+    // Edges of the room and of the rules are in: a ledge the room's whole width, a top at the highest perch's, a wall the room's height, spots at its corners.
+    const edges = {
+      ...emptyMasks(),
+      ledges: [{ id: 'a', x0: 0, x1: 6400, top: MAX_PERCH_TOP }],
+      walls: [{ id: 'b', x: 6400, y0: 0, y1: 900 }],
+      fronts: [{ id: 'c', points: [{ x: 0, y: 0 }, { x: 6400, y: 0 }, { x: 6400, y: 900 }] }],
+      spots: [{ id: 'd', x: 0, y: 0 }, { id: 'e', x: 6400, y: 900 }],
+    };
     expect(checkMasks(edges, SIZE).ok).toBe(true);
     expect(checkMasks(emptyMasks(), SIZE)).toEqual({ ok: true, draft: emptyMasks() });
   });
 
-  it('refuses a body that is not the four lists and nothing else', () => {
-    for (const body of [null, 'ledges', 42, [], { ...GOOD, extra: [] }, { ledges: [], walls: [], hazards: [] }]) {
+  it('reads a body of the four lists from before spots as a draft with none (OP-156, part 3)', () => {
+    // A keeper's painter tab opened before spots sends this, and the overflow object kept drafts like it.
+    expect(Object.keys(BEFORE_SPOTS)).toEqual(['ledges', 'walls', 'hazards', 'fronts']);
+    expect(checkMasks(JSON.parse(JSON.stringify(BEFORE_SPOTS)), SIZE)).toEqual({ ok: true, draft: { ...GOOD, spots: [] } });
+    // Its lists are checked as ever.
+    expect(refusal(checkMasks({ ...BEFORE_SPOTS, walls: [{ ...GOOD.walls[0], y0: 800 }] }, SIZE))).toEqual({ reason: 'order', list: 'walls', index: 0 });
+    // A saved draft as the park answers it, read for the check: the lists it has, its room and time left out.
+    expect(draftOf({ room: 'l1', ...GOOD, savedAt: 1 })).toEqual(GOOD);
+    expect(draftOf({ room: 'l1', ...BEFORE_SPOTS, savedAt: 1 })).toEqual(BEFORE_SPOTS);
+    expect(checkMasks(draftOf({ room: 'l1', ...BEFORE_SPOTS, savedAt: 1 }), SIZE)).toEqual({ ok: true, draft: { ...GOOD, spots: [] } });
+    expect(refusal(checkMasks(draftOf({ room: 'l1', ledges: [], savedAt: 1 }), SIZE))?.reason).toBe('body');
+  });
+
+  it('refuses a body that is not the five lists (or the four from before spots) and nothing else', () => {
+    const { fronts: _f, ...noFronts } = GOOD;
+    for (const body of [null, 'ledges', 42, [], { ...GOOD, extra: [] }, { ...BEFORE_SPOTS, extra: [] }, { ledges: [], walls: [], hazards: [] }, noFronts, { spots: [] }]) {
       expect(refusal(checkMasks(body, SIZE))?.reason, JSON.stringify(body)).toBe('body');
     }
     // A key JSON can carry that an object literal cannot: refused like any other extra.
     expect(refusal(checkMasks(JSON.parse('{"ledges":[],"walls":[],"hazards":[],"fronts":[],"__proto__":[]}'), SIZE))?.reason).toBe('body');
+    expect(refusal(checkMasks(JSON.parse('{"ledges":[],"walls":[],"hazards":[],"fronts":[],"spots":[],"__proto__":[]}'), SIZE))?.reason).toBe('body');
     expect(refusal(checkMasks({ ...GOOD, walls: {} }, SIZE))).toEqual({ reason: 'list', list: 'walls', index: undefined });
+    expect(refusal(checkMasks({ ...GOOD, spots: {} }, SIZE))).toEqual({ reason: 'list', list: 'spots', index: undefined });
+    expect(refusal(checkMasks({ ...GOOD, spots: null }, SIZE))).toEqual({ reason: 'list', list: 'spots', index: undefined });
   });
 
   it('holds each list to MASK_LIST_MAX items', () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `ledge-${i}`, x0: i, x1: i + 10, top: 50 }));
     expect(checkMasks({ ...emptyMasks(), ledges: many(MASK_LIST_MAX) }, SIZE).ok).toBe(true);
     expect(refusal(checkMasks({ ...emptyMasks(), ledges: many(MASK_LIST_MAX + 1) }, SIZE))).toEqual({ reason: 'too-many', list: 'ledges', index: undefined });
+    const spots = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `spot-${i}`, x: i, y: 770 }));
+    expect(checkMasks({ ...emptyMasks(), spots: spots(MASK_LIST_MAX) }, SIZE).ok).toBe(true);
+    expect(refusal(checkMasks({ ...emptyMasks(), spots: spots(MASK_LIST_MAX + 1) }, SIZE))).toEqual({ reason: 'too-many', list: 'spots', index: undefined });
   });
 
   it('refuses an item with a field missing, extra or of the wrong kind, and says which', () => {
@@ -53,14 +84,22 @@ describe('a ledge draft (OP-156)', () => {
     for (const x0 of ['100', null, Number.NaN, Number.POSITIVE_INFINITY, true]) expect(refusal(checkMasks(withItem('ledges', { x0 }), SIZE))?.reason, String(x0)).toBe('number');
     expect(refusal(checkMasks(withItem('walls', { y1: '770' }), SIZE))?.reason).toBe('number');
     expect(refusal(checkMasks(withItem('fronts', { points: [...TRI.slice(0, 2), { x: 1, y: 'x' }] }), SIZE))?.reason).toBe('number');
+    // A spot is its id and its point, nothing more or less.
+    expect(refusal(checkMasks(withItem('spots', { top: 0 }), SIZE))).toEqual({ reason: 'item', list: 'spots', index: 0 });
+    expect(refusal(checkMasks({ ...GOOD, spots: [{ id: 'booth-lobby', x: 2431 }] }, SIZE))).toEqual({ reason: 'item', list: 'spots', index: 0 });
+    expect(refusal(checkMasks({ ...GOOD, spots: [{ id: 'booth-lobby', at: { x: 2431, y: 770 } }] }, SIZE))).toEqual({ reason: 'item', list: 'spots', index: 0 });
+    for (const y of ['770', null, Number.NaN, Number.NEGATIVE_INFINITY, [770]]) expect(refusal(checkMasks(withItem('spots', { y }), SIZE)), String(y)).toEqual({ reason: 'number', list: 'spots', index: 0 });
   });
 
   it('takes ids of [a-z0-9-] up to 32 long, each once across the draft', () => {
     for (const id of ['', 'Ledge-1', 'ledge_1', 'ledge 1', 'x'.repeat(33), '<b>', 7]) expect(refusal(checkMasks(withItem('ledges', { id }), SIZE))?.reason, String(id)).toBe('id');
     expect(checkMasks(withItem('ledges', { id: 'x'.repeat(32) }), SIZE).ok).toBe(true);
     expect(refusal(checkMasks({ ...GOOD, ledges: [GOOD.ledges[0], { ...GOOD.ledges[0], x0: 400, x1: 500 }] }, SIZE))).toEqual({ reason: 'same-id', list: 'ledges', index: 1 });
-    // Ids are the draft's, not a list's: a wall may not take a ledge's.
+    // Ids are the draft's, not a list's: a wall may not take a ledge's, nor a spot a front's; and a spot is placed once.
     expect(refusal(checkMasks(withItem('walls', { id: 'ledge-1' }), SIZE))).toEqual({ reason: 'same-id', list: 'walls', index: 0 });
+    expect(refusal(checkMasks(withItem('spots', { id: 'front-1' }), SIZE))).toEqual({ reason: 'same-id', list: 'spots', index: 0 });
+    expect(refusal(checkMasks({ ...GOOD, spots: [GOOD.spots[0], { ...GOOD.spots[0], x: 2500 }] }, SIZE))).toEqual({ reason: 'same-id', list: 'spots', index: 1 });
+    for (const id of ['Booth-Lobby', 'booth lobby', 'x'.repeat(33), 12]) expect(refusal(checkMasks(withItem('spots', { id }), SIZE))?.reason, String(id)).toBe('id');
   });
 
   it('keeps every item inside the room, its ends in order and its top over the ground and within reach', () => {
@@ -81,6 +120,10 @@ describe('a ledge draft (OP-156)', () => {
       ['walls', { y0: 500, y1: 500 }, 'order'],
       ['fronts', { points: [...TRI.slice(0, 2), { x: 6401, y: 10 }] }, 'outside'],
       ['fronts', { points: [...TRI.slice(0, 2), { x: 10, y: -1 }] }, 'outside'],
+      ['spots', { x: -1 }, 'outside'],
+      ['spots', { x: 6400.5 }, 'outside'],
+      ['spots', { y: -0.5 }, 'outside'],
+      ['spots', { y: 901 }, 'outside'],
     ];
     for (const [list, change, reason] of cases) expect(refusal(checkMasks(withItem(list, change), SIZE)), `${list} ${JSON.stringify(change)}`).toEqual({ reason, list, index: 0 });
     // A smaller room has a smaller inside.
@@ -98,7 +141,7 @@ describe('a ledge draft (OP-156)', () => {
   it('says why in one of its own words only, never what was sent', () => {
     const hostile = ["' OR '1'='1", '<img src=x onerror=alert(1)>', '../../../etc/passwd', '\u0000', 'x'.repeat(10_000)];
     for (const v of hostile) {
-      for (const list of ['ledges', 'walls', 'hazards', 'fronts'] as const) {
+      for (const list of ['ledges', 'walls', 'hazards', 'fronts', 'spots'] as const) {
         for (const field of ['id', 'x0', 'x', 'points']) {
           const c = checkMasks(withItem(list, { [field]: v }), SIZE);
           expect(c.ok).toBe(false);
@@ -147,5 +190,33 @@ describe('the rooms the painter works over (OP-156)', () => {
     expect(own.map((f) => f.id)).toEqual(l1.fronts!.map((f) => f.id));
     expect(own.length).toBeGreaterThan(0);
     expect(checkMasks({ ...emptyMasks(), ledges: ledgesOf(l1), fronts: own }, l1.size)).toEqual({ ok: true, draft: { ...emptyMasks(), ledges: ledgesOf(l1), fronts: own } });
+  });
+});
+
+describe('a room’s own places as the painter starts from them (OP-156, part 3)', () => {
+  it('are its placed spots, each a copy of its point, and the tree’s pass the draft’s check with its ledges and fronts', () => {
+    const at = { x: 2431, y: 770 };
+    const spots = placesOf({ places: [{ id: 'booth-lobby', at }] });
+    expect(spots).toEqual([{ id: 'booth-lobby', x: 2431, y: 770 }]);
+    // Copies: the painter moves a spot of its draft, never the room's.
+    spots[0]!.x = 1;
+    expect(at.x).toBe(2431);
+    expect(placesOf({})).toEqual([]);
+    // The tree's own places, ledges and fronts together, whatever they are today, start a draft that passes the check.
+    const l1 = ROOMS['l1']!;
+    const own = { ...emptyMasks(), ledges: ledgesOf(l1), fronts: frontsOf(l1), spots: placesOf(l1) };
+    expect(own.spots.map((s) => s.id)).toEqual((l1.places ?? []).map((p) => p.id));
+    expect(checkMasks(own, l1.size)).toEqual({ ok: true, draft: own });
+  });
+
+  it('are named apart from a tree room’s own ledges and fronts, so a draft of them all, every name placed, passes the check', () => {
+    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+    expect(tree.length).toBeGreaterThan(0);
+    for (const room of tree) {
+      expect(treeLevelOf(room.id), room.id).not.toBeNull();
+      const spots = treeSpotsFor(room.id).map((s, i) => ({ id: s.id, x: 100 + 40 * i, y: 770 }));
+      const draft = { ...emptyMasks(), ledges: ledgesOf(room), fronts: frontsOf(room), spots };
+      expect(checkMasks(draft, room.size), room.id).toEqual({ ok: true, draft });
+    }
   });
 });
