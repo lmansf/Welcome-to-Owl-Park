@@ -6,8 +6,6 @@ import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
-import { ArcadeScene } from './game/ArcadeScene';
-import { ClimbScene } from './game/ClimbScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
@@ -125,8 +123,9 @@ const game = new Phaser.Game({
   disablePreFX: true,
   disablePostFX: true,
   // The owl builder's preview draws over the room (which keeps running underneath) or the home screen;
-  // the arcade's games draw over the room.
-  scene: [BootScene, RoomScene, HomeScene, BuilderScene, ArcadeScene, ClimbScene],
+  // the arcade's games and the climb draw over the room, added after these the first time one is played
+  // (game/lazyScenes.ts, OP-204).
+  scene: [BootScene, RoomScene, HomeScene, BuilderScene],
 });
 
 game.registry.set('config', cfg);

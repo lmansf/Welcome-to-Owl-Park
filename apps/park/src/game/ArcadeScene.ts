@@ -7,18 +7,13 @@ import { HOP_ROWS, rowY, type HopGame, type Item, type Lane } from '../arcade/ho
 import { GROUND_Y as KNOCK_GROUND, PIECE_SIZE, SLING, drawnAt, shown, type KnockGame, type Piece, type PieceKind, type Stand } from '../arcade/knock';
 import { GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, KNOCK_PIECES, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, solidFit, standPieces } from '../arcade/paint';
 import type { WingBeat } from './airTrack';
+import { ARCADE_INK } from './arcadeInk';
 import type { PreviewRect } from './BuilderScene';
 import { Owl } from './Owl';
 
 /** A run being played: one of the three games. */
 export type ArcadeSim = HopGame | FlapGame | KnockGame;
 
-/** Each game's neon: its cabinet's colours. */
-export const ARCADE_INK: Readonly<Record<ArcadeSim['game'], { ink: number; glow: number; css: string }>> = {
-  crossing: { ink: 0xff8ad0, glow: 0xff2aa1, css: '#FF2AA1' },
-  flight: { ink: 0x8af4ff, glow: 0x00e5ff, css: '#00E5FF' },
-  sling: { ink: 0xcdb0ff, glow: 0x8a4dff, css: '#8A4DFF' },
-};
 const AMBER = 0xffc46a;
 const BARK = 0xc98a4a;
 const WATER = 0x8af4ff;
