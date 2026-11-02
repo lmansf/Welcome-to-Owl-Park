@@ -155,5 +155,12 @@ describe('a run in the arcade', () => {
     const off = CABINETS.map((c) => (c.game === 'flight' ? { ...c, live: false } : c));
     expect(startRun('arcade', at('cabinet-flight'), 'flight', 1, T0, off)).toEqual({ ok: false, reason: 'unknown' });
   });
+
+  it('starts at the cabinets in level 0\'s cave too, by the cave\'s own spots (OP-163)', () => {
+    const cave = (id: string) => rectCenter(ROOMS['l0-arcade']!.doors.find((d) => d.id === id)!.rect);
+    expect(startRun('l0-arcade', cave('cabinet-sling'), 'sling', 7, T0)).toEqual({ ok: true, run: { game: 'sling', seed: 7, startedAt: T0 } });
+    // The hall's spot is far from the cave's cabinet.
+    expect(startRun('l0-arcade', at('cabinet-crossing'), 'crossing', 7, T0)).toEqual({ ok: false, reason: 'far' });
+  });
 });
 

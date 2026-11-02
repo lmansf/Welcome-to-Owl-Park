@@ -31,14 +31,16 @@ const ASK = {
 };
 
 const PART = { rooms: 'the rooms', tickets: 'the ticket book', collections: 'the collections' };
+const SET = { signing: 'PASS_SIGNING_KEY', admin: 'ADMIN_KEY' };
 
 async function checkHealth() {
   const line = $('#health');
   try {
     const h = await (await fetch('/api/health', { cache: 'no-store' })).json();
     const down = Object.keys(h.parts).filter((k) => !h.parts[k]).map((k) => PART[k] || k);
+    const unset = Object.keys(h.configured || {}).filter((k) => !h.configured[k]).map((k) => SET[k] || k);
     line.className = 'health ' + (h.ok ? 'up' : 'down');
-    line.textContent = h.ok ? 'The park is up: every part answered in ' + h.ms + ' ms.' : 'Something is down: ' + down.join(', ') + ' did not answer. See the playbook.';
+    line.textContent = h.ok ? 'The park is up: every part answered in ' + h.ms + ' ms.' : down.length ? 'Something is down: ' + down.join(', ') + ' did not answer. See the playbook.' : 'Not set: ' + unset.join(', ') + ' (wrangler secret put). See the playbook.';
   } catch {
     line.className = 'health down';
     line.textContent = 'The park did not answer the health check.';

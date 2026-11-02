@@ -8,6 +8,7 @@
  * pass is never a collector token and a collector token is never a pass.
  */
 import { isDeviceId, isTimeZone } from '@owl-park/shared';
+import { isLocalHost } from './guard';
 import { moduleLog } from './logs';
 import { isTicketId } from './tickets';
 
@@ -74,16 +75,58 @@ async function key(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 
-/** Whether this isolate has said so already: the development key is warned of once, not on every request. */
+/** Whether this isolate has said so already: each of the two lines below once, not on every request. */
 let devKeyWarned = false;
+let keyRefusedNoted = false;
 
-export function signingSecret(env: { PASS_SIGNING_KEY?: string }): string {
-  if (env.PASS_SIGNING_KEY && env.PASS_SIGNING_KEY.length >= 16) return env.PASS_SIGNING_KEY;
-  if (!devKeyWarned) {
-    devKeyWarned = true;
-    moduleLog.warn('worker.pass', 'signing_key_missing', 'PASS_SIGNING_KEY is not set, so passes are signed with the development key. Set it with: wrangler secret put PASS_SIGNING_KEY');
+/** Whether the deployment's own signing key is set: 16 characters or more (OP-209). Never the key itself. */
+export function signingKeySet(env: { PASS_SIGNING_KEY?: string }): boolean {
+  return !!env.PASS_SIGNING_KEY && env.PASS_SIGNING_KEY.length >= 16;
+}
+
+/**
+ * The key passes, collector tokens, entries, links and keepers' tokens are signed and checked with,
+ * or null where nothing may be (OP-209). The deployment's own key when it is set; without it, the
+ * development key (written in this public file) only for a request to a host on this machine (local
+ * development and the browser tests: `at` is the request's URL, or for a room socket whether its
+ * upgrade came to one). Anywhere else nothing is signed or checked: a missing key fails closed, said
+ * once per isolate as an error, never quietly signed with a key anyone can read.
+ */
+export function signingSecret(env: { PASS_SIGNING_KEY?: string }, at: URL | boolean): string | null {
+  if (signingKeySet(env)) return env.PASS_SIGNING_KEY as string;
+  if (typeof at === 'boolean' ? at : isLocalHost(at.hostname)) {
+    if (!devKeyWarned) {
+      devKeyWarned = true;
+      moduleLog.warn('worker.pass', 'signing_key_missing', 'PASS_SIGNING_KEY is not set, so passes are signed with the development key (this machine only). Set it with: wrangler secret put PASS_SIGNING_KEY');
+    }
+    return DEV_KEY;
   }
-  return DEV_KEY;
+  if (!keyRefusedNoted) {
+    keyRefusedNoted = true;
+    moduleLog.error('worker.pass', 'signing_key_refused', 'PASS_SIGNING_KEY is not set (or shorter than 16 characters) off this machine: no pass, entry, link or keeper’s token is signed or taken until it is. Set it with: wrangler secret put PASS_SIGNING_KEY');
+  }
+  return null;
+}
+
+/** Thrown by `requireSecret` where a request needs the signing key and none may sign: the Worker answers 503 (OP-209). */
+export class SigningKeyMissing extends Error {
+  constructor() {
+    super('no signing key: PASS_SIGNING_KEY is not set');
+    this.name = 'SigningKeyMissing';
+  }
+}
+
+/** The signing key for a request that cannot go on without one (`signingSecret`); throws SigningKeyMissing where there is none. */
+export function requireSecret(env: { PASS_SIGNING_KEY?: string }, at: URL | boolean): string {
+  const secret = signingSecret(env, at);
+  if (secret === null) throw new SigningKeyMissing();
+  return secret;
+}
+
+/** Tests only: this isolate has said nothing yet about the signing key. */
+export function forgetSigningKeyNotes(): void {
+  devKeyWarned = false;
+  keyRefusedNoted = false;
 }
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -113,9 +156,9 @@ async function sign(secret: string, payload: object): Promise<string> {
   return `${body}.${b64url(sig)}`;
 }
 
-/** The signed payload of a token, or null when the token is malformed or the signature is wrong. */
-async function verified(secret: string, token: string | null): Promise<Record<string, unknown> | null> {
-  if (!token || token.length > 512) return null;
+/** The signed payload of a token, or null when the token is malformed, the signature is wrong, or there is no key to check it with (OP-209). */
+async function verified(secret: string | null, token: string | null): Promise<Record<string, unknown> | null> {
+  if (secret === null || !token || token.length > 512) return null;
   const dot = token.indexOf('.');
   if (dot <= 0) return null;
   const body = token.slice(0, dot);
@@ -137,7 +180,7 @@ export async function mintPass(secret: string, payload: PassPayload): Promise<st
   return sign(secret, payload);
 }
 
-export async function verifyPass(secret: string, token: string | null, nowS = Math.floor(Date.now() / 1000)): Promise<PassPayload | null> {
+export async function verifyPass(secret: string | null, token: string | null, nowS = Math.floor(Date.now() / 1000)): Promise<PassPayload | null> {
   const p = await verified(secret, token);
   if (!p || p['k'] !== undefined) return null; // a collector token is not a pass
   const { id, exp } = p;
@@ -269,7 +312,7 @@ export async function mintKeeper(secret: string, exp = Math.floor(Date.now() / 1
 }
 
 /** Whether this is a keeper's token, good now (a pass, an entry or any other token never is). */
-export async function verifyKeeper(secret: string, token: unknown, nowS = Math.floor(Date.now() / 1000)): Promise<boolean> {
+export async function verifyKeeper(secret: string | null, token: unknown, nowS = Math.floor(Date.now() / 1000)): Promise<boolean> {
   if (typeof token !== 'string') return false;
   const p = await verified(secret, token);
   return !!p && p['k'] === 'kpr' && typeof p['exp'] === 'number' && p['exp'] >= nowS;

@@ -93,6 +93,8 @@ describe('streetSpawnBack', () => {
   it('brings the owl back out in front of the door it went in by', () => {
     expect(streetSpawnBack({ room: 'homes', spawn: 'from-nest-3' })).toBe('from-nest-3');
     expect(streetSpawnBack({ room: 'homes', spawn: 'from-nest-0' })).toBe('from-nest-0');
+    // The tree's street has the same six doors (OP-128).
+    expect(streetSpawnBack({ room: 'l5-street', spawn: 'from-nest-4' })).toBe('from-nest-4');
   });
 
   it('brings it out in front of its own door otherwise', () => {

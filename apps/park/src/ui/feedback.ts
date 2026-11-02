@@ -39,6 +39,7 @@ export function feedbackReply(outcome: FeedbackOutcome): { text: string; done: b
 }
 
 const CSS = `
+#hud .layer.feedback-layer{z-index:26}
 #hud .layer .modal.feedback{width:min(520px,calc(100vw - 24px))}
 @media (max-width:600px),(pointer:coarse){#hud .layer.feedback-layer{align-items:flex-start;padding-top:max(10px,env(safe-area-inset-top))}}
 #hud .feedback .kinds{display:flex;gap:6px;flex-wrap:wrap}
@@ -56,7 +57,7 @@ const CSS = `
 `;
 
 /**
- * Feedback, from the Menu: what kind of note, a few words, Send. On a phone it sits at the top of
+ * Feedback, from the Menu, Settings or the feedback bug (OP-208), over every other screen: what kind of note, a few words, Send. On a phone it sits at the top of
  * the screen, so the keyboard never covers what the visitor is typing. Visitors are asked to leave
  * out personal details.
  */
@@ -108,9 +109,12 @@ export function createFeedbackScreen(root: HTMLElement, send: SendFeedback, toas
     status.textContent = '';
     refresh();
   });
-  // The park's own keys leave text fields alone, so Escape is heard here too.
+  // The park's own keys leave text fields alone, so Escape is heard here too. It closes this form
+  // only: one opened by the feedback bug over a game (OP-208) leaves the game as it was.
   box.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') modal.close();
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    modal.close();
   });
 
   sendBtn.addEventListener('click', async () => {

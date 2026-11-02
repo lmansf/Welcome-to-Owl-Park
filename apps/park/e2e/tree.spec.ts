@@ -64,7 +64,9 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
 
   test('a jump and a flap up onto the lintel over the way down, and a jump on up to the shelf fungus', async ({ page }) => {
     await openPark(page, { room: 'l1' });
-    await walkAndStop(page, LOBBY + 650, GROUND);
+    // East of the way down (a doorway to level 0 since OP-163, 610 to 700), still under the lintel's east end
+    // (730): from the spawn at 800 the walk does not cross the doorway, which would take the owl down.
+    await walkAndStop(page, LOBBY + 720, GROUND);
     await jumpFlapGlide(page, 200, { jumpMs: 340, spare: 15 });
     await standsAt(page, 196);
     await walkAndStop(page, LOBBY + 600, GROUND);
@@ -97,10 +99,11 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     });
   }
 
-  test('reads at a glance: an edge on every ledge, the shapes in front and the shaded glows drawn, and the archway and the stair up marked (OP-173)', async ({ page }) => {
+  test('reads at a glance: an edge on every ledge, the shapes in front and the shaded glows drawn, and the archway, the stair up and the way down to level 0 marked (OP-173, OP-163)', async ({ page }) => {
     await openPark(page, { room: 'l1' });
     // The fronts: the west path's lamps, the square's post, the stair's banister (raised) and the tower's railing.
-    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 6, lips: 25, marks: 2, behind: false });
+    // The way down to level 0 is a doorway now (OP-163), marked and no longer shaded.
+    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 5, lips: 25, marks: 3, behind: false });
   });
 
   test('the stair’s banister is in front of an owl climbing the stair, and behind one walking by on the floor (OP-173)', async ({ page }) => {

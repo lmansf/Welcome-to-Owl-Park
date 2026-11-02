@@ -10,6 +10,7 @@ import type { OwlFit } from './fitOverlay';
 import { ensureVariantTexture, owlAnchors } from './items';
 import { Pet } from './Pet';
 import { symbolTexture } from './symbols';
+import { walkPose } from './walkPose';
 
 export { OWL_H, OWL_W };
 /** The 200 x 240 layer canvas is drawn at this scale in 1600-wide rooms. */
@@ -148,6 +149,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private landedHard = 0;
   private falling = 0;
   private wasFlying = false;
+  /** How far its walking waddle has come in (OP-199, walkPose.ts): 0 at rest. */
+  private waddleIn = 0;
   /** How high what the owl last stood on is (room px; 0 the floor): kept through a jump until it lands. */
   private footing = 0;
   /**
@@ -686,7 +689,12 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     const squash = landingSquash(now - this.landedAt, this.landedHard);
     this.art.setScale(this.dir * this.drawnFacing * sx * squash.sx, sy * squash.sy);
     this.art.y = y - this.lift;
-    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : 0;
+    // The walking waddle (OP-199): on the ground only, easing in and out with the walk; none in calm motion.
+    const walkingHere = this.walk !== null && !flying;
+    const moving = walkingHere || this.waddleIn > 0;
+    const waddle = moving ? walkPose({ amount: this.waddleIn, walking: walkingHere, grounded: !flying, dt, now, calm: this.calm() }) : null;
+    this.waddleIn = waddle?.amount ?? 0;
+    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0);
     const ground = this.groundUnder(this.pos, air.z);
     this.shadow.y = -ground / (OWL_SCALE * this.size);
     const up = shadowFade(air.z - ground);
@@ -719,7 +727,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     }
 
     this.fx?.tick(now);
-    this.pet?.tick(now, this.pos.x, this.pos.y, this.dir, this.alpha);
+    this.pet?.tick(now, this.pos.x, this.pos.y, this.dir, this.alpha, air);
     return finished;
   }
 

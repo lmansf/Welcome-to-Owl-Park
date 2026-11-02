@@ -300,9 +300,9 @@ type Obj = ReturnType<typeof roomObject>;
  * visitor's, as the Worker says of every ticket holder's (X-Visitor-Kind: visitor), or with `spec` a
  * spectator's (OP-191).
  */
-function connect(room: string, id: string, cid?: string, dev?: string, spec = false): FakeSocket {
+function connect(room: string, id: string, cid?: string, dev?: string, spec = false, local = false): FakeSocket {
   const ws = new FakeSocket();
-  ws.serializeAttachment({ room, id, sid: `sid${++sockets}`, ip: '192.0.2.1', joinedAt: clock, state: null, ...(cid ? { cid } : {}), ...(dev ? { dev } : {}), ...(spec ? { spec: true } : {}) });
+  ws.serializeAttachment({ room, id, sid: `sid${++sockets}`, ip: '192.0.2.1', joinedAt: clock, state: null, ...(cid ? { cid } : {}), ...(dev ? { dev } : {}), ...(spec ? { spec: true } : {}), ...(local ? { local: true } : {}) });
   state.acceptWebSocket(ws, [`id:${id}`, 'ip:192.0.2.1', `room:${room}`, ...(cid ? [`cid:${cid}`] : [])]);
   return ws;
 }
@@ -977,6 +977,22 @@ describe('closed for setup (OP-205)', () => {
     const back = await join(obj, 'hub', 'v_back');
     expect(back.closed).toBeNull();
     expect(back.last('welcome')).toBeDefined();
+  });
+
+  it('takes a keeper’s token signed with the development key only on a socket to this machine, while no key is set (OP-209)', async () => {
+    const obj = roomObject();
+    await tell(obj, { on: true, words: null });
+    const dev = signingSecret({}, true) as string;
+    // Off this machine there is no key to check a token with: the public development key opens nothing.
+    const forged = connect('hub', 'v_forger');
+    await send(obj, forged, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, keeper: await mintKeeper(dev, nowS() + 600) });
+    expect(forged.closed?.code).toBe(CLOSE.SETUP);
+    expect(forged.deserializeAttachment()).not.toHaveProperty('keeper');
+    // Local development and the browser tests (no key set, on localhost) keep working with it.
+    const local = connect('hub', 'v_localkeeper', undefined, undefined, false, true);
+    await send(obj, local, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, keeper: await mintKeeper(dev, nowS() + 600) });
+    expect(local.closed).toBeNull();
+    expect(local.last('welcome')).toBeDefined();
   });
 
   it('keeps the park closed through a wake from hibernation', async () => {
@@ -1851,9 +1867,9 @@ describe('spectators in the room object (OP-191)', () => {
   });
 
   it('becomes a full visitor in place with its own ticket’s pass, made since its socket opened, and no other', async () => {
-    const obj = roomObject();
+    const key = 'spectator-tests-signing-key-0123456789';
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: key });
     const ws = await spectator(obj, 'hub');
-    const key = signingSecret({});
     const now = Math.floor(clock / 1000);
     const pass = (p: Partial<{ id: string; cid: string; adm: boolean; iat: number }>) => mintPass(key, { id: SPEC_ID, cid: SPEC, adm: true, iat: now, exp: now + 3600, ...p });
     const refusals: Array<[string, string]> = [

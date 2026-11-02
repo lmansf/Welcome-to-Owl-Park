@@ -133,7 +133,7 @@ page writes nothing new to its console.
   are read like the Worker and the room server.
 - Its lines are all `client.net`, `info`, from the room connection (`apps/park/src/net/edge.ts`):
   `room_join_ok`, `reconnect_ok` (with `gap_ms`), `room_join_refused` and `room_leave` (each with the
-  close `code`). The table gives their fields.
+  close `code`), and `emote_throttled` (with `count`, OP-210). The table gives their fields.
 
 ## Adding an event [BUILT]
 
@@ -166,7 +166,8 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | Event | Component | Level | When it fires | Fields |
 | --- | --- | --- | --- | --- |
 | `log_field_refused` | the refused line's | warn | The logger dropped a field in `REFUSED_FIELDS` from a line. In `LOGGER_EVENTS`: the logger's own | `field`, `of` (the event of the line it was dropped from) |
-| `signing_key_missing` | `worker.pass` | warn | `PASS_SIGNING_KEY` is not set or shorter than 16 characters: passes are signed with the development key. Once per isolate (`signingSecret`, `pass.ts`) | none |
+| `signing_key_missing` | `worker.pass` | warn | `PASS_SIGNING_KEY` is not set or shorter than 16 characters, on a request to this machine (localhost, 127.0.0.1, [::1]): passes are signed with the development key. Once per isolate (`signingSecret`, `pass.ts`) | none |
+| `signing_key_refused` | `worker.pass` | error | `PASS_SIGNING_KEY` is not set or shorter than 16 characters, anywhere but this machine (OP-209): nothing is signed or checked. Every call that needs it (a pass, an entry, a link, a keeper's token, a room socket) is answered 503 `{"ok":false,"error":"no-signing-key"}`, and `/api/health` answers 503. Once per isolate (`signingSecret`, `pass.ts`) | none |
 | `pass_issued` | `worker.pass` | info | A guest pass went out (`/api/pass`, `routes/visit.ts`) | `session_id`, `collector_hash`, `new_collector` (true when the browser had no collector token) |
 | `pass_verified` | `worker.pass` | debug | A route took a pass (`passFrom`, `routes/http.ts`) | `route`, `session_id`, `adm` (admitted past the front gate) |
 | `pass_rejected` | `worker.pass` | info | A route refused a pass (`passFrom`) | `route`, `reason`: `missing`, `expired`, `invalid` (`passRefusal`, `pass.ts`) |
@@ -186,6 +187,7 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `queue_depth` | `room.queue` | info | How the line stands: every `DEPTH_EVERY_MS` (10 s) while anyone waits or holds a place, and once more as it empties | `waiting`, `held` (places held for called numbers), `front`, `owls` (in the rooms), `rate` (owls called per minute over the last ten minutes, `lineRate`) |
 | `tick_latency_p95` | `room.tick` | info | Once a room's window has run `TICK_EVERY_MS` (10 s), on its next frame: the window's 95th percentile frame-handling time, from at most `TICK_SAMPLE_MAX` (2,000) frames | `room` (every nest together as `nest`), `p95_ms`, `frames`, `window_ms` |
 | `emote_throttled` | `room.emote` | info | Emotes came too fast and were dropped: at once, then at most every `THROTTLE_TELL_MS` (10 s) per socket, and once more for the rest when the socket ends | socket fields, `count` (dropped since last told) |
+| `emote_throttled` | `client.net` | info | The page dropped emotes that came sooner than `EMOTE_SEND_EVERY_MS` (`apps/park/src/net/budget.ts`, OP-210) after the last one it sent: told with the next emote it sends | `room`, `count` (dropped since last told) |
 | `position_rejected` | `room.move` | info | The room would not take a place or stance as the page asked (OP-149): at once, then at most every `REJECTED_TELL_MS` (60 s) per socket, and once more when the socket ends | socket fields; `reason` (the last one): `room`, `floor`, `perch`, `arrival` (`PositionRejection`, `Room.ts`); `count` (since last told) |
 | `webhook_received` | `worker.store` | info | A store webhook was taken (`routes/store.ts`) | `topic`, `order_hash` (when the payload names an order), `status`, `duration_ms` |
 | `webhook_rejected` | `worker.store` | warn | A store webhook was turned away before its work | `topic`, `reason`: `signature`, `not-set-up`, `other-store`, `bad-body` |
@@ -218,7 +220,7 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `afk_leave` | `room.rest` | info | An owl left its room asleep; follows its `room_leave` with reason `afk` | socket fields, `asleep_ms` (when its sleep's start is known) |
 | `gate_crossed` | `collections.travel` | info | An owl walked through the front gate into the park (OP-130) | socket fields |
 | `gate_flag_cleared` | `collections.travel` | info | An owl is outside the park again: into it is through the front gate next time (OP-130) | socket fields |
-| `health_check` | `worker.health` | info; error when a part did not answer | `/api/health` (OP-068) | `ok`, `parts` (`rooms`, `tickets`, `collections`: each true or false), `duration_ms` |
+| `health_check` | `worker.health` | info; error when a part did not answer, or (off this machine) a key is not set | `/api/health` (OP-068) | `ok`, `parts` (`rooms`, `tickets`, `collections`: each true or false), `configured` (`signing`, `admin`: whether `PASS_SIGNING_KEY` and `ADMIN_KEY` are set, never their values, OP-209), `duration_ms` |
 | `climb_band_refused` | `collections.climb` | info | A band of the climb was refused | socket fields; `climb_ref`; `band`; `reason`: `idle`, `too-fast`, `forgotten` (`AscentResult`, `climbbook.ts`); `practice: true` (a spectator's run, OP-191) |
 | `spectator_refused` | `room.play` | info | A spectator asked for something locked to ticket holders (a quest, an NPC owl, a leaf pile or a stall, a quest item, today's tasks), told once per socket; or a spectator's pass did not make it a full visitor, told each time (OP-191) | socket fields; `frame` (the first refused frame, or `admit`); for `admit`, `reason`: `pass`, `not-admitted`, `not-this-owl`, `before-socket` |
 | `spectator_admitted` | `room.join` | info | A spectator's ticket made it a full visitor in place (OP-191) | socket fields |
@@ -345,8 +347,8 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 
 ## Every event, checked
 
-`LOG_EVENTS` holds 58 events, every one in the table above: `log_field_refused`,
-`signing_key_missing`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
+`LOG_EVENTS` holds 62 events, every one in the table above: `log_field_refused`,
+`signing_key_missing`, `signing_key_refused`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
 `claim_in_use`, `order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
 `room_join_refused`, `room_leave`, `reconnect_ok`, `queue_enter`, `queue_admit`, `queue_depth`,
 `tick_latency_p95`, `emote_throttled`, `position_rejected`, `webhook_received`,

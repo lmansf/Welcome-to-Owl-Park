@@ -59,7 +59,7 @@ defines it. Alphabetical. Grep the term.
 - **Claim link**: the link in the store's "Your ticket" email, `#claim=<secret>`; opening it moves the order's live tickets onto this device; `TicketBook.claim`.
 - **Collector token** (`cid`): the anonymous, HMAC-signed token a device keeps in `localStorage` (`owl-park:collector`); names its collection, nest and wallet; `apps/edge/src/pass.ts`.
 - **Device**: in the ticket book, the collector id of the browser holding a ticket (C35: one device at a time).
-- **Dev key** (development signing key): what the Worker signs with until `PASS_SIGNING_KEY` is set; it logs a warning; `signingSecret` in `pass.ts`.
+- **Dev key** (development signing key): what the Worker signs with until `PASS_SIGNING_KEY` is set, on this machine only (localhost); it logs a warning. Anywhere else a missing key refuses instead (503, OP-209); `signingSecret` in `pass.ts`.
 - **First scan**: the moment a ticket's time starts (a day ticket 24 h, an annual pass 365 days); `DEFAULT_LENGTH_MS` in `apps/edge/src/tickets.ts`.
 - **Fraud link**: C45; every paid ticket order scored by the owner's pipeline before release (2 s budget, fail open, 24 h fail-open on reviews); PLANNED (OP-052, OP-053, OP-072); `docs/ARCHITECTURE.md` section 12.
 - **Fail open**: when the fraud endpoint does not answer in 2 s, or a review sits 24 h, the order is released and recorded as `fallback_used` / `fail_open` (C45).

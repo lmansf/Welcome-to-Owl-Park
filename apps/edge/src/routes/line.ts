@@ -1,7 +1,7 @@
 /** Busy nights (OP-075): a visitor's place in the line, and the busy ribbon's words. */
 import { type LineStatus, waitMinutes } from '@owl-park/shared';
 import type { LineAnswer } from '../Overflow';
-import { mintEntry, signingSecret, verifyEntry } from '../pass';
+import { mintEntry, requireSecret, verifyEntry } from '../pass';
 import { CORS, json, passFrom, readJson, whoOf } from './http';
 import { overflow, overflowOf } from './park';
 import type { RouteCtx } from './router';
@@ -13,7 +13,7 @@ export async function line(c: RouteCtx): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
   const pass = await passFrom(request, env, log);
   if (!pass) return json({ error: 'bad-pass' }, 401);
-  const secret = signingSecret(env);
+  const secret = requireSecret(env, url);
   const who = whoOf(pass);
   const st = await overflowOf(env);
   const go = async () => json({ state: 'go', entry: await mintEntry(secret, who) } satisfies LineStatus);

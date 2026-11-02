@@ -34,7 +34,7 @@ async function newOwlPlays(browser: Browser): Promise<Page> {
 test.describe('the entries setting (OP-156)', () => {
   test.afterEach(async ({ request }) => share(request, 0));
 
-  test('opened on the keepers’ page, the tree takes every new owl out of its nest’s door; dark again, the owl in it is sent out to the hub', async ({ browser, request }) => {
+  test('opened on the keepers’ page, the tree takes every new owl out of its nest’s door onto the tree’s street; dark again, the owl there is sent to the nests’ street (`homes`), outside the park as it was', async ({ browser, request }) => {
     test.slow(); // a keeper's page and a visit through the room server, drawn with software WebGL
     const keeper = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     keeper.on('dialog', (d) => void d.accept());
@@ -50,13 +50,13 @@ test.describe('the entries setting (OP-156)', () => {
 
     const page = await newOwlPlays(browser);
     await walkToDoor(page, 'to-street');
-    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('l1');
+    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('l5-street');
     await online(page);
 
     await keeper.locator('#tree-share').fill('0');
     await keeper.locator('#tree-save').click();
     await expect(keeper.locator('#tree-state')).toHaveText('The tree is dark: only a keeper’s token reaches it.');
-    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('hub');
+    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('homes');
     await keeper.context().close();
     await page.context().close();
   });
@@ -66,7 +66,7 @@ test.describe('the entries setting (OP-156)', () => {
     await share(request, 100);
     const page = await newOwlPlays(browser);
     const door = async () => (await state(page)).doors.find((d) => d.id === 'to-street')?.to;
-    expect(await door()).toBe('l1');
+    expect(await door()).toBe('l5-street');
     await share(request, 0);
     // The room server tells the nest at once: the way out is today's park's again.
     await expect.poll(door, { timeout: 15_000 }).toBe('homes');

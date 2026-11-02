@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ARCADE_GAMES,
   ARCADE_ROOM,
+  TREE_ARCADE_ROOM,
+  isArcadeRoom,
   CABINETS,
   CABINET_OFF,
   FLAP_FIRST,
@@ -52,6 +54,9 @@ describe('the arcade', () => {
   it('finds a cabinet only by its spot in the arcade', () => {
     expect(cabinetAt(ARCADE_ROOM, 'cabinet-flight')?.game).toBe('flight');
     expect(cabinetAt('market', 'cabinet-flight')).toBeUndefined();
+    // The arcade's cave on level 0 has the same cabinets (OP-163).
+    expect(cabinetAt(TREE_ARCADE_ROOM, 'cabinet-flight')?.game).toBe('flight');
+    expect([isArcadeRoom(ARCADE_ROOM), isArcadeRoom(TREE_ARCADE_ROOM), isArcadeRoom('l0'), isArcadeRoom(undefined)]).toEqual([true, true, false, false]);
     expect(cabinetAt(ARCADE_ROOM, 'to-market')).toBeUndefined();
   });
 });
