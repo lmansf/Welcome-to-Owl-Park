@@ -20,8 +20,14 @@ the conflict for the owner to settle.)
 Where to look for more: a ticket's row on the Board tab (its number plus one), the Bible item it
 names (C31, C35, ...), and the docs it touched.
 
+## Week of 2026-11-02
+
+- OP-183 (2026-11-02): a ticket admits its owl on any screen, and the card before the store at the turnstiles offers "Have a ticket on another screen?" with Bring your owl here, the account's emailed link (branch claude/gate-bring-owl).
+- OP-191 (2026-11-02): spectators, the page's half: an owl without a ticket that works walks on past the turnstiles as a spectator with one line and Get a Day Ticket, a "Just looking" badge, quests, the Realm Vote and the stores sell a Day Ticket instead, games end with what they would have earned, and a ticket bought inside makes the owl a visitor in place; off until `SPECTATORS` is `on` (branch claude/spectator-client, stacked on claude/spectator-server).
+
 ## Week of 2026-10-26
 
+- OP-157 (2026-11-01): the tree's style frame (the lobby ring's three approved layers, live since main 10a58c7) and its style sheet, now in `docs/MAP.md` with the grid, the named spots and the steps for painting a level (branch claude/map-doc).
 - OP-190 (2026-11-01): back from checkout with no extra steps: the bought ticket takes the owl through the turnstiles by itself ("Your ticket is here. In you go!"); the park's return address `/?checkout=done` tells the game page at once and closes checkout's window, or shows "You're all set" with Play here instead, or starts the park there with Play going through the turnstiles; the store theme's redirect snippet is written in `docs/DEPLOY.md` (step 11), not applied (branch claude/checkout-return).
 - OP-180 (2026-11-01): the turnstiles sell a Day Ticket through the popup checkout in place of the refusal lines; the lobby's booth, its panel and the plaza status card are gone; opening night's half-price annual pass follows a Day Ticket bought at the gate (the desk now offers it to Day and Night tickets, never to an annual holder); the card before the store asks once, right before the purchase. OP-183 checked: tickets are held by the owl's collector id, not the device (branch claude/gate-sales).
 - OP-181 (2026-11-01): the nightly restart: a 09:00 UTC cron (and `POST /api/admin/restart`) sends every owl home after a short notice, and while the gate takes tickets no pass from before the restart goes past the turnstiles (branch claude/nightly-restart).

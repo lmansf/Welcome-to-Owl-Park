@@ -4,11 +4,13 @@ import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, doAction, expectStoreCard, openPa
 
 /**
  * The card before the store (OP-153), through the room server and the stand-in store
- * (e2e/standInStore.mjs). Since OP-180 it shows once for each purchase, right before it: a
- * turnstile reached without a ticket asks it before checkout for a Day Ticket (what follows that
- * purchase, Back to checkout, Open checkout and the half-price pass, asks nothing more), and the gift
- * shop's door asks it before the store's page. Not now (or Escape) goes back to where the visitor
- * was and opens nothing; Continue goes on. Opening night's pass offer after the turnstiles, which no
+ * (e2e/standInStore.mjs). Since OP-180 it shows once for each purchase, right before it: the turnstiles'
+ * Day Ticket sale asks it before checkout (what follows that purchase, Back to checkout, Open checkout
+ * and the half-price pass, asks nothing more), and the gift shop's door asks it before the store's
+ * page. The room server here lets spectators in (SPECTATORS on, OP-191), so an owl without a ticket
+ * walks on past the turnstiles as a spectator, and the sale is asked from its "Just looking" badge's
+ * Get a Day Ticket. Not now (or Escape) goes back to where the visitor was and opens nothing;
+ * Continue goes on. Opening night's pass offer after the turnstiles, which no
  * purchase came before, asks it too: opening.spec.ts presses it through, with the pass after a Day
  * Ticket.
  */
@@ -51,21 +53,32 @@ async function arrive(browser: Browser, device: BrowserContextOptions, blockPopu
   return page;
 }
 
-/** What the turnstiles say above the card's line, for an owl with no ticket (OP-180). */
-const DAY_TICKET = 'You need a ticket to go in. You can get a Day Ticket right here.';
+/** What the badge's Get a Day Ticket says above the card's line (OP-191). */
+const KEEP = 'A Day Ticket lets you keep what you win.';
+const DAY_TICKET = `${KEEP} You can get a Day Ticket right here.`;
 
-/** Into a turnstile with no ticket: the card before the store comes up, with the turnstiles' offer. */
-async function intoTheGate(page: Page): Promise<void> {
+/** Through a turnstile with no ticket, on into the hub as a spectator (OP-191). */
+async function inAsSpectator(page: Page): Promise<void> {
   await walkToDoor(page, 'gate');
+  await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
+  await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(true);
+}
+
+const badgeGet = (page: Page) => page.locator('[data-spectator-get="badge"]');
+
+/** The badge's Get a Day Ticket: the card before the store comes up, with the turnstiles' sale. */
+async function askFromBadge(page: Page): Promise<void> {
+  await badgeGet(page).click();
   await expect(card(page)).toBeVisible({ timeout: 15_000 });
   await expectStoreCard(page);
   await expect(page.locator(`${STORE_CARD} [data-store="say"]`)).toContainText(DAY_TICKET);
 }
 
-/** Back on the plaza, still outside: the turnstiles turned the owl back while the card asked. */
-async function turnedBack(page: Page): Promise<void> {
-  await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
-  expect((await state(page)).room).toBe('lobby');
+/** Still in the hub, still just looking: Not now took nothing away. */
+async function stillLooking(page: Page): Promise<void> {
+  expect((await state(page)).room).toBe('hub');
+  expect((await state(page)).spectator).toBe(true);
+  await expect(page.locator('[data-spectator].show')).toBeVisible();
 }
 
 const card = (page: Page) => page.locator(STORE_CARD);
@@ -93,13 +106,14 @@ test.describe('the card before the store (OP-153)', () => {
     ['a computer', COMPUTER],
     ['a phone', PHONE],
   ] as const) {
-    test(`on ${name}: a turnstile without a ticket asks before checkout; Not now opens nothing, and Continue opens checkout`, async ({ browser, request }) => {
+    test(`on ${name}: a spectator's Get a Day Ticket asks before checkout; Not now opens nothing, and Continue opens checkout`, async ({ browser, request }) => {
       await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';
       const opened = pagesOpened(a);
 
-      await intoTheGate(a);
+      await inAsSpectator(a);
+      await askFromBadge(a);
       // The card takes the focus, not Continue, so a stray key never buys; both buttons are 44 px or more.
       await expect(card(a)).toBeFocused();
       for (const b of [continueOn(a), notNowOn(a)]) {
@@ -109,21 +123,21 @@ test.describe('the card before the store (OP-153)', () => {
       }
       await a.screenshot({ path: `e2e-screenshots/storecard-gate-${shot}.png` });
       await notNow(a, null, opened);
-      await turnedBack(a);
+      await stillLooking(a);
       await expect(a.locator('[data-gate-sale]')).toBeHidden();
 
-      // Each time the owl walks into the turnstiles without a ticket, it asks again.
-      await intoTheGate(a);
+      // Each time the badge's button is pressed, it asks again.
+      await askFromBadge(a);
       if (device === COMPUTER) {
         // Escape is Not now: the card goes and nothing opens.
         await a.keyboard.press('Escape');
         await expect(card(a)).toBeHidden();
         await new Promise((r) => setTimeout(r, QUIET_MS));
         expect(opened()).toBe(0);
-        await turnedBack(a);
+        await stillLooking(a);
 
         // The keyboard reaches both buttons, and Enter on Continue opens checkout.
-        await intoTheGate(a);
+        await askFromBadge(a);
         await a.keyboard.press('Tab');
         await expect(notNowOn(a)).toBeFocused();
         await a.keyboard.press('Tab');
@@ -138,20 +152,43 @@ test.describe('the card before the store (OP-153)', () => {
       await expect(a.locator('[data-gate-sale] [data-checkout="status"]')).toContainText('Checkout is open in its own window');
       expect(opened()).toBe(1);
 
-      // Into the turnstiles again while checkout is open: no second card, and nothing more opens.
-      await turnedBack(a);
-      await walkToDoor(a, 'gate');
-      await expect(a.getByText('You need a ticket to go in.', { exact: true })).toBeVisible({ timeout: 15_000 });
+      // The badge's button again while checkout is open: checkout's card again, no second card, and nothing more opens.
+      await badgeGet(a).click();
+      await expect(a.locator('[data-gate-sale]')).toBeVisible({ timeout: 15_000 });
+      await expect(a.getByText(KEEP, { exact: true })).toBeVisible({ timeout: 15_000 });
       await expect(card(a)).toBeHidden();
+      await new Promise((r) => setTimeout(r, QUIET_MS));
       expect(opened()).toBe(1);
       await a.context().close();
     });
   }
 
+  test('beside the Day Ticket, the card offers to bring here an owl whose ticket is on another screen (OP-183); its button opens the account’s box and nothing of the store', async ({ browser, request }) => {
+    await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+    const a = await arrive(browser, COMPUTER);
+    const opened = pagesOpened(a);
+    await inAsSpectator(a);
+    await askFromBadge(a);
+    const aside = a.locator(`${STORE_CARD} [data-store="aside"]`);
+    await expect(aside).toBeVisible();
+    await expect(a.locator(`${STORE_CARD} [data-store="aside-line"]`)).toHaveText('Have a ticket on another screen?');
+    const bring = a.locator(`${STORE_CARD} [data-store="aside-go"]`);
+    await expect(bring).toHaveText('Bring your owl here');
+    const box = (await bring.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    await bring.click();
+    await expect(card(a)).toBeHidden();
+    await expect(a.getByRole('dialog', { name: 'Bring your owl here' })).toBeVisible({ timeout: 15_000 });
+    await new Promise((r) => setTimeout(r, QUIET_MS));
+    expect(opened(), 'pages opened by Bring your owl here').toBe(0);
+    await a.context().close();
+  });
+
   test('Back to checkout, once its window was closed, opens it again with no second card', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER);
-    await intoTheGate(a);
+    await inAsSpectator(a);
+    await askFromBadge(a);
     const [first] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
     await first.waitForURL(/\/cart\//);
     const cart = first.url();
@@ -171,7 +208,8 @@ test.describe('the card before the store (OP-153)', () => {
   test('a blocked checkout window: Open checkout is the cart link the card let through, with no second card', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER, true);
-    await intoTheGate(a);
+    await inAsSpectator(a);
+    await askFromBadge(a);
     await storeContinue(a);
     await expect(a.locator('[data-gate-sale] [data-checkout="status"]')).toContainText('Your browser blocked the checkout window');
 

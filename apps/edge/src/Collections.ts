@@ -272,6 +272,11 @@ export class Collections extends DurableObject<Env> {
     return this.book.play(cid, feathers, ev, Date.now());
   }
 
+  /** The collector's feather balance, and nothing more: a spectator's practice answers carry it (OP-191). */
+  async feathers(cid: string): Promise<number> {
+    return this.book.feathers(cid, Date.now());
+  }
+
   /** Today's three tasks and this collector's progress. */
   async tasks(cid: string): Promise<TaskView> {
     return this.book.tasks(cid, Date.now());
@@ -282,19 +287,20 @@ export class Collections extends DurableObject<Env> {
   /**
    * A run started at its cabinet (the room server checked the owl stands there). It is kept here by
    * the collector, not on the visitor's socket, so a page back from a dropped connection still has it (OP-137).
+   * `practice`: a spectator's run (OP-191), which pays nothing and keeps nothing for the wall to its end.
    */
-  async arcadeStart(cid: string, game: ArcadeGame, seed: number): Promise<{ startedAt: number }> {
-    return { startedAt: this.arcade.start(cid, game, seed, Date.now()).startedAt };
+  async arcadeStart(cid: string, game: ArcadeGame, seed: number, practice = false): Promise<{ startedAt: number }> {
+    return { startedAt: this.arcade.start(cid, game, seed, Date.now(), practice).startedAt };
   }
 
-  /** A run's score so far, checked against its time: kept as the owl's best when it beats it, paying nothing. */
-  async arcadeRecord(cid: string, run: RunResult, seed: number, look: PortraitLook): Promise<RunRecorded | RunRefused> {
-    return this.arcade.record(cid, run, seed, look, Date.now());
+  /** A run's score so far, checked against its time: kept as the owl's best when it beats it, paying nothing (a practice run keeps nothing). */
+  async arcadeRecord(cid: string, run: RunResult, seed: number, look: PortraitLook, practice = false): Promise<RunRecorded | RunRefused> {
+    return this.arcade.record(cid, run, seed, look, Date.now(), practice);
   }
 
-  /** A run's end, checked against its time: its pay under the activities' cap, the wall, the tasks. */
-  async arcadeRun(cid: string, run: RunResult, seed: number, look: PortraitLook): Promise<({ ok: true } & RunSettled) | RunRefused> {
-    return this.arcade.finish(cid, run, seed, look, Date.now());
+  /** A run's end, checked against its time: its pay under the activities' cap, the wall, the tasks (for a practice run, none of them). */
+  async arcadeRun(cid: string, run: RunResult, seed: number, look: PortraitLook, practice = false): Promise<({ ok: true } & RunSettled) | RunRefused> {
+    return this.arcade.finish(cid, run, seed, look, Date.now(), practice);
   }
 
   /** Today's score wall, and this collector's own bests (none for a page without a collection). */
@@ -305,16 +311,19 @@ export class Collections extends DurableObject<Env> {
 
   // ---------- the stained-glass climb (designs/the-stained-glass-climb.md): no answer carries a collector id ----------
 
-  /** Start a run at the live portal, or return the collector's open one wherever it stands. */
-  async climbStart(cid: string, flags: ClimbFlags): Promise<ClimbStart> {
-    return this.climb.start(cid, flags, Date.now());
+  /** Start a run at the live portal, or return the collector's open one wherever it stands (`practice`: a spectator's, OP-191). */
+  async climbStart(cid: string, flags: ClimbFlags, practice = false): Promise<ClimbStart> {
+    return this.climb.start(cid, flags, Date.now(), practice);
   }
 
-  /** A band reached: checked against its floor, paid under the activities' cap, recorded; the clouds' item on the visit it came in. */
-  async climbBand(cid: string, seed: number, band: number, visit?: Visit): Promise<AscentResult> {
+  /**
+   * A band reached: checked against its floor, paid under the activities' cap, recorded; the clouds' item
+   * on the visit it came in. A practice band (OP-191) is checked and banked, and nothing more.
+   */
+  async climbBand(cid: string, seed: number, band: number, visit?: Visit, practice = false): Promise<AscentResult> {
     return this.during(visit, () => {
       // A refused band is logged by the room object, with the run's reference (OP-134).
-      return this.climb.band(cid, seed, band, Date.now());
+      return this.climb.band(cid, seed, band, Date.now(), practice);
     });
   }
 

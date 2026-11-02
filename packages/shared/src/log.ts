@@ -94,6 +94,8 @@ export const LOG_EVENTS = [
   'gate_flag_cleared',
   'health_check',
   'climb_band_refused',
+  'spectator_refused',
+  'spectator_admitted',
   'read_failed',
   'write_failed',
   'send_failed',

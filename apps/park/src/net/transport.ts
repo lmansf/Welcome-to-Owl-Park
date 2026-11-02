@@ -28,8 +28,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onPeerLook?(id: string, look: OwlLook): void;
   /** Park-wide room populations, when the transport knows them. */
   onCounts?(rooms: Record<string, number>): void;
-  /** The room we tried to enter is full. */
-  onFull?(room: string): void;
+  /** The room we tried to enter is full; `spectators`: full for a spectator only (its share of the room, OP-191), a ticket holder still gets in. */
+  onFull?(room: string, spectators?: boolean): void;
   /** A peer played an emote. */
   onPeerEmote?(id: string, emote: string): void;
   /** A peer said a prewritten phrase (its number in the phrase list). */
@@ -52,6 +52,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onRestartNotice?(words: string): void;
   /** The park restarted for the night (OP-181): the owl goes to the home screen, and Play brings it back in. */
   onRestart?(): void;
+  /** Whether this owl walks the park as a spectator (OP-191): said with every welcome, and false once a ticket admits it in place. */
+  onSpectator?(spectator: boolean): void;
 }
 
 export interface RoomConnection {
@@ -68,6 +70,10 @@ export interface RoomConnection {
   nests?: NestLink;
   /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */
   drop?(): void;
+  /** A spectator's ticket went through (OP-191): the room server takes the admitted pass in place. False: it did not, and `renew` is the fallback. */
+  admit?(): Promise<boolean>;
+  /** Open the room's socket again at once, on the pass as it now stands (the room server only, OP-191). */
+  renew?(): void;
 }
 
 /**
@@ -87,6 +93,11 @@ export interface ParkTransport {
    * goes through. Transports without a server have an open gate.
    */
   entry?(): Promise<Entry>;
+  /**
+   * Which park this owl starts in (OP-156's entries setting): 2 when the keepers send it into the tree,
+   * else 1. Transports without a server have only today's park.
+   */
+  entryMap?(): Promise<1 | 2>;
   /** The ticket wallet on this device (C35); only the room server keeps tickets. */
   readonly tickets?: TicketWallet;
   /** The line in front of the park on busy nights (OP-075); only the room server has one. */
@@ -173,6 +184,11 @@ export interface TicketWallet {
 export interface Entry {
   gate: 'open' | 'ticket';
   admitted: boolean;
+  /**
+   * Spectators (OP-191): the park lets an owl without a ticket that works past the turnstiles as a
+   * spectator (the park's SPECTATORS switch is on). Absent or false: the turnstiles turn it away.
+   */
+  spectators?: boolean;
 }
 
 export const OPEN_ENTRY: Entry = { gate: 'open', admitted: true };

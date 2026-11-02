@@ -63,6 +63,7 @@ any scanner and any hand test against the park's address. A local copy (`pnpm de
 | Rate limits a minute | 600 per address; 300 calls needing no pass; 60 refused calls per address; 120 per owl; 10 ticket and account calls per owl | `API_LIMITS`, `limits.ts` | OP-142 |
 | Body limits | feedback 16,384 bytes; account calls 2,048; policy reports 8,192; ledge drafts 1 MiB; larger ones get 413 unread | `FEEDBACK_BODY_MAX`, `ACCOUNT_BODY_MAX`, `MASKS_BODY_MAX`, `index.ts`; `REPORT_BODY_MAX`, `guard.ts` | OP-140 (reports), OP-156 (ledge drafts); the others not named |
 | Room sockets per address | 8 per room object | `MAX_SOCKETS_PER_IP`, `wrangler.jsonc`; `RoomObject.ts` | not named in the code |
+| A socket's kind (visitor or spectator) | the Worker deletes the page's `X-Visitor-Kind` and sets its own from the pass and the gate; the room object takes a socket inside the park it did not call a visitor for a spectator (default-deny); a spectator's `admit` needs an admitted pass of its own owl made since its socket opened | `/ws`, `index.ts`; `spectatorSocket`, `admitPass`, `RoomObject.ts` | OP-191 |
 
 - The rate limits are counted in each copy of the Worker's memory (`limits.ts`). A flood spread over
   many machines is Cloudflare's own protection's to stop.

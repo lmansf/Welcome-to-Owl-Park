@@ -11,6 +11,10 @@
  * The run under way is kept here too, one per collector, not on the page's connection: a page back
  * from a dropped connection still has its run, and a run's best is kept as it is reached, so a run
  * cut short (a tab closed, a page that died) still leaves its best on the wall (OP-137).
+ *
+ * A spectator's run (OP-191) is a practice run: it is checked like any other, but keeps nothing for the
+ * wall and pays nothing, so the day's best on the wall, and its bonus, are ticket holders' alone. A run
+ * started as practice stays practice to its end, whatever ticket the owl has by then.
  */
 import type { CollectionBook, PlayResult } from './book';
 import { isHexColour } from './look';
@@ -55,6 +59,8 @@ export interface ArcadeRunRow {
   startedAt: number;
   /** The owl's best of the day in the run's game when the run started (null: none yet). */
   bestBefore: number | null;
+  /** A spectator's run (OP-191): it pays nothing and keeps nothing for the wall, to its end. */
+  practice?: true;
 }
 
 export interface ScoreStore {
@@ -82,6 +88,8 @@ export interface RunRecorded {
   mine: OwnBests;
   /** The record changed the game's column on the wall: everyone in the arcade should see it. */
   changed: boolean;
+  /** A practice run's (OP-191): checked, and nothing kept. */
+  practice?: true;
 }
 
 /** A portrait's colours and kind from untrusted data; null when they are not colours. */
@@ -130,10 +138,11 @@ export class ArcadeBook {
   /**
    * A run starts at its cabinet (the room server checked the owl stands there): it takes the place of
    * any run of the collector's before it, which is never paid, and notes the owl's best as it starts.
+   * `practice`: a spectator's run (OP-191).
    */
-  start(cid: string, game: ArcadeGame, seed: number, now: number): ArcadeRunRow {
+  start(cid: string, game: ArcadeGame, seed: number, now: number, practice = false): ArcadeRunRow {
     const own = this.store.bests(parkDay(now), cid).find((r) => r.game === game);
-    const run: ArcadeRunRow = { cid, game, seed, startedAt: now, bestBefore: own ? own.score : null };
+    const run: ArcadeRunRow = { cid, game, seed, startedAt: now, bestBefore: own ? own.score : null, ...(practice ? { practice: true as const } : {}) };
     this.store.putRun(run);
     return run;
   }
@@ -148,11 +157,13 @@ export class ArcadeBook {
   /**
    * A run's score so far, as the run goes: kept as the owl's best of the day when it beats it, so the
    * best is on the wall whether or not the page lives to see the run end. Pays nothing; the run goes
-   * on, and its end pays.
+   * on, and its end pays. A practice run (started as one, or `practice`: a spectator's socket, OP-191)
+   * is checked the same and keeps nothing.
    */
-  record(cid: string, result: RunResult, seed: number, look: PortraitLook, now: number): RunRecorded | RunRefused {
+  record(cid: string, result: RunResult, seed: number, look: PortraitLook, now: number, practice = false): RunRecorded | RunRefused {
     const run = this.runFor(cid, result, seed, now);
     if (typeof run === 'string') return { ok: false, reason: run };
+    if (practice || run.practice) return { ok: true, wall: this.wall(result.game, now), mine: this.mine(cid, now), changed: false, practice: true };
     const day = parkDay(now);
     const game = result.game;
     const score = Math.max(0, Math.floor(result.score));
@@ -169,9 +180,11 @@ export class ArcadeBook {
    * pays its band's feathers, and DAY_BEST_FEATHERS more the first time today this owl beats the day's
    * best in that game, all under the activities' shared cap; keeps the owl's best for the wall; moves
    * today's tasks. A new best, and the day's best, are judged against the standings as the run
-   * started, so the bests the run kept as it went do not count against it.
+   * started, so the bests the run kept as it went do not count against it. A practice run (started as
+   * one, or `practice`: a spectator's socket, OP-191) is checked the same and over the same, but writes
+   * no row, pays nothing and moves no task: its answer says `practice`, with the balance as it stands.
    */
-  finish(cid: string, result: RunResult, seed: number, look: PortraitLook, now: number): ({ ok: true } & RunSettled) | RunRefused {
+  finish(cid: string, result: RunResult, seed: number, look: PortraitLook, now: number, practice = false): ({ ok: true } & RunSettled) | RunRefused {
     const run = this.runFor(cid, result, seed, now);
     if (run === 'idle') return { ok: false, reason: 'idle' };
     this.store.dropRun(cid);
@@ -179,6 +192,9 @@ export class ArcadeBook {
     const day = parkDay(now);
     const game = result.game;
     const score = Math.max(0, Math.floor(result.score));
+    if (practice || run.practice) {
+      return { ok: true, paid: { game, score, added: 0, total: this.book.feathers(cid, now), best: false, top: false, wall: this.wall(game, now), mine: this.mine(cid, now), practice: true }, changed: false };
+    }
     const before = this.wall(game, now);
     const own = this.store.bests(day, cid).find((r) => r.game === game);
     // The owl's own best as the run started (none, when the park day turned meanwhile), and the day's
@@ -229,7 +245,7 @@ function cleanRunRow(v: unknown): ArcadeRunRow | null {
   const seed = num(v['seed']);
   const best = v['bestBefore'];
   if (!Number.isInteger(seed) || seed < 0) return null;
-  return { cid: v['cid'], game: v['game'], seed, startedAt: num(v['startedAt']), bestBefore: typeof best === 'number' && Number.isInteger(best) && best >= 0 ? best : null };
+  return { cid: v['cid'], game: v['game'], seed, startedAt: num(v['startedAt']), bestBefore: typeof best === 'number' && Number.isInteger(best) && best >= 0 ? best : null, ...(v['practice'] === true ? { practice: true as const } : {}) };
 }
 
 /** In-memory store for tests and the local mode. */

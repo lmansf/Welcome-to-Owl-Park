@@ -36,7 +36,7 @@ const ADMIN = 'keepers-key-0123456789';
 const CTX = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
 const nowS = () => Math.floor(Date.now() / 1000);
 
-/** A draft as the painter sends one: a ledge of the room's and one drawn, a wall, a hazard, a front. */
+/** A draft as the painter sends one: a ledge of the room's and one drawn, a wall, a hazard, a front, two of the level's spots placed. */
 const DRAFT: MaskDraft = {
   ledges: [
     { id: 'boulder', x0: 680, x1: 850, top: 110 },
@@ -55,7 +55,13 @@ const DRAFT: MaskDraft = {
       ],
     },
   ],
+  spots: [
+    { id: 'booth-lobby', x: 2431, y: 770 },
+    { id: 'to-market', x: 6165, y: 770 },
+  ],
 };
+/** DRAFT as a painter's tab opened before spots sends it, and as the overflow object kept drafts then: the four lists. */
+const { spots: _none, ...BEFORE_SPOTS } = DRAFT;
 
 /** The overflow object as the platform runs it: its own SQLite, no alarms needed here. */
 class FakeState {
@@ -120,7 +126,7 @@ describe('saving a ledge draft (OP-156)', () => {
     const said = (await r.json()) as { ok: boolean; room: string; savedAt: number };
     expect(said).toEqual({ ok: true, room: 'l1', savedAt: expect.any(Number) });
     logged(cap.lines, 'admin_ok', { route: '/api/admin/masks/l1', by: 'keeper' });
-    logged(cap.lines, 'masks_saved', { component: 'worker.admin', level: 'info', room: 'l1', by: 'keeper', ledges: 2, walls: 1, hazards: 1, fronts: 1 });
+    logged(cap.lines, 'masks_saved', { component: 'worker.admin', level: 'info', room: 'l1', by: 'keeper', ledges: 2, walls: 1, hazards: 1, fronts: 1, spots: 2 });
     const back = await read(env);
     expect(back.status).toBe(200);
     expect(back.headers.get('Cache-Control')).toBe('no-store');
@@ -128,7 +134,7 @@ describe('saving a ledge draft (OP-156)', () => {
     // The keepers' key saves too; the new draft replaces the old, whole.
     const next: MaskDraft = { ...emptyMasks(), ledges: [{ id: 'ledge-2', x0: 100, x1: 200, top: MAX_PERCH_TOP }] };
     expect((await save(env, next, { 'X-Admin-Key': ADMIN })).status).toBe(200);
-    logged(cap.lines, 'masks_saved', { room: 'l1', by: 'key', ledges: 1, walls: 0, hazards: 0, fronts: 0 });
+    logged(cap.lines, 'masks_saved', { room: 'l1', by: 'key', ledges: 1, walls: 0, hazards: 0, fronts: 0, spots: 0 });
     expect((await (await read(env)).json()) as SavedMasks).toMatchObject({ room: 'l1', ...next });
     // A token that is not good, with the key beside it: the key decides.
     expect((await save(env, next, { 'X-Keeper-Token': 'not.a-token', 'X-Admin-Key': ADMIN })).status).toBe(200);
@@ -141,6 +147,8 @@ describe('saving a ledge draft (OP-156)', () => {
       ['{"ledges": [', { reason: 'body' }],
       [[DRAFT], { reason: 'body' }],
       [{ ledges: [], walls: [], hazards: [] }, { reason: 'body' }],
+      [{ ledges: [], walls: [], hazards: [], spots: [] }, { reason: 'body' }],
+      [{ ...BEFORE_SPOTS, extra: [] }, { reason: 'body' }],
       [{ ...DRAFT, extra: [] }, { reason: 'body' }],
       [{ ...DRAFT, walls: 'none' }, { reason: 'list', list: 'walls' }],
       [{ ...DRAFT, ledges: Array.from({ length: MASK_LIST_MAX + 1 }, (_, i) => ({ id: `ledge-${i}`, x0: i, x1: i + 5, top: 50 })) }, { reason: 'too-many', list: 'ledges' }],
@@ -153,6 +161,11 @@ describe('saving a ledge draft (OP-156)', () => {
       [{ ...DRAFT, ledges: [{ ...DRAFT.ledges[0], top: MAX_PERCH_TOP + 1 }] }, { reason: 'top', list: 'ledges', index: 0 }],
       [{ ...DRAFT, hazards: [{ ...DRAFT.hazards[0], top: 0 }] }, { reason: 'top', list: 'hazards', index: 0 }],
       [{ ...DRAFT, fronts: [{ id: 'front-1', points: DRAFT.fronts[0]!.points.slice(0, 2) }] }, { reason: 'points', list: 'fronts', index: 0 }],
+      [{ ...DRAFT, spots: 'none' }, { reason: 'list', list: 'spots' }],
+      [{ ...DRAFT, spots: [{ ...DRAFT.spots[0], top: 0 }] }, { reason: 'item', list: 'spots', index: 0 }],
+      [{ ...DRAFT, spots: [DRAFT.spots[0], { ...DRAFT.spots[1], id: 'boulder' }] }, { reason: 'same-id', list: 'spots', index: 1 }],
+      [{ ...DRAFT, spots: [{ ...DRAFT.spots[0], y: '770' }] }, { reason: 'number', list: 'spots', index: 0 }],
+      [{ ...DRAFT, spots: [DRAFT.spots[0], { ...DRAFT.spots[1], x: 6401 }] }, { reason: 'outside', list: 'spots', index: 1 }],
     ];
     for (const [body, why] of cases) {
       const r = await save(env, body, keeper);
@@ -175,6 +188,27 @@ describe('saving a ledge draft (OP-156)', () => {
     logged(cap.lines, 'masks_refused', { reason: 'too-large' });
     expect((await read(env)).status).toBe(404);
     expect(cap.lines.filter((l) => l.event === 'masks_saved')).toEqual([]);
+  });
+
+  it('takes a draft of the four lists from before spots as one with none, and reads one kept before spots back with none (OP-156, part 3)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-01T12:00:00Z'));
+    const { env, obj, state } = park();
+    // A keeper's painter tab opened before spots sends the four lists: kept as a draft with no spots.
+    expect((await save(env, BEFORE_SPOTS, { 'X-Keeper-Token': await mintKeeper(KEY) })).status).toBe(200);
+    logged(cap.lines, 'masks_saved', { room: 'l1', by: 'keeper', ledges: 2, fronts: 1, spots: 0 });
+    expect(await (await read(env)).json()).toEqual({ room: 'l1', ...DRAFT, spots: [], savedAt: Date.parse('2026-11-01T12:00:00Z') });
+    // A draft the overflow object kept before spots, as it kept it: it reads back with none, here and through the Worker.
+    const kept = { room: 'l1', ...BEFORE_SPOTS, savedAt: 1_700_000_000_000 };
+    state.storage.sql.exec(`INSERT OR REPLACE INTO overflow_settings (key, value) VALUES (?, ?)`, 'masks:l1', JSON.stringify(kept));
+    expect(await (await obj.fetch(new Request('https://park/masks/l1'))).json()).toEqual({ ...kept, spots: [] });
+    forgetMasks();
+    const back = await read(env);
+    expect(back.status).toBe(200);
+    expect(await back.json()).toEqual({ ...kept, spots: [] });
+    // Saved again with its spots placed, it has them.
+    expect((await save(env, DRAFT, { 'X-Admin-Key': ADMIN })).status).toBe(200);
+    expect(await (await read(env)).json()).toEqual({ room: 'l1', ...DRAFT, savedAt: Date.parse('2026-11-01T12:00:00Z') });
   });
 
   it('says so when the overflow object does not keep or give a draft (502, 503), and logs it', async () => {

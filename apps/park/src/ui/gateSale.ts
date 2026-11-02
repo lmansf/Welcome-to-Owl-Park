@@ -10,13 +10,17 @@
  * (checkoutReturn.ts) tells this page that checkout is done, and it looks at the wallet at once.
  *
  * The ticket is the owl's, not the screen's: the checkout token names the owl's collector id, as the
- * claim and share links do, so it lets the owl in on any screen it plays on.
+ * claim and share links do, so it lets the owl in on any screen it plays on. So beside buying, with
+ * the park's accounts on, the card offers to bring here an owl that already has a ticket on another
+ * screen (OP-183): its button opens the account's Bring your owl here box (account.ts, OP-139), the
+ * same emailed link as the home screen's I already have an owl. The owl then plays on this screen
+ * and not the other, as ever.
  */
 import type { WalletEntry } from '../net';
 import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, arrivedWords, createCheckoutWatch, startCheckout, type CheckoutWatch, type Opener, type Started, type WatchClock } from './checkout';
 import { ANSWER_AFTER_MS, answerReturns, pageChannel, type MakeChannel } from './checkoutReturn';
 import { PREVIEW_WORDS } from './preview';
-import type { AskStore, LinkMaker, StoreGo } from './storeCard';
+import type { AskStore, LinkMaker, StoreAside, StoreGo } from './storeCard';
 import { GATE_WORDS } from './tickets';
 
 export interface GateSale {
@@ -37,6 +41,27 @@ export interface GateSale {
    * does, OP-190), and what follows the purchase gets the opener the card handed out.
    */
   bought?: (ticket: WalletEntry, open: Opener) => boolean;
+  /**
+   * Bring here an owl whose ticket is on another screen (OP-183): the account's restore box. Absent
+   * while the park's accounts are off, and then the card offers only the Day Ticket.
+   */
+  bring?: () => void;
+}
+
+/**
+ * The sale with the way to bring an owl here (OP-183) when this screen can ask for one: `restore`
+ * opens the account's Bring your owl here box, and is null while the park's accounts are off.
+ */
+export function withBring(sale: GateSale, restore: (() => void) | null): GateSale {
+  if (!restore) return sale;
+  return { ...sale, bring: restore };
+}
+
+/** What the card shows under its buttons for an owl whose ticket may be on another screen (OP-183); nothing without a way to bring it. */
+export function bringAside(sale: Pick<GateSale, 'bring'>): StoreAside | undefined {
+  const bring = sale.bring;
+  if (!bring) return undefined;
+  return { line: GATE_WORDS.elsewhere, label: GATE_WORDS.bring, run: bring };
 }
 
 /** What the card says above its own line: why the turnstiles stayed shut and that they sell a Day Ticket, then the early preview's warning. */
@@ -70,7 +95,10 @@ const CSS = `
 `;
 
 export interface GateSalePanel {
-  /** The card before the store, then checkout; while a checkout is under way, its card comes back instead. */
+  /**
+   * The card before the store (with the way to bring an owl here, when the sale has one), then
+   * checkout; while a checkout is under way, its card comes back instead.
+   */
   sell(sale: GateSale): void;
   /** A checkout is open and its ticket is being watched for (not after Cancel). */
   busy(): boolean;
@@ -201,7 +229,7 @@ export function createGateSale(root: HTMLElement, ask: AskStore, toast: (message
       opener = null;
       cancelled = false;
       el.classList.remove('open');
-      ask(gateBuy(next, started), null, saleLines(next));
+      ask(gateBuy(next, started), null, saleLines(next), bringAside(next));
     },
     busy: () => watch.active() && !cancelled,
   };

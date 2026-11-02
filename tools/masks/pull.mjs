@@ -2,11 +2,12 @@
 /**
  * The ledge painter's draft as room data (OP-156): fetches a tree room's saved draft from the park
  * (GET /api/masks/<room>, which anyone may read) and prints its ledges as treeLedge(...) lines to
- * paste into the room's perches in packages/shared/rooms/index.ts and its fronts as lines to paste
- * into the room's fronts there (OP-173: shapes drawn over the owls), its walls and hazards as JSON
- * (the game has no place for those yet), and what differs from the room's ledges and fronts as the
- * tree has them now. It prints and writes nothing: a ledge or a front becomes the park's in a pull
- * request.
+ * paste into the room's perches in packages/shared/rooms/index.ts, its fronts as lines to paste
+ * into the room's fronts there (OP-173: shapes drawn over the owls), its placed spots as lines to
+ * paste into the room's places (part 3: where each of the level's named spots stands, TREE_SPOTS),
+ * its walls and hazards as JSON (the game has no place for those yet), and what differs from the
+ * room's ledges, fronts and places as the tree has them now. It prints and writes nothing: a ledge,
+ * a front or a place becomes the park's in a pull request.
  *
  *   pnpm masks:pull <room> [--base <url>]
  *
@@ -22,8 +23,9 @@ import { parseArgs } from 'node:util';
 register(new URL('../chaos/lib/ts-hooks.mjs', import.meta.url));
 const SHARED = new URL('../../packages/shared/', import.meta.url);
 export const { roomFor } = await import(new URL('rooms/index.ts', SHARED).href);
-export const { checkMasks, frontsOf, isPaintable, ledgesOf } = await import(new URL('src/masks.ts', SHARED).href);
+export const { checkMasks, draftOf, frontsOf, isPaintable, ledgesOf, placesOf } = await import(new URL('src/masks.ts', SHARED).href);
 const { ROOM_W } = await import(new URL('src/room.ts', SHARED).href);
+const { treeSpotsFor } = await import(new URL('src/treeSpots.ts', SHARED).href);
 
 export const DEFAULT_BASE = 'http://localhost:8787';
 const ROOM_ID = /^[a-z0-9-]{1,32}$/;
@@ -54,8 +56,13 @@ export function frontLine(f, raised = false) {
   return `{ id: '${f.id}',${raised ? ' raised: true,' : ''} poly: pts(${f.points.map((p) => `[${roomX(p.x, from)}, ${p.y}]`).join(', ')}) },`;
 }
 
-/** What differs between the room's ledges now and the draft's, by id. */
-export function ledgeDiff(now, drafted) {
+/** A placed spot as a line of the room's places: its point in room px, as the painter placed it. */
+export function placeLine(s) {
+  return `{ id: '${s.id}', at: { x: ${s.x}, y: ${s.y} } },`;
+}
+
+/** What differs between the room's items now and the draft's, by id, each number of `keys` that moved said. */
+function fieldDiff(now, drafted, keys) {
   const was = new Map(now.map((l) => [l.id, l]));
   const is = new Map(drafted.map((l) => [l.id, l]));
   const added = drafted.filter((l) => !was.has(l.id)).map((l) => l.id);
@@ -65,11 +72,21 @@ export function ledgeDiff(now, drafted) {
   for (const l of drafted) {
     const o = was.get(l.id);
     if (!o) continue;
-    const moves = ['x0', 'x1', 'top'].filter((k) => o[k] !== l[k]).map((k) => `${k} ${o[k]} -> ${l[k]}`);
+    const moves = keys.filter((k) => o[k] !== l[k]).map((k) => `${k} ${o[k]} -> ${l[k]}`);
     if (moves.length) changed.push(`${l.id} (${moves.join(', ')})`);
     else same += 1;
   }
   return { added, removed, changed, same };
+}
+
+/** What differs between the room's ledges now and the draft's, by id. */
+export function ledgeDiff(now, drafted) {
+  return fieldDiff(now, drafted, ['x0', 'x1', 'top']);
+}
+
+/** What differs between the room's places now and the draft's spots, by id. */
+export function placeDiff(now, drafted) {
+  return fieldDiff(now, drafted, ['x', 'y']);
 }
 
 /** What differs between the room's fronts now and the draft's, by id: a front is changed when it has more or fewer points, or any of them moved. */
@@ -102,6 +119,8 @@ export function printout(room, saved, base) {
   const when = new Date(saved.savedAt).toISOString().replace('T', ' ').slice(0, 16);
   const json = (v) => JSON.stringify(v, null, 2);
   const raised = new Set((room.fronts ?? []).filter((f) => f.raised).map((f) => f.id));
+  const names = new Set(treeSpotsFor(room.id).map((s) => s.id));
+  const strays = saved.spots.filter((s) => !names.has(s.id)).map((s) => s.id);
   return [
     `// ${room.id}: the ledge draft saved ${when} UTC, from ${base}`,
     `// Ledges (${saved.ledges.length}), for the room's perches in packages/shared/rooms/index.ts:`,
@@ -110,6 +129,10 @@ export function printout(room, saved, base) {
     `// Fronts (${saved.fronts.length}), for the room's fronts there (drawn over the owls):`,
     ...saved.fronts.map((f) => frontLine(f, raised.has(f.id))),
     '',
+    `// Places (${saved.spots.length}), for the room's places there (where each of its level's named spots stands):`,
+    ...saved.spots.map(placeLine),
+    ...(strays.length ? [`// Not named spots of ${room.id}'s level (TREE_SPOTS, packages/shared/src/treeSpots.ts): ${strays.join(', ')}.`] : []),
+    '',
     `// Walls (${saved.walls.length}):`,
     json(saved.walls),
     `// Hazards (${saved.hazards.length}):`,
@@ -117,6 +140,7 @@ export function printout(room, saved, base) {
     '',
     `// Against ${room.id}'s ledges now: ${diffWords(ledgeDiff(ledgesOf(room), saved.ledges))}.`,
     `// Against ${room.id}'s fronts now: ${diffWords(frontDiff(frontsOf(room), saved.fronts))}.`,
+    `// Against ${room.id}'s places now: ${diffWords(placeDiff(placesOf(room), saved.spots))}.`,
   ].join('\n');
 }
 
@@ -164,7 +188,8 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
     return 1;
   }
   const body = await res.json().catch(() => null);
-  const checked = body && typeof body === 'object' ? checkMasks({ ledges: body.ledges, walls: body.walls, hazards: body.hazards, fronts: body.fronts }, room.size) : { ok: false, reason: 'body' };
+  // A draft saved before spots (part 3) reads as one with none.
+  const checked = body && typeof body === 'object' ? checkMasks(draftOf(body), room.size) : { ok: false, reason: 'body' };
   if (!checked.ok || body.room !== id || typeof body.savedAt !== 'number') {
     err(`What the park at ${base} gave for ${id} is not a draft that fits the room${checked.ok ? '' : ` (${checked.reason}${checked.list ? ` in ${checked.list}` : ''})`}.`);
     return 1;

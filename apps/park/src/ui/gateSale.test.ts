@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WalletEntry } from '../net';
 import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, LOOK_MS, type Opener, type Started, type WatchClock } from './checkout';
+import { ACCOUNT_WORDS } from './account';
 import { ANSWER_AFTER_MS, RETURN_CHANNEL, askForGamePage, type ReturnChannel, type ReturnMessage } from './checkoutReturn';
-import { createGateSale, gateBuy, saleLines, type GateSale } from './gateSale';
+import { bringAside, createGateSale, gateBuy, saleLines, withBring, type GateSale } from './gateSale';
 import { PREVIEW_WORDS } from './preview';
-import { goOn, type AskStore, type LinkMaker, type StoreGo } from './storeCard';
+import { goOn, type AskStore, type LinkMaker, type StoreAside, type StoreGo } from './storeCard';
 import { GATE_WORDS, PASS_WORDS, OPENING_WORDS, createFreePassCard, forgetOffers, gateRefusal, offerOnce } from './tickets';
 
 const CART = 'https://owl-test.myshopify.com/cart/100:1?attributes%5Bowl_checkout%5D=tok';
@@ -143,6 +144,30 @@ describe('a Day Ticket at the turnstiles (OP-180)', () => {
   });
 });
 
+describe('bringing an owl with a ticket on another screen here, beside buying (OP-183)', () => {
+  const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, wallet: async () => [], before: new Set() };
+
+  it('says it in plain words, and its button is the account’s own Bring your owl here', () => {
+    expect(GATE_WORDS.elsewhere).toBe('Have a ticket on another screen?');
+    expect(GATE_WORDS.bring).toBe('Bring your owl here');
+    expect(GATE_WORDS.bring).toBe(ACCOUNT_WORDS.restoreTitle);
+  });
+
+  it('is offered only where this screen can ask for the owl’s link: with the park’s accounts off, the card sells only', () => {
+    expect(withBring(sale, null)).toBe(sale);
+    expect(bringAside(withBring(sale, null))).toBeUndefined();
+    let asked = 0;
+    const brought = withBring(sale, () => asked++);
+    // The sale itself is left as it was.
+    expect(sale.bring).toBeUndefined();
+    const aside = bringAside(brought)!;
+    expect([aside.line, aside.label]).toEqual([GATE_WORDS.elsewhere, GATE_WORDS.bring]);
+    expect(asked).toBe(0);
+    aside.run();
+    expect(asked).toBe(1);
+  });
+});
+
 /** A clock the test turns by hand (as checkout.test.ts's). */
 function testClock() {
   let now = 0;
@@ -168,8 +193,8 @@ describe('the turnstiles’ sale on the page (OP-180)', () => {
 
   function setup(o = opener(), goingIn = true) {
     const root = new FakeEl('div');
-    const asked: Array<{ go: StoreGo; say: readonly string[] | undefined }> = [];
-    const ask: AskStore = (go, _opener, say) => asked.push({ go, say });
+    const asked: Array<{ go: StoreGo; say: readonly string[] | undefined; aside: StoreAside | undefined }> = [];
+    const ask: AskStore = (go, _opener, say, aside) => asked.push({ go, say, aside });
     const toasts: string[] = [];
     const t = testClock();
     const channel = fakeChannels();
@@ -211,6 +236,25 @@ describe('the turnstiles’ sale on the page (OP-180)', () => {
     expect(s.card().classList.contains('open')).toBe(false);
     expect(s.bought.map(([t, open]) => [t.id, open])).toEqual([['OWL-DAYT-ICKT', s.o.open]]);
     expect(s.panel.busy()).toBe(false);
+  });
+
+  it('the card offers to bring an owl here beside buying when the sale has a way (OP-183); its button opens nothing of the store', async () => {
+    const s = setup();
+    s.panel.sell(s.sale);
+    expect(s.asked[0]!.aside).toBeUndefined();
+    let restores = 0;
+    s.panel.sell(withBring(s.sale, () => restores++));
+    expect(s.asked).toHaveLength(2);
+    const aside = s.asked[1]!.aside!;
+    expect([aside.line, aside.label]).toEqual(['Have a ticket on another screen?', 'Bring your owl here']);
+    // The Day Ticket is still offered beside it, with the same words.
+    expect(s.asked[1]!.say).toEqual(['You need a ticket to go in. You can get a Day Ticket right here.']);
+    aside.run();
+    await settle();
+    expect(restores).toBe(1);
+    expect(s.o.calls).toEqual([]);
+    expect(s.panel.busy()).toBe(false);
+    expect(s.card().classList.contains('open')).toBe(false);
   });
 
   it('the owl wandered off from the turnstiles: the ticket is here and works at them; held, it waits on the store’s check', async () => {

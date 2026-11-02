@@ -45,6 +45,33 @@ export function roomCap(env: Env, roomId: string): number {
   return (Object.hasOwn(DEFAULT_CAPS, key) ? DEFAULT_CAPS[key] : undefined) ?? 40;
 }
 
+/** SPECTATOR_SHARE when it is not set, or not a number from 0 to 1 (OP-191). */
+export const DEFAULT_SPECTATOR_SHARE = 0.75;
+/** SPECTATOR_SHARE that is not a share is said once per isolate, not at every join. */
+let shareWarned = false;
+
+/** The share of a room's cap spectators may join up to (OP-191), from SPECTATOR_SHARE or the default. */
+export function spectatorShare(env: Env): number {
+  const raw = env.SPECTATOR_SHARE as string | undefined;
+  if (raw === undefined || raw === '') return DEFAULT_SPECTATOR_SHARE;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+  // TODO-DOCS (OP-191): docs/LOGGING.md: read_failed (room.join, error) for a SPECTATOR_SHARE that is not a share, once per isolate.
+  if (!shareWarned) {
+    shareWarned = true;
+    moduleLog.error('room.join', 'read_failed', 'SPECTATOR_SHARE is not a share from 0 to 1: the default holds.', { value: String(raw).slice(0, 40), share: DEFAULT_SPECTATOR_SHARE });
+  }
+  return DEFAULT_SPECTATOR_SHARE;
+}
+
+/**
+ * How many owls a room may hold and still let a spectator in (OP-191): its cap times the spectators'
+ * share, rounded down. Ticket holders come in up to the full cap; nobody inside is sent out.
+ */
+export function spectatorLimit(env: Env, roomId: string): number {
+  return Math.floor(roomCap(env, roomId) * spectatorShare(env));
+}
+
 /** The key all the nests are counted under. */
 export const NESTS_COUNT = 'nests';
 
