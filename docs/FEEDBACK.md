@@ -2,8 +2,8 @@
 
 - Status: BUILT (OP-028); the preview nudge and the feedback reward PLANNED (OP-063, OP-064)
 - Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
-- Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts, collectLog.ts, routes/feedback.ts; apps/park/src/ui/feedback.ts, settingsScreen.ts; apps/park-log
-- Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089, OP-108, OP-166, OP-167
+- Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts, collectLog.ts, routes/feedback.ts; apps/park/src/ui/feedback.ts, feedbackBug.ts, settingsScreen.ts; apps/park-log
+- Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089, OP-108, OP-166, OP-167, OP-208
 - Related: docs/ARCHITECTURE.md section 10
 
 **Send feedback** is the first row of Settings (OP-167): in the Menu's Settings tab, and in the home
@@ -14,6 +14,18 @@ note it is (Bug, Idea, Praise, Other) and a few words, up to 1,000 characters
 (`FEEDBACK_MAX_CHARS`). The form and its sending are the same from either place. The form asks visitors to leave
 out names, emails and other personal details. On a phone it sits at the top of the screen, so the
 keyboard never covers what is being typed (`apps/park/src/ui/feedback.ts`).
+
+**The feedback bug** (OP-208): until the full opening (midnight Eastern, December 1,
+`FULL_OPENING_MS` in `apps/park/src/ui/preview.ts`), a small round bug button stays on screen
+everywhere: the home screen, every room, and over the arcade, the climb and the owl builder. It
+sits halfway down the left edge, clear of the top bar, the screens' close buttons and the
+controls along the bottom; on the home screen, whose buttons fill the left side, it keeps to the
+right edge. It opens the same form. Over a game or a covering screen the form opens on top and
+closing it leaves that screen as it was; anywhere else it opens as Settings' row does. The form
+sits over every other screen (its layer's `z-index` is 26). The bug goes away on its own at the
+opening, with no deploy, and `FEEDBACK_BUG_ON` in `apps/park/src/ui/feedbackBug.ts` turns it off
+sooner. Nothing new is sent: the note carries the room and the screen size as before, and the
+Worker adds the browser's description, from which the analytics copy takes phone or desktop.
 
 ## Where notes are kept
 
