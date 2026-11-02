@@ -230,11 +230,8 @@ test.describe('spectators (OP-191)', () => {
     expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['day', 'active']]);
     await a.screenshot({ path: 'e2e-screenshots/spectator-admitted.png' });
 
-    // The half-price pass offer follows the ticket as ever (OP-180); then the quests are open.
-    const offer = a.locator('[data-free-pass="day"]');
-    await expect(offer).toBeVisible({ timeout: 20_000 });
-    await offer.getByRole('button', { name: 'No thanks' }).click();
-    await expect(a.locator('[data-free-pass]')).toBeHidden();
+    // No half-price pass after the ticket (OP-198: the Annual Pass was offered on the card); the quests are open.
+    await expect(a.locator('[data-free-pass]')).toHaveCount(0);
     await a.keyboard.press('KeyJ');
     const menu = a.getByRole('dialog', { name: 'Menu' });
     await expect(menu).toBeVisible();
