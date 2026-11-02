@@ -117,7 +117,10 @@ starts in that window, says "Your ticket is here. Press Play and in you go!", an
 to the turnstiles and through them. The half-price annual pass follows the Day Ticket once. A ticket's status
 shows only at the turnstiles; the Menu's Settings keep the tickets in a closed row (Tickets), with
 their IDs for the keepers. A ticket is the owl's, not the screen's (OP-183): it lets the owl in on
-any screen it plays on.
+any screen it plays on. So under its two buttons, the card before the store at the turnstiles (and
+from a spectator's Get a Day Ticket) asks "Have a ticket on another screen?" with **Bring your owl
+here**, which opens the same emailed-link box as the home screen's I already have an owl (OP-183,
+with the park's accounts on). The owl then plays on this screen and not the other.
 
 **Spectators** (OP-191, only while `SPECTATORS` is `on`; the words are drafts for the owner's
 approval, in `apps/park/src/ui/spectator.ts`): at the turnstiles, an owl without a ticket that works

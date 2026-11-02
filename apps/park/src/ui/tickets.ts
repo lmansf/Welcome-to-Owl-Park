@@ -6,6 +6,7 @@
  */
 import type { ScanRefusal, ScanReply, WalletEntry } from '../net';
 import type { TicketLink } from '../net/ticketLinks';
+import { ACCOUNT_WORDS } from './account';
 import type { Opener } from './checkout';
 import type { AskStore } from './storeCard';
 
@@ -110,10 +111,17 @@ export function gateCard(scan: Extract<ScanReply, { ok: true }>, now: number): G
   return { kind: KIND_LABEL[scan.kind], id: scan.id, line };
 }
 
-/** What the turnstiles say before they sell a Day Ticket (OP-180), for the owner's approval. */
+/**
+ * What the turnstiles say before they sell a Day Ticket (OP-180), and beside it how an owl whose
+ * ticket is on another screen comes here (OP-183), for the owner's approval.
+ */
 export const GATE_WORDS = {
   /** After the reason, on the card before the store: the turnstiles sell a Day Ticket right there. */
   buy: 'You can get a Day Ticket right here.',
+  /** Under the card's buttons (OP-183): a ticket is the owl's, so the owl that holds it can be brought to this screen. */
+  elsewhere: 'Have a ticket on another screen?',
+  /** Its button, which opens the account's Bring your owl here box (account.ts): the same words as that box's title. */
+  bring: ACCOUNT_WORDS.restoreTitle,
 } as const;
 
 /**

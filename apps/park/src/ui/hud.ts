@@ -25,7 +25,7 @@ import { createSettingsScreen } from './settingsScreen';
 import { createWhichOwlScreen, type WhichOwlRun } from './whichOwl';
 import { createShopPanel, type ShopPanel } from './shop';
 import { GATE_WORDS, createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
-import { createGateSale, type GateSale, type GateSalePanel } from './gateSale';
+import { createGateSale, withBring, type GateSale, type GateSalePanel } from './gateSale';
 import { createStoreCard, type StoreGo } from './storeCard';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { createTurnPhone } from './turnPhone';
@@ -139,7 +139,8 @@ export interface Hud {
   openShop(): void;
   /**
    * A turnstile reached without a ticket that works (OP-180): the card before the store, then
-   * checkout for a Day Ticket over the game, and what follows once the ticket has come.
+   * checkout for a Day Ticket over the game, and what follows once the ticket has come. With the
+   * park's accounts on, the card also offers to bring here an owl with a ticket on another screen (OP-183).
    */
   sellAtGate(sale: GateSale): void;
   /**
@@ -971,7 +972,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     offerTicket,
     sellAtGate(sale) {
       gateSale ??= createGateSale(root, storeCard.ask, (m, ms) => toast(m, ms ?? 4500));
-      gateSale.sell(sale);
+      // OP-183: with the park's accounts on, an owl whose ticket is on another screen is brought here by the account's emailed link.
+      const screens = accountScreens;
+      gateSale.sell(withBring(sale, screens && account ? () => screens.openEmail('restore') : null));
     },
     askStore: (go, opener) => storeCard.ask(go, opener),
     showTicket(card) {
