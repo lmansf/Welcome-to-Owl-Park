@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
  */
 export function linesOf(root, file, name) {
   const lines = readFileSync(new URL(file, root), 'utf8').split('\n');
-  const from = lines.findIndex((l) => new RegExp(`^(async )?function ${name}\\(`).test(l));
+  const from = lines.findIndex((l) => new RegExp(`^(export )?(async )?function ${name}\\(`).test(l));
   const to = lines.findIndex((l, i) => i > from && l === '}');
   if (from < 0 || to < 0) throw new Error(`stryker.config.mjs: ${file} has no function ${name} any more; update the mutate list.`);
   return `${file}:${from + 1}-${to + 1}`;

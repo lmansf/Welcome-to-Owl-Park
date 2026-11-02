@@ -220,7 +220,7 @@ describe('hostile values at every door the Worker has (OP-143)', () => {
 // ---- No database address or key in anything the Worker answers (OP-150, item 2) ----
 //
 // The bundle check (tools/security/bundle-check.mjs) reads the built page. This reads the other half
-// the pen-test pointed at: what the Worker itself says back. Every route index.ts names is asked as
+// the pen-test pointed at: what the Worker itself says back. Every route the Worker names is asked as
 // a stranger, as an owl with a pass and as a keeper with the keepers' key, by GET and by POST, with
 // the collection log's Supabase address and a JWT-shaped key set as the Worker's secrets, and with
 // any upstream call (the store, the log) answering with that address and key. No answer may hold
@@ -233,12 +233,15 @@ const JWT = /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/;
 const LOG_HOST = 'abcdefghijklmnop.' + 'supa' + 'base.co';
 const DATABASE = /supabase/i;
 
-/** Every path index.ts routes on, read from the source so a new route is covered the day it lands. */
+/**
+ * Every path the Worker routes on (OP-201: the route table, and the paths its handlers in src/routes
+ * tell apart), read from the source so a new route is covered the day it lands.
+ */
 async function routes(): Promise<string[]> {
-  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (path: string, encoding: string) => string };
-  const source = readFileSync('src/index.ts', 'utf8');
+  const { readFileSync, readdirSync } = (await import('node:fs' as string)) as { readFileSync: (path: string, encoding: string) => string; readdirSync: (path: string) => string[] };
+  const source = ['src/index.ts', ...readdirSync('src/routes').map((f) => `src/routes/${f}`)].map((f) => readFileSync(f, 'utf8')).join('\n');
   const found = new Set<string>(['/', '/api/account/protect', '/api/account/restore', '/api/account/confirm', '/api/account/owls', '/api/account/bind']);
-  for (const m of source.matchAll(/pathname(?: === |\.startsWith\()'(\/[^']*)'/g)) found.add(m[1]!.endsWith('/') ? `${m[1]}l1` : m[1]!);
+  for (const m of source.matchAll(/(?:pathname(?: === |\.startsWith\()|(?:path|prefix): )'(\/[^']*)'/g)) found.add(m[1]!.endsWith('/') ? `${m[1]}l1` : m[1]!);
   return [...found].filter((p) => !p.startsWith('/ws')).sort();
 }
 
@@ -255,7 +258,7 @@ describe('no database address or key in any answer the Worker gives (OP-150)', (
     const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ url: `https://${LOG_HOST}`, key: JWT_SHAPED }));
     try {
       const paths = await routes();
-      // The reading of index.ts found the routes (a regex that stopped matching would pass vacuously).
+      // The reading of the routes found them (a regex that stopped matching would pass vacuously).
       expect(paths.length).toBeGreaterThan(30);
       expect(paths).toContain('/api/health');
       expect(paths).toContain('/api/admin/collect-log');
