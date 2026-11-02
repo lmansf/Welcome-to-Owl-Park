@@ -44,7 +44,7 @@ Useful query parameters while developing:
 | Parameter | Effect |
 | --- | --- |
 | `?debug=1` | Draw walkable areas, doors and spawn points |
-| `?room=market` | Skip the home screen and start in a given room: `lobby` (the default), `hub`, `grove`, `market`, `glass`, `arcade`, `homes`, or the tree's `l1` to `l4` (with a keeper's token while the tree is dark); `&spawn=<id>` picks the spawn point |
+| `?room=market` | Skip the home screen and start in a given room: `lobby` (the default), `hub`, `grove`, `market`, `glass`, `arcade`, `homes`, or the tree's `l1` to `l4`, `l5-street` and `l5` (with a keeper's token while the tree is dark); `&spawn=<id>` picks the spawn point |
 | `?home=0` | Skip the home screen and start in the lobby |
 | `?transport=local` | Force a transport: `local` (tabs on one device) or `edge` (room server) |
 | `?id=owl-a&look=%23C9A227,%23F6F1E3,%23FF2AA1` | Fixed id and colours (tests) |
