@@ -73,6 +73,8 @@ from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.patch import cut as cut_crop, patch as patch_edit  # noqa: E402
+from artlib import parse_hex  # noqa: E402
+from artlib.split import CODE_TOLERANCE, split as split_layer  # noqa: E402
 from artlib.resize import crop_to_aspect, downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
@@ -1026,6 +1028,44 @@ def cmd_patch(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_split(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A tree screen's platforms or front props (OP-173, OP-159): the picked painting's own pixels
+    where a colour-coded edit of it is filled with one code colour, the key colour everywhere else,
+    written as a new raw candidate of the key (select it with generate.mjs select, finish it as any
+    keyed layer). The painting is the screen's back scenery, so the layers stay in register.
+
+    TODO-DOCS (OP-159): docs/ART-PIPELINE.md and docs/MAP.md section 10: the six-layer recipe: one
+    scene a screen, picked, shifted onto the ground line and mended at its joins as the screen's back
+    scenery; a colour-coded map of it (platforms green, front props blue) as an edit of its half-size
+    cut; `split <screen>-play|front --base-key <screen>-back --map-key <map> --colour #00FF00|#0000FF`."""
+    key = validate_key(a.key, assets=ctx.assets)
+    kc = ctx.assets.get(key, {}).get("key_colour")
+    if not kc:
+        raise ArtError(f"{key}: split writes a keyed layer, and the key has no key colour in the table")
+    base_img, base_name, base_sc = open_base(ctx, a.base_key, a.base)
+    code, code_sc = resolve_raw(ctx, a.map_key, a.map)
+    try:
+        img, rep = split_layer(base_img, open_raw(code), parse_hex(a.colour), parse_hex(kc), tolerance=a.tolerance,
+                               min_area=a.min_area, close=a.close, max_hole=a.max_hole, grow=a.grow)
+    except ValueError as e:
+        raise ArtError(f"{key}: {e}") from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    src = lambda name, sc: {"key": (sc or {}).get("key"), "file": name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
+    b = base_sc or {}
+    sc = {"schema": 1, "key": key, "kind": ctx.assets.get(key, {}).get("kind"), "realm": b.get("realm"), "provider": b.get("provider"), "model": b.get("model"),
+          "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
+          "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
+          "key_colour": kc, "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "split", "cost_estimate_usd": 0, "provider_meta": {},
+          "split": {"base": src(base_name, base_sc), "map": src(code.name, code_sc), **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
+    note(f"split {key}: {rel_to_repo(d / f'{h}.png')}, {rep['kept_px']} px of {base_name} in {rep['parts']} part(s) where {code.name} is {a.colour} "
+         f"(bbox {rep['kept_bbox']}); select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
 def shift_down(img: Image.Image, n: int) -> Image.Image:
     """The image moved down n pixels: its bottom n rows fall off, and the gap at the top mirrors the
     painting's own top rows (rows 1 to n, upside down). What ran out of the frame (a bamboo stalk, a
@@ -1598,6 +1638,21 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--join", type=int, default=0, help="px at the box's left and right sides within which the edit joins the painting along the cheapest top-to-bottom cut (a band across a seam; with --threshold 0 the whole box)")
     add_common(sp)
     sp.set_defaults(fn=cmd_patch)
+
+    sp = sub.add_parser("split", help="a tree screen's platforms or front props: the picked painting's pixels where a colour-coded edit of it shows one code colour; writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the layer the cut-out is for (a keyed key in the table)")
+    sp.add_argument("--base-key", required=True, help="the key whose picked candidate is cut (the screen's back scenery)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--map-key", required=True, help="the colour-coded edit's key (its SELECTED candidate unless --map)")
+    sp.add_argument("--map", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--colour", required=True, help="#RRGGBB: the code colour of the things kept (platforms #00FF00, front props #0000FF)")
+    sp.add_argument("--tolerance", type=float, default=CODE_TOLERANCE, help="RGB distance from the code colour that still counts as coded")
+    sp.add_argument("--min-area", type=int, default=400, help="px below which a coded fleck is dropped")
+    sp.add_argument("--close", type=int, default=4, help="px of gaps bridged in the mask")
+    sp.add_argument("--max-hole", type=int, default=2000, help="px below which an enclosed hole in the mask is filled")
+    sp.add_argument("--grow", type=int, default=3, help="px the mask grows past the coded outline")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_split)
 
     sp = sub.add_parser("shift", help="move a keyed candidate down, its top rows mirrored into the gap; writes a new raw candidate of <key>")
     sp.add_argument("key")

@@ -33,6 +33,7 @@ from artlib import fields  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
 from artlib.guide import render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
+from artlib.split import split as split_layer  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards, sign_board_rect  # noqa: E402
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
@@ -672,6 +673,71 @@ class TestShift(unittest.TestCase):
             self.assertEqual(tuple(int(c) for c in px[0, 70]), (248, 2, 200), "and stays as wide as it was")
             with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
                 self.assertEqual(postprocess.main(["shift", "tree-l1-w1-play", "--dy", "300", "--raw", str(raw), "--work", td]), 1, "more than a quarter of the height is refused")
+
+
+class TestSplit(unittest.TestCase):
+    """A tree screen's platforms and front props are cut out of its painting by a colour-coded edit of it (OP-173, OP-159)."""
+
+    @staticmethod
+    def scene_and_map():
+        sky, bark, plank, post = (248, 2, 200), (60, 40, 28), (150, 110, 70), (20, 20, 24)
+        scene = Image.new("RGB", (400, 240), sky)
+        d = ImageDraw.Draw(scene)
+        d.rectangle((150, 0, 250, 239), fill=bark)  # the trunk, behind
+        d.rectangle((0, 200, 399, 239), fill=plank)  # the walkway and what is under it
+        d.rectangle((260, 120, 330, 132), fill=plank)  # a ledge
+        d.rectangle((60, 120, 66, 199), fill=post)  # a lantern post in front of the walkway
+        # The model's map: the same picture redrawn a pixel off, the walkway and ledge green (shaded), the post blue,
+        # and a stray green fleck in the sky that is not a platform.
+        code = scene.copy()
+        c = ImageDraw.Draw(code)
+        c.rectangle((1, 201, 399, 239), fill=(30, 230, 40))
+        c.rectangle((261, 121, 331, 133), fill=(10, 250, 10))
+        c.rectangle((61, 121, 67, 199), fill=(15, 15, 240))
+        c.rectangle((20, 20, 26, 26), fill=(0, 255, 0))
+        return scene, code
+
+    def test_split_keeps_the_paintings_own_pixels_where_the_map_is_coded(self):
+        scene, code = self.scene_and_map()
+        out, rep = split_layer(scene, code, (0, 255, 0), (255, 0, 255), min_area=100, grow=2)
+        a, s = np.asarray(out), np.asarray(scene)
+        self.assertEqual(tuple(int(v) for v in a[220, 200]), tuple(int(v) for v in s[220, 200]), "the walkway is the painting's own")
+        self.assertEqual(tuple(int(v) for v in a[126, 300]), tuple(int(v) for v in s[126, 300]), "so is the ledge")
+        self.assertEqual(tuple(int(v) for v in a[200, 0]), tuple(int(v) for v in s[200, 0]), "grown past the map's pixel-off outline, the top edge is kept")
+        self.assertEqual(tuple(int(v) for v in a[60, 200]), (255, 0, 255), "the trunk behind is not a platform")
+        self.assertEqual(tuple(int(v) for v in a[23, 23]), (255, 0, 255), "a stray fleck of green is dropped")
+        self.assertEqual(rep["parts"], 2)
+        self.assertEqual(rep["specks_dropped"], 1)
+        front, rep = split_layer(scene, code, (0, 0, 255), (255, 0, 255), min_area=100, grow=2)
+        f = np.asarray(front)
+        self.assertEqual(tuple(int(v) for v in f[160, 63]), (20, 20, 24), "the post is cut out")
+        self.assertEqual(tuple(int(v) for v in f[220, 200]), (255, 0, 255), "and nothing else")
+        with self.assertRaises(ValueError):
+            split_layer(scene, scene, (0, 255, 0), (255, 0, 255))
+
+    def test_the_split_command_writes_a_keyed_candidate_with_its_record(self):
+        scene, code = self.scene_and_map()
+        with tempfile.TemporaryDirectory() as td:
+            base, mp = Path(td) / "scene.png", Path(td) / "codes.png"
+            scene.resize((2048, 1152), Image.Resampling.NEAREST).save(base)
+            code.resize((2048, 1152), Image.Resampling.NEAREST).save(mp)
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["split", "tree-l4-0-play", "--base-key", "tree-l4-0-back", "--base", str(base), "--map-key", "tree-l4-0-scene",
+                                       "--map", str(mp), "--colour", "#00FF00", "--min-area", "1500", "--work", td, "--now", "2026-11-02T01:00:00Z"])
+            self.assertEqual(rc, 0, out.getvalue())
+            made = list((Path(td) / "raw" / "tree-l4-0-play").glob("*.png"))
+            self.assertEqual(len(made), 1)
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["now_source"], "split")
+            self.assertEqual(sc["key_colour"], "#FF00FF")
+            self.assertEqual((sc["split"]["base"]["file"], sc["split"]["map"]["file"], sc["split"]["parts"]), ("scene.png", "codes.png", 2))
+            px = np.asarray(Image.open(made[0]).convert("RGB"))
+            self.assertEqual(tuple(int(v) for v in px[1100, 1000]), (150, 110, 70), "the walkway, at the full size")
+            self.assertEqual(tuple(int(v) for v in px[300, 1000]), (255, 0, 255))
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(postprocess.main(["split", "tree-l4-0-bg", "--base-key", "tree-l4-0-back", "--base", str(base), "--map-key", "tree-l4-0-scene",
+                                                   "--map", str(mp), "--colour", "#00FF00", "--work", td]), 1, "the sky plate has no key colour to cut onto")
 
 
 class TestKeyScreen(unittest.TestCase):
