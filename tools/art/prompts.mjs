@@ -2141,3 +2141,129 @@ const TREE_L5_JOBS = treeLevelJobs(5, { w2: 4501, w1: 4505, 0: 4509, e1: 4513, e
 Object.assign(PROMPTS, TREE_L5_PROMPTS);
 HELPER_KEYS.push(...TREE_L5_KEYS.filter((k) => k.endsWith('-scene')));
 JOBS.push(...TREE_L5_JOBS);
+
+// ---- Level 5's joins, colour-coded maps and top strips (OP-158), made as level 2's were ----
+// Two rows: the nests street (the far west end, then the street: 4096x1152, the join at x 2048, held
+// under `tree-l5-w2-back`) and the canopy (the crown, the entrance, the lounge, bough 7: 8192x1152,
+// joins at x 2048, 4096 and 6144, held under `tree-l5-0-back`). The two rooms meet at a doorway in the
+// trunk, not on a walkway, so no join is mended between them.
+const TREE_L5_SEAM_PROMPTS = {
+  'tree-l5-seam-w2-w1': treeSeam(
+    `a level walkway of pale wooden planks along a great bough, a small treehouse hut with a round door standing behind it near the left edge and a slim post hung with a round paper lantern, with the canopy's dark leaves above`,
+    `the same walkway of pale wooden planks running on, a small treehouse hut with a round door standing behind it near the right edge, and the canopy's dark leaves and boughs above`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below; between the two huts the walkway's back edge is plain, with one slim post hung with a round paper lantern a little left of the middle and nothing else standing there; the canopy's dark leaves and boughs run on across the top with open magenta sky between them and the walkway; the dark leaves under the walkway run on. The two huts stay exactly where they are.`,
+  ),
+  'tree-l5-seam-0-e1': treeSeam(
+    `a level walkway of pale wooden planks leaving the crown of a colossal tree along a great bough, with strings of round paper lanterns hanging from the crown's boughs above`,
+    `the same walkway of pale wooden planks running on along the bough, a great dark bough with clusters of leaves above it, and a carved wooden post of an archway standing at the walkway's back edge near the right edge`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge and the bough beneath it running on below; the strings of lanterns on the left end in a last lantern a little left of the middle, and the great bough on the right reaches on toward them, with open magenta sky between the boughs and the walkway; nothing stands on the walkway in the middle, and the archway's post at the right stays exactly where it is.`,
+  ),
+  'tree-l5-seam-e1-e2': treeSeam(
+    `a level walkway of pale wooden planks, a low carved wooden railing on posts along its back edge around an open stairwell, where steps wind down behind it, and great dark boughs with clusters of leaves above`,
+    `the same walkway of pale wooden planks running on, a small shop hut with a striped awning standing behind it near the right edge, and great dark boughs with clusters of leaves above`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below; the carved railing on the left ends in its last post where it does now, and right of it the walkway's back edge is plain with nothing standing on it as far as the hut; the dark boughs and leaves run on across the top with open magenta sky between them and the walkway. The stairwell and the hut stay exactly where they are.`,
+  ),
+  'tree-l5-seam-e2-e3': treeSeam(
+    `a level walkway of pale wooden planks, a low carved wooden railing on posts hung with round paper lanterns along its back edge with soft moss behind it, and great dark boughs with clusters of leaves above`,
+    `the same walkway of pale wooden planks running on along the bough, strings of round paper lanterns hanging above it from the boughs, and clusters of dark leaves along the top`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge and the bough beneath it running on below; the lantern-hung railing on the left ends in its last post where it does now, and right of it the walkway's back edge is plain with nothing standing on it; the strings of lanterns on the right hang on from the boughs, which run on across the top with open magenta sky between them and the walkway.`,
+  ),
+};
+export const TREE_L5_SEAM_KEYS = Object.keys(TREE_L5_SEAM_PROMPTS);
+const TREE_L5_SEAM_JOBS = TREE_L5_SEAM_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: key.replace('tree-l5-seam-', '').split('-').map((s) => `tree-l5-${s}-back`),
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4581 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the level's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L5_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L5_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L5_SEAM_KEYS);
+JOBS.push(...TREE_L5_SEAM_JOBS);
+
+const TREE_L5_HUTS = `the small treehouse huts with their roofs, round doors and lanterns, the slim posts with their lanterns between them,`;
+const TREE_L5_CODES = {
+  'tree-l5-w2-codes': treeCodes({
+    stand: `the walkway of pale wooden planks from the right edge of the frame to its end at the low railing on the left, with its timber front edge; and every perch up the bough to the left: the three flat-topped burls, the small square platform of planks, the broad shelf fungus, and the small flat platform at the bough's tip at the far left.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `${TREE_L5_HUTS} the low railing at the walkway's end, the great bough and the branches the perches stand on, the clusters of dark leaves, the leaves under the walkway,`,
+  }),
+  'tree-l5-w1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `${TREE_L5_HUTS} the great bough and the clusters of dark leaves behind and above, the leaves under the walkway,`,
+  }),
+  'tree-l5-0-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks from its rounded end at the left to the right edge of the frame, with its timber front edge.`,
+    front: `the curly black iron lantern post standing at the walkway's front edge on the left, with the round lantern hanging from it.`,
+    keep: `the trunk and its bark, the archway cut into it, the crown's great boughs and their clusters of leaves, the strings of lanterns, the leaves under the walkway,`,
+  }),
+  'tree-l5-e1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the grand carved archway with its lanterns and pennants, the stairwell's railing, its posts and its steps winding down, the great boughs and their clusters of leaves, the leaves under the walkway,`,
+  }),
+  'tree-l5-e2-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the shop hut with its roof, awning, window and counter, the lounge's railing, its posts, its lanterns and the moss behind it, the great boughs and their clusters of leaves, the leaves under the walkway,`,
+  }),
+  'tree-l5-e3-codes': treeCodes({
+    stand: `the walkway of pale wooden planks from the left edge of the frame to its end at the low railing, with its timber front edge; and every perch up the bough to the right: the three flat-topped burls, the small square platform of planks, the broad shelf fungus, and the small flat platform at the bough's tip at the upper right.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the low railing at the walkway's end, the great bough and the branches the perches stand on, the strings of lanterns, the clusters of dark leaves, the leaves under the walkway,`,
+  }),
+};
+export const TREE_L5_CODE_KEYS = Object.keys(TREE_L5_CODES);
+const TREE_L5_CODE_JOBS = TREE_L5_CODE_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: (key === 'tree-l5-0-codes' ? ['play', 'front'] : ['play']).map((l) => key.replace('-codes', `-${l}`)),
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4551 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L5_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L5_CODES);
+HELPER_KEYS.push(...TREE_L5_CODE_KEYS);
+JOBS.push(...TREE_L5_CODE_JOBS);
+
+const TREE_L5_TOP_MIRROR = `the clusters of dark leaves and the dark boughs among them meet their own reflections in V shapes, and any string of lanterns is reflected, so that lanterns stand upside down above it.`;
+const TREE_L5_TOP_GOES_ON = `the dark boughs rise on and branch outward, carrying clusters of dark leaves up out of the top edge, with a few small gaps of open sky between the clusters; any string of lanterns hangs in a gentle downward curve from the boughs, each lantern hanging below the string.`;
+const TREE_L5_TOP_PROMPTS = Object.fromEntries(
+  Object.entries({
+    w2: 'the huts, the railing, the walkway, the perches up the bough and the leaves already there',
+    w1: 'the huts, the posts and their lanterns, the walkway and the leaves already there',
+    0: 'the trunk, its archway, the crown\'s boughs, the lantern strings, the walkway, the lantern post and the leaves already there',
+    e1: 'the archway with its lanterns and pennants, the stairwell and its railing, the walkway and the leaves already there',
+    e2: 'the shop hut, the lounge\'s railing and lanterns, the walkway and the leaves already there',
+    e3: 'the railing, the walkway, the perches up the bough, the lantern strings and the leaves already there',
+  }).map(([s, keep]) => [`tree-l5-top-${s}`, treeTopStrip(TREE_L5_TOP_MIRROR, TREE_L5_TOP_GOES_ON, keep)]),
+);
+export const TREE_L5_TOP_KEYS = Object.keys(TREE_L5_TOP_PROMPTS);
+const TREE_L5_TOP_JOBS = TREE_L5_TOP_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l5-top-', 'tree-l5-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4595 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L5_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L5_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L5_TOP_KEYS);
+JOBS.push(...TREE_L5_TOP_JOBS);
