@@ -2313,3 +2313,59 @@ const TREE_L0C_JOBS = treeLevelJobs(0, { c0: 4701, c1: 4705, c2: 4709 }, TREE_L0
 Object.assign(PROMPTS, TREE_L0C_PROMPTS);
 HELPER_KEYS.push(...TREE_L0C_KEYS.filter((k) => k.endsWith('-scene')));
 JOBS.push(...TREE_L0C_JOBS);
+
+// ---- The arcade cave's joins, maps and top strips (OP-163), made as the levels above were ----
+// The three picked scenes, moved onto the ground line, side by side west to east make a row of
+// 6144x1152 held under `tree-l0-c0-back`, with joins at x 2048 and 4096.
+const TREE_L0C_SEAM_PROMPTS = {
+  'tree-l0-seam-c0-c1': treeSeam(
+    `a level floor of wet flat stone slabs among the roots of a cave, catching streaks of magenta and cyan neon, a great gnarled root rising at the left edge with a lantern of plain glass, chrome conduit and a neon tube running along the back of the floor, and the cave's open depth as flat magenta between the roots`,
+    `the same floor of wet stone slabs running on, a great gnarled root rising on the right with chrome plates and neon conduit bolted along it, and the cave's open depth as flat magenta between the roots`,
+    `the floor of wet stone slabs runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; the neon conduit along the back of the floor runs on from the left into the plates on the right as one line of chrome and light; the great roots on either side arch toward each other over the middle and join into the cave's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle.`,
+  ),
+  'tree-l0-seam-c1-c2': treeSeam(
+    `a level floor of wet flat stone slabs among the roots of a cave, catching streaks of magenta and cyan neon, a tall bare alcove framed in riveted chrome at the back of the floor near the left edge, and the cave's open depth as flat magenta between the roots`,
+    `the same floor of wet stone slabs running on, great gnarled roots rising on the right with chrome plates and neon conduit bolted along them, and the cave's open depth as flat magenta between the roots`,
+    `the floor of wet stone slabs runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; a thin neon tube runs along the back of the floor from the alcove's frame on the left to the plates on the right; the great roots on either side arch toward each other over the middle and join into the cave's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle, and the alcove stays exactly where it is.`,
+  ),
+};
+export const TREE_L0C_SEAM_KEYS = Object.keys(TREE_L0C_SEAM_PROMPTS);
+JOBS.push(...TREE_L0C_SEAM_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: key.replace('tree-l0-seam-', '').split('-').map((s) => `tree-l0-${s}-back`), realm: 'tree', optional: true,
+  size: '1152x1152', seed: 4781 + 10 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the cave's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_SEAM_PROMPTS[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_SEAM_KEYS);
+
+const TREE_L0C_KEEP = `the great roots and the cave's roof, the chrome plates, the conduit and the neon tubes, every alcove with its chrome frame and its dark inside, the lanterns, the dark earth under the floor,`;
+const TREE_L0C_CODES = {
+  'tree-l0-c0-codes': treeCodes({ stand: `the long floor of wet stone slabs across the whole width of the frame, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the mouth at the left edge, ${TREE_L0C_KEEP}` }),
+  'tree-l0-c1-codes': treeCodes({ stand: `the long floor of wet stone slabs across the whole width of the frame, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the large blank panel in its chrome frame high on the back wall, ${TREE_L0C_KEEP}` }),
+  'tree-l0-c2-codes': treeCodes({ stand: `the floor of wet stone slabs from the left edge of the frame to its end against the wall of roots on the right, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the two smaller empty alcoves on the right, ${TREE_L0C_KEEP}` }),
+};
+export const TREE_L0C_CODE_KEYS = Object.keys(TREE_L0C_CODES);
+JOBS.push(...TREE_L0C_CODE_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: [key.replace('-codes', '-play')], realm: 'tree', optional: true,
+  size: '2048x1152', seed: 4751 + 10 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_CODES[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_CODES);
+HELPER_KEYS.push(...TREE_L0C_CODE_KEYS);
+
+const TREE_L0C_TOP_PROMPTS = Object.fromEntries(['c0', 'c1', 'c2'].map((s) => [`tree-l0-top-${s}`, treeTopStrip(
+  `the great roots and the cave's roof meet their own reflections, and the chrome plates and neon tubes among them are reflected.`,
+  `the great roots rise on and join into the cave's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the chrome plates and the neon tubes end where they do now, with plain root and earth above them.`,
+  `the floor, every alcove and panel, the roots, the plates, the neon, the lanterns and the open magenta depth already there`,
+)]));
+export const TREE_L0C_TOP_KEYS = Object.keys(TREE_L0C_TOP_PROMPTS);
+JOBS.push(...TREE_L0C_TOP_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: [`${key.replace('tree-l0-top-', 'tree-l0-')}-back`], realm: 'tree', optional: true,
+  size: '2048x1152', seed: 4795 + 2 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the cave's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_TOP_PROMPTS[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_TOP_KEYS);
