@@ -257,6 +257,7 @@ describe('time per room (OP-113)', () => {
     collector_id: A,
     realm: 'glass',
     realm_kind: 'realm',
+    map_id: 1,
     entered_at: '2026-10-19T16:05:00.000Z',
     exited_at: '2026-10-19T16:25:00.000Z',
     entry_source: 'walked',
@@ -279,6 +280,14 @@ describe('time per room (OP-113)', () => {
     expect(checkRealmVisit(stay(1, { entry_source: 'teleport' }))).toBe('entry_source');
     // Come into by travel from the map (OP-130).
     expect(checkRealmVisit(stay(1, { entry_source: 'travel' }))).toEqual(stay(1, { entry_source: 'travel' }));
+    // The tree (OP-128): its levels are rooms the log takes, and a time says which park it was in.
+    expect(checkRealmVisit(stay(1, { realm: 'l1', realm_kind: 'hub', map_id: 2 }))).toEqual(stay(1, { realm: 'l1', realm_kind: 'hub', map_id: 2 }));
+    expect(checkRealmVisit(stay(1, { realm: '1l' }))).toBe('realm');
+    expect(checkRealmVisit(stay(1, { map_id: 3 }))).toBe('map_id');
+    expect(checkRealmVisit(stay(1, { map_id: '2' }))).toBe('map_id');
+    // A Worker from before the tree sends no park: today's.
+    const { map_id: _none, ...old } = stay(1);
+    expect(checkRealmVisit(old)).toEqual(stay(1));
     expect(checkRealmVisit(stay(1, { exited_at: '2026-10-19T16:04:59.000Z' }))).toBe('exited_at');
     expect(checkRealmVisit(stay(1, { collectibles_gained: -1 }))).toBe('collectibles_gained');
     expect(checkRealmVisit(stay(1, { visit_id: 'v_visitAAAA1' }))).toBe('visit_id');

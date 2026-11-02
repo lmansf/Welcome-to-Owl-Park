@@ -86,6 +86,11 @@ stay anonymous even if they are ever joined to the store by accident.
    applied with the function deployed again before the Worker that sends `travel` goes live, for the same reason.
    OP-166 adds `sql/feedback.sql` as `game_feedback` (applied 2026-10-31), and the function deployed
    again, so it knows `feedback`, before the Worker that sends notes goes live, for the same reason.
+   OP-113 (for the tree, OP-128) adds `sql/maps.sql` as `game_realm_visit_map`: `map_id` on each time in a
+   room (1 today's park, 2 the tree), room names with digits (the tree's levels `l0` to `l5`, which the
+   old checks refused), and the view `game.v_realm_time_by_map`. Order: the migration, then the function
+   deployed again, then the Worker. The function takes a row without `map_id` as 1, so the Worker before
+   it still lands; a function from before it would refuse every time on a level of the tree, as it does now.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,
