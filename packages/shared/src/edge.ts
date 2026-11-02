@@ -35,8 +35,8 @@ import type { QuestBoard, QuestUpdate } from './quests';
 import type { Air } from './flight';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 15;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 16;
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
 export const BAND_COUNT = 6;
@@ -69,6 +69,8 @@ export const CLOSE = {
   NOT_THROUGH_GATE: 4015,
   /** The park's nightly restart (OP-181): every owl goes to the home screen, and nothing reconnects on its own. */
   RESTART: 4016,
+  /** The park is closed for setup (OP-205): the page shows the closed card on the home screen, and nothing reconnects. */
+  SETUP: 4017,
   TOO_LARGE: 1009,
 } as const;
 
@@ -458,8 +460,9 @@ export interface ServerClosed {
   /**
    * `realm`: a gated realm is closed; the socket closes with 4013 next, and `sign` is its approved phrase.
    * `gate`: travel into the park before the owl walked through the front gate (OP-130); 4015 next.
+   * `setup`: the park is closed for setup (OP-205); 4017 next, and `sign` is the closed card's words.
    */
-  why: 'closed' | 'gone' | 'realm' | 'gate';
+  why: 'closed' | 'gone' | 'realm' | 'gate' | 'setup';
   sign?: string;
 }
 /** The park restarts for the night (OP-181): the words to show, then the socket closes with 4016 in `ms`. */

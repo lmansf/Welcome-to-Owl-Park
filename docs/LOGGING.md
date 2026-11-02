@@ -201,6 +201,9 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `gate_switched` | `worker.admin` | info | The keepers changed the opening switch (`/api/admin/gate`, OP-067) | `gate` (the mode now), `by`: `switch` or `deployed` (set back to `GATE`) |
 | `park_restart` | `worker` | info; warn when a room object missed it | The nightly restart (OP-181), by its cron or by hand (`restartPark`, `routes/admin.ts`) | `by`: `cron` or `key`; `objects`; `missed`; `owls` (sent home); `restart_at` (ISO, when the vote ledger kept the time) |
 | `room_restart` | `room.leave` | info | A room object was told of the nightly restart: every owl there is told, and the alarm closes its sockets (`RoomObject.restart`, OP-181). Each owl's `room_leave` follows as `kick`, detail `restart` | `owls`, `sockets`, `close_in_ms` (`RESTART_CLOSE_MS`, 10 s; 0 with no sockets) |
+| `room_setup` | `room.leave` | info | The park closed for setup (OP-205): every owl in the room object but a keeper's was sent to the home screen with the closed card's words. Each owl's `room_leave` follows as `kick`, detail `setup` | `owls` |
+| `setup_on` | `overflow` | info | The keepers closed the park for setup on the capacity page (OP-205) | |
+| `setup_off` | `overflow` | info | The keepers opened the park again after setup (OP-205) | |
 | `capacity_set` | `worker.admin` | info | The keepers changed the busy-night settings (`/api/admin/capacity`) | `line` (its mode), `threshold`, `ribbon` (on or off), `copies`, `realms` (the open realms) |
 | `realms_set` | `overflow` | info | The keepers changed the realms switch (`Overflow.ts`) | `open`, `portal`, `night` (`moon` when unset), `tree` |
 | `realms_set` | `room.realms` | debug | The realms switch reached a room object | `open`, `portal`, `night` and `tree` when set |
@@ -349,7 +352,7 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 `tick_latency_p95`, `emote_throttled`, `position_rejected`, `webhook_received`,
 `webhook_rejected`, `webhook_duplicate`, `webhook_failed`, `order_recorded`, `store_unreachable`,
 `admin_denied`, `admin_ok`, `request_refused`, `rate_limited`, `csp_violation`, `gate_switched`,
-`park_restart`, `room_restart`, `capacity_set`, `realms_set`, `masks_saved`, `masks_refused`,
+`park_restart`, `room_restart`, `room_setup`, `setup_on`, `setup_off`, `capacity_set`, `realms_set`, `masks_saved`, `masks_refused`,
 `collect_logged`, `collect_log_failed`, `collect_log_retried`, `collect_log_full`,
 `collect_log_dropped`, `afk_sleep`, `afk_leave`, `gate_crossed`, `gate_flag_cleared`,
 `health_check`, `climb_band_refused`, `spectator_refused`, `spectator_admitted`, `read_failed`,

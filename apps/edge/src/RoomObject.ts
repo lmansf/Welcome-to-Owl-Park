@@ -32,6 +32,10 @@ import {
   NPC_TALK_RADIUS,
   REALMS_DEFAULTS,
   RESTART_NOTICE,
+  SETUP_DEFAULTS,
+  cleanSetup,
+  setupWords,
+  type SetupSettings,
   RIBBON_MAX_CHARS,
   STREET_DOORS,
   STREET_ROOM,
@@ -125,6 +129,8 @@ export interface Attachment {
    * and the quests and today's tasks are locked to it, until a ticket's pass admits it in place.
    */
   spec?: true;
+  /** This socket's hello carried a keeper's token that checked out (OP-156): it walks in while the park is closed for setup (OP-205). */
+  keeper?: true;
 }
 
 /**
@@ -190,6 +196,8 @@ const QUIZ_KEY = 'quiz';
 const NOTICE_FRESH_MS = 60_000;
 /** Storage key for the realms switch as last heard (the stained-glass climb): a woken object starts from it, not from closed. */
 const REALMS_KEY = 'realms';
+/** Storage key for the setup switch as last heard (OP-205), so a wake from hibernation keeps the park closed. */
+const SETUP_KEY = 'setup';
 /**
  * Storage key for where owls left each room lately (room id -> owl id -> where and when), so an owl back
  * from a dropped connection resumes where it was though its empty nest was let go or this object slept
@@ -319,6 +327,8 @@ export class RoomObject extends DurableObject<Env> {
   private notice: string | null = null;
   /** The realms switch as last heard from the overflow object (its notice, its poll, or this object's storage). */
   private realms: RealmsSettings = REALMS_DEFAULTS;
+  /** The setup switch as last heard (OP-205): while on, only keepers walk in. */
+  private setup: SetupSettings = SETUP_DEFAULTS;
   /** The player stats are kept only while the analytics log is set up (OP-111): without it, no calls for them. */
   private readonly statsOn: boolean;
   private noticeAt = 0;
@@ -366,6 +376,8 @@ export class RoomObject extends DurableObject<Env> {
       // The realms switch as last heard, so a wake from hibernation does not close an open realm.
       const realms = await ctx.storage.get<unknown>(REALMS_KEY);
       if (realms) this.realms = cleanRealms(realms);
+      const setup = await ctx.storage.get<unknown>(SETUP_KEY);
+      if (setup) this.setup = cleanSetup(setup);
       // Where owls left lately, so one back from a dropped connection resumes where it was (OP-138).
       for (const [id, kept] of Object.entries(cleanLeavers(await ctx.storage.get<unknown>(LEAVERS_KEY)))) {
         if (!roomDef(id)) continue;
@@ -536,9 +548,10 @@ export class RoomObject extends DurableObject<Env> {
     try {
       const r = await ns.get(ns.idFromName('park')).fetch('https://park/notice');
       if (r.ok) {
-        const body = (await r.json()) as { words?: unknown; realms?: unknown };
+        const body = (await r.json()) as { words?: unknown; realms?: unknown; setup?: unknown };
         this.setNotice(body.words);
         if (body.realms !== undefined) this.setRealms(body.realms);
+        if (body.setup !== undefined) this.setSetup(body.setup);
       } else this.log.warn('overflow', 'read_failed', 'The overflow object did not say the busy ribbon: it stays as it was until the next ask.', { status: r.status });
     } catch (e) {
       this.log.warn('overflow', 'read_failed', 'The overflow object did not say the busy ribbon: it stays as it was until the next ask.', { error: e });
@@ -588,6 +601,36 @@ export class RoomObject extends DurableObject<Env> {
     if (treeShare(before) > 0 && treeShare(next) === 0) {
       for (const room of Object.values(ROOMS)) if (mapOf(room) === 2 && room.gated && !next.open.includes(room.id) && !before.open.includes(room.id)) this.sendRealmAway(room.id);
     }
+  }
+
+  // ---------- closed for setup (OP-205) ----------
+
+  /**
+   * The setup switch changed (the overflow object's notice or poll): keep it, in memory and in storage.
+   * Turned on, every owl here but a keeper's is sent to the home screen with the closed card's words.
+   */
+  private setSetup(v: unknown): void {
+    const next = cleanSetup(v);
+    if (next.on === this.setup.on && next.words === this.setup.words) return;
+    const closing = next.on && !this.setup.on;
+    this.setup = next;
+    void this.ctx.storage.put(SETUP_KEY, next);
+    if (!closing) return;
+    let owls = 0;
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (!att || att.keeper) continue;
+      if (att.state) owls += 1;
+      this.sendSetupAway(ws, att);
+    }
+    this.log.info('room.leave', 'room_setup', 'The park closed for setup: every owl here but a keeper’s went to the home screen.', { owls });
+  }
+
+  /** One socket told the park is closed for setup, then closed with CLOSE.SETUP (the page shows the closed card). */
+  private sendSetupAway(ws: WebSocket, att: Attachment): void {
+    this.send(ws, { t: 'closed', room: att.room, why: 'setup', sign: setupWords(this.setup) });
+    closeSocket(ws, CLOSE.SETUP, 'closed for setup');
+    if (att.state) this.drop(ws, { reason: 'kick', detail: 'setup' });
   }
 
   // ---------- the nightly restart (OP-181) ----------
@@ -698,10 +741,11 @@ export class RoomObject extends DurableObject<Env> {
     }
     if (url.pathname === '/notice' && request.method === 'POST') {
       // The overflow object's word that the ribbon or the realms switch changed.
-      const body = (await request.json().catch(() => null)) as { words?: unknown; realms?: unknown } | null;
+      const body = (await request.json().catch(() => null)) as { words?: unknown; realms?: unknown; setup?: unknown } | null;
       this.noticeAt = Date.now();
       this.setNotice(body?.words, true);
       if (body?.realms !== undefined) this.setRealms(body.realms);
+      if (body?.setup !== undefined) this.setSetup(body.setup);
       return Response.json({ ok: true });
     }
     if (url.pathname === '/restart' && request.method === 'POST') {
@@ -795,10 +839,20 @@ export class RoomObject extends DurableObject<Env> {
 
     if (!att.state) {
       if (frame.t !== 'hello') return this.kick(ws, CLOSE.BAD_PROTOCOL, 'hello first');
+      // A keeper's token that checks out is kept on the socket: it walks in while the park is closed for
+      // setup (OP-205), and stays when the switch closes the park.
+      if (frame.keeper !== undefined && (await verifyKeeper(signingSecret(this.env), frame.keeper))) {
+        att.keeper = true;
+        ws.serializeAttachment(att);
+      }
+      if (this.setup.on && !att.keeper) {
+        this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away while the park is closed for setup.', { reason: 'setup' });
+        return this.sendSetupAway(ws, att);
+      }
       if (!isNestRoom(att.room)) {
         // A gated realm the keepers have not opened: the page walks the owl back to the hub. A keeper's
         // token (OP-156) lets its owl in, to walk the tree (map 2) while it is dark.
-        if (this.realmClosed(att.room) && !(await verifyKeeper(signingSecret(this.env), frame.keeper))) {
+        if (this.realmClosed(att.room) && !att.keeper) {
           this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a realm the keepers have not opened.', { reason: 'realm' });
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');

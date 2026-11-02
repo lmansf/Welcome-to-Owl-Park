@@ -7,11 +7,11 @@
  *
  * Internal routes, called by the Worker (which has checked the pass or the admin key already):
  *   GET  /state           the settings, whether the line is in front of the park, its pace, the count
- *   POST /settings        {line?, ribbon?, copy?: {room, n, state}, realms?: {open?, portal?, night?}}: the keepers' changes
+ *   POST /settings        {line?, ribbon?, copy?: {room, n, state}, realms?: {open?, portal?, night?}, setup?: {on?, words?}}: the keepers' changes
  *                         (`realms` is the stained-glass climb's switch, designs/the-stained-glass-climb.md)
  *   POST /line/join       {who}: a number in the line (its turn at once while a place is free), or go when there is no line
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
- *   GET  /notice          the ribbon's words and the realms switch now (for the room objects)
+ *   GET  /notice          the ribbon's words, the realms switch and the setup switch now (for the room objects)
  *   GET  /masks/<room>    a tree room's ledge draft as a keeper last saved it (OP-156), or 404
  *   POST /masks/<room>    {ledges, walls, hazards, fronts, spots}: keep it as the room's draft, checked
  *                         again here (checkMasks), with when it was saved; the old draft goes
@@ -41,6 +41,9 @@ import {
   treeShare,
   withRealmsChanges,
   type RealmsSettings,
+  SETUP_DEFAULTS,
+  withSetupChanges,
+  type SetupSettings,
   hashForLog,
   type Logger,
   checkMasks,
@@ -79,6 +82,8 @@ export interface OverflowState {
   countedAt: number | null;
   /** The realms switch: open gated rooms, the climb's portal, the special night. */
   realms: RealmsSettings;
+  /** Closed for setup (OP-205): the whole park shut while the keepers set something up (absent: open). */
+  setup?: SetupSettings;
 }
 
 /** The overflow object's answer to a line request, before the Worker adds the entry. */
@@ -127,6 +132,12 @@ class Settings {
   }
   setRealms(v: RealmsSettings): void {
     this.write('realms', v);
+  }
+  setup(): SetupSettings {
+    return this.read('setup', SETUP_DEFAULTS);
+  }
+  setSetup(v: SetupSettings): void {
+    this.write('setup', v);
   }
 
   /** A tree room's ledge draft (OP-156), kept under `masks:<room>`; null before one is saved. One kept before spots has none. */
@@ -262,12 +273,13 @@ export class Overflow extends DurableObject<Env> {
       count: this.count?.n ?? null,
       countedAt: this.count?.at ?? null,
       realms: this.settings.realms(),
+      setup: this.settings.setup(),
     };
   }
 
-  /** Tell every room object the ribbon's words and the realms switch when either changed (they also ask every minute on their own). */
+  /** Tell every room object the ribbon's words, the realms switch and the setup switch when any changed (they also ask every minute on their own). */
   private async sendNotice(words: string | null, realms: RealmsSettings = this.settings.realms()): Promise<void> {
-    const body = JSON.stringify({ words, realms });
+    const body = JSON.stringify({ words, realms, setup: this.settings.setup() });
     if (body === this.sent) return;
     this.sent = body;
     await Promise.all(
@@ -312,7 +324,7 @@ export class Overflow extends DurableObject<Env> {
     const url = new URL(request.url);
     const now = Date.now();
     if (url.pathname === '/state') return Response.json(await this.state(now));
-    if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)), realms: this.settings.realms() });
+    if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)), realms: this.settings.realms(), setup: this.settings.setup() });
     if (url.pathname.startsWith('/masks/')) return this.masks(request, url.pathname.slice('/masks/'.length), now);
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
     const body = (await request.json().catch(() => null)) as unknown;
@@ -323,6 +335,13 @@ export class Overflow extends DurableObject<Env> {
       let ribbon = this.settings.ribbon();
       let copies = this.settings.copies();
       let realms = this.settings.realms();
+      let setup = this.settings.setup();
+      if (body['setup'] !== undefined) {
+        const next = withSetupChanges(setup, body['setup']);
+        if (!next) return Response.json({ error: 'bad setup' }, { status: 400 });
+        if (next.on !== setup.on) this.log.info('overflow', next.on ? 'setup_on' : 'setup_off', next.on ? 'The keepers closed the park for setup: every owl goes to the home screen.' : 'The keepers opened the park again after setup.', {});
+        setup = next;
+      }
       if (body['realms'] !== undefined) {
         const next = withRealmsChanges(realms, body['realms'], (r) => GATED_ROOMS.includes(r), isNightKey);
         if (!next) return Response.json({ error: 'bad realms' }, { status: 400 });
@@ -352,6 +371,7 @@ export class Overflow extends DurableObject<Env> {
       this.settings.setRibbon(ribbon);
       this.settings.setCopies(copies);
       this.settings.setRealms(realms);
+      this.settings.setSetup(setup);
       // Turned on: the line counts the park now. Turned off: everyone waiting goes in on their next
       // look, so the line is taken down, and a line started later begins afresh rather than calling them.
       this.count = null;

@@ -42,6 +42,40 @@ export const RIBBON_DEFAULTS: RibbonSettings = { on: false, words: null };
 export const RIBBON_WORDS = "It's busy tonight; things may be slow";
 export const RIBBON_MAX_CHARS = 90;
 
+/**
+ * Closed for setup (OP-205): the keepers shut the whole park for a while, to set something up, and open
+ * it again with the same switch. While it is on, every owl in a room is sent to the home screen with
+ * its words, and Play brings no one back in; an owl on a keeper's token still walks in, to check the
+ * park before it opens. No deploy needed, and nothing is lost: owls come back where they would anyway.
+ */
+export interface SetupSettings {
+  on: boolean;
+  /** The keepers' own words for the closed card; null shows SETUP_WORDS. */
+  words: string | null;
+}
+
+export const SETUP_DEFAULTS: SetupSettings = { on: false, words: null };
+/** The closed card's words unless the keepers write their own (for the owner's approval). */
+export const SETUP_WORDS = 'Owl Park is closed for a little while to set up something new. Come back soon!';
+
+/** The setup switch's settings with the given changes (words as the ribbon's: one plain line), or null when out of bounds. */
+export function withSetupChanges(base: SetupSettings, v: unknown): SetupSettings | null {
+  return withRibbonChanges(base, v);
+}
+
+/** A setup value as it arrived (a notice, a stored copy): its shape kept, anything else off. */
+export function cleanSetup(v: unknown): SetupSettings {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return SETUP_DEFAULTS;
+  const o = v as Record<string, unknown>;
+  const words = typeof o['words'] === 'string' && o['words'] ? o['words'].slice(0, RIBBON_MAX_CHARS) : null;
+  return { on: o['on'] === true, words };
+}
+
+/** What the closed card says while the park is closed for setup. */
+export function setupWords(s: SetupSettings): string {
+  return s.words ?? SETUP_WORDS;
+}
+
 /** A copy of a room beside the room itself (copy 1): taking new owls, or draining (no new owls, then closed). */
 export type CopyState = 'open' | 'draining';
 /** Room id -> copy number ("2" to COPY_MAX) -> its state. A room with no entry is just itself. */

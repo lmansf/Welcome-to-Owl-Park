@@ -109,6 +109,7 @@ import {
   wayAround,
   PERCH_SLACK,
   doorTarget,
+  SETUP_WORDS,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -179,6 +180,8 @@ const TAP_SLOP = 16;
 const LEAVE_FADE_MS = 220;
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
 export const RESTARTED_KEY = 'restarted';
+/** The registry's closed card (OP-205): the words the home screen shows while the park is closed for setup. */
+export const SETUP_KEY = 'setup';
 /** The restart's notice stays up until the room closes, near enough (the room waits ten seconds, OP-181). */
 const RESTART_NOTICE_MS = 9_000;
 /** Where Play and travel home land the owl in its own nest (OP-105, OP-130): before its mirror. */
@@ -981,6 +984,7 @@ export class RoomScene extends Phaser.Scene {
       onNotThroughGate: () => live() && this.notThroughGate(),
       onRestartNotice: (words) => live() && this.hud.toast(words, RESTART_NOTICE_MS),
       onRestart: () => live() && this.restarted(),
+      onSetup: (words) => live() && this.closedForSetup(words),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -1125,6 +1129,18 @@ export class RoomScene extends Phaser.Scene {
   private restarted(): void {
     if (this.leaving) return;
     this.registry.set(RESTARTED_KEY, true);
+    void this.leaveRoom().then((left) => {
+      if (left) this.scene.start('home');
+    });
+  }
+
+  /**
+   * The park is closed for setup (OP-205): out of the room as through a door, to the home screen, which
+   * shows the keepers' words over Play until the park opens again.
+   */
+  private closedForSetup(words: string): void {
+    if (this.leaving) return;
+    this.registry.set(SETUP_KEY, words || SETUP_WORDS);
     void this.leaveRoom().then((left) => {
       if (left) this.scene.start('home');
     });
