@@ -20,6 +20,10 @@ the conflict for the owner to settle.)
 Where to look for more: a ticket's row on the Board tab (its number plus one), the Bible item it
 names (C31, C35, ...), and the docs it touched.
 
+## Week of 2026-11-02
+
+- OP-191 (2026-11-02): spectators, the page's half: an owl without a ticket that works walks on past the turnstiles as a spectator with one line and Get a Day Ticket, a "Just looking" badge, quests, the Realm Vote and the stores sell a Day Ticket instead, games end with what they would have earned, and a ticket bought inside makes the owl a visitor in place; off until `SPECTATORS` is `on` (branch claude/spectator-client, stacked on claude/spectator-server).
+
 ## Week of 2026-10-26
 
 - OP-157 (2026-11-01): the tree's style frame (the lobby ring's three approved layers, live since main 10a58c7) and its style sheet, now in `docs/MAP.md` with the grid, the named spots and the steps for painting a level (branch claude/map-doc).

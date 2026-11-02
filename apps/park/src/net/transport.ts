@@ -28,8 +28,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onPeerLook?(id: string, look: OwlLook): void;
   /** Park-wide room populations, when the transport knows them. */
   onCounts?(rooms: Record<string, number>): void;
-  /** The room we tried to enter is full. */
-  onFull?(room: string): void;
+  /** The room we tried to enter is full; `spectators`: full for a spectator only (its share of the room, OP-191), a ticket holder still gets in. */
+  onFull?(room: string, spectators?: boolean): void;
   /** A peer played an emote. */
   onPeerEmote?(id: string, emote: string): void;
   /** A peer said a prewritten phrase (its number in the phrase list). */
@@ -184,6 +184,11 @@ export interface TicketWallet {
 export interface Entry {
   gate: 'open' | 'ticket';
   admitted: boolean;
+  /**
+   * Spectators (OP-191): the park lets an owl without a ticket that works past the turnstiles as a
+   * spectator (the park's SPECTATORS switch is on). Absent or false: the turnstiles turn it away.
+   */
+  spectators?: boolean;
 }
 
 export const OPEN_ENTRY: Entry = { gate: 'open', admitted: true };

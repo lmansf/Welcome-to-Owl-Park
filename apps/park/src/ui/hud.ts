@@ -24,9 +24,10 @@ import { createSayWheel } from './sayWheel';
 import { createSettingsScreen } from './settingsScreen';
 import { createWhichOwlScreen, type WhichOwlRun } from './whichOwl';
 import { createShopPanel, type ShopPanel } from './shop';
-import { createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
+import { GATE_WORDS, createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createGateSale, type GateSale, type GateSalePanel } from './gateSale';
 import { createStoreCard, type StoreGo } from './storeCard';
+import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { createTurnPhone } from './turnPhone';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
@@ -148,6 +149,16 @@ export interface Hud {
   askStore(go: StoreGo, opener?: HTMLElement | null): void;
   /** The ticket card that flips up as the turnstiles take a ticket. */
   showTicket(card: GateCard): void;
+  /**
+   * Spectators (OP-191): the owl walks the park as one, or not. The "Just looking" badge shows with its
+   * Get a Day Ticket button, the Quests tab says the quests are ticket holders', and the feather shop
+   * sells a Day Ticket instead.
+   */
+  setSpectator(on: boolean): void;
+  /** What every Get a Day Ticket does (OP-191): the turnstiles' sale, with `line` above the card before the store. */
+  onGetTicket(cb: (line: string) => void): void;
+  /** A line with a Get a Day Ticket button under it, for a while (OP-191: the turnstiles, a room busy for spectators). */
+  offerTicket(line: string, ms?: number): void;
   /** The arcade's game screen over everything while a run is played (again, if it is open); `handlers` take the play. */
   openArcade(view: ArcadeView, handlers: ArcadeHandlers): void;
   /** The run's score and its line of the moment, as it goes. */
@@ -435,6 +446,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let ticketCard: TicketCard | null = null;
   let freePass: FreePassCard | null = null;
   let gateSale: GateSalePanel | null = null;
+  /** Spectators (OP-191): whether the owl walks the park as one, and what Get a Day Ticket does. */
+  let spectator = false;
+  let getTicket: ((line: string) => void) | null = null;
   let roomId = '';
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
@@ -547,6 +561,16 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
             questDot.hidden = true;
           }
           if (!questUi) return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: 'Your quests show here once you are in the park.' }));
+          // A spectator's quests and today's tasks are locked (OP-191): the Day Ticket instead.
+          if (spectator) {
+            const get = Object.assign(document.createElement('button'), { type: 'button', textContent: SPECTATOR_WORDS.get });
+            get.dataset['spectatorGet'] = 'quests';
+            get.addEventListener('click', () => {
+              closeScreens();
+              getTicket?.(SPECTATOR_WORDS.locked);
+            });
+            return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: `${SPECTATOR_WORDS.locked} ${GATE_WORDS.buy}` }), get);
+          }
           questUi.mountJournal(panel, () => menu.isOpen() && menu.tab() === 'quests');
         },
       },
@@ -780,6 +804,24 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(() => el.remove(), ms);
   };
 
+  /** A line with a Get a Day Ticket button under it (OP-191); the button opens the turnstiles' sale with the same line. */
+  const offerTicket = (line: string, ms = 9000) => {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.dataset['spectatorOffer'] = '';
+    el.append(Object.assign(document.createElement('span'), { textContent: line }));
+    const get = Object.assign(document.createElement('button'), { type: 'button', className: 'offer-get', textContent: SPECTATOR_WORDS.get });
+    get.dataset['spectatorGet'] = 'offer';
+    get.addEventListener('click', () => {
+      el.remove();
+      getTicket?.(line);
+    });
+    el.append(get);
+    toasts.appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  };
+  const badge = createSpectatorBadge(root, () => getTicket?.(SPECTATOR_WORDS.keep));
+
   return {
     setCount(n) {
       here = n;
@@ -909,8 +951,24 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     openSettings: (opener) => openScreen('settings', false, opener),
     openWhichOwl,
     openShop() {
+      // The feather shop and its free gift are ticket holders' (OP-191).
+      if (spectator) {
+        closeSheets();
+        return void getTicket?.(SPECTATOR_WORDS.locked);
+      }
       shop?.open();
     },
+    setSpectator(on) {
+      if (on === spectator) return;
+      spectator = on;
+      badge.set(on);
+      if (on) shop?.close();
+      menu.refresh();
+    },
+    onGetTicket(cb) {
+      getTicket = cb;
+    },
+    offerTicket,
     sellAtGate(sale) {
       gateSale ??= createGateSale(root, storeCard.ask, (m, ms) => toast(m, ms ?? 4500));
       gateSale.sell(sale);

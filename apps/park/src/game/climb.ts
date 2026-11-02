@@ -26,6 +26,7 @@ import {
 } from '@owl-park/shared';
 import type { ActivityLink, ClimbReply } from '../collect/service';
 import type { Hud } from '../ui/hud';
+import { climbWouldEarn, endOfGameLine } from '../ui/spectator';
 import type { PreviewRect } from './BuilderScene';
 import type { ClimbScene } from './ClimbScene';
 
@@ -49,6 +50,8 @@ export interface ClimbHost {
   feathers(total: number): void;
   /** A collectible was granted: the collection should be read again. */
   awarded(variant: string): void;
+  /** A spectator's Get a Day Ticket (OP-191): the turnstiles' sale, with this line above the card before the store. */
+  offerTicket(line: string): void;
 }
 
 /** A run under way: its key, its night, and what the room has banked and paid so far. */
@@ -65,6 +68,9 @@ interface Run {
   /** A band the room refused as too fast, tried once more when its floor has passed. */
   retry: ReturnType<typeof setTimeout> | null;
   added: number;
+  /** A spectator's run (OP-191): it earns nothing, and `would` is what its bands would have earned with a Day Ticket. */
+  practice: boolean;
+  would: number;
   ref: string | null;
   over: boolean;
   /** The hints given, so each verb is taught once. */
@@ -171,10 +177,10 @@ export class Climb {
     const night = NIGHTS[reply.night] ?? NIGHTS[reply.tier]!;
     const layout = LAYOUTS[night.layout]!;
     this.run?.retry && clearTimeout(this.run.retry);
-    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, ref: null, over: false, taught: new Set(), auto: null, hintTimer: null, panes: night.panes };
+    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, practice: reply.practice === true, would: 0, ref: null, over: false, taught: new Set(), auto: null, hintTimer: null, panes: night.panes };
     this.host.hud.openClimb(
       { tier: reply.tier, night: reply.night, banked: reply.banked, remainingCap: reply.remainingCap, cap: PLAY_FEATHERS_PER_DAY, bestBandToday: reply.bestBandToday, resumed: reply.resumed, previousForgotten: reply.previousForgotten },
-      { frame: (rect) => this.frame(rect), start: () => this.start() },
+      { frame: (rect) => this.frame(rect), start: () => this.start(), again: () => void this.play() },
     );
   }
 
@@ -315,10 +321,21 @@ export class Climb {
     run.unanswered = null;
     run.ref = reply.ref;
     run.added += reply.added;
+    if (reply.practice) {
+      run.practice = true;
+      run.would += climbWouldEarn(run.banked, reply.banked);
+    }
     run.banked = Math.max(run.banked, reply.banked);
     this.host.feathers(reply.feathers);
     this.host.hud.climbHeader(run.banked, Math.max(0, PLAY_FEATHERS_PER_DAY - reply.total));
     if (reply.item) this.host.awarded(reply.item.variant);
+    if (run.banked >= BAND_COUNT && run.practice) {
+      // A spectator at the clouds (OP-191): what the climb would have earned with a Day Ticket, and the offer before Play again.
+      run.over = true;
+      const offer = endOfGameLine(run.would);
+      this.host.hud.climbResult({ line: 'You reached the clouds!', feathers: null, ref: reply.ref, offer: { line: offer, get: () => this.host.offerTicket(offer) } });
+      return;
+    }
     if (run.banked >= BAND_COUNT) {
       run.over = true;
       this.host.hud.climbResult({

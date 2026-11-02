@@ -552,6 +552,8 @@ game.events.on(HOME_SHOWN, () => {
 });
 // The Say wheel says a phrase here and for everyone in the room.
 hud.onSay((n) => roomScene()?.say(n) ?? false);
+// Every Get a Day Ticket a spectator sees (OP-191): the turnstiles' sale, from the room the owl is in.
+hud.onGetTicket((line) => roomScene()?.offerDayTicket(line));
 hud.attachQuests(quests, {
   accept: (quest) => roomScene()?.acceptQuest(quest) ?? Promise.resolve(false),
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
