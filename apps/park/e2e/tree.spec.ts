@@ -64,7 +64,9 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
 
   test('a jump and a flap up onto the lintel over the way down, and a jump on up to the shelf fungus', async ({ page }) => {
     await openPark(page, { room: 'l1' });
-    await walkAndStop(page, LOBBY + 650, GROUND);
+    // East of the way down (a doorway to level 0 since OP-163, 610 to 700), still under the lintel's east end
+    // (730): from the spawn at 800 the walk does not cross the doorway, which would take the owl down.
+    await walkAndStop(page, LOBBY + 720, GROUND);
     await jumpFlapGlide(page, 200, { jumpMs: 340, spare: 15 });
     await standsAt(page, 196);
     await walkAndStop(page, LOBBY + 600, GROUND);
