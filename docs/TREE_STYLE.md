@@ -97,14 +97,20 @@ Every realm has the same two parts, painted in the same palette with the realm's
 - **Easter eggs** (hidden rooms, a secret character) are painted like any other screen, behind a door that
   can be found.
 
-## 7. Order and budget
+## 7. The art kit, order and budget
 
-The owner approved about $18 of art in all (2026-11-02). Order and estimates, at about $0.07 an image
-with four candidates per layer:
+The owner approved a reusable kit with $87 of art in all (2026-11-02, OP-219). It replaces painting each
+screen. Every piece is in this palette:
 
-1. The Gift Shop Gate, the Realm Gate plaza, the two arches, the Commons' second screens, the finish
-   shrine, and the glass tower's lift and pane: about $7.02 (OP-229).
-2. Updraft Canopy, ten screens and one props sheet: about $8.37 (OP-230).
+- **The core set**, used everywhere: ten seamless textures (bark, inner wood, planks, moss, leaves, rope,
+  stone, earth, roots, cloth) and eighteen keyed shape sheets (platforms, trims, stairs, doors, portal
+  arches, barriers, benches, shelves, signs, stalls).
+- **One area set per area**: the five heights, the entrance and plaza, and each realm. Each set has three
+  accent textures, three prop sheets and seven backdrop layers (two sky, two far, three middle).
+- **Course props and landmark pieces** for each course and set piece.
+- **Hero screens** (the entrance, the plaza, vistas and each course's last screen) get one generation pass
+  guided by the kit. Every other screen is assembled in code from the kit (OP-234).
 
-That leaves about $2.60 for re-runs. Anything past that waits on the owner. Every screen is shown to the
-owner before it is published, and nothing is published without his approval.
+A texture must tile with no visible edge. A sheet is keyed so the pipeline can cut it into pieces. Every
+run's cost is logged, and generation stops at $87. Every piece is shown to the owner before it is
+published, and nothing is published without his approval.
