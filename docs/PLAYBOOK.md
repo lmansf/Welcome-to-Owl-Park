@@ -88,7 +88,7 @@ its own cap of 80.
 
 Nothing more specific (no times, no refunds, no causes) without the owner's word.
 
-## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077, OP-180, OP-190)]
+## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077, OP-180, OP-190, OP-191)]
 
 What a visitor has in hand on main 8a1bbb9. Nothing a visitor does needs typing.
 
@@ -118,6 +118,22 @@ to the turnstiles and through them. The half-price annual pass follows the Day T
 shows only at the turnstiles; the Menu's Settings keep the tickets in a closed row (Tickets), with
 their IDs for the keepers. A ticket is the owl's, not the screen's (OP-183): it lets the owl in on
 any screen it plays on.
+
+**Spectators** (OP-191, only while `SPECTATORS` is `on`; the words are drafts for the owner's
+approval, in `apps/park/src/ui/spectator.ts`): at the turnstiles, an owl without a ticket that works
+hears "No ticket? Come in, look around and play. A Day Ticket lets you keep what you win." with a
+**Get a Day Ticket** button, and walks on into the hub. A small "Just looking" badge under the top bar
+has Get a Day Ticket too ("A Day Ticket lets you keep what you win." above the card before the store).
+The quests, the NPC owls, the leaf piles, the stalls, the feather shop, the gift and the gift shop's
+door say "Quests and the shops are for ticket holders. You can get a Day Ticket right here."; the
+idol says "Ticket holders vote here, one vote a day." and then offers the card. The arcade and the
+climb end with "Nice run! With a Day Ticket this would have earned N feathers." (or "With a Day
+Ticket, games earn feathers." when the run would have earned none) over Get a Day Ticket and Play
+again; fishing, the copy game, the quiz and the beam add "With a Day Ticket this would have earned N
+feathers." to their own line, and the card follows at most once every five minutes. A room past its
+spectators' share says "This part of the park is busy. A Day Ticket gets you in." A ticket bought
+from inside lands where the owl stands: "Your Day Ticket is in. Have fun!", the badge goes, and the
+quests open, with no reload. Nests and the mirror stay open to a spectator.
 
 **On a computer**: WASD or the arrow keys walk while held; E uses whatever the owl stands at; the
 space bar hops; T opens Say; 1 to 8 play an emote as the wheel numbers them; M opens the Menu; Q

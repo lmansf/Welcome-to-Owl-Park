@@ -2,8 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 import { E2E_ACCOUNTS, E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
 
 /**
- * The room server's test settings: the admin key, a store that is the stand-in on this machine, and
- * accounts on (OP-139), their mail kept by the same stand-in.
+ * The room server's test settings: the admin key, a store that is the stand-in on this machine,
+ * accounts on (OP-139), their mail kept by the same stand-in, and spectators on (OP-191).
  */
 const EDGE_VARS = {
   ADMIN_KEY: E2E_ADMIN_KEY,
@@ -13,6 +13,9 @@ const EDGE_VARS = {
   SHOPIFY_TEST_ORIGIN: E2E_STORE.origin,
   OPENING_PASS_CODE: E2E_STORE.passCode,
   ACCOUNTS: 'on',
+  // Spectators (OP-191) on, as the owner may switch them on: an owl without a ticket walks on past the
+  // turnstiles as a spectator (spectator.spec.ts), which the gate's, turnstiles' and checkout's tests follow.
+  SPECTATORS: 'on',
   ACCOUNT_SECRET: E2E_ACCOUNTS.secret,
   MAIL_FROM: E2E_ACCOUNTS.from,
   MAIL_TEST_ORIGIN: E2E_STORE.origin,
@@ -44,8 +47,8 @@ export default defineConfig({
     // that chain runs close to a minute, so this project gets a longer per-test budget.
     // The ledge painter (paint.spec.ts, OP-156) saves to the room server, so it runs here too, and so
     // does a note sent from the home screen's Settings (feedback.spec.ts, OP-167), and the card before the
-    // store (storecard.spec.ts, OP-153), whose ways need the store's pages.
-    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    // store (storecard.spec.ts, OP-153), whose ways need the store's pages, and spectators (spectator.spec.ts, OP-191).
+    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart|spectator)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {

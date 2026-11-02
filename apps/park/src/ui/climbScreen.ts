@@ -2,6 +2,7 @@ import { BAND_COUNT, BAND_NAMES, type ClimbInput, type ClimbTier } from '@owl-pa
 import type { PreviewRect } from '../game/BuilderScene';
 import { createJoystick, type Joystick } from './joystick';
 import { createModal } from './modal';
+import { SPECTATOR_WORDS } from './spectator';
 
 /**
  * The climb screen (designs/the-stained-glass-climb.md): the whole screen over the room while a
@@ -44,6 +45,11 @@ export interface ClimbResultView {
   /** The run reference a visitor can quote (absent when there is none). */
   ref?: string;
   note?: string;
+  /**
+   * A spectator's climb (OP-191): what it would have earned with a Day Ticket, and the Get a Day Ticket
+   * button, then Play again.
+   */
+  offer?: { line: string; get: () => void };
 }
 
 export interface ClimbHandlers {
@@ -51,6 +57,8 @@ export interface ClimbHandlers {
   frame(rect: PreviewRect | null): void;
   /** Start (or carry on with) the climb from its card. */
   start(): void;
+  /** A spectator's Play again on the result card (OP-191): a new climb from the portal. */
+  again?(): void;
 }
 
 /** The touch targets are at least this wide (CSS pixels). */
@@ -105,7 +113,9 @@ const CSS = `
 #hud .climb .c-ref{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;opacity:.85}
 #hud .climb .c-note{font-size:13px;opacity:.85}
 #hud .climb .c-card div:empty{display:none}
-#hud .climb .c-buttons{display:flex;gap:10px}
+#hud .climb .c-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+#hud .climb .c-offer{font-size:15px;font-weight:700;color:#FFD36A}
+#hud .climb .c-buttons button[hidden]{display:none}
 #hud .climb .c-buttons button{min-height:44px;padding:8px 22px}
 `;
 
@@ -163,7 +173,8 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
         <div class="c-item" data-item></div>
         <div class="c-ref" data-ref></div>
         <div class="c-note" data-note></div>
-        <div class="c-buttons"><button data-done>Close</button></div>
+        <div class="c-offer" data-offer></div>
+        <div class="c-buttons"><button data-spectator-get="climb" hidden></button><button data-again hidden></button><button data-done>Close</button></div>
       </div>
     </div>`;
   const $ = <T extends Element>(sel: string) => box.querySelector(sel) as T;
@@ -295,6 +306,22 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
   $<HTMLButtonElement>('[data-stop]').addEventListener('click', () => modal.close());
   $<HTMLButtonElement>('[data-start-close]').addEventListener('click', () => modal.close());
   $<HTMLButtonElement>('[data-done]').addEventListener('click', () => modal.close());
+  // A spectator's result (OP-191): Get a Day Ticket closes the climb for the card before the store; Play again climbs anew.
+  let offerGet: (() => void) | null = null;
+  const getBtn = $<HTMLButtonElement>('[data-spectator-get]');
+  getBtn.textContent = SPECTATOR_WORDS.get;
+  getBtn.addEventListener('click', () => {
+    const get = offerGet;
+    modal.close();
+    get?.();
+  });
+  const againBtn = $<HTMLButtonElement>('[data-again]');
+  againBtn.textContent = SPECTATOR_WORDS.again;
+  againBtn.addEventListener('click', () => {
+    const again = handlers?.again;
+    modal.close();
+    again?.();
+  });
   $<HTMLButtonElement>('[data-go]').addEventListener('click', () => {
     startCard.classList.remove('show');
     playing = true;
@@ -395,13 +422,17 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       $<HTMLElement>('[data-item]').textContent = r.item ?? '';
       $<HTMLElement>('[data-ref]').textContent = r.ref ? `Climb ${r.ref}` : '';
       $<HTMLElement>('[data-note]').textContent = r.note ?? '';
+      $<HTMLElement>('[data-offer]').textContent = r.offer?.line ?? '';
+      offerGet = r.offer?.get ?? null;
+      getBtn.hidden = !r.offer;
+      againBtn.hidden = !r.offer || !handlers?.again;
       bandEl.textContent = '';
       hintEl.textContent = '';
       playing = false;
       box.classList.remove('playing');
       release();
       resultCard.classList.add('show');
-      requestAnimationFrame(() => $<HTMLButtonElement>('[data-done]').focus({ preventScroll: true }));
+      requestAnimationFrame(() => (r.offer ? getBtn : $<HTMLButtonElement>('[data-done]')).focus({ preventScroll: true }));
     },
     close: () => modal.close(),
     isOpen: () => modal.isOpen(),

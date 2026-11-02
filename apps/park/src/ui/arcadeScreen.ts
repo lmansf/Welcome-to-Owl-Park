@@ -2,6 +2,7 @@ import { FIELD_H, FIELD_W } from '../arcade/field';
 import type { HopDir } from '../arcade/hop';
 import type { PreviewRect } from '../game/BuilderScene';
 import { createModal, modalHeader } from './modal';
+import { SPECTATOR_WORDS } from './spectator';
 
 /** A game as its screen shows it: its name and colour, how to play, and the owl's best today. */
 export interface ArcadeView {
@@ -27,6 +28,11 @@ export interface ArcadeResultView {
   best: number | null;
   /** Something more to say: the day's feathers from games used up, or the room not answering. */
   note?: string;
+  /**
+   * A spectator's run (OP-191): what it would have earned with a Day Ticket, and the Get a Day Ticket
+   * button before Play again.
+   */
+  offer?: { line: string; get: () => void };
 }
 
 /** What the player does on the field, in field pixels where it matters. */
@@ -84,7 +90,9 @@ const CSS = `
 #hud .arcade .a-new{color:var(--neon);font-weight:800;text-shadow:0 0 10px var(--neon)}
 #hud .arcade .a-new:empty,#hud .arcade .a-note:empty{display:none}
 #hud .arcade .a-note{font-size:13px;opacity:.85;text-align:center}
-#hud .arcade .a-buttons{display:flex;gap:10px}
+#hud .arcade .a-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+#hud .arcade .a-offer{font-size:15px;font-weight:700;text-align:center;color:#FFD36A}
+#hud .arcade .a-offer:empty,#hud .arcade [data-spectator-get][hidden]{display:none}
 #hud .arcade .a-buttons button{min-height:44px;padding:8px 22px}
 #hud .arcade .a-howto{position:absolute;left:12px;right:12px;top:24%;margin:0 auto;max-width:420px;display:none;flex-direction:column;gap:10px;align-items:center;padding:18px 16px;border-radius:20px;background:rgba(12,30,54,.95);border:1px solid var(--neon);box-shadow:0 0 30px rgba(0,0,0,.6);text-align:center}
 #hud .arcade.howto .a-howto{display:flex}
@@ -152,7 +160,8 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
         <div class="a-new" data-new></div>
         <div data-best></div>
         <div class="a-note" data-note></div>
-        <div class="a-buttons"><button data-again>Play</button><button class="ghost" data-done>Close</button></div>
+        <div class="a-offer" data-offer></div>
+        <div class="a-buttons"><button data-spectator-get="arcade" hidden></button><button data-again>Play</button><button class="ghost" data-done>Close</button></div>
       </div>
     </div>`;
   const $ = <T extends Element>(sel: string) => box.querySelector(sel) as T;
@@ -169,6 +178,15 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   /** A pull on the pad's stick under way in the game (Talon Toss). */
   let pulling = false;
   $<HTMLButtonElement>('[data-again]').addEventListener('click', () => handlers?.again());
+  /** A spectator's result offers a Day Ticket (OP-191): the button closes the game for the card before the store. */
+  let offerGet: (() => void) | null = null;
+  const getBtn = $<HTMLButtonElement>('[data-spectator-get]');
+  getBtn.textContent = SPECTATOR_WORDS.get;
+  getBtn.addEventListener('click', () => {
+    const get = offerGet;
+    modal.close();
+    get?.();
+  });
   $<HTMLButtonElement>('[data-done]').addEventListener('click', () => modal.close());
   const howToUp = () => box.classList.contains('howto');
   /** The how-to card goes, for good on this device, and the field takes the keys. */
@@ -344,9 +362,13 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       $<HTMLElement>('[data-new]').textContent = r.newBest ? 'New best!' : '';
       $<HTMLElement>('[data-best]').textContent = r.best !== null ? `Your best ${r.best}` : '';
       $<HTMLElement>('[data-note]').textContent = r.note ?? '';
+      $<HTMLElement>('[data-offer]').textContent = r.offer?.line ?? '';
+      offerGet = r.offer?.get ?? null;
+      getBtn.hidden = !r.offer;
+      $<HTMLButtonElement>('[data-again]').textContent = r.offer ? SPECTATOR_WORDS.again : 'Play';
       bannerEl.textContent = '';
       box.classList.add('over');
-      requestAnimationFrame(() => $<HTMLButtonElement>('[data-again]').focus({ preventScroll: true }));
+      requestAnimationFrame(() => (r.offer ? getBtn : $<HTMLButtonElement>('[data-again]')).focus({ preventScroll: true }));
     },
     close: () => modal.close(),
     isOpen: () => modal.isOpen(),

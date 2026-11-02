@@ -174,6 +174,11 @@ Old pages speaking v3 are refused and reload themselves.
   (`hud.ts` `questNews`), the NPC dialogue and the shop. The on-screen tracker is gone (OP-083).
 - Test hooks on `window.owlPark`: `quests()`, `talk(npc)`, `use(target)`, `accept(quest)`,
   `abandon(quest)`, `handIn(quest)`, `gather(quest, n)`, `shop()`, `buy(variant)`, `gift()`.
+- Spectators (OP-191, `docs/ARCHITECTURE.md` section 4): the room refuses a spectator every quest
+  frame with reason `spectator`, and the page draws no NPC marks or quest items for one. Talking to
+  an NPC owl, a leaf pile or a stall, the feather shop, the gift and the Quests tab open the Day
+  Ticket's card instead, with "Quests and the shops are for ticket holders." above it. Once a bought
+  ticket makes the owl a visitor, the board is fetched and the marks and items are drawn.
 
 ## The Quest Log sheet
 

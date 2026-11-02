@@ -119,6 +119,10 @@ to one per 1.5 s per owl.
   [QUESTS.md](QUESTS.md).
 - Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
   shop hooks.
+- Spectators (OP-191): a spectator keeps the collection it has and wears it, emotes and uses the
+  mirror, but earns nothing new (no feathers, items or pickups) and the feather shop and the gift
+  sell a Day Ticket instead. When a bought ticket makes it a visitor the page refreshes the
+  collection.
 
 ## Art for wearables and pets
 

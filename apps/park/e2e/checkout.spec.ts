@@ -4,17 +4,19 @@ import { expect, test } from './fixtures';
 import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
 
 /**
- * Buying a ticket without leaving the park (OP-175), at the turnstiles (OP-180), through the room
- * server and the stand-in store (e2e/standInStore.mjs). A turnstile reached without a ticket asks
- * the card before the store once (OP-153; storecard.spec.ts), and its Continue opens the store's
- * checkout in a window of its own with this owl's one-time token in the cart; the store's own
- * checkout page is stood in for here (the test never reaches a real store), the paid order comes in
- * as a signed webhook, and the ticket lands on the owl with no email opened. The owl, still at the
- * turnstiles, then goes through them by itself with the ticket (OP-190), and the half-price annual
- * pass is offered right after it, all season (Logan, Nov 1); No thanks puts it away (opening.spec.ts
- * follows Get the pass). The store sends the buyer back to the park's return address
- * (`/?checkout=done`, ui/checkoutReturn.ts), which closes checkout's window or says where the ticket
- * is when a game page is open, and otherwise becomes the park.
+ * Buying a ticket without leaving the park (OP-175), the turnstiles' sale (OP-180), through the room
+ * server and the stand-in store (e2e/standInStore.mjs). The room server here lets spectators in
+ * (SPECTATORS on, OP-191): an owl without a ticket walks on past the turnstiles as a spectator, and
+ * its "Just looking" badge's Get a Day Ticket asks the card before the store once (OP-153;
+ * storecard.spec.ts), whose Continue opens the store's checkout in a window of its own with this owl's
+ * one-time token in the cart; the store's own checkout page is stood in for here (the test never
+ * reaches a real store), the paid order comes in as a signed webhook, and the ticket lands on the owl
+ * with no email opened. The turnstiles then scan it where the owl stands and the owl is a full visitor
+ * in place (OP-191), and the half-price annual pass is offered right after it, all season (Logan,
+ * Nov 1); No thanks puts it away (opening.spec.ts follows Get the pass). The store sends the buyer back
+ * to the park's return address (`/?checkout=done`, ui/checkoutReturn.ts), which closes checkout's
+ * window or says where the ticket is when a game page is open, and otherwise becomes the park, where
+ * Play takes the owl through the turnstiles with the ticket (OP-190).
  *
  * A HUD card that was never made is not in the page at all: these tests ask for none of it
  * (`toHaveCount(0)` on the card shown up, `[data-ticket-card].up`), not for a hidden one.
@@ -25,8 +27,10 @@ const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
 const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
 /** The Day Ticket in the stand-in store's catalogue. */
 const DAY_VARIANT = '41001';
-/** What the turnstiles say above the card's line, for an owl with no ticket (OP-180). */
-const DAY_TICKET = 'You need a ticket to go in. You can get a Day Ticket right here.';
+/** What the badge's Get a Day Ticket says above the card's line (OP-191). */
+const DAY_TICKET = 'A Day Ticket lets you keep what you win. You can get a Day Ticket right here.';
+/** Once the bought ticket has made the spectator a full visitor where it stands (OP-191). */
+const ADMITTED = 'Your Day Ticket is in. Have fun!';
 
 let made = 0;
 /** A new order number: the room server keeps its ticket book from one test run to the next. */
@@ -57,16 +61,30 @@ async function arrive(browser: Browser, device: BrowserContextOptions, blockPopu
   return page;
 }
 
-/** Into a turnstile with no ticket: it turns the owl back and offers a Day Ticket, on the card before the store. */
-async function buyAtGate(page: Page): Promise<void> {
+/**
+ * Through a turnstile with no ticket, on into the hub as a spectator (OP-191), and the badge's Get a
+ * Day Ticket: the card before the store, with the turnstiles' sale.
+ */
+async function buyInside(page: Page): Promise<void> {
   await walkToDoor(page, 'gate');
+  await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
+  await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(true);
+  await page.locator('[data-spectator-get="badge"]').click();
   await expect(page.locator(STORE_CARD)).toBeVisible({ timeout: 15_000 });
   await expectStoreCard(page);
   await expect(page.locator(`${STORE_CARD} [data-store="say"]`)).toContainText(DAY_TICKET);
 }
 
+/** The bought ticket made the spectator a full visitor where it stands, in the hub (OP-191). */
+async function admittedInPlace(page: Page): Promise<void> {
+  await expect(page.getByText(ADMITTED, { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(false);
+  expect((await state(page)).room).toBe('hub');
+  await expect(page.locator('[data-spectator].show')).toHaveCount(0);
+}
+
 const status = (page: Page) => page.locator('[data-gate-sale] [data-checkout="status"]');
-/** The words when the ticket has come with the owl at the turnstiles (OP-190). */
+/** The words when the ticket has come with the owl going in with it: at the turnstiles (OP-190), or a spectator inside (OP-191). */
 const IN_YOU_GO = 'Your ticket is here. In you go!';
 /** The checkout window's own screen, back at the park with the game open elsewhere (OP-190). */
 const ALL_SET = "You're all set. Your ticket is waiting in the park window.";
@@ -111,26 +129,25 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     ['a computer', COMPUTER],
     ['a phone', PHONE],
   ] as const) {
-    test(`on ${name}: a turnstile without a ticket opens checkout in its own window, and the paid ticket lands on the owl with no email`, async ({ browser, request }) => {
+    test(`on ${name}: a spectator's Get a Day Ticket opens checkout in its own window, and the paid ticket lands on the owl with no email`, async ({ browser, request }) => {
       await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';
-      await buyAtGate(a);
+      await buyInside(a);
       const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
       await expect(status(a)).toContainText('Checkout is open in its own window');
       await popup.waitForURL(/\/cart\//);
       const token = tokenOf(popup.url());
-      expect((await state(a)).room).toBe('lobby');
+      expect((await state(a)).room).toBe('hub');
       await a.screenshot({ path: `e2e-screenshots/checkout-open-${shot}.png` });
 
       await pay(request, token);
-      // The ticket comes and the owl, still at the turnstiles, goes through them by itself: no tap,
-      // no walk, no card before the store; the turnstiles scan it as for any owl (OP-190).
+      // The ticket comes and the spectator is a full visitor where it stands: no tap, no walk, no
+      // card before the store, no reload; the turnstiles scan it from there (OP-191).
       await expect(a.getByText(IN_YOU_GO)).toBeVisible({ timeout: 15_000 });
       await expect(a.locator('[data-gate-sale]')).toBeHidden();
-      await expect(a.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 15_000 });
+      await admittedInPlace(a);
       await expect(a.locator(STORE_CARD)).toBeHidden();
-      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
       expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['day', 'active']]);
       // The annual pass offer follows, any night of the season; No thanks puts it away.
       const offer = a.locator('[data-free-pass="day"]');
@@ -146,7 +163,7 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
   test('back at the park from checkout with the game open: checkout’s window closes or says the ticket waits there, and the owl goes in', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER);
-    await buyAtGate(a);
+    await buyInside(a);
     const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
     await popup.waitForURL(/\/cart\//);
     await pay(request, tokenOf(popup.url()));
@@ -166,16 +183,16 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     } else {
       expect(await closed).toBe(true);
     }
-    // The game page heard it and looked at the wallet: in you go.
+    // The game page heard it and looked at the wallet: in you go, where the owl stands.
     await expect(a.getByText(IN_YOU_GO)).toBeVisible({ timeout: 15_000 });
-    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+    await admittedInPlace(a);
     await a.context().close();
   });
 
   test('back at the park from checkout with no game page open: the park starts there, and Play takes the owl through the turnstiles', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER);
-    await buyAtGate(a);
+    await buyInside(a);
     const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
     await popup.waitForURL(/\/cart\//);
     const token = tokenOf(popup.url());
@@ -192,13 +209,16 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     await expect(popup.locator('[data-ticket-card]')).toContainText('Your visit starts now', { timeout: 20_000 });
     await expect(popup.locator(STORE_CARD)).toBeHidden();
     await expect.poll(async () => (await state(popup)).room, { timeout: 20_000 }).toBe('hub');
+    // Through the turnstiles with the ticket: a visitor, not a spectator.
+    await expect.poll(async () => (await state(popup)).connected, { timeout: 20_000 }).toBe(true);
+    expect((await state(popup)).spectator).toBe(false);
     await popup.context().close();
   });
 
   test('a blocked checkout window gives a link to tap with no second card, and Cancel says the ticket still lands if it was paid', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER, true);
-    await buyAtGate(a);
+    await buyInside(a);
     await storeContinue(a);
     await expect(status(a)).toContainText('Your browser blocked the checkout window');
     const link = a.locator('[data-gate-sale] [data-checkout="link"]');
@@ -210,8 +230,9 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
     await expect(a.locator(STORE_CARD)).toBeHidden();
     // Paid just before Cancel: it still lands, and the page still says so.
     await pay(request, token);
-    // The owl was turned back from the turnstiles and stands before them: in it goes.
+    // The owl walks the park as a spectator: it is a full visitor where it stands.
     await expect(a.getByText(IN_YOU_GO)).toBeVisible({ timeout: 15_000 });
+    await admittedInPlace(a);
     expect(await a.evaluate(() => window.owlPark.wallet())).toHaveLength(1);
     await a.context().close();
   });
