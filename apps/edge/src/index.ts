@@ -5,7 +5,7 @@
  * park's Durable Object (where quests, NPC owls, leaf piles and the nests live).
  */
 import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTimeZone, isVariantId, parseFeedback, waitMinutes, type LineStatus, type Logger, type OwlAccount, type SavedMasks, type TravelState } from '@owl-park/shared';
-import { SOURCES, type Source } from '@owl-park/shared';
+import { SOURCES, entryMap, treeShare, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, mailSender, offerOrderProtect, orderEmail } from './accounts';
 import { capacityPage } from './capacityPage';
 import { deviceClass, type Visit } from './collectLog';
@@ -22,13 +22,13 @@ import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
 import { GUEST_PASS_TTL_S, KEEPER_TTL_S, isCollectorId, mintCollector, mintEntry, mintKeeper, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyKeeper, verifyPass, type PassPayload } from './pass';
 import { jobOf } from './crons';
-import { admitted, beforeRestart, gateMode, mayEnter } from './gate';
+import { admitted, beforeRestart, gateMode, mayEnter, spectating, spectatorsOn } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateRead, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
 import { health } from './health';
 import { isPage, uncachedPage } from './page';
 import { ROOMS, isRoomId, paintableRoom, roomCap } from './rooms';
-import { GATED_ROOMS } from '@owl-park/shared/rooms';
+import { GATED_ROOMS, TREE_ARRIVAL } from '@owl-park/shared/rooms';
 import { NIGHTS } from '@owl-park/shared';
 import { KINDS, passCartLink, ticketCartLink, webhookSigned, type TicketLine } from './shopify';
 import { storeCheck, storeConfig, type TicketMirror } from './storeApi';
@@ -462,7 +462,11 @@ const park = {
       const pass = await mintPass(secret, payload);
       log.info('worker.pass', 'pass_issued', 'A guest pass went out.', { session_id: hashForLog(payload.id), collector_hash: hashForLog(cid), new_collector: !known });
       // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
-      return Response.json({ pass, exp, collector, gate: (await gateOf(env)).mode, adm: payload.adm, ...(account ? { account } : {}) }, { headers: CORS });
+      const gate = await gateOf(env);
+      // The entries setting (OP-156): an owl the keepers send into the tree starts there, if the front
+      // gate would let it into the tree's arrival at all (a guest pass is not, while the park takes tickets).
+      const map = entryMap(cid, treeShare((await overflowOf(env)).realms)) === 2 && mayEnter(gate, payload, TREE_ARRIVAL.room) ? 2 : 1;
+      return Response.json({ pass, exp, collector, gate: gate.mode, adm: payload.adm, ...(map === 2 ? { map } : {}), ...(account ? { account } : {}) }, { headers: CORS });
     }
 
     if (url.pathname === '/api/entry') {
@@ -472,7 +476,8 @@ const park = {
       if (!pass) return json({ error: 'bad-pass' }, 401);
       // A pass from before the park's nightly restart goes through the turnstiles again (OP-181).
       const gate = await gateOf(env);
-      return json({ gate: gate.mode, admitted: pass.adm && !beforeRestart(gate, pass) });
+      // `spectators` (OP-191), only while SPECTATORS is on: an owl without a ticket that works walks on past the turnstiles as a spectator.
+      return json({ gate: gate.mode, admitted: pass.adm && !beforeRestart(gate, pass), ...(spectatorsOn(env) ? { spectators: true } : {}) });
     }
 
     if (url.pathname === '/api/travel') {
@@ -507,15 +512,16 @@ const park = {
       if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
       return json({ token: await mintKeeper(signingSecret(env)), ttl: KEEPER_TTL_S });
     }
-    // ---- The ledge painter (OP-156): a tree room's ledges, walls, hazards and fronts as a keeper painted them ----
+    // ---- The ledge painter (OP-156): a tree room's ledges, walls, hazards, fronts and placed spots as a keeper painted them ----
     //
     // TODO-DOCS (OP-156): docs/ARCHITECTURE.md: POST /api/admin/masks/<room> (a keeper's token in
     // X-Keeper-Token, or the keepers' key; the draft checked by checkMasks, packages/shared/src/masks.ts)
     // and GET /api/masks/<room> (public: level geometry only; 404 before a draft is saved; what the
     // overflow object said kept 10 s per room in each copy of the Worker, a save through it at once), both counted
     // as calls that need no pass (limits.ts); the draft store, one row per room in the overflow object
-    // under `masks:<room>` with `savedAt`, a new save replacing the old. docs/LOGGING.md: masks_saved
-    // (worker.admin, info: room, by keeper or key, how many ledges, walls, hazards and fronts) and
+    // under `masks:<room>` with `savedAt`, a new save replacing the old; a draft of the four lists from
+    // before spots (part 3) is taken, and kept or read back, as one with none. docs/LOGGING.md: masks_saved
+    // (worker.admin, info: room, by keeper or key, how many ledges, walls, hazards, fronts and spots) and
     // masks_refused (worker.admin, warn: room when it is a room id, reason, and the list and index of
     // the item refused); admin_denied's reason bad-keeper-token.
     if (url.pathname.startsWith('/api/admin/masks/')) {
@@ -540,8 +546,8 @@ const park = {
       const saved = (await r.json()) as SavedMasks;
       keepMasks(roomId, saved);
       const { savedAt } = saved;
-      const { ledges, walls, hazards, fronts } = checked.draft;
-      log.info('worker.admin', 'masks_saved', 'A keeper saved a tree room’s ledge draft.', { room: roomId, by, ledges: ledges.length, walls: walls.length, hazards: hazards.length, fronts: fronts.length });
+      const { ledges, walls, hazards, fronts, spots } = checked.draft;
+      log.info('worker.admin', 'masks_saved', 'A keeper saved a tree room’s ledge draft.', { room: roomId, by, ledges: ledges.length, walls: walls.length, hazards: hazards.length, fronts: fronts.length, spots: spots.length });
       return json({ ok: true, room: roomId, savedAt });
     }
     if (url.pathname.startsWith('/api/masks/')) {
@@ -1049,10 +1055,13 @@ const park = {
         return new Response('bad pass', { status: 401 });
       }
       const seen = { room: roomId, session_id: hashForLog(pass.id), ...(pass.cid ? { collector_hash: hashForLog(pass.cid) } : {}) };
-      if (!mayEnter(await gateOf(env), pass, roomId)) {
+      // Past the turnstiles without a ticket that works: turned away, or with SPECTATORS on let in as a spectator (OP-191).
+      const gate = await gateOf(env);
+      if (!mayEnter(gate, pass, roomId) && !spectatorsOn(env)) {
         log.info('room.join', 'room_join_refused', 'A room socket was refused: the pass is not admitted past the front gate.', { ...seen, reason: 'gate' });
         return new Response('not admitted', { status: 403 });
       }
+      const spectator = spectating(gate, pass, roomId);
       // The line (OP-075): while the park has one, only an owl that was inside lately, or came
       // through it, opens a room; a newcomer is sent to wait on the home screen.
       const busy = await overflowOf(env);
@@ -1071,6 +1080,9 @@ const park = {
       // A fresh entry with every room, so an owl inside goes on from room to room while there is a line.
       headers.set('X-Entry', await mintEntry(secret, who));
       headers.set('X-Visitor-Id', pass.id);
+      // Only the Worker says whether the owl is a visitor or a spectator (OP-191): whatever the page sent under the name goes.
+      headers.delete('X-Visitor-Kind');
+      headers.set('X-Visitor-Kind', spectator ? 'spectator' : 'visitor');
       // Only the pass says whose collection (and nest) this is, and on which device: whatever the page sent under these names goes.
       headers.delete('X-Collector-Id');
       headers.delete('X-Collector-Tz');

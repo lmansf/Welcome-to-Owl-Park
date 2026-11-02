@@ -194,6 +194,14 @@ to its own clock, and runs the quiz card on the server's clock.
   `collect/tasks.ts` keeps them.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
+- Spectators (OP-191, `docs/ARCHITECTURE.md` section 4): every game plays and the room answers
+  `practice: true` with nothing paid. The page then toasts the game's own line with "With a Day
+  Ticket this would have earned N feathers." (a caught fish's feathers, the copy game's tunes and win,
+  the beam's least share `LANTERN_FEATHERS`, the quiz's `QUIZ_FEATHERS`; `wouldHaveEarned` in
+  `ui/spectator.ts`) and opens the Day Ticket's card at most once every five minutes. The arcade's
+  and the climb's result cards say "Nice run! With a Day Ticket this would have earned N feathers."
+  over Get a Day Ticket and Play again (`runFeathers`, `BAND_FEATHERS`; the day's best and the brisk
+  bonus are left out). Today's tasks are locked: the Quests tab sells a Day Ticket instead.
 
 ## Tests
 

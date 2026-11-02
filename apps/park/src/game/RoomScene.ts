@@ -29,6 +29,7 @@ import {
   arrivalPoint,
   backgroundTiles,
   mapOf,
+  realmShut,
   speciesOf,
   tileFade,
   tilePlacement,
@@ -121,7 +122,7 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_GROUND, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom } from '../rooms';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
@@ -130,6 +131,7 @@ import type { Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
+import { SPECTATOR_WORDS, createOfferPacer, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
@@ -290,6 +292,13 @@ export class RoomScene extends Phaser.Scene {
   private passingGate = false;
   /** The ticket bought in checkout's own page that Play came in with (OP-190): through the turnstiles once the room is up. */
   private cameWith: WalletEntry | null = null;
+  /**
+   * The owl walks this room as a spectator (OP-191), as its welcome said (kept in the registry from room
+   * to room until the next welcome says): it plays, but quests, the stores and the vote are locked.
+   */
+  private spectator = false;
+  /** A bought ticket is making this spectator a full visitor in place (OP-191): its scan, then `admit` (or a new socket). */
+  private admitting = false;
   /** Where the owl was at the last look for doorways, and the walk it was on: a doorway takes it from where its step crossed in (OP-124). */
   private doorLook: { pos: Vec2; walk: Walk | null } | null = null;
   /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
@@ -462,6 +471,8 @@ export class RoomScene extends Phaser.Scene {
     this.leaving = false;
     this.atIdol = false;
     this.passingGate = false;
+    this.spectator = this.registry.get('spectator') === true;
+    this.admitting = false;
     this.doorLook = null;
     this.actions = [];
     // The scene is reused room after room: the last room's tiles went with its display list and art.
@@ -745,6 +756,7 @@ export class RoomScene extends Phaser.Scene {
       acts: () => this.acts,
       look: () => this.look,
       feathers: (total) => this.collection.setFeathers(total),
+      offerTicket: (line) => this.offerDayTicket(line),
     });
     this.climb = climbFor(room, {
       scene: this,
@@ -755,6 +767,7 @@ export class RoomScene extends Phaser.Scene {
       calm: () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false,
       feathers: (total) => this.collection.setFeathers(total),
       awarded: () => void this.collection.refresh(),
+      offerTicket: (line) => this.offerDayTicket(line),
     });
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
@@ -813,6 +826,8 @@ export class RoomScene extends Phaser.Scene {
       tasks: this.tasks,
       cheer: () => this.pieces.idol?.react(),
       robot: () => this.pieces.idol?.image ?? null,
+      spectating: () => this.spectator,
+      spectatorOffer: (line) => this.afterGameOffer(line),
     });
 
     this.setupCamera();
@@ -839,6 +854,8 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setCount(1);
     this.hud.setActions([]);
     this.hud.setRoom(room.id);
+    // Phones play the tree on their side (OP-155 (d)): held upright in a tree room, a card asks to turn them.
+    this.hud.setSideways(mapOf(room) === 2);
     this.showWaysOut();
     // The owl builder's kind and colours: today's pledge and the worn collectibles stay as they are.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
@@ -922,7 +939,7 @@ export class RoomScene extends Phaser.Scene {
       onUsed: (id, by, until) => live() && this.onUsed(id, by, until),
       onLanterns: (beam, lit) => live() && this.play?.onLanterns(beam, lit),
       onQuiz: (n, right, won, others) => live() && this.play?.onQuiz(n, right, won, others),
-      onPaid: (what, feathers, total) => live() && this.play?.onPaid(what, feathers, total),
+      onPaid: (what, feathers, total, practice) => live() && this.play?.onPaid(what, feathers, total, practice),
       onTasks: (tasks, finished, paid, total) => live() && this.play?.onTasks(tasks, finished, paid, total),
       onWall: (walls, mine) => live() && this.arcade?.onWall(walls, mine),
       onNest: (seen) => live() && this.onNest(seen),
@@ -951,7 +968,8 @@ export class RoomScene extends Phaser.Scene {
         this.registry.set('counts', rooms);
         this.hud.setParkCount(Object.values(rooms).reduce((a, b) => a + b, 0));
       },
-      onFull: (roomId) => live() && void this.roomFull(roomId),
+      onFull: (roomId, spectators) => live() && void this.roomFull(roomId, spectators === true),
+      onSpectator: (on) => live() && this.setSpectator(on),
       onQueued: () => live() && this.queued(),
       onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
       onRealms: (realms) => live() && this.setRealms(realms),
@@ -1076,9 +1094,11 @@ export class RoomScene extends Phaser.Scene {
     if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
   }
 
-  private async roomFull(roomId: string): Promise<void> {
+  private async roomFull(roomId: string, spectators = false): Promise<void> {
     if (this.leaving) return;
-    this.hud.toast('That part of the park is full right now. Try again in a moment.', 3500);
+    // Full for a spectator only (OP-191): a ticket holder would still get in, so the Day Ticket is offered.
+    if (spectators) this.hud.offerTicket(SPECTATOR_WORDS.busy);
+    else this.hud.toast('That part of the park is full right now. Try again in a moment.', 3500);
     const back = this.cameFrom ?? { room: 'hub', spawn: undefined };
     if (back.room === roomId) return;
     await this.goTo(back.room, back.spawn ?? 'default', undefined);
@@ -1234,7 +1254,7 @@ export class RoomScene extends Phaser.Scene {
   private prefetchNear(now: number): void {
     if (now < this.prefetchAt) return;
     this.prefetchAt = now + 500;
-    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), walkingMap())) prefetchRoomArt(this, to, this.cfg);
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking())) prefetchRoomArt(this, to, this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */
@@ -1661,9 +1681,12 @@ export class RoomScene extends Phaser.Scene {
     view: { x: number; y: number; w: number; h: number };
     /** The ledge painter, when it is up (OP-156, `?paint=1`). */
     paint: PaintDebug | null;
+    /** The owl walks this room as a spectator, as its welcome said (OP-191). */
+    spectator: boolean;
   } | null {
     if (!this.built) return null;
     return {
+      spectator: this.spectator,
       room: this.room.id,
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room })),
       pos: { ...this.me.pos },
@@ -1687,7 +1710,7 @@ export class RoomScene extends Phaser.Scene {
       tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, behind: this.me.depth < this.treeDress.raisedDepth },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
-      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
+      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.spectator ? null : this.quests.markFor(n.id), approach: n.approaching })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y, top: m.top })),
       actions: this.actions.map((a) => a.id),
@@ -1813,11 +1836,13 @@ export class RoomScene extends Phaser.Scene {
   private async refreshBoard(): Promise<void> {
     const gen = this.gen;
     const link = this.link;
-    if (!link) return;
+    // A spectator's quests are locked (OP-191): asked for again once a ticket makes it a visitor.
+    if (!link || this.spectator) return;
     const res = await link.board();
     if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
     this.boardTimer?.remove();
     if (!res.board) {
+      if (res.reason === 'spectator') return;
       this.boardTimer = this.time.delayedCall(BOARD_RETRY_MS, () => void this.refreshBoard());
       return;
     }
@@ -1838,9 +1863,10 @@ export class RoomScene extends Phaser.Scene {
   /** The board changed: NPC markers and this room's quest items follow it. */
   private showBoard(board: QuestBoard | null): void {
     if (!this.built) return;
-    for (const npc of this.npcs.values()) npc.setMark(this.quests.markFor(npc.id));
+    // A spectator's quests are locked (OP-191): no marks over the NPC owls, and no quest items drawn.
+    for (const npc of this.npcs.values()) npc.setMark(this.spectator ? null : this.quests.markFor(npc.id));
     const wanted = new Map<string, { quest: string; n: number; kind: QuestItemMarker['kind']; x: number; y: number; top?: number }>();
-    for (const q of board?.active ?? []) for (const it of q.items) if (it.room === this.room.id) wanted.set(`${q.id}#${it.n}`, { quest: q.id, ...it });
+    for (const q of this.spectator ? [] : (board?.active ?? [])) for (const it of q.items) if (it.room === this.room.id) wanted.set(`${q.id}#${it.n}`, { quest: q.id, ...it });
     for (const [key, m] of this.items) {
       if (wanted.has(key)) continue;
       m.destroy();
@@ -1861,6 +1887,8 @@ export class RoomScene extends Phaser.Scene {
   private async talk(id: string): Promise<void> {
     const npc = this.npcs.get(id);
     if (!npc || this.busy) return;
+    // The NPC owls' quests and Nova's shop are ticket holders' (OP-191).
+    if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
     if (!this.link) return void this.hud.toast(`${npc.def.name} is lost in thought. Try again in a moment.`, 3000);
     const gen = this.gen;
     this.busy = true;
@@ -1868,6 +1896,7 @@ export class RoomScene extends Phaser.Scene {
       const res = await this.link.talk(id);
       if (gen !== this.gen || this.leaving) return;
       if (!res.ok) {
+        if (res.reason === 'spectator') return this.offerDayTicket(SPECTATOR_WORDS.locked);
         this.hud.toast(res.reason === 'far' ? `Walk a little closer to ${npc.def.name}.` : `${npc.def.name} did not hear you. Try again in a moment.`, 3000);
         return;
       }
@@ -1884,13 +1913,16 @@ export class RoomScene extends Phaser.Scene {
   private async use(id: string): Promise<void> {
     const def = getInteractable(id);
     if (!def || this.busy || !this.link) return;
+    // Leaf piles, stalls and the moonbeam count for quests and tasks: ticket holders' (OP-191).
+    if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
     const gen = this.gen;
     this.busy = true;
     try {
       const res = await this.link.use(id);
       if (gen !== this.gen || this.leaving) return;
       if (!res.ok) {
-        if (res.reason === 'gone') this.hud.toast('Someone flopped in first. The leaves will blow back together soon.', 3200);
+        if (res.reason === 'spectator') this.offerDayTicket(SPECTATOR_WORDS.locked);
+        else if (res.reason === 'gone') this.hud.toast('Someone flopped in first. The leaves will blow back together soon.', 3200);
         else if (res.reason === 'far') this.hud.toast('A little closer...', 2000);
         else if (res.reason !== 'busy') this.hud.toast('The park did not catch that. Try again in a moment.', 3000);
         return;
@@ -1941,7 +1973,7 @@ export class RoomScene extends Phaser.Scene {
 
   private async gather(m: QuestItemMarker): Promise<void> {
     const link = this.link;
-    if (!link) return;
+    if (!link || this.spectator) return;
     const gen = this.gen;
     this.gathering.set(m.key, Number.POSITIVE_INFINITY);
     const res = await link.gather(m.quest, m.n);
@@ -2235,7 +2267,7 @@ export class RoomScene extends Phaser.Scene {
     // the first leg now (OP-148). A perch's top asked for from the floor has no way round: its face.
     const aim = snapToWalkable(target, f.walkable);
     if (!fromKeys && distance(to, aim) > WAY_SHORT_PX) {
-      const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id), walkingMap())]);
+      const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id), this.walking())]);
       if (legs?.[0]) {
         to = resolveTarget({ ...this.me.pos }, legs[0], f.walkable, f.shut);
         this.wayTo = aim;
@@ -2348,6 +2380,11 @@ export class RoomScene extends Phaser.Scene {
   /** The Realm Vote: one vote per ticket-holder per park day, cast here at the idol. */
   private async vote(): Promise<void> {
     if (this.voting || !this.atIdol) return;
+    // The Realm Vote is ticket holders' (OP-191): its line, then the Day Ticket.
+    if (this.spectator) {
+      this.hud.toast(SPECTATOR_WORDS.idol, 4000);
+      return this.offerDayTicket(SPECTATOR_WORDS.idol);
+    }
     this.voting = true;
     try {
       const outcome = await castVote(this.transport, this.room.id);
@@ -2412,6 +2449,52 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
+   * The owl walks the park as a spectator, or not (OP-191), as each welcome says and as `admit` answers.
+   * The HUD's badge follows. Flipped to a visitor, the quests, today's tasks and the collection are asked
+   * for again (the quest items drawn), and a bought ticket's flip says so once.
+   */
+  private setSpectator(on: boolean): void {
+    const was = this.spectator;
+    this.spectator = on;
+    this.registry.set('spectator', on);
+    this.hud.setSpectator(on);
+    if (on && !was) this.showBoard(this.quests.board);
+    if (!on && was) {
+      this.showBoard(this.quests.board);
+      void this.refreshBoard();
+      this.play?.attach(this.acts);
+      void this.collection.refresh();
+    }
+    if (!on && this.admitting) {
+      this.admitting = false;
+      this.hud.toast(SPECTATOR_WORDS.admitted, 4500);
+    }
+  }
+
+  /** A spectator's Get a Day Ticket (OP-191): the turnstiles' own sale, with `line` above the card before the store. */
+  offerDayTicket(line: string): void {
+    void this.entry().then((entry) => this.sellDayTicket(line, entry));
+  }
+
+  /**
+   * A spectator's game is over (OP-191): its line as a toast every time, then the Day Ticket's card,
+   * at most once every few minutes for the whole page (FULL_OFFER_EVERY_MS).
+   */
+  private afterGameOffer(line: string): void {
+    this.hud.toast(line, 4500);
+    let pacer = this.registry.get('offerPacer') as OfferPacer | undefined;
+    if (!pacer) {
+      pacer = createOfferPacer();
+      this.registry.set('offerPacer', pacer);
+    }
+    if (!pacer.due()) return;
+    const gen = this.gen;
+    this.time.delayedCall(1500, () => {
+      if (gen === this.gen && !this.leaving && this.spectator) this.offerDayTicket(SPECTATOR_WORDS.keep);
+    });
+  }
+
+  /**
    * A turnstile reached without a ticket that works, while the gate takes tickets (OP-180): the card
    * before the store says why and that a Day Ticket can be had right here, and its Continue opens
    * checkout. The ticket lands on this owl (its collector id, not this screen); once it has come the
@@ -2440,9 +2523,41 @@ export class RoomScene extends Phaser.Scene {
    * `open`, the opener the card before the store handed that purchase. True when the owl goes in.
    */
   ticketCame(ticket: WalletEntry, open?: Opener): boolean {
-    const goingIn = this.admitAtGate(ticket);
+    // A spectator inside the park (OP-191) is admitted where it stands; at the lobby's turnstiles it walks through them (OP-190).
+    const goingIn = this.admitInPlace(ticket) || this.admitAtGate(ticket);
     if (ticket.kind === 'day' || ticket.kind === 'night') void this.offerPass(ticket.id, 'day', open, goingIn ? 2700 : 0);
     return goingIn;
+  }
+
+  /**
+   * A spectator's bought ticket (OP-191): the turnstiles scan it from where the owl stands, and the room
+   * takes the admitted pass in place (`admit`), or failing that a new socket on it (`renew`); no reload.
+   * The welcome or the answer then says the owl is a visitor (setSpectator). False when the owl is no
+   * spectator here, or the ticket does not work yet.
+   */
+  private admitInPlace(ticket: WalletEntry): boolean {
+    if (!this.spectator || !this.built || this.leaving) return false;
+    if (ticket.status !== 'unused' && ticket.status !== 'active') return false;
+    const tickets = this.transport.tickets;
+    if (!tickets) return false;
+    if (this.admitting) return true;
+    this.admitting = true;
+    const gen = this.gen;
+    void (async () => {
+      const scan = await tickets.scan(ticket.id).catch((): ScanReply => ({ ok: false, reason: 'offline' }));
+      if (gen !== this.gen || this.leaving) return;
+      if (!scan.ok) {
+        this.admitting = false;
+        this.hud.toast(gateRefusal(scan.reason, scan.kind).line, 4500);
+        return;
+      }
+      const conn = this.conn;
+      const taken = (await conn?.admit?.().catch(() => false)) ?? false;
+      if (gen !== this.gen || this.leaving) return;
+      // The room would not take the pass on this socket: a new one, on it (the welcome then says visitor).
+      if (!taken) conn?.renew?.();
+    })();
+    return true;
   }
 
   /** Into the turnstiles with a ticket that came (OP-190): false when the owl is not at them, or the ticket does not work yet. */
@@ -2484,11 +2599,11 @@ export class RoomScene extends Phaser.Scene {
     if (this.leaving) return;
     const entry = await this.entry();
     if (this.leaving) return;
-    if (!scan.ok && entry.gate === 'ticket' && !entry.admitted) {
+    const way = turnstileWay(scan, entry);
+    if (way.go === 'back') {
       // OP-180: without a ticket that works, a Day Ticket right here; otherwise why the turnstiles stay shut.
-      const refusal = gateRefusal(scan.reason, scan.kind);
-      if (refusal.buy && this.transport.tickets) void this.sellDayTicket(refusal.line, entry);
-      else this.hud.toast(refusal.line, 4500);
+      if (way.sale && this.transport.tickets) void this.sellDayTicket(way.line, entry);
+      else this.hud.toast(way.line, 4500);
       this.walkTo({ x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
       this.time.delayedCall(1500, () => {
         this.passingGate = false;
@@ -2497,7 +2612,11 @@ export class RoomScene extends Phaser.Scene {
     }
     this.pieces.gate?.react();
     if (scan.ok) this.hud.showTicket(gateCard(scan, Date.now()));
-    else this.hud.toast('Welcome to Owl Park!', 2600);
+    // A spectator (OP-191): one line, with the Day Ticket on a button (or why its ticket did not go through), and on in.
+    else if (way.go === 'spectate') {
+      if (way.sale && this.transport.tickets) this.hud.offerTicket(way.line);
+      else this.hud.toast(way.line, 4500);
+    } else this.hud.toast('Welcome to Owl Park!', 2600);
     if (scan.ok && scan.kind === 'opening-night') void this.offerPass(scan.id, 'night');
     // The card stays up a moment before the walk on into the hub.
     this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
@@ -2505,6 +2624,8 @@ export class RoomScene extends Phaser.Scene {
 
   /** The gift shop's door: the store, after the card before the store (OP-153); soon, until it has a page. */
   private openShop(): void {
+    // The stores are ticket holders' (OP-191): the gift shop's door sells a Day Ticket instead.
+    if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
     const url = this.cfg.shopUrl;
     if (url) this.hud.askStore({ run: (open) => void open(url, '_blank', 'noopener') });
     else this.hud.toast('The gift shop opens soon.');
@@ -2645,13 +2766,24 @@ export class RoomScene extends Phaser.Scene {
    */
   private realmClosed(roomId: string | undefined): boolean {
     const room = roomId ? ROOMS[roomId] : undefined;
-    if (!room || room.gated !== true || this.realms.open.includes(room.id)) return false;
+    // The switch's own rule (realmShut): the tree is open too while it takes a share of the arrivals (OP-156).
+    if (!room || !realmShut(room, this.realms)) return false;
     return !(mapOf(room) === 2 && storedKeeper() !== null);
   }
 
   /** Where `door` leads this owl: the tree's way for an owl walking the tree (OP-162). */
   private doorTo(door: DoorDef): DoorDef['to'] {
-    return doorTarget(door, walkingMap());
+    return doorTarget(door, this.walking());
+  }
+
+  /**
+   * The park this owl walks (walkingMap), while it can: with the tree shut to it (dark again, and no
+   * keeper's token), an owl of the tree takes today's park's ways, so its nest's door and a realm's
+   * way out still lead somewhere rather than to a closed tree (OP-156).
+   */
+  private walking(): 1 | 2 {
+    const map = walkingMap();
+    return map === 2 && this.realmClosed(TREE_ARRIVAL.room) ? 1 : map;
   }
 
   /** Whether the owl stands at the height `door` is taken at (a side view's doorway, OP-162); any height for a doorway without one. */

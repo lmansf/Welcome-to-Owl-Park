@@ -84,8 +84,8 @@ export interface QuestPushes {
   onUsed?(id: string, by: string | null, until: number): void;
 }
 
-/** Why the room did not take an activity. */
-export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten';
+/** Why the room did not take an activity (`spectator`: today's tasks are locked to a spectator, OP-191; the page's half shows it). */
+export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' | 'spectator';
 type No = { ok: false; reason: ActRefusal };
 
 /** The robot owl's tune to copy: played until `listenUntil`, then each note due by `deadline`. */
@@ -99,13 +99,14 @@ export interface CopyTune {
 
 export type LightReply = { ok: true; id: string } | No;
 export type CastReply = { ok: true; biteAt: number } | No;
-export type ReelReply = { ok: true; outcome: 'early' | 'late' } | { ok: true; outcome: 'caught'; fish: string; feathers: number; total: number } | No;
+/** `practice` (OP-191): a spectator's catch, which earned nothing. */
+export type ReelReply = { ok: true; outcome: 'early' | 'late' } | { ok: true; outcome: 'caught'; fish: string; feathers: number; total: number; practice?: true } | No;
 /** A new game: the emotes the robot plays this game, and its first tune. */
 export type CopyReply = ({ ok: true; notes: string[] } & CopyTune) | No;
 export type NoteReply =
   | { ok: true; step: 'note' | 'early'; deadline: number }
-  | ({ ok: true; step: 'tune'; feathers: number; total: number } & CopyTune)
-  | { ok: true; step: 'won'; level: number; feathers: number; total: number }
+  | ({ ok: true; step: 'tune'; feathers: number; total: number; practice?: true } & CopyTune)
+  | { ok: true; step: 'won'; level: number; feathers: number; total: number; practice?: true }
   | { ok: true; step: 'wrong' | 'slow'; level: number; expected: string }
   | No;
 /** A run started at a cabinet: the seed of its course and when it started (this device's clock). */
@@ -116,10 +117,10 @@ export type ScoreReply = { ok: true; paid: RunPaid } | No;
 export type RecordReply = { ok: true; wall: GameWall; mine: OwnBests } | No;
 /** A climb started at the portal, or the open one returned (`resumed`); `startedAt` on this device's clock. */
 export type ClimbReply =
-  | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
+  | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean; practice?: true }
   | No;
 /** A band line reached: what the room banked and paid, and the run's reference. */
-export type AscentReply = { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string } | No;
+export type AscentReply = { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string; practice?: true } | No;
 
 /**
  * The park's activities in one room (activities.ts in @owl-park/shared): the hub's lanterns, the pond
@@ -161,8 +162,8 @@ export interface ActivityPushes {
   onLanterns?(beam: { lit: Record<string, number>; glowUntil: number }, lit: { id: string; by: string | null } | null): void;
   /** A stage quiz question closed: the right zone, whether this visitor stood in it, and the other owls that did. */
   onQuiz?(n: number, right: QuizZone, won: boolean, others: string[]): void;
-  /** Feathers from something shared: a full lantern beam, a right quiz answer. */
-  onPaid?(what: 'beam' | 'quiz', feathers: number, total: number): void;
+  /** Feathers from something shared: a full lantern beam, a right quiz answer (`practice`: a spectator's share, which earned nothing, OP-191). */
+  onPaid?(what: 'beam' | 'quiz', feathers: number, total: number, practice?: boolean): void;
   /** Today's tasks moved: as they stand, the ones just finished, what they paid and the balance. */
   onTasks?(tasks: TaskView, finished: string[], paid: number, total: number): void;
   /** The arcade's score wall: every column and the owl's own bests on arrival, then a column as it changes. */

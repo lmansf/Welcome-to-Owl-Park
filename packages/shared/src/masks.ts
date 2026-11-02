@@ -1,20 +1,25 @@
 /**
- * The ledge painter's draft (OP-156, part 2): what a keeper paints over a room of the tree (map 2),
- * in room pixels, before any of it becomes room data. A ledge is a perch as the tree's rooms make
- * them (a span from x0 to x1 on the plan, `top` above the ground line); a wall stands at x from y0
- * down to y1 (room y, down the screen); a hazard is a span like a ledge's; a front is a polygon over
- * the playfield to be drawn in front of the owls (a post, a pillar, the near side of a railing).
+ * The ledge painter's draft (OP-156, parts 2 and 3): what a keeper paints over a room of the tree
+ * (map 2), in room pixels, before any of it becomes room data. A ledge is a perch as the tree's rooms
+ * make them (a span from x0 to x1 on the plan, `top` above the ground line); a wall stands at x from
+ * y0 down to y1 (room y, down the screen); a hazard is a span like a ledge's; a front is a polygon
+ * over the playfield to be drawn in front of the owls (a post, a pillar, the near side of a railing);
+ * a spot is one of the level's named spots (TREE_SPOTS, treeSpots.ts) placed at the point where its
+ * thing stands, which becomes one of the room's `places`.
  *
  * A keeper saves a draft through the Worker (POST /api/admin/masks/<room>), which keeps one per room
  * in the overflow object; anyone may read it back (GET /api/masks/<room>: level geometry, nothing
  * personal), and `pnpm masks:pull <room>` prints it as room data to paste in. The game does not read
- * a draft: a ledge or a front is the park's once it is in packages/shared/rooms.
+ * a draft: a ledge, a front or a place is the park's once it is in packages/shared/rooms.
  *
  * checkMasks is the one check of a draft, the Worker's, the overflow object's and the painter's: all
- * four lists and nothing else, each at most MASK_LIST_MAX items; ids unique across the draft and
+ * five lists and nothing else, each at most MASK_LIST_MAX items; ids unique across the draft and
  * words of [a-z0-9-]; numbers finite and inside the room; x0 < x1, y0 < y1, 0 < top <= MAX_PERCH_TOP;
- * a front of 3 to 64 points. Anything else, an extra field included, is refused, and the refusal says
- * why in a fixed word and where (the list and the item's place in it), never what was sent.
+ * a front of 3 to 64 points. (That a spot's id is one of its level's names is the painter's to keep,
+ * and the rooms' test's once it is a place.) Anything else, an extra field included, is refused, and
+ * the refusal says why in a fixed word and where (the list and the item's place in it), never what
+ * was sent. A body of the first four lists alone is a draft from before spots (a keeper's painter tab
+ * opened before them, a draft the overflow object kept then): it is read as one with no spots.
  *
  * Module by module and with no class of its own, so the pull script's Node reads it (type stripping).
  */
@@ -52,11 +57,19 @@ export interface FrontMark {
   points: Vec2[];
 }
 
+/** A placed spot (OP-156, part 3): one of the level's named spots at the point where its thing stands (room px). */
+export interface SpotMark {
+  id: string;
+  x: number;
+  y: number;
+}
+
 export interface MaskDraft {
   ledges: LedgeMark[];
   walls: WallMark[];
   hazards: HazardMark[];
   fronts: FrontMark[];
+  spots: SpotMark[];
 }
 
 /** A draft as the overflow object keeps it and GET /api/masks/<room> answers it. */
@@ -66,8 +79,10 @@ export interface SavedMasks extends MaskDraft {
   savedAt: number;
 }
 
-export const MASK_LISTS = ['ledges', 'walls', 'hazards', 'fronts'] as const;
+export const MASK_LISTS = ['ledges', 'walls', 'hazards', 'fronts', 'spots'] as const;
 export type MaskList = (typeof MASK_LISTS)[number];
+/** The lists of a draft from before spots (OP-156, part 2): a body of these alone is read as one with no spots. */
+const LISTS_BEFORE_SPOTS = ['ledges', 'walls', 'hazards', 'fronts'] as const;
 
 /** The most items one list of a draft may hold. */
 export const MASK_LIST_MAX = 200;
@@ -96,6 +111,7 @@ const FIELDS: Record<MaskList, readonly string[]> = {
   walls: ['id', 'x', 'y0', 'y1'],
   hazards: ['id', 'x0', 'x1', 'top'],
   fronts: ['id', 'points'],
+  spots: ['id', 'x', 'y'],
 };
 
 type Size = { w: number; h: number };
@@ -112,7 +128,7 @@ export function isPaintable(room: Pick<RoomDef, 'map'> | null | undefined): bool
 
 /** An empty draft. */
 export function emptyMasks(): MaskDraft {
-  return { ledges: [], walls: [], hazards: [], fronts: [] };
+  return { ledges: [], walls: [], hazards: [], fronts: [], spots: [] };
 }
 
 /** A span from x0 to x1 at `top` (a ledge's or a hazard's), or why not. */
@@ -147,16 +163,24 @@ function front(item: Record<string, unknown>, size: Size): { points: Vec2[] } | 
   return { points: out };
 }
 
+function spot(item: Record<string, unknown>, size: Size): Vec2 | MaskReason {
+  const { x, y } = item;
+  if (!finite(x) || !finite(y)) return 'number';
+  if (x < 0 || x > size.w || y < 0 || y > size.h) return 'outside';
+  return { x, y };
+}
+
 /**
  * The draft in `body` for a room of this size, every item copied with only its own fields; or why it
  * is refused (the first rule it breaks, list by list and item by item).
  */
 export function checkMasks(body: unknown, size: Size): MaskCheck {
-  if (!isRecord(body) || !exactly(body, MASK_LISTS)) return { ok: false, reason: 'body' };
+  if (!isRecord(body) || !(exactly(body, MASK_LISTS) || exactly(body, LISTS_BEFORE_SPOTS))) return { ok: false, reason: 'body' };
   const draft = emptyMasks();
   const seen = new Set<string>();
   for (const list of MASK_LISTS) {
-    const items = body[list];
+    // A draft from before spots has none.
+    const items = Object.hasOwn(body, list) ? body[list] : [];
     if (!Array.isArray(items)) return { ok: false, reason: 'list', list };
     if (items.length > MASK_LIST_MAX) return { ok: false, reason: 'too-many', list };
     for (let index = 0; index < items.length; index++) {
@@ -175,6 +199,10 @@ export function checkMasks(body: unknown, size: Size): MaskCheck {
         const f = front(item, size);
         if (typeof f === 'string') return refuse(f);
         draft.fronts.push({ id, ...f });
+      } else if (list === 'spots') {
+        const p = spot(item, size);
+        if (typeof p === 'string') return refuse(p);
+        draft.spots.push({ id, ...p });
       } else {
         const s = span(item, size);
         if (typeof s === 'string') return refuse(s);
@@ -183,6 +211,14 @@ export function checkMasks(body: unknown, size: Size): MaskCheck {
     }
   }
   return { ok: true, draft };
+}
+
+/**
+ * The lists of a saved draft as the park answers it (its room and savedAt left out), for checkMasks:
+ * those it has, so a draft saved before spots reads as one with none.
+ */
+export function draftOf(saved: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(MASK_LISTS.filter((list) => Object.hasOwn(saved, list)).map((list) => [list, saved[list]]));
 }
 
 /** A room's own ledges as the painter starts from them: each perch's span on the plan and its top. */
@@ -196,4 +232,9 @@ export function ledgesOf(room: Pick<RoomDef, 'perches'>): LedgeMark[] {
 /** A room's own fronts as the painter starts from them (OP-173): each one's polygon, point by point. */
 export function frontsOf(room: Pick<RoomDef, 'fronts'>): FrontMark[] {
   return (room.fronts ?? []).map((f) => ({ id: f.id, points: f.poly.map((p) => ({ x: p.x, y: p.y })) }));
+}
+
+/** A room's own places as the painter starts from them (OP-156, part 3): each placed spot's point. */
+export function placesOf(room: Pick<RoomDef, 'places'>): SpotMark[] {
+  return (room.places ?? []).map((p) => ({ id: p.id, x: p.at.x, y: p.at.y }));
 }

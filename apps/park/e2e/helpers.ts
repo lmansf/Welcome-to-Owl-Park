@@ -2,6 +2,8 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 export interface ParkState {
   room: string;
+  /** The owl walks this room as a spectator, as its welcome said (OP-191). */
+  spectator: boolean;
   pos: { x: number; y: number };
   walking: boolean;
   look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
@@ -82,8 +84,12 @@ export interface ParkState {
     readout: string;
     own: string[];
     ownFronts: string[];
-    drawn: { ledges: string[]; walls: string[]; hazards: string[]; fronts: string[] };
+    ownSpots: string[];
+    drawn: { ledges: string[]; walls: string[]; hazards: string[]; fronts: string[]; spots: string[] };
     labels: number;
+    pins: number;
+    names: string[];
+    naming: string | null;
     selected: ({ kind: string; id: string } & Record<string, unknown>) | null;
     suggestions: Array<{ x0: number; x1: number; top: number }>;
     pending: number;
@@ -94,6 +100,7 @@ export interface ParkState {
       walls: Array<{ id: string; x: number; y0: number; y1: number }>;
       hazards: Array<{ id: string; x0: number; x1: number; top: number }>;
       fronts: Array<{ id: string; points: Array<{ x: number; y: number }> }>;
+      spots: Array<{ id: string; x: number; y: number }>;
     };
   } | null;
 }

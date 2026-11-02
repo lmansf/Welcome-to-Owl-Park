@@ -26,6 +26,7 @@ import { KnockGame, MAX_PULL, loadPhysics } from '../arcade/knock';
 import type { ActivityLink } from '../collect/service';
 import type { ArcadeInput } from '../ui/arcadeScreen';
 import type { Hud } from '../ui/hud';
+import { arcadeWouldEarn, endOfGameLine } from '../ui/spectator';
 import { ARCADE_INK, type ArcadeScene, type ArcadeSim } from './ArcadeScene';
 import type { PreviewRect } from './BuilderScene';
 
@@ -92,6 +93,8 @@ export interface ArcadeHost {
   look(): OwlLook;
   /** The feather balance changed. */
   feathers(total: number): void;
+  /** A spectator's Get a Day Ticket (OP-191): the turnstiles' sale, with this line above the card before the store. */
+  offerTicket(line: string): void;
 }
 
 /** A run under way at a cabinet: its game, its seed, and its result once the room took it. */
@@ -357,6 +360,12 @@ export class Arcade {
     const paid = reply.paid;
     this.host.feathers(paid.total);
     this.onWall([paid.wall], paid.mine);
+    if (paid.practice) {
+      // A spectator's run (OP-191): it paid nothing; what it would have with a Day Ticket, and the offer before Play again.
+      const offer = endOfGameLine(arcadeWouldEarn(game, paid.score));
+      this.host.hud.arcadeResult({ line, feathers: null, newBest: false, best: paid.mine[game] ?? null, offer: { line: offer, get: () => this.host.offerTicket(offer) } });
+      return;
+    }
     const capped = paid.added < runFeathers(game, paid.score);
     this.host.hud.arcadeResult({
       line,

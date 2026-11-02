@@ -48,7 +48,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -61,6 +61,8 @@ interface Pass {
   adm?: boolean;
   /** The owl's account (OP-139), while the park has accounts on. */
   account?: OwlAccount;
+  /** The park this owl starts in, 2 when the keepers send it into the tree (OP-156); absent is today's park. */
+  map?: 1 | 2;
 }
 
 /** The park says this screen's owl is on another screen now (OP-139). */
@@ -344,14 +346,20 @@ export class EdgeTransport implements ParkTransport {
     try {
       const res = await this.api('/api/entry');
       if (res.ok) {
-        const e = (await res.json()) as { gate?: unknown; admitted?: unknown };
-        return e.gate === 'ticket' ? { gate: 'ticket', admitted: e.admitted === true } : OPEN_ENTRY;
+        const e = (await res.json()) as { gate?: unknown; admitted?: unknown; spectators?: unknown };
+        // `spectators` only while the park's SPECTATORS switch is on (OP-191).
+        return e.gate === 'ticket' ? { gate: 'ticket', admitted: e.admitted === true, ...(e.spectators === true ? { spectators: true } : {}) } : OPEN_ENTRY;
       }
     } catch {
       // Offline: the pass's word below.
     }
     const pass = await this.getPass();
     return pass.gate === 'ticket' ? { gate: 'ticket', admitted: pass.adm === true } : OPEN_ENTRY;
+  }
+
+  /** Which park this owl starts in, as its pass says (OP-156's entries setting). */
+  async entryMap(): Promise<1 | 2> {
+    return (await this.getPass()).map === 2 ? 2 : 1;
   }
 
   /** POST a vote with this visitor's pass; the server decides admission and the daily limit. */
@@ -516,6 +524,8 @@ export class EdgeTransport implements ParkTransport {
           this.keepEntry(f.entry);
           if (f.notice !== undefined) handlers.onNotice?.(f.notice);
           if (f.realms) handlers.onRealms?.(f.realms);
+          // Spectators (OP-191): every welcome says whether this owl walks the park as one.
+          handlers.onSpectator?.(f.spectator === true);
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
           // This page speaks the room's protocol: a later version change may reload it again.
@@ -570,7 +580,7 @@ export class EdgeTransport implements ParkTransport {
           handlers.onCounts?.(f.rooms);
           break;
         case 'full':
-          handlers.onFull?.(f.room);
+          handlers.onFull?.(f.room, f.spectators === true);
           break;
         case 'notice':
           handlers.onNotice?.(f.words);
@@ -584,6 +594,7 @@ export class EdgeTransport implements ParkTransport {
         case 'refused':
         case 'act':
         case 'street':
+        case 'admitted':
           answer(f);
           break;
         case 'nest':
@@ -617,7 +628,7 @@ export class EdgeTransport implements ParkTransport {
           handlers.onQuiz?.(f.n, f.right, selfId !== null && f.winners.includes(selfId), f.winners.filter((id) => id !== selfId));
           break;
         case 'paid':
-          handlers.onPaid?.(f.what, f.feathers, f.total);
+          handlers.onPaid?.(f.what, f.feathers, f.total, f.practice === true);
           break;
         case 'tasks':
           handlers.onTasks?.(toLocalTasks(f.tasks), f.finished, f.paid, f.total);
@@ -723,7 +734,7 @@ export class EdgeTransport implements ParkTransport {
         const f = await act('reel');
         if (!f.ok) return f;
         if (f.a !== 'reel') return unknown;
-        return f.outcome === 'caught' ? { ok: true, outcome: 'caught', fish: f.fish, feathers: f.feathers, total: f.total } : { ok: true, outcome: f.outcome };
+        return f.outcome === 'caught' ? { ok: true, outcome: 'caught', fish: f.fish, feathers: f.feathers, total: f.total, ...(f.practice ? { practice: true as const } : {}) } : { ok: true, outcome: f.outcome };
       },
       copy: async () => {
         const f = await act('copy');
@@ -739,9 +750,9 @@ export class EdgeTransport implements ParkTransport {
           case 'early':
             return { ok: true, step: f.step, deadline: f.deadline - offset };
           case 'tune':
-            return { ok: true, step: 'tune', tune: f.tune, listenUntil: f.listenUntil - offset, deadline: f.deadline - offset, level: f.level, feathers: f.feathers, total: f.total };
+            return { ok: true, step: 'tune', tune: f.tune, listenUntil: f.listenUntil - offset, deadline: f.deadline - offset, level: f.level, feathers: f.feathers, total: f.total, ...(f.practice ? { practice: true as const } : {}) };
           case 'won':
-            return { ok: true, step: 'won', level: f.level, feathers: f.feathers, total: f.total };
+            return { ok: true, step: 'won', level: f.level, feathers: f.feathers, total: f.total, ...(f.practice ? { practice: true as const } : {}) };
           case 'wrong':
           case 'slow':
             return { ok: true, step: f.step, level: f.level, expected: f.expected };
@@ -967,6 +978,20 @@ export class EdgeTransport implements ParkTransport {
       drop() {
         // As a dead connection is closed: onclose schedules the reconnect.
         ws?.close(4000, 'dropped');
+      },
+      // A spectator's ticket went through (OP-191): the room takes the admitted pass in place.
+      admit: async () => {
+        const pass = await this.getPass().catch(() => null);
+        if (!pass?.adm) return false;
+        const f = await request({ t: 'admit', pass: pass.pass });
+        const ok = f?.t === 'admitted' && f.ok;
+        if (ok) handlers.onSpectator?.(false);
+        return ok;
+      },
+      renew() {
+        // The fallback when the room would not take the pass: a new socket on it, at once.
+        backoff = BACKOFF_MIN_MS;
+        ws?.close(4000, 'renew');
       },
       async leave() {
         closed = true;

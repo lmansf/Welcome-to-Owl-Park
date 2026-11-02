@@ -14,6 +14,7 @@ import {
   NEST_SPOTS,
   NIGHTS,
   PLAY_FEATHERS_PER_DAY,
+  QUIZ_ZONES,
   RESTART_NOTICE,
   ROOM_W,
   NestBook,
@@ -24,11 +25,15 @@ import {
   hashForLog,
   leastClimbMs,
   leastRunMs,
+  quizRound,
+  quizRoundAt,
   runFeathers,
   type ArcadeGame,
   type ClientFrame,
+  type LanternState,
   type NestLook,
   type OwlLook,
+  type PlayEvent,
   type PortraitLook,
   type RunResult,
   type ServerFrame,
@@ -36,7 +41,7 @@ import {
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
 import { captureLogs, loggerFor } from '../src/logs';
-import { mintEntry, mintKeeper } from '../src/pass';
+import { mintEntry, mintKeeper, mintPass, signingSecret } from '../src/pass';
 import { roomDef } from '../src/rooms';
 import { TravelBook } from '../src/travelBook';
 import { eventsOf, logged } from './logged';
@@ -56,7 +61,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { RESTART_CLOSE_MS, RoomObject } = await import('../src/RoomObject');
+const { RESTART_CLOSE_MS, RoomObject, spectatorSocket } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -156,34 +161,90 @@ class FakeCollections {
     return this.answer(this.nests.street(cid, n));
   }
   tasks(cid: string) {
+    this.noAward(cid, 'tasks');
     return this.answer(this.book.tasks(cid, Date.now()));
   }
-  questEvent() {
+  /** The quest events counted, as `kind:cid`. */
+  readonly questCalls: string[] = [];
+  questEvent(cid?: string, ev?: { kind: string }) {
+    if (cid) this.noAward(cid, 'questEvent');
+    if (cid && ev) this.questCalls.push(`${ev.kind}:${cid}`);
     return this.answer({ updates: [] });
+  }
+  /**
+   * Spectators' collectors (OP-191): every award asked for one of them (and every quest or task call,
+   * or a game's call not marked practice) is a fault, kept here and thrown, so a test sees it.
+   */
+  readonly spectators = new Set<string>();
+  readonly faults: string[] = [];
+  private noAward(cid: string, what: string) {
+    if (!this.spectators.has(cid)) return;
+    this.faults.push(what);
+    throw new Error(`${what} asked for a spectator`);
+  }
+  private practiceOnly(cid: string, practice: boolean | undefined, what: string) {
+    if (!practice) this.noAward(cid, what);
+  }
+  play(cid: string, feathers: number, ev: PlayEvent | null) {
+    this.noAward(cid, 'play');
+    return this.answer(this.book.play(cid, feathers, ev, Date.now()));
+  }
+  feathers(cid: string) {
+    return this.answer(this.book.feathers(cid, Date.now()));
+  }
+  /** The quests' own calls: none is ever asked for a spectator; a ticket holder's are not played in this fake. */
+  board(cid: string) {
+    this.noAward(cid, 'board');
+    return Promise.reject(new Error('not in this fake'));
+  }
+  accept(cid: string) {
+    this.noAward(cid, 'accept');
+    return Promise.reject(new Error('not in this fake'));
+  }
+  abandon(cid: string) {
+    this.noAward(cid, 'abandon');
+    return Promise.reject(new Error('not in this fake'));
+  }
+  handIn(cid: string) {
+    this.noAward(cid, 'handIn');
+    return Promise.reject(new Error('not in this fake'));
+  }
+  gather(cid: string) {
+    this.noAward(cid, 'gather');
+    return Promise.reject(new Error('not in this fake'));
+  }
+  flop(cid: string) {
+    this.noAward(cid, 'flop');
+    return Promise.reject(new Error('not in this fake'));
   }
   setEquipped() {
     return this.answer(null);
   }
-  arcadeStart(cid: string, game: ArcadeGame, seed: number) {
-    return this.answer({ startedAt: this.arcade.start(cid, game, seed, Date.now()).startedAt });
+  arcadeStart(cid: string, game: ArcadeGame, seed: number, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'arcadeStart');
+    return this.answer({ startedAt: this.arcade.start(cid, game, seed, Date.now(), practice).startedAt });
   }
-  arcadeRecord(cid: string, run: RunResult, seed: number, look: PortraitLook) {
-    return this.answer(this.arcade.record(cid, run, seed, look, Date.now()));
+  arcadeRecord(cid: string, run: RunResult, seed: number, look: PortraitLook, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'arcadeRecord');
+    return this.answer(this.arcade.record(cid, run, seed, look, Date.now(), practice));
   }
-  arcadeRun(cid: string, run: RunResult, seed: number, look: PortraitLook) {
-    return this.answer(this.arcade.finish(cid, run, seed, look, Date.now()));
+  arcadeRun(cid: string, run: RunResult, seed: number, look: PortraitLook, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'arcadeRun');
+    return this.answer(this.arcade.finish(cid, run, seed, look, Date.now(), practice));
   }
   arcadeWalls(cid: string | null) {
     return this.answer({ walls: this.arcade.walls(Date.now()), mine: cid ? this.arcade.mine(cid, Date.now()) : {} });
   }
   /** The climb's calls, with the flags the room object passed. */
   readonly climbStarts: unknown[] = [];
-  climbStart(cid: string, flags: { atPortal: boolean; portalLive: boolean; special: string | null }) {
+  climbStart(cid: string, flags: { atPortal: boolean; portalLive: boolean; special: string | null }, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'climbStart');
     this.climbStarts.push(flags);
-    return this.answer(this.climb.start(cid, flags, Date.now()));
+    return this.answer(this.climb.start(cid, flags, Date.now(), practice));
   }
-  climbBand(cid: string, seed: number, band: number) {
-    return this.answer(this.climb.band(cid, seed, band, Date.now()));
+  climbBand(cid: string, seed: number, band: number, _visit?: unknown, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'climbBand');
+    return this.answer(this.climb.band(cid, seed, band, Date.now(), practice));
   }
   climbLookup(ref: string) {
     return this.answer(this.climb.lookup(ref));
@@ -233,10 +294,14 @@ function roomObject(caps?: Record<string, number>, more: Record<string, string> 
 }
 type Obj = ReturnType<typeof roomObject>;
 
-/** A socket the Worker sent to a room (what fetch() does, without the platform's socket pair). */
-function connect(room: string, id: string, cid?: string, dev?: string): FakeSocket {
+/**
+ * A socket the Worker sent to a room (what fetch() does, without the platform's socket pair): a
+ * visitor's, as the Worker says of every ticket holder's (X-Visitor-Kind: visitor), or with `spec` a
+ * spectator's (OP-191).
+ */
+function connect(room: string, id: string, cid?: string, dev?: string, spec = false): FakeSocket {
   const ws = new FakeSocket();
-  ws.serializeAttachment({ room, id, sid: `sid${++sockets}`, ip: '192.0.2.1', joinedAt: clock, state: null, ...(cid ? { cid } : {}), ...(dev ? { dev } : {}) });
+  ws.serializeAttachment({ room, id, sid: `sid${++sockets}`, ip: '192.0.2.1', joinedAt: clock, state: null, ...(cid ? { cid } : {}), ...(dev ? { dev } : {}), ...(spec ? { spec: true } : {}) });
   state.acceptWebSocket(ws, [`id:${id}`, 'ip:192.0.2.1', `room:${room}`, ...(cid ? [`cid:${cid}`] : [])]);
   return ws;
 }
@@ -858,6 +923,22 @@ describe('the tree (map 2), dark until it opens (OP-156)', () => {
     expect(owl.closed).toBeNull();
     expect(owl.last('welcome')).toBeDefined();
   });
+
+  it('opens to every owl while the tree takes a share of new arrivals, and sends them out when it goes dark (OP-156)', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const realms = (r: unknown) => obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: r }) }));
+    await realms({ open: [], portal: false, night: null, tree: 30 });
+    const owl = await join(obj, 'l1', 'v_owl');
+    expect(owl.closed).toBeNull();
+    expect(owl.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null, tree: 30 });
+    // Today's gated realm keeps to its own checkbox.
+    expect((await join(obj, 'glass', 'v_glass')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+    // Back to 0: the tree goes dark, and the owl in it is told so and sent out.
+    await realms({ open: [], portal: false, night: null });
+    expect(owl.last('closed')).toMatchObject({ t: 'closed', room: 'l1', why: 'realm' });
+    expect(owl.closed?.code).toBe(CLOSE.REALM_CLOSED);
+    expect((await join(obj, 'l1', 'v_late')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
 });
 
 describe('flight in the room object (OP-084)', () => {
@@ -1464,5 +1545,286 @@ describe('the park’s nightly restart (OP-181)', () => {
     await woken.alarm();
     expect(a.closed).toBeNull();
     expect(alarms.kept.has('restart')).toBe(false);
+  });
+});
+
+describe('spectators in the room object (OP-191)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  /** A spectator's collector, and its owl: the fake collections object faults any award asked for it. */
+  const SPEC = 'c_specDDDD';
+  const SPEC_ID = 'v_specAAAA';
+  beforeEach(() => {
+    cap = captureLogs();
+    collections.spectators.add(SPEC);
+  });
+  afterEach(() => {
+    cap.restore();
+    // Whatever each test did, nothing was paid, counted or asked of the quests for a spectator.
+    expect(collections.faults).toEqual([]);
+  });
+  async function spectator(obj: Obj, room: string, look: OwlLook = LOOK, id = SPEC_ID) {
+    const ws = connect(room, id, SPEC, undefined, true);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look });
+    return ws;
+  }
+  const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
+  /** Walk an owl along `path` and let each leg finish. */
+  async function walk(obj: Obj, ws: FakeSocket, ...path: Vec2[]) {
+    for (const to of path) {
+      await send(obj, ws, { t: 'move', to, seq: ++seqs });
+      clock += 20_000;
+    }
+  }
+  let seqs = 0;
+  /** Straight down onto the hub's floor from wherever the owl came in, perhaps up on a ledge, where a walk along meets its edge. */
+  const floor = (ws: FakeSocket): Vec2 => ({ x: ws.last('welcome')!.you.pos.x, y: 800 });
+  /** The answer to request `r`, once the room has sent it (checking a pass takes the crypto a while). */
+  const answered = (ws: FakeSocket, r: number) => vi.waitFor(() => {
+    const f = ws.of('admitted').find((a) => a.r === r);
+    if (!f) throw new Error(`no answer to ${r} yet`);
+    return f;
+  });
+
+  it('takes a socket inside the park for a spectator unless the Worker called it a visitor, and none outside it', async () => {
+    expect(spectatorSocket('hub', null)).toBe(true);
+    expect(spectatorSocket('hub', 'spectator')).toBe(true);
+    expect(spectatorSocket('hub', 'Visitor')).toBe(true);
+    expect(spectatorSocket('arcade', 'visitor')).toBe(false);
+    expect(spectatorSocket('lobby', null)).toBe(false);
+    expect(spectatorSocket('homes', 'spectator')).toBe(false);
+    // Through fetch(), as the Worker sends a socket on.
+    vi.stubGlobal(
+      'WebSocketPair',
+      class {
+        0 = new FakeSocket();
+        1 = new FakeSocket();
+      },
+    );
+    const obj = roomObject();
+    const open = async (room: string, kind?: string) => {
+      const headers: Record<string, string> = { Upgrade: 'websocket', 'X-Room': room, 'X-Visitor-Id': 'v_fetchAAAA', 'X-Visitor-Ip': `192.0.2.${state.sockets.length + 10}` };
+      if (kind) headers['X-Visitor-Kind'] = kind;
+      // Node will not make a 101 answer; the socket and its attachment are made before it.
+      await obj.fetch(new Request('https://room/ws', { headers })).catch(() => undefined);
+      return (state.sockets.at(-1)!.ws.deserializeAttachment() as { spec?: true }).spec;
+    };
+    expect(await open('hub')).toBe(true);
+    expect(await open('hub', 'spectator')).toBe(true);
+    expect(await open('hub', 'visitor')).toBeUndefined();
+    expect(await open('lobby')).toBeUndefined();
+    vi.unstubAllGlobals();
+    vi.stubGlobal('WebSocketRequestResponsePair', class {});
+    vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
+  });
+
+  it('welcomes a spectator as one, shows it to the others, and counts its arrival for no quest', async () => {
+    const obj = roomObject();
+    const holder = await join(obj, 'hub', 'v_holder', OWNER);
+    expect(holder.last('welcome')).not.toHaveProperty('spectator');
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    expect(ws.last('welcome')).toMatchObject({ spectator: true });
+    expect(holder.last('enter')).toMatchObject({ owl: { id: SPEC_ID } });
+    logged(cap.lines, 'room_join_ok', { room: 'hub', spectator: true, owls: 2 });
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+  });
+
+  it('turns a spectator away at its share of the room, and still lets a ticket holder in', async () => {
+    const obj = roomObject({ hub: 4 }, { SPECTATOR_SHARE: '0.5' });
+    await join(obj, 'hub', 'v_a', OWNER);
+    await join(obj, 'hub', 'v_b', GUEST);
+    const ws = await spectator(obj, 'hub');
+    expect(ws.last('full')).toEqual({ t: 'full', room: 'hub', cap: 4, spectators: true });
+    expect(ws.closed?.code).toBe(CLOSE.ROOM_FULL);
+    logged(cap.lines, 'room_join_refused', { room: 'hub', reason: 'spectators', cap: 4, limit: 2 });
+    const c = await join(obj, 'hub', 'v_c', OTHER);
+    expect(c.last('welcome')).toBeDefined();
+  });
+
+  it('refuses it the quests, the NPC owls, the quest items and today’s tasks, and tells it once', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    await send(obj, ws, { t: 'quests', r: 1 });
+    await send(obj, ws, { t: 'talk', npc: 'elder', r: 2 });
+    await send(obj, ws, { t: 'accept', quest: 'q1', r: 3 });
+    await send(obj, ws, { t: 'use', target: 'lamp', r: 4 });
+    await send(obj, ws, { t: 'gather', quest: 'q1', n: 0, r: 5 });
+    await send(obj, ws, { t: 'act', a: 'tasks', r: 6 });
+    await settle();
+    expect(ws.of('refused')).toEqual([1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })));
+    expect(act(ws, 6)).toEqual({ t: 'act', r: 6, a: 'tasks', ok: false, reason: 'spectator' });
+    logged(cap.lines, 'spectator_refused', { component: 'room.play', room: 'hub', frame: 'quests' });
+    expect(eventsOf(cap.lines).filter((e) => e === 'spectator_refused')).toHaveLength(1);
+    expect(collections.questCalls).toEqual([]);
+  });
+
+  it('keeps it a spectator through the object’s sleep', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    const woken = roomObject();
+    await send(woken, ws, { t: 'quests', r: 1 });
+    await settle();
+    expect(ws.last('refused')).toEqual({ t: 'refused', r: 1, reason: 'spectator' });
+  });
+
+  it('shows its emotes and counts them for no quest, and shows no Realm Vote pledge on it', async () => {
+    (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['hoot', 'flap'];
+    const obj = roomObject();
+    const holder = connect('hub', 'v_holder', OWNER);
+    await send(obj, holder, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: { ...LOOK, pledge: 'grove' } });
+    const ws = await spectator(obj, 'hub', { ...LOOK, pledge: 'market' });
+    await settle();
+    expect(holder.last('enter')?.owl.look).not.toHaveProperty('pledge');
+    // A ticket holder's pledge shows as ever.
+    expect(ws.last('welcome')!.owls.find((o) => o.id === 'v_holder')?.look.pledge).toBe('grove');
+    await send(obj, ws, { t: 'emote', e: 'hoot' });
+    await settle();
+    expect(holder.last('emote')).toEqual({ t: 'emote', id: SPEC_ID, e: 'hoot' });
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+  });
+
+  it('plays the arcade’s games as practice runs: nothing kept on the wall, nothing paid', async () => {
+    const obj = roomObject();
+    const other = await join(obj, 'arcade', 'v_other', OWNER);
+    const ws = await spectator(obj, 'arcade');
+    await settle();
+    const at = ws.last('welcome')!.you.pos;
+    await walk(obj, ws, { x: at.x, y: 850 }, { x: 1900, y: 820 });
+    await send(obj, ws, { t: 'act', a: 'run', g: 'flight', r: 1 });
+    await settle();
+    const started = act(ws, 1) as { seed: number };
+    expect(started).toMatchObject({ a: 'run', ok: true, practice: true });
+    clock += leastRunMs({ game: 'flight', score: 12 }) + 100;
+    await send(obj, ws, { t: 'act', a: 'record', g: 'flight', s: 12, k: started.seed, r: 2 });
+    await send(obj, ws, { t: 'act', a: 'score', g: 'flight', s: 12, k: started.seed, r: 3 });
+    await settle();
+    expect(act(ws, 2)).toMatchObject({ ok: true, practice: true, mine: {} });
+    expect(act(ws, 3)).toMatchObject({ ok: true, paid: { score: 12, added: 0, best: false, top: false, practice: true } });
+    // The other owl saw no wall change.
+    expect(other.of('wall')).toHaveLength(1);
+    expect(collections.arcade.walls(clock).every((w) => w.top.length === 0)).toBe(true);
+    expect(collections.book.feathers(SPEC, clock)).toBe(0);
+  });
+
+  it('climbs the stained glass as practice: the bands answer, and bank nothing', async () => {
+    const obj = roomObject();
+    await obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: { open: ['glass'], portal: true, night: 'easy' } }) }));
+    const ws = await spectator(obj, 'glass');
+    await walk(obj, ws, { x: 1200, y: 850 }, { x: 2885, y: 745 });
+    await send(obj, ws, { t: 'act', a: 'climb', r: 1 });
+    await settle();
+    const started = act(ws, 1) as { seed: number; startedAt: number };
+    expect(started).toMatchObject({ a: 'climb', ok: true, practice: true });
+    clock = started.startedAt + leastClimbMs(NIGHTS['easy']!, 2) + 250;
+    await send(obj, ws, { t: 'act', a: 'ascent', k: started.seed, band: 2, r: 2 });
+    await settle();
+    expect(act(ws, 2)).toMatchObject({ a: 'ascent', ok: true, banked: 2, added: 0, practice: true });
+    expect(collections.book.feathers(SPEC, clock)).toBe(0);
+  });
+
+  it('fishes for nothing', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'grove');
+    await walk(obj, ws, { x: 1920, y: 800 }, { x: 1880, y: 750 }, { x: 1200, y: 730 }, { x: 760, y: 672 }, { x: 965, y: 630 });
+    await send(obj, ws, { t: 'act', a: 'cast', r: 1 });
+    const cast = act(ws, 1) as { ok: boolean; biteAt: number };
+    expect(cast).toMatchObject({ ok: true });
+    clock = cast.biteAt;
+    await send(obj, ws, { t: 'act', a: 'reel', r: 2 });
+    await settle();
+    expect(act(ws, 2)).toMatchObject({ ok: true, outcome: 'caught', feathers: 0, total: 0, practice: true });
+  });
+
+  it('copies the robot owl’s tunes for nothing', async () => {
+    (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['hoot', 'flap'];
+    const obj = roomObject();
+    const ws = await spectator(obj, 'market');
+    await walk(obj, ws, { x: 1480, y: 760 });
+    await send(obj, ws, { t: 'act', a: 'copy', r: 1 });
+    await settle();
+    const game = act(ws, 1) as { ok: boolean; tune: string[]; listenUntil: number };
+    expect(game).toMatchObject({ ok: true });
+    clock = game.listenUntil + 1;
+    for (const [i, e] of game.tune.entries()) {
+      await send(obj, ws, { t: 'act', a: 'note', e, r: 10 + i });
+      clock += 500;
+    }
+    await settle();
+    expect(act(ws, 10 + game.tune.length - 1)).toMatchObject({ ok: true, step: 'tune', feathers: 0, total: 0, practice: true });
+  });
+
+  it('helps light the beam, so everyone’s share counts it, and is paid nothing itself', async () => {
+    const lit: LanternState = { lit: Object.fromEntries(['lantern-2', 'lantern-3', 'lantern-4', 'lantern-5', 'lantern-6'].map((id) => [id, clock + 600_000])), glowUntil: 0, helpers: {} };
+    state.storage.get = async (key: string) => (key === 'lanterns' ? structuredClone(lit) : undefined);
+    const obj = roomObject();
+    const holder = await join(obj, 'hub', 'v_holder', OWNER);
+    const ws = await spectator(obj, 'hub');
+    await walk(obj, ws, floor(ws), { x: 752, y: 760 });
+    await walk(obj, holder, floor(holder), { x: 1242, y: 760 });
+    await send(obj, ws, { t: 'act', a: 'light', r: 1 });
+    await settle();
+    expect(act(ws, 1)).toMatchObject({ ok: true, id: 'lantern-1' });
+    await send(obj, holder, { t: 'act', a: 'light', r: 1 });
+    await settle();
+    expect(act(holder, 1)).toMatchObject({ ok: true, id: 'lantern-7' });
+    // Two helpers: four feathers and one for the other.
+    expect(holder.last('paid')).toEqual({ t: 'paid', what: 'beam', feathers: 5, total: 5 });
+    expect(ws.last('paid')).toEqual({ t: 'paid', what: 'beam', feathers: 0, total: 0, practice: true });
+  });
+
+  it('answers the stage quiz with everyone, and is paid nothing for it', async () => {
+    const obj = roomObject();
+    const holder = await join(obj, 'hub', 'v_holder', OWNER);
+    const ws = await spectator(obj, 'hub');
+    const round = quizRound(quizRoundAt(clock).n + 2);
+    const zone = QUIZ_ZONES[round.right];
+    await walk(obj, holder, floor(holder), { x: zone.x + 60, y: 810 });
+    await walk(obj, ws, floor(ws), { x: zone.x + 140, y: 810 });
+    clock = round.revealAt + 1;
+    await obj.alarm();
+    await settle();
+    expect(holder.last('quiz')).toMatchObject({ n: round.n, right: round.right });
+    expect(new Set(holder.last('quiz')!.winners)).toEqual(new Set(['v_holder', SPEC_ID]));
+    expect(holder.last('paid')).toMatchObject({ what: 'quiz' });
+    expect(holder.last('paid')).not.toHaveProperty('practice');
+    expect(holder.last('paid')!.feathers).toBeGreaterThan(0);
+    expect(ws.last('paid')).toEqual({ t: 'paid', what: 'quiz', feathers: 0, total: 0, practice: true });
+  });
+
+  it('becomes a full visitor in place with its own ticket’s pass, made since its socket opened, and no other', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    const key = signingSecret({});
+    const now = Math.floor(clock / 1000);
+    const pass = (p: Partial<{ id: string; cid: string; adm: boolean; iat: number }>) => mintPass(key, { id: SPEC_ID, cid: SPEC, adm: true, iat: now, exp: now + 3600, ...p });
+    const refusals: Array<[string, string]> = [
+      [await mintPass('another-key-0123456789abcdef', { id: SPEC_ID, cid: SPEC, adm: true, iat: now, exp: now + 3600 }), 'pass'],
+      [await pass({ adm: false }), 'not-admitted'],
+      [await pass({ id: 'v_otherAAAA' }), 'not-this-owl'],
+      [await pass({ cid: OTHER }), 'not-this-owl'],
+      [await pass({ iat: now - 60 }), 'before-socket'],
+    ];
+    for (const [i, [token, reason]] of refusals.entries()) {
+      await send(obj, ws, { t: 'admit', pass: token, r: i + 1 });
+      expect(await answered(ws, i + 1)).toEqual({ t: 'admitted', r: i + 1, ok: false, reason: 'pass' });
+      logged(cap.lines, 'spectator_refused', { component: 'room.play', frame: 'admit', reason });
+    }
+    await send(obj, ws, { t: 'quests', r: 9 });
+    await settle();
+    expect(ws.last('refused')).toMatchObject({ r: 9, reason: 'spectator' });
+    // Its ticket went through: from here on it is a visitor, and its arrival counts.
+    collections.spectators.delete(SPEC);
+    await send(obj, ws, { t: 'admit', pass: await pass({}), r: 10 });
+    expect(await answered(ws, 10)).toEqual({ t: 'admitted', r: 10, ok: true });
+    expect(ws.deserializeAttachment()).not.toHaveProperty('spec');
+    logged(cap.lines, 'spectator_admitted', { component: 'room.join', room: 'hub' });
+    expect(collections.questCalls).toEqual([`visit:${SPEC}`]);
+    await send(obj, ws, { t: 'act', a: 'tasks', r: 11 });
+    await settle();
+    expect(act(ws, 11)).toMatchObject({ ok: true });
+    // A visitor's admit changes nothing, and is answered all the same.
+    const visitor = await join(obj, 'hub', 'v_holder', OWNER);
+    await send(obj, visitor, { t: 'admit', pass: await pass({}), r: 1 });
+    expect(await answered(visitor, 1)).toEqual({ t: 'admitted', r: 1, ok: true });
   });
 });

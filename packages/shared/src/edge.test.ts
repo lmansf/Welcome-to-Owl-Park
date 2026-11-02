@@ -22,8 +22,8 @@ describe('protocol v10, the climb', () => {
 });
 
 describe('protocol v9, the arcade', () => {
-  it('is version 14 (owls standing on perches, OP-084), and a page speaking the version before is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(14);
+  it('is version 15 (spectators, OP-191), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(15);
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
@@ -183,5 +183,24 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 6401, y: 2 }, seq: 1 }))).toBeNull(); // past the biggest room
     expect(parseClientFrame(JSON.stringify({ t: 'say', text: 'hi' }))).toBeNull();
     expect(parseClientFrame('x'.repeat(2000))).toBeNull();
+  });
+});
+
+describe('protocol v15, spectators (OP-191)', () => {
+  const PASS = `${'a'.repeat(120)}.${'B'.repeat(43)}`;
+
+  it('takes an admit with a pass shaped as the Worker signs one, and nothing else', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'admit', pass: PASS, r: 3 }))).toEqual({ t: 'admit', pass: PASS, r: 3 });
+    for (const pass of [undefined, 7, '', 'no-dot', `${PASS}.x`, `${'a'.repeat(120)}.${'B'.repeat(42)}`, `${'a'.repeat(467)}.${'B'.repeat(43)}`, `a b.${'B'.repeat(43)}`]) {
+      expect(parseClientFrame(JSON.stringify({ t: 'admit', pass, r: 3 })), String(pass)).toBeNull();
+    }
+    expect(parseClientFrame(JSON.stringify({ t: 'admit', pass: PASS }))).toBeNull();
+    // The longest pass a frame may carry still fits one frame.
+    expect(parseClientFrame(JSON.stringify({ t: 'admit', pass: `${'a'.repeat(466)}.${'B'.repeat(43)}`, r: 1e9 }))).not.toBeNull();
+  });
+
+  it('reads the room’s answer to an admit, a spectator’s welcome and the full room it is turned from', () => {
+    expect(parseServerFrame(JSON.stringify({ t: 'admitted', r: 3, ok: false, reason: 'pass' }))).toEqual({ t: 'admitted', r: 3, ok: false, reason: 'pass' });
+    expect(parseServerFrame(JSON.stringify({ t: 'full', room: 'hub', cap: 80, spectators: true }))).toEqual({ t: 'full', room: 'hub', cap: 80, spectators: true });
   });
 });
