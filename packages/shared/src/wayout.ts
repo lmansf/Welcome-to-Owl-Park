@@ -8,7 +8,7 @@
  * Leaving changes nothing on a ticket: a day ticket's hours keep running from its first scan, and
  * coming back in is the gate's quick scan (C35).
  */
-import { STREET_ROOM, isNestRoom } from './homes';
+import { STREET_ROOM, TREE_STREET_ROOM, isNestRoom, isStreetRoom } from './homes';
 
 /** The front gate, outside the turnstiles: an owl that leaves the park is back here (every visit starts in its own nest, OP-105). */
 export const LOBBY_ROOM = 'lobby';
@@ -26,9 +26,9 @@ export const WAY_OUT_WORDS = {
   no: 'Stay',
 } as const;
 
-/** Rooms outside the turnstiles, free to every pass: the lobby, the street of nests and the nests. */
+/** Rooms outside the turnstiles, free to every pass: the lobby, the streets of nests (the tree's too) and the nests. */
 export function isFreeRoom(roomId: string): boolean {
-  return roomId === LOBBY_ROOM || roomId === STREET_ROOM || isNestRoom(roomId);
+  return roomId === LOBBY_ROOM || isStreetRoom(roomId) || isNestRoom(roomId);
 }
 
 /** Inside the park, past the turnstiles: where "Leave the park" is offered. */
@@ -47,5 +47,7 @@ export function parkwardDoor(roomId: string): string | null {
   if (isNestRoom(roomId)) return 'to-street';
   if (roomId === STREET_ROOM) return 'to-lobby';
   if (roomId === LOBBY_ROOM) return 'gate';
+  // The tree's street ends at its own front gate (OP-158).
+  if (roomId === TREE_STREET_ROOM) return 'gate';
   return null;
 }

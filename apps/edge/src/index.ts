@@ -496,7 +496,8 @@ const park = {
       // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
       const gate = await gateOf(env);
       // The entries setting (OP-156): an owl the keepers send into the tree starts there, if the front
-      // gate would let it into the tree's arrival at all (a guest pass is not, while the park takes tickets).
+      // gate would let it into the tree's arrival at all. The arrival is the tree's street, outside its own
+      // front gate (a free room), so a guest pass goes in and buys a Day Ticket at that gate.
       const map = entryMap(cid, treeShare((await overflowOf(env)).realms)) === 2 && mayEnter(gate, payload, TREE_ARRIVAL.room) ? 2 : 1;
       return Response.json({ pass, exp, collector, gate: gate.mode, adm: payload.adm, ...(map === 2 ? { map } : {}), ...(account ? { account } : {}) }, { headers: CORS });
     }

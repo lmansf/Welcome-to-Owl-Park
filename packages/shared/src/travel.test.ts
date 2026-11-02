@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ROOMS } from '../rooms';
 import { CLOSE } from './edge';
 import { STREET_ROOM } from './homes';
-import { GATE_ARRIVAL, TRAVEL_LANDINGS, TRAVEL_WORDS, canTravel, gateAfter, needsGate, parseTravelState, throughGate, travelAfter, visitedPlace } from './travel';
+import { GATE_ARRIVAL, TREE_GATE_ARRIVAL, TRAVEL_LANDINGS, TRAVEL_WORDS, canTravel, gateAfter, needsGate, parseTravelState, throughGate, travelAfter, visitedPlace } from './travel';
 import { LEFT_PARK_SPAWN, LOBBY_ROOM } from './wayout';
 
 describe('travel from the map (OP-130)', () => {
@@ -12,6 +12,11 @@ describe('travel from the map (OP-130)', () => {
     expect(throughGate('hub', 'default')).toBe(true);
     for (const spawn of ['from-grove', 'from-market', 'from-glass', undefined]) expect(throughGate('hub', spawn), String(spawn)).toBe(false);
     expect(throughGate('grove', 'default')).toBe(false);
+    // The tree's front gate (OP-128) lands the owl under the arch, on level 5's canopy.
+    const treeGate = ROOMS['l5-street']!.doors.find((d) => d.id === 'gate')!;
+    expect(treeGate.to).toEqual(TREE_GATE_ARRIVAL);
+    expect(throughGate('l5', 'default')).toBe(true);
+    for (const spawn of ['from-l4', 'east']) expect(throughGate('l5', spawn), spawn).toBe(false);
   });
 
   it('keeps the gate walked through inside the park, and forgets it outside', () => {

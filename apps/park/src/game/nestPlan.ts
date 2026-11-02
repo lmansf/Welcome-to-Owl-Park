@@ -1,4 +1,4 @@
-import { FURNITURE, NEST_SPOTS, STREET_DOORS, STREET_ROOM, getNestSpot, isNestId, type Furniture, type NestLayout, type NestLook, type NestSpot, type NestSpotId } from '@owl-park/shared';
+import { FURNITURE, NEST_SPOTS, STREET_DOORS, getNestSpot, isStreetRoom, isNestId, type Furniture, type NestLayout, type NestLook, type NestSpot, type NestSpotId } from '@owl-park/shared';
 
 /**
  * The nests' plain rules on this side, kept apart from Phaser so they can be tested: how furniture
@@ -75,7 +75,7 @@ const FROM_NEST = /^from-nest-([0-9])$/;
 
 /** The street spawn an owl comes back out at: in front of the door it went in by, else in front of its own. */
 export function streetSpawnBack(cameFrom: { room: string; spawn?: string | undefined } | undefined): string {
-  const m = cameFrom?.room === STREET_ROOM ? FROM_NEST.exec(cameFrom.spawn ?? '') : null;
+  const m = cameFrom && isStreetRoom(cameFrom.room) ? FROM_NEST.exec(cameFrom.spawn ?? '') : null;
   return m && Number(m[1]) < STREET_DOORS ? `from-nest-${m[1]}` : 'from-nest-0';
 }
 

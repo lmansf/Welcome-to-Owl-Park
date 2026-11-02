@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ROOMS, roomFor } from '../rooms';
+import { ROOMS, TREE_ARRIVAL, roomFor } from '../rooms';
+import { doorTarget } from './doorways';
 import { isWalkable, pointInRect, rectCenter } from './geometry';
-import { STREET_ROOM } from './homes';
+import { STREET_ROOM, TREE_STREET_ROOM, isStreetRoom, streetOf } from './homes';
 import { resolveTarget } from './resolveTarget';
 import { findSpawn } from './room';
 import { LEFT_PARK_SPAWN, LOBBY_ROOM, WAY_OUT_DOOR, WAY_OUT_WORDS, insidePark, isFreeRoom, parkwardDoor } from './wayout';
@@ -70,5 +71,52 @@ describe('the way to the park (OP-105)', () => {
 
   it('is no door inside the park', () => {
     for (const room of ['hub', 'grove', 'market', 'arcade']) expect(parkwardDoor(room), room).toBeNull();
+  });
+});
+
+describe('the tree\'s street, outside its front gate (OP-128)', () => {
+  it('is a free room like the nests\' street, and level 5\'s canopy is inside the park', () => {
+    expect(isStreetRoom(TREE_STREET_ROOM)).toBe(true);
+    expect(isStreetRoom(STREET_ROOM)).toBe(true);
+    for (const room of ['l5', 'l4', 'l1', LOBBY_ROOM, undefined]) expect(isStreetRoom(room), String(room)).toBe(false);
+    expect(streetOf(1)).toBe(STREET_ROOM);
+    expect(streetOf(2)).toBe(TREE_STREET_ROOM);
+    expect(isFreeRoom(TREE_STREET_ROOM)).toBe(true);
+    expect(insidePark(TREE_STREET_ROOM)).toBe(false);
+    for (const room of ['l5', 'l4', 'l3', 'l2', 'l1']) expect(insidePark(room), room).toBe(true);
+  });
+
+  it('is where an owl of the tree comes out of its nest, in front of its own door, and it walks along the street through the front gate', () => {
+    expect(TREE_ARRIVAL).toEqual({ room: TREE_STREET_ROOM, spawn: 'from-nest-0' });
+    const nestDoor = roomFor('nest-k3x9q2ab')!.doors.find((d) => d.id === parkwardDoor('nest-k3x9q2ab'))!;
+    expect(doorTarget(nestDoor, 2)).toEqual(TREE_ARRIVAL);
+    const street = roomFor(TREE_STREET_ROOM)!;
+    const gate = street.doors.find((d) => d.id === parkwardDoor(TREE_STREET_ROOM))!;
+    expect(gate.id).toBe('gate');
+    const end = resolveTarget(findSpawn(street, TREE_ARRIVAL.spawn), rectCenter(gate.rect), street.walkable);
+    expect(pointInRect(end, gate.rect)).toBe(true);
+    expect(gate.to).toEqual({ room: 'l5', spawn: 'default' });
+  });
+
+  it('has six nest doors, each with the spawn in front of it, and the seventh painted door hatching soon', () => {
+    const street = roomFor(TREE_STREET_ROOM)!;
+    for (let n = 0; n < 6; n++) {
+      const door = street.doors.find((d) => d.id === `nest-door-${n}`)!;
+      expect(door, String(n)).toBeDefined();
+      const spawn = street.spawns[`from-nest-${n}`]!;
+      expect(isWalkable(spawn, street.walkable), String(n)).toBe(true);
+      expect(spawn.x).toBeGreaterThan(door.rect.x);
+      expect(spawn.x).toBeLessThan(door.rect.x + door.rect.w);
+    }
+    expect(street.doors.find((d) => d.id === 'spare-nest')?.closedSign).toBe('Hatching Soon');
+  });
+
+  it('puts an owl that leaves the tree, or comes back from checkout, before the front gate', () => {
+    const street = roomFor(TREE_STREET_ROOM)!;
+    const gate = street.doors.find((d) => d.id === 'gate')!;
+    const outside = street.spawns[LEFT_PARK_SPAWN]!;
+    expect(isWalkable(outside, street.walkable)).toBe(true);
+    for (const door of street.doors) expect(pointInRect(outside, door.rect), door.id).toBe(false);
+    expect(outside.x).toBeLessThan(gate.rect.x);
   });
 });

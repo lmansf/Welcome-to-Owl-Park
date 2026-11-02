@@ -1332,11 +1332,30 @@ export const ROOMS: Record<string, RoomDef> = {
       west: { x: 640, y: TREE_GROUND },
       // Back out of the gate from the canopy, in front of the turnstiles.
       'from-canopy': { x: 3 * ROOM_W - 220, y: TREE_GROUND },
+      // Out of the park by the Menu, or back from checkout in this page: before the gate, as the lobby's 'from-hub' is (LEFT_PARK_SPAWN).
+      'from-hub': { x: 3 * ROOM_W - 220, y: TREE_GROUND },
+      // Out of a nest, in front of its door (door 0 the owl's own, nearest the gate).
+      'from-nest-0': { x: 3010, y: TREE_GROUND },
+      'from-nest-1': { x: 2695, y: TREE_GROUND },
+      'from-nest-2': { x: 2150, y: TREE_GROUND },
+      'from-nest-3': { x: 1855, y: TREE_GROUND },
+      'from-nest-4': { x: 1275, y: TREE_GROUND },
+      'from-nest-5': { x: 1050, y: TREE_GROUND },
     },
     doors: [
       // The tree's front gate, at the street's east end past the trunk: its turnstiles let an owl with a
       // ticket on into the canopy, under the entrance arch, and sell a Day Ticket to one without (OP-180).
       { id: 'gate', rect: { x: 3 * ROOM_W - 100, y: 750, w: 80, h: 40 }, to: { room: 'l5', spawn: 'default' }, top: 0, markAt: { x: 3 * ROOM_W - 60, y: 600 } },
+      // The nest doors along the boardwalk, as today's street's (STREET_DOORS): the owl's own nest behind
+      // door 0, nearest the gate, and up to five other owls' open nests west of it. Each door's flag hangs
+      // over it. The westmost painted door is a nest still to hatch.
+      { id: 'nest-door-0', rect: { x: 2960, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 3010, y: 590 } },
+      { id: 'nest-door-1', rect: { x: 2645, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 2695, y: 590 } },
+      { id: 'nest-door-2', rect: { x: 2100, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 2150, y: 590 } },
+      { id: 'nest-door-3', rect: { x: 1805, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 1855, y: 590 } },
+      { id: 'nest-door-4', rect: { x: 1225, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 1275, y: 590 } },
+      { id: 'nest-door-5', rect: { x: 1000, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 1050, y: 590 } },
+      { id: 'spare-nest', rect: { x: 770, y: 750, w: 100, h: 40 }, closedSign: 'Hatching Soon', top: 0, marker: { x: 820, y: TREE_GROUND } },
       // The street's far end, on the bough's highest perch: a doorway for the places beyond Owl Park, shut
       // until one exists (no destination yet; the owner's steer, OP-158).
       { id: 'closed-beyond', rect: { x: 8, y: 750, w: 60, h: 40 }, closedSign: 'Hatching Soon', top: 264, marker: { x: 40, y: TREE_GROUND - 264 } },
@@ -1398,10 +1417,10 @@ export const ROOMS: Record<string, RoomDef> = {
 
 /**
  * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer
- * (OP-156's entries setting): the lobby ring at the trunk's foot, until the canopy's street (level 5,
- * OP-158) is built and takes its place.
+ * (OP-156's entries setting): the canopy's street of nests (level 5, OP-158), in front of its own door,
+ * outside the tree's front gate.
  */
-export const TREE_ARRIVAL = { room: 'l1', spawn: 'default' } as const;
+export const TREE_ARRIVAL = { room: 'l5-street', spawn: 'from-nest-0' } as const;
 
 /**
  * The nest every owl has: a cosy round room inside a trunk, one screen. It is a template rather than
