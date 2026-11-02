@@ -2402,3 +2402,95 @@ const TREE_L0_TOP_JOBS = TREE_L0_TOP_KEYS.map((key, i) => ({
 Object.assign(PROMPTS, TREE_L0_TOP_PROMPTS);
 HELPER_KEYS.push(...TREE_L0_TOP_KEYS);
 JOBS.push(...TREE_L0_TOP_JOBS);
+
+// ---- Level 0's arcade cave (OP-163): three screens, its own room `l0c` (cap 40, as today's hall) ----
+// The arcade's three-screen hall rebuilt as a cave off the stair foot's cavern: a bay a screen, each
+// with a bare alcove at the back of the floor where the game sets a cabinet, the score wall's bare panel
+// on the middle screen, and chrome plates and neon tubes threaded through the roots. The cave's mouth is
+// at the west edge of the first screen (a doorway the game marks); the east end closes. The game draws
+// the cabinets, the score wall and the Hatching Soon slots, so the paintings leave their places bare.
+const TREE_CAVE_NEON = `NEON (only here, under the tree): riveted chrome plates bolted to the roots, conduit and glowing neon tubes in signal magenta #FF2AA1 and circuit cyan #00E5FF threaded along the roots and the floor's back edge, their light caught on the wet stone; the rest keeps the cavern's bark, earth, cold blue-white light from above and warm gold sap-light.`;
+const TREE_CAVE_FLOOR = `The walking floor is one level path of flat stone slabs among the roots, a flat strip seen side-on with a broad, clean, flat top edge six sevenths of the way down the frame, its slabs wet and catching thin streaks of magenta and cyan light; below it there is only a narrow band, about a seventh of the frame, of dark earth and root ends, down to the bottom edge. Where the cavern's open depth would show behind the roots and above the floor, the frame is flat pure magenta #FF00FF, and the roots, the walls and the floor are painted fully and opaquely against it.`;
+const TREE_CAVE_ALCOVE = (where) => `${where}, at the back of the floor behind its unbroken front edge, a tall bare alcove between two great roots, about two and a half visitors' heights tall and one and a half wide, framed in a riveted chrome arch traced by a thin neon tube, its inside plain, dark and empty, with no cabinet, no screen, no sign and no glow inside it (the game sets a cabinet there later), and the floor in front of it plain and open`;
+const TREE_L0C_SCREENS = {
+  c0: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, with dark hollows between them; far away among the roots a few thin lines of magenta and cyan neon glow faintly, and a few small knotholes glow warm gold.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and the right third, reaching down to at most the middle of the frame, with fine root threads hanging from them and a thin line of faint cyan neon wound round one; and a few low rounded root humps rising from the bottom edge to a fifth of the way up at the sides; the middle third stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): a cave off a vast root cavern under a colossal ancient tree at night, made into a games hall, seen strictly from the side with no perspective tilt. ${TREE_CAVE_FLOOR} It runs across the whole width of the frame. THE MOUTH: at the left edge, the floor leaves the frame at exactly its height through a tall rounded opening between two great roots, about two and a half visitors' heights tall, its far side plain, dark and bare (the way back to the cavern, which the game marks later), with nothing standing on the floor within a tenth of the frame of the left edge. THE BAY: ${TREE_CAVE_ALCOVE('in the middle of the frame')}. THE EAST: at the right edge the floor leaves the frame at exactly its height as a plain run of stone slabs between roots, with nothing standing on it within a tenth of the frame of the right edge. Great roots arch over everything, the cave's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; ${TREE_CAVE_NEON} A visitor added later by the game stands about one sixth of the frame's height tall; the alcove and the openings are sized for it.`),
+    fg: treeCaveOverlay('a games hall in a cave of roots under a colossal tree, with a flat stone floor', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, one of them reaching to about the middle of the frame, with fine root threads hanging from them and a short run of chrome conduit with a glowing cyan neon tube bolted along one; at the far left and far right edges, a thick dark root runs from the top of the frame down past the floor, each no wider than an eighth of the frame.`),
+  },
+  c1: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, the hollows between them lit faintly from within by magenta and cyan neon far away, and a few small knotholes glowing warm gold.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and the right third, reaching down to at most the middle of the frame, with fine root threads hanging from them and thin lines of faint magenta neon wound round two of them; the middle third stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): the middle of a games hall in a cave of roots under a colossal ancient tree at night, seen strictly from the side with no perspective tilt. ${TREE_CAVE_FLOOR} It arrives from the left edge at exactly that height, crosses the whole frame at that one height as one straight strip of slabs, and leaves the right edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE SCORE WALL: in the middle of the frame, high on the cave's back wall above the floor, between the roots, one large blank panel: a wide, dark, rectangular panel in a riveted chrome frame traced by a thin cyan neon tube, about two fifths of the frame wide and a visitor's height tall, its bottom edge about two visitors' heights above the floor, its face plain and empty (the game writes on it later); the floor under it is plain and open. THE BAY: ${TREE_CAVE_ALCOVE('right of the middle, about three quarters of the way across')}. Great roots arch over everything, the cave's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; ${TREE_CAVE_NEON} A visitor added later by the game stands about one sixth of the frame's height tall; the alcove and the panel are sized for it.`),
+    fg: treeCaveOverlay('the middle of a games hall in a cave of roots under a colossal tree, with a flat stone floor', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, the largest in the left third reaching to about the middle of the frame, with fine root threads hanging from them and a short run of chrome conduit with a glowing magenta neon tube bolted along one; the whole middle third of the top of the frame stays empty magenta, because a panel hangs there in the scene behind; at the far right edge, a thick dark root runs from the top of the frame down past the floor, no wider than an eighth of the frame.`),
+  },
+  c2: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, the hollows between them darkest toward the right, where the cave ends in black depth; a few thin lines of magenta and cyan neon glow faintly among the roots on the left, and a few small knotholes glow warm gold.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and a dense curtain of them in the right third, reaching down to at most the middle of the frame, with fine root threads hanging from them and a thin line of faint cyan neon wound round one on the left; the middle third stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): the far end of a games hall in a cave of roots under a colossal ancient tree at night, seen strictly from the side with no perspective tilt. ${TREE_CAVE_FLOOR} It arrives from the left edge at exactly that height as a plain run of stone slabs with nothing standing on it within a tenth of the frame of the left edge, and runs to the right to about four fifths of the way across, where it ends against a wall of great roots grown together, so nothing leads on to the right. THE BAY: ${TREE_CAVE_ALCOVE('left of the middle, about a third of the way across')}. THE SLOTS: right of the middle, at the back of the floor, two smaller empty alcoves side by side between the roots, each about two visitors' heights tall and a visitor wide, framed in plain riveted chrome with no neon, their insides dark, empty and unlit (bays that open later). Great roots arch over everything, the cave's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; ${TREE_CAVE_NEON} A visitor added later by the game stands about one sixth of the frame's height tall; the alcoves are sized for it.`),
+    fg: treeCaveOverlay('the far end of a games hall in a cave of roots under a colossal tree, with a flat stone floor', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, the largest at the right reaching to about the middle of the frame, with fine root threads hanging from them and a short run of chrome conduit with a glowing cyan neon tube bolted along one; at the far left edge, a thick dark root runs from the top of the frame down past the floor, no wider than an eighth of the frame; the right edge stays open.`),
+  },
+};
+const TREE_L0C_PROMPTS = treeLevelPrompts(0, TREE_L0C_SCREENS);
+export const TREE_L0C_KEYS = Object.keys(TREE_L0C_PROMPTS);
+const TREE_L0C_JOBS = treeLevelJobs(0, { c0: 4701, c1: 4705, c2: 4709 }, TREE_L0C_PROMPTS);
+Object.assign(PROMPTS, TREE_L0C_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L0C_JOBS);
+
+// ---- The arcade cave's joins, maps and top strips (OP-163), made as the levels above were ----
+// The three picked scenes, moved onto the ground line, side by side west to east make a row of
+// 6144x1152 held under `tree-l0-c0-back`, with joins at x 2048 and 4096.
+const TREE_L0C_SEAM_PROMPTS = {
+  'tree-l0-seam-c0-c1': treeSeam(
+    `a level floor of wet flat stone slabs among the roots of a cave, catching streaks of magenta and cyan neon, a great gnarled root rising at the left edge with a lantern of plain glass, chrome conduit and a neon tube running along the back of the floor, and the cave's open depth as flat magenta between the roots`,
+    `the same floor of wet stone slabs running on, a great gnarled root rising on the right with chrome plates and neon conduit bolted along it, and the cave's open depth as flat magenta between the roots`,
+    `the floor of wet stone slabs runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; the neon conduit along the back of the floor runs on from the left into the plates on the right as one line of chrome and light; the great roots on either side arch toward each other over the middle and join into the cave's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle.`,
+  ),
+  'tree-l0-seam-c1-c2': treeSeam(
+    `a level floor of wet flat stone slabs among the roots of a cave, catching streaks of magenta and cyan neon, a tall bare alcove framed in riveted chrome at the back of the floor near the left edge, and the cave's open depth as flat magenta between the roots`,
+    `the same floor of wet stone slabs running on, great gnarled roots rising on the right with chrome plates and neon conduit bolted along them, and the cave's open depth as flat magenta between the roots`,
+    `the floor of wet stone slabs runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; a thin neon tube runs along the back of the floor from the alcove's frame on the left to the plates on the right; the great roots on either side arch toward each other over the middle and join into the cave's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle, and the alcove stays exactly where it is.`,
+  ),
+};
+export const TREE_L0C_SEAM_KEYS = Object.keys(TREE_L0C_SEAM_PROMPTS);
+JOBS.push(...TREE_L0C_SEAM_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: key.replace('tree-l0-seam-', '').split('-').map((s) => `tree-l0-${s}-back`), realm: 'tree', optional: true,
+  size: '1152x1152', seed: 4781 + 10 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the cave's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_SEAM_PROMPTS[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_SEAM_KEYS);
+
+const TREE_L0C_KEEP = `the great roots and the cave's roof, the chrome plates, the conduit and the neon tubes, every alcove with its chrome frame and its dark inside, the lanterns, the dark earth under the floor,`;
+const TREE_L0C_CODES = {
+  'tree-l0-c0-codes': treeCodes({ stand: `the long floor of wet stone slabs across the whole width of the frame, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the mouth at the left edge, ${TREE_L0C_KEEP}` }),
+  'tree-l0-c1-codes': treeCodes({ stand: `the long floor of wet stone slabs across the whole width of the frame, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the large blank panel in its chrome frame high on the back wall, ${TREE_L0C_KEEP}` }),
+  'tree-l0-c2-codes': treeCodes({ stand: `the floor of wet stone slabs from the left edge of the frame to its end against the wall of roots on the right, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the two smaller empty alcoves on the right, ${TREE_L0C_KEEP}` }),
+};
+export const TREE_L0C_CODE_KEYS = Object.keys(TREE_L0C_CODES);
+JOBS.push(...TREE_L0C_CODE_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: [key.replace('-codes', '-play')], realm: 'tree', optional: true,
+  size: '2048x1152', seed: 4751 + 10 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_CODES[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_CODES);
+HELPER_KEYS.push(...TREE_L0C_CODE_KEYS);
+
+const TREE_L0C_TOP_PROMPTS = Object.fromEntries(['c0', 'c1', 'c2'].map((s) => [`tree-l0-top-${s}`, treeTopStrip(
+  `the great roots and the cave's roof meet their own reflections, and the chrome plates and neon tubes among them are reflected.`,
+  `the great roots rise on and join into the cave's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the chrome plates and the neon tubes end where they do now, with plain root and earth above them.`,
+  `the floor, every alcove and panel, the roots, the plates, the neon, the lanterns and the open magenta depth already there`,
+)]));
+export const TREE_L0C_TOP_KEYS = Object.keys(TREE_L0C_TOP_PROMPTS);
+JOBS.push(...TREE_L0C_TOP_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: [`${key.replace('tree-l0-top-', 'tree-l0-')}-back`], realm: 'tree', optional: true,
+  size: '2048x1152', seed: 4795 + 2 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the cave's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_TOP_PROMPTS[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_TOP_KEYS);
