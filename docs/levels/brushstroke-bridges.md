@@ -49,18 +49,20 @@ two panels, each climbing from its foot to 540, joined at the fold.
     it afresh. In act 2's rain it lasts `RAIN_BRIDGE_MS` (2000 ms) unless its stone stands under an
     eave (a shelter span `{ x0, x1 }` under a roof), when it keeps the full 4000 ms.
   - The room server must let an owl stand on a painted perch: each one is declared in the room data
-    (as here, `k1~`, `k4~1` and so on), so `standingHeights` and `groundAt` know its top. OPEN
-    QUESTION: whether a painted bridge is drawn for every owl in the room (the room tells everyone
-    who painted what, and when) or only on the painter's page, where other owls would see a
-    visitor standing on air.
+    (as here, `k1~`, `k4~1` and so on), so `standingHeights` and `groundAt` know its top. Course
+    rooms are shared (the owner, 2026-11-02), so a painted bridge is drawn for every owl in the
+    room: the room tells everyone who painted what, and when, and no owl is seen standing on air.
+    Any owl may stand on a bridge while it lasts, as on a gust in the Updraft Canopy. To settle when
+    the room is built: whether owls riding one another's bridges past a brush stone needs a limit
+    (only the painter stands on it); play tests decide.
 - **Hazard floors.** The ponds, the river and the cloud mist send an owl that touches them back to
   its last safe ledge, as the climb's thorns do: time only. (The same new piece as the Updraft
   Canopy's, section 2 there.)
-- **The dash.** Assumed: a sideways burst of about 260 px with no fall, once per jump, Shift on a
-  computer and a button on a phone, only in courses. Another agent is building the real one;
-  re-check the two dash hops (`n2` to `n3`, and the optional `m2` to `m3`) when it lands.
-- **Shortcuts that stay open, per owl:** the bamboo, the raft and the crane. OPEN QUESTION: the same
-  as the Updraft Canopy's, where the per-owl record lives.
+- **The dash.** The real one, from PR 72 (`dash.ts`): 162 px in 180 ms, once per jump, Shift on a
+  computer and a button on a phone, only in courses; on a hop it adds 115 px, counted at 0.8 as +92
+  (the README). The two dash hops (`n2` to `n3`, and the optional `m2` to `m3`) are checked at that.
+- **Shortcuts that stay open, per owl:** the bamboo, the raft and the crane, kept for good in the
+  course book (`coursebook.ts`, PR 72), as the owner decided on 2026-11-02.
 - **Seals.** A red seal is picked up by standing on its ledge; it counts for this run. The scroll at
   the pavilion takes four. Every shortcut keeps the seals on its path: the bamboo ends before seal 1,
   the raft lands below the falls (seal 2), the crane lands below seals 3 and 4.
@@ -161,10 +163,10 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the bridge from k1 | `k1` | `c1` | 180 | 640 | 323 | 531 |
-| the bridge from k3 | `k3` | `c2` | 180 | 580 | 323 | 531 |
-| the treads from k4 | `c2` | `c3` | 180 | 400 | 323 | 531 |
-| the bridges (from bench 1) | `c1` | `c2` | 60 | 1520 | 611 | 819 |
+| the bridge from k1 | `k1` | `c1` | 180 | 640 | 323 | 415 |
+| the bridge from k3 | `k3` | `c2` | 180 | 580 | 323 | 415 |
+| the treads from k4 | `c2` | `c3` | 180 | 400 | 323 | 415 |
+| the bridges (from bench 1) | `c1` | `c2` | 60 | 1520 | 611 | 703 |
 
 **The unfinished painting.** On an easel on the tea terrace (x 4400): an ink landscape of this very
 garden, one stroke missing where the river should be crossed. Looking at it (Use) the first time
@@ -267,9 +269,9 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the bridge from k6 | `k6` | `r1` | 160 | 620 | 371 | 579 |
-| the bridge from k8 | `k8` | `r2` | 130 | 600 | 443 | 651 |
-| the bridge from k9 | `k9` | `k10` | 180 | 380 | 323 | 531 |
+| the bridge from k6 | `k6` | `r1` | 160 | 620 | 371 | 463 |
+| the bridge from k8 | `k8` | `r2` | 130 | 600 | 443 | 535 |
+| the bridge from k9 | `k9` | `k10` | 180 | 380 | 323 | 415 |
 
 **Bridge timing in the rain.** Every rain hop above is checked in time as well as in reach. At 260
 px/s an owl covers 520 px in 2 s, so each rain bridge is left within about 400 px of its stone: `k6`
@@ -344,8 +346,8 @@ _____^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 |                   |   (1 char = 80 px across, 1 row = 60 px up; | on the ruler = a screen edge)
 
 brush-3b
-       =oB                   o      ####
-    ~~~                     ===
+       =oB                  o       ####
+    ~~~                    ===
 
     ~~~
                      ==
@@ -396,7 +398,7 @@ More hops, and notes on the ones above:
 
 | hop | rise | gap | needs | reach | note |
 | --- | ---: | ---: | --- | ---: | --- |
-| `m2` to `m3` | -60 | 920 | D (dash) | 1107 | the expert's dash skip past k15 |
+| `m2` to `m3` | -60 | 920 | D (dash) | 991 | the expert's dash skip past k15 |
 
 Doors, benches and the rest:
 
@@ -413,8 +415,8 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | the back bridge and the treads | `k11~` | `m1` | 420 | 0 | over a flap | - |
-| the bridge from k14 | `m1` | `m2` | 20 | 760 | 707 | 915 |
-| the bridge from k15 | `k15` | `m3` | 180 | 640 | 323 | 531 |
+| the bridge from k14 | `m1` | `m2` | 20 | 760 | 707 | 799 |
+| the bridge from k15 | `k15` | `m3` | 180 | 640 | 323 | 415 |
 
 #### Room `brush-3b` (3200 x 900, 2 screens)
 
@@ -442,8 +444,8 @@ Floor along the ground line:
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
 | `n2` | a dry stone: the dash run-up | 1700 | 470 | 160 | 300 | `k18~` | 100 | 100 | T1 | 111 |
-| `n3` | ledge past the dash gap, red seal 4 | 2240 | 270 | 200 | 500 | `n2` | 200 | 380 | D (dash) | 483 |
-| `n4` | the summit pavilion's terrace (solid) | 2900 | 230 | 300 | 540 | `n3` | 40 | 460 | T3 | 659 |
+| `n3` | ledge past the dash gap, red seal 4 | 2200 | 270 | 200 | 500 | `n2` | 200 | 340 | D (dash) | 367 |
+| `n4` | the summit pavilion's terrace (solid) | 2900 | 230 | 300 | 540 | `n3` | 40 | 500 | T3 | 659 |
 
 Doors, benches and the rest:
 
@@ -452,7 +454,7 @@ Doors, benches and the rest:
 | D | door `back`: back to `brush-3a` | 40 | 0 |
 | o | red seal 3, on `n1` | 680 | 520 |
 | B | bench 4, on `n1` | 780 | 520 |
-| o | red seal 4, on `n3` | 2340 | 500 |
+| o | red seal 4, on `n3` | 2300 | 500 |
 | S | the finish shrine: the scroll stamped with the four seals; the ink-wash scarf on a first clear; the woken crane waits on the roof | 3050 | 540 |
 | X | a misty stair to a farther peak: a "maybe later" barrier with the sign `Hatching Soon` | 3180 | 540 |
 
@@ -461,12 +463,12 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | the treads from k16 | `terrace` | `n1` | 520 | 320 | over a flap | - |
-| the bridge from k18 | `k18` | `n2` | 100 | 580 | 515 | 723 |
-| the dash | `k18~` | `n3` | 300 | 640 | over a flap | - |
-| the dash gap at all (from the high ledge) | `n1` | `n3` | -20 | 1420 | 803 | 1011 |
+| the bridge from k18 | `k18` | `n2` | 100 | 580 | 515 | 607 |
+| the dash | `k18~` | `n3` | 300 | 600 | over a flap | - |
+| the dash gap at all (from the high ledge) | `n1` | `n3` | -20 | 1380 | 803 | 895 |
 
-**The dash gap.** `n2` to `n3`: 380 px, rising 200. A jump, a flap and a glide reach 275 px at
-that rise; with the dash, 483. `n2` is a dry stone: it looks like a brush stone with its ink gone,
+**The dash gap.** `n2` to `n3`: 340 px, rising 200. A jump, a flap and a glide reach 275 px at
+that rise; with the dash, 367. `n2` is a dry stone: it looks like a brush stone with its ink gone,
 so a visitor sees there is no bridge to wait for.
 
 ### The summit pavilion and the finish shrine
@@ -522,8 +524,8 @@ real runs once built.
 
 - **Blast radius.** The brush stones are new perches with a lifetime (`perches.ts`, and the room
   server's `standingHeights` must include them); the rain and the eaves are room data; the hazard
-  floor is shared with the Updraft Canopy; the dash is another agent's.
-- **Bridges in a shared room** (section 2) is the main question for the owner and the build.
+  floor is shared with the Updraft Canopy; the dash is PR 72's (`dash.ts`), unchanged here.
+- **Bridges in a shared room** (section 2): course rooms are shared, so every owl sees every bridge.
 - **Art.** Each room in the tree's six layers. The bridges, treads, stones, seals, the crane, the
   heron, the painting and the scroll are game sprites: ink strokes that the game draws and fades.
 - **The ferry raft and the crane** are doors with a ride: the owl is carried, the clock runs, and

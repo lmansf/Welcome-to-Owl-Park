@@ -1,8 +1,8 @@
 # Level plans: the realms' courses
 
 - Status: PLANNED (OP-225, OP-226, OP-235). Plans for the park remap the owner approved on 2026-11-02; nothing here is built
-- Verified against: main 503b9bf (2026-11-02)
-- Code: `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts`, `perches.ts`, `room.ts`, `climb.ts`, `climbCity.ts`, `climbPilot.ts`; `packages/shared/rooms/index.ts`
+- Verified against: main 503b9bf (2026-11-02); the dash against PR 72's `dash.ts` (branch `claude/course-kit`, 58c282b)
+- Code: `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts`, `perches.ts`, `room.ts`, `climb.ts`, `climbCity.ts`, `climbPilot.ts`; `packages/shared/rooms/index.ts`; from PR 72, `packages/shared/src/dash.ts` and `coursebook.ts`
 - Tickets: OP-225 (the Glass Tower), OP-226 (Updraft Canopy), OP-235 (Brushstroke Bridges)
 - Related: `docs/MAP.md` (the tree), `designs/the-stained-glass-climb.md` (the climb), `docs/ACTIVITIES.md`
 
@@ -13,7 +13,7 @@ the plans for three courses, one file each, written so that someone can type the
 | Course | Realm | File | Screens | New mechanic | First clear | With shortcuts | Gold |
 | --- | --- | --- | ---: | --- | ---: | ---: | ---: |
 | Updraft Canopy | the Treehouse Clearing | `updraft-canopy.md` | 10 | updrafts that switch; wind | about 7:15 | about 2:16 | 1:45 |
-| The Glass Tower | the stained-glass realm | `glass-tower.md` | 12 views | (built) the glass lift | about 4:38 | about 0:50 | 0:45 |
+| The Glass Tower | the stained-glass realm | `glass-tower.md` | 16 views | (built) the glass lift; two new storeys | about 6:28 | about 1:05 | 1:00 |
 | Brushstroke Bridges | the ink-wash realm | `brushstroke-bridges.md` | 10 | brush stones that paint fading bridges | about 7:05 | about 2:19 | 1:55 |
 
 All times are estimates from the physics (each file's time section), except the Glass Tower's
@@ -55,8 +55,9 @@ side:
     `U + flap`: the same with the flap kept for the top;
   - `D (dash)`: only with the dash; the hop is also checked to fail without it.
 - **The "what each mechanic is for" tables** check the opposite: the hop a mechanic makes possible,
-  without the mechanic. Each is refused, so the mechanic is needed. Where a dash alone could make
-  the hop, the table shows it (an expert's skip, still needing the dash).
+  without the mechanic. Each is refused, so the mechanic is needed. Their last column is the reach
+  with the real dash (+92); where it covers the gap, a dash alone makes the hop (an expert's skip,
+  still needing the dash). A row that must stay shut even with the dash is also checked at +130.
 - A generator checked every hop and every "without" in these files; nothing in them fails.
 
 The Glass Tower is the climb, in the climb's own units (field px, `y` up); its file says so.
@@ -74,25 +75,27 @@ The park's flight (`flight.ts`) runs on the climb's jump (`jump.ts`), in room pi
 | A hop's margins | a rise 10 px short of the top, 0.8 of the reach across | `ROUTE_MARGIN`, `ROUTE_REACH` |
 | The highest ledge | 540 over the ground line | `MAX_PERCH_TOP` |
 | The highest an owl may be | the room's highest top + 280 | `MAX_RISE`, `Room.ts` |
-| The dash (assumed) | a burst of about 260 px across with no fall, once per jump; counted at 0.8, so +208 on a glide's reach | not built: another agent is building the real dash |
+| The dash | 162 px in 180 ms, once per jump, back when the owl stands on something, never sooner than 350 ms after the last | `AIR_DASH_SPEED` 900, `AIR_DASH_MS` 180, `AIR_DASH_COOLDOWN_MS` 350 (`dash.ts`, PR 72) |
+| The dash on a hop | +115 px across: the dash is a walk while the owl is up, so the fall goes on through it, and its 180 ms give up 47 px of the ordinary 260 px/s drift (162 - 47). Counted at 0.8: **+92** on a glide's reach | `dash.ts`, `flight.ts` |
+| A gap the dash must not cross | checked at the plain 0.8 x 162 = **+130**, so it stays shut under either reckoning | |
 
 The reach across, by rise (px; `routes.ts`'s `hopTier`, margins in):
 
 | Rise | T1, a jump | T2, with the flap | T3, with a glide | With the dash too |
 | ---: | ---: | ---: | ---: | ---: |
-| -200 | 178 | 255 | 1235 | 1443 |
-| -100 | 161 | 241 | 995 | 1203 |
-| 0 | 141 | 224 | 755 | 963 |
-| 50 | 128 | 215 | 635 | 843 |
-| 100 | 111 | 204 | 515 | 723 |
-| 130 | 95 | 197 | 443 | 651 |
-| 150 | - | 192 | 395 | 603 |
-| 200 | - | 176 | 275 | 483 |
-| 220 | - | 168 | 227 | 435 |
-| 250 | - | 149 | 155 | 363 |
+| -200 | 178 | 255 | 1235 | 1327 |
+| -100 | 161 | 241 | 995 | 1087 |
+| 0 | 141 | 224 | 755 | 847 |
+| 50 | 128 | 215 | 635 | 727 |
+| 100 | 111 | 204 | 515 | 607 |
+| 130 | 95 | 197 | 443 | 535 |
+| 150 | - | 192 | 395 | 487 |
+| 200 | - | 176 | 275 | 367 |
+| 220 | - | 168 | 227 | 319 |
+| 250 | - | 149 | 155 | 247 |
 
 A glide is strong: level, it carries an owl 755 px. So a mechanic is only needed where a hop rises
-(at a rise of 200 a glide reaches 275 px, the dash 483) or a hazard blocks the glide's line. Both
+(at a rise of 200 a glide reaches 275 px, with the dash 367) or a hazard blocks the glide's line. Both
 tree courses are built on that.
 
 ## What the physics made impossible, and the fixes
@@ -112,15 +115,26 @@ tree courses are built on that.
   is impossible; the pilot confirms it.
 - **The tower's shortcuts beat its anti-cheat floors** (`CLIMB_FLOORS`). Fix: a scripted shortcut
   road and floors for runs that report their shortcuts (the tower file, section 5).
-- **The tower is short:** about 4.6 minutes for a first clear. Fix offered, the owner's call: two
-  more storeys.
+- **The real dash is shorter than these plans first assumed** (162 px, against about 260), and a
+  dash on a hop adds only 115 px of it. Every dash hop was checked again at +92: the Updraft Canopy's
+  dash gap (`c12` to `c13`, 420 px) and Brushstroke Bridges' (`n2` to `n3`, 380 px) no longer
+  closed. Fix: both gaps narrowed to 340 px (still 65 px past a glide's 275). Bell 3's branch in the
+  trunk still closed, by 7 px, and moved 20 px nearer (360 to 340 px) for room. Two optional dash
+  skips no longer work (the Canopy's past updraft U12 and Brushstroke's past the bridge from `k8`),
+  so those mechanics are now always needed. Every gap that must stay shut even with the dash holds
+  at +130.
+- **The tower was short:** about 4.6 minutes for a first clear. Fix, the owner's call: bands 7 and 8,
+  measured with the pilot; about 6.5 minutes now, and about 7 with the hidden pane room.
 
-## Open questions for the owner and the build
+## Decided (the owner, 2026-11-02)
 
-- Is a course room shared, like the rest of the tree, or a solo instance, like the climb? It decides
-  whether gusts and painted bridges are seen by every owl in the room.
-- Where does an owl's record of the shortcuts it opened live?
-- Do the Glass Tower's seven extra benches stay benches?
-- Keep the Glass Tower short, or add bands 7 and 8?
-- The secret characters' and the shrines' words: drafts only; the owner approves every visitor-facing
-  word.
+- **Course rooms are shared,** like every other room in the park. Every owl in a room sees the same
+  gusts (they run on park time) and every painted bridge (the room tells everyone who painted what).
+- **Opened shortcuts are kept per owl for good,** in the course book (`coursebook.ts`, PR 72), which
+  already keeps them.
+- **The Glass Tower's extra benches stay benches.**
+- **The Glass Tower gains bands 7 and 8,** to bring its first clear near seven minutes; its times are
+  measured again with the pilot, with floors for runs that report shortcuts (`glass-tower.md`,
+  sections 4.9, 5 and 6).
+- **The secret characters' and the shrines' words stay drafts.** The owner approves them when each
+  course is built.

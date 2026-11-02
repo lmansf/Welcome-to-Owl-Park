@@ -61,14 +61,14 @@ three-screen vertical climb cannot fit in one room. Each storey's hatch is a doo
 - **Hazard floors and hazard boxes.** A floor span marked hazard (bramble, thorn roots, the drop) and
   a box `{ x0, x1, z0, z1 }` (thorn vines) send an owl that touches them back to its last safe ledge,
   as the climb's thorns do (`safeX`, `safeY` in `climb.ts`): it costs time, nothing else.
-- **The dash.** Another agent is building the real dash. This plan assumes a sideways burst of about
-  260 px with no fall, once per jump, Shift on a computer and a button on a phone, and only in
-  courses. The dash hops are checked against that (the README); re-check them when the real
-  numbers land.
+- **The dash.** The real one, from PR 72 (`dash.ts`): 162 px in 180 ms, once per jump, back when
+  the owl stands on something, Shift on a computer and a button on a phone, only in courses. On a
+  hop it adds 115 px across, counted at 0.8 as +92 (the README); every dash hop here is checked
+  at that, and every gap the dash must not cross at +130.
 - **Shortcuts that stay open.** The log, the vine and the bough open for one owl for good, from their
   far side. Each is a door pair (the log, the vine) or a perch (the bough) that is shut until that
-  owl's record says it was opened. OPEN QUESTION: where that per-owl record lives (the quest book,
-  the collection log or a course record of its own).
+  owl's record says it was opened. That record is the course book (`coursebook.ts`, PR 72), which
+  keeps each owl's opened shortcuts for good (the owner, 2026-11-02).
 - **Bells.** An acorn bell rings when an owl stands next to it on its ledge; it counts for this run
   only. The hut's door stays shut until this run has rung all five. Each shortcut leaves the bells on
   its path: the log ends under bell 2, the vine starts after bell 3, the bough leaves bells 4 and 5
@@ -177,10 +177,10 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the updraft U1 | `f2` | `b1` | 240 | 210 | 179 | 387 |
-| the updraft U2 | `s4` | `l5` | 240 | 240 | 179 | 387 |
-| the updraft U3 | `l5` | `l6` | 180 | 400 | 323 | 531 |
-| the updraft U4 | `l7` | `l8` | 240 | 250 | 179 | 387 |
+| the updraft U1 | `f2` | `b1` | 240 | 210 | 179 | 271 |
+| the updraft U2 | `s4` | `l5` | 240 | 240 | 179 | 271 |
+| the updraft U3 | `l5` | `l6` | 180 | 400 | 323 | 415 |
+| the updraft U4 | `l7` | `l8` | 240 | 250 | 179 | 271 |
 | the updraft U5 | `l9` | `b2` | 260 | 240 | over a flap | - |
 
 ### The hidden room: under the roots
@@ -285,7 +285,7 @@ Hazards and wind (z is height over the ground line):
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
 | `t1` | ring shelf | 300 | 640 | 220 | 130 | `trunk-a` | 130 | 0 | T1 | 95 |
 | `t2` | ring shelf | 600 | 520 | 180 | 250 | `t1` | 120 | 80 | T1 | 101 |
-| `b3` | side branch, acorn bell 3 | 120 | 320 | 120 | 450 | `t2` | 200 | 360 | D (dash) | 483 |
+| `b3` | side branch, acorn bell 3 | 140 | 320 | 120 | 450 | `t2` | 200 | 340 | D (dash) | 367 |
 | `t3` | ring shelf | 1100 | 310 | 200 | 460 | `U6` | -60 | 60 | U (glide off) | 144 |
 | `t4` | ring shelf under the hatch | 1360 | 250 | 200 | 520 | `t3` | 60 | 60 | T1 | 125 |
 | `U6` | updraft, on 3 s / off 2 s, phase 0 | 920 | - | 120 | 520 | `t2` | 0 | 140 | T1 into U6 | 141 |
@@ -302,7 +302,7 @@ Doors, benches and the rest:
 | --- | --- | ---: | ---: |
 | D | door `down`: back to `canopy-1` | 40 | 0 |
 | B | bench 2 | 200 | 0 |
-| o | acorn bell 3, on `b3` | 180 | 450 |
+| o | acorn bell 3, on `b3` | 200 | 450 |
 | V | door `vine-foot`: the vine's foot, coiled out of reach until it is dropped from `canopy-2c`; then it leads to `canopy-2c` spawn `vine-top` | 1530 | 0 |
 | D | door `hatch-up` on `t4`: to `canopy-2b` | 1460 | 520 |
 
@@ -310,8 +310,8 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the updraft U6 | `t2` | `t3` | 210 | 320 | 251 | 459 |
-| the dash (from the top shelf) | `t3` | `b3` | -10 | 860 | 779 | 987 |
+| the updraft U6 | `t2` | `t3` | 210 | 320 | 251 | 343 |
+| the dash (from the top shelf) | `t3` | `b3` | -10 | 840 | 779 | 871 |
 
 #### Room `canopy-2b` (1600 x 900, 1 screen)
 
@@ -412,8 +412,8 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the updraft U9 | `v1` | `v2` | 220 | 240 | 227 | 435 |
-| the updraft U10 | `v2` | `v3` | 190 | 340 | 299 | 507 |
+| the updraft U9 | `v1` | `v2` | 220 | 240 | 227 | 319 |
+| the updraft U10 | `v2` | `v3` | 190 | 340 | 299 | 391 |
 
 ## 5. Act 3: The Crown Run
 
@@ -429,7 +429,7 @@ canopy-3
               !!==o=%%%%%%%%%%%%%%%%%%%%%P=B=     ||                 ===
               !!          ||        ||            ||
               !!     ==   ||        ||            ||
-              !!          ||    === ||            ||         ===
+              !!          ||    === ||            ||          ===
               !!          ||        ||         ===||
            ===!!       =* ||        ||            ||
        ===    !!          ||        ||            ||
@@ -492,8 +492,8 @@ Hazards and wind (z is height over the ground line):
 
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
-| `c12` | limb: the dash run-up | 4900 | 470 | 200 | 300 | `c10` | -240 | 460 | T3 | 1331 |
-| `c13` | limb past the dash gap | 5520 | 270 | 240 | 500 | `c12` | 200 | 420 | D (dash) | 483 |
+| `c12` | limb: the dash run-up | 4980 | 470 | 200 | 300 | `c10` | -240 | 540 | T3 | 1331 |
+| `c13` | limb past the dash gap | 5520 | 270 | 240 | 500 | `c12` | 200 | 340 | D (dash) | 367 |
 | `c14` | limb, acorn bell 5 | 5840 | 250 | 180 | 520 | `c13` | 20 | 80 | T1 | 136 |
 | `c15` | the lookout hut's deck (solid) | 6020 | 230 | 360 | 540 | `c14` | 20 | 0 | T1 | 136 |
 
@@ -527,15 +527,15 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | the updraft U11 | `c2` | `c3` | 260 | 260 | over a flap | - |
-| the updraft U12 | `c4` | `c5` | 160 | 480 | 371 | 579 |
-| the updraft U13 | `c6` | `c7` | 220 | 300 | 227 | 435 |
+| the updraft U12 | `c4` | `c5` | 160 | 480 | 371 | 463 |
+| the updraft U13 | `c6` | `c7` | 220 | 300 | 227 | 319 |
 | the updraft U14 | `c9` | `c10` | 280 | 280 | over a flap | - |
-| the updraft U14 (straight on) | `c8` | `c10` | 80 | 640 | 563 | 771 |
-| the dash (from the high limb) | `c10` | `c13` | -40 | 1080 | 851 | 1059 |
-| the dash gap at all | `c12` | `c14` | 220 | 740 | 227 | 435 |
+| the updraft U14 (straight on) | `c8` | `c10` | 80 | 640 | 563 | 655 |
+| the dash (from the high limb) | `c10` | `c13` | -40 | 1080 | 851 | 943 |
+| the dash gap at all | `c12` | `c14` | 220 | 660 | 227 | 319 |
 
-**The dash gap.** `c12` to `c13`: a 420 px gap rising 200 px. A jump, a flap and a glide reach
-275 px at that rise; with the dash, 483. Nothing else reaches `c13` or bell 5 without the dash
+**The dash gap.** `c12` to `c13`: a 340 px gap rising 200 px. A jump, a flap and a glide reach
+275 px at that rise; with the dash, 367. Nothing else reaches `c13` or bell 5 without the dash
 (the table above checks `c10` and `c12` to `c14`). On a computer the dash is Shift; on a phone the
 course shows a dash button beside Jump.
 
@@ -616,16 +616,15 @@ than the estimated best. Set it from real runs once the course is built.
 
 - **Blast radius.** Updrafts and wind touch `flight.ts` (the step and `carryOn`), `Room.ts` (the
   air limit is fine as it is, section 2) and the walk protocol (wind). Doors with `top` already
-  exist (OP-162). The hazard floor is new to the tree. The dash is another agent's.
+  exist (OP-162). The hazard floor is new to the tree. The dash is PR 72's (`dash.ts`), unchanged here.
 - **Art.** Each act's rooms are painted in the tree's six layers (`docs/MAP.md` section 6). The
   updraft leaves, the bells, the log's clod, the vine, the bough and the owlet are sprites drawn by
   the game, not painted (interactive things are left bare in the paintings).
 - **The trunk's hatches** are doors with a `top`; an owl arrives on the next storey's floor at its
   left, as if it climbed through the hatch. OPEN QUESTION: whether the hatch should instead lead
   to a spawn on a ledge (a smoother climb, at the cost of the act 2 rooms' simple floors).
-- **Shared or private gusts.** Every owl in a room sees the same gusts, since they run on park time.
-  Courses are rooms, so other owls are there too. OPEN QUESTION: whether a course room is shared
-  like the rest of the tree or a solo instance like the stained-glass climb.
+- **Shared gusts.** Course rooms are shared, like every other room in the park (the owner,
+  2026-11-02), so every owl in a room sees the same gusts, which run on park time.
 - **Bells per run.** A run starts at the course gate and ends at the shrine. OPEN QUESTION: whether
   leaving the course (the Commons door) clears the bells rung so far.
 - **The gold time** and the per-screen times are estimates: replace them with measured times from
