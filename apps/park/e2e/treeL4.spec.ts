@@ -33,9 +33,9 @@ test.describe('the tree, level 4 (OP-159)', () => {
     ]);
   });
 
-  test('reads at a glance: an edge on each of its eleven ledges (OP-173)', async ({ page }) => {
+  test('reads at a glance: an edge on each of its eleven ledges, and the way down to level 3 marked (OP-173)', async ({ page }) => {
     await openPark(page, { room: 'l4' });
-    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 11, marks: 0, behind: false });
+    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 11, marks: 1, behind: false });
   });
 
   for (const [spawn, screen] of [['west', 0], ['east', 1]] as const) {

@@ -139,14 +139,21 @@ describe("the tree's ways into today's park (OP-162)", () => {
   });
 
   it("the realms the tree opens into are the market and the rooms it leads to, never today's park's own streets", () => {
-    expect([...TREE_REALMS].sort()).toEqual(['arcade', 'market']);
+    expect([...TREE_REALMS].sort()).toEqual(['arcade', 'glass', 'market']);
     for (const id of ['hub', 'lobby', STREET_ROOM]) expect(TREE_REALMS.has(id), id).toBe(false);
   });
 
   it("a side view's doorways stand at a height, so a ledge over one is walked along without going through", () => {
     for (const room of ALL_ROOMS) {
       if (mapOf(room) !== 2) continue;
-      for (const d of room.doors) if (d.to) expect(d.top, `${room.id} ${d.id}`).toBe(0);
+      // On the ground, or (a stair taken from its top) at the height of the ledge it stands on.
+      for (const d of room.doors) {
+        if (!d.to) continue;
+        expect(d.top, `${room.id} ${d.id}`).toBeDefined();
+        if (d.top === 0) continue;
+        const on = (room.perches ?? []).find((p) => p.top === d.top && Math.min(...p.area.map((v) => v.x)) <= d.rect.x && Math.max(...p.area.map((v) => v.x)) >= d.rect.x + d.rect.w);
+        expect(on, `${room.id} ${d.id} stands on a ledge at its height`).toBeDefined();
+      }
     }
     // The archway lies under the high roof's end and the balcony: both pass over it.
     const l1 = ROOMS['l1']!;
@@ -507,7 +514,11 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       return a.x !== b.x || a.y !== b.y;
     });
     // The stained-glass street's way back is its painted arch in the far wall (OP-127), as the hub's east arch is.
-    expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual(['glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'lobby:gate', 'lobby:to-homes']);
+    // In the tree, the stair between levels 3 and 4 and level 3's doorway into the stained-glass street
+    // do too: an owl comes out as far along the floor from the spawn as it went in from the doorway's middle.
+    expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual([
+      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'lobby:gate', 'lobby:to-homes',
+    ]);
   });
 
   it("takes the owl through the gate's left turnstile, between the plinth and the first post, onto the hub's path at its left", () => {
@@ -671,7 +682,7 @@ describe('the tree (map 2)', () => {
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
 
   it('is a room of its own map, gated, with owls a quarter bigger: level 1, four screens with the lobby second', () => {
-    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4']);
+    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4', 'l3']);
     for (const r of tree) {
       expect(r.gated, `${r.id} is dark until the keepers open it`).toBe(true);
       expect(GATED_ROOMS).toContain(r.id);
@@ -709,8 +720,35 @@ describe('the tree (map 2)', () => {
       ['tree-l4-0-fg', 0, 1.2, false],
       ['tree-l4-e1-fg', 1, 1.2, false],
     ]);
-    // No tile of today's park, nor of level 1, is drawn plain.
-    for (const r of ALL_ROOMS) if (r.id !== 'l4') expect([...backgroundTiles(r), ...foregroundTiles(r)].some((t) => t.plain), r.id).toBe(false);
+    // No tile of today's park, nor of level 1 (painted before the six layers), is drawn plain.
+    for (const r of ALL_ROOMS) if (!['l3', 'l4'].includes(r.id)) expect([...backgroundTiles(r), ...foregroundTiles(r)].some((t) => t.plain), r.id).toBe(false);
+  });
+
+  it('level 3 is three screens in six layers, its stair to level 4 taken from the top and its doorway into the stained-glass street (OP-160)', () => {
+    const l3 = getRoom('l3');
+    const l4 = getRoom('l4');
+    expect(l3.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+    const at = (t: { key: string; x: number }) => [t.key, t.x / ROOM_W];
+    const ones = backgroundTiles(l3).filter((t) => (t.rate ?? 1) === 1);
+    expect(ones.filter((t) => !t.plain).map(at)).toEqual(['0', 'e1', 'e2'].map((s, i) => [`tree-l3-${s}-back`, i]));
+    expect(ones.filter((t) => t.plain).map(at)).toEqual(['0', 'e1', 'e2'].map((s, i) => [`tree-l3-${s}-play`, i]));
+    // Only the landing has front props, and only the landing and the reach a middle distance.
+    expect(foregroundTiles(l3).filter((t) => t.plain).map(at)).toEqual([['tree-l3-0-front', 0]]);
+    expect(backgroundTiles(l3).filter((t) => t.rate === 0.75).map(at)).toEqual([['tree-l3-0-mid', 0], ['tree-l3-e2-mid', 2]]);
+    // The stair joins the two levels both ways: up from level 3's landing, down from level 4's boardwalk.
+    const up = l3.doors.find((d) => d.id === 'stair-l4-l3')!;
+    const down = l4.doors.find((d) => d.id === 'stair-l4-l3')!;
+    expect(up.to).toEqual({ room: 'l4', spawn: 'from-l3' });
+    expect(up.top).toBe(l3.perches!.find((p) => p.id === 'stair-top')!.top);
+    expect(down.to).toEqual({ room: 'l3', spawn: 'from-l4' });
+    expect(down.top).toBe(0);
+    expect(l4.spawns['from-l3']).toBeDefined();
+    expect(l3.spawns['from-l4']).toBeDefined();
+    // The stained-glass street's way out brings an owl walking the tree back to the doorway on the reach.
+    expect(l3.doors.find((d) => d.id === 'to-glass')!.to).toEqual({ room: 'glass', spawn: 'default' });
+    const out = ROOMS['glass']!.doors.find((d) => d.id === 'to-hub')!;
+    expect(doorTarget(out, 1)).toEqual({ room: 'hub', spawn: 'from-glass' });
+    expect(doorTarget(out, 2)).toEqual({ room: 'l3', spawn: 'glass' });
   });
 
   it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {

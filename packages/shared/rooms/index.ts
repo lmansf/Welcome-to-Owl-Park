@@ -613,7 +613,7 @@ export const ROOMS: Record<string, RoomDef> = {
     spawns: { 'default': { x: 330, y: 740 }, 'from-hub': { x: 330, y: 740 } },
     doors: [
       // The painted arch's threshold (x 150 to 290), not the trunk beside it; its glow at the arch's foot.
-      { id: 'to-hub', rect: { x: 150, y: 690, w: 140, h: 75 }, to: { room: 'hub', spawn: 'from-glass' }, marker: { x: 220, y: 728 } },
+      { id: 'to-hub', rect: { x: 150, y: 690, w: 140, h: 75 }, to: { room: 'hub', spawn: 'from-glass' }, toTree: { room: 'l3', spawn: 'glass' }, marker: { x: 220, y: 728 } },
       // In front of the plinth: an owl votes standing on the floor before the idol, not on its plinth.
       { id: 'idol', rect: { x: 1150, y: 816, w: 220, h: 64 }, marker: { x: 1260, y: 848 } },
       // The portal: standing here offers the climb (the client's `interactions` table).
@@ -1115,8 +1115,89 @@ export const ROOMS: Record<string, RoomDef> = {
       default: { x: 800, y: TREE_GROUND },
       west: { x: 220, y: TREE_GROUND },
       east: { x: ROOM_W + 1240, y: TREE_GROUND },
+      // Up from level 3, at the foot of the way down.
+      'from-l3': { x: 780, y: TREE_GROUND },
     },
-    doors: [],
+    doors: [
+      // The way down to level 3: the stair behind the railing west of the trunk, taken from the boardwalk
+      // (the balcony over it walks on past).
+      { id: 'stair-l4-l3', rect: { x: 640, y: 750, w: 100, h: 40 }, to: { room: 'l3', spawn: 'from-l4' }, top: 0, markAt: { x: 690, y: 560 } },
+    ],
+  },
+  // Level 3, the high branch east (OP-160): three screens, the trunk's landing (0) with its stair up to
+  // level 4, the stained-glass realm's common area (+1) and its reach (+2), where the stained-glass
+  // street's doorway stands and a stair of perches climbs the branch toward its tip. Painted in the six
+  // layers as level 4 (only the landing has front props; the common area stays open, with no middle
+  // distance). The stair up is taken from its top, so an owl climbs the treads to go up; down from
+  // level 4 it comes out at the stair's foot. The stairwell down to level 2 is added with that level.
+  l3: {
+    id: 'l3',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: 3 * ROOM_W, h: ROOM_H },
+    background: 'tree-l3-0-back',
+    backgrounds: [
+      // The skies, farthest from the trunk first: each lies over the one beyond it and fades into it.
+      { key: 'tree-l3-e2-bg', x: 2 * ROOM_W, y: 0, rate: 0.5 },
+      { key: 'tree-l3-e1-bg', x: ROOM_W, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      { key: 'tree-l3-0-bg', x: 0, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      // The middle distance of the landing and the reach, each fading into the common area's open view.
+      { key: 'tree-l3-0-mid', x: 0, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } },
+      { key: 'tree-l3-e2-mid', x: 2 * ROOM_W, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } },
+      ...['0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l3-${s}-back`, x: i * ROOM_W, y: 0 })),
+      ...['0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l3-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
+    ],
+    foregrounds: [
+      { key: 'tree-l3-0-front', x: 0, y: 0, plain: true },
+      ...['0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l3-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    ],
+    mood: 'hub',
+    // The boardwalk from the landing's west end, through the common area, to the reach's railing, and on
+    // along the top of the branch where it runs level, under the first perches.
+    walkable: [
+      [
+        { x: 150, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W + 1100, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W + 1100, y: TREE_GROUND + TREE_STRIP },
+        { x: 150, y: TREE_GROUND + TREE_STRIP },
+      ],
+    ],
+    perches: [
+      // The landing: the stair's eight treads up the trunk, each a hop, to the landing at its top.
+      treeLedge('stair-1', 488, 650, 43),
+      treeLedge('stair-2', 528, 680, 80),
+      treeLedge('stair-3', 576, 716, 115),
+      treeLedge('stair-4', 620, 736, 152),
+      treeLedge('stair-5', 672, 776, 185),
+      treeLedge('stair-6', 728, 832, 218),
+      treeLedge('stair-7', 776, 872, 251),
+      treeLedge('stair-8', 832, 900, 290),
+      treeLedge('stair-top', 872, 1076, 325),
+      // The reach: up the branch toward its tip, the stump, the little table, the shelf fungus, two boards
+      // on their posts and the tip's perch (the capstone's place, OP-110).
+      treeLedge('stump', 2 * ROOM_W + 900, 2 * ROOM_W + 980, 54),
+      treeLedge('table', 2 * ROOM_W + 1012, 2 * ROOM_W + 1092, 103),
+      treeLedge('fungus', 2 * ROOM_W + 1132, 2 * ROOM_W + 1256, 143),
+      treeLedge('board-1', 2 * ROOM_W + 1208, 2 * ROOM_W + 1312, 210),
+      treeLedge('board-2', 2 * ROOM_W + 1296, 2 * ROOM_W + 1396, 290),
+      treeLedge('tip', 2 * ROOM_W + 1388, 2 * ROOM_W + 1460, 387),
+    ],
+    spawns: {
+      default: { x: 300, y: TREE_GROUND },
+      // Down from level 4, at the stair's foot.
+      'from-l4': { x: 420, y: TREE_GROUND },
+      east: { x: 2 * ROOM_W + 820, y: TREE_GROUND },
+      // Back out of the stained-glass street, in front of its doorway.
+      glass: { x: 2 * ROOM_W + 690, y: TREE_GROUND },
+    },
+    doors: [
+      // Up to level 4, from the landing at the stair's top.
+      { id: 'stair-l4-l3', rect: { x: 990, y: 750, w: 80, h: 40 }, to: { room: 'l4', spawn: 'from-l3' }, top: 325, markAt: { x: 1030, y: 390 } },
+      // The stained-glass doorway on the reach: into the realm's street (today's stained-glass realm),
+      // whose way out brings a tree owl back here.
+      { id: 'to-glass', rect: { x: 2 * ROOM_W + 480, y: 750, w: 120, h: 40 }, to: { room: 'glass', spawn: 'default' }, top: 0, markAt: { x: 2 * ROOM_W + 538, y: 430 } },
+    ],
   },
 };
 
