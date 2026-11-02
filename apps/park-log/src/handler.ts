@@ -89,6 +89,8 @@ export interface RealmVisitRow {
   collector_id: string;
   realm: string;
   realm_kind: (typeof REALM_KINDS)[number];
+  /** The park the owl walked there: 1 today's park, 2 the tree (OP-128). A Worker from before it sends none: 1. */
+  map_id: 1 | 2;
   entered_at: string;
   exited_at: string;
   entry_source: (typeof ENTRY_SOURCES)[number];
@@ -155,6 +157,8 @@ const HASH = /^[0-9a-f]{64}$/;
 const COLLECTIBLE = /^(furniture:)?[a-z0-9][a-z0-9-]{0,47}(~[0-9]{1,2})?$/;
 /** A room's neutral id, a collectible's kind or a rarity: a short lower-case word. */
 const WORD = /^[a-z]{1,20}$/;
+/** A room the park's log names: a word, or a level of the tree (`l0` to `l5`, OP-128), so a letter then letters or digits. */
+const ROOM_WORD = /^[a-z][a-z0-9]{0,19}$/;
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -169,6 +173,12 @@ function iso(v: unknown): string | null {
 function wordOrNull(v: unknown): string | null | undefined {
   if (v === null || v === undefined) return null;
   return typeof v === 'string' && WORD.test(v) ? v : undefined;
+}
+
+/** A room's name or none, as `wordOrNull`; undefined when it is neither. */
+function roomOrNull(v: unknown): string | null | undefined {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' && ROOM_WORD.test(v) ? v : undefined;
 }
 
 /** Whether two keys are the same, compared by their digests so the time taken says nothing of either. */
@@ -189,7 +199,7 @@ export function checkRow(v: unknown): LogRow | string {
   if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
   if (typeof r['collectible_id'] !== 'string' || !COLLECTIBLE.test(r['collectible_id'])) return 'collectible_id';
   if (!COLLECTIBLE_TYPES.includes(r['collectible_type'] as CollectibleType)) return 'collectible_type';
-  const realm = wordOrNull(r['realm']);
+  const realm = roomOrNull(r['realm']);
   if (realm === undefined) return 'realm';
   const acquired = iso(r['acquired_at']);
   if (!acquired) return 'acquired_at';
@@ -271,8 +281,10 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
   if (typeof r['visit_id'] !== 'string' || !UUID.test(r['visit_id'])) return 'visit_id';
   if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
   if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
-  if (typeof r['realm'] !== 'string' || !WORD.test(r['realm'])) return 'realm';
+  if (typeof r['realm'] !== 'string' || !ROOM_WORD.test(r['realm'])) return 'realm';
   if (!REALM_KINDS.includes(r['realm_kind'] as RealmVisitRow['realm_kind'])) return 'realm_kind';
+  const map = r['map_id'] ?? 1;
+  if (map !== 1 && map !== 2) return 'map_id';
   const entered = iso(r['entered_at']);
   if (!entered) return 'entered_at';
   const exited = iso(r['exited_at']);
@@ -286,6 +298,7 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
     collector_id: r['collector_id'],
     realm: r['realm'],
     realm_kind: r['realm_kind'] as RealmVisitRow['realm_kind'],
+    map_id: map,
     entered_at: entered,
     exited_at: exited,
     entry_source: r['entry_source'] as RealmVisitRow['entry_source'],
@@ -306,7 +319,7 @@ export function checkFeedback(v: unknown): FeedbackRow | string {
   const body = r['body'];
   // The park sends its words cleaned (newlines kept, every other control character out); anything else is not the park's.
   if (typeof body !== 'string' || body.length < FEEDBACK_MIN_CHARS || body.length > FEEDBACK_MAX_CHARS || /[\u0000-\u0009\u000B-\u001F\u007F]/.test(body)) return 'body';
-  const realm = wordOrNull(r['realm']);
+  const realm = roomOrNull(r['realm']);
   if (realm === undefined) return 'realm';
   const realmKind = r['realm_kind'] ?? null;
   if (realmKind !== null && !REALM_KINDS.includes(realmKind as (typeof REALM_KINDS)[number])) return 'realm_kind';
@@ -427,7 +440,7 @@ export interface Db {
 const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, realm, acquired_at, session_id, device_class, first_entry_at, backfill';
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
 const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained';
-const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, entered_at, exited_at, entry_source, collectibles_gained';
+const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, map_id, entered_at, exited_at, entry_source, collectibles_gained';
 const FEEDBACK_COLUMNS = 'event_id, park_feedback_id, collector_id, session_id, kind, body, realm, realm_kind, device_class, submitted_at';
 
 /**

@@ -350,6 +350,8 @@ export interface RealmVisitData {
   seq: number;
   /** The room as the log names it (`logRoom`). */
   room: string;
+  /** The park the owl was walking there (`visitMaps`): 1 today's park, 2 the tree (OP-128). */
+  map: 1 | 2;
   entered: number;
   exited: number;
   source: EntrySource;
@@ -363,6 +365,7 @@ export interface RealmVisitRow {
   collector_id: string;
   realm: string;
   realm_kind: RealmKind;
+  map_id: 1 | 2;
   entered_at: string;
   exited_at: string;
   entry_source: EntrySource;
@@ -376,6 +379,7 @@ async function realmVisitRow(salt: string, d: RealmVisitData): Promise<RealmVisi
     collector_id: await saltedHash(salt, 'collector', d.cid),
     realm: d.room,
     realm_kind: realmKind(d.room),
+    map_id: d.map === 2 ? 2 : 1,
     entered_at: iso(d.entered),
     exited_at: iso(Math.max(d.entered, d.exited)),
     entry_source: d.source,
