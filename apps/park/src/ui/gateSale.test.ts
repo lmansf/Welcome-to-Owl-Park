@@ -3,10 +3,10 @@ import type { WalletEntry } from '../net';
 import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, LOOK_MS, type Opener, type Started, type WatchClock } from './checkout';
 import { ACCOUNT_WORDS } from './account';
 import { ANSWER_AFTER_MS, RETURN_CHANNEL, askForGamePage, type ReturnChannel, type ReturnMessage } from './checkoutReturn';
-import { bringAside, createGateSale, gateBuy, saleLines, withBring, type GateSale } from './gateSale';
+import { UPGRADE_WORDS, bringAside, createGateSale, gateBuy, passUpgrade, saleLines, withBring, type GateSale } from './gateSale';
 import { PREVIEW_WORDS } from './preview';
-import { goOn, type AskStore, type LinkMaker, type StoreAside, type StoreGo } from './storeCard';
-import { GATE_WORDS, PASS_WORDS, OPENING_WORDS, createFreePassCard, forgetOffers, gateRefusal, offerOnce } from './tickets';
+import { goOn, type AskStore, type LinkMaker, type StoreAside, type StoreGo, type StoreUpgrade } from './storeCard';
+import { GATE_WORDS, PASS_AFTER_DAY_TICKET, PASS_WORDS, OPENING_WORDS, createFreePassCard, forgetOffers, gateRefusal, offerOnce } from './tickets';
 
 const CART = 'https://owl-test.myshopify.com/cart/100:1?attributes%5Bowl_checkout%5D=tok';
 const PAGE = 'https://owl-test.myshopify.com/collections/tickets';
@@ -144,6 +144,46 @@ describe('a Day Ticket at the turnstiles (OP-180)', () => {
   });
 });
 
+describe('the Annual Pass beside the Day Ticket (OP-198)', () => {
+  const PASS_CART = 'https://owl-test.myshopify.com/cart/200:1?attributes%5Bowl_checkout%5D=tok2';
+
+  it('names both buttons and says one line about the pass, from one set of words', () => {
+    expect(UPGRADE_WORDS).toEqual({ line: 'Or get the Annual Pass and come back all year.', day: 'Day Ticket', pass: 'Annual Pass' });
+  });
+
+  it('is offered only when the park can make the pass’s cart link', () => {
+    expect(passUpgrade({ ticketsUrl: PAGE }, () => {})).toBeUndefined();
+    const up = passUpgrade({ ticketsUrl: PAGE, checkoutPass: async () => PASS_CART }, () => {})!;
+    expect([up.line, up.goLabel, up.label]).toEqual([UPGRADE_WORDS.line, UPGRADE_WORDS.day, UPGRADE_WORDS.pass]);
+  });
+
+  it('its button opens checkout’s window in its own click, then sends it to the pass’s cart link, as Continue does for the Day Ticket', async () => {
+    const o = opener();
+    let began = 0;
+    const got: Array<[Started, Opener]> = [];
+    const up = passUpgrade({ ticketsUrl: PAGE, checkoutPass: async () => (began++, PASS_CART) }, (s, open) => got.push([s, open]))!;
+    // Offering it asks nothing of the store.
+    expect(began).toBe(0);
+    goOn(up.go, o.open, link);
+    expect(o.calls).toEqual([['', CHECKOUT_WINDOW, CHECKOUT_FEATURES]]);
+    await settle();
+    expect(got).toEqual([[{ kind: 'popup', url: PASS_CART, win: o.win }, o.open]]);
+    expect(o.win!.location.href).toBe(PASS_CART);
+  });
+
+  it('without the pass’s link, its button falls back to the store’s ticket page like the Day Ticket’s', async () => {
+    const o = opener();
+    const got: Started[] = [];
+    goOn(passUpgrade({ ticketsUrl: PAGE, checkoutPass: async () => null }, (s) => got.push(s))!.go, o.open, link);
+    await settle();
+    expect(got).toEqual([{ kind: 'fallback', url: PAGE, win: o.win }]);
+  });
+
+  it('is the pass’s one pitch: the half-price pass is not offered again after a Day Ticket bought in the park', () => {
+    expect(PASS_AFTER_DAY_TICKET).toBe(false);
+  });
+});
+
 describe('bringing an owl with a ticket on another screen here, beside buying (OP-183)', () => {
   const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, wallet: async () => [], before: new Set() };
 
@@ -193,8 +233,8 @@ describe('the turnstiles’ sale on the page (OP-180)', () => {
 
   function setup(o = opener(), goingIn = true) {
     const root = new FakeEl('div');
-    const asked: Array<{ go: StoreGo; say: readonly string[] | undefined; aside: StoreAside | undefined }> = [];
-    const ask: AskStore = (go, _opener, say, aside) => asked.push({ go, say, aside });
+    const asked: Array<{ go: StoreGo; say: readonly string[] | undefined; aside: StoreAside | undefined; upgrade: StoreUpgrade | undefined }> = [];
+    const ask: AskStore = (go, _opener, say, aside, upgrade) => asked.push({ go, say, aside, upgrade });
     const toasts: string[] = [];
     const t = testClock();
     const channel = fakeChannels();
@@ -207,6 +247,22 @@ describe('the turnstiles’ sale on the page (OP-180)', () => {
     const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, checkout: async () => CART, wallet: async () => (looks++, wallet), before: new Set(), bought: (tk, open) => (bought.push([tk, open]), goingIn && tk.status !== 'held') };
     return { root, asked, toasts, t, panel, card, sale, bought, o, channel, looks: () => looks, focused: () => focused, setWallet: (w: WalletEntry[]) => (wallet = w) };
   }
+
+  it('the card offers the Annual Pass beside the Day Ticket when the pass’s link can be had (OP-198); its ticket comes the same way', async () => {
+    const s = setup();
+    s.panel.sell({ ...s.sale, checkoutPass: async () => 'https://owl-test.myshopify.com/cart/200:1?attributes%5Bowl_checkout%5D=tok2' });
+    const up = s.asked[0]!.upgrade!;
+    expect(up.label).toBe('Annual Pass');
+    goOn(up.go, s.o.open, link);
+    await settle();
+    expect(s.card().find('checkout', 'status')!.textContent).toBe(CHECKOUT_WORDS.open);
+    s.setWallet([ticket('OWL-ANNU-ALPS', { kind: 'annual' })]);
+    await s.t.advance(LOOK_MS);
+    expect(s.bought.map(([t]) => [t.id, t.kind])).toEqual([['OWL-ANNU-ALPS', 'annual']]);
+    // Without the pass's link, the Day Ticket alone.
+    s.panel.sell(s.sale);
+    expect(s.asked[1]!.upgrade).toBeUndefined();
+  });
 
   it('asks once, right before the purchase; checkout open, the ticket comes, and what follows gets the card’s opener', async () => {
     const s = setup();

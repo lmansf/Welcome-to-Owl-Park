@@ -67,6 +67,15 @@ describe('the turnstiles with spectators (OP-191)', () => {
   });
 });
 
+describe('the turnstiles’ question (OP-198)', () => {
+  it('asks to buy a Day Ticket or enter as a guest, in the owner’s draft words', () => {
+    expect(SPECTATOR_WORDS.turnstile).toBe('No ticket yet? A Day Ticket lets you keep what you win.');
+    expect([SPECTATOR_WORDS.buy, SPECTATOR_WORDS.guest]).toEqual(['Buy a Day Ticket', 'Enter as a guest']);
+    expect(SPECTATOR_WORDS.guestNote).toBe('Guests can look around and play, but keep nothing they win.');
+    expect(SPECTATOR_WORDS.guestIn).toBe('Welcome in! You can get a Day Ticket any time from the button up top.');
+  });
+});
+
 describe("a spectator's end of game (OP-191)", () => {
   it('says what the run would have earned with a Day Ticket', () => {
     expect(endOfGameLine(4)).toBe('Nice run! With a Day Ticket this would have earned 4 feathers.');

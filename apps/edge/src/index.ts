@@ -927,8 +927,10 @@ const park = {
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
       if (url.pathname === '/api/tickets/checkout') {
         // The gate's checkout (OP-175, OP-180): a cart link with one Day Ticket and a one-time token for this owl, so the paid ticket lands here.
+        // With `kind: 'annual'` (OP-198), the annual pass instead: the card before the store offers it beside the Day Ticket.
         const store = storeConfig(env);
-        const variant = store ? (await storeCatalogue(env))?.dayVariant : null;
+        const catalogue = store ? await storeCatalogue(env) : null;
+        const variant = body['kind'] === 'annual' ? catalogue?.passVariant : catalogue?.dayVariant;
         if (!store || !variant) return json({ error: 'not-set-up' }, 503);
         const r = await desk('/tickets/checkout', { device });
         if (r.status !== 200 || typeof r.body['token'] !== 'string') return reply(r);

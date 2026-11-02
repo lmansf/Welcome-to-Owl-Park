@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, E2E_STORE, GATE_ASK, GATE_ASK_LINE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
 
 /**
  * Opening night (C42) through the room server and the stand-in store (e2e/standInStore.mjs): the
@@ -142,7 +142,7 @@ test.describe('opening night (C42)', () => {
     });
   }
 
-  test('a Day Ticket bought by a spectator is offered the half-price pass right after it comes, with no second card', async ({ browser, request }) => {
+  test('Buy a Day Ticket at the turnstiles: the card offers the Annual Pass beside it, the pass lands on the owl and takes it in, and no half-price pitch follows (OP-198)', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     try {
       const context = await browser.newContext(COMPUTER);
@@ -151,56 +151,73 @@ test.describe('opening night (C42)', () => {
       await a.goto('/?transport=edge&home=0');
       await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
 
-      // On past the turnstiles as a spectator (OP-191); the badge's Get a Day Ticket asks the card before
-      // the store once, and its Continue opens checkout for a Day Ticket.
+      // The turnstiles ask (OP-198): Buy a Day Ticket steps the owl back out and asks the card before the store.
       await walkToDoor(a, 'gate');
-      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
-      await expect.poll(async () => (await state(a)).spectator, { timeout: 15_000 }).toBe(true);
-      await a.locator('[data-spectator-get="badge"]').click();
+      const ask = a.locator(GATE_ASK);
+      await expect(ask).toContainText(GATE_ASK_LINE, { timeout: 15_000 });
+      await ask.locator('[data-gate-ask="buy"]').click();
+      await expect(ask).toBeHidden();
       await expectStoreCard(a);
-      await expect(a.locator(`${STORE_CARD} [data-store="say"]`)).toContainText('A Day Ticket lets you keep what you win. You can get a Day Ticket right here.');
-      const [popup] = await Promise.all([a.waitForEvent('popup'), storeContinue(a)]);
+      const card = a.locator(STORE_CARD);
+      await expect(card.locator('[data-store="say"]')).toContainText('A Day Ticket lets you keep what you win. You can get a Day Ticket right here.');
+      await expect(card.locator('[data-store="upgrade-line"]')).toHaveText('Or get the Annual Pass and come back all year.');
+      await expect(card.locator('[data-store="continue"]')).toHaveText('Day Ticket');
+      await expect(card.locator('[data-store="upgrade"]')).toHaveText('Annual Pass');
+      await a.screenshot({ path: 'e2e-screenshots/gate-upgrade-card.png' });
+      // Still outside the turnstiles, and no spectator.
+      expect((await state(a)).room).toBe('lobby');
+      expect((await state(a)).spectator).toBe(false);
+
+      // Annual Pass: checkout for the pass with the owl's token, at its own price (no code).
+      const [popup] = await Promise.all([a.waitForEvent('popup'), card.locator('[data-store="upgrade"]').click()]);
+      await expect(card).toBeHidden();
       await popup.waitForURL(/\/cart\//);
-      const token = new URL(popup.url()).searchParams.get('attributes[owl_checkout]');
+      const u = new URL(popup.url());
+      expect(u.origin + u.pathname).toBe(`https://${E2E_STORE.shop}/cart/41002:1`);
+      expect(u.searchParams.has('discount')).toBe(false);
+      const token = u.searchParams.get('attributes[owl_checkout]');
       expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
-      // The buyer pays: the Day Ticket lands on the owl.
+      // The buyer pays: the pass lands on the owl, which walks through the turnstiles with it by itself (OP-190).
       const order = orderId();
-      await putOrder(request, order, [ticketLine(1, 'day')], { totalPriceSet: { shopMoney: { amount: '1.60' } }, ...LOW, customAttributes: [{ key: 'owl_checkout', value: token }] });
+      await putOrder(request, order, [{ ...ticketLine(1, 'annual'), originalTotalSet: { shopMoney: { amount: '14.99' } } }], { totalPriceSet: { shopMoney: { amount: '14.99' } }, ...LOW, customAttributes: [{ key: 'owl_checkout', value: token }] });
       expect(await webhook(request, 'orders/paid', order)).toEqual({ tickets: 1, sent: true });
       if (!popup.isClosed()) await popup.close();
-
-      // Right after it, the annual pass at half price, once.
-      const offer = a.locator('[data-free-pass="day"]');
-      await expect(offer).toBeVisible({ timeout: 20_000 });
-      await expect(offer).toContainText('Come back all year! The annual pass is half price tonight.');
-      await expect(offer.getByRole('button', { name: 'No thanks' })).toBeVisible();
-      await a.screenshot({ path: 'e2e-screenshots/opening-day-pass.png' });
-      // The spectator is a full visitor where it stands, in the hub, with no reload (OP-191).
-      await expect.poll(async () => (await state(a)).spectator, { timeout: 20_000 }).toBe(false);
-      expect((await state(a)).room).toBe('hub');
-      const [day] = await a.evaluate(() => window.owlPark.wallet());
-      expect(day).toMatchObject({ kind: 'day', status: 'active' });
-
-      // Get the pass: the cart with the night's code and the Day Ticket, with no second card before the store.
-      const [cart] = await Promise.all([context.waitForEvent('page'), offer.getByRole('button', { name: 'Get the pass' }).click()]);
-      await cart.waitForURL(/\/cart\//);
-      const u = new URL(cart.url());
-      expect(u.origin + u.pathname).toBe(`https://${E2E_STORE.shop}/cart/41002:1`);
-      expect(u.searchParams.get('discount')).toBe(E2E_STORE.passCode);
-      expect(u.searchParams.get('attributes[from_ticket]')).toBe(day!.id);
-      await expect(a.locator(STORE_CARD)).toBeHidden();
-      await cart.close();
-
-      // The pass order comes back linked to the Day Ticket, and the page says so.
-      const pass = orderId();
-      await putOrder(request, pass, [halfPricePass(2)], { ...HALF_PRICE, discountCodes: [E2E_STORE.passCode], customAttributes: [{ key: 'from_ticket', value: day!.id }] });
-      expect(await webhook(request, 'orders/paid', pass)).toEqual({ tickets: 1, sent: true });
-      await expect(a.getByText('Your annual pass is in your wallet')).toBeVisible({ timeout: 20_000 });
-      const wallet = await a.evaluate(() => window.owlPark.wallet());
-      expect(wallet.find((t) => t.kind === 'annual')).toMatchObject({ status: 'unused' });
-      expect(wallet.find((t) => t.id === day!.id)).toMatchObject({ freePass: 'claimed' });
+      await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('hub');
+      expect((await state(a)).spectator).toBe(false);
+      expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['annual', 'active']]);
+      // One pitch: no half-price pass offer after.
+      await a.waitForTimeout(3500);
+      await expect(a.locator('[data-free-pass]')).toHaveCount(0);
       await context.close();
+    } finally {
+      await flip(request, 'deployed');
+    }
+  });
+
+  test('Not now on the card leaves the owl outside, and the turnstiles ask again (OP-198)', async ({ browser, request }) => {
+    await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+    try {
+      const a = await (await browser.newContext(COMPUTER)).newPage();
+      await a.goto('/?transport=edge&home=0');
+      await a.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+      await walkToDoor(a, 'gate');
+      const ask = a.locator(GATE_ASK);
+      await ask.locator('[data-gate-ask="buy"]').click({ timeout: 15_000 });
+      await expectStoreCard(a);
+      await a.locator(`${STORE_CARD} [data-store="not-now"]`).click();
+      await expect(a.locator(STORE_CARD)).toBeHidden();
+      await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
+      expect((await state(a)).room).toBe('lobby');
+      expect((await state(a)).spectator).toBe(false);
+      // Escape on the question is neither choice: the owl steps back out again.
+      await walkToDoor(a, 'gate');
+      await expect(ask).toBeVisible({ timeout: 15_000 });
+      await a.keyboard.press('Escape');
+      await expect(ask).toBeHidden();
+      await expect.poll(async () => (await state(a)).walking, { timeout: 15_000 }).toBe(false);
+      expect((await state(a)).room).toBe('lobby');
+      await a.context().close();
     } finally {
       await flip(request, 'deployed');
     }

@@ -1,30 +1,25 @@
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, STORE_CARD, state, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, STORE_CARD, enterAsGuest, state, walkToDoor } from './helpers';
 
 /**
  * The opening switch (OP-067) through the room server: the keepers flip the front gate with the
  * admin key and no deploy, and the turnstiles follow it. The room server here lets spectators in
  * (SPECTATORS on, OP-191): with the gate taking tickets, an owl without one walks on past the
- * turnstiles as a spectator, with one line and the Day Ticket on a button (spectator.spec.ts,
+ * turnstiles as a spectator once it chooses Enter as a guest (OP-198; spectator.spec.ts,
  * storecard.spec.ts and checkout.spec.ts go on from there). Every test hands the gate back to the
  * deployed setting (open) when it ends, so the other suites find it as before.
  */
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const COMPUTER: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
 const PHONE: BrowserContextOptions = { ...devices['Pixel 7'] };
-/** What the turnstiles say to an owl with no ticket as it walks on in as a spectator (OP-191). */
-const SPECTATE = 'No ticket? Come in, look around and play. A Day Ticket lets you keep what you win.';
-
 /**
- * Through a turnstile without a ticket: one line with the Day Ticket on a button and no card before the
- * store, and on into the hub as a spectator (OP-191).
+ * Through a turnstile without a ticket: the turnstiles ask first (OP-198), with no card before the
+ * store, and Enter as a guest walks the owl on into the hub as a spectator (OP-191).
  */
 async function inAsSpectator(page: Page): Promise<void> {
-  const offer = page.locator('[data-spectator-offer]');
-  await expect(offer).toContainText(SPECTATE, { timeout: 15_000 });
-  await expect(offer.locator('[data-spectator-get]')).toHaveText('Get a Day Ticket');
   await expect(page.locator(STORE_CARD)).toBeHidden();
+  await enterAsGuest(page);
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
   await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(true);
 }

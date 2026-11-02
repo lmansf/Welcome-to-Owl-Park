@@ -3,7 +3,7 @@
  * that works walks on past the turnstiles as a spectator: it goes everywhere, emotes, says phrases and
  * plays every game, but earns nothing, and the quests, the Realm Vote and the stores stay locked to it
  * (the room server enforces all of that; the server half, docs/ARCHITECTURE.md section 4). This file
- * holds what the page says to a spectator, the turnstiles' choice, the end-of-game offer's words and
+ * holds what the page says to a spectator (and the turnstiles' question's words, OP-198), the turnstiles' choice, the end-of-game offer's words and
  * how often the full offer may come up, and the HUD's "Just looking" badge. Every way it offers a Day
  * Ticket opens the turnstiles' own sale (gateSale.ts, OP-180): the card before the store, then checkout.
  *
@@ -15,8 +15,18 @@ import { gateRefusal } from './tickets';
 
 /** Everything a spectator is told, in one place (drafts for the owner). */
 export const SPECTATOR_WORDS = {
-  /** At the turnstiles, with no ticket that works: the owl walks on in. */
-  turnstile: 'No ticket? Come in, look around and play. A Day Ticket lets you keep what you win.',
+  /** At the turnstiles, with no ticket that works: the turnstiles' question (OP-198, gatePrompt.ts) says this above its buttons. */
+  turnstile: 'No ticket yet? A Day Ticket lets you keep what you win.',
+  /** The question's first button: the turnstiles' sale. */
+  buy: 'Buy a Day Ticket',
+  /** Its second: in as a spectator. */
+  guest: 'Enter as a guest',
+  /** Under its buttons. */
+  guestNote: 'Guests can look around and play, but keep nothing they win.',
+  /** What a screen reader calls the question. */
+  askLabel: 'At the turnstiles',
+  /** Once a guest is through the turnstiles. */
+  guestIn: 'Welcome in! You can get a Day Ticket any time from the button up top.',
   /** The HUD's badge while the owl is a spectator. */
   badge: 'Just looking',
   /** The button on the badge, the turnstiles' line, the end of a game and the busy line. */
@@ -63,8 +73,9 @@ export function climbWouldEarn(from: number, to: number): number {
 
 /**
  * What the turnstiles do (OP-191): `in` with a ticket that went through (or an open gate); `spectate`,
- * with SPECTATORS on and no ticket that works, walks the owl on in as a spectator, with the line to
- * show and whether it offers a Day Ticket; `back` turns it away as before (OP-180) with why and
+ * with SPECTATORS on and no ticket that works, lets the owl in as a spectator, with the line to show
+ * and whether it offers a Day Ticket (with one on offer, the turnstiles ask first, OP-198: buy one or
+ * enter as a guest); `back` turns it away as before (OP-180) with why and
  * whether to sell one. A ticket that waits on the store's check or its night still lets the owl in as
  * a spectator, saying why; the turnstiles that could not reach the park turn it back.
  */
