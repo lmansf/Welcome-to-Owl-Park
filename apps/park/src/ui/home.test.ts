@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COLLECTOR_KEY, LOCAL_COLLECTOR_KEY, holdsOwl } from '../identity';
 import type { WalletEntry } from '../net';
-import { HOME_WORDS, LINE_WORDS, walletSummary } from './home';
+import { CLOSED_WORDS, HOME_WORDS, LINE_WORDS, reopenWords, walletSummary } from './home';
 
 const T0 = Date.UTC(2026, 11, 1, 18, 0, 0);
 const H = 3_600_000;
@@ -74,5 +74,28 @@ describe('the line on the home screen (OP-075)', () => {
     expect(LINE_WORDS.wait(1)).toBe('About a minute');
     expect(LINE_WORDS.wait(12)).toBe('About 12 minutes');
     expect(LINE_WORDS.wait(61)).toBe('More than an hour');
+  });
+});
+
+describe('the closed card’s reopen time (OP-233)', () => {
+  // 5:15 PM in New York on Nov 2, 2026: 22:15 UTC, and 7:15 AM the next morning in Tokyo.
+  const AT = Date.UTC(2026, 10, 2, 22, 15);
+  const en = (timeZone: string, now: number) => reopenWords(AT, now, { locale: 'en-US', timeZone }).replace(/\u202f/g, ' ');
+
+  it('says the time in the visitor’s own time zone: the time alone when it is later that day there', () => {
+    expect(en('America/New_York', Date.UTC(2026, 10, 2, 18, 0))).toBe('Back by 5:15 PM EST');
+    expect(en('UTC', Date.UTC(2026, 10, 2, 18, 0))).toBe('Back by 10:15 PM UTC');
+  });
+
+  it('gives the day too when that time falls on another day there', () => {
+    // Afternoon of Nov 2 in Tokyo: the park opens the next morning there.
+    expect(en('Asia/Tokyo', Date.UTC(2026, 10, 2, 6, 0))).toBe('Back by Tue, Nov 3, 7:15 AM GMT+9');
+    // A day ahead in New York.
+    expect(en('America/New_York', Date.UTC(2026, 10, 1, 18, 0))).toBe('Back by Mon, Nov 2, 5:15 PM EST');
+  });
+
+  it('keeps its words in one place for the owner’s approval', () => {
+    expect(CLOSED_WORDS.back('5:15 PM')).toBe('Back by 5:15 PM');
+    expect(CLOSED_WORDS.keeper).toMatch(/keeper/);
   });
 });

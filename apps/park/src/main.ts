@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -15,6 +15,7 @@ import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
+import { storedKeeper } from './net/keeper';
 import { readAccountLink, withoutAccountLink } from './net/accountLinks';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
@@ -467,7 +468,8 @@ document.addEventListener('visibilitychange', () => {
 });
 /** Play: into the owl's own nest, through the line when the park has one (the server says), else straight in. */
 const startPlay = () => {
-  if (!atHome || home.inLine() || lineTimer || entering) return;
+  // Closed for setup (OP-233): no way in from here (Enter, Q, a kept owl's Keep it) while the card is up.
+  if (!atHome || home.isShut() || home.inLine() || lineTimer || entering) return;
   if (!transport.line) return void enterPark();
   void askLine(true);
 };
@@ -479,6 +481,35 @@ const refreshNotice = async () => {
 setInterval(() => {
   if (atHome) void refreshNotice();
 }, 60_000);
+
+// ---- closed for setup (OP-233): no Play on the home screen while the keepers have the park shut ----
+/** How often the home screen asks whether the park is closed, while it is up and in view. */
+const CLOSED_POLL_MS = 15_000;
+/**
+ * Sent home by the room because the park closed (OP-205): the room's word stands over an "open" from
+ * the park for this long, since a Worker that has not heard of the closing yet may say so for up to
+ * half a minute (overflowState.ts) and a browser keep it five seconds more: Play must not come back
+ * for a moment and bounce the owl.
+ */
+const SENT_HOME_TRUST_MS = 35_000;
+let sentHomeAt = Number.NEGATIVE_INFINITY;
+/** A keeper's tab (OP-156: `?keeper=1`, or a token kept from earlier in the tab): its Play still walks in. */
+const keeperTab = () => cfg.keeper || storedKeeper() !== null;
+const showClosed = (v: ClosedView) => {
+  if (!v.closed && Date.now() - sentHomeAt < SENT_HOME_TRUST_MS) return;
+  home.closed(v.closed ? { words: v.words ?? SETUP_WORDS, reopenAt: v.reopenAt, keeper: keeperTab() } : null);
+};
+/** Ask the park whether it is closed; with no answer, the home screen stays as it was. */
+const refreshClosed = async () => {
+  const v = (await transport.closed?.()) ?? null;
+  if (v && atHome) showClosed(v);
+};
+setInterval(() => {
+  if (atHome && document.visibilityState === 'visible') void refreshClosed();
+}, CLOSED_POLL_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && atHome) void refreshClosed();
+});
 const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   logIn: (opener) => {
     // Which owl are you (OP-076) first: the owl is made on this device at its reveal (or at Skip),
@@ -542,6 +573,7 @@ game.events.on(HOME_SHOWN, () => {
     void refreshWallet();
   }
   void refreshNotice();
+  void refreshClosed();
   // Back from checkout (OP-190): the ticket came while the park was starting.
   if (backSay) {
     hud.toast(backSay, 6000);
@@ -553,12 +585,13 @@ game.events.on(HOME_SHOWN, () => {
     game.registry.set(RESTARTED_KEY, false);
     hud.toast(RESTART_HOME, 8000);
   }
-  // Closed for setup (OP-205): the keepers' words stay over Play; Play asks the park again, and the
-  // room sends the owl back here with them until the park opens.
+  // Closed for setup (OP-205): the room sent the owl here with the keepers' words. The closed card
+  // takes Play's place at once (OP-233), and the park's own answer fills in the reopen time.
   const setup = game.registry.get(SETUP_KEY) as string | undefined;
   if (setup) {
     game.registry.set(SETUP_KEY, undefined);
-    home.note(setup);
+    sentHomeAt = Date.now();
+    home.closed({ words: setup, reopenAt: null, keeper: keeperTab() });
     hud.toast(setup, 8000);
   }
 });

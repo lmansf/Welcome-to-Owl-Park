@@ -5,6 +5,8 @@
  * preview scene draws it in the frame this screen leaves for it). Play always lands the owl in its
  * own nest, before its mirror (OP-105), and the park is out of the nest's door. "Logged in" means
  * only that this device holds an owl: the park has no accounts, and nobody types a thing.
+ * While the keepers have the park closed for setup (OP-233), the closed card takes the place of Play
+ * and Make your owl, with their words and the time they expect to open; a keeper's tab keeps its Play.
  */
 import type { Entry, WalletEntry } from '../net';
 import { ACCOUNT_WORDS } from './account';
@@ -45,6 +47,42 @@ export const LINE_WORDS = {
   passed: "Your turn came while you were away, so you're back in line.",
   offline: "We can't reach the park just now. Trying again…",
 } as const;
+
+/**
+ * Every word the closed card adds to the keepers' own (OP-233), for the owner's approval. The card
+ * itself is the keepers' words (SETUP_WORDS unless they wrote their own), shown in place of Play.
+ */
+export const CLOSED_WORDS = {
+  /** The time the keepers expect to open, in the visitor's own time zone. */
+  back: (when: string) => `Back by ${when}`,
+  /** Only on a keeper's tab (a keeper's token, OP-156): its Play still walks in, to check the park. */
+  keeper: 'You hold a keeper’s token: Play walks you in.',
+} as const;
+
+/**
+ * The reopen time as the closed card says it (OP-233), in this browser's own time zone (or `timeZone`,
+ * for the tests): the time alone when it is later today there, else with its day.
+ */
+export function reopenWords(at: number, now: number, opts: { locale?: string; timeZone?: string } = {}): string {
+  const zone = opts.timeZone ? { timeZone: opts.timeZone } : {};
+  const day = (ms: number) => new Intl.DateTimeFormat(opts.locale, { ...zone, year: 'numeric', month: 'numeric', day: 'numeric' }).format(ms);
+  const sameDay = day(at) === day(now);
+  const when = new Intl.DateTimeFormat(opts.locale, {
+    ...zone,
+    ...(sameDay ? {} : { weekday: 'short', month: 'short', day: 'numeric' }),
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(at);
+  return CLOSED_WORDS.back(when);
+}
+
+/** What the closed card shows (OP-233): the keepers' words, their reopen time if any, and whether this tab is a keeper's. */
+export interface ClosedCard {
+  words: string;
+  reopenAt: number | null;
+  keeper: boolean;
+}
 
 /** What the home screen shows of the line: the owl's place, or a short message. */
 export type LineView = { place: number; waitMin: number | null; ticket: boolean } | { message: 'turn' | 'passed' | 'offline' };
@@ -101,6 +139,13 @@ export interface HomeScreen {
   inLine(): boolean;
   /** Whether the park keeps accounts (OP-139): I already have an owl is shown only then. */
   setAccounts(on: boolean): void;
+  /**
+   * Closed for setup (OP-233): the closed card, in place of Play and Make your owl (a keeper's tab keeps
+   * its Play); null takes the card away and puts them back.
+   */
+  closed(card: ClosedCard | null): void;
+  /** Whether the closed card keeps this tab out (shown, and not a keeper's tab). */
+  isShut(): boolean;
 }
 
 /** Width over height of what the builder's preview keeps in view around the owl, a hat above and a pet behind (VIEW in game/BuilderScene.ts). */
@@ -135,6 +180,9 @@ function css(): string {
 #hud .home .h-line .h-message{margin:0;font-size:clamp(18px,2.8vh,22px);font-weight:700;opacity:1}
 #hud .home .h-line p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-line .h-small-note{font-size:13px;opacity:.75}
+#hud .home .h-closed{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.78);border:1px solid rgba(224,122,95,.75)}
+#hud .home .h-closed .h-closed-words{margin:0;font-size:clamp(17px,2.6vh,21px);font-weight:700;line-height:1.3}
+#hud .home .h-closed p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-stage{min-width:0;min-height:0}
 /* After every rule that sets a display, so a hidden part (the line, its message, the note) stays hidden. */
 #hud .home [hidden]{display:none}
@@ -167,6 +215,11 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     <div class="h-side">
       <div class="h-brand"><span class="h-mascot" aria-hidden="true"></span><h1></h1></div>
       <p class="h-note" data-home-note hidden></p>
+      <div class="h-closed" data-home-closed role="status" aria-live="polite" hidden>
+        <p class="h-closed-words" data-closed-words></p>
+        <p data-closed-back hidden></p>
+        <p data-closed-keeper hidden></p>
+      </div>
       <button class="h-main" data-home-btn="login"></button>
       <button class="h-main" data-home-btn="play"></button>
       <div class="h-line" data-home-line role="status" aria-live="polite" hidden>
@@ -201,6 +254,11 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   const lineTicket = $<HTMLElement>('[data-line-ticket]');
   const lineAuto = $<HTMLElement>('[data-line-auto]');
   $<HTMLElement>('[data-line-heading]').textContent = LINE_WORDS.heading;
+  const closedEl = $<HTMLElement>('[data-home-closed]');
+  const closedWords = $<HTMLElement>('[data-closed-words]');
+  const closedBack = $<HTMLElement>('[data-closed-back]');
+  const closedKeeper = $<HTMLElement>('[data-closed-keeper]');
+  closedKeeper.textContent = CLOSED_WORDS.keeper;
   lineTicket.textContent = LINE_WORDS.ticket;
   login.textContent = HOME_WORDS.logIn;
   play.textContent = HOME_WORDS.play;
@@ -215,6 +273,13 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   let shown = false;
   let loggedIn = false;
   let waiting = false;
+  /** The closed card keeps this tab out (OP-233): no Play, no Make your owl. */
+  let shut = false;
+  /** Play and Make your owl as the screen stands: one or the other, unless the line or the closed card has their place. */
+  const buttons = () => {
+    login.hidden = loggedIn || shut;
+    play.hidden = !loggedIn || waiting || shut;
+  };
   const frame = (): PreviewFrame => {
     // The owl stands low in the space beside the buttons. On a narrow phone its frame reaches a little
     // under the buttons' side, where only a pet would stand, so the owl itself can fill the space.
@@ -228,7 +293,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   }).observe(stage);
   // On a computer, Enter plays; a focused button takes Enter itself.
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || actions.blocked()) return;
+    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || shut || actions.blocked()) return;
     const t = e.target;
     if (t instanceof HTMLElement && t !== document.body && (!el.contains(t) || t instanceof HTMLButtonElement)) return;
     e.preventDefault();
@@ -240,13 +305,12 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       loggedIn = isIn;
       shown = true;
       el.hidden = false;
-      login.hidden = isIn;
-      play.hidden = !isIn || waiting;
+      buttons();
       if (!isIn) {
         wallet.hidden = true;
         noteEl.hidden = true;
       }
-      (isIn ? play : login).focus({ preventScroll: true });
+      if (!shut) (isIn ? play : login).focus({ preventScroll: true });
       if (isIn) actions.stage(frame());
     },
     hide() {
@@ -267,7 +331,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       // While the owl waits, Play gives way to its place in line.
       waiting = view !== null;
       lineEl.hidden = !waiting;
-      play.hidden = !loggedIn || waiting;
+      buttons();
       if (waiting) wallet.hidden = true;
       else wallet.hidden = !wallet.textContent || !loggedIn;
       if (!view) return;
@@ -297,5 +361,20 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     setAccounts(on) {
       restore.hidden = !on;
     },
+    closed(card) {
+      const wasShut = shut;
+      shut = card !== null && !card.keeper;
+      closedEl.hidden = card === null;
+      if (card) {
+        closedWords.textContent = card.words;
+        closedBack.textContent = card.reopenAt === null ? '' : reopenWords(card.reopenAt, Date.now());
+        closedBack.hidden = card.reopenAt === null;
+        closedKeeper.hidden = !card.keeper;
+      }
+      buttons();
+      // Open again while the screen is up: Play is back, and takes the focus as it would have.
+      if (wasShut && !shut && shown) (loggedIn ? play : login).focus({ preventScroll: true });
+    },
+    isShut: () => shut,
   };
 }

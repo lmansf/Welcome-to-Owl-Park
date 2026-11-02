@@ -367,14 +367,29 @@ describe('the overflow object (OP-075)', () => {
     try {
       const r = await post<OverflowState>('/settings', { setup: { on: true, words: '  Back at 5:15  ' } });
       expect(r.status).toBe(200);
-      expect(r.body.setup).toEqual({ on: true, words: 'Back at 5:15' });
+      expect(r.body.setup).toEqual({ on: true, words: 'Back at 5:15', reopenAt: null });
       logged(cap.lines, 'setup_on', { component: 'overflow' });
-      expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS, setup: { on: true, words: 'Back at 5:15' } });
-      expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back at 5:15' });
+      expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS, setup: { on: true, words: 'Back at 5:15', reopenAt: null } });
+      expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back at 5:15', reopenAt: null });
       logged(cap.lines, 'setup_off', { component: 'overflow' });
     } finally {
       cap.restore();
     }
+  });
+
+  it('keeps a reopen time with the setup switch, refuses one that is not a time, and forgets it when the park opens (OP-233)', async () => {
+    const back = T0 + 2 * 60 * MIN;
+    for (const reopenAt of ['5:15', -1, 1.5, Date.UTC(2100, 0, 1), true]) expect((await post('/settings', { setup: { on: true, reopenAt } })).status).toBe(400);
+    expect((await post<OverflowState>('/settings', { setup: { on: true, reopenAt: back } })).body.setup).toEqual({ on: true, words: null, reopenAt: back });
+    // Words saved later keep the time; the time can be cleared on its own.
+    expect((await post<OverflowState>('/settings', { setup: { words: 'Back soon' } })).body.setup).toEqual({ on: true, words: 'Back soon', reopenAt: back });
+    expect((await post<OverflowState>('/settings', { setup: { reopenAt: null } })).body.setup).toEqual({ on: true, words: 'Back soon', reopenAt: null });
+    // Opening the park forgets the time it gave, so the next closing starts with none; the words stay.
+    await post('/settings', { setup: { reopenAt: back } });
+    expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back soon', reopenAt: null });
+    // A time can be set ahead of the closing, and is kept through it.
+    await post('/settings', { setup: { reopenAt: back } });
+    expect((await post<OverflowState>('/settings', { setup: { on: true } })).body.setup).toEqual({ on: true, words: 'Back soon', reopenAt: back });
   });
 
   it('refuses settings out of bounds, and copies while the park runs in one object', async () => {
