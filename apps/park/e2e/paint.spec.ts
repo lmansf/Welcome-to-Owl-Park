@@ -3,8 +3,8 @@ import { expect, test } from './fixtures';
 import { E2E_ADMIN_KEY, openPark, settleCamera, state, walkAndStop, type ParkState } from './helpers';
 
 /**
- * The ledge painter (OP-156): a keeper paints the tree's ledges over the running room and saves the
- * draft. Against the room server (the edge project): the keepers' key buys the tab a keeper's token
+ * The ledge painter (OP-156): a keeper paints the tree's ledges over the running room, places the
+ * level's named spots, and saves the draft. Against the room server (the edge project): the keepers' key buys the tab a keeper's token
  * (`?keeper=1`), which lets the owl into the dark tree and lets the painter save. The tree's four
  * screens are drawn with software WebGL on a CI runner, a frame a few hundred ms, and each look at the
  * page waits on one: so these look as seldom as they can, and run as slow tests.
@@ -170,6 +170,63 @@ test.describe('the ledge painter (OP-156)', () => {
     await page.keyboard.press('Control+z');
     await page.keyboard.press('Control+z');
     await expect.poll(async () => (await paint(page)).draft).toEqual(start.draft);
+    await page.context().close();
+  });
+
+  test('a keeper places one of the level’s named spots, drags it, takes the drag back and saves it (OP-156, part 3)', async ({ browser, request }) => {
+    test.slow(); // the tree drawn with software WebGL, each look at the page a frame or more
+    const page = await painter(browser);
+    // The level's names west to east (OP-155's list), and every spot of the room's own or of a draft saved before drawn as a pin with its name.
+    const first = await paint(page);
+    expect(first.names).toEqual(['closed-west', 'stair-l2-l1', 'stair-l1-l0', 'booth-lobby', 'idol-market', 'guardian-market', 'game-market', 'to-market']);
+    expect(first.draft.spots.map((s) => s.id)).toEqual(expect.arrayContaining(first.ownSpots));
+    expect(first.drawn.spots).toEqual(first.draft.spots.map((s) => s.id));
+    expect(first.pins).toBe(first.draft.spots.length);
+    // The spot tool lists them; the lobby's booth is picked to place.
+    await settleCamera(page);
+    await page.locator('[data-tool="spot"]').click();
+    const names = page.locator('[data-paint-names]');
+    await expect(names).toBeVisible();
+    await expect(names.locator('[data-spot]')).toHaveCount(first.names.length);
+    const booth = names.locator('[data-spot="booth-lobby"]');
+    await booth.click();
+    await expect(booth).toHaveAttribute('aria-pressed', 'true');
+    // A room server that kept an earlier run's draft has it placed already: picked with its name, and Delete takes it away first.
+    if (first.draft.spots.some((s) => s.id === 'booth-lobby')) {
+      await expect.poll(async () => (await paint(page)).selected?.id).toBe('booth-lobby');
+      await page.locator('[data-paint="delete"]').click();
+    }
+    await expect(booth).toHaveAttribute('data-placed', 'false');
+    await expect(page.locator('[data-paint-readout]')).toContainText('booth-lobby: tap where it stands');
+    // A tap at the foot of the booth's window places it there, picked, its name ticked.
+    const candidates = [GROUND, GROUND - 40, GROUND - 80].map((y) => ({ x: LOBBY + 831, y }));
+    const seen = await onScreen(page, candidates);
+    const n = seen.findIndex((p) => p.open);
+    expect(n, 'a place for the booth on open canvas').toBeGreaterThanOrEqual(0);
+    await page.mouse.click(seen[n]!.x, seen[n]!.y);
+    let placed = first;
+    await expect.poll(async () => (placed = await paint(page)).draft.spots.some((s) => s.id === 'booth-lobby')).toBe(true);
+    const spot = placed.draft.spots.find((s) => s.id === 'booth-lobby')!;
+    expect(Math.abs(spot.x - candidates[n]!.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(spot.y - candidates[n]!.y)).toBeLessThanOrEqual(2);
+    expect(placed.selected).toMatchObject({ kind: 'spot', id: 'booth-lobby' });
+    await expect.poll(async () => (await paint(page)).drawn.spots).toContain('booth-lobby');
+    await expect(booth).toHaveAttribute('data-placed', 'true');
+    await expect(page.locator('[data-paint-readout]')).toHaveText(`booth-lobby  x ${spot.x}  y ${spot.y}`);
+    // Its pin dragged 40 px east moves it; Undo puts it back where it was placed.
+    await dragRoom(page, spot, { x: spot.x + 40, y: spot.y });
+    await expect.poll(async () => Math.abs(((await paint(page)).draft.spots.find((s) => s.id === 'booth-lobby')?.x ?? 0) - (spot.x + 40))).toBeLessThanOrEqual(2);
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => (await paint(page)).draft.spots.find((s) => s.id === 'booth-lobby')).toEqual(spot);
+    // Saved: the room server gives the spot back where it was placed.
+    await page.locator('[data-paint="save"]').click();
+    await expect(page.locator('[data-paint-status]')).toHaveAttribute('data-state', 'saved');
+    const saved = await paint(page);
+    const back = await request.get('/api/masks/l1');
+    expect(back.status()).toBe(200);
+    const body = (await back.json()) as Paint['draft'];
+    expect(body).toEqual({ room: 'l1', ...saved.draft, savedAt: expect.any(Number) });
+    expect(body.spots).toContainEqual(spot);
     await page.context().close();
   });
 });

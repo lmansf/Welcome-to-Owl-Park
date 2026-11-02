@@ -350,6 +350,16 @@ describe('the overflow object (OP-075)', () => {
     expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { ...realms, open: [] } });
   });
 
+  it('keeps the tree’s share of new arrivals with the realms switch, 0 to 100, and tells the rooms (OP-156)', async () => {
+    for (const bad of [-1, 101, 12.5, '40']) expect((await post('/settings', { realms: { tree: bad } })).status, String(bad)).toBe(400);
+    const r = await post<OverflowState>('/settings', { realms: { tree: 40 } });
+    expect(r.status).toBe(200);
+    expect(r.body.realms).toEqual({ open: [], portal: false, night: null, tree: 40 });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { open: [], portal: false, night: null, tree: 40 } });
+    // 0 darkens the tree again, and the switch reads as one never touched.
+    expect((await post<OverflowState>('/settings', { realms: { tree: 0 } })).body.realms).toEqual({ open: [], portal: false, night: null });
+  });
+
   it('refuses settings out of bounds, and copies while the park runs in one object', async () => {
     expect((await post('/settings', { line: { threshold: -5 } })).status).toBe(400);
     expect((await post('/settings', { ribbon: { words: 'x'.repeat(200) } })).status).toBe(400);

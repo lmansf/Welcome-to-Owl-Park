@@ -4,6 +4,8 @@
  * the room server keeps them in its overflow object. Shared so the pages, the Worker and the tests
  * agree on the settings, their limits and what a visitor in the line is told.
  */
+import { hashForLog } from './log';
+import { mapOf, type RoomDef } from './room';
 
 /**
  * off: never a line. auto: a line once the park holds `threshold` owls, kept until it has emptied.
@@ -130,15 +132,53 @@ export interface RealmsSettings {
   open: string[];
   portal: boolean;
   night: string | null;
+  /**
+   * The entries setting (OP-156): of every hundred new arrivals, how many start in the tree (map 2)
+   * rather than today's park; absent is 0. Above 0 the tree's gated rooms are open to every owl the
+   * front gate lets in; at 0 the tree is dark, and only a keeper's token reaches it.
+   */
+  tree?: number;
 }
 export const REALMS_DEFAULTS: RealmsSettings = { open: [], portal: false, night: null };
 export const REALMS_OPEN_MAX = 16;
+
+/** The tree's share of new arrivals, 0 to 100 (the entries setting, OP-156). */
+export function treeShare(r: Pick<RealmsSettings, 'tree'>): number {
+  const n = r.tree;
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? Math.min(100, n) : 0;
+}
+
+/** These settings with the tree's share set: kept only when above 0, so a switch never touched reads as before. */
+function withTree(r: RealmsSettings, share: number): RealmsSettings {
+  const { tree: _gone, ...rest } = r;
+  return share > 0 ? { ...rest, tree: share } : rest;
+}
+
+/**
+ * Which park a new arrival starts in (OP-156): the tree for about `share` owls in every hundred, the
+ * same answer for an owl every time (its id decides), today's park for the rest and whenever the share
+ * is 0.
+ */
+export function entryMap(who: string, share: number): 1 | 2 {
+  if (!(share > 0)) return 1;
+  if (share >= 100) return 2;
+  return parseInt(hashForLog(`entry:${who}`).slice(-6), 16) % 100 < share ? 2 : 1;
+}
+
+/**
+ * Whether the realms switch keeps a room shut: a gated room not in `open`; a gated room of the tree
+ * (map 2) is also open while the tree takes a share of the arrivals. Rooms without `gated` are never shut.
+ */
+export function realmShut(room: Pick<RoomDef, 'id' | 'gated' | 'map'> | undefined, r: RealmsSettings): boolean {
+  if (!room || room.gated !== true || r.open.includes(room.id)) return false;
+  return !(mapOf(room) === 2 && treeShare(r) > 0);
+}
 
 /** The realms settings with the given changes, or null when a room is not gated or a night is unknown. */
 export function withRealmsChanges(base: RealmsSettings, v: unknown, gated: (room: string) => boolean, night: (key: string) => boolean): RealmsSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  const out: RealmsSettings = { open: [...base.open], portal: base.portal, night: base.night };
+  let out: RealmsSettings = withTree({ open: [...base.open], portal: base.portal, night: base.night }, treeShare(base));
   if (o['open'] !== undefined) {
     const list = o['open'];
     if (!Array.isArray(list) || list.length > REALMS_OPEN_MAX || !list.every((r) => typeof r === 'string' && gated(r))) return null;
@@ -153,6 +193,11 @@ export function withRealmsChanges(base: RealmsSettings, v: unknown, gated: (room
     if (n !== null && (typeof n !== 'string' || !night(n))) return null;
     out.night = n;
   }
+  if (o['tree'] !== undefined) {
+    const share = o['tree'];
+    if (typeof share !== 'number' || !Number.isInteger(share) || share < 0 || share > 100) return null;
+    out = withTree(out, share);
+  }
   return out;
 }
 
@@ -161,7 +206,9 @@ export function cleanRealms(v: unknown): RealmsSettings {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return REALMS_DEFAULTS;
   const o = v as Record<string, unknown>;
   const open = Array.isArray(o['open']) ? (o['open'] as unknown[]).filter((r): r is string => typeof r === 'string' && r.length <= 32).slice(0, REALMS_OPEN_MAX).sort() : [];
-  return { open, portal: o['portal'] === true, night: typeof o['night'] === 'string' && o['night'].length <= 32 ? o['night'] : null };
+  const clean: RealmsSettings = { open, portal: o['portal'] === true, night: typeof o['night'] === 'string' && o['night'].length <= 32 ? o['night'] : null };
+  return withTree(clean, typeof o['tree'] === 'number' && Number.isInteger(o['tree']) && o['tree'] >= 0 && o['tree'] <= 100 ? o['tree'] : 0);
 }
 
-export const sameRealms = (a: RealmsSettings, b: RealmsSettings): boolean => a.portal === b.portal && a.night === b.night && a.open.length === b.open.length && a.open.every((r, i) => r === b.open[i]);
+export const sameRealms = (a: RealmsSettings, b: RealmsSettings): boolean =>
+  a.portal === b.portal && a.night === b.night && treeShare(a) === treeShare(b) && a.open.length === b.open.length && a.open.every((r, i) => r === b.open[i]);
