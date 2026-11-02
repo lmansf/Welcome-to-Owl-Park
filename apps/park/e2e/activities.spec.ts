@@ -86,7 +86,9 @@ test.describe('activities (this device)', () => {
     await act(page, 'act:copy');
     const card = page.locator('.play-card.copy');
     await expect(card).toBeVisible();
-    await expect(card).toHaveAttribute('data-phase', 'listen');
+    // The tune plays first; on a slow machine (a shard's first test, the page still warming) it can be
+    // over before the card is seen, so the card may already be waiting for the owl's notes.
+    await expect(card).toHaveAttribute('data-phase', /^(listen|play)$/);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-copy.png` });
     const game = (await state(page)).play?.copy;
     expect(game?.tune).toHaveLength(3);
