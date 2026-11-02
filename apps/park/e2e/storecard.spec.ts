@@ -163,6 +163,27 @@ test.describe('the card before the store (OP-153)', () => {
     });
   }
 
+  test('beside the Day Ticket, the card offers to bring here an owl whose ticket is on another screen (OP-183); its button opens the account’s box and nothing of the store', async ({ browser, request }) => {
+    await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+    const a = await arrive(browser, COMPUTER);
+    const opened = pagesOpened(a);
+    await inAsSpectator(a);
+    await askFromBadge(a);
+    const aside = a.locator(`${STORE_CARD} [data-store="aside"]`);
+    await expect(aside).toBeVisible();
+    await expect(a.locator(`${STORE_CARD} [data-store="aside-line"]`)).toHaveText('Have a ticket on another screen?');
+    const bring = a.locator(`${STORE_CARD} [data-store="aside-go"]`);
+    await expect(bring).toHaveText('Bring your owl here');
+    const box = (await bring.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    await bring.click();
+    await expect(card(a)).toBeHidden();
+    await expect(a.getByRole('dialog', { name: 'Bring your owl here' })).toBeVisible({ timeout: 15_000 });
+    await new Promise((r) => setTimeout(r, QUIET_MS));
+    expect(opened(), 'pages opened by Bring your owl here').toBe(0);
+    await a.context().close();
+  });
+
   test('Back to checkout, once its window was closed, opens it again with no second card', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser, COMPUTER);

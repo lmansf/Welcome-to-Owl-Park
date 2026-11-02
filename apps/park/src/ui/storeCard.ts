@@ -18,6 +18,10 @@
  * This file is the only place in the park's code that opens a window or makes a link off the park:
  * storeCard.test.ts reads the code for any other, so no new way can skip the card.
  *
+ * A way may put one more choice on the card, under its two buttons, that goes nowhere near the store
+ * (`StoreAside`; OP-183: at the turnstiles, bringing an owl whose ticket is on another screen here).
+ * It closes the card and runs in its click, and Tab reaches it after Continue.
+ *
  * TODO-DOCS (OP-153, OP-180): the card before the store in docs/ARCHITECTURE.md (the purchase path)
  * and docs/PLAYBOOK.md section 7, with its line, which the owner approves (`STORE_WORDS.ask`).
  */
@@ -52,10 +56,21 @@ export type StoreGo =
   | { run: (open: Opener, link: LinkMaker) => void };
 
 /**
- * Asks before the store; `opener` takes the focus back after Not now. `say`: lines the card shows
- * above its own (what the turnstiles say before they sell a Day Ticket, OP-180).
+ * A choice beside the purchase that stays in the park (OP-183): its short line and its button, under
+ * Continue and Not now. `run` comes after the card has closed, in the same click.
  */
-export type AskStore = (go: StoreGo, opener?: HTMLElement | null, say?: readonly string[]) => void;
+export interface StoreAside {
+  line: string;
+  label: string;
+  run: () => void;
+}
+
+/**
+ * Asks before the store; `opener` takes the focus back after Not now. `say`: lines the card shows
+ * above its own (what the turnstiles say before they sell a Day Ticket, OP-180). `aside`: a choice
+ * beside the purchase that stays in the park (OP-183).
+ */
+export type AskStore = (go: StoreGo, opener?: HTMLElement | null, say?: readonly string[], aside?: StoreAside) => void;
 
 export interface StoreCard {
   ask: AskStore;
@@ -97,6 +112,10 @@ const CSS = `
 #hud .store-ask .row > .go,#hud .store-ask .row > .stay{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--m-target);min-width:max(var(--m-target),116px);margin:0;padding:10px 20px;border-radius:999px;font:inherit;font-size:var(--m-body);font-weight:800;text-decoration:none;box-shadow:none;text-shadow:none;cursor:pointer}
 #hud .store-ask .row > .go{background:var(--m-accent);color:var(--m-on-accent);border:2px solid var(--m-accent)}
 #hud .store-ask .row > .stay{background:transparent;color:var(--m-text);border:2px solid var(--m-frame)}
+#hud .store-ask .aside{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding-top:14px;border-top:1px solid var(--m-frame)}
+#hud .store-ask .aside[hidden]{display:none}
+#hud .store-ask .aside p{margin:0}
+#hud .store-ask .aside > button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--m-target);min-width:max(var(--m-target),116px);margin:0;padding:10px 20px;border-radius:999px;font:inherit;font-size:var(--m-body);font-weight:800;background:transparent;color:var(--m-text);border:2px solid var(--m-frame);box-shadow:none;text-shadow:none;cursor:pointer}
 #hud .store-ask :focus-visible{outline:3px solid var(--m-focus);outline-offset:2px}
 `;
 
@@ -137,7 +156,18 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
   stay.textContent = STORE_WORDS.stay;
   stay.addEventListener('click', () => modal.close());
   row.appendChild(stay);
-  box.append(says, line, row);
+  /** A choice beside the purchase that stays in the park (OP-183), under the two buttons. */
+  const aside = document.createElement('div');
+  aside.className = 'aside';
+  aside.hidden = true;
+  aside.dataset['store'] = 'aside';
+  const asideLine = document.createElement('p');
+  asideLine.dataset['store'] = 'aside-line';
+  const asideGo = document.createElement('button');
+  asideGo.type = 'button';
+  asideGo.dataset['store'] = 'aside-go';
+  aside.append(asideLine, asideGo);
+  box.append(says, line, row, aside);
   // Escape is Not now, and only that: whatever is under this card stays open.
   box.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' && e.code !== 'Escape') return;
@@ -148,8 +178,18 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
 
   /** The way waiting on Continue; a press of an older card's Continue does nothing. */
   let waiting: StoreGo | null = null;
+  /** The choice beside it on the open card, if the way gave one. */
+  let beside: StoreAside | null = null;
   modal.onClose(() => {
     waiting = null;
+    beside = null;
+  });
+  asideGo.addEventListener('click', () => {
+    const run = beside?.run;
+    if (!run) return;
+    // The card closes first (the focus goes back to what asked), then the choice runs in this same click.
+    modal.close();
+    run();
   });
 
   /** Continue for this way: the link itself, or a button that opens the way's window in its click. */
@@ -178,9 +218,13 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
   };
 
   return {
-    ask(go, opener, say) {
+    ask(go, opener, say, side) {
       if (modal.isOpen()) modal.close();
       waiting = go;
+      beside = side ?? null;
+      aside.hidden = !side;
+      asideLine.textContent = side?.line ?? '';
+      asideGo.textContent = side?.label ?? '';
       says.innerHTML = '';
       says.hidden = !say?.length;
       for (const [i, text] of (say ?? []).entries()) {
