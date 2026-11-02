@@ -250,6 +250,48 @@ turnstiles let everyone through. The steps, in order:
     and whether the pass link is ready (the code set, an annual pass on sale). Votes count one per
     wallet per park day, however many tickets or passes it holds.
 
+11. **Back to the park after checkout** (OP-190; NOT APPLIED: the store's theme is the owner's,
+    and this waits for the owner's yes). The store's Thank you page has one way out, its "Continue
+    shopping" link to the store's home page. The owner decided that tickets sell at the turnstiles
+    and the ticket shop is dropped, so the store's home page has nothing of its own to show: this
+    snippet sends every visitor there to the park, and a buyer who came from checkout to the park's
+    return address, `https://exploreowlpark.com/?checkout=done` (plain, nothing secret in it). There
+    the park tells the game window at once, so the owl goes through the turnstiles with its new
+    ticket, and checkout's window closes (or says the ticket is waiting in the park window); with no
+    game window open, the park starts in that window and Play takes the owl in
+    (`apps/park/src/ui/checkoutReturn.ts`). In Shopify admin → Online Store → Themes → the live
+    theme (Horizon) → Edit code → `layout/theme.liquid`, paste this as the first thing inside
+    `<head>`, then Save:
+
+    ```liquid
+    {%- comment -%} Owl Park (OP-190): the store's home page sends visitors to the park; back from checkout, to its return address. {%- endcomment -%}
+    {%- if request.page_type == 'index' and request.design_mode == false -%}
+      <script>
+        (function () {
+          var park = 'https://exploreowlpark.com/';
+          var fromCheckout = /\/checkouts\/|\/orders\//.test(document.referrer || '');
+          location.replace(fromCheckout ? park + '?checkout=done' : park);
+        })();
+      </script>
+    {%- endif -%}
+    ```
+
+    It runs on the home page only (`request.page_type == 'index'`), never in the theme editor
+    (`request.design_mode`), and checkout itself is untouched (themes do not run on checkout).
+    Checkout's addresses hold `/checkouts/` (the Thank you page too); `/orders/` is the order status
+    page that the confirmation email links to. `location.replace` leaves the store's home page out
+    of the back button. To undo it, delete the lines and Save. Check after applying: buy a Day
+    Ticket at the turnstiles on a computer, press Continue shopping on the Thank you page, and the
+    checkout window should close or say "You're all set"; open the store's home page directly, and
+    it should go to the park's home screen. If the Thank you page sends no referrer, buyers land on
+    the park's plain address instead; the game window still finds the ticket within a few seconds.
+
+    **The stronger option, later** (not built): a Shopify app with a Thank you page checkout UI
+    extension (target `purchase.thank-you.block.render`, allowed on every plan but Starter, so on
+    Basic too) that shows a "Back to the park" button to `https://exploreowlpark.com/?checkout=done`
+    on the Thank you page itself, with no wait for Continue shopping. It needs an app with an
+    extension deployed through the Shopify CLI and placed in the checkout editor, the owner's.
+
 ### Coding agents
 
 Claude Code picks up the Cloudflare skills vendored in `.claude/skills/` and the Cloudflare MCP
