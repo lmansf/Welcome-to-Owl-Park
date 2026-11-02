@@ -474,7 +474,7 @@ test('selectJobs supports lists and globs and rejects unmatched patterns', () =>
   const flight = Object.keys(P.FLIGHT_MASTERS);
   assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, ...flight, 'owl-wing-right']);
   assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), [...P.SPECIES_MASTER_KEYS, ...flight]);
-  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'tree-l1-0-fg', 'tree-l1-w1-fg', 'tree-l1-e1-fg', 'tree-l1-e2-fg', 'tree-l4-0-fg', 'tree-l4-e1-fg', 'tree-l3-0-fg', 'tree-l3-e1-fg', 'tree-l3-e2-fg', 'tree-l2-0-fg', 'tree-l2-w1-fg', 'tree-l2-w2-fg']);
+  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'tree-l1-0-fg', 'tree-l1-w1-fg', 'tree-l1-e1-fg', 'tree-l1-e2-fg', 'tree-l4-0-fg', 'tree-l4-e1-fg', 'tree-l3-0-fg', 'tree-l3-e1-fg', 'tree-l3-e2-fg', 'tree-l2-0-fg', 'tree-l2-w1-fg', 'tree-l2-w2-fg', 'tree-l5-0-fg', 'tree-l5-w2-fg', 'tree-l5-w1-fg', 'tree-l5-e1-fg', 'tree-l5-e2-fg', 'tree-l5-e3-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }), [10, 11, 12]);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }, { variants: 2, seed: 50 }), [50, 51]);
