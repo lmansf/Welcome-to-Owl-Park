@@ -213,4 +213,6 @@ export interface RunPaid {
   top: boolean;
   wall: GameWall;
   mine: OwnBests;
+  /** A spectator's run (OP-191): checked like any, but it paid nothing, kept nothing for the wall and moved no task. */
+  practice?: true;
 }

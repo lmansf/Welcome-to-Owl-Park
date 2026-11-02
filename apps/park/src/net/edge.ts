@@ -48,7 +48,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -523,6 +523,8 @@ export class EdgeTransport implements ParkTransport {
           this.keepEntry(f.entry);
           if (f.notice !== undefined) handlers.onNotice?.(f.notice);
           if (f.realms) handlers.onRealms?.(f.realms);
+          // Spectators (OP-191): every welcome says whether this owl walks the park as one.
+          handlers.onSpectator?.(f.spectator === true);
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
           // This page speaks the room's protocol: a later version change may reload it again.
@@ -591,6 +593,7 @@ export class EdgeTransport implements ParkTransport {
         case 'refused':
         case 'act':
         case 'street':
+        case 'admitted':
           answer(f);
           break;
         case 'nest':
@@ -974,6 +977,20 @@ export class EdgeTransport implements ParkTransport {
       drop() {
         // As a dead connection is closed: onclose schedules the reconnect.
         ws?.close(4000, 'dropped');
+      },
+      // A spectator's ticket went through (OP-191): the room takes the admitted pass in place.
+      admit: async () => {
+        const pass = await this.getPass().catch(() => null);
+        if (!pass?.adm) return false;
+        const f = await request({ t: 'admit', pass: pass.pass });
+        const ok = f?.t === 'admitted' && f.ok;
+        if (ok) handlers.onSpectator?.(false);
+        return ok;
+      },
+      renew() {
+        // The fallback when the room would not take the pass: a new socket on it, at once.
+        backoff = BACKOFF_MIN_MS;
+        ws?.close(4000, 'renew');
       },
       async leave() {
         closed = true;

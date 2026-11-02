@@ -22,7 +22,7 @@ import { openingOn, passLinkReady, storeCatalogue } from './opening';
 import { openingPage } from './openingPage';
 import { GUEST_PASS_TTL_S, KEEPER_TTL_S, isCollectorId, mintCollector, mintEntry, mintKeeper, mintPass, passRefusal, randomCollectorId, randomVisitorId, readCollector, signingSecret, verifyEntry, verifyKeeper, verifyPass, type PassPayload } from './pass';
 import { jobOf } from './crons';
-import { admitted, beforeRestart, gateMode, mayEnter } from './gate';
+import { admitted, beforeRestart, gateMode, mayEnter, spectating, spectatorsOn } from './gate';
 import { forgetGate, gateFrom, gateNow, type GateRead, type GateSet } from './gateSwitch';
 import { gatePage } from './gatePage';
 import { health } from './health';
@@ -476,7 +476,8 @@ const park = {
       if (!pass) return json({ error: 'bad-pass' }, 401);
       // A pass from before the park's nightly restart goes through the turnstiles again (OP-181).
       const gate = await gateOf(env);
-      return json({ gate: gate.mode, admitted: pass.adm && !beforeRestart(gate, pass) });
+      // `spectators` (OP-191), only while SPECTATORS is on: an owl without a ticket that works walks on past the turnstiles as a spectator.
+      return json({ gate: gate.mode, admitted: pass.adm && !beforeRestart(gate, pass), ...(spectatorsOn(env) ? { spectators: true } : {}) });
     }
 
     if (url.pathname === '/api/travel') {
@@ -1054,10 +1055,13 @@ const park = {
         return new Response('bad pass', { status: 401 });
       }
       const seen = { room: roomId, session_id: hashForLog(pass.id), ...(pass.cid ? { collector_hash: hashForLog(pass.cid) } : {}) };
-      if (!mayEnter(await gateOf(env), pass, roomId)) {
+      // Past the turnstiles without a ticket that works: turned away, or with SPECTATORS on let in as a spectator (OP-191).
+      const gate = await gateOf(env);
+      if (!mayEnter(gate, pass, roomId) && !spectatorsOn(env)) {
         log.info('room.join', 'room_join_refused', 'A room socket was refused: the pass is not admitted past the front gate.', { ...seen, reason: 'gate' });
         return new Response('not admitted', { status: 403 });
       }
+      const spectator = spectating(gate, pass, roomId);
       // The line (OP-075): while the park has one, only an owl that was inside lately, or came
       // through it, opens a room; a newcomer is sent to wait on the home screen.
       const busy = await overflowOf(env);
@@ -1076,6 +1080,9 @@ const park = {
       // A fresh entry with every room, so an owl inside goes on from room to room while there is a line.
       headers.set('X-Entry', await mintEntry(secret, who));
       headers.set('X-Visitor-Id', pass.id);
+      // Only the Worker says whether the owl is a visitor or a spectator (OP-191): whatever the page sent under the name goes.
+      headers.delete('X-Visitor-Kind');
+      headers.set('X-Visitor-Kind', spectator ? 'spectator' : 'visitor');
       // Only the pass says whose collection (and nest) this is, and on which device: whatever the page sent under these names goes.
       headers.delete('X-Collector-Id');
       headers.delete('X-Collector-Tz');

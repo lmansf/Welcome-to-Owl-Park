@@ -45,6 +45,10 @@ board (PM hat).
 - To stop the store as well: in Shopify, set the ticket products to Draft; they leave the store at
   once.
 - To start again: **Take tickets now**, and the products back to Active.
+- Spectators (OP-191) misbehaving or crowding the rooms: set `SPECTATORS` to `"off"` in
+  `apps/edge/wrangler.jsonc` and deploy (`docs/DEPLOY.md`). From then on an owl without a ticket is
+  turned away at the turnstiles as before; spectators already inside keep their sockets until they
+  leave or the nightly restart. To keep spectators but fewer of them, lower `SPECTATOR_SHARE`.
 
 ## 4. Tickets that did not arrive
 

@@ -9,6 +9,12 @@
  * screen its owl has moved from is sent the moved card, at its hello or at once when the Worker
  * says the owl was restored elsewhere. Once a night the Worker restarts the park (OP-181): every
  * socket is told, then closed a moment later by the object's alarm, and each page goes home.
+ *
+ * Spectators (OP-191): the Worker says of every socket whether it is a visitor or a spectator (an owl
+ * past the turnstiles without a ticket that works), and a socket inside the park it says neither of is a
+ * spectator. A spectator walks, emotes, chats and plays every game, but earns nothing: every award an
+ * owl's play earns goes through `earnFor`, and the arcade's and the climb's runs are practice runs. The
+ * quests and today's tasks refuse it. A ticket bought meanwhile makes it a full visitor in place (`admit`).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -57,6 +63,7 @@ import {
   startRun,
   wearVariants,
   type ClientAct,
+  type ClientAdmit,
   type ClientFrame,
   type ClientHello,
   type ClientNest,
@@ -68,6 +75,7 @@ import {
   type NestView,
   type NestVisit,
   type OwlLook,
+  type PlayEvent,
   type PlayResult,
   type QuestBoard,
   type QuestUpdate,
@@ -83,8 +91,8 @@ import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectL
 import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
-import { ROOMS, isRoomId, publicCounts, roomCap, roomDef } from './rooms';
-import { isCollectorId, signingSecret, verifyKeeper } from './pass';
+import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from './rooms';
+import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
 import type { Env } from './env';
 
 interface Attachment {
@@ -112,6 +120,29 @@ interface Attachment {
   run?: string;
   /** Why the room server closed the socket, when it did (rate limits, a bad frame): its leave is a kick (OP-134). */
   kicked?: string;
+  /**
+   * A spectator (OP-191): past the turnstiles without a ticket that works. It plays but earns nothing,
+   * and the quests and today's tasks are locked to it, until a ticket's pass admits it in place.
+   */
+  spec?: true;
+}
+
+/**
+ * Whether a socket into this room is a spectator's (OP-191), by the kind the Worker gave it
+ * (X-Visitor-Kind, after dropping whatever the page sent). Default-deny: inside the park, a socket the
+ * Worker did not call a visitor is a spectator; outside it (the lobby, the street, the nests) nobody is.
+ */
+export function spectatorSocket(roomId: string, kind: string | null): boolean {
+  return insidePark(roomId) && kind !== 'visitor';
+}
+
+/** What an owl's play earned (OP-191): a ticket holder's pay, or a spectator's nothing, with its balance and `practice`. */
+type Earned = PlayResult & { practice?: true };
+
+/** The look a spectator shows (OP-191): no Realm Vote pledge, since the vote is locked to it. */
+function withoutPledge(look: OwlLook): OwlLook {
+  const { pledge: _pledge, ...rest } = look;
+  return rest;
 }
 
 /** Why an owl leaves its room, as the log tells it (OP-134); `afk` is told for a goodbye said asleep. */
@@ -299,6 +330,8 @@ export class RoomObject extends DurableObject<Env> {
   private readonly throttled = new Map<string, { n: number; toldAt: number }>();
   /** Places the room would not take as asked, by socket session, since last told (OP-149's position_rejected). */
   private readonly rejected = new Map<string, { n: number; toldAt: number; why: PositionRejection }>();
+  /** Spectators' sockets whose first refused frame was told (OP-191's spectator_refused): once per socket. */
+  private readonly refusedTold = new Set<string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -354,6 +387,7 @@ export class RoomObject extends DurableObject<Env> {
       r = new Room(def, {
         now: () => Date.now(),
         cap: roomCap(this.env, id),
+        spectatorLimit: spectatorLimit(this.env, id),
         counts: () => this.counts(),
         log: this.log,
         rejected: (owl, why) => this.positionRejected(id, owl, why),
@@ -420,6 +454,21 @@ export class RoomObject extends DurableObject<Env> {
     const r = this.rejected.get(att.sid);
     this.rejected.delete(att.sid);
     if (r?.n) this.tellRejected(att, r);
+    this.refusedTold.delete(att.sid);
+  }
+
+  /**
+   * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a leaf pile
+   * or a stall, a quest item, today's tasks. Told once per socket, with the first frame refused.
+   *
+   * TODO-DOCS (OP-191): docs/LOGGING.md: spectator_refused (room.play, info): frame (the first refused
+   * frame, or `admit` with its reason for a pass that did not admit, told each time).
+   */
+  private spectatorRefused(att: Attachment, frame: string): void {
+    if (this.refusedTold.has(att.sid)) return;
+    if (this.refusedTold.size >= 2_000) this.refusedTold.clear();
+    this.refusedTold.add(att.sid);
+    this.logOf(att).info('room.play', 'spectator_refused', 'A spectator asked for something locked to ticket holders: it was refused.', { frame });
   }
 
   /**
@@ -684,6 +733,8 @@ export class RoomObject extends DurableObject<Env> {
     if (isCollectorId(cid)) att.cid = cid;
     if (isDeviceId(dev)) att.dev = dev;
     if (isTimeZone(tz)) att.tz = tz;
+    // A spectator (OP-191), by the Worker's word: inside the park, a socket it did not call a visitor is one.
+    if (spectatorSocket(roomId, request.headers.get('X-Visitor-Kind'))) att.spec = true;
     // Which copy of the room this is, and the entry for the welcome (OP-075): the Worker's word only.
     const copy = Number(request.headers.get('X-Room-Copy'));
     if (Number.isInteger(copy) && copy > 1) att.copy = copy;
@@ -740,9 +791,6 @@ export class RoomObject extends DurableObject<Env> {
 
     if (!att.state) {
       if (frame.t !== 'hello') return this.kick(ws, CLOSE.BAD_PROTOCOL, 'hello first');
-      if (this.env.GATE === 'ticket' && att.ip !== 'admitted') {
-        // v2 hook: the Worker marks admitted passes; guests are refused when the gate is closed.
-      }
       if (!isNestRoom(att.room)) {
         // A gated realm the keepers have not opened: the page walks the owl back to the hub. A keeper's
         // token (OP-156) lets its owl in, to walk the tree (map 2) while it is dark.
@@ -832,7 +880,36 @@ export class RoomObject extends DurableObject<Env> {
       case 'nest':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.arrange(ws, att, room, frame));
+      case 'admit':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.admitPass(ws, att, room, frame));
     }
+  }
+
+  /**
+   * A spectator's ticket went through the turnstiles (OP-191): the pass the scan gave its page makes it a
+   * full visitor here, in place, when the pass is admitted and good, is this owl's (its visitor and its
+   * collector), and was made since this socket opened. Answered `admitted`; once admitted, its arrival
+   * counts for its quests as a visitor's does. A run it started as a spectator stays a practice run.
+   */
+  private async admitPass(ws: WebSocket, att: Attachment, room: Room, frame: ClientAdmit): Promise<void> {
+    const r = frame.r;
+    if (room.sessionOf(att.id) !== att.sid) return;
+    if (!att.spec) return this.send(ws, { t: 'admitted', r, ok: true });
+    const pass = await verifyPass(signingSecret(this.env), frame.pass);
+    const why = !pass ? 'pass' : !pass.adm ? 'not-admitted' : pass.id !== att.id || pass.cid !== att.cid ? 'not-this-owl' : (pass.iat ?? 0) < Math.floor(att.joinedAt / 1000) ? 'before-socket' : null;
+    if (why) {
+      this.logOf(att).info('room.play', 'spectator_refused', 'A spectator’s pass did not make it a full visitor: it stays a spectator.', { frame: 'admit', reason: why });
+      return this.send(ws, { t: 'admitted', r, ok: false, reason: 'pass' });
+    }
+    const kept = ws.deserializeAttachment() as Attachment | null;
+    if (!kept || kept.sid !== att.sid) return;
+    const { spec: _spec, ...visitor } = kept;
+    ws.serializeAttachment(visitor satisfies Attachment);
+    this.send(ws, { t: 'admitted', r, ok: true });
+    // TODO-DOCS (OP-191): docs/LOGGING.md: spectator_admitted (room.join, info): a spectator's ticket made it a full visitor in place.
+    this.logOf(att).info('room.join', 'spectator_admitted', 'A spectator’s ticket went through: it is a full visitor in its room from now on.');
+    if (!isNestRoom(att.room)) await this.pushEvent(ws, visitor, { kind: 'visit', room: att.room });
   }
 
   /** Put a visitor whose hello arrived in its room and tell everyone. False when the room is full (the socket closes 4010). */
@@ -844,15 +921,18 @@ export class RoomObject extends DurableObject<Env> {
     // Back on a new socket (OP-134): before the room saw its old one go, or soon after its connection dropped.
     const replaced = room.has(att.id);
     const back = room.leaverOf(att.id);
-    const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome });
+    const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome, ...(att.spec ? { spectator: true } : {}) });
     const log = this.logOf(att);
     if (result === 'full') {
-      log.info('room.join', 'room_join_refused', 'An owl was turned away from a full room.', { reason: 'cap', cap: room.cap });
-      this.send(ws, { t: 'full', room: att.room, cap: room.cap });
+      // A spectator is turned away at its share of the cap (OP-191): ticket holders still come in.
+      // TODO-DOCS (OP-191): docs/LOGGING.md: room_join_refused reason `spectators` (with cap and limit); room_join_ok `spectator`; climb_band_refused `practice`.
+      if (att.spec) log.info('room.join', 'room_join_refused', 'A spectator was turned away: the room holds its spectators’ share of owls.', { reason: 'spectators', cap: room.cap, limit: room.spectatorLimit });
+      else log.info('room.join', 'room_join_refused', 'An owl was turned away from a full room.', { reason: 'cap', cap: room.cap });
+      this.send(ws, { t: 'full', room: att.room, cap: room.cap, ...(att.spec ? { spectators: true as const } : {}) });
       closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
       return false;
     }
-    log.info('room.join', 'room_join_ok', 'An owl joined a room.', { owls: room.count, ...(hello.via ? { via: hello.via } : {}), ...(att.copy ? { copy: att.copy } : {}), ...(att.owner ? { owner: true } : {}) });
+    log.info('room.join', 'room_join_ok', 'An owl joined a room.', { owls: room.count, ...(hello.via ? { via: hello.via } : {}), ...(att.copy ? { copy: att.copy } : {}), ...(att.owner ? { owner: true } : {}), ...(att.spec ? { spectator: true } : {}) });
     if (replaced) log.info('room.join', 'reconnect_ok', 'An owl came back on a new socket before the room saw its old one go.', { gap_ms: 0, replaced: true });
     else if (back?.dropped) log.info('room.join', 'reconnect_ok', 'An owl came back after its connection dropped.', { gap_ms: Date.now() - back.leftAt });
     // The entry went out with the welcome: the socket need not keep it.
@@ -872,7 +952,7 @@ export class RoomObject extends DurableObject<Env> {
     if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
     if (att.room === ARCADE_ROOM) this.serial(att, () => this.sendWall(ws, att));
-    // Arriving in a room counts for quests that ask to visit it (none asks for a nest).
+    // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
   }
@@ -1060,9 +1140,9 @@ export class RoomObject extends DurableObject<Env> {
     this.send(ws, { t: 'quests', ...extra, board, updates });
   }
 
-  /** Count an event toward the visitor's quests and push the board when something moved. */
+  /** Count an event toward the visitor's quests and push the board when something moved. A spectator's count for nothing (OP-191). */
   private async pushEvent(ws: WebSocket, att: Attachment, ev: Parameters<Collections['questEvent']>[1]): Promise<void> {
-    if (!att.cid) return;
+    if (!att.cid || att.spec) return;
     try {
       const res = await this.collections().questEvent(att.cid, ev, att.room);
       if (res.updates.length && res.board) this.sendBoard(ws, res.board, res.updates);
@@ -1074,9 +1154,14 @@ export class RoomObject extends DurableObject<Env> {
 
   private async quest(ws: WebSocket, att: Attachment, room: Room, frame: Extract<ClientFrame, { r: number }>): Promise<void> {
     const r = frame.r;
-    const refuse = (reason: 'far' | 'unknown' | 'busy' | 'offline') => this.send(ws, { t: 'refused', r, reason });
+    const refuse = (reason: 'far' | 'unknown' | 'busy' | 'offline' | 'spectator') => this.send(ws, { t: 'refused', r, reason });
     if (!att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
+    // The quests, the NPC owls, the leaf piles, the stalls and the quest items are ticket holders' (OP-191).
+    if (att.spec) {
+      this.spectatorRefused(att, frame.t);
+      return refuse('spectator');
+    }
     const cid = att.cid;
     const stub = this.collections();
     try {
@@ -1149,12 +1234,20 @@ export class RoomObject extends DurableObject<Env> {
 
   private async act(ws: WebSocket, att: Attachment, room: Room, frame: ClientAct): Promise<void> {
     const { r, a } = frame;
-    const no = (reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten') => this.send(ws, { t: 'act', r, a, ok: false, reason });
+    const no = (reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' | 'spectator') => this.send(ws, { t: 'act', r, a, ok: false, reason });
     if (!att.cid) return no('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     const cid = att.cid;
     const stub = this.collections();
+    // Decided once per frame (OP-191): a spectator's games run as anyone's, but earn nothing.
+    const practice = att.spec === true;
+    const asPractice = practice ? { practice: true as const } : {};
     try {
+      // Today's tasks are ticket holders' (OP-191).
+      if (a === 'tasks' && practice) {
+        this.spectatorRefused(att, 'tasks');
+        return no('spectator');
+      }
       if (a === 'tasks') return this.send(ws, { t: 'act', r, a, ok: true, tasks: await stub.tasks(cid) });
       // The nests have no activities: today's tasks are all that is asked for there.
       if (isNestRoom(att.room)) return no('unknown');
@@ -1163,15 +1256,15 @@ export class RoomObject extends DurableObject<Env> {
         const portal = roomDef(att.room)?.doors.find((d) => d.id === 'portal');
         const pos = room.positionOf(att.id);
         const atPortal = !!portal && !!pos && pointInRect(pos, portal.rect);
-        const res = await stub.climbStart(cid, { atPortal, portalLive: this.realms.portal, special: this.realms.night });
+        const res = await stub.climbStart(cid, { atPortal, portalLive: this.realms.portal, special: this.realms.night }, practice);
         if (!res.ok) return no(res.reason);
         const { ok: _ok, ...started } = res;
         return this.send(ws, { t: 'act', r, a, ok: true, ...started });
       }
       if (a === 'ascent') {
-        const res = await stub.climbBand(cid, frame.k!, frame.band!, visitOf(att));
+        const res = await stub.climbBand(cid, frame.k!, frame.band!, visitOf(att), practice);
         if (!res.ok) {
-          this.logOf(att).info('collections.climb', 'climb_band_refused', 'A band of the climb was refused.', { climb_ref: climbRef(cid, frame.k!), band: frame.band, reason: res.reason });
+          this.logOf(att).info('collections.climb', 'climb_band_refused', 'A band of the climb was refused.', { climb_ref: climbRef(cid, frame.k!), band: frame.band, reason: res.reason, ...asPractice });
           return no(res.reason);
         }
         const { ok: _ok, ...settled } = res;
@@ -1185,7 +1278,8 @@ export class RoomObject extends DurableObject<Env> {
           this.send(ws, { t: 'act', r, a, ok: true, id: res.id });
           room.broadcast(acts.lanternFrame({ id: res.id, by: att.id }));
           this.saveLanterns(acts);
-          this.pushTasks(ws, await stub.play(cid, 0, { kind: 'light' }));
+          // A spectator's light counts toward the beam, and for no task (OP-191).
+          if (!practice) this.pushTasks(ws, await this.earnFor(att, 0, { kind: 'light' }));
           if (res.full) await this.payBeam(res.full);
           return;
         }
@@ -1197,8 +1291,8 @@ export class RoomObject extends DurableObject<Env> {
           const res = acts.reel(att.id);
           if (!res.ok) return no(res.reason);
           if (res.outcome !== 'caught') return this.send(ws, { t: 'act', r, a, ok: true, outcome: res.outcome });
-          const played = await stub.play(cid, res.fish.feathers, { kind: 'fish' });
-          this.send(ws, { t: 'act', r, a, ok: true, outcome: 'caught', fish: res.fish.id, feathers: played.added, total: played.total });
+          const played = await this.earnFor(att, res.fish.feathers, { kind: 'fish' });
+          this.send(ws, { t: 'act', r, a, ok: true, outcome: 'caught', fish: res.fish.id, feathers: played.added, total: played.total, ...asPractice });
           return this.pushTasks(ws, played);
         }
         case 'copy': {
@@ -1224,14 +1318,14 @@ export class RoomObject extends DurableObject<Env> {
             case 'slow':
               return this.send(ws, { t: 'act', r, a, ok: true, step: step.kind, level: step.level, expected: step.expected });
             case 'tune': {
-              const played = await stub.play(cid, step.feathers, { kind: 'copy' });
+              const played = await this.earnFor(att, step.feathers, { kind: 'copy' });
               const g = step.game;
-              this.send(ws, { t: 'act', r, a, ok: true, step: 'tune', tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level, feathers: played.added, total: played.total });
+              this.send(ws, { t: 'act', r, a, ok: true, step: 'tune', tune: g.tune, listenUntil: g.listenUntil, deadline: g.deadline, level: g.level, feathers: played.added, total: played.total, ...asPractice });
               return this.pushTasks(ws, played);
             }
             case 'won': {
-              const played = await stub.play(cid, step.feathers, { kind: 'copy' });
-              this.send(ws, { t: 'act', r, a, ok: true, step: 'won', level: step.level, feathers: played.added, total: played.total });
+              const played = await this.earnFor(att, step.feathers, { kind: 'copy' });
+              this.send(ws, { t: 'act', r, a, ok: true, step: 'won', level: step.level, feathers: played.added, total: played.total, ...asPractice });
               return this.pushTasks(ws, played);
             }
           }
@@ -1241,21 +1335,21 @@ export class RoomObject extends DurableObject<Env> {
         case 'run': {
           const res = startRun(att.room, room.positionOf(att.id), frame.g!, crypto.getRandomValues(new Uint32Array(1))[0]!, Date.now());
           if (!res.ok) return no(res.reason);
-          const { startedAt } = await stub.arcadeStart(cid, res.run.game, res.run.seed);
-          return this.send(ws, { t: 'act', r, a, ok: true, game: res.run.game, seed: res.run.seed, startedAt });
+          const { startedAt } = await stub.arcadeStart(cid, res.run.game, res.run.seed, practice);
+          return this.send(ws, { t: 'act', r, a, ok: true, game: res.run.game, seed: res.run.seed, startedAt, ...asPractice });
         }
         case 'record': {
           const result: RunResult = frame.n === undefined ? { game: frame.g!, score: frame.s! } : { game: frame.g!, score: frame.s!, shots: frame.n };
-          const kept = await stub.arcadeRecord(cid, result, frame.k!, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK));
+          const kept = await stub.arcadeRecord(cid, result, frame.k!, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK), practice);
           if (!kept.ok) return no(kept.reason);
-          this.send(ws, { t: 'act', r, a, ok: true, wall: kept.wall, mine: kept.mine });
+          this.send(ws, { t: 'act', r, a, ok: true, wall: kept.wall, mine: kept.mine, ...(kept.practice ? { practice: true as const } : {}) });
           if (kept.changed) room.broadcast({ t: 'wall', walls: [kept.wall] }, att.id);
           return;
         }
         case 'score': {
           const result: RunResult = frame.n === undefined ? { game: frame.g!, score: frame.s! } : { game: frame.g!, score: frame.s!, shots: frame.n };
           // One result per run, whether or not it holds up.
-          const settled = await stub.arcadeRun(cid, result, frame.k!, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK));
+          const settled = await stub.arcadeRun(cid, result, frame.k!, portraitLook(room.lookOf(att.id) ?? DEFAULT_LOOK), practice);
           if (!settled.ok) return no(settled.reason);
           this.send(ws, { t: 'act', r, a, ok: true, paid: settled.paid });
           // Everyone else in the arcade sees the wall change; the player has it in the answer.
@@ -1281,6 +1375,17 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
+  /**
+   * What an owl's play earns (OP-191): every award a game pays goes through here. A ticket holder is paid
+   * by the collections object (`play`: feathers under the activities' cap, and its step on today's tasks);
+   * a spectator gets nothing at all: its balance as it stands, and `practice`.
+   */
+  private async earnFor(att: Attachment, feathers: number, ev: PlayEvent): Promise<Earned> {
+    const cid = att.cid!;
+    if (att.spec) return { added: 0, total: await this.collections().feathers(cid), practice: true };
+    return this.collections().play(cid, feathers, ev);
+  }
+
   /** Tell a visitor their tasks moved (and what finishing them paid). */
   private pushTasks(ws: WebSocket, played: PlayResult): void {
     if (played.tasks) this.send(ws, { t: 'tasks', ...played.tasks });
@@ -1295,7 +1400,10 @@ export class RoomObject extends DurableObject<Env> {
     return null;
   }
 
-  /** A full lantern beam: every owl that helped light it, and is still here, is paid. */
+  /**
+   * A full lantern beam: every owl that helped light it, and is still here, is paid. A spectator that
+   * helped counts toward everyone's share, and is paid nothing itself (OP-191).
+   */
   private async payBeam(helpers: string[]): Promise<void> {
     const each = lanternFeathers(helpers.length);
     for (const id of helpers) {
@@ -1303,8 +1411,8 @@ export class RoomObject extends DurableObject<Env> {
       const att = ws?.deserializeAttachment() as Attachment | null | undefined;
       if (!ws || !att?.cid) continue;
       try {
-        const played = await this.collections().play(att.cid, each, { kind: 'beam' });
-        this.send(ws, { t: 'paid', what: 'beam', feathers: played.added, total: played.total });
+        const played = await this.earnFor(att, each, { kind: 'beam' });
+        this.send(ws, { t: 'paid', what: 'beam', feathers: played.added, total: played.total, ...(played.practice ? { practice: true as const } : {}) });
         this.pushTasks(ws, played);
       } catch (e) {
         // The beam still glows; pay is best effort.
@@ -1313,7 +1421,7 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  /** A stage quiz question that just closed: the answer for everyone in the hub, and pay for the owls in its zone. */
+  /** A stage quiz question that just closed: the answer for everyone in the hub, and pay for the owls in its zone (a spectator's, nothing: OP-191). */
   private async settleQuiz(): Promise<void> {
     const hub = this.rooms.get(QUIZ_ROOM);
     if (!hub?.count) return;
@@ -1328,8 +1436,8 @@ export class RoomObject extends DurableObject<Env> {
       const att = ws?.deserializeAttachment() as Attachment | null | undefined;
       if (!ws || !att?.cid) continue;
       try {
-        const played = await this.collections().play(att.cid, QUIZ_FEATHERS, { kind: 'quiz' });
-        this.send(ws, { t: 'paid', what: 'quiz', feathers: played.added, total: played.total });
+        const played = await this.earnFor(att, QUIZ_FEATHERS, { kind: 'quiz' });
+        this.send(ws, { t: 'paid', what: 'quiz', feathers: played.added, total: played.total, ...(played.practice ? { practice: true as const } : {}) });
         this.pushTasks(ws, played);
       } catch (e) {
         this.logOf(att).error('room.play', 'write_failed', 'An owl that answered the stage quiz right was not paid: the collections object did not answer.', { feathers: QUIZ_FEATHERS, error: e });
@@ -1433,10 +1541,12 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   /**
-   * The look to show others now: wear limited to what the cache says the collector owns.
-   * `recheck` asks for a fresh read when the look names something the cache does not know.
+   * The look to show others now: wear limited to what the cache says the collector owns, and for a
+   * spectator no Realm Vote pledge (OP-191). `recheck` asks for a fresh read when the look names
+   * something the cache does not know.
    */
-  private vetLook(att: Attachment, look: OwlLook): { look: OwlLook; recheck: boolean } {
+  private vetLook(att: Attachment, asked: OwlLook): { look: OwlLook; recheck: boolean } {
+    const look = att.spec ? withoutPledge(asked) : asked;
     if (!look.wear) return { look, recheck: false };
     if (!att.cid) return { look: withoutWear(look), recheck: false };
     const cached = this.owned.get(att.cid);
@@ -1452,7 +1562,7 @@ export class RoomObject extends DurableObject<Env> {
     if (!entry) return;
     const room = this.rooms.get(att.room);
     if (!room || room.sessionOf(att.id) !== att.sid) return;
-    const look = withWear(requested, filterOwnedWear(requested.wear, entry.set));
+    const look = withWear(att.spec ? withoutPledge(requested) : requested, filterOwnedWear(requested.wear, entry.set));
     const current = room.lookOf(att.id);
     if (current && JSON.stringify(current) !== JSON.stringify(look)) room.look(att.id, look, true);
     this.rememberEquipped(att, look.wear);

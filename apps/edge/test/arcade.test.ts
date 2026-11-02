@@ -55,6 +55,16 @@ for (const [name, make] of STORES) {
       expect(s.openRun('c_owlbbbbb')).not.toBeNull();
     });
 
+    it('keeps a spectator’s run marked practice, and no other (OP-191)', () => {
+      const s = make();
+      s.putRun({ cid: 'c_owlaaaaa', game: 'flight', seed: 7, startedAt: MON, bestBefore: null, practice: true });
+      s.putRun({ cid: 'c_owlbbbbb', game: 'flight', seed: 8, startedAt: MON, bestBefore: null });
+      expect(s.openRun('c_owlaaaaa')).toEqual({ cid: 'c_owlaaaaa', game: 'flight', seed: 7, startedAt: MON, bestBefore: null, practice: true });
+      expect(s.openRun('c_owlbbbbb')).toEqual({ cid: 'c_owlbbbbb', game: 'flight', seed: 8, startedAt: MON, bestBefore: null });
+      s.putRun({ cid: 'c_owlaaaaa', game: 'flight', seed: 9, startedAt: MON, bestBefore: null });
+      expect(s.openRun('c_owlaaaaa')?.practice).toBeUndefined();
+    });
+
     it('settles runs the same way as the book’s memory store', () => {
       const arcade = new ArcadeBook(make(), new CollectionBook(new MemoryCollectionStore()));
       arcade.start('c_owlaaaaa', 'sling', 1, MON - 60_000);
@@ -69,6 +79,16 @@ for (const [name, make] of STORES) {
 }
 
 describe('the score table', () => {
+  it('gives a run table from before spectators their practice column, every run there a ticket holder’s (OP-191)', () => {
+    const sql = sqlStorage();
+    sql.exec(`CREATE TABLE arcade_runs (cid TEXT PRIMARY KEY, game TEXT NOT NULL, seed INTEGER NOT NULL, started_at INTEGER NOT NULL, best_before INTEGER)`);
+    sql.exec(`INSERT INTO arcade_runs VALUES ('c_owlaaaaa', 'flight', 7, ${MON}, NULL)`);
+    const s = new SqlScoreStore(sql);
+    expect(s.openRun('c_owlaaaaa')).toEqual({ cid: 'c_owlaaaaa', game: 'flight', seed: 7, startedAt: MON, bestBefore: null });
+    s.putRun({ cid: 'c_owlbbbbb', game: 'sling', seed: 1, startedAt: MON, bestBefore: null, practice: true });
+    expect(new SqlScoreStore(sql).openRun('c_owlbbbbb')?.practice).toBe(true);
+  });
+
   it('reads broken colours as a plain owl rather than failing', () => {
     const sql = sqlStorage();
     const s = new SqlScoreStore(sql);

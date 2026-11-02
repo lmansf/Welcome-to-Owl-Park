@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CollectionBook, MemoryCollectionStore } from './book';
 import { BAND_FEATHERS, BRISK_FEATHERS, CLIMB_RUN_MAX_MS, NIGHTS, briskMs, leastClimbMs } from './climb';
 import { CLOUDS_ITEM, ClimbBook, MemoryClimbStore, climbRef, isClimbRef, type ClimbFlags } from './climbbook';
@@ -218,5 +218,56 @@ describe('the memory climb store', () => {
     expect(back.openRun(CID)).toEqual(store.openRun(CID));
     expect(back.bands(CID, 7)).toEqual(store.bands(CID, 7));
     expect(MemoryClimbStore.from(null).openRun(CID)).toBeNull();
+  });
+});
+
+describe('a spectator’s practice climb (OP-191)', () => {
+  it('checks and banks its bands, but writes no rows, pays nothing and grants no item', () => {
+    const { climb, store, book } = setup();
+    const play = vi.spyOn(book, 'play');
+    const grant = vi.spyOn(book, 'grant');
+    expect(climb.start(CID, AT, MON, true)).toMatchObject({ ok: true, seed: 7, banked: 0, practice: true });
+    expect(climb.band(CID, 7, 2, MON + 10)).toEqual({ ok: false, reason: 'too-fast' });
+    expect(climb.band(CID, 7, 2, reach(2))).toEqual({ ok: true, banked: 2, added: 0, feathers: 0, total: 0, brisk: 0, ref: climbRef(CID, 7), practice: true });
+    expect(climb.band(CID, 7, 6, reach(6))).toEqual({ ok: true, banked: 6, added: 0, feathers: 0, total: 0, brisk: 0, ref: climbRef(CID, 7), practice: true });
+    expect(play).not.toHaveBeenCalled();
+    expect(grant).not.toHaveBeenCalled();
+    expect(store.snapshot().bands).toEqual([]);
+    expect(book.owned(CID, undefined, MON)).not.toContain(CLOUDS_ITEM);
+    // Resumed, it is still practice.
+    expect(climb.start(CID, AT, reach(6) + 1, true)).toMatchObject({ ok: true, seed: 7, resumed: true, banked: 6, practice: true });
+  });
+
+  it('lets the owl, once it has a ticket, climb the same bands for pay that same day', () => {
+    const { climb, book } = setup();
+    climb.start(CID, AT, MON, true);
+    climb.band(CID, 7, 3, reach(3));
+    // A ticket holder's start lets the open practice run go, as a forgotten one, and starts a fresh one.
+    const fresh = climb.start(CID, AT, reach(3) + 1);
+    expect(fresh).toMatchObject({ ok: true, seed: 8, resumed: false, previousForgotten: true, banked: 0, bestBandToday: 0 });
+    expect(fresh).not.toHaveProperty('practice');
+    const start = reach(3) + 1;
+    const paid = climb.band(CID, 8, 3, start + leastClimbMs(EASY, 3) + 250);
+    expect(paid).toMatchObject({ ok: true, banked: 3, added: BAND_FEATHERS[0]! + BAND_FEATHERS[1]! + BAND_FEATHERS[2]! });
+    expect(paid).not.toHaveProperty('practice');
+    expect(book.feathers(CID, start)).toBeGreaterThan(0);
+  });
+
+  it('pays nothing for a holder’s run whose band comes from a spectator’s socket', () => {
+    const { climb, store } = setup();
+    climb.start(CID, AT, MON);
+    expect(climb.band(CID, 7, 1, reach(1), true)).toMatchObject({ ok: true, banked: 1, added: 0, practice: true });
+    expect(store.snapshot().bands).toEqual([]);
+    // Away from the portal, a ticket holder's start still lets a practice run go, and opens none.
+    const spectator = setup();
+    spectator.climb.start(CID, AT, MON, true);
+    expect(spectator.climb.start(CID, { ...AT, atPortal: false }, MON + 1)).toEqual({ ok: false, reason: 'far' });
+    expect(spectator.store.openRun(CID)?.practice).toBe(true);
+  });
+
+  it('keeps the practice mark through a snapshot of the memory store', () => {
+    const { climb, store } = setup();
+    climb.start(CID, AT, MON, true);
+    expect(MemoryClimbStore.from(JSON.parse(JSON.stringify(store.snapshot()))).openRun(CID)?.practice).toBe(true);
   });
 });

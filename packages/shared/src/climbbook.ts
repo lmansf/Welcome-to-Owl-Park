@@ -10,6 +10,11 @@
  * A band climbed within its brisk window (the high road's time and a fifth, judged from the band
  * below's arrival) pays a brisk feather on top. Reaching the clouds grants the realm's item the
  * first time ever.
+ *
+ * A spectator's run (OP-191) is a practice run: its bands are checked against their floors and banked as
+ * any are, but write no band rows, pay nothing and grant no item, so once the owl has a ticket the same
+ * bands pay it that same day. A run started as practice stays practice to its end; a ticket holder's
+ * `climb` lets an open practice run go and starts a fresh one.
  */
 import { BAND_COUNT, type ClimbTier, type ClimbWhy } from './edge';
 import type { CollectionBook } from './book';
@@ -28,6 +33,8 @@ export interface RunRow {
   layout: string;
   startedAt: number;
   banked: number;
+  /** A spectator's run (OP-191): its bands pay nothing and write no rows. */
+  practice?: true;
 }
 
 export type BandVerdict = 'ok' | 'paid-today';
@@ -77,11 +84,11 @@ export interface ClimbFlags {
 }
 
 export type ClimbStart =
-  | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
+  | { ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean; practice?: true }
   | { ok: false; reason: 'far' | 'closed' };
 
 export type AscentResult =
-  | { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
+  | { ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string; practice?: true }
   | { ok: false; reason: 'idle' | 'too-fast' | 'forgotten' };
 
 /** What a keeper sees for a run reference: never the collector id. */
@@ -119,13 +126,17 @@ export class ClimbBook {
     return { remaining: Math.max(0, this.book.playCap() - total), total };
   }
 
-  /** Start a run (at the portal, while it is live) or resume the collector's open one, whatever the flags say. */
-  start(cid: string, flags: ClimbFlags, now: number): ClimbStart {
+  /**
+   * Start a run (at the portal, while it is live) or resume the collector's open one, whatever the flags
+   * say. `practice`: a spectator's (OP-191), whose new run is a practice run. A ticket holder's open
+   * practice run is let go, as a forgotten one is, so its next run pays.
+   */
+  start(cid: string, flags: ClimbFlags, now: number, practice = false): ClimbStart {
     const day = parkDay(now);
     let run = this.store.openRun(cid);
     let resumed = false;
     let previousForgotten = false;
-    if (run && forgotten(run, now)) {
+    if (run && (forgotten(run, now) || (run.practice && !practice))) {
       previousForgotten = true;
       run = null;
     }
@@ -134,7 +145,7 @@ export class ClimbBook {
       if (!flags.portalLive) return { ok: false, reason: 'closed' };
       if (!flags.atPortal) return { ok: false, reason: 'far' };
       const key = nightFor(day, flags.special, isNightKey);
-      run = { cid, seed: this.newSeed() >>> 0, night: key, layout: NIGHTS[key]!.layout, startedAt: now, banked: 0 };
+      run = { cid, seed: this.newSeed() >>> 0, night: key, layout: NIGHTS[key]!.layout, startedAt: now, banked: 0, ...(practice ? { practice: true as const } : {}) };
       this.store.putRun(run);
     }
     const paid = this.store.paidBands(cid, day);
@@ -150,11 +161,16 @@ export class ClimbBook {
       bestBandToday: paid.length ? Math.max(...paid) : 0,
       resumed,
       previousForgotten,
+      ...(run.practice ? { practice: true as const } : {}),
     };
   }
 
-  /** A band reached: every unpaid band above the banked one up to it, checked, paid and recorded. */
-  band(cid: string, seed: number, band: number, now: number): AscentResult {
+  /**
+   * A band reached: every unpaid band above the banked one up to it, checked, paid and recorded. A
+   * practice run's (started as one, or `practice`: a spectator's socket, OP-191) is checked and banked,
+   * and nothing more: no rows, no feathers, no item.
+   */
+  band(cid: string, seed: number, band: number, now: number, practice = false): AscentResult {
     const run = this.store.openRun(cid);
     if (!run || run.seed !== seed) return { ok: false, reason: 'idle' };
     if (forgotten(run, now)) return { ok: false, reason: 'forgotten' };
@@ -171,6 +187,10 @@ export class ClimbBook {
     }
     // Every floor first: a frame that fails one writes nothing.
     for (let b = run.banked + 1; b <= band; b++) if (!plausibleBand(night, b, elapsed)) return { ok: false, reason: 'too-fast' };
+    if (practice || run.practice) {
+      this.store.putRun({ ...run, banked: band });
+      return { ok: true, banked: band, added: 0, feathers: this.book.feathers(cid, now), total: this.cap(cid, now).total, brisk: 0, ref, practice: true };
+    }
     const paidToday = new Set(this.store.paidBands(cid, day));
     let added = 0;
     let feathers = this.book.feathers(cid, now);
@@ -245,7 +265,7 @@ const WHYS = new Set(['capped', 'paid-today', 'item-already-given']);
 
 function cleanRun(v: unknown): RunRow | null {
   if (!isObj(v) || typeof v['cid'] !== 'string' || !v['cid'] || typeof v['night'] !== 'string' || typeof v['layout'] !== 'string') return null;
-  return { cid: v['cid'], seed: num(v['seed']) >>> 0, night: v['night'], layout: v['layout'], startedAt: num(v['startedAt']), banked: Math.min(BAND_COUNT, Math.max(0, Math.floor(num(v['banked'])))) };
+  return { cid: v['cid'], seed: num(v['seed']) >>> 0, night: v['night'], layout: v['layout'], startedAt: num(v['startedAt']), banked: Math.min(BAND_COUNT, Math.max(0, Math.floor(num(v['banked'])))), ...(v['practice'] === true ? { practice: true as const } : {}) };
 }
 
 function cleanBand(v: unknown): BandRow | null {

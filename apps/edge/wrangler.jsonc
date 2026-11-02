@@ -72,7 +72,14 @@
     "LOG_LEVEL": "info",
     // The API's and the sockets' rate limits (OP-142, src/limits.ts): "on" always, but for a load test's
     // throwaway copy, whose bots all come from one machine.
-    "RATE_LIMITS": "on"
+    "RATE_LIMITS": "on",
+    // Spectators (OP-191): "on" lets an owl without a ticket that works past the turnstiles as a
+    // spectator (it plays every game but earns nothing; quests, stores and the vote stay locked).
+    // "off" turns it away at the turnstiles, as before. Off until the owner's go and the page's half.
+    "SPECTATORS": "off",
+    // The share of a room's cap a spectator may join up to (0 to 1): past floor(cap x share) owls only
+    // ticket holders come in, up to the full cap. Nobody already inside is sent out.
+    "SPECTATOR_SHARE": "0.75"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },
