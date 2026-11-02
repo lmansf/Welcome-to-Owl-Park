@@ -2,7 +2,7 @@
 
 - Status: BUILT (the headers, limits and checks below); the nightly check BUILT, its Finding on the board PLANNED (OP-133)
 - Verified against: main ee09af3 (2026-11-01)
-- Code: apps/edge/src/guard.ts, apps/edge/src/limits.ts, apps/edge/src/index.ts, apps/edge/src/page.ts, apps/edge/src/accounts.ts, apps/edge/src/collectLog.ts, apps/edge/src/Collections.ts, packages/shared/src/phrases.ts, tools/security/security-test.sh, .github/workflows/security-nightly.yml
+- Code: apps/edge/src/guard.ts, apps/edge/src/limits.ts, apps/edge/src/index.ts, apps/edge/src/routes/, apps/edge/src/page.ts, apps/edge/src/accounts.ts, apps/edge/src/collectLog.ts, apps/edge/src/Collections.ts, packages/shared/src/phrases.ts, tools/security/security-test.sh, .github/workflows/security-nightly.yml
 - Tickets: OP-151, OP-139, OP-140, OP-141, OP-142, OP-143, OP-144, OP-150, OP-133
 - Related: docs/ARCHITECTURE.md, docs/PLAYBOOK.md, docs/FEEDBACK.md, docs/DEPLOY.md
 
@@ -25,7 +25,7 @@ any scanner and any hand test against the park's address. A local copy (`pnpm de
   (`packages/shared/src/shop.ts`, C31). Purchase delays and spending limits for in-game buying do not
   apply.
 - **No passwords.** No account is needed to play: a guest pass and the browser's collector token
-  are the owl (`/api/pass`, `apps/edge/src/index.ts`). With `ACCOUNTS` "on" (`wrangler.jsonc`), an
+  are the owl (`/api/pass`, `apps/edge/src/routes/visit.ts`). With `ACCOUNTS` "on" (`wrangler.jsonc`), an
   owl can be protected with an email, by a magic link (`apps/edge/src/accounts.ts`, OP-139). A link
   is good for `MAGIC_LINK_MS` (15 minutes) and used once. At most `LINKS_PER_EMAIL_PER_HOUR` (3) per
   email and `LINKS_PER_IP_PER_HOUR` (10) per address go out (`packages/shared/src/accounts.ts`). The
@@ -57,22 +57,22 @@ any scanner and any hand test against the park's address. A local copy (`pnpm de
 | Strict-Transport-Security, https only | `max-age=31536000` (`HSTS`), no subdomains, no preload | `finished`, `guard.ts` | OP-140 |
 | https only | a page over http goes to https (301); the API and sockets over http get 403 | `frontDoor`, `guard.ts` | OP-141 |
 | Other sites' pages | API calls and preflights refused 403 `origin`; sockets need the park's own page | `frontDoor`, `originAllowed`, `guard.ts` | OP-141, OP-144 |
-| CORS | the park's own origin by name, never `*`; one header list for every route | `finished`, `guard.ts`; `CORS`, `index.ts` | OP-144 |
+| CORS | the park's own origin by name, never `*`; one header list for every route | `finished`, `guard.ts`; `CORS`, `routes/http.ts` | OP-144 |
 | The page is never cached | `Cache-Control: no-store`, no ETag | `uncachedPage`, `page.ts`; `guardedPage` | OP-129 (`apps/park/public/_headers`) |
-| API answers | `Cache-Control: no-store`; refusals are short codes (`{"error":"bad-pass"}`) | `CORS`, `json`, `index.ts`; `refusal`, `guard.ts` | not named in the code |
+| API answers | `Cache-Control: no-store`; refusals are short codes (`{"error":"bad-pass"}`) | `CORS`, `json`, `routes/http.ts`; `refusal`, `guard.ts` | not named in the code |
 | Rate limits a minute | 600 per address; 300 calls needing no pass; 60 refused calls per address; 120 per owl; 10 ticket and account calls per owl | `API_LIMITS`, `limits.ts` | OP-142 |
-| Body limits | feedback 16,384 bytes; account calls 2,048; policy reports 8,192; ledge drafts 1 MiB; larger ones get 413 unread | `FEEDBACK_BODY_MAX`, `ACCOUNT_BODY_MAX`, `MASKS_BODY_MAX`, `index.ts`; `REPORT_BODY_MAX`, `guard.ts` | OP-140 (reports), OP-156 (ledge drafts); the others not named |
+| Body limits | feedback 16,384 bytes; account calls 2,048; policy reports 8,192; ledge drafts 1 MiB; larger ones get 413 unread | `FEEDBACK_BODY_MAX`, `ACCOUNT_BODY_MAX`, `MASKS_BODY_MAX`, `routes/http.ts`; `REPORT_BODY_MAX`, `guard.ts` | OP-140 (reports), OP-156 (ledge drafts); the others not named |
 | Room sockets per address | 8 per room object | `MAX_SOCKETS_PER_IP`, `wrangler.jsonc`; `RoomObject.ts` | not named in the code |
-| A socket's kind (visitor or spectator) | the Worker deletes the page's `X-Visitor-Kind` and sets its own from the pass and the gate; the room object takes a socket inside the park it did not call a visitor for a spectator (default-deny); a spectator's `admit` needs an admitted pass of its own owl made since its socket opened | `/ws`, `index.ts`; `spectatorSocket`, `admitPass`, `RoomObject.ts` | OP-191 |
+| A socket's kind (visitor or spectator) | the Worker deletes the page's `X-Visitor-Kind` and sets its own from the pass and the gate; the room object takes a socket inside the park it did not call a visitor for a spectator (default-deny); a spectator's `admit` needs an admitted pass of its own owl made since its socket opened | `/ws`, `routes/rooms.ts`; `spectatorSocket`, `admitPass`, `RoomObject.ts` | OP-191 |
 
 - The rate limits are counted in each copy of the Worker's memory (`limits.ts`). A flood spread over
   many machines is Cloudflare's own protection's to stop.
 - OPEN QUESTION: which tickets added the feedback and account body limits, the short refusal codes
   and the sockets-per-address cap. The code does not name them.
 - OPEN QUESTION: the policy report's 204 and an unknown `/api/` path's 404 carry no `Cache-Control`
-  (`index.ts`). Neither has a body worth keeping; the owner decides whether they should say `no-store`.
+  (`routes/visit.ts`, `routes/vote.ts` and the others under `routes/`). Neither has a body worth keeping; the owner decides whether they should say `no-store`.
 - OPEN QUESTION: the CORS header list names `X-Admin-Key` on every route, the visitors' too (`CORS`,
-  `index.ts`). The key opens nothing there; only `/api/admin/*`, `/api/vote/tally` and
+  `routes/http.ts`). The key opens nothing there; only `/api/admin/*`, `/api/vote/tally` and
   `/api/vote/close` ask for it (`isAdmin`).
 
 ## The security check [BUILT]

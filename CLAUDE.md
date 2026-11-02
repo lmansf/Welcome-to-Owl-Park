@@ -7,6 +7,9 @@ Supabase Edge Function in the owner's analytics project (its README). `apps/ig-c
 Worker too, not the park's: the Instagram MCP connector (OP-168; its README has the setup and
 secrets). Run Wrangler through the package scripts so the pinned version is used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec wrangler <command>`.
 
+- The Worker's routes (OP-201): each in `apps/edge/src/routes/` by area, listed in `routes/table.ts`;
+  shared request helpers in `routes/http.ts`, the park's objects in `routes/park.ts`. A new route is a
+  handler there and a line in the table.
 - Formatter and linter (OP-203): Biome, set in `biome.json` (line width 140), run by `pnpm format`,
   `pnpm format:check` and `pnpm lint`. The repo is not formatted yet: the one reformat commit lands when
   no PRs are open, and CI checks it from then on. Until then never run `pnpm format` on a branch.

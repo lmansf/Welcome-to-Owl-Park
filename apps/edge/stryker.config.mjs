@@ -12,8 +12,8 @@
  * room and its object (join and leave, the caps, the emote and position limits), the line and its
  * object, the copies of a room, the collection log's outbox. The Worker: passes and the gate, accounts,
  * the store's webhooks and their signature, the ticket desk and book (the one-device claim move), the
- * vote ledger, and from the Worker's entry point only its admin-key check and the pass it reads from a
- * request, found by name. The keepers' pages (*Page.ts) and the SQL stores are out.
+ * vote ledger, and of the routes' shared helpers (routes/http.ts) only the admin-key check and the pass
+ * read from a request, found by name. The keepers' pages (*Page.ts) and the SQL stores are out.
  *
  * TODO-DOCS (OP-131): docs/TESTING.md, with packages/shared/stryker.config.mjs (the scopes, the
  * threshold schedule and the equivalent mutants).
@@ -37,8 +37,8 @@ export default strykerOptions(
       'src/TicketBook.ts',
       'src/tickets.ts',
       'src/Ledger.ts',
-      linesOf(root, 'src/index.ts', 'isAdmin'),
-      linesOf(root, 'src/index.ts', 'passFrom'),
+      linesOf(root, 'src/routes/http.ts', 'isAdmin'),
+      linesOf(root, 'src/routes/http.ts', 'passFrom'),
     ],
   },
   {
