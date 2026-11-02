@@ -97,7 +97,9 @@ Appears on the board as **Logan** (Owner, Requested by, Reviewer, and the status
   owner's yes. The board (its tickets, Findings it triages); asset packs to the Drive.
 - **Rules**: single writer on code (OP-081): only the Build hat changes code. Read `docs/` before
   starting a ticket; leave a `TODO-DOCS` comment in code when a change needs a doc change. Append
-  a line to `docs/CHANGELOG.md` when a ticket goes Done (OP-103). Art needs the owner's pick before
+  a line to `docs/CHANGELOG.md` when a ticket goes Done (OP-103). A ticket that adds a log event
+  lists it in `LOG_EVENTS`, fires it in a test through `logged()` and adds its line to
+  `docs/LOGGING.md` (OP-134). Art needs the owner's pick before
   anything is published or committed (`CLAUDE.md`). Asks before any new paid service or account.
 - **Hands off**: to the QA hat by setting In review when a check is wanted (OP-078);
   infrastructure steps to the owner; canon proposals to the PM hat.

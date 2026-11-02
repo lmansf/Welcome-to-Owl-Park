@@ -84,9 +84,28 @@ function listening(): RoomHandlers & { statuses: string[] } {
     onStatus: (s) => void statuses.push(s),
     onRestartNotice: vi.fn(),
     onRestart: vi.fn(),
+    onSetup: vi.fn(),
     onQueued: vi.fn(),
   };
 }
+
+describe('closed for setup on the page (OP-205)', () => {
+  it('goes home with the closed card’s words on the setup code, and does not reconnect', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const handlers = listening();
+    await park.join('hub', SELF, handlers);
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    socket.hear({ t: 'closed', room: 'hub', why: 'setup', sign: 'Back at 5:15' });
+    expect(handlers.onSetup).not.toHaveBeenCalled();
+    socket.shut(CLOSE.SETUP);
+    expect(handlers.onSetup).toHaveBeenCalledWith('Back at 5:15');
+    expect(handlers.statuses.at(-1)).toBe('offline');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(FakeSocket.made).toHaveLength(1);
+    expect(handlers.onRestart).not.toHaveBeenCalled();
+  });
+});
 
 describe('the park’s nightly restart on the page (OP-181)', () => {
   it('shows the room’s words, then goes home on the restart code and does not reconnect', async () => {

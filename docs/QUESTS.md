@@ -1,9 +1,9 @@
 # Quests, NPC owls, leaf piles and the feather shop
 
 - Status: BUILT; the founder perk PLANNED (OP-049)
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged); the numbers are Claude Code's as written
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02); the numbers are Claude Code's as written
 - Code: packages/shared/src/quests.ts, questCatalog.ts, questbook.ts, npcs.ts, interactables.ts, shop.ts, species.ts; apps/edge/src/Collections.ts; apps/park/src/ui/quests.ts
-- Tickets: OP-013, OP-014, OP-015, OP-016, OP-018, OP-019
+- Tickets: OP-013, OP-014, OP-015, OP-016, OP-018, OP-019, OP-083, OP-108
 - Related: docs/COLLECTIBLES.md, docs/ACTIVITIES.md; the Quest Log sheet in the Drive
 
 Collectibles are earned now, not found lying around: NPC owls give quests, quests pay feathers
@@ -18,8 +18,9 @@ server and the zero-backend local mode run the same rules and Node unit-tests th
 
 1. An owl with a gold **!** over its head has quests. Walk up (or tap it) and **talk**: the
    dialogue shows what it offers, what you are doing for it and what you can hand back.
-2. **Take on** a quest. Its next step and progress show in Quests (from the Menu, or J); a new
-   quest shows a 2 s line at the top and a dot on the Menu until Quests opens (OP-083).
+2. **Take on** a quest. Its next step and progress show in Quests, the Menu's first tab (J opens
+   the Menu on it). A new quest shows a 2 s line at the top and a dot on the Menu button and its
+   Quests tab until that tab opens (OP-083, OP-108).
 3. Do the steps in order: talk to someone, visit a place, flop into leaf piles, browse the
    market stalls, bask in the moonbeam, play an emote for someone, or find things a quest hides
    (acorns, lost gears, moonstones) that only you can see.
@@ -168,10 +169,11 @@ Old pages speaking v3 are refused and reload themselves.
   asks for them), leaf piles with the flop and poof, glows under the stalls and the moonbeam,
   quest-item markers, and the action buttons (E runs the first). Tapping an NPC or a pile walks
   up and does it on arrival.
-- HUD: feathers in the top bar, the quests screen (`ui/quests.ts`; from the Menu or J: every quest
-  carried with its next step and progress, finished ones first, Collect walking the owl to the
-  giver; today's tasks; who has more), the New quest and Quest complete lines and the Menu's dot
-  (`hud.ts` `questNews`), the NPC dialogue and the shop. The on-screen tracker is gone (OP-083).
+- HUD: feathers in the top bar, the quests journal (`ui/quests.ts`, drawn into the Menu's Quests
+  tab, its first; J opens the Menu there and opens on Under way: every quest carried with its next
+  step and progress, finished ones first, Collect walking the owl to the giver; today's tasks; who
+  has more), the New quest and Quest complete lines and the dot on the Menu button and its Quests
+  tab (`hud.ts` `questNews`; OP-108), the NPC dialogue and the shop. The on-screen tracker is gone (OP-083).
 - Test hooks on `window.owlPark`: `quests()`, `talk(npc)`, `use(target)`, `accept(quest)`,
   `abandon(quest)`, `handIn(quest)`, `gather(quest, n)`, `shop()`, `buy(variant)`, `gift()`.
 - Spectators (OP-191, `docs/ARCHITECTURE.md` section 4): the room refuses a spectator every quest

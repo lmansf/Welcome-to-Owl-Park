@@ -56,7 +56,6 @@ export function spectatorShare(env: Env): number {
   if (raw === undefined || raw === '') return DEFAULT_SPECTATOR_SHARE;
   const n = Number(raw);
   if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
-  // TODO-DOCS (OP-191): docs/LOGGING.md: read_failed (room.join, error) for a SPECTATOR_SHARE that is not a share, once per isolate.
   if (!shareWarned) {
     shareWarned = true;
     moduleLog.error('room.join', 'read_failed', 'SPECTATOR_SHARE is not a share from 0 to 1: the default holds.', { value: String(raw).slice(0, 40), share: DEFAULT_SPECTATOR_SHARE });

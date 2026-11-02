@@ -304,10 +304,6 @@ export class Room {
    * where the page has its owl when the room will not let it in there: a point whose straight walk
    * reaches it comes first, so the room's copy walks over to the owl and the page never has to move
    * its owl back to the room's spot (OP-138).
-   *
-   * TODO-DOCS (OP-138): docs/ARCHITECTURE.md's "Entering a room" row: a page's hello says where its
-   * owl is as the socket opens (RoomHandlers.here), and an arrival the room will not have there is
-   * scattered where its copy can walk straight to that spot.
    */
   scatter(spawn: Vec2, radius: number, except?: string, toward?: Vec2): Vec2 {
     let r = radius;

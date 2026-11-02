@@ -14,9 +14,6 @@
  * ribbon every minute, so an owl makes a few dozen calls a minute at most, and a household, a school
  * or a phone network shares one address. Only the store's webhooks go uncounted (signed, and retried by
  * the store). RATE_LIMITS "off" is for a load test's throwaway copy only (tools/load/throwaway-config.mjs).
- *
- * TODO-DOCS (OP-142): docs/ARCHITECTURE.md: the limits, why in memory, and the route table (the
- * ticket's Notes); docs/PLAYBOOK.md: a rate_limited line, and RATE_LIMITS.
  */
 
 export interface Limit {

@@ -20,10 +20,6 @@
  * picks a mutant's tests by their names joined with spaces, and vitest 5 matches names joined with
  * ' > ', so without it no test runs against any mutant and every one survives. Stryker 10.1.1 has the
  * same fix: the patch goes with the next upgrade.
- *
- * TODO-DOCS (OP-131): docs/TESTING.md: what mutation testing is in one paragraph, the scopes (this
- * file, apps/edge/stryker.config.mjs and the shards), the threshold schedule (break under 50 now, 70
- * after two weeks, 80 by the preview), the patch, and the list of equivalent mutants with why.
  */
 import { piecesOf, strykerOptions } from '../../tools/mutation/stryker.mjs';
 

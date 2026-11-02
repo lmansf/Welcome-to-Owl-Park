@@ -1,9 +1,9 @@
 # Capacity: caps, full rooms and busy nights
 
-- Status: BUILT (the caps, the line, the busy ribbon, copies of a room and the capacity page)
-- Verified against: main 47462df (2026-11-01); the process write-up from 9f7326a (OP-075, 2026-10-24)
-- Code: apps/edge/src/rooms.ts, apps/edge/src/Room.ts, apps/edge/src/RoomObject.ts, apps/edge/src/Overflow.ts, apps/park/src/game/RoomScene.ts, tools/load
-- Tickets: OP-068, OP-075, OP-088, OP-100
+- Status: BUILT (the caps, the line, the busy ribbon, copies of a room, the capacity page and the tree's share)
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02); the process write-up from 9f7326a (OP-075, 2026-10-24)
+- Code: apps/edge/src/rooms.ts, apps/edge/src/Room.ts, apps/edge/src/RoomObject.ts, apps/edge/src/Overflow.ts, apps/edge/src/line.ts, apps/edge/src/capacityPage.ts, apps/edge/src/routes/admin.ts, apps/edge/src/routes/rooms.ts, packages/shared/src/overflow.ts, apps/park/src/ui/ribbon.ts, apps/park/src/game/RoomScene.ts, tools/load
+- Tickets: OP-068, OP-075, OP-088, OP-100, OP-156
 - Related: docs/ARCHITECTURE.md sections 3 and 6, docs/PLAYBOOK.md section 5
 
 What the park holds, what happens at the cap, and how the park bends instead of breaking on a night
@@ -113,15 +113,39 @@ The same settings answer to the admin API, for a script or a phone without the p
     curl -H "X-Admin-Key: <the admin key>" -H "Content-Type: application/json" \
       -d '{"line":{"mode":"auto","threshold":80}}' https://<the park>/api/admin/capacity
 
-A POST takes any of `{"line": {"mode", "threshold", "holdMin"}}`, `{"ribbon": {"on", "words"}}` and
-`{"copy": {"room", "n", "state"}}`, and answers with every setting and each room's owls, copy by copy.
+A POST takes any of `{"line": {"mode", "threshold", "holdMin"}}`, `{"ribbon": {"on", "words"}}`,
+`{"copy": {"room", "n", "state"}}` and `{"realms": {"open", "portal", "night", "tree"}}`, and answers
+with every setting and each room's owls, copy by copy. The handler is `adminCapacity` in
+`apps/edge/src/routes/admin.ts`; the page is `apps/edge/src/capacityPage.ts`.
+
+**The tree's card** (OP-156): **The tree (map 2)** on the page, `{"realms": {"tree": n}}` on the API.
+`n` is a whole number from 0 to 100: of every hundred new owls, how many start in the tree rather than
+today's park (`treeShare`, `packages/shared/src/overflow.ts`). 0, as deployed, keeps the tree dark:
+only a keeper's token reaches it (`docs/PLAYBOOK.md`, section 10).
+
+- A share above 0 opens the tree's gated rooms to every owl. A guest pass while the front gate takes
+  tickets still starts in today's park.
+- Back to 0, every owl in the tree is sent to the hub. The page asks before opening the tree and
+  before closing it.
+- A changed share reaches new arrivals within half a minute, like the other settings.
+- Each Play asks again, and while the share stays the same an owl is sent the same way every time.
+
+The page's **Realms and the climb** card is the rest of the realms switch: the gated rooms open
+(`open`), the climb's portal (`portal`) and the special night (`night`); `docs/ACTIVITIES.md` is the
+climb's.
 
 ## 3. The busy ribbon [BUILT]
 
 A thin banner across the top of the home screen and every room. On: everyone sees it. Its words are
-the ribbon's own (`It's busy tonight; things may be slow`) unless the keepers write theirs (one line,
-up to 90 characters, shown as plain text). It comes on by itself while the line is in front of the
-park, and can be on alone. An owl may hide it for the rest of its visit; new words bring it back.
+the ribbon's own (`RIBBON_WORDS`, "It's busy tonight; things may be slow") unless the keepers write
+theirs (one line, up to `RIBBON_MAX_CHARS`, 90 characters, shown as plain text). It comes on by itself
+while the line is in front of the park, and can be on alone. An owl may hide it for the rest of its
+visit (its cross, "Hide this note", `RIBBON_UI_WORDS`); new words bring it back. In a room it sits
+under the top bar, to the left of the activity cards on a wide screen, and the 2 s notices at the top
+move below it while it shows (`apps/park/src/ui/ribbon.ts`).
+
+The visitor-facing words await the owner's approval: `LINE_WORDS` (`apps/park/src/ui/home.ts`),
+`RIBBON_WORDS` (`packages/shared/src/overflow.ts`) and `RIBBON_UI_WORDS`.
 
 Verify: the page reads "On for everyone"; `/api/notice` answers the words; an owl in a room sees it.
 
@@ -137,15 +161,19 @@ look, and a line started later begins afresh.
   the nests included, since the room objects are what overflow. An owl already inside walks on from
   room to room: every room's welcome gives it an entry (good for three hours, renewed by every room),
   and its next room checks that. A page that opens straight into a room without one is sent back
-  to the home screen to wait.
+  to the home screen to wait: its socket is answered, then closed with 4012 (`CLOSE.QUEUED`) once
+  its page says hello, or after `TURN_AWAY_WAIT_MS` (5 s) without one (`turnedAway`,
+  `apps/edge/src/routes/rooms.ts`).
 - **The waiting screen**: part of the home screen. It says the owl's place, a rough wait, that the
   page updates on its own, and, for an owl holding a ticket, that the ticket's time starts at the
   turnstiles, not in the line (C35: a ticket starts at its first scan at the gate). It never
   mentions the store. When the owl's turn comes it walks into the lobby by itself.
 - **Turns**: numbers are called strictly in order as places free up. Free places are the threshold,
   less the owls in the park, less owls called whose place is still held, less owls let in during the
-  last 20 seconds (a page takes a few seconds to reach its room). The line moves every five seconds
-  while anyone is in it. An owl whose turn passed while it was away (its phone locked, say) is told
+  last 20 seconds (`CLAIM_GRACE_MS`, `apps/edge/src/line.ts`: a page takes a few seconds to reach its
+  room). A turn is taken as it is given: a newcomer called as it joins (a place was free already)
+  walks in on that answer, so its place stops being held and it counts only until it is in a room.
+  The line moves every five seconds while anyone is in it. An owl whose turn passed while it was away (its phone locked, say) is told
   so and joins again at the back.
 - **The rough wait**: the line's pace is the owls it called in the last ten minutes, divided by ten
   (owls a minute); the wait is the owl's place divided by that, rounded up. Before the line has

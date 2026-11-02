@@ -10,10 +10,6 @@ The wing is registered on a 200 x 120 canvas (400 x 240 at 2x) with its root, wh
 shoulder, at ROOT and its tip SPAN to the right of it: the game mirrors it for the left wing and
 turns both about the root (`apps/park/src/game/Owl.ts`, WING). Every owl kind wears the same wing in
 its own colours.
-
-TODO-DOCS (OP-084): docs/ART-PIPELINE.md: the `owl-wing-right` job (an edit of the owl master), its
-finish (`pnpm art:finish wings`, then `publish owl-wing-body owl-wing-accent`), and the two layers in
-the art table (200 x 120, the root at ROOT, tintable like the owl's own).
 """
 from __future__ import annotations
 

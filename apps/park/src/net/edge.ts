@@ -395,6 +395,8 @@ export class EdgeTransport implements ParkTransport {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let welcomed = false;
     let opened = false;
+    /** The closed card's words, when the room said the park is closed for setup (OP-205). */
+    let setupSign: string | null = null;
     let lastRx = Date.now();
     /** When the socket dropped (it reconnects): the page's log tells the gap once the room has the owl again (OP-134). */
     let droppedAt: number | null = null;
@@ -608,7 +610,8 @@ export class EdgeTransport implements ParkTransport {
           });
           break;
         case 'closed':
-          if (f.why === 'realm') handlers.onRealmClosed?.(f.sign ?? '');
+          if (f.why === 'setup') setupSign = f.sign ?? '';
+          else if (f.why === 'realm') handlers.onRealmClosed?.(f.sign ?? '');
           else if (f.why === 'gate') handlers.onNotThroughGate?.();
           else handlers.onNestClosed?.(f.why);
           break;
@@ -893,6 +896,13 @@ export class EdgeTransport implements ParkTransport {
           this.pass = null;
           this.ticketId = null;
           handlers.onRestart?.();
+          handlers.onStatus('offline');
+          return;
+        }
+        if (ev.code === CLOSE.SETUP) {
+          // Closed for setup (OP-205): home, where the closed card shows the keepers' words. Nothing
+          // reconnects; Play tries again, and the room says so again until the park opens.
+          handlers.onSetup?.(setupSign ?? '');
           handlers.onStatus('offline');
           return;
         }

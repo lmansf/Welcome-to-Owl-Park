@@ -8,10 +8,6 @@ const ART = join(__dirname, '../../public/art');
 
 /**
  * What one piece of art may weigh (OP-129), so the next room or piece does not slow the park.
- *
- * TODO-DOCS (OP-129): docs/ARCHITECTURE.md: this budget, the lazy-load rule (each room loads its own
- * art; only the home screen, the owl and the nest are on the way in), and the art list with its
- * content hashes (vite.config.ts) that lets /art/* be cached a year (public/_headers).
  */
 const PNG_MAX_KB = 300;
 const WEBP_MAX_KB = 700;

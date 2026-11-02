@@ -22,13 +22,6 @@ import {
 
 // ---- The park's signed tokens (OP-131's survivors in pass.ts): what each kind takes, to the character and
 // the second, and that a token of one kind is never read as another, whatever fields it carries ----
-//
-// TODO-DOCS (OP-131): pass.ts's equivalent mutants, for docs/TESTING.md's list (no input tells them apart):
-// b64url's /=+$/ as /=+/ (btoa puts '=' only at the end); unb64url with no padding added, and its loop to
-// i <= length (atob reads unpadded base64; a typed array drops a write past its end); the HMAC key made
-// extractable (it never leaves key()); verified's dot test as dot < 0 or none (a token with no body, or no
-// dot, then fails its signature or its JSON); verified's object test, five ways (every reader then asks
-// for its own fields, which no primitive or array has).
 
 const SECRET = 'pass-tests-signing-key-0123456789';
 const NOW_S = 1_800_000_000;

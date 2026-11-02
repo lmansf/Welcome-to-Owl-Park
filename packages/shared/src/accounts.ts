@@ -17,12 +17,6 @@
  *
  * The park keeps an email only as a keyed hash (to find its owls) and a sealed copy (to write to);
  * neither is ever logged. No sign-up is ever needed to play.
- *
- * TODO-DOCS (OP-139): docs/ARCHITECTURE.md (identity): the cid as the owl's id, the device in the
- * collector token, the account record (friend code, the email's hash and sealed copy, the device the
- * owl is on), the magic links and their limits, the ACCOUNTS switch; docs/PLAYBOOK.md: what a
- * keeper does for a family that lost an unprotected owl (nothing can be done) or a protected one
- * (the restore link); docs/DEPLOY.md: ACCOUNT_SECRET and the mail sender.
  */
 import type { PortraitLook } from './arcade';
 

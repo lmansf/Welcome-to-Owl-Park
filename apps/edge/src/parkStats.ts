@@ -20,18 +20,6 @@
  *   from the room server's word on each socket, so free owls are counted beside paid ones.
  *
  * Nothing here is kept while the log is off. Written against `SqlStorage`, so Node tests it.
- *
- * TODO-DOCS (OP-111): docs/ARCHITECTURE.md, beside the collection log (OP-107): the player stats
- * (this file, the room object's hello, look, minute heartbeat and close calls, `game.dim_player` and
- * `game.add_player_versions`, `game.fact_session`, `game.v_player_lifetime` in apps/park-log/sql/
- * players.sql), and the privacy boundary for under-13 players the ticket sets out: the park side holds
- * no email or name; purchases and the one Logan-only table tying a ticket to an owl come with the
- * store and the ticket gate (OP-024, OP-010), and play data is only ever joined outward to the buyer.
- *
- * TODO-DOCS (OP-113): docs/ARCHITECTURE.md, in the same model: `game.fact_realm_visit` (a row for
- * each room a visit went into, under its session, from this file's rooms), its views
- * `game.v_realm_time` and `game.v_player_realm`, and `minutes_by_realm` in `game.v_player_lifetime`
- * (apps/park-log/sql/realms.sql): how the times add up to the visit's, and what each entry source means.
  */
 import { DEFAULT_SPECIES, SPECIES, isHexColour, isNestRoom, mapOf, type SpeciesId } from '@owl-park/shared';
 import { TREE_REALMS, roomFor } from '@owl-park/shared/rooms';

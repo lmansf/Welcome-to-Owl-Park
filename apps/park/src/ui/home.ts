@@ -5,14 +5,6 @@
  * preview scene draws it in the frame this screen leaves for it). Play always lands the owl in its
  * own nest, before its mirror (OP-105), and the park is out of the nest's door. "Logged in" means
  * only that this device holds an owl: the park has no accounts, and nobody types a thing.
- * TODO-DOCS (OP-105): docs/NESTS.md (the mirror section's "Go to your nest" line) and PLAYBOOK.md
- * section 7 ("Your owl") still name the second button. Play is now the one way in: it lands every
- * visit, a coming back after closing the tab too, in the owl's own nest before its mirror (made on
- * first sight; the lobby only if the nests do not answer), through the line as before. The way to
- * the park is marked "To the park": a sign on the nest's door and at the street's east end
- * (game/street.ts), and labelled chips at the screen's edge (RoomScene.updateHints). The first time
- * home, a card under the bar says "Welcome to your nest / The park is out the door." (once per
- * device, gone at a tap).
  */
 import type { Entry, WalletEntry } from '../net';
 import { ACCOUNT_WORDS } from './account';

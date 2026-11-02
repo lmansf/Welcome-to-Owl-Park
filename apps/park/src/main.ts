@@ -6,12 +6,10 @@ import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
 import { BootScene } from './game/BootScene';
-import { ArcadeScene } from './game/ArcadeScene';
-import { ClimbScene } from './game/ClimbScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
-import { NEST_SPAWN, RESTARTED_KEY, RoomScene, type RoomStart } from './game/RoomScene';
+import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, type RoomStart } from './game/RoomScene';
 import { startWalking, walkingMap } from './game/walkingMap';
 import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
@@ -125,8 +123,9 @@ const game = new Phaser.Game({
   disablePreFX: true,
   disablePostFX: true,
   // The owl builder's preview draws over the room (which keeps running underneath) or the home screen;
-  // the arcade's games draw over the room.
-  scene: [BootScene, RoomScene, HomeScene, BuilderScene, ArcadeScene, ClimbScene],
+  // the arcade's games and the climb draw over the room, added after these the first time one is played
+  // (game/lazyScenes.ts, OP-204).
+  scene: [BootScene, RoomScene, HomeScene, BuilderScene],
 });
 
 game.registry.set('config', cfg);
@@ -549,6 +548,14 @@ game.events.on(HOME_SHOWN, () => {
   if (game.registry.get(RESTARTED_KEY) === true) {
     game.registry.set(RESTARTED_KEY, false);
     hud.toast(RESTART_HOME, 8000);
+  }
+  // Closed for setup (OP-205): the keepers' words stay over Play; Play asks the park again, and the
+  // room sends the owl back here with them until the park opens.
+  const setup = game.registry.get(SETUP_KEY) as string | undefined;
+  if (setup) {
+    game.registry.set(SETUP_KEY, undefined);
+    home.note(setup);
+    hud.toast(setup, 8000);
   }
 });
 // The Say wheel says a phrase here and for everyone in the room.

@@ -112,6 +112,7 @@ import {
   wayAround,
   PERCH_SLACK,
   doorTarget,
+  SETUP_WORDS,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -182,6 +183,8 @@ const TAP_SLOP = 16;
 const LEAVE_FADE_MS = 220;
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
 export const RESTARTED_KEY = 'restarted';
+/** The registry's closed card (OP-205): the words the home screen shows while the park is closed for setup. */
+export const SETUP_KEY = 'setup';
 /** The restart's notice stays up until the room closes, near enough (the room waits ten seconds, OP-181). */
 const RESTART_NOTICE_MS = 9_000;
 /** Where Play and travel home land the owl in its own nest (OP-105, OP-130): before its mirror. */
@@ -314,6 +317,8 @@ export class RoomScene extends Phaser.Scene {
   private keyTurns = 0;
   /** The hint chips last sent to the HUD, so an unchanged frame touches no DOM. */
   private hintsShown = '';
+  /** The view, screen and doors the hints were last placed for: unchanged, nothing is placed again (OP-204). */
+  private hintsFor: { at: string; doors: unknown } = { at: '', doors: null };
   /** When to look again for doorways to fetch the next room's art through. */
   private prefetchAt = 0;
   private voting = false;
@@ -486,6 +491,7 @@ export class RoomScene extends Phaser.Scene {
     this.keyWalk = false;
     this.keyTurns = 0;
     this.hintsShown = '';
+    this.hintsFor = { at: '', doors: null };
     this.voting = false;
     this.pendingVote = false;
     this.pieces = {};
@@ -981,6 +987,7 @@ export class RoomScene extends Phaser.Scene {
       onNotThroughGate: () => live() && this.notThroughGate(),
       onRestartNotice: (words) => live() && this.hud.toast(words, RESTART_NOTICE_MS),
       onRestart: () => live() && this.restarted(),
+      onSetup: (words) => live() && this.closedForSetup(words),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -1125,6 +1132,18 @@ export class RoomScene extends Phaser.Scene {
   private restarted(): void {
     if (this.leaving) return;
     this.registry.set(RESTARTED_KEY, true);
+    void this.leaveRoom().then((left) => {
+      if (left) this.scene.start('home');
+    });
+  }
+
+  /**
+   * The park is closed for setup (OP-205): out of the room as through a door, to the home screen, which
+   * shows the keepers' words over Play until the park opens again.
+   */
+  private closedForSetup(words: string): void {
+    if (this.leaving) return;
+    this.registry.set(SETUP_KEY, words || SETUP_WORDS);
     void this.leaveRoom().then((left) => {
       if (left) this.scene.start('home');
     });
@@ -1279,8 +1298,11 @@ export class RoomScene extends Phaser.Scene {
   private updateHints(): void {
     const own = isStreetRoom(this.room.id) ? 'nest-door-0' : null;
     const toPark = parkwardDoor(this.room.id);
-    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const v = this.cameras.main.worldView;
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight}`;
+    if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
+    this.hintsFor = { at, doors: this.room.doors };
+    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: TOUCH_HINT_BOTTOM } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;

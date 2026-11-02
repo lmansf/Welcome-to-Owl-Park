@@ -14,10 +14,6 @@
  * - The park's page runs only its own scripts, with a fresh nonce for its two inline ones on each
  *   load, and connects only to its own host (`parkPolicy`). A browser reports what the policy blocked
  *   to /api/csp-report, logged as csp_violation (a few lines a while, however many pages report).
- *
- * TODO-DOCS (OP-140, OP-141): docs/ARCHITECTURE.md: the front door, the page's policy with why each
- * source is in it, HSTS without includeSubDomains, PARK_ORIGINS; docs/PLAYBOOK.md: what a
- * csp_violation line means and what to do about one.
  */
 import type { Logger } from '@owl-park/shared';
 

@@ -10,9 +10,6 @@ import { WALK_SAMPLE_PX, resolveTarget } from './resolveTarget';
  * the page asks for the way around and walks it in legs, each an ordinary straight walk, so the room
  * server and the other owls' pages see walks as they always have. The held keys and the thumbstick
  * slide along the edge instead (steerTarget).
- *
- * TODO-DOCS (OP-148): docs/ARCHITECTURE.md's Movement row (a tap that a straight walk stops short of
- * is walked round the bend in legs, each one move message, set off as the one before ends).
  */
 
 /** Grid step of the search over the floor, in room pixels. */
