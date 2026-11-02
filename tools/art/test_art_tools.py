@@ -34,6 +34,7 @@ from artlib.grade import grade, load_palette  # noqa: E402
 from artlib.guide import render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
 from artlib.split import split as split_layer  # noqa: E402
+from artlib.match import match_colours, solid_mask  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards, sign_board_rect  # noqa: E402
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
@@ -752,6 +753,46 @@ class TestSplit(unittest.TestCase):
                 self.assertEqual(postprocess.main(["split", "tree-l4-0-bg", "--base-key", "tree-l4-0-back", "--base", str(base), "--map-key", "tree-l4-0-scene",
                                                    "--map", str(mp), "--colour", "#00FF00", "--work", td]), 1, "the sky plate has no key colour to cut onto")
 
+
+
+class TestMatch(unittest.TestCase):
+    """One screen's keyed layer is matched to its neighbour's colours (OP-159)."""
+
+    @staticmethod
+    def overlay(fill):
+        img = Image.new("RGB", (200, 120), (255, 0, 255))
+        d = ImageDraw.Draw(img)
+        d.ellipse((10, 10, 90, 70), fill=fill)
+        d.rectangle((120, 20, 180, 40), fill=tuple(min(255, v + 30) for v in fill))
+        return img
+
+    def test_match_moves_the_props_to_the_references_colours_and_keeps_the_key(self):
+        pale, dark = self.overlay((150, 150, 175)), self.overlay((20, 26, 48))
+        out, rep = match_colours(pale, dark, (255, 0, 255))
+        a, d = np.asarray(out).astype(float), np.asarray(dark).astype(float)
+        props = solid_mask(np.asarray(pale), (255, 0, 255))
+        want = d[solid_mask(np.asarray(dark), (255, 0, 255))].mean(axis=0)
+        self.assertTrue(np.allclose(a[props].mean(axis=0), want, atol=1.0), "the props take the reference's colours")
+        self.assertEqual(tuple(int(v) for v in np.asarray(out)[5, 195]), (255, 0, 255), "the key colour is left as it is")
+        self.assertEqual(rep["matched_px"], int(props.sum()))
+
+    def test_the_match_command_writes_a_candidate_with_its_record(self):
+        with tempfile.TemporaryDirectory() as td:
+            src, ref = Path(td) / "pale.png", Path(td) / "dark.png"
+            self.overlay((150, 150, 175)).save(src)
+            self.overlay((20, 26, 48)).save(ref)
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["match", "tree-l4-e1-fg", "--to-key", "tree-l4-0-fg", "--raw", str(src), "--to", str(ref), "--work", td])
+            self.assertEqual(rc, 0)
+            made = list((Path(td) / "raw" / "tree-l4-e1-fg").glob("*.png"))
+            self.assertEqual(len(made), 1)
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["now_source"], "match")
+            self.assertEqual(sc["matched"]["base"], "pale.png")
+            self.assertEqual(sc["matched"]["to"]["key"], "tree-l4-0-fg")
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(postprocess.main(["match", "tree-l4-0-bg", "--to-key", "tree-l4-0-fg", "--raw", str(src), "--to", str(ref), "--work", td]), 1,
+                                 "the sky plate has no key colour to keep")
 
 class TestKeyScreen(unittest.TestCase):
     """A row of screens laid side by side is keyed one screen at a time (OP-162)."""

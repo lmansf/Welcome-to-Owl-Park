@@ -16,6 +16,8 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
   patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
   shift <key> --dy N   a keyed candidate moved N room px down, its top rows mirrored into the gap: a new raw candidate
+  split <key>          a tree screen's platforms or front props: its painting's pixels where a colour-coded edit shows one code colour
+  match <key>          a keyed candidate's props moved to another's colours (mean and spread): a new raw candidate
   field [game...]      the arcade games' field guides at 2x (the generator's @canvas:arcade-<game>-bg)
   canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
   wing <room>         stitch the room's picked wings onto its painting; finish every screen and the end overlays
@@ -75,6 +77,7 @@ from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards
 from artlib.patch import cut as cut_crop, patch as patch_edit  # noqa: E402
 from artlib import parse_hex  # noqa: E402
 from artlib.split import CODE_TOLERANCE, split as split_layer  # noqa: E402
+from artlib.match import SOLID_DISTANCE, match_colours  # noqa: E402
 from artlib.resize import crop_to_aspect, downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
@@ -1073,6 +1076,40 @@ def cmd_split(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_match(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A keyed candidate with its props' colours moved to another candidate's (OP-159): the mean and
+    spread of each RGB channel over the pixels well away from the key colour, the key colour and the
+    rim left as they are, written as a new raw candidate of the key (select it with generate.mjs
+    select, finish it as before). For two screens' overlays painted in different keys of the palette.
+
+    TODO-DOCS (OP-159): docs/ART-PIPELINE.md and docs/MAP.md section 10: `match <key> --to-key <key>`
+    when one screen's overlay (or another keyed layer) comes back paler or darker than its neighbour's."""
+    key = validate_key(a.key, assets=ctx.assets)
+    kc = ctx.assets.get(key, {}).get("key_colour")
+    if not kc:
+        raise ArtError(f"{key}: match is for a keyed layer, and the key has no key colour in the table")
+    ref_key = validate_key(a.to_key, assets=ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    ref, ref_sc = resolve_raw(ctx, ref_key, a.to)
+    rkc = ctx.assets.get(ref_key, {}).get("key_colour") or kc
+    try:
+        img, rep = match_colours(open_raw(raw), open_raw(ref), parse_hex(kc), parse_hex(rkc), distance=a.distance)
+    except ValueError as e:
+        raise ArtError(f"{key}: {e}") from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    r = ref_sc or {}
+    sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{img.width}x{img.height}", "width": img.width, "height": img.height, "format": "png",
+              "source_url": None, "generated_at": ctx.now, "now_source": "match", "cost_estimate_usd": 0, "provider_meta": {},
+              "matched": {"base": raw.name, "to": {"key": ref_key, "file": ref.name, "seed": r.get("seed"), "model": r.get("model"), "provider": r.get("provider")}, **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
+    note(f"match {key}: {rel_to_repo(d / f'{h}.png')}, {raw.name}'s {rep['matched_px']} px of props moved from mean {rep['from_mean']} to {ref_key}'s "
+         f"{rep['to_mean']}; select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
 def shift_down(img: Image.Image, n: int) -> Image.Image:
     """The image moved down n pixels: its bottom n rows fall off, and the gap at the top mirrors the
     painting's own top rows (rows 1 to n, upside down). What ran out of the frame (a bamboo stalk, a
@@ -1668,6 +1705,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
     add_common(sp)
     sp.set_defaults(fn=cmd_shift)
+
+    sp = sub.add_parser("match", help="move a keyed candidate's colours to another's (mean and spread of the props); writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the keyed layer whose candidate is matched")
+    sp.add_argument("--to-key", required=True, help="the keyed layer whose candidate it is matched to (its SELECTED one unless --to)")
+    sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--to", default=None, help="a raw candidate file of --to-key instead of its SELECTED one")
+    sp.add_argument("--distance", type=float, default=SOLID_DISTANCE, help="RGB distance from the key colour past which a pixel counts as the props")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_match)
 
     sp = sub.add_parser("field", help="layout guides of the arcade games' fields (the generator's @canvas:arcade-<game>-bg)")
     sp.add_argument("games", nargs="*", help=f"games (default: all of {', '.join(FIELD_GAMES)})")
