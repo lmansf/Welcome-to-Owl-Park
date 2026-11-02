@@ -1,7 +1,8 @@
 /**
  * The park's health (OP-068): whether each of its objects answers within a few seconds. Anyone may
- * ask (`/api/health`, from a phone or an uptime monitor): the answer names no setting and no secret,
- * only which part answered.
+ * ask (`/api/health`, from a phone or an uptime monitor): the answer names no setting and no secret's
+ * value, only which part answered and (the route, OP-209) whether the signing key and the keepers' key
+ * are set at all, as two yes-or-no flags.
  */
 
 /** How long a part may take to answer before it counts as down. */

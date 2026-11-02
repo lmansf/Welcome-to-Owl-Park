@@ -3,7 +3,7 @@ import { type Logger, hashForLog } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, mailSender } from '../accounts';
 import { roomObjectNames } from '../copies';
 import type { Env } from '../env';
-import { signingSecret } from '../pass';
+import { requireSecret } from '../pass';
 import { ROOMS } from '../rooms';
 import { ACCOUNT_BODY_MAX, CORS, clientIp, json, passFrom, readJson } from './http';
 import { collections, overflowOf } from './park';
@@ -41,7 +41,7 @@ export async function account(c: RouteCtx): Promise<Response> {
   if (!body) return json({ error: 'bad request' }, 400);
   const r = await accountRoute(url.pathname.slice('/api/account/'.length), body, {
     rpc: collections(env),
-    secret: signingSecret(env),
+    secret: requireSecret(env, url),
     keys: emailKeys(env),
     mail: mailSender(env),
     origin: url.origin,

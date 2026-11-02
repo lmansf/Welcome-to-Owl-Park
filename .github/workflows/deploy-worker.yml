@@ -10,6 +10,8 @@
 #   3. The Worker's own secrets, PASS_SIGNING_KEY (32+ random characters) and ADMIN_KEY (16+), can be
 #      added as repository secrets too: the workflow uploads each one it finds to the Worker after the
 #      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
+#      PASS_SIGNING_KEY must be a repository secret (OP-209): without one the run stops before it
+#      deploys, since a Worker without its signing key refuses every pass and room socket.
 #      The store's go up the same way: SHOPIFY_SHOP with the app's SHOPIFY_CLIENT_ID and
 #      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
 #      and for opening night, OPENING_PASS_CODE (the code that takes half off the annual pass).
@@ -53,6 +55,19 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       MAIL_FROM: ${{ secrets.MAIL_FROM }}
     steps:
+      # OP-209: a Worker without its signing key refuses every visitor, so never deploy one that might
+      # lack it. Says only whether the secret is there and long enough, never its value.
+      - name: Check PASS_SIGNING_KEY is there to upload
+        run: |
+          if [ -z "$PASS_SIGNING_KEY" ]; then
+            echo "::error::The Actions secret PASS_SIGNING_KEY is not available to this workflow, so it cannot be uploaded. Add it under Settings -> Secrets and variables -> Actions (32+ random characters), then run this workflow again. Nothing was deployed."
+            exit 1
+          fi
+          if [ "${#PASS_SIGNING_KEY}" -lt 16 ]; then
+            echo "::error::The Actions secret PASS_SIGNING_KEY is shorter than 16 characters: the Worker would refuse it. Replace it with 32+ random characters, then run this workflow again. Nothing was deployed."
+            exit 1
+          fi
+          echo "PASS_SIGNING_KEY is set."
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -80,10 +95,10 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/edge
           command: deploy
-      # Each step below runs only when its repository secret exists; wrangler-action uploads the
+      # Each step below but the signing key's runs only when its repository secret exists; wrangler-action uploads the
       # secret, then lists the Worker's secret names (never values) as confirmation.
+      # Always: the first step stopped the run if the secret was missing (OP-209).
       - name: Upload PASS_SIGNING_KEY to the Worker
-        if: env.PASS_SIGNING_KEY != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

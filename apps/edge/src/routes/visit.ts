@@ -4,7 +4,7 @@ import { TREE_ARRIVAL } from '@owl-park/shared/rooms';
 import { accountsOn } from '../accounts';
 import { beforeRestart, mayEnter, spectatorsOn } from '../gate';
 import { REPORT_BODY_MAX, noteViolation, violationOf } from '../guard';
-import { GUEST_PASS_TTL_S, type PassPayload, mintCollector, mintPass, randomCollectorId, randomVisitorId, readCollector, signingSecret } from '../pass';
+import { GUEST_PASS_TTL_S, type PassPayload, mintCollector, mintPass, randomCollectorId, randomVisitorId, readCollector, requireSecret } from '../pass';
 import { CORS, json, passFrom, readJson } from './http';
 import { collections, gateOf, overflowOf } from './park';
 import type { RouteCtx } from './router';
@@ -23,7 +23,7 @@ export async function cspReport(c: RouteCtx): Promise<Response> {
 export async function guestPass(c: RouteCtx): Promise<Response> {
   const { request, env, url, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-  const secret = signingSecret(env);
+  const secret = requireSecret(env, url);
   // The collector token the browser keeps; a missing or forged one starts a new collection.
   const given = request.headers.get('X-Collector') ?? url.searchParams.get('collector');
   const known = await readCollector(secret, given);

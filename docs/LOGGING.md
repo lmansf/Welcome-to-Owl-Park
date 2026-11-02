@@ -166,7 +166,8 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | Event | Component | Level | When it fires | Fields |
 | --- | --- | --- | --- | --- |
 | `log_field_refused` | the refused line's | warn | The logger dropped a field in `REFUSED_FIELDS` from a line. In `LOGGER_EVENTS`: the logger's own | `field`, `of` (the event of the line it was dropped from) |
-| `signing_key_missing` | `worker.pass` | warn | `PASS_SIGNING_KEY` is not set or shorter than 16 characters: passes are signed with the development key. Once per isolate (`signingSecret`, `pass.ts`) | none |
+| `signing_key_missing` | `worker.pass` | warn | `PASS_SIGNING_KEY` is not set or shorter than 16 characters, on a request to this machine (localhost, 127.0.0.1, [::1]): passes are signed with the development key. Once per isolate (`signingSecret`, `pass.ts`) | none |
+| `signing_key_refused` | `worker.pass` | error | `PASS_SIGNING_KEY` is not set or shorter than 16 characters, anywhere but this machine (OP-209): nothing is signed or checked. Every call that needs it (a pass, an entry, a link, a keeper's token, a room socket) is answered 503 `{"ok":false,"error":"no-signing-key"}`, and `/api/health` answers 503. Once per isolate (`signingSecret`, `pass.ts`) | none |
 | `pass_issued` | `worker.pass` | info | A guest pass went out (`/api/pass`, `routes/visit.ts`) | `session_id`, `collector_hash`, `new_collector` (true when the browser had no collector token) |
 | `pass_verified` | `worker.pass` | debug | A route took a pass (`passFrom`, `routes/http.ts`) | `route`, `session_id`, `adm` (admitted past the front gate) |
 | `pass_rejected` | `worker.pass` | info | A route refused a pass (`passFrom`) | `route`, `reason`: `missing`, `expired`, `invalid` (`passRefusal`, `pass.ts`) |
@@ -218,7 +219,7 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `afk_leave` | `room.rest` | info | An owl left its room asleep; follows its `room_leave` with reason `afk` | socket fields, `asleep_ms` (when its sleep's start is known) |
 | `gate_crossed` | `collections.travel` | info | An owl walked through the front gate into the park (OP-130) | socket fields |
 | `gate_flag_cleared` | `collections.travel` | info | An owl is outside the park again: into it is through the front gate next time (OP-130) | socket fields |
-| `health_check` | `worker.health` | info; error when a part did not answer | `/api/health` (OP-068) | `ok`, `parts` (`rooms`, `tickets`, `collections`: each true or false), `duration_ms` |
+| `health_check` | `worker.health` | info; error when a part did not answer, or (off this machine) a key is not set | `/api/health` (OP-068) | `ok`, `parts` (`rooms`, `tickets`, `collections`: each true or false), `configured` (`signing`, `admin`: whether `PASS_SIGNING_KEY` and `ADMIN_KEY` are set, never their values, OP-209), `duration_ms` |
 | `climb_band_refused` | `collections.climb` | info | A band of the climb was refused | socket fields; `climb_ref`; `band`; `reason`: `idle`, `too-fast`, `forgotten` (`AscentResult`, `climbbook.ts`); `practice: true` (a spectator's run, OP-191) |
 | `spectator_refused` | `room.play` | info | A spectator asked for something locked to ticket holders (a quest, an NPC owl, a leaf pile or a stall, a quest item, today's tasks), told once per socket; or a spectator's pass did not make it a full visitor, told each time (OP-191) | socket fields; `frame` (the first refused frame, or `admit`); for `admit`, `reason`: `pass`, `not-admitted`, `not-this-owl`, `before-socket` |
 | `spectator_admitted` | `room.join` | info | A spectator's ticket made it a full visitor in place (OP-191) | socket fields |
@@ -345,8 +346,8 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 
 ## Every event, checked
 
-`LOG_EVENTS` holds 58 events, every one in the table above: `log_field_refused`,
-`signing_key_missing`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
+`LOG_EVENTS` holds 62 events, every one in the table above: `log_field_refused`,
+`signing_key_missing`, `signing_key_refused`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
 `claim_in_use`, `order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
 `room_join_refused`, `room_leave`, `reconnect_ok`, `queue_enter`, `queue_admit`, `queue_depth`,
 `tick_latency_p95`, `emote_throttled`, `position_rejected`, `webhook_received`,
