@@ -98,6 +98,12 @@ import {
   fall,
   newFlier,
   stepFlier,
+  FRESH_DASH,
+  dashEnd,
+  dashHeading,
+  dashRefusal,
+  holdsDash,
+  spendDash,
   type Air,
   type Flier,
   type FlightAbilities,
@@ -115,7 +121,7 @@ import {
   SETUP_WORDS,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
-import type { ActivityLink, ActivityPushes, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
+import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
 import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
@@ -142,6 +148,7 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
+import { courseFor, drawPlaceholderRoom, type Course } from './course';
 import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { doorwaysOff, roomsAhead, takesDoorway } from './doors';
@@ -422,6 +429,11 @@ export class RoomScene extends Phaser.Scene {
   private arcade: Arcade | null = null;
   /** The stained-glass climb from its portal, in the glass realm only. */
   private climb: Climb | null = null;
+  /** The parkour course, in a room that is one of its acts (OP-224); the owl holds the dash there. */
+  private course: Course | null = null;
+  private courseLink: CourseLink | null = null;
+  /** Dashes this page made in this room, for the tests. */
+  private dashes = 0;
   private acts: ActivityLink | null = null;
   /** The nests: on the street, who lives behind each door; in a nest, what stands where. */
   private nests: NestLink | null = null;
@@ -502,8 +514,10 @@ export class RoomScene extends Phaser.Scene {
     this.sleptAt = 0;
     this.askedAt = 0;
     this.goingAway = false;
-    // A new room: on the ground, Jump let go, the allowance full.
-    this.flier = newFlier();
+    // A new room: on the ground, Jump let go, the allowance full; in a parkour course, the dash in hand (OP-224).
+    this.flier = holdsDash(this.room) ? { ...newFlier(), dash: { ...FRESH_DASH } } : newFlier();
+    this.dashes = 0;
+    this.courseLink = null;
     this.flightClock = 0;
     this.jumpIsDown = false;
     this.jumpDownAt = 0;
@@ -540,6 +554,7 @@ export class RoomScene extends Phaser.Scene {
     this.play = null;
     this.arcade = null;
     this.climb = null;
+    this.course = null;
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -751,7 +766,9 @@ export class RoomScene extends Phaser.Scene {
     // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
     // hairline of the clear colour shows at a join while the camera scrolls.
     const playTiles: Phaser.GameObjects.Image[] = [];
-    for (const t of backgroundTiles(room)) {
+    // A room with no art (the test course, OP-224) is drawn in plain shapes.
+    if (room.drawn) drawPlaceholderRoom(this, room);
+    for (const t of room.drawn ? [] : backgroundTiles(room)) {
       for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) {
         this.placeTile(t, img);
         if (t.plain) img.setData('plain', true);
@@ -779,6 +796,18 @@ export class RoomScene extends Phaser.Scene {
       awarded: () => void this.collection.refresh(),
       offerTicket: (line) => this.offerDayTicket(line),
     });
+    this.course = courseFor(room, {
+      scene: this,
+      hud: this.hud,
+      link: () => this.courseLink,
+      me: () => ({ pos: { ...this.me.pos }, grounded: this.flier.air.s === GROUNDED, ground: this.groundNow() }),
+      spawn: () => this.registry.get('spawnName') as string | undefined,
+      place: (at) => this.placeAt(at),
+      feathers: (total) => this.collection.setFeathers(total),
+      awarded: () => void this.collection.refresh(),
+      hudRoot: () => document.getElementById('hud'),
+    });
+    this.hud.setDash(this.flier.dash !== undefined);
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
@@ -899,6 +928,7 @@ export class RoomScene extends Phaser.Scene {
       this.steer();
       this.checkDoors(finished);
       this.checkItems(now);
+      this.course?.tick(now);
       this.updateHints();
       this.rest(now);
       this.prefetchNear(now);
@@ -1025,6 +1055,10 @@ export class RoomScene extends Phaser.Scene {
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
     this.nests = this.collection.service.nestLink(this.room.id, conn, pushes, () => nestLook(this.look));
+    if (this.course) {
+      this.courseLink = this.collection.service.courseLink(this.room.id, conn, () => ({ ...this.me.pos }), () => this.groundNow());
+      void this.course.connected();
+    }
     if (isStreetRoom(this.room.id)) void this.askStreet();
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
@@ -1709,10 +1743,16 @@ export class RoomScene extends Phaser.Scene {
     paint: PaintDebug | null;
     /** The owl walks this room as a spectator, as its welcome said (OP-191). */
     spectator: boolean;
+    /** The dash (OP-224): whether the owl holds it here, whether it is spent this jump, and the dashes made in this room. */
+    dash: { holds: boolean; spent: boolean; dashes: number };
+    /** In a parkour course: the course as the room has it for this owl (OP-224). */
+    course: ReturnType<Course['debug']>;
   } | null {
     if (!this.built) return null;
     return {
       spectator: this.spectator,
+      dash: { holds: this.flier.dash !== undefined, spent: this.flier.dash?.spent ?? false, dashes: this.dashes },
+      course: this.course?.debug() ?? null,
       room: this.room.id,
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room })),
       pos: { ...this.me.pos },
@@ -2123,6 +2163,38 @@ export class RoomScene extends Phaser.Scene {
     if (!this.jumpIsDown) return;
     this.jumpIsDown = false;
     this.jumpUpAt = Math.max(at, this.jumpDownAt);
+  }
+
+  /**
+   * Shift or the pad's Dash (OP-224, dash.ts): in a parkour course, up in the air, once a jump, a short
+   * burst along the held keys or the stick (else the way the owl faces), as far as the footing goes.
+   * The room checks it as it checks a walk and the flight; it comes back on landing (flight.ts).
+   */
+  dashDown(at = Date.now()): boolean {
+    if (!this.built || this.leaving || !this.flier.dash) return false;
+    if (dashRefusal(this.flier.dash, true, this.flier.air.s !== GROUNDED, at) !== null) return false;
+    const f = this.footingNow();
+    const to = dashEnd(this.me.pos, dashHeading(this.keys?.direction() ?? null, this.me.facing()), f.walkable, f.shut);
+    if (distance(to, this.me.pos) < 3) return false;
+    this.flier = { ...this.flier, dash: spendDash(this.flier.dash, at) };
+    this.dashes += 1;
+    this.walkGoal = null;
+    this.wayTo = null;
+    this.keyWalk = false;
+    const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now(), dash: true };
+    this.me.startWalk(walk);
+    this.conn?.send({ t: 'move', id: this.playerId, walk });
+    this.conn?.track(this.snapshot());
+    return true;
+  }
+
+  /** Back where a fall in a course takes the owl (OP-224): there at once, standing, and the room told. */
+  private placeAt(at: Vec2): void {
+    this.walkGoal = null;
+    this.wayTo = null;
+    this.keyWalk = false;
+    this.me.place(at);
+    this.stop();
   }
 
   /** Jump pressed now and let go `holdMs` after the press takes, set at once (the tests and the console). */
@@ -2747,6 +2819,10 @@ export class RoomScene extends Phaser.Scene {
     this.arcade = null;
     this.climb?.destroy();
     this.climb = null;
+    this.course?.destroy();
+    this.course = null;
+    this.courseLink = null;
+    this.hud.setDash(false);
     this.bubbles?.clear();
     this.bubbles = null;
     this.acts?.close();
@@ -2861,7 +2937,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Where the owl can walk at the height it is now (OP-084, perches.ts): the floor and the perch tops at or below it, less the floor shut for now. */
   private footingNow(): { walkable: Polygon[]; shut: Shut[] } {
-    return footing(this.room, this.flier.air.z, this.shutFloor());
+    return footing(this.room, this.flier.air.z, this.course ? [...this.shutFloor(), ...this.course.shut()] : this.shutFloor());
   }
 
   /** What the owl stands on, or would come down on, now: a perch's top, else the floor (0). */

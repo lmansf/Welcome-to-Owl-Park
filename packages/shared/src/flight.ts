@@ -16,6 +16,7 @@
  * perch (perches.ts, groundAt). A landing on the floor is never sent; one on a perch is, since only
  * the owl's own page knows what was under it.
  */
+import { landDash, type DashCharge } from './dash';
 import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
 import { MAX_PERCH_TOP } from './perches';
 import { WALK_SPEED } from './walk';
@@ -66,6 +67,8 @@ export interface Flier {
   coyoteMs: number;
   /** Rising from a press still held: let go and the rise is cut short. */
   rising: boolean;
+  /** The dash, in a course (OP-224, dash.ts): flight brings it back as the owl lands. Absent where the owl does not hold it. */
+  dash?: DashCharge;
 }
 
 export const newFlier = (): Flier => ({ air: ON_GROUND, bufferMs: 0, coyoteMs: 0, rising: false });
@@ -126,7 +129,10 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readon
   if (s === AIRBORNE && can.glide && input.held && vz <= 0) s = GLIDING;
   else if (s === GLIDING && !input.held) s = AIRBORNE;
   const air = fall({ z, vz, s, f }, FLIGHT_STEP_MS, ground);
-  return { air, bufferMs, coyoteMs, rising: air.s === GROUNDED ? false : rising };
+  const out: Flier = { air, bufferMs, coyoteMs, rising: air.s === GROUNDED ? false : rising };
+  // Standing on something again: a dash spent in the air is back (OP-224).
+  if (fl.dash) out.dash = air.s === GROUNDED ? landDash(fl.dash) : fl.dash;
+  return out;
 }
 
 /**

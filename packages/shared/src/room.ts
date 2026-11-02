@@ -1,3 +1,4 @@
+import type { RoomCourse } from './course';
 import type { Polygon, Rect } from './geometry';
 import type { Perch, Raised } from './perches';
 import type { Vec2 } from './protocol';
@@ -99,6 +100,23 @@ export interface RoomDef {
   map?: 2;
   /** How big owls are drawn here against today's park (the tree's owl stands a sixth of the screen's height: 1.25). */
   owlScale?: number;
+  /**
+   * An act of a parkour course (OP-224, course.ts): which course and which act, and its course pieces
+   * (benches, the objective's parts, the lost feathers, shortcuts, the pits an owl falls through and,
+   * in the last act, the finish shrine). An owl in such a room holds the dash (dash.ts).
+   */
+  course?: RoomCourse;
+  /**
+   * Only a keeper's owl comes in (OP-224: the test course): the room server turns any other owl away at
+   * its hello, and a page without a keeper's token (or the local mode in development) goes to the hub.
+   * No door of a room visitors walk leads into one.
+   */
+  keeperOnly?: true;
+  /**
+   * Drawn by the page in plain shapes, with no painting of its own (OP-224's placeholder rooms): its
+   * tiles name no art, nothing is loaded for them, and the scene paints the floor plan instead.
+   */
+  drawn?: true;
 }
 
 /** One ROOM_W x ROOM_H piece of a room's art, at its top-left corner in room pixels. */

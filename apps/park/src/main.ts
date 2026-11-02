@@ -158,12 +158,18 @@ const jump = (at?: number) => {
 };
 // Letting go always reaches the owl, whatever has opened since.
 const jumpEnd = (at?: number) => roomScene()?.jumpUp(at);
+// Shift, or the pad's Dash: a dash, in a parkour course only (OP-224); the room scene says whether the owl holds it.
+const dash = (at?: number) => {
+  if (!atHome && !hud.isBlocking()) roomScene()?.dashDown(at);
+};
 hud.onInteract(interact);
 hud.onJump(jump, jumpEnd);
+hud.onDash(dash);
 const keyboard = attachKeyboard(window, {
   interact,
   jump,
   jumpEnd,
+  dash,
   menu: () => {
     if (!atHome) hud.toggleMap();
   },
