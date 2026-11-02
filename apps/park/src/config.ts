@@ -79,6 +79,12 @@ export interface ParkConfig {
    * token (`?keeper=1`, now or earlier in the tab): game/ledgePainter.ts.
    */
   paint: boolean;
+  /**
+   * Rooms built from the art kit (OP-234, `?kit=1`): a painted room that has a kit room standing in
+   * for it (KIT_DEMOS, packages/shared/rooms/kit.ts: level 4 of the tree) is drawn from the kit. The
+   * room's layout is the same, so only the look changes, and only in this page.
+   */
+  kit: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -117,5 +123,6 @@ export function readConfig(): ParkConfig {
     pos: q.get('pos') === '1',
     keeper: q.get('keeper') === '1',
     paint: q.get('paint') === '1',
+    kit: q.get('kit') === '1',
   };
 }

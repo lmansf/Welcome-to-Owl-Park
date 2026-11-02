@@ -126,7 +126,8 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom, roomFor } from '../rooms';
+import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
@@ -570,7 +571,10 @@ export class RoomScene extends Phaser.Scene {
   private async open(): Promise<void> {
     const gen = this.gen;
     const previous = this.registry.get('loadedRoom') as string | undefined;
-    if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
+    // A room drawn from the art kit (OP-234) loads and releases its kit's pieces instead of paintings.
+    const drawn = drawnRoom(this.room, this.cfg);
+    const was = previous ? roomFor(previous) : undefined;
+    if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous, was && drawnRoom(was, this.cfg)));
     const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
     screen?.show('Opening…');
     const spawn = arrivalPoint(this.room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
@@ -579,14 +583,14 @@ export class RoomScene extends Phaser.Scene {
     const leaveEarly = () => void joining.conn.then((conn) => conn.leave());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, leaveEarly);
     this.openPosOverlay();
-    const cap = roomArtCap(this.room, this.cfg);
+    const cap = roomArtCap(drawn, this.cfg);
     this.artCap = cap;
     // On a dense screen, the paintings whose sharp copies the browser does not have yet open at 1x,
     // a third of the bytes, and sharpen once those come.
-    const soft = await opensSoft(this.room, this.cfg);
+    const soft = await opensSoft(drawn, this.cfg);
     await loadArt(
       this,
-      roomOpeningArt(this.room.id),
+      roomOpeningArt(this.room.id, drawn),
       this.cfg.pixelRatio,
       cap,
       (done, total) => {
@@ -746,18 +750,22 @@ export class RoomScene extends Phaser.Scene {
   /** The room's art, pieces and residents, with the own owl at `spawn`, where the room was told it comes in. */
   private build(spawn: Vec2): void {
     const { room } = this;
+    // What is drawn: the room's paintings, or the art kit's pieces (OP-234), the same layout either way.
+    const art = drawnRoom(room, this.cfg);
     ensureFxTextures(this);
 
     // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
     // hairline of the clear colour shows at a join while the camera scrolls.
     const playTiles: Phaser.GameObjects.Image[] = [];
-    for (const t of backgroundTiles(room)) {
+    for (const t of backgroundTiles(art)) {
       for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) {
         this.placeTile(t, img);
         if (t.plain) img.setData('plain', true);
         if ((t.rate ?? 1) === 1) playTiles.push(img);
       }
     }
+    // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
+    if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
@@ -803,14 +811,16 @@ export class RoomScene extends Phaser.Scene {
       this.decor = new NestDecor(this, (keys) => loadArt(this, keys, this.cfg.pixelRatio, this.artCap));
       this.mirror = new NestMirror(this, NEST_MIRROR);
     }
-    for (const t of foregroundTiles(room)) {
+    for (const t of foregroundTiles(art)) {
       if (this.textures.exists(t.key)) for (const img of this.tileImages(t, room.size.h + 100, ROOM_W, ROOM_H)) this.placeTile(t, img);
     }
     // A room of the tree reads at a glance (OP-173): its ledges' edges and the shades over the playfield
     // under the owls, the shapes painted in front of the path over them, under the overlay.
     if (mapOf(room) === 2) {
-      this.treeDress = dressTreeRoom(this, room, playTiles, {
+      this.treeDress = dressTreeRoom(this, art, playTiles, {
         ground: TREE_GROUND,
+        // A kit room's ledges carry their own edge, the cap.
+        lips: !art.kit,
         // A raised front lies between the owls on ledges (drawn TREE_RAISED_BAND back) and those on the floor.
         depths: { shade: -0.9, lip: -0.8, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
         open: (door) => !this.realmClosed(this.doorTo(door)?.room),
@@ -1277,7 +1287,7 @@ export class RoomScene extends Phaser.Scene {
   private prefetchNear(now: number): void {
     if (now < this.prefetchAt) return;
     this.prefetchAt = now + 500;
-    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking())) prefetchRoomArt(this, to, this.cfg);
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking())) prefetchRoomArt(this, drawnRoom(to, this.cfg), this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */

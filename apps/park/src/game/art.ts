@@ -8,12 +8,13 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, KIT_ART, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, kitArtKeys, kitPlaceholder, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
+import { drawKitOps } from './kitView';
 import { loadSvgTexture } from './svgLoader';
 
 export const ART_PATH = 'art/';
@@ -27,8 +28,10 @@ export const WING_H = 120;
  * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
  * the screen), and never given a placeholder: the arcade draws its neon stand-in for anything missing.
  * `climb`: the stained-glass climb's tower pieces, the same way; the climb draws glass of its own until they come.
+ * `kit`: the art kit's textures, shape pieces and backdrops (OP-234, kitArt.ts), each standing in as its
+ * placeholder in the tree's palette until its art ships.
  */
-export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb';
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb' | 'kit';
 
 export interface ArtSpec {
   w: number;
@@ -285,6 +288,9 @@ export { FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS };
 /** The climb's pieces, loaded by its scene when a climb opens and released when it closes. */
 export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'climb');
 
+// The art kit's pieces (OP-234), at their logical sizes.
+for (const [key, { w, h }] of Object.entries(KIT_ART)) ART[key] ??= { w, h, kind: 'kit' };
+
 // The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
 for (const room of Object.values(ROOMS)) {
   for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
@@ -301,6 +307,8 @@ export function blockadeKey(phrase: string): string {
 /** Art that belongs to one room (released when it closes; roomOpeningArt is what loads as it opens). */
 export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(roomId)): string[] {
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
+  // A room built from the art kit (OP-234) loads its pieces too.
+  if (room?.kit) keys.push(...kitArtKeys(room));
   for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
@@ -308,7 +316,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
-  return keys.filter((k) => k in ART);
+  // Once each: a kit backdrop is one picture drawn on several screens.
+  return [...new Set(keys)].filter((k) => k in ART);
 }
 
 const FURNITURE_ART = new Set(FURNITURE.map((f) => f.art));
@@ -675,6 +684,9 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
       g.fillRect(0, 460, w, h - 460);
       break;
     }
+    case 'kit':
+      drawKitOps(g, kitPlaceholder(key) ?? []);
+      break;
     case 'piece':
       g.fillStyle(0xc9a227, 0.18);
       g.fillEllipse(w / 2, h / 2, w * 0.6, h * 0.8);
