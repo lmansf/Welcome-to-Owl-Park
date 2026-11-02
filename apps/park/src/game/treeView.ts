@@ -97,7 +97,8 @@ function tileFor(tiles: readonly Phaser.GameObjects.Image[], poly: Polygon): Pha
 
 /** Dresses a room of the tree as above. `playTiles` are the images of its 1x playfield, already placed. */
 export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: readonly Phaser.GameObjects.Image[], opts: TreeDressOptions): TreeDressing {
-  for (const img of playTiles) img.setTint(TREE_PLAY_TINT);
+  // Quieted: the playfield, or on a level painted in six layers its back scenery alone (its platforms are plain).
+  for (const img of playTiles) if (!img.getData('plain')) img.setTint(TREE_PLAY_TINT);
 
   let shades = 0;
   for (const s of room.shades ?? []) {
@@ -127,7 +128,8 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
     if (!tile) continue;
     const img = cutFront(scene, tile, f.id, f.poly);
     if (!img) continue;
-    cuts.push({ img: img.setTint(TREE_PLAY_TINT).setDepth(f.raised ? opts.depths.raised : opts.depths.front), tile, id: f.id, poly: f.poly, raised: !!f.raised });
+    if (!tile.getData('plain')) img.setTint(TREE_PLAY_TINT);
+    cuts.push({ img: img.setDepth(f.raised ? opts.depths.raised : opts.depths.front), tile, id: f.id, poly: f.poly, raised: !!f.raised });
   }
 
   let marks = 0;

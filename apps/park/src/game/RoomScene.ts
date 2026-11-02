@@ -745,6 +745,7 @@ export class RoomScene extends Phaser.Scene {
     for (const t of backgroundTiles(room)) {
       for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) {
         this.placeTile(t, img);
+        if (t.plain) img.setData('plain', true);
         if ((t.rate ?? 1) === 1) playTiles.push(img);
       }
     }
