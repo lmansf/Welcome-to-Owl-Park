@@ -8,9 +8,6 @@
  *
  * Over the plan an owl in the air moves as it walks, at WALK_SPEED; a jump rises JUMP_RISE (about
  * 149 px) and a flap at its top 111 px more; a glide falls one px for GLIDE_SLOPE along.
- *
- * TODO-DOCS (OP-084): docs/TESTING.md: the route tiers and the rooms tests that hold every room's
- * perches to them (each reached somehow, a quest's spots only on tier 1 perches).
  */
 import { GLIDE_SINK, JUMP_RISE } from './flight';
 import { closestPointOnPolygon, distance, pointInPolygon, type Polygon } from './geometry';

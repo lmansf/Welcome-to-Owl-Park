@@ -8,9 +8,6 @@ import { PHONE_ROOM_BUDGET } from './game/artFiles';
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
  * any database (OP-150): the Supabase transport it once had for a start without a server is gone, and
  * CI checks the built page for any client or key of one (tools/security/bundle-check.mjs).
- *
- * TODO-DOCS (OP-150): docs/ARCHITECTURE.md's transports table, docs/DEPLOY.md's `?transport=` line
- * and docs/GLOSSARY.md's Edge entry still name a `supabase` transport.
  */
 export type TransportKind = 'local' | 'edge';
 

@@ -1,9 +1,9 @@
 # Nests
 
-- Status: BUILT (C39); the mirror BUILT (OP-077)
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
-- Code: packages/shared/src/homes.ts, nestbook.ts, rooms/index.ts (NEST_ROOM, NEST_MIRROR); apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, game/nest.ts, game/street.ts, game/mirror.ts, game/nestPlan.ts
-- Tickets: OP-029, OP-032, OP-033, OP-077, OP-093
+- Status: BUILT (C39); the mirror BUILT (OP-077); Play into the nest BUILT (OP-105)
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
+- Code: packages/shared/src/homes.ts, nestbook.ts, styles.ts, travel.ts, rooms/index.ts (NEST_ROOM, NEST_MIRROR); apps/edge/src/sqlNestStore.ts; apps/park/src/ui/decorate.ts, home.ts, game/nest.ts, game/street.ts, game/mirror.ts, game/nestPlan.ts
+- Tickets: OP-029, OP-032, OP-033, OP-076, OP-077, OP-093, OP-105, OP-110, OP-130
 - Related: docs/ARCHITECTURE.md section 4 (protocol) and section 9 (Go home)
 
 Every owl has a nest of its own: a cosy round room inside a tree, on a street of tree houses outside
@@ -87,14 +87,20 @@ and the `mirror` spot and spawn in `NEST_ROOM` (`packages/shared/rooms/index.ts`
   the editor's stage, so each choice shows on the owl at once (`RoomScene.mirrorView`).
 - Any owl may use any nest's mirror. A look changed in someone else's nest changes only that owl,
   never the host's (room server test).
-- The Menu has no Your owl tile. The home screen's button is **Go to your nest**, which lands the
-  owl before its mirror, facing it (`apps/park/src/ui/home.ts`). On a keyboard Q goes to the mirror
-  from anywhere: home to the nest, then up to the mirror and into Your owl; Q again closes it
-  (`nestPlan.mirrorKey`).
+- The Menu has no Your owl tab. **Play** on the home screen is the one way in (OP-105): every visit,
+  a return after closing the tab too, lands the owl in its own nest before its mirror, facing it
+  (`apps/park/src/ui/home.ts`); the nest is made on first sight, and the owl goes to the lobby only
+  if the nests do not answer. The way on is marked **To the park** (`NEST_WORDS.toPark`): a sign on
+  the nest's door and at the street's east end (`apps/park/src/game/street.ts`), and labelled chips
+  at the screen's edge. The first time home, a card under the bar says "Welcome to your nest / The
+  park is out the door." (`NEST_WORDS.welcome`, `welcomeLine`), once per device, gone at a tap. On a
+  keyboard Q goes to the mirror from anywhere: home to the nest, then up to the mirror and into Your
+  owl; Q again closes it (`nestPlan.mirrorKey`).
 - A brand-new owl's first time home: the mirror glints once, with no words
   (`nestPlan.firstGlint`, kept on the device).
-- The one exception stays: **Make your owl** on a device's first visit opens the editor in place,
-  and so will **Make it yours** at the end of the first-run quiz (PLANNED, OP-076).
+- The one exception stays: on a device's first visit, **Make your owl** opens the quiz, Which owl
+  are you? (OP-076), and its **Make it yours** and **Skip** open the editor in place; **Keep it**
+  goes on to Play. The Menu's Settings tab has **Retake the quiz** (`docs/PLAYBOOK.md`, section 7).
 
 Tests: unit tests for the mirror spot, the glint, where Q goes and the edit scope; browser tests
 on a phone and a computer open Your owl from the mirror and watch the owl's colour change
@@ -112,6 +118,11 @@ box, String of lanterns, Feather mobile on the wall.
 once a park day (new at midnight in the park, US Eastern, like the rest of the park's days). An owl
 that owns all sixteen gets 5 feathers instead (what a common collectible pays when it comes again).
 
+A style set's **capstone** (OP-110, `docs/COLLECTIBLES.md`) is furniture too, and the day's gift
+never gives one: only completing its set does (`capstone` on the piece, `homes.ts`). The capstone
+arrives the next time the park reads the owl's furniture, from where it stands in Decorate. No set
+exists yet (`STYLE_SETS` is empty).
+
 ## The room server
 
 The nests live in the Collections object's SQLite (`apps/edge/src/sqlNestStore.ts`: tables `nests`
@@ -119,8 +130,9 @@ and `furniture`; no new Durable Object class, no migration). The room object hol
 the nests as rooms: a nest's room checks with the collections whether the nest is there and open
 before it welcomes a visitor, and turns the visitor away otherwise (a `closed` frame, then close
 4011, which the page does not reconnect after). Protocol 7 (`packages/shared/src/edge.ts`) adds the
-`street` and `nest` frames; see `docs/ARCHITECTURE.md`. "Go home" in the Menu asks for the owl's own
-nest with `GET /api/nest` (the nest's id only; made on first sight). The day's gift is `POST /api/nest/gift` with
+`street` and `nest` frames; see `docs/ARCHITECTURE.md`. Play, and **Travel home** on the Menu's map
+(OP-130; Go home is retired), ask for the owl's own nest with `GET /api/nest` (the nest's id only;
+made on first sight). The day's gift is `POST /api/nest/gift` with
 the visitor's pass. Population counts add every nest up under one `nests` entry, so they never name
 a nest.
 

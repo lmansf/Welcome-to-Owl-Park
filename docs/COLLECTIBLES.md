@@ -1,9 +1,9 @@
 # Collectibles
 
 - Status: BUILT; Purchases is groundwork only, PLANNED (OP-049 for the founder perk)
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged); the numbers are Claude Code's as written
-- Code: packages/shared/src/collectibles.ts, book.ts, shop.ts; apps/edge/src/Collections.ts, sqlStore.ts; apps/park/src/collect, apps/park/src/game/itemArt.ts
-- Tickets: OP-013, OP-014, OP-015, OP-025, OP-029
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02); the numbers are Claude Code's as written
+- Code: packages/shared/src/collectibles.ts, book.ts, shop.ts, styles.ts, nestbook.ts; apps/edge/src/Collections.ts, sqlStore.ts, collectLog.ts; apps/park/src/collect, apps/park/src/game/itemArt.ts
+- Tickets: OP-013, OP-014, OP-015, OP-025, OP-029, OP-076, OP-084, OP-107, OP-110
 - Related: docs/QUESTS.md, docs/ARCHITECTURE.md section 8
 
 Visitors collect wearables (hats, glasses, collars), little pets that trot after their owl,
@@ -41,6 +41,31 @@ their season.
 Ids, names and rarities live in `CATALOGUE`; variant ids are `<item>~<colourway>` (`witch-hat~3`)
 and bare ids for emotes (`hoot`).
 
+## Styles and sets [BUILT (OP-110); no sets listed yet]
+
+- Every collectible and piece of furniture has a style: the style of the place it comes from.
+  `styleOf` gives an item's own `style`, or `hub` (`HUB_STYLE`) when it names none. Drop 1's
+  twelve items are `seasonal` (`SEASONAL_STYLE`). Each realm brings a style of its own as it
+  opens, with a neutral id.
+- A set is a few things of one style (`STYLE_SETS` in `packages/shared/src/styles.ts`). A realm's
+  set is five collectibles and three pieces of furniture. The list is empty for now: a realm's set
+  comes with its sub-ticket's pieces and the owner's picks of their art.
+- An owl that has every piece of a set is given its capstone: a piece of furniture marked
+  `capstone` that only that set gives. The day's furniture gift never gives one. Any colourway of
+  a collectible counts.
+- The capstone is given the next time the park reads the owl's furniture (`capstonesDue`, called
+  by `NestBook` in `packages/shared/src/nestbook.ts`), with source `set`. A set completed by a
+  quest, the shop or a gift has its capstone waiting there.
+- A set can be completed at any time, a realm closed for the season too. A thing earned again
+  counts once, and what a duplicate pays is unchanged.
+- The Collection tab shows each set's pieces and progress. Its capstone is a silhouette without a
+  name until the set is complete. The sets sit beside the collection's total percentage (OP-107)
+  and are not part of it.
+- No rule makes a nest match a style: any piece stands anywhere.
+- `styleSetProblems` checks a list of sets, and the tests hold `STYLE_SETS` to it: every piece
+  exists and shares its set's style, every capstone is marked so, belongs to one set only and is
+  not a starter piece.
+
 ## Defaults
 
 | Setting | Default |
@@ -75,6 +100,16 @@ and bare ids for emotes (`hoot`).
   quest talks, uses and pickups against the owl's position on the server clock, and keeps a small
   cache of what each collector owns to vet worn items and emotes (a look naming something unknown
   triggers a fresh read, so items bought over HTTP are recognised).
+- The **collection log** (OP-107, `apps/edge/src/collectLog.ts`): when the log is on, every
+  collectible or piece of furniture granted is logged. The `Collections` object writes the row
+  into its own outbox in the same step as the grant and sends it on at once; a failed send waits
+  for the object's alarm, so a grant never waits on the log or fails because of it. The log is on
+  once the Worker has `PARK_LOG_URL`, `FRAUD_SCORE_KEY` and `FRAUD_HASH_SALT`
+  ([DEPLOY.md](DEPLOY.md)); without them nothing is kept or sent.
+- The log is anonymous by construction. The collector and the visit leave as salted hashes, the
+  device only as phone or desktop, the place as the room's neutral id. No name, email, order,
+  ticket, pass or address is ever in a row, and the collector's own id never leaves the
+  `Collections` object.
 
 ### API
 
@@ -108,14 +143,15 @@ to one per 1.5 s per owl.
   canvas has no `filter`); colourway 0 is the art as painted.
 - Until painted art ships every wearable and pet has a drawn placeholder (`itemArt.ts`).
 - HUD: feathers in the top bar; the **owl builder** (`ui/owlBuilder.ts`), opened at the mirror in
-  a nest (OP-077, `docs/NESTS.md`) or by Make your owl on a first visit, not from the Menu: the
+  a nest (OP-077, `docs/NESTS.md`) or, on a first visit, after the which-owl quiz that Make your
+  owl opens (its Make it yours, or Skip; OP-076), not from the Menu: the
   whole screen, the owl drawn big and alive by `game/BuilderScene.ts`, and tabs for its kind,
   colours, wear, pets and effects, a card per item with its colourway dots; a tap puts it on or
   takes it off, and what is not owned yet shows greyed with where to find it). The **emote wheel**
   (`ui/emoteWheel.ts`: the owned emotes round a ring, eight a page) has its own button (above the
   pad on a phone), and on a keyboard 1 to 8 play the emotes as the wheel numbers them, without
-  opening it. The hop (`JUMP_EMOTE`, `jump`) is every owl's and not in the catalogue or the wheel
-  (OP-082, [ACTIVITIES.md](ACTIVITIES.md)). The quests screen, dialogue and shop are in
+  opening it. Jump (flight, OP-084, `packages/shared/src/flight.ts`) is every owl's and is not an
+  emote: it is not in the catalogue or the wheel. The quests screen, dialogue and shop are in
   [QUESTS.md](QUESTS.md).
 - Test hooks on `window.owlPark`: `collection()`, `equip(variant)`, `emote(e)`, and the quest and
   shop hooks.

@@ -15,10 +15,6 @@
  * `ground` is the height of what the owl comes down on where it is: the floor (0), or the top of a
  * perch (perches.ts, groundAt). A landing on the floor is never sent; one on a perch is, since only
  * the owl's own page knows what was under it.
- *
- * TODO-DOCS (OP-084): docs/ARCHITECTURE.md (movement): the air state, when it is sent, how other
- * pages carry it on, the room server's checks; docs/PLAYBOOK.md (controls): Jump, a second flap in
- * the air, Jump held to glide, on the pad and the space bar.
  */
 import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
 import { MAX_PERCH_TOP } from './perches';

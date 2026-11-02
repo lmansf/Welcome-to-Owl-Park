@@ -5,10 +5,6 @@
  * side wall (the room's left or right edge) runs up and down the floor, any other runs across it. A
  * doorway in the far wall that comes out in a side wall turns a corner, and the owl arrives at the
  * spawn as it always has.
- *
- * TODO-DOCS (OP-124): docs/ARCHITECTURE.md's rooms table ("Doors") says a door places you at a spawn;
- * it is the spawn shifted along the doorway back by the owl's lane, and the room server keeps that
- * point when it is on the floor, out of an exit and near the spawn.
  */
 import { isWalkable, pointInRect, type Rect } from './geometry';
 import { nestDoorIndex } from './homes';
@@ -34,11 +30,6 @@ export function doorAxis(room: RoomDef, door: DoorDef): DoorAxis {
  * found in a doorway can be a frame's walk past where the owl crossed in, a turnstile further along at
  * the gate, and a narrow stretch of doorway can be crossed between two looks (OP-124). A step that
  * began inside comes in where it ends, `to`, or nowhere when it ends outside.
- *
- * TODO-DOCS (OP-124): docs/ARCHITECTURE.md's doorway paragraph ("A walk goes through a doorway only
- * when..."): the page takes a doorway from where the owl's step since its last look came into it, a
- * step right across it included, so a slow frame neither carries the owl a turnstile along nor past
- * a narrow doorway. Held keys against an edge of the floor slide along it (steerTarget).
  */
 export function entryPoint(rect: Rect, from: Vec2, to: Vec2): Vec2 | null {
   if (pointInRect(from, rect)) return pointInRect(to, rect) ? to : null;

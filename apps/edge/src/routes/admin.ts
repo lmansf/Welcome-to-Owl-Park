@@ -59,8 +59,6 @@ export async function restartPark(env: Env, log: Logger, by: 'cron' | 'key'): Pr
   );
   const missed = told.filter((n) => n === null).length;
   const owls = told.reduce<number>((a, n) => a + (n ?? 0), 0);
-  // TODO-DOCS (OP-181): docs/LOGGING.md: park_restart (worker, info; warn when a room object missed it): by (cron or key),
-  // objects, missed, owls, restart_at (when the ledger kept it). Per object, send_failed (worker, error): object, by.
   const fields = { by, objects: names.length, missed, owls, ...(restartAt !== null ? { restart_at: new Date(restartAt).toISOString() } : {}) };
   if (missed) log.warn('worker', 'park_restart', 'The park restarted for the night, but not every room object was told.', fields);
   else log.info('worker', 'park_restart', 'The park restarted for the night: every room object sends its owls to the home screen.', fields);
@@ -115,10 +113,6 @@ export async function adminPing(c: RouteCtx): Promise<Response> {
 }
 
 // ---- A keeper's token: this tab's owl walks the tree (map 2) while it is dark (OP-156) ----
-//
-// TODO-DOCS (OP-156): docs/PLAYBOOK.md (or DEPLOY.md's admin routes): to walk a closed realm, open
-// the park with ?keeper=1 and give the keepers' key once; the page swaps it here for a 12-hour token
-// kept in that tab only (never the key), and its hello carries the token past the closed arch.
 export async function adminKeeper(c: RouteCtx): Promise<Response> {
   const { request, env, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -223,8 +217,6 @@ export async function adminGate(c: RouteCtx): Promise<Response> {
 }
 
 // ---- The nightly restart (OP-181) by hand, to try it on staging: the same as its cron ----
-// TODO-DOCS (OP-181): docs/DEPLOY.md's admin routes: POST /api/admin/restart (the admin key) restarts
-// the park now, as the 09:00 UTC cron does; it answers the objects told, those missed and the owls sent home.
 export async function adminRestart(c: RouteCtx): Promise<Response> {
   const { request, env, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });

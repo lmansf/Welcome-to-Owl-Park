@@ -144,9 +144,6 @@ class Autopilot {
  * the room as an `ascent`, which checks it against its floor and pays it; the clouds grant the
  * realm's item once. Stop and Escape close the screen and send nothing: the run waits in the
  * room for an hour.
- *
- * TODO-DOCS: docs/ACTIVITIES.md has no climb yet; designs/the-stained-glass-climb.md is the design
- * until the doc agent writes the activity up (the realm, the portal, the bands' pay and the item).
  */
 export class Climb {
   private run: Run | null = null;

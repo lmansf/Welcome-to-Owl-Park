@@ -10,10 +10,6 @@
  * too); a thing that comes again counts once, and what a duplicate pays is unchanged; the Collection
  * tab shows a capstone as a silhouette until it is earned; the sets sit beside the collection's total
  * (OP-107's percentage) and are not part of it.
- *
- * TODO-DOCS (OP-110): docs/COLLECTIBLES.md (each item's style, `hub` unless it names another, Drop 1
- * `seasonal`; the sets, their capstones and when one is given) and docs/NESTS.md (a capstone is
- * furniture the day's gift never gives).
  */
 import { HUB_STYLE, ITEMS, parseVariant, type ItemDef } from './collectibles';
 import { FURNITURE, STARTER_FURNITURE, getFurniture, type Furniture } from './homes';

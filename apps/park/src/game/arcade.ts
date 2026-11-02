@@ -132,20 +132,6 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
  * hall, and a run of a game from Play at a cabinet to what it paid. The game itself is drawn by
  * ArcadeScene over the room, in the HUD's arcade screen; the room server (or the local mode) starts
  * each run and pays it.
- *
- * TODO-DOCS (OP-059): docs/ACTIVITIES.md (Neon Roost) has the arcade one screen wide, its cabinets
- * under the score board, and the games drawn in neon lines. Now: the hall is three screens (arcade,
- * arcade-mid, arcade-end) entered from the street at its west end, a bay per game with the game's
- * title sign over its cabinet, the score wall on the board in the middle; each game is drawn from its
- * painted field and pieces (arcade/paint.ts) once every piece has loaded, in neon lines until then.
- *
- * TODO-DOCS (OP-137): docs/ACTIVITIES.md (Neon Roost) and docs/ARCHITECTURE.md section 4: a run is
- * kept by its collector in the collections object (not on the socket), so it outlasts a dropped
- * connection; past the owl's best, the page sends `act` `record` (the score so far, at most once a
- * second) and the room keeps it as the owl's best and shows it on the wall, paying nothing, so a run
- * cut short keeps its best; the end pays as before, a new best and the day's best judged against the
- * standings as the run started. Moon Flap flaps with the pad's Interact on a touch screen, and each
- * game opens on a how-to card before its first run on a device.
  */
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();

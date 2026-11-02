@@ -4,9 +4,6 @@
  * where the owl is drawn, and a red flash and a count each time the owl moves further than an owl's
  * width between two frames beyond what its walk covers in that time, which no walk does. It asks once
  * a tab for the keepers' key and checks it with the room server; without it nothing shows.
- *
- * TODO-DOCS (OP-138): docs/PLAYBOOK.md gets the overlay for a report of an owl jumping: `?pos=1`, the
- * keepers' key it asks for (checked with GET /api/admin/ping), what its lines mean, and the red flash.
  */
 import { WALK_SPEED, type Vec2 } from '@owl-park/shared';
 

@@ -37,7 +37,6 @@ import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators), so a stale page reloads. */
 export const EDGE_PROTOCOL_VERSION = 15;
-// TODO-DOCS: docs/ARCHITECTURE.md section 4 now names v15 and describes its spectators (OP-191); the frames v9 to v14 added (the arcade, the climb's `climb` and `ascent` acts, `realms`, `rest` and `asleep`, flight, travel, perches) are still to be described there.
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
 export const BAND_COUNT = 6;

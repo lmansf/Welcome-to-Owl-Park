@@ -12,9 +12,6 @@
  * and the card takes the focus as it opens (not a button, so a stray key never chooses).
  *
  * The words are drafts for the owner's approval (SPECTATOR_WORDS, spectator.ts).
- *
- * TODO-DOCS (OP-198): the turnstiles' question in docs/ARCHITECTURE.md (the purchase path) and
- * docs/PLAYBOOK.md section 7.
  */
 import { createModal } from './modal';
 import { MENU_THEMES, themeAt, tokenStyle } from './menuTheme';

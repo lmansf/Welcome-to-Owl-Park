@@ -7,17 +7,6 @@ import { overflow } from './park';
 import type { RouteCtx } from './router';
 
 // ---- The ledge painter (OP-156): a tree room's ledges, walls, hazards, fronts and placed spots as a keeper painted them ----
-//
-// TODO-DOCS (OP-156): docs/ARCHITECTURE.md: POST /api/admin/masks/<room> (a keeper's token in
-// X-Keeper-Token, or the keepers' key; the draft checked by checkMasks, packages/shared/src/masks.ts)
-// and GET /api/masks/<room> (public: level geometry only; 404 before a draft is saved; what the
-// overflow object said kept 10 s per room in each copy of the Worker, a save through it at once), both counted
-// as calls that need no pass (limits.ts); the draft store, one row per room in the overflow object
-// under `masks:<room>` with `savedAt`, a new save replacing the old; a draft of the four lists from
-// before spots (part 3) is taken, and kept or read back, as one with none. docs/LOGGING.md: masks_saved
-// (worker.admin, info: room, by keeper or key, how many ledges, walls, hazards, fronts and spots) and
-// masks_refused (worker.admin, warn: room when it is a room id, reason, and the list and index of
-// the item refused); admin_denied's reason bad-keeper-token.
 export async function adminMasks(c: RouteCtx): Promise<Response> {
   const { request, env, url, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });

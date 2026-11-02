@@ -28,17 +28,6 @@ import { mountPaintPanel, type PaintPanel, type PaintState } from '../ui/paintPa
  * suggestions go. Save sends the draft to the room server with the tab's keeper's token
  * (net/masks.ts); `pnpm masks:pull <room>` prints it as room data. All of it is room pixels: the
  * camera turns them into the screen's.
- *
- * TODO-DOCS (OP-156): docs/PLAYBOOK.md: how a keeper paints a level's ledges: open the park with
- * ?keeper=1&paint=1&room=l1 (the keepers' key once; the tab keeps a 12-hour token), what each colour
- * is, the tools, Suggest (the screen in view; a tap takes a suggestion), dragging ends and lines,
- * fronts point by point, Undo and Delete (and their keys), Try (the owl stands on the draft in this
- * page only, and position_rejected lines for it are expected), Save, and `pnpm masks:pull <room>`
- * to turn the saved draft into room data in a pull request. Placing the level's named spots (OP-156,
- * part 3): the Spot tool, a name from its list (OP-155's names, packages/shared/src/treeSpots.ts),
- * then a tap where its thing stands (a door's or a stair's threshold middle on the walking surface,
- * an idol's, a booth's or a guardian's base centre); a pin dragged moves it; masks:pull prints them
- * as the room's `places`, which the game does not read yet.
  */
 
 const COLOURS: Record<MarkKind, number> = { ledge: 0x5be37d, wall: 0xff4d4d, hazard: 0xff9f1c, front: 0x3d8bff, spot: 0xc77dff };

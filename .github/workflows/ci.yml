@@ -14,9 +14,6 @@ name: CI
 # scope's score in the run's summary and fails the run when one is under the break threshold; the
 # reports and the scores are kept with the run.
 #
-# TODO-DOCS (OP-123): docs/DEPLOY.md gains a CI section: the two tiers and what each runs, tagging a
-# test @smoke, refreshing the shard timings (apps/park/e2e/durations.json) when tests are added, and
-# that browser tests wait on the park's own state (or frames), never on fixed sleeps.
 on:
   push:
     paths-ignore: ['docs/**', '**/*.md']

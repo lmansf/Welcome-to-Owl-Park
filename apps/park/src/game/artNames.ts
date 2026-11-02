@@ -10,9 +10,6 @@ export const OWL_LAYERS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'o
 /**
  * What the great horned owl wears in place of its body, belly and accent while its wings are out
  * (OP-136): the same painting with its folded wings taken away, so a flying owl shows two wings.
- * TODO-DOCS (OP-136): docs/ARCHITECTURE.md's sprite section: an owl's wings open only over its
- * kind's flight layers, which load once the room's own art is in (never at boot); until they have,
- * the wings stay folded.
  */
 export const FLIGHT_LAYERS = ['owl-flight-body', 'owl-flight-belly', 'owl-flight-accent'] as const;
 
@@ -60,10 +57,6 @@ export const DENSE_FROM_RATIO = DENSE_SCALE + 0.125;
  * each BOOT_ART key at the scale this screen will want, and keeps the answers in
  * `window.__owlParkArt` by address for the loader to take. A key the build ships as SVG is left
  * out (the loader draws that itself). `artBase` is where the art is served (`/art/`).
- *
- * TODO-DOCS (OP-129): docs/ARCHITECTURE.md: the page asks for the boot's art itself, as it opens
- * (this script, which vite.config.ts writes into index.html's head), and art.ts's loader takes those
- * downloads.
  */
 export function earlyArtScript(artBase: string, published: ReadonlyMap<string, string>): string {
   const at = (scale: number) =>
