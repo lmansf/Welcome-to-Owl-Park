@@ -4,7 +4,7 @@ import { TREE_ARRIVAL } from '@owl-park/shared/rooms';
 import { accountsOn } from '../accounts';
 import { beforeRestart, mayEnter, spectatorsOn } from '../gate';
 import { REPORT_BODY_MAX, noteViolation, violationOf } from '../guard';
-import { GUEST_PASS_TTL_S, type PassPayload, mintCollector, mintPass, randomCollectorId, randomVisitorId, readCollector, signingSecret } from '../pass';
+import { GUEST_PASS_TTL_S, type PassPayload, mintCollector, mintPass, randomCollectorId, randomVisitorId, readCollector, requireSecret } from '../pass';
 import { CORS, json, passFrom, readJson } from './http';
 import { collections, gateOf, overflowOf } from './park';
 import type { RouteCtx } from './router';
@@ -23,7 +23,7 @@ export async function cspReport(c: RouteCtx): Promise<Response> {
 export async function guestPass(c: RouteCtx): Promise<Response> {
   const { request, env, url, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-  const secret = signingSecret(env);
+  const secret = requireSecret(env, url);
   // The collector token the browser keeps; a missing or forged one starts a new collection.
   const given = request.headers.get('X-Collector') ?? url.searchParams.get('collector');
   const known = await readCollector(secret, given);
@@ -59,7 +59,8 @@ export async function guestPass(c: RouteCtx): Promise<Response> {
   // A guest pass opens the lobby; once the park takes tickets only an admitted pass goes further.
   const gate = await gateOf(env);
   // The entries setting (OP-156): an owl the keepers send into the tree starts there, if the front
-  // gate would let it into the tree's arrival at all (a guest pass is not, while the park takes tickets).
+  // gate would let it into the tree's arrival at all. The arrival is the tree's street, outside its own
+  // front gate (a free room), so a guest pass goes in and buys a Day Ticket at that gate.
   const map = entryMap(cid, treeShare((await overflowOf(env)).realms)) === 2 && mayEnter(gate, payload, TREE_ARRIVAL.room) ? 2 : 1;
   return Response.json({ pass, exp, collector, gate: gate.mode, adm: payload.adm, ...(map === 2 ? { map } : {}), ...(account ? { account } : {}) }, { headers: CORS });
 }

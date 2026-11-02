@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LOBBY_ROOM, NEST_WORDS, STREET_ROOM, isNestRoom, nestDoorIndex, parkwardDoor, type DoorDef, type NestLook, type RoomDef } from '@owl-park/shared';
+import { LOBBY_ROOM, NEST_WORDS, isNestRoom, isStreetRoom, nestDoorIndex, parkwardDoor, type DoorDef, type NestLook, type RoomDef } from '@owl-park/shared';
 import { NEST_PARK_SIGN } from '../rooms';
 import type { StreetDoor } from './nestPlan';
 
@@ -112,7 +112,7 @@ function edgeSign(scene: Phaser.Scene, room: RoomDef, d: DoorDef, words: string)
 export function addNestsSign(scene: Phaser.Scene, room: RoomDef): void {
   // A nest's own door leads back to the street too, but there the way is plain.
   if (isNestRoom(room.id)) return;
-  for (const d of room.doors) if (d.to?.room === STREET_ROOM) edgeSign(scene, room, d, NEST_WORDS.toNests);
+  for (const d of room.doors) if (isStreetRoom(d.to?.room)) edgeSign(scene, room, d, NEST_WORDS.toNests);
 }
 
 /**

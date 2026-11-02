@@ -48,6 +48,8 @@ export const MOVE_REFILL_PER_S = 2;
 /** Air states the room server takes from one visitor (OP-084): a jump, a flap, a cut, a glide and a landing are five. */
 export const AIR_BURST = 8;
 export const AIR_REFILL_PER_S = 4;
+/** One emote per visitor this often: the room server drops faster ones quietly, and the page waits a little longer between the ones it sends (OP-210). */
+export const EMOTE_EVERY_MS = 1_500;
 
 /** Close codes the server uses; the client reacts to each differently. */
 export const CLOSE = {

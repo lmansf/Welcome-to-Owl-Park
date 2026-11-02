@@ -6,9 +6,10 @@ import type { Env } from '../env';
 import { mayEnter, spectating, spectatorsOn } from '../gate';
 import { health } from '../health';
 import { countIn, countedOneMore } from '../overflowState';
-import { mintEntry, passRefusal, signingSecret, verifyEntry, verifyPass } from '../pass';
+import { isLocalHost } from '../guard';
+import { mintEntry, passRefusal, requireSecret, signingKeySet, verifyEntry, verifyPass } from '../pass';
 import { ROOMS, isRoomId, roomCap } from '../rooms';
-import { CORS, clientIp, json, whoOf } from './http';
+import { CORS, adminKeySet, clientIp, json, whoOf } from './http';
 import { collections, gateOf, objectFor, objectName, overflowOf, readGate } from './park';
 import type { RouteCtx } from './router';
 
@@ -67,7 +68,7 @@ export async function copyFor(env: Env, roomId: string, copies: OverflowState['c
 }
 
 export async function healthRoute(c: RouteCtx): Promise<Response> {
-  const { env, log } = c;
+  const { env, url, log } = c;
   // The park's health (OP-068): the rooms, the ticket book and the collections each answer in time.
   const h = await health({
     rooms: async () => {
@@ -77,10 +78,16 @@ export async function healthRoute(c: RouteCtx): Promise<Response> {
     tickets: () => readGate(env),
     collections: () => collections(env).ping(),
   });
-  const fields = { ok: h.ok, parts: h.parts, duration_ms: h.ms };
-  if (h.ok) log.info('worker.health', 'health_check', 'The park answered its health check.', fields);
-  else log.error('worker.health', 'health_check', 'A part of the park did not answer its health check in time.', fields);
-  return json(h, h.ok ? 200 : 503);
+  // Whether the signing key and the keepers' key are set (OP-209): yes or no, never what they are. Off
+  // this machine the park is not ok without both, so the uptime check (any answer but 200) alerts.
+  const configured = { signing: signingKeySet(env), admin: adminKeySet(env) };
+  const unset = !isLocalHost(url.hostname) && !(configured.signing && configured.admin);
+  const ok = h.ok && !unset;
+  const fields = { ok, parts: h.parts, configured, duration_ms: h.ms };
+  if (ok) log.info('worker.health', 'health_check', 'The park answered its health check.', fields);
+  else if (!h.ok) log.error('worker.health', 'health_check', 'A part of the park did not answer its health check in time.', fields);
+  else log.error('worker.health', 'health_check', 'Every part answered, but the signing key or the keepers’ key is not set (configured says which): the park is not ok until both are.', fields);
+  return json({ ...h, ok, configured }, ok ? 200 : 503);
 }
 
 export async function counts(c: RouteCtx): Promise<Response> {
@@ -113,7 +120,8 @@ export async function socket(c: RouteCtx): Promise<Response> {
   // One of the park's rooms, or a nest (`nest-<id>`): whether that nest is there, and open, is the room object's to say.
   if (!isRoomId(roomId)) return new Response('unknown room', { status: 404 });
   if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
-  const secret = signingSecret(env);
+  // No signing key off this machine (OP-209): the socket is refused (503) before any pass is read.
+  const secret = requireSecret(env, url);
   const given = url.searchParams.get('pass');
   const pass = await verifyPass(secret, given);
   if (!pass) {

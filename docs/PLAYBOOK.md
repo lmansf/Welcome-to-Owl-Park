@@ -21,7 +21,10 @@ board (PM hat).
 - On a phone, open `https://<the park's address>/api/health`. `"ok": true` means the Worker and the
   park's three objects answered: `rooms` (the rooms and the nests), `tickets` (the ticket book, the
   votes and the opening switch) and `collections` (collections, quests, the shop). A 503 names the part
-  that did not answer within three seconds. No answer at all: the Worker itself, or Cloudflare
+  that did not answer within three seconds. `configured` says whether `PASS_SIGNING_KEY` and
+  `ADMIN_KEY` are set (true or false, never their values): with either false the answer is a 503 too,
+  and with the signing key missing the Worker refuses every pass and room socket (OP-209) until
+  `wrangler secret put PASS_SIGNING_KEY`. No answer at all: the Worker itself, or Cloudflare
   (cloudflarestatus.com).
 - The keepers' page `/admin/gate` (the admin key) shows the same check as its first line.
 - Cloudflare's dashboard: Workers & Pages → the park's Worker → Metrics for errors and requests, and

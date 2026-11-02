@@ -48,6 +48,7 @@ export type LogComponent = (typeof LOG_COMPONENTS)[number];
 export const LOG_EVENTS = [
   'log_field_refused',
   'signing_key_missing',
+  'signing_key_refused',
   'pass_issued',
   'pass_verified',
   'pass_rejected',

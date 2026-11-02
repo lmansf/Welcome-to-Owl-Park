@@ -1,4 +1,4 @@
-import { MOVE_BURST, MOVE_REFILL_PER_S } from '@owl-park/shared';
+import { EMOTE_EVERY_MS, MOVE_BURST, MOVE_REFILL_PER_S } from '@owl-park/shared';
 
 /**
  * A token bucket for moves, stricter than the room server's (MOVE_BURST, MOVE_REFILL_PER_S) so
@@ -35,5 +35,31 @@ export class MoveBudget {
   wait(now: number): number {
     this.refill(now);
     return this.tokens >= 1 ? 0 : Math.ceil(((1 - this.tokens) / this.perSecond) * 1000);
+  }
+}
+
+/**
+ * How far apart the page sends emotes (OP-210): a little more than the room's EMOTE_EVERY_MS, so a
+ * frame that arrives early on a jittery network is still one the room plays.
+ */
+export const EMOTE_SEND_EVERY_MS = EMOTE_EVERY_MS + 100;
+
+/**
+ * One emote at a time, EMOTE_SEND_EVERY_MS apart (OP-210). One that comes sooner is dropped, not
+ * queued: the room drops such an emote quietly too, so nobody else would ever see it, and a queued one
+ * would play after the keys were let go. Dropping it here keeps a mash of the number keys from
+ * filling the room's flood limit (40 frames in 5 s closes the socket with 4003). Time comes in as an
+ * argument, so it is pure.
+ */
+export class EmoteGate {
+  private sentAt = Number.NEGATIVE_INFINITY;
+
+  constructor(private readonly everyMs = EMOTE_SEND_EVERY_MS) {}
+
+  /** True (and the spacing starts again) when an emote may go now; false when it is too soon. */
+  take(now: number): boolean {
+    if (now - this.sentAt < this.everyMs) return false;
+    this.sentAt = now;
+    return true;
   }
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -525,6 +525,10 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     now += LIMITS.emoteEveryMs;
     expect(room.emote('a', 'flap')).toBe(true);
     expect(b.count('emote')).toBe(2);
+  });
+
+  it('spaces emotes by the shared EMOTE_EVERY_MS, the spacing the page keeps to (OP-210)', () => {
+    expect(LIMITS.emoteEveryMs).toBe(EMOTE_EVERY_MS);
   });
 
   // One step into a jump, as the page sends it (OP-084).

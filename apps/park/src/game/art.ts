@@ -8,7 +8,7 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { ARCADE_ROOM, FURNITURE, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, TREE_GROUND, roomFor } from '../rooms';
@@ -305,7 +305,7 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
   if (roomId === 'glass') keys.push('glass-idol');
-  if (roomId === ARCADE_ROOM) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
+  if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
   return keys.filter((k) => k in ART);

@@ -18,7 +18,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ARCADE_ROOM,
+  isArcadeRoom,
   Activities,
   CLOSE,
   COPY_BASE_EMOTES,
@@ -38,7 +38,7 @@ import {
   type SetupSettings,
   RIBBON_MAX_CHARS,
   STREET_DOORS,
-  STREET_ROOM,
+  isStreetRoom,
   distance,
   filterOwnedWear,
   getInteractable,
@@ -92,6 +92,7 @@ import {
 import { accountsOn } from './accounts';
 import type { Collections } from './Collections';
 import { deviceClass, logConfig, type DeviceClass, type Visit } from './collectLog';
+import { isLocalHost } from './guard';
 import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
@@ -131,6 +132,8 @@ export interface Attachment {
   spec?: true;
   /** This socket's hello carried a keeper's token that checked out (OP-156): it walks in while the park is closed for setup (OP-205). */
   keeper?: true;
+  /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
+  local?: true;
 }
 
 /**
@@ -778,6 +781,7 @@ export class RoomObject extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [`id:${id}`, `ip:${ip}`, `room:${roomId}`, ...(isCollectorId(cid) ? [`cid:${cid}`] : [])]);
     const att: Attachment = { room: roomId, id, sid: randomSid(), ip, joinedAt: Date.now(), state: null };
     if (run) att.run = run;
+    if (isLocalHost(url.hostname)) att.local = true;
     if (isCollectorId(cid)) att.cid = cid;
     if (isDeviceId(dev)) att.dev = dev;
     if (isTimeZone(tz)) att.tz = tz;
@@ -841,7 +845,7 @@ export class RoomObject extends DurableObject<Env> {
       if (frame.t !== 'hello') return this.kick(ws, CLOSE.BAD_PROTOCOL, 'hello first');
       // A keeper's token that checks out is kept on the socket: it walks in while the park is closed for
       // setup (OP-205), and stays when the switch closes the park.
-      if (frame.keeper !== undefined && (await verifyKeeper(signingSecret(this.env), frame.keeper))) {
+      if (frame.keeper !== undefined && (await verifyKeeper(signingSecret(this.env, att.local === true), frame.keeper))) {
         att.keeper = true;
         ws.serializeAttachment(att);
       }
@@ -954,7 +958,7 @@ export class RoomObject extends DurableObject<Env> {
     const r = frame.r;
     if (room.sessionOf(att.id) !== att.sid) return;
     if (!att.spec) return this.send(ws, { t: 'admitted', r, ok: true });
-    const pass = await verifyPass(signingSecret(this.env), frame.pass);
+    const pass = await verifyPass(signingSecret(this.env, att.local === true), frame.pass);
     const why = !pass ? 'pass' : !pass.adm ? 'not-admitted' : pass.id !== att.id || pass.cid !== att.cid ? 'not-this-owl' : (pass.iat ?? 0) < Math.floor(att.joinedAt / 1000) ? 'before-socket' : null;
     if (why) {
       this.logOf(att).info('room.play', 'spectator_refused', 'A spectator’s pass did not make it a full visitor: it stays a spectator.', { frame: 'admit', reason: why });
@@ -1009,7 +1013,7 @@ export class RoomObject extends DurableObject<Env> {
     if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
     if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
-    if (att.room === ARCADE_ROOM) this.serial(att, () => this.sendWall(ws, att));
+    if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
     // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
@@ -1137,7 +1141,7 @@ export class RoomObject extends DurableObject<Env> {
   /** The street's nest doors for this visitor: its own nest behind door 0, and up to five other owls' open nests. */
   private async streetDoors(ws: WebSocket, att: Attachment, room: Room, r: number): Promise<void> {
     const refuse = (reason: 'unknown' | 'busy' | 'offline') => this.send(ws, { t: 'refused', r, reason });
-    if (att.room !== STREET_ROOM || !att.cid) return refuse('unknown');
+    if (!isStreetRoom(att.room) || !att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     if (!room.takeUse(att.id)) return refuse('busy');
     const look = room.lookOf(att.id);

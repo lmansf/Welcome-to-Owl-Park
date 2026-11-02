@@ -25,7 +25,10 @@ import {
   RARITY_COLOURS,
   RARITY_NAMES,
   SAY_EVERY_MS,
+  isStreetRoom,
+  streetOf,
   STREET_ROOM,
+  TREE_STREET_ROOM,
   arrivalPoint,
   backgroundTiles,
   mapOf,
@@ -792,7 +795,7 @@ export class RoomScene extends Phaser.Scene {
     }
     addNestsSign(this, room);
     addParkSign(this, room);
-    if (room.id === STREET_ROOM) {
+    if (isStreetRoom(room.id)) {
       this.streetSigns = new StreetDoors(this, room);
       this.streetSigns.show(this.street, nestLook(this.look));
     }
@@ -1022,7 +1025,7 @@ export class RoomScene extends Phaser.Scene {
     this.acts = this.collection.service.activityLink(this.room.id, conn, pushes, () => ({ ...this.me.pos }), () => this.look);
     this.play?.attach(this.acts);
     this.nests = this.collection.service.nestLink(this.room.id, conn, pushes, () => nestLook(this.look));
-    if (this.room.id === STREET_ROOM) void this.askStreet();
+    if (isStreetRoom(this.room.id)) void this.askStreet();
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
@@ -1293,7 +1296,7 @@ export class RoomScene extends Phaser.Scene {
    * the park, the chip for the way there says so in words (OP-105).
    */
   private updateHints(): void {
-    const own = this.room.id === STREET_ROOM ? 'nest-door-0' : null;
+    const own = isStreetRoom(this.room.id) ? 'nest-door-0' : null;
     const toPark = parkwardDoor(this.room.id);
     const v = this.cameras.main.worldView;
     const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight}`;
@@ -1318,7 +1321,7 @@ export class RoomScene extends Phaser.Scene {
               ? `${NEST_WORDS.toPark}, off screen: walk there`
               : door.id === own
                 ? `${NEST_WORDS.yourNest}, off screen: walk there`
-                : door.to?.room === STREET_ROOM
+                : isStreetRoom(this.doorTo(door)?.room)
                   ? `${NEST_WORDS.toNests}, off screen: walk there`
                   : 'Doorway, off screen: walk there',
         };
@@ -1339,10 +1342,10 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setWaysOut({ leave: insidePark(this.room.id), home: !(isNestRoom(this.room.id) && this.nestMine) });
   }
 
-  /** "Leave the park" (the card asked first): to the lobby, outside the gate. The ticket keeps running. */
+  /** "Leave the park" (the card asked first): to the lobby, outside the gate (in the tree, before its front gate). The ticket keeps running. */
   leavePark(): boolean {
     if (!this.built || this.leaving || !insidePark(this.room.id)) return false;
-    void this.goTo(LOBBY_ROOM, LEFT_PARK_SPAWN, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
+    void this.goTo(this.walking() === 2 ? TREE_STREET_ROOM : LOBBY_ROOM, LEFT_PARK_SPAWN, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined });
     return true;
   }
 
@@ -1363,7 +1366,7 @@ export class RoomScene extends Phaser.Scene {
     if (home === this.room.id) return false;
     this.hud.closeDialogue();
     this.talkingTo = null;
-    void this.goTo(home, spawn, { room: STREET_ROOM, spawn: 'from-nest-0' }, fadeMs, undefined, 'travel');
+    void this.goTo(home, spawn, { room: streetOf(this.walking()), spawn: 'from-nest-0' }, fadeMs, undefined, 'travel');
     return true;
   }
 
@@ -1502,7 +1505,7 @@ export class RoomScene extends Phaser.Scene {
     const nestId = await this.collection.service.homeNest().catch(() => null);
     const home = nestId ? nestRoomId(nestId) : null;
     if (!(await this.leaveRoom())) return;
-    const back: RoomStart = home ? { room: home, spawn: NEST_SPAWN, from: { room: STREET_ROOM, spawn: 'from-nest-0' } } : { room: LOBBY_ROOM, spawn: undefined };
+    const back: RoomStart = home ? { room: home, spawn: NEST_SPAWN, from: { room: streetOf(this.walking()), spawn: 'from-nest-0' } } : { room: LOBBY_ROOM, spawn: undefined };
     this.awayScreen()?.gone(() => this.scene.start('room', back));
   }
 
@@ -1740,7 +1743,7 @@ export class RoomScene extends Phaser.Scene {
       talkingTo: this.talkingTo,
       play: this.play?.debug() ?? null,
       wall: this.arcade?.wall() ?? null,
-      street: this.room.id === STREET_ROOM ? this.street : null,
+      street: isStreetRoom(this.room.id) ? this.street : null,
       nest: this.nestView
         ? { id: this.nestView.nestId, mine: this.nestMine, open: this.nestView.open, layout: this.nestView.layout, drawn: this.decor?.drawn() ?? {}, owned: this.owned, gift: this.nestGift, decorating: this.decorating, spot: this.decorSpot }
         : null,
@@ -2354,7 +2357,7 @@ export class RoomScene extends Phaser.Scene {
       // A doorway to another room takes the owl from where its step came in, a step across it included.
       const cameIn = (to && stepFrom ? entryPoint(door.rect, stepFrom, pos) : null) ?? (inside ? pos : null);
       if (!cameIn || !this.atDoorLevel(door)) continue;
-      const nestDoor = this.room.id === STREET_ROOM ? nestDoorIndex(door.id) : null;
+      const nestDoor = isStreetRoom(this.room.id) ? nestDoorIndex(door.id) : null;
       if (nestDoor !== null) {
         if (takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null) && this.enterNest(nestDoor, walkFinished)) return;
         continue;
@@ -2372,7 +2375,7 @@ export class RoomScene extends Phaser.Scene {
           return;
         }
         // Out of a nest, the owl comes back out by the street door it went in by.
-        const spawn = isNestRoom(this.room.id) && to.room === STREET_ROOM ? streetSpawnBack(this.cameFrom) : to.spawn;
+        const spawn = isNestRoom(this.room.id) && isStreetRoom(to.room) ? streetSpawnBack(this.cameFrom) : to.spawn;
         void this.goTo(to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, cameIn));
         return;
       }
@@ -2626,9 +2629,12 @@ export class RoomScene extends Phaser.Scene {
     const entry = await this.entry();
     if (this.leaving) return;
     const way = turnstileWay(scan, entry);
-    /** Back out of the turnstile it tried, 70 below them; the turnstiles take the next owl in a moment. */
+    /**
+     * Back out of the turnstile it tried, 70 below them (in a side view, the tree's front gate, 140 back
+     * the way it came along the floor); the turnstiles take the next owl in a moment.
+     */
     const stepBack = () => {
-      this.walkTo({ x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
+      this.walkTo(mapOf(this.room) === 2 ? { x: door.rect.x - 140, y: this.me.pos.y } : { x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
       this.time.delayedCall(1500, () => {
         this.passingGate = false;
       });
@@ -2775,7 +2781,7 @@ export class RoomScene extends Phaser.Scene {
     const d = this.street[n];
     const nestId = d?.kind === 'own' || d?.kind === 'nest' ? d.nestId : null;
     if (nestId) {
-      void this.goTo(`nest-${nestId}`, 'default', { room: STREET_ROOM, spawn: `from-nest-${n}` });
+      void this.goTo(`nest-${nestId}`, 'default', { room: this.room.id, spawn: `from-nest-${n}` });
       return true;
     }
     if (!walkFinished) return false;
@@ -2809,7 +2815,7 @@ export class RoomScene extends Phaser.Scene {
   private onNestClosed(): void {
     if (this.leaving) return;
     this.hud.toast(NEST_WORDS.closedForNow, 3000);
-    void this.goTo(STREET_ROOM, streetSpawnBack(this.cameFrom), undefined);
+    void this.goTo(isStreetRoom(this.cameFrom?.room) ? this.cameFrom!.room : streetOf(this.walking()), streetSpawnBack(this.cameFrom), undefined);
   }
 
   /**
@@ -2879,10 +2885,16 @@ export class RoomScene extends Phaser.Scene {
     }
   }
 
-  /** The realm this owl is in (or was entering) is closed: back to the hub, by the arch it came through. */
+  /**
+   * The realm this owl is in (or was entering) is closed: back to the hub, by the arch it came through.
+   * From the tree's street, outside its front gate (OP-128), the owl has come through no gate: to the
+   * nests' street instead, in front of its own door, outside the park as it was.
+   */
   private onRealmClosed(sign: string): void {
     if (this.leaving) return;
     this.hud.toast(sign || 'Pardon Our Feathers', 3000);
+    // Off the tree's street, onto the nests' street in the middle of the lane: not on the own nest's doorstep, which would walk it in.
+    if (this.room.id === TREE_STREET_ROOM) return void this.goTo(STREET_ROOM, 'default', undefined);
     const back = `from-${this.room.id}`;
     void this.goTo('hub', Object.hasOwn(ROOMS['hub']?.spawns ?? {}, back) ? back : 'default', undefined);
   }

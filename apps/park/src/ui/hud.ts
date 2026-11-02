@@ -13,6 +13,7 @@ import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbRe
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
+import { createFeedbackBug } from './feedbackBug';
 import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
@@ -880,6 +881,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         toast,
         () => openScreen('menu'),
       );
+      // The feedback bug (OP-208): on screen everywhere until the full opening. Over a game or a
+      // covering screen the form opens on top and leaves it as it was; anywhere else it opens as Settings' does.
+      createFeedbackBug(root, (button) => {
+        if (!feedback || feedback.isOpen()) return;
+        if (arcade.isOpen() || climb.isOpen() || builder?.isOpen() || whichOwl.isOpen() || accountScreens?.isOpen()) feedback.open(false, button);
+        else openScreen('feedback', false, button);
+      });
     },
     attachAccount(link, deps) {
       const refresh = () =>

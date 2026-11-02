@@ -26,7 +26,7 @@ import {
 import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
-import { MoveBudget } from './budget';
+import { EmoteGate, MoveBudget } from './budget';
 import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
 import { OPEN_ENTRY, type AccountConfirm, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
@@ -409,6 +409,10 @@ export class EdgeTransport implements ParkTransport {
     /** Moves wait here while the budget is spent; a newer one replaces the one waiting. */
     const budget = new MoveBudget(Date.now());
     let queued: Vec2 | null = null;
+    /** Emotes go at most one per EMOTE_SEND_EVERY_MS; sooner ones never leave the page (OP-210). */
+    const emoteGate = new EmoteGate();
+    /** Emotes dropped for coming too fast since the page's log last said so. */
+    let emotesDropped = 0;
     let queueTimer: ReturnType<typeof setTimeout> | null = null;
     /** Quest requests waiting for the server's answer, by request number. */
     const waiters = new Map<number, { resolve: (f: Answer | null) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -961,6 +965,16 @@ export class EdgeTransport implements ParkTransport {
             sendFrame({ t: 'bye' });
             break;
           case 'emote':
+            // The room plays one emote per owl every EMOTE_EVERY_MS and drops the rest, though each
+            // still counts towards its flood limit: a mash of the number keys stays here (OP-210).
+            if (!emoteGate.take(Date.now())) {
+              emotesDropped += 1;
+              break;
+            }
+            if (emotesDropped > 0) {
+              pageLog?.info('client.net', 'emote_throttled', 'Emotes came too fast and the page dropped them.', { room: roomId, count: emotesDropped });
+              emotesDropped = 0;
+            }
             sendFrame({ t: 'emote', e: msg.e });
             break;
           case 'say':

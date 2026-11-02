@@ -14,7 +14,8 @@ import { jobOf } from './crons';
 import { isPage, uncachedPage } from './page';
 import { exportPark } from './parkExport';
 import { restartPark } from './routes/admin';
-import { clientIp, passOf } from './routes/http';
+import { SigningKeyMissing } from './pass';
+import { clientIp, noSigningKey, passOf } from './routes/http';
 import { votes } from './routes/park';
 import { router } from './routes/router';
 import { ROUTES } from './routes/table';
@@ -49,7 +50,16 @@ const park = {
     }
 
     const handle = routeOf(url.pathname);
-    if (handle) return handle({ request, env, ctx, url, log });
+    if (handle) {
+      try {
+        return await handle({ request, env, ctx, url, log });
+      } catch (e) {
+        // A route that signs or checks a pass, an entry, a link or a keeper's token, with no signing key
+        // off this machine (OP-209): refused, a socket's upgrade too; `signingSecret` said so once.
+        if (e instanceof SigningKeyMissing) return noSigningKey();
+        throw e;
+      }
+    }
 
     const asset = await env.ASSETS.fetch(request);
     // The page with its policy (OP-140): only its own scripts, and only its own host to talk to.

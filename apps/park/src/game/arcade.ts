@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import {
   ARCADE_GAMES,
   ARCADE_ROOM,
+  ROOM_W,
+  TREE_ARCADE_ROOM,
   CABINETS,
   CABINET_OFF,
   GAMES,
@@ -10,6 +12,7 @@ import {
   WALL_SIZE,
   cabinetOf,
   hexToInt,
+  isArcadeRoom,
   runFeathers,
   type ArcadeGame,
   type GameWall,
@@ -20,6 +23,7 @@ import {
   type RunResult,
 } from '@owl-park/shared';
 import { cabinetFace } from '../arcade/cabinets';
+import { TREE_GROUND } from '../rooms';
 import { FlapGame } from '../arcade/flap';
 import { HopGame } from '../arcade/hop';
 import { KnockGame, MAX_PULL, loadPhysics } from '../arcade/knock';
@@ -40,18 +44,76 @@ interface Box {
   h: number;
 }
 
+/** A cabinet's look in the room: its screen, its game's title sign (the sign's art, and the box it is drawn in), and its neon colours. */
+interface CabinetArt {
+  screen: Box;
+  title: { key: string } & Box;
+  ink: string;
+  glow: string;
+}
+
 /**
- * Each cabinet on the arcade's painting (room pixels): its screen, its game's title sign on the blank
- * panel above it (the sign's art, and the box it is drawn in), and its neon colours.
+ * Each arcade's look (room pixels): its cabinets by spot, the score wall's board, whether the game
+ * draws the cabinets themselves (the tree's cave paints only bare alcoves, OP-163), and the bays that
+ * open later, each saying "Hatching Soon".
  */
-const CABINET_ART: Readonly<Record<string, { screen: Box; title: { key: string } & Box; ink: string; glow: string }>> = {
-  'cabinet-crossing': { screen: { x: 594, y: 428, w: 116, h: 106 }, title: { key: 'arcade-title-hoot-hop', x: 618, y: 176, w: 364, h: 114 }, ink: '#FF8AD0', glow: '#FF2AA1' },
-  'cabinet-flight': { screen: { x: 1798, y: 450, w: 128, h: 92 }, title: { key: 'arcade-title-moon-flap', x: 1813, y: 143, w: 251, h: 115 }, ink: '#8AF4FF', glow: '#00E5FF' },
-  'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-talon-toss', x: 3900, y: 146, w: 280, h: 110 }, ink: '#CDB0FF', glow: '#8A4DFF' },
+interface ArcadeArt {
+  cabinets: Readonly<Record<string, CabinetArt>>;
+  board: Box;
+  drawn: boolean;
+  slots: readonly Box[];
+}
+
+/** The score wall's layout size: a board is drawn at this size and scaled to fit its frame. */
+const BOARD_W = 466;
+const BOARD_H = 206;
+
+const INKS = {
+  crossing: { ink: '#FF8AD0', glow: '#FF2AA1' },
+  flight: { ink: '#8AF4FF', glow: '#00E5FF' },
+  sling: { ink: '#CDB0FF', glow: '#8A4DFF' },
+} as const;
+
+/** The cave's cabinets stand in their alcoves on the floor, this wide and tall (room pixels). */
+const CAVE_CABINET = { w: 116, h: 196 };
+/** A cabinet in the cave: centred at `cx` in its alcove, its title sign over the alcove's arch (`archTop`). */
+function caveCabinet(cx: number, archTop: number, key: string, size: { w: number; h: number }, ink: { ink: string; glow: string }): CabinetArt {
+  const w = Math.min(size.w, 250);
+  const h = Math.round((size.h * w) / size.w);
+  const top = TREE_GROUND - 10 - CAVE_CABINET.h;
+  return { screen: { x: cx - 44, y: top + 28, w: 88, h: 70 }, title: { key, x: Math.round(cx - w / 2), y: archTop - 14 - h, w, h }, ...ink };
+}
+
+const ARCADE_ART: Readonly<Record<string, ArcadeArt>> = {
+  // Today's hall: the cabinets are painted, each sign on the blank panel over its cabinet.
+  [ARCADE_ROOM]: {
+    cabinets: {
+      'cabinet-crossing': { screen: { x: 594, y: 428, w: 116, h: 106 }, title: { key: 'arcade-title-hoot-hop', x: 618, y: 176, w: 364, h: 114 }, ...INKS.crossing },
+      'cabinet-flight': { screen: { x: 1798, y: 450, w: 128, h: 92 }, title: { key: 'arcade-title-moon-flap', x: 1813, y: 143, w: 251, h: 115 }, ...INKS.flight },
+      'cabinet-sling': { screen: { x: 3906, y: 410, w: 138, h: 116 }, title: { key: 'arcade-title-talon-toss', x: 3900, y: 146, w: 280, h: 110 }, ...INKS.sling },
+    },
+    // Inside the frame of the board on the hall's middle wall.
+    board: { x: 2322, y: 182, w: BOARD_W, h: BOARD_H },
+    drawn: false,
+    slots: [],
+  },
+  // Level 0's cave (OP-163): a cabinet in each screen's alcove, the board in the middle screen's chrome
+  // panel, and the last screen's two small alcoves.
+  [TREE_ARCADE_ROOM]: {
+    cabinets: {
+      'cabinet-crossing': caveCabinet(800, 520, 'arcade-title-hoot-hop', { w: 364, h: 114 }, INKS.crossing),
+      'cabinet-flight': caveCabinet(ROOM_W + 1225, 490, 'arcade-title-moon-flap', { w: 251, h: 115 }, INKS.flight),
+      'cabinet-sling': caveCabinet(2 * ROOM_W + 585, 475, 'arcade-title-talon-toss', { w: 280, h: 110 }, INKS.sling),
+    },
+    board: { x: ROOM_W + 644, y: 322, w: 318, h: Math.round((BOARD_H * 318) / BOARD_W) },
+    drawn: true,
+    slots: [
+      { x: 2 * ROOM_W + 950, y: 600, w: 80, h: 115 },
+      { x: 2 * ROOM_W + 1082, y: 600, w: 78, h: 115 },
+    ],
+  },
 };
 
-/** The score wall: inside the frame of the board on the hall's middle wall (room pixels), one column per game. */
-const BOARD: Box = { x: 2322, y: 182, w: 466, h: 206 };
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 /** A run past the owl's best tells the room its score at most this often (OP-137). */
@@ -144,32 +206,45 @@ export class Arcade {
   private frameRect: PreviewRect | null = null;
   private destroyed = false;
 
-  constructor(private readonly host: ArcadeHost) {
+  constructor(
+    private readonly host: ArcadeHost,
+    private readonly art: ArcadeArt = ARCADE_ART[ARCADE_ROOM]!,
+  ) {
     const { scene } = host;
     for (const cabinet of CABINETS) {
-      const art = CABINET_ART[cabinet.spot];
-      if (!art) continue;
+      const look = art.cabinets[cabinet.spot];
+      if (!look) continue;
       const face = cabinetFace(cabinet);
-      const { title, screen } = art;
+      const { title, screen } = look;
+      if (art.drawn) drawCabinet(scene, look, face.off);
       if (!face.off) {
         // The game's painted sign, or until it ships, its name in neon on the panel.
         if (scene.textures.exists(title.key)) scene.add.image(title.x, title.y, title.key).setOrigin(0).setDisplaySize(title.w, title.h).setDepth(2);
         else
           scene.add
-            .text(title.x + title.w / 2, title.y + title.h / 2, face.text, { fontFamily: FONT, fontSize: '40px', fontStyle: '800', color: art.glow, stroke: '#05060d', strokeThickness: 6, resolution: 2 })
+            .text(title.x + title.w / 2, title.y + title.h / 2, face.text, { fontFamily: FONT, fontSize: '40px', fontStyle: '800', color: look.glow, stroke: '#05060d', strokeThickness: 6, resolution: 2 })
             .setOrigin(0.5)
-            .setShadow(0, 0, art.glow, 14, true, true)
+            .setShadow(0, 0, look.glow, 14, true, true)
             .setDepth(3);
         continue;
       }
       scene.add.graphics().fillStyle(0x05060d, 0.88).fillRoundedRect(screen.x, screen.y, screen.w, screen.h, 10).setDepth(2);
       scene.add
-        .text(screen.x + screen.w / 2, screen.y + screen.h / 2, face.text, { fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: art.ink, align: 'center', lineSpacing: 2, resolution: 2 })
+        .text(screen.x + screen.w / 2, screen.y + screen.h / 2, face.text, { fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: look.ink, align: 'center', lineSpacing: 2, resolution: 2 })
         .setOrigin(0.5)
-        .setShadow(0, 0, art.glow, 10, false, true)
+        .setShadow(0, 0, look.glow, 10, false, true)
         .setDepth(3);
     }
-    this.wallLayer = scene.add.container(0, 0).setDepth(3);
+    // The bays that open later, each dark and saying so.
+    for (const slot of art.slots)
+      scene.add
+        .text(slot.x + slot.w / 2, slot.y + slot.h / 2, CABINET_OFF.replace(' ', '\n'), { fontFamily: FONT, fontSize: '15px', fontStyle: '700', color: '#F6F1E3', align: 'center', lineSpacing: 2, resolution: 2 })
+        .setOrigin(0.5)
+        .setAlpha(0.7)
+        .setShadow(0, 0, '#00E5FF', 8, false, true)
+        .setDepth(3);
+    // The wall is laid out at its own size and scaled into the board's frame.
+    this.wallLayer = scene.add.container(art.board.x, art.board.y).setScale(art.board.w / BOARD_W).setDepth(3);
     this.portraits = scene.add.graphics();
     this.wallLayer.add(this.portraits);
     for (const game of ARCADE_GAMES) this.walls.set(game, { game, top: [] });
@@ -188,21 +263,21 @@ export class Arcade {
     const { scene } = this.host;
     for (const child of [...this.wallLayer.list]) if (child !== this.portraits) child.destroy();
     this.portraits.clear();
-    const col = BOARD.w / ARCADE_GAMES.length;
+    const col = BOARD_W / ARCADE_GAMES.length;
     const text = (x: number, y: number, s: string, size: number, color: string, alpha = 1) => {
       const t = scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: '700', color, resolution: 2 }).setOrigin(0.5).setAlpha(alpha);
       this.wallLayer.add(t);
       return t;
     };
     ARCADE_GAMES.forEach((game, i) => {
-      const cx = BOARD.x + col * i + col / 2;
-      const art = CABINET_ART[cabinetOf(game).spot]!;
+      const cx = col * i + col / 2;
+      const art = this.art.cabinets[cabinetOf(game).spot]!;
       // Each column's game in its cabinet's light ink, glowing in its neon (the neon itself is too dark to read on the board).
-      text(cx, BOARD.y + 20, GAMES[game].name, 18, art.ink).setShadow(0, 0, art.glow, 8, false, true);
-      text(cx, BOARD.y + 42, "Today's best", 12, '#F6F1E3', 0.75);
+      text(cx, 20, GAMES[game].name, 18, art.ink).setShadow(0, 0, art.glow, 8, false, true);
+      text(cx, 42, "Today's best", 12, '#F6F1E3', 0.75);
       const top = this.walls.get(game)?.top ?? [];
       for (let k = 0; k < WALL_SIZE; k++) {
-        const y = BOARD.y + 68 + k * 26;
+        const y = 68 + k * 26;
         const e = top[k];
         if (!e) {
           text(cx, y, '·', 16, '#F6F1E3', 0.3);
@@ -212,7 +287,7 @@ export class Arcade {
         this.wallLayer.add(scene.add.text(cx - 10, y, String(e.score), { fontFamily: FONT, fontSize: '18px', fontStyle: '800', color: '#F6F1E3', resolution: 2 }).setOrigin(0, 0.5));
       }
       const own = this.mine[game];
-      if (own !== undefined) text(cx, BOARD.y + BOARD.h - 10, `Your best ${own}`, 12, art.ink);
+      if (own !== undefined) text(cx, BOARD_H - 10, `Your best ${own}`, 12, art.ink);
     });
   }
 
@@ -394,7 +469,32 @@ export class Arcade {
   }
 }
 
-/** The arcade, for its room only. */
+/**
+ * A cabinet the game draws in its alcove (the tree's cave, OP-163): a dark body edged in its game's neon,
+ * a marquee strip, the screen's frame, and the stick and buttons on its panel. A cabinet switched off
+ * keeps its body and a dim edge.
+ */
+function drawCabinet(scene: Phaser.Scene, look: CabinetArt, off: boolean): void {
+  const glow = hexToInt(look.glow);
+  const { w, h } = CAVE_CABINET;
+  const cx = look.screen.x + look.screen.w / 2;
+  const x = cx - w / 2;
+  const y = TREE_GROUND - 10 - h;
+  const g = scene.add.graphics().setDepth(2);
+  g.fillStyle(0x0b0d1c, 1).fillRoundedRect(x, y, w, h, { tl: 18, tr: 18, bl: 4, br: 4 });
+  g.lineStyle(3, glow, off ? 0.35 : 0.95).strokeRoundedRect(x, y, w, h, { tl: 18, tr: 18, bl: 4, br: 4 });
+  g.fillStyle(glow, off ? 0.15 : 0.55).fillRect(x + 12, y + 10, w - 24, 10);
+  g.lineStyle(2, 0xc7ceda, 0.8).strokeRoundedRect(look.screen.x - 4, look.screen.y - 4, look.screen.w + 8, look.screen.h + 8, 8);
+  if (!off) g.fillStyle(glow, 0.22).fillRoundedRect(look.screen.x, look.screen.y, look.screen.w, look.screen.h, 6);
+  const panel = look.screen.y + look.screen.h + 18;
+  g.fillStyle(0x161a30, 1).fillRect(x + 8, panel, w - 16, 26);
+  g.fillStyle(0xc7ceda, 1).fillRect(cx - 30, panel - 6, 4, 14);
+  g.fillStyle(glow, 1).fillCircle(cx - 28, panel - 8, 6);
+  g.fillCircle(cx + 14, panel + 13, 5).fillCircle(cx + 30, panel + 13, 5);
+}
+
+/** The arcade, for its rooms only: today's hall and the tree's cave. */
 export function arcadeFor(room: RoomDef, host: ArcadeHost): Arcade | null {
-  return room.id === ARCADE_ROOM ? new Arcade(host) : null;
+  const art = isArcadeRoom(room.id) ? ARCADE_ART[room.id] : undefined;
+  return art ? new Arcade(host, art) : null;
 }

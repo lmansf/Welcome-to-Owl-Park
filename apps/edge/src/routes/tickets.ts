@@ -2,7 +2,7 @@
 import { hashForLog } from '@owl-park/shared';
 import { deviceClass } from '../collectLog';
 import { openingOn, passLinkReady, storeCatalogue } from '../opening';
-import { GUEST_PASS_TTL_S, mintPass, signingSecret } from '../pass';
+import { GUEST_PASS_TTL_S, mintPass, requireSecret } from '../pass';
 import { KINDS, passCartLink, ticketCartLink } from '../shopify';
 import { storeConfig } from '../storeApi';
 import { CORS, json, passFrom, readJson } from './http';
@@ -100,7 +100,7 @@ export async function tickets(c: RouteCtx): Promise<Response> {
     const until = r.body['validUntil'];
     const exp = Math.min(nowS + GUEST_PASS_TTL_S, typeof until === 'number' ? Math.floor(until / 1000) : Infinity);
     // Issued now: the turnstiles admit it after any nightly restart that went before (OP-181).
-    const admittedPass = await mintPass(signingSecret(env), { ...pass, iat: nowS, exp, adm: true, tid });
+    const admittedPass = await mintPass(requireSecret(env, url), { ...pass, iat: nowS, exp, adm: true, tid });
     if (r.body['started'] === true) {
       mirrorLater(ctx, env, log, url.origin, { id: tid });
       // Its first scan started its time on this owl (OP-192): the pass the owl holds, and until when. A ticket the keepers gave has no store order.

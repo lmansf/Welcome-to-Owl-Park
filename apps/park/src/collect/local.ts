@@ -1,5 +1,5 @@
 import {
-  ARCADE_ROOM,
+  isArcadeRoom,
   Activities,
   ArcadeBook,
   ClimbBook,
@@ -18,7 +18,7 @@ import {
   REACH_SLACK,
   sameLevel,
   STREET_DOORS,
-  STREET_ROOM,
+  isStreetRoom,
   USE_COOLDOWN_MS,
   distance,
   getInteractable,
@@ -291,7 +291,7 @@ export class LocalCollections implements CollectionService {
   nestLink(room: string, _conn: RoomConnection | null, pushes: NestPushes, look: () => NestLook): NestLink | null {
     const cid = this.cid;
     const here = nestIdOf(room);
-    if (room !== STREET_ROOM && !here) return null;
+    if (!isStreetRoom(room) && !here) return null;
     let closed = false;
     const later = (fn: () => void) => setTimeout(() => !closed && fn(), 0);
     const channel = here && typeof BroadcastChannel === 'function' ? new BroadcastChannel(NESTS_CHANNEL) : null;
@@ -488,7 +488,7 @@ export class LocalCollections implements CollectionService {
     // The room server sends a newcomer the beam as it burns, and the arcade's wall; so does this.
     const beam = acts.lanternState();
     if (Object.keys(beam.lit).length) later(() => pushes.onLanterns?.({ lit: beam.lit, glowUntil: beam.glowUntil }, null));
-    if (room === ARCADE_ROOM) {
+    if (isArcadeRoom(room)) {
       const wall = this.arcade((a) => ({ walls: a.walls(this.now()), mine: a.mine(cid, this.now()) }));
       later(() => pushes.onWall?.(wall.walls, wall.mine));
     }

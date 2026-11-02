@@ -1,4 +1,4 @@
-import { STREET_ROOM, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { isStreetRoom, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
 import { NEST_ROOM, roomFor } from '../rooms';
 
 /**
@@ -32,7 +32,7 @@ export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId
   return room.doors
     .filter((d) => {
       const to = doorTarget(d, map);
-      return to ? !closed(to.room) : room.id === STREET_ROOM && nestDoorIndex(d.id) !== null;
+      return to ? !closed(to.room) : isStreetRoom(room.id) && nestDoorIndex(d.id) !== null;
     })
     .filter((d) => distanceToRect(aim, d.rect) > DOOR_AIM_PX)
     .map((d) => ({ x: d.rect.x - m, y: d.rect.y - m, w: d.rect.w + 2 * m, h: d.rect.h + 2 * m }))
@@ -60,7 +60,7 @@ export function roomsAhead(room: RoomDef, pos: Vec2, walkTo: Vec2 | null, fromKe
     const near = fromKeys && distanceToRect(pos, door.rect) <= AHEAD_PX;
     if (!aimed && !near) continue;
     const way = doorTarget(door, map);
-    const to = way ? (closed(way.room) ? undefined : roomFor(way.room)) : room.id === STREET_ROOM && nestDoorIndex(door.id) !== null ? NEST_ROOM : undefined;
+    const to = way ? (closed(way.room) ? undefined : roomFor(way.room)) : isStreetRoom(room.id) && nestDoorIndex(door.id) !== null ? NEST_ROOM : undefined;
     if (to && to.id !== room.id && !out.includes(to)) out.push(to);
   }
   return out;

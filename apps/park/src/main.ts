@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -10,7 +10,7 @@ import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
 import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, type RoomStart } from './game/RoomScene';
-import { startWalking } from './game/walkingMap';
+import { startWalking, walkingMap } from './game/walkingMap';
 import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
@@ -360,7 +360,8 @@ async function playStart(): Promise<RoomStart> {
     const ticket = backWith ?? undefined;
     if (ticket) backFromCheckout = false;
     backWith = null;
-    return { room: LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
+    // An owl of the tree came from the tree's front gate (TREE_STREET_ROOM), and goes back before it.
+    return { room: walkingMap() === 2 ? TREE_STREET_ROOM : LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
   }
   const map = transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
   startWalking(map);
