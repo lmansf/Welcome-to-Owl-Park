@@ -1,4 +1,4 @@
-# The tree's style guide: one tree, five heights (OP-215)
+# The park's style guide: one tree, five heights, one look for every realm (OP-219)
 
 The owner, 2026-11-02, walking the tree: the stitching between screens and levels lacks continuity,
 every level looks the same, and it is unclear where you are. He asked for one cohesive palette and style
@@ -55,20 +55,56 @@ arrival, a soft fade through the next height's colour on the stairs, and on a co
 - **Nothing cut by the frame mid-view:** a prop that a faster layer carries to the middle of the view
   is drawn whole or cleared.
 
-## 4. The entrance is the canopy
+## 4. The entrance and the park's layout (the remap, OP-219)
 
-Already built this way, and kept: a new owl arrives in the tree on level 5's nests street at its own
-nest's door (`TREE_ARRIVAL`, door 0, nearest the gate). The street is the nest village at the top of
-the tree: the owl's own nest and the other owls' nest doors, and Hatching Soon at the far west end.
-East of the street, the front gate sells the Day Ticket (OP-180's sale) and opens into the canopy, whose
-entrance stair goes down through the levels. So nothing moves in the layout. What changes is the look:
-the street and the canopy are painted as the brightest, most open place in the tree, so arriving there
-reads as arriving at the top.
+The owner approved a remap on 2026-11-02, so the park becomes one side-view map in this style. The route
+in: the owl's own nest, then the nests street (level 5), then the Gift Shop Gate, then the Realm Gate plaza.
 
-## 5. Repaint order and budget
+- The Gift Shop Gate is two screens, entered from the nests street. Its shelves stand on both sides of the
+  walkway, then come the ticket booth and the turnstiles. Leaving the park walks back through it.
+  It is the warmest, best-lit room in the park: lantern gold on inner wood, goods lit from above.
+- The Realm Gate plaza sits past the turnstiles, at the top of the canopy, in full sky. It has one portal arch
+  per realm. An open arch glows in that realm's accent colour. A realm not open yet has a boarded arch
+  with light behind the boards. The trunk stair down into the tree is at the plaza's left end.
+- The tree's levels below are for exploring. No realm is reached by climbing.
 
-The repaint keeps every platform's shape and ledge position, so the room data and the tests hold.
-Order, one level a turn: level 5 (the entrance, seen first), level 1, level 0, level 2, level 3, level 4.
-Per screen, repaint the sky plate and the middle distance first (two layers, four candidates each, about
-$0.56 a screen); repaint the back scenery or the overlay only where it fights its height or breaks a
-seam. Seventeen screens of far layers come to about $9.50.
+## 5. Directions and barriers (the owner's rules, 2026-11-02)
+
+- **Down is always left, up is always right.** On every level, the stair down is at the left end and the stair
+  up is at the right end, both at floor height. The canopy's way into the tree goes down. Never paint or
+  place a doorway so that an owl must hop over one doorway to reach another.
+- **Nothing looks explorable unless it is.** Every ledge, branch or path that is painted or drawn either leads
+  somewhere an owl can go, or sits behind a clear barrier: a locked gate, a rope, a fallen branch, or a
+  boarded arch with a Hatching Soon sign. A barrier looks shut for now but not forever, with a lantern or a
+  glow behind it. Paint no climbable-looking branch that leads nowhere.
+
+## 6. Realms: the Commons and the course
+
+Every realm has the same two parts, painted in the same palette with the realm's own accent:
+
+| Realm | Accent | Commons mood | Course look |
+|---|---|---|---|
+| Treehouse Clearing | leaf `#8DAE5A` | dappled amber, under the lower boughs | Updraft Canopy: fern floor, inside a hollow trunk, open treetops |
+| Neon Street | neon pink and cyan on navy | dusk, lanterns and signs | rooftops at night, signs as platforms |
+| The stained-glass realm | dusk blue `#6F9BC8` with coloured glass | cool, high, hazy | the glass tower |
+
+- **The Commons** are calm, with no falls. The idol owl stands at the centre, with open floor around it for
+  the NPCs, the mini game and the merch stall.
+- **The course** has three acts of three or four screens each. Each act has its own look, but the same
+  palette and the same ledge style, so a jump always reads the same.
+- **Platforms on a course are drawn in code** from one painted ledge style. Paint the sky, the back
+  scenery and the middle distance, and leave the playable space bare.
+- **Easter eggs** (hidden rooms, a secret character) are painted like any other screen, behind a door that
+  can be found.
+
+## 7. Order and budget
+
+The owner approved about $18 of art in all (2026-11-02). Order and estimates, at about $0.07 an image
+with four candidates per layer:
+
+1. The Gift Shop Gate, the Realm Gate plaza, the two arches, the Commons' second screens, the finish
+   shrine, and the glass tower's lift and pane: about $7.02 (OP-229).
+2. Updraft Canopy, ten screens and one props sheet: about $8.37 (OP-230).
+
+That leaves about $2.60 for re-runs. Anything past that waits on the owner. Every screen is shown to the
+owner before it is published, and nothing is published without his approval.
