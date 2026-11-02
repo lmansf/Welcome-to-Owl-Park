@@ -75,8 +75,8 @@
     "RATE_LIMITS": "on",
     // Spectators (OP-191): "on" lets an owl without a ticket that works past the turnstiles as a
     // spectator (it plays every game but earns nothing; quests, stores and the vote stay locked).
-    // "off" turns it away at the turnstiles, as before. Off until the owner's go and the page's half.
-    "SPECTATORS": "off",
+    // "off" turns it away at the turnstiles, as before. On since 2026-11-01 on the owner's yes.
+    "SPECTATORS": "on",
     // The share of a room's cap a spectator may join up to (0 to 1): past floor(cap x share) owls only
     // ticket holders come in, up to the full cap. Nobody already inside is sent out.
     "SPECTATOR_SHARE": "0.75"
