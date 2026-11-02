@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachKeyboard, heldDirection } from './keyboard';
+import { SIDEWAYS_MIN, alongTheFloor, attachKeyboard, heldDirection, holdsUp } from './keyboard';
 
 describe('heldDirection', () => {
   it('maps WASD and the arrow keys to the four ways', () => {
@@ -26,6 +26,36 @@ describe('heldDirection', () => {
   });
 });
 
+describe('alongTheFloor (OP-212)', () => {
+  it('walks a side view left or right only, at full pace', () => {
+    expect(alongTheFloor({ x: 1, y: 0 })).toEqual({ x: 1, y: 0 });
+    expect(alongTheFloor(heldDirection(['KeyW', 'ArrowLeft']))).toEqual({ x: -1, y: 0 });
+    expect(alongTheFloor({ x: SIDEWAYS_MIN, y: -0.9 })).toEqual({ x: 1, y: 0 });
+  });
+
+  it('walks nowhere on up or down alone, a push mostly up, or nothing held', () => {
+    expect(alongTheFloor(heldDirection(['ArrowUp']))).toBeNull();
+    expect(alongTheFloor(heldDirection(['KeyS']))).toBeNull();
+    expect(alongTheFloor({ x: 0.2, y: -0.98 })).toBeNull();
+    expect(alongTheFloor(null)).toBeNull();
+  });
+});
+
+describe('holdsUp (OP-212)', () => {
+  it('is up held, alone or with a side key, or a thumbstick pushed up as steep as a diagonal', () => {
+    expect(holdsUp(heldDirection(['ArrowUp']))).toBe(true);
+    expect(holdsUp(heldDirection(['KeyW', 'KeyD']))).toBe(true);
+    expect(holdsUp({ x: 0.3, y: -0.95 })).toBe(true);
+  });
+
+  it('is not a push mostly sideways, down, or nothing held', () => {
+    expect(holdsUp({ x: 0.9, y: -0.44 })).toBe(false);
+    expect(holdsUp(heldDirection(['ArrowDown']))).toBe(false);
+    expect(holdsUp(heldDirection(['ArrowRight']))).toBe(false);
+    expect(holdsUp(null)).toBe(false);
+  });
+});
+
 /** Just enough of a window for the listener: events are plain objects handed to the handlers. */
 function fakeWindow() {
   const handlers = new Map<string, (e: unknown) => void>();
@@ -48,6 +78,7 @@ describe('attachKeyboard', () => {
     const calls: string[] = [];
     const fake = fakeWindow();
     const keys = attachKeyboard(fake.win, {
+      up: () => calls.push('up'),
       interact: () => calls.push('interact'),
       jump: () => calls.push('jump'),
       jumpEnd: () => calls.push('jump end'),
@@ -125,6 +156,18 @@ describe('attachKeyboard', () => {
     key('keydown', 'Space');
     fire('blur');
     expect(keys.direction()).toBeNull();
-    expect(calls).toEqual(['jump', 'jump end']);
+    expect(calls).toEqual(['up', 'jump', 'jump end']);
+  });
+
+  it('presses up once a press on W or the up arrow, which walk up as well while held (OP-212)', () => {
+    const { key, keys, calls } = setup();
+    expect(key('keydown', 'KeyW')).toBe(true);
+    key('keydown', 'KeyW', { repeat: true });
+    expect(keys.direction()).toEqual({ x: 0, y: -1 });
+    key('keyup', 'KeyW');
+    key('keydown', 'ArrowUp');
+    key('keydown', 'ArrowDown');
+    key('keydown', 'KeyD');
+    expect(calls).toEqual(['up', 'up']);
   });
 });

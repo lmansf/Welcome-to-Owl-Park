@@ -1,7 +1,7 @@
-import { STREET_ROOM } from '@owl-park/shared';
+import { STREET_ROOM, TREE_STREET_ROOM, type DoorDef } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
-import { AHEAD_PX, DOOR_AIM_PX, WAY_DOOR_PX, doorwaysOff, roomsAhead, takesDoorway } from './doors';
+import { AHEAD_PX, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 
 const door = { x: 1700, y: 610, w: 130, h: 90 };
 
@@ -17,6 +17,56 @@ describe('takesDoorway', () => {
     expect(takesDoorway(door, { x: 2000, y: 640 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 700 + DOOR_AIM_PX + 1 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 655 }, false, true)).toBe(false);
+  });
+});
+
+describe('takesDoorway seen from the side (the tree, OP-212)', () => {
+  it('passes a doorway by on the held keys, and stays standing in one', () => {
+    expect(takesDoorway(door, { x: 2400, y: 640 }, true, false, true)).toBe(false);
+    expect(takesDoorway(door, { x: 1765, y: 655 }, true, false, true)).toBe(false);
+    expect(takesDoorway(door, null, false, false, true)).toBe(false);
+  });
+
+  it('still takes a tap aimed at the doorway itself, and never one on an errand', () => {
+    expect(takesDoorway(door, { x: 1765, y: 655 }, false, false, true)).toBe(true);
+    expect(takesDoorway(door, { x: 1765, y: 610 - DOOR_AIM_PX }, false, false, true)).toBe(true);
+    expect(takesDoorway(door, { x: 2000, y: 640 }, false, false, true)).toBe(false);
+    expect(takesDoorway(door, { x: 1765, y: 655 }, false, true, true)).toBe(false);
+  });
+
+  it('leaves a room seen from above as it was: the held keys and standing in it go through', () => {
+    expect(takesDoorway(door, { x: 2400, y: 640 }, true, false, false)).toBe(true);
+    expect(takesDoorway(door, null, false, false, false)).toBe(true);
+  });
+});
+
+describe('upCounts (OP-212)', () => {
+  it('counts a press for a moment after it, and none before it or once the moment is past', () => {
+    expect(upCounts(1000, 1000)).toBe(true);
+    expect(upCounts(1000, 1000 + UP_GRACE_MS)).toBe(true);
+    expect(upCounts(1000, 1001 + UP_GRACE_MS)).toBe(false);
+    expect(upCounts(1000, 999)).toBe(false);
+    expect(upCounts(0, 100)).toBe(false);
+  });
+});
+
+describe('doorwayUnder (OP-212)', () => {
+  const l1 = ROOMS['l1']!;
+  const stairDown = l1.doors.find((d) => d.id === 'stair-l1-l0')!;
+  const stairUp = l1.doors.find((d) => d.id === 'stair-l2-l1')!;
+  const middle = (d: DoorDef) => ({ x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 });
+  const level = (z: number) => (d: DoorDef) => d.top === undefined || d.top === z;
+  const leads = (d: DoorDef) => !!d.to;
+
+  it('is the doorway the owl stands in at its height, leading somewhere', () => {
+    expect(doorwayUnder(l1.doors, middle(stairDown), level(0), leads)?.id).toBe('stair-l1-l0');
+    expect(doorwayUnder(l1.doors, middle(stairUp), level(286), leads)?.id).toBe('stair-l2-l1');
+  });
+
+  it('is none under the stair up’s landing on the floor, beside a doorway, or at one that leads nowhere now', () => {
+    expect(doorwayUnder(l1.doors, middle(stairUp), level(0), leads)).toBeNull();
+    expect(doorwayUnder(l1.doors, { x: stairDown.rect.x - 20, y: 770 }, level(0), leads)).toBeNull();
+    expect(doorwayUnder(l1.doors, middle(stairDown), level(0), () => false)).toBeNull();
   });
 });
 
@@ -80,5 +130,21 @@ describe('roomsAhead (OP-129)', () => {
     const door = street.doors.find((d) => d.id === 'nest-door-0')!;
     const at = { x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 };
     expect(roomsAhead(street, { x: at.x - 400, y: at.y }, at, false, open)).toEqual([NEST_ROOM]);
+  });
+
+  it('seen from the side, is the room behind a doorway an owl stands in, which up may take it through (OP-212)', () => {
+    const l1 = ROOMS['l1']!;
+    const stair = l1.doors.find((d) => d.id === 'stair-l1-l0')!.rect;
+    const at = { x: stair.x + stair.w / 2, y: 770 };
+    expect(roomsAhead(l1, at, null, false, open, 2, true).map((r) => r.id)).toEqual(['l0']);
+    expect(roomsAhead(l1, { x: stair.x - 200, y: 770 }, null, false, open, 2, true)).toEqual([]);
+    // Seen from above, an owl standing still is going nowhere.
+    expect(roomsAhead(l1, at, null, false, open, 2, false)).toEqual([]);
+  });
+
+  it('on the tree’s street, is a nest behind the nest door an owl stands in', () => {
+    const street = ROOMS[TREE_STREET_ROOM]!;
+    const door = street.doors.find((d) => d.id === 'nest-door-2')!.rect;
+    expect(roomsAhead(street, { x: door.x + door.w / 2, y: 770 }, null, false, open, 2, true)).toEqual([NEST_ROOM]);
   });
 });
