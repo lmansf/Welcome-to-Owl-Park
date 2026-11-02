@@ -377,6 +377,22 @@ describe('the overflow object (OP-075)', () => {
     }
   });
 
+  it('with one object per room, the setup switch reaches every room, every open copy and the nests (OP-106)', async () => {
+    make('room');
+    await post('/settings', { copy: { room: 'hub', n: 2, state: 'open' } });
+    rooms.told.length = 0;
+    await post('/settings', { setup: { on: true } });
+    const told = rooms.told.map((t) => t.name);
+    for (const id of ['lobby', 'hub', 'grove', 'market', 'arcade', 'homes']) expect(told).toContain(`room:${id}`);
+    expect(told).toContain('room:hub~2');
+    expect(told).toContain('nests');
+    // And the line counts the owls in the nests too, as with the whole park in one object.
+    rooms.counts.set('room:hub', { hub: 3 });
+    rooms.counts.set('nests', { nests: 4 });
+    await post('/settings', { line: { mode: 'auto', threshold: 100 } });
+    expect(await st()).toMatchObject({ count: 7 });
+  });
+
   it('refuses settings out of bounds, and copies while the park runs in one object', async () => {
     expect((await post('/settings', { line: { threshold: -5 } })).status).toBe(400);
     expect((await post('/settings', { ribbon: { words: 'x'.repeat(200) } })).status).toBe(400);

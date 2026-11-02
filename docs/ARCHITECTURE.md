@@ -505,10 +505,13 @@ OP-156). The tree's grid, its layers and its style sheet are `docs/MAP.md`.
 
 ## 6. Scaling knobs and capacity
 
-1. `ROOM_SHARDING=single` (default): the whole park in one object. Cheapest, and enough while the
-   whole park has well under 80 owls walking at once (measured below).
-2. `ROOM_SHARDING=room`: one object per room, so each room holds its own cap; more object awake
-   time billed. The park-wide count in the HUD then covers only the owl's own room (the
+1. `ROOM_SHARDING=single`: the whole park in one object. Cheapest, and enough while the
+   whole park has well under 80 owls walking at once (measured below). The setting until OP-106.
+2. `ROOM_SHARDING=room` (as deployed, since OP-106): one object per room, so each room holds its own
+   cap; more object awake time billed. Every nest shares one more object (`nests`, `NESTS_OBJECT` in
+   `apps/edge/src/copies.ts`), so whatever the park tells every room object (the nightly restart,
+   the setup switch, the ribbon and the realms switch, the moved card) and the counts reach the
+   nests too. The park-wide count in the HUD then covers only the owl's own room (the
    `/api/counts` route still adds up every room), and the lanterns and the quiz start afresh in the
    hub's own object.
 3. Copies of a room (OP-075, `apps/edge/src/copies.ts`): with one object per room, the keepers open
@@ -539,7 +542,7 @@ The Load test workflow runs it again (`tools/load/run-steps.mjs`).
 | 80 in the hub | every 4 s | one | 20 / 35 / 49 | held |
 | 80 in the hub | every 1 s | one | 31 / 71 / 97 | held |
 | 120 in the hub | every 1 s | one | 565 / 2,999 / 3,150 | overloaded: Cloudflare closed 98 sockets with 1013 ("Service overloaded") after 19 s |
-| 240 in four rooms at their caps | every 1 s | one, as today | 819 / 19,591 / 20,821 | overloaded: all 240 closed with 1013 after 22 s |
+| 240 in four rooms at their caps | every 1 s | one, as then | 819 / 19,591 / 20,821 | overloaded: all 240 closed with 1013 after 22 s |
 | 240 in four rooms at their caps | every 1 s | one per room | 22 / 39 / 54 | held |
 | 480, 120 in each of four rooms | every 1 s | one per room | 14,826 / 33,369 / 36,517 | every object seconds behind |
 
@@ -553,15 +556,15 @@ What it means:
 
 - A room holds its cap of 80 even with every owl in it walking all the time. Keep the caps of busy
   rooms at 80 or below: 120 busy owls overload an object even when it has nothing else to do.
-- With one object for the whole park (today's setting), every room's fan-out adds up in that one
+- With one object for the whole park (the setting until OP-106), every room's fan-out adds up in that one
   object, so the whole park holds about what one busy room does: 80 owls walking at once in one
   room, or more spread over several. The four rooms at their caps with everyone walking come to
   about 15,800 frames a second and overload it. Past its limit, moves lag by seconds, and then
   Cloudflare drops every owl in the park at once; the client reconnects on its own, first after
   about half a second and never more than twelve seconds apart.
-- With `ROOM_SHARDING=room`, each room holds its own cap, and a room that overloads no longer takes
-  the others with it. Switch to it (a deploy) before a day that may bring more than about 80 owls
-  at once, such as opening night, when everyone arrives in the lobby together. Each busy room's
+- With `ROOM_SHARDING=room` (today's setting, OP-106), each room holds its own cap, and a room that
+  overloads no longer takes the others with it. The park switched to it ahead of the full opening,
+  when everyone arrives in the lobby together. Each busy room's
   object is then awake, and billed, on its own (the cost model in section 3).
 - More headroom in one room would come from sending one combined frame per room every 100 ms
   instead of one per move (not built).
@@ -785,9 +788,8 @@ starts on a fresh guest pass. While the gate takes tickets, no pass made before 
 goes past the turnstiles, and `/api/entry` says it is not admitted: the owl walks through them
 again, they scan its ticket again, and an expired one is refused there. The pass they admit with is
 dated at the scan. With the gate open nothing changes. The keepers can restart by hand with
-`POST /api/admin/restart` (the admin key), to try it on staging. With one object per room, nests
-are their own objects and are not told; their owls are not sent home, and go past the turnstiles
-only by scanning again.
+`POST /api/admin/restart` (the admin key), to try it on staging. With one object per room, every
+room's object and copy is told, and so is the one object every nest shares (`nests`, OP-106).
 
 The ticket flow (C35; the Worker's side is built, OP-071, and tested against a stand-in store;
 the store's own setup, the app, its secrets and the webhooks, is PLANNED (OP-024); the
@@ -1240,7 +1242,7 @@ is not admitted opens only the lobby, the street and the nests (`mayEnter` in
 2. When to buy Workers Paid ($5): before the first promoted weekend is the recommendation.
 3. Decided: the room server is the transport, live on Cloudflare since 2026-10-18 (OP-002, OP-020). The Supabase Realtime fallback is gone from the code (OP-150).
 4. Decided: the park's own domain, exploreowlpark.com and www, with the workers.dev address kept on beside it (OP-002, OP-020).
-5. Room caps: hub 80 / grove 40 / market 40 as deployed; OP-068 measured that one object holds 80 walking owls (section 6). When to switch to one object per room is the owner's call before a busy night.
+5. Room caps: hub 80 / grove 40 / market 40 as deployed; OP-068 measured that one object holds 80 walking owls (section 6). Decided: one object per room (OP-106), switched ahead of the full opening.
 6. Pre-ticket access: open to all guests (today), or a bot check on `/api/pass` if abuse shows.
 7. Collectibles: how purchases with money reach a collection (quest rewards, leaf-pile feathers and the shop follow canon C31; defaults in `docs/QUESTS.md` and `docs/COLLECTIBLES.md`).
 8. Activities (C30): their numbers and words, defaults in `docs/ACTIVITIES.md`.
