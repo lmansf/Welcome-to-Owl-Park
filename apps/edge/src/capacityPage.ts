@@ -4,6 +4,14 @@
  * number of owls, or on), the busy ribbon and its words, and every room's owls copy by copy, with
  * opening, draining and closing a copy of a room (one object per room only). docs/CAPACITY.md says
  * when to use which.
+ *
+ * The tree's card (OP-156): of every hundred new owls, how many start in the tree (map 2), kept with
+ * the realms switch as `realms.tree` (0 to 100; 0, as deployed, keeps the tree dark).
+ * TODO-DOCS (OP-156): docs/CAPACITY.md section 2 gains the tree's card and `{"realms": {"tree": n}}`
+ * on the API. A share above 0 opens the tree's gated rooms to every owl; a guest pass while the front
+ * gate takes tickets still starts in today's park. Back to 0, every owl in the tree is sent to the hub.
+ * A changed share reaches new arrivals within half a minute, like the other settings. Each Play asks
+ * again, and while the share stays the same an owl is sent the same way every time.
  */
 import { ADMIN_STYLE, adminPage } from './feedbackPage';
 
@@ -85,6 +93,12 @@ function show(s) {
   $('#realm-rooms').innerHTML = (s.gated || []).map((r) => '<label><input type="checkbox" data-realm="' + r + '"' + (rl.open.includes(r) ? ' checked' : '') + '> ' + r + ' open</label>').join('');
   $('#portal').checked = !!rl.portal;
   $('#night').innerHTML = '<option value="">The moon</option>' + (s.nights || []).map((n) => '<option value="' + n + '"' + (rl.night === n ? ' selected' : '') + '>' + n + '</option>').join('');
+  // The entries setting (OP-156): of every hundred new owls, how many start in the tree.
+  const tree = rl.tree || 0;
+  $('#tree-state').textContent = tree
+    ? 'The tree is open: ' + tree + ' in every hundred new owls start there, if the front gate lets them in; every owl may walk into it.'
+    : 'The tree is dark: only a keeper\u2019s token reaches it.';
+  if (document.activeElement !== $('#tree-share')) $('#tree-share').value = String(tree);
 }
 
 async function load() {
@@ -146,6 +160,14 @@ $('#realms-save').addEventListener('click', () => {
   if (!open.includes('glass') && now && now.realms && now.realms.open.includes('glass') && !confirm('Close the realm? Every owl in it is sent back to the hub.')) return;
   change({ realms: { open, portal: $('#portal').checked, night } }, 'Done. Owls in the rooms see it at once.');
 });
+$('#tree-save').addEventListener('click', () => {
+  const tree = Number($('#tree-share').value);
+  if (!Number.isInteger(tree) || tree < 0 || tree > 100) return say('A whole number from 0 to 100.');
+  const before = (now && now.realms && now.realms.tree) || 0;
+  if (tree > 0 && before === 0 && !confirm('Open the tree? New owls start there and every owl may walk in.')) return;
+  if (tree === 0 && before > 0 && !confirm('Close the tree? Every owl in it is sent back to the hub.')) return;
+  change({ realms: { tree } }, 'Done. New owls start where it says within half a minute.');
+});
 $('#refresh').addEventListener('click', load);
 $('#forget').addEventListener('click', () => { saveKey(''); say(''); locked(true); });
 load();
@@ -200,6 +222,14 @@ function html(nonce: string, ribbonWords: string): string {
 <label><input type="checkbox" id="portal"> The climb's portal is live</label>
 <label>Night <select id="night"></select></label>
 <button id="realms-save">Save</button>
+</div>
+</section>
+<section class="card" aria-labelledby="tree-h">
+<h2 id="tree-h">The tree (map 2)</h2>
+<p id="tree-state"></p>
+<div class="tabs">
+<label>Of every hundred new owls, start <input id="tree-share" type="number" min="0" max="100" step="1" inputmode="numeric"> in the tree</label>
+<button id="tree-save">Save</button>
 </div>
 </section>
 <section class="card" aria-labelledby="copies-h">

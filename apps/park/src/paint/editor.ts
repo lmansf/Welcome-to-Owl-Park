@@ -1,9 +1,10 @@
 /**
  * The ledge painter's editing (OP-156): the draft, the tool, what is picked, the front being drawn
- * point by point, and a few steps of undo. Nothing here draws or hears a pointer: the painter
- * (game/ledgePainter.ts) turns presses and drags into these calls, all in room pixels, so the rules
- * are tested by themselves. Every number the editor makes is a whole room pixel, inside the room;
- * a ledge's or a hazard's top stays over the ground line and within MAX_PERCH_TOP.
+ * point by point, the name the spot tool places, and a few steps of undo. Nothing here draws or hears
+ * a pointer: the painter (game/ledgePainter.ts) turns presses and drags into these calls, all in room
+ * pixels, so the rules are tested by themselves. Every number the editor makes is a whole room pixel,
+ * inside the room; a ledge's or a hazard's top stays over the ground line and within MAX_PERCH_TOP;
+ * a spot is placed only under one of the room's own names (its level's, TREE_SPOTS), each once.
  */
 import {
   FRONT_POINTS_MAX,
@@ -20,14 +21,15 @@ import {
   type MaskList,
   type Perch,
   type Polygon,
+  type SpotMark,
   type Vec2,
   type WallMark,
 } from '@owl-park/shared';
 
-export type MarkKind = 'ledge' | 'wall' | 'hazard' | 'front';
+export type MarkKind = 'ledge' | 'wall' | 'hazard' | 'front' | 'spot';
 export type Tool = 'select' | MarkKind;
-export const TOOLS: readonly Tool[] = ['select', 'ledge', 'wall', 'hazard', 'front'];
-export const LIST_OF: Record<MarkKind, MaskList> = { ledge: 'ledges', wall: 'walls', hazard: 'hazards', front: 'fronts' };
+export const TOOLS: readonly Tool[] = ['select', 'ledge', 'wall', 'hazard', 'front', 'spot'];
+export const LIST_OF: Record<MarkKind, MaskList> = { ledge: 'ledges', wall: 'walls', hazard: 'hazards', front: 'fronts', spot: 'spots' };
 
 /** An item of the draft. */
 export interface Picked {
@@ -37,7 +39,7 @@ export interface Picked {
 
 /**
  * Where a press landed on an item: an end of its line (`start` is x0, or a wall's y0), the line
- * itself, one of a front's points, or inside a front.
+ * itself, one of a front's points, inside a front, or a spot (its `point`).
  */
 export interface Hit extends Picked {
   part: 'start' | 'end' | 'line' | 'point' | 'inside';
@@ -58,9 +60,9 @@ export const UNDO_STEPS = 50;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const topOf = (y: number, frame: Frame) => clamp(Math.round(frame.ground - y), 1, MAX_PERCH_TOP);
-type Item = LedgeMark | WallMark | HazardMark | FrontMark;
+type Item = LedgeMark | WallMark | HazardMark | FrontMark | SpotMark;
 /** A draft as text, its lists in a fixed order: two drafts are the same when theirs are. */
-const canon = (d: MaskDraft) => JSON.stringify([d.ledges, d.walls, d.hazards, d.fronts]);
+const canon = (d: MaskDraft) => JSON.stringify([d.ledges, d.walls, d.hazards, d.fronts, d.spots]);
 
 /** The next free id for a new item of this kind: one past the highest `<kind>-<n>` in the draft. */
 export function nextId(draft: MaskDraft, kind: MarkKind): string {
@@ -81,14 +83,22 @@ export function find(draft: MaskDraft, p: Picked): Item | undefined {
   return (draft[LIST_OF[p.kind]] as Item[]).find((i) => i.id === p.id);
 }
 
+/** What a press may land on: only these kinds (all when absent), and a spot's pin's head `lift` room px over its point. */
+export interface HitOptions {
+  kinds?: readonly MarkKind[];
+  lift?: number;
+}
+
 /**
- * What a press at `p` lands on, `tol` room px at most away: an end or a point first (the nearest),
- * then a line (the nearest), then the front drawn last that it is inside.
+ * What a press at `p` lands on, `tol` room px at most away: an end, a point or a spot first (the
+ * nearest; a spot by its point or by its pin's head), then a line (the nearest), then the front drawn
+ * last that it is inside.
  */
-export function hitTest(draft: MaskDraft, p: Vec2, tol: number, ground: number): Hit | null {
+export function hitTest(draft: MaskDraft, p: Vec2, tol: number, ground: number, opts: HitOptions = {}): Hit | null {
   const best: { hit: Hit | null; d: number } = { hit: null, d: Number.POSITIVE_INFINITY };
+  const wanted = (kind: MarkKind) => !opts.kinds || opts.kinds.includes(kind);
   const near = (hit: Hit, d: number) => {
-    if (d <= tol && d < best.d) {
+    if (d <= tol && d < best.d && wanted(hit.kind)) {
       best.hit = hit;
       best.d = d;
     }
@@ -108,13 +118,15 @@ export function hitTest(draft: MaskDraft, p: Vec2, tol: number, ground: number):
     near({ kind: 'wall', id: w.id, part: 'end' }, distance(p, { x: w.x, y: w.y1 }));
   }
   for (const f of draft.fronts) f.points.forEach((q, i) => near({ kind: 'front', id: f.id, part: 'point', point: i }, distance(p, q)));
+  const lift = opts.lift ?? 0;
+  for (const s of draft.spots) near({ kind: 'spot', id: s.id, part: 'point' }, Math.min(distance(p, s), distance(p, { x: s.x, y: s.y - lift })));
   if (best.hit) return best.hit;
   const along = (a: Vec2, b: Vec2) => distance(p, closestPointOnSegment(p, a, b));
   for (const [kind, list] of spans) for (const s of list) near({ kind, id: s.id, part: 'line' }, along({ x: s.x0, y: ground - s.top }, { x: s.x1, y: ground - s.top }));
   for (const w of draft.walls) near({ kind: 'wall', id: w.id, part: 'line' }, along({ x: w.x, y: w.y0 }, { x: w.x, y: w.y1 }));
   for (const f of draft.fronts) f.points.forEach((q, i) => near({ kind: 'front', id: f.id, part: 'line' }, along(q, f.points[(i + 1) % f.points.length]!)));
   if (best.hit) return best.hit;
-  for (let i = draft.fronts.length - 1; i >= 0; i--) {
+  for (let i = draft.fronts.length - 1; i >= 0 && wanted('front'); i--) {
     const f = draft.fronts[i]!;
     if (pointInPolygon(p, f.points)) return { kind: 'front', id: f.id, part: 'inside' };
   }
@@ -123,9 +135,9 @@ export function hitTest(draft: MaskDraft, p: Vec2, tol: number, ground: number):
 
 /**
  * The draft with `hit`'s part dragged by (to - from): an end along its line, a ledge's or a hazard's
- * line up or down (its top), a wall's sideways, a front's point anywhere, a front (pressed inside, or
- * on an edge) whole. `before` is the draft as the press found it. Kept inside the room, an end at
- * least MIN_SPAN from the other, a top within reach.
+ * line up or down (its top), a wall's sideways, a front's point or a spot anywhere, a front (pressed
+ * inside, or on an edge) whole. `before` is the draft as the press found it. Kept inside the room, an
+ * end at least MIN_SPAN from the other, a top within reach.
  */
 export function dragged(before: MaskDraft, hit: Hit, from: Vec2, to: Vec2, frame: Frame): MaskDraft {
   const dx = to.x - from.x;
@@ -141,6 +153,7 @@ export function dragged(before: MaskDraft, hit: Hit, from: Vec2, to: Vec2, frame
       ),
     };
   }
+  if (list === 'spots') return { ...before, spots: swap(before.spots, (m) => ({ ...m, x: clamp(Math.round(m.x + dx), 0, w), y: clamp(Math.round(m.y + dy), 0, h) })) };
   if (list === 'fronts') {
     return {
       ...before,
@@ -178,6 +191,16 @@ export function drawnMark(kind: 'ledge' | 'hazard' | 'wall', a: Vec2, b: Vec2, f
   return x1 - x0 < MIN_SPAN ? null : { x0, x1, top: topOf(a.y, frame) };
 }
 
+/**
+ * The draft with the spot named `id` at `p`, a whole room pixel inside the room: placed anew at the
+ * end of the list, or moved there when it is placed already.
+ */
+export function withSpot(draft: MaskDraft, id: string, p: Vec2, frame: Frame): MaskDraft {
+  const at = { x: clamp(Math.round(p.x), 0, frame.size.w), y: clamp(Math.round(p.y), 0, frame.size.h) };
+  const placed = draft.spots.some((s) => s.id === id);
+  return { ...draft, spots: placed ? draft.spots.map((s) => (s.id === id ? { id, ...at } : s)) : [...draft.spots, { id, ...at }] };
+}
+
 /** The selected item's numbers, as the panel shows them. */
 export function readout(draft: MaskDraft, p: Picked): string {
   const item = find(draft, p);
@@ -185,7 +208,8 @@ export function readout(draft: MaskDraft, p: Picked): string {
   const n = (v: number) => String(Math.round(v));
   if ('points' in item) return `${item.id}  ${item.points.length} points`;
   if ('y0' in item) return `${item.id}  x ${n(item.x)}  y0 ${n(item.y0)}  y1 ${n(item.y1)}`;
-  return `${item.id}  x0 ${n(item.x0)}  x1 ${n(item.x1)}  top ${n(item.top)}`;
+  if ('x0' in item) return `${item.id}  x0 ${n(item.x0)}  x1 ${n(item.x1)}  top ${n(item.top)}`;
+  return `${item.id}  x ${n(item.x)}  y ${n(item.y)}`;
 }
 
 /**
@@ -208,20 +232,28 @@ export function trialPerches(ledges: readonly LedgeMark[], floor: readonly Polyg
   }));
 }
 
-/** What the painter's state is: the draft, the tool, the item picked, the front being drawn and the undo steps. */
+/**
+ * What the painter's state is: the draft, the tool, the item picked, the front being drawn, the name
+ * the spot tool places and the undo steps.
+ */
 export class PaintEditor {
   draft: MaskDraft;
   tool: Tool = 'select';
   selected: Picked | null = null;
   /** A front being drawn: its points so far, a tap each. */
   pending: Vec2[] | null = null;
+  /** The name the spot tool places next, picked from the room's (`names`); null until one is. */
+  naming: string | null = null;
+  /** The room's named spots (its level's, TREE_SPOTS): the only ids a spot is placed under. */
+  readonly names: readonly string[];
   private readonly past: MaskDraft[] = [];
   /** The draft as it was last saved (canon), or null when this one was never saved. */
   private savedAs: string | null;
 
-  constructor(draft: MaskDraft, saved: boolean) {
+  constructor(draft: MaskDraft, saved: boolean, names: readonly string[] = []) {
     this.draft = draft;
     this.savedAs = saved ? canon(draft) : null;
+    this.names = names;
   }
 
   /** Whether the draft differs from what was last saved (a draft never saved always does). */
@@ -285,6 +317,28 @@ export class PaintEditor {
     const list = LIST_OF[kind];
     this.change({ ...this.draft, [list]: [...this.draft[list], { id, ...mark }] });
     this.selected = { kind, id };
+    return this.selected;
+  }
+
+  /**
+   * Pick one of the room's names for the spot tool to place; one placed already is picked in the
+   * draft too (to see, or delete). False for a name that is not the room's.
+   */
+  pickName(id: string): boolean {
+    if (!this.names.includes(id)) return false;
+    this.naming = id;
+    this.selected = this.draft.spots.some((s) => s.id === id) ? { kind: 'spot', id } : null;
+    return true;
+  }
+
+  /**
+   * Place the spot named `id` at `p`, or move it there when it is placed already, and pick it: a
+   * change, which Undo takes back. Null for a name that is not the room's.
+   */
+  place(id: string, p: Vec2, frame: Frame): Picked | null {
+    if (!this.names.includes(id)) return null;
+    this.change(withSpot(this.draft, id, p, frame));
+    this.selected = { kind: 'spot', id };
     return this.selected;
   }
 
