@@ -16,6 +16,9 @@
     "e2e": "pnpm --filter @owl-park/park e2e",
     "mutate": "pnpm --filter @owl-park/shared mutate && pnpm --filter @owl-park/edge mutate",
     "check": "pnpm typecheck && pnpm test && pnpm build",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
     "build:edge": "node tools/build-edge.mjs",
     "deploy:edge": "pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy",
@@ -35,6 +38,7 @@
     "art:test": "node --test \"tools/art/**/*.test.mjs\" && python3 -B -m unittest discover -s tools/art -p \"test_*.py\""
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.56.1",
     "ws": "^8.21.0"
   }
