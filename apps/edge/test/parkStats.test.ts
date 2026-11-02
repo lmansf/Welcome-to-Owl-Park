@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CollectLog, saltedHash, type LogConfig, type PlayerRow, type RealmVisitRow, type SessionRow } from '../src/collectLog';
-import { ParkStats, REALM_VISITS_MAX, VISIT_GRACE_MS, type Sighting } from '../src/parkStats';
+import { ParkStats, REALM_VISITS_MAX, VISIT_GRACE_MS, visitMaps, type Sighting } from '../src/parkStats';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { sqlStorage } from './sqlite';
 
@@ -183,6 +183,35 @@ describe('time per room (OP-113)', () => {
       ['nest', 'deep_link'],
       ['glass', 'deep_link'],
     ]);
+  });
+
+  it('says which park each room was walked in: the tree for its levels, and for the market and the nest a tree owl comes through (OP-113, OP-128)', async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true }), BARN, MON);
+    t.stats.seen(into('l1'), BARN, MON + MIN);
+    t.stats.seen(into('market'), BARN, MON + 2 * MIN);
+    t.stats.seen(into('market'), BARN, MON + 3 * MIN); // its line dropped: still the tree's
+    t.stats.seen(into('l1'), BARN, MON + 4 * MIN);
+    t.stats.seen({ ...into('hub'), pass: 'v_visitEEEE5' }, BARN, MON + 5 * MIN); // another visit, today's park
+    t.stats.seen({ ...into('market'), pass: 'v_visitEEEE5' }, BARN, MON + 6 * MIN);
+    t.stats.close(MON + 6 * MIN + VISIT_GRACE_MS);
+    const rows = await t.sent<RealmVisitRow>('realm_visit');
+    expect(rows.map((r) => [r.realm, r.map_id])).toEqual([
+      ['nest', 2],
+      ['l1', 2],
+      ['market', 2],
+      ['market', 2],
+      ['l1', 2],
+      ['hub', 1],
+      ['market', 1],
+    ]);
+  });
+
+  it('counts a visit of shared rooms only for today\'s park', () => {
+    expect(visitMaps([])).toEqual([]);
+    expect(visitMaps(['nest-abcdefgh', 'market'])).toEqual([1, 1]);
+    expect(visitMaps(['market', 'hub', 'market'])).toEqual([1, 1, 1]);
+    expect(visitMaps(['market', 'l1', 'hub', 'nest-abcdefgh'])).toEqual([2, 2, 1, 1]);
   });
 
   it("walks from one nest into another, though the log names both the same: Go home from another owl's nest", async () => {
