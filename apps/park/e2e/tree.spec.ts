@@ -229,16 +229,14 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
   test('standing in the stair up’s doorway at the stair’s foot stays on level 1, the up arrow over it; up goes up to level 2', async ({ page, isMobile }) => {
     await openPark(page, { room: 'l1' });
     // On the floor at the spiral stair's foot (OP-220): the stair up to level 2's doorway (960 to 1070).
-    // On a phone a walk aimed at the doorway is a tap on it and goes through (OP-212), so there the owl
-    // walks up short of it and on into it by the keys, which never take a doorway by themselves.
-    if (isMobile) {
-      await walkAndStop(page, LOBBY + 900, GROUND);
-      await page.keyboard.down('ArrowRight');
-      await expect.poll(async () => (await state(page)).pos.x, { timeout: 15_000, intervals: [50] }).toBeGreaterThan(LOBBY + 975);
-      await page.keyboard.up('ArrowRight');
-    } else {
-      await walkAndStop(page, LOBBY + 1015, GROUND);
-    }
+    // A walk aimed at a doorway counts as a tap on it and goes through (OP-212), so the owl walks up
+    // short of it (more than a tap's aim away) and on into it by the keys, which never take a doorway
+    // by themselves. The page itself watches for the owl inside, frame by frame, so the keys let go
+    // well before it could walk out the far side (960 to 1070) on a slow runner.
+    await walkAndStop(page, LOBBY + 880, GROUND);
+    await page.keyboard.down('ArrowRight');
+    await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
+    await page.keyboard.up('ArrowRight');
     await standsAt(page, 0);
     await frames(page, 30);
     const s = await state(page);
