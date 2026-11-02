@@ -126,6 +126,12 @@ export interface RoomTile {
    * (the lobby's on top); docs/ARCHITECTURE.md's rooms table gains a tile's `fade`.
    */
   fade?: { left?: number; right?: number };
+  /**
+   * Drawn as painted (OP-173's six layers): a level's platforms and front props are not quieted with
+   * its back scenery, so what an owl stands on and what stands in front of it read at a glance. A
+   * tree room's 1x tiles are otherwise drawn a step quieter.
+   */
+  plain?: boolean;
 }
 
 /** The room pixels a tile fades over at each side edge, at most half the tile each (OP-162). */

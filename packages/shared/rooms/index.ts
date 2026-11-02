@@ -1052,6 +1052,72 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0, markAt: { x: 3 * ROOM_W + 1365, y: 462 } },
     ],
   },
+  // Level 4, the sky landing (OP-159): two screens, the stair landing round the trunk (0) and the quiet
+  // overlook east of it (+1), painted in the six layers of OP-173: the sky at half the camera's pace, the
+  // middle distance at three quarters (the overlook has none: its view stays open), the back scenery,
+  // the platforms and the front props (all three cut from one painting of each screen, so they stay in
+  // register), and the overlay at 1.2 in front of the owls. Only the back scenery is drawn a step
+  // quieter; the platforms are drawn as painted, so what an owl stands on stands out, and the front
+  // props (each screen's lantern post) are drawn over the owls, under the overlay. The ledges are the
+  // platforms' own tops, measured on their layer at 1600 x 900. The stairs up to level 5 and down to
+  // level 3 are added as those levels are built. Gated like level 1.
+  l4: {
+    id: 'l4',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'tree-l4-0-back',
+    backgrounds: [
+      // The skies: the landing's lies over the overlook's and fades into it.
+      { key: 'tree-l4-e1-bg', x: ROOM_W, y: 0, rate: 0.5 },
+      { key: 'tree-l4-0-bg', x: 0, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      // The landing's middle distance, fading into the overlook's open view.
+      { key: 'tree-l4-0-mid', x: 0, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } },
+      // The back scenery (quieted), then the platforms over it (as painted), edge to edge.
+      ...['0', 'e1'].map((s, i) => ({ key: `tree-l4-${s}-back`, x: i * ROOM_W, y: 0 })),
+      ...['0', 'e1'].map((s, i) => ({ key: `tree-l4-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
+    ],
+    foregrounds: [
+      // The front props with the room, over the owls; then the overlay, over everything.
+      ...['0', 'e1'].map((s, i) => ({ key: `tree-l4-${s}-front`, x: i * ROOM_W, y: 0, plain: true })),
+      ...['0', 'e1'].map((s, i) => ({ key: `tree-l4-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    ],
+    mood: 'hub',
+    // The boardwalk round the trunk, from its west end on the landing to the railing at the overlook's end.
+    walkable: [
+      [
+        { x: 130, y: TREE_GROUND - TREE_STRIP },
+        { x: ROOM_W + 1330, y: TREE_GROUND - TREE_STRIP },
+        { x: ROOM_W + 1330, y: TREE_GROUND + TREE_STRIP },
+        { x: 130, y: TREE_GROUND + TREE_STRIP },
+      ],
+    ],
+    perches: [
+      // The landing: the spiral stair's treads up the trunk (each a hop), its half-landing and the two
+      // treads over it, then the balcony on the trunk's west side, a jump and a glide from the top tread.
+      treeLedge('stair-1', 896, 984, 67),
+      treeLedge('stair-2', 924, 1024, 96),
+      treeLedge('stair-3', 972, 1068, 134),
+      treeLedge('stair-landing', 1004, 1148, 175),
+      treeLedge('stair-4', 1048, 1112, 206),
+      treeLedge('stair-5', 1044, 1084, 239),
+      treeLedge('balcony', 584, 740, 321),
+      // The overlook: a stair of perches up the bough, each a hop and a short gap on from the last: the
+      // stump, the board on its post, the mushroom's cap and the lookout at the top.
+      treeLedge('stump', ROOM_W + 352, ROOM_W + 520, 111),
+      treeLedge('board', ROOM_W + 584, ROOM_W + 732, 233),
+      treeLedge('mushroom', ROOM_W + 800, ROOM_W + 1056, 330),
+      treeLedge('lookout', ROOM_W + 1124, ROOM_W + 1224, 431),
+    ],
+    // Owls come in on the landing, just west of the stair's foot; the east spawn is at the overlook's railing.
+    spawns: {
+      default: { x: 800, y: TREE_GROUND },
+      west: { x: 220, y: TREE_GROUND },
+      east: { x: ROOM_W + 1240, y: TREE_GROUND },
+    },
+    doors: [],
+  },
 };
 
 /**

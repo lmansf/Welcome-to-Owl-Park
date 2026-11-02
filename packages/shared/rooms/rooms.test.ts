@@ -9,7 +9,7 @@ import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_S
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
-import { FLIGHT_STEP_MS, GROUNDED, MAX_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
+import { FLIGHT_STEP_MS, GLIDE_SLOPE, GROUNDED, MAX_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
 import { MAX_PERCH_TOP, PERCH_SLACK, footing, groundAt, type Raised } from '../src/perches';
 import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
@@ -50,9 +50,10 @@ describe('room size and art tiles', () => {
       expect(room.size.h).toBeLessThanOrEqual(ROOM_MAX_H);
       // A tile that scrolls at its own rate (the tree's sky plate and overlay, OP-156) is a layer of a
       // screen the room's own tiles paint: it covers nothing of its own.
-      const tiles = backgroundTiles(room).filter((t) => (t.rate ?? 1) === 1);
+      // So is a plain one (OP-173's six layers: a screen's platforms over its back scenery, its front props).
+      const tiles = backgroundTiles(room).filter((t) => (t.rate ?? 1) === 1 && !t.plain);
       for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) {
-        if ((t.rate ?? 1) !== 1) expect(tiles.some((o) => o.x === t.x && o.y === t.y), `${t.key} is a layer of a screen of the room`).toBe(true);
+        if ((t.rate ?? 1) !== 1 || t.plain) expect(tiles.some((o) => o.x === t.x && o.y === t.y), `${t.key} is a layer of a screen of the room`).toBe(true);
         expect(t.x % ROOM_W, `${t.key} sits on the tile grid`).toBe(0);
         expect(t.y % ROOM_H, `${t.key} sits on the tile grid`).toBe(0);
         expect(t.x + ROOM_W, `${t.key} inside the room`).toBeLessThanOrEqual(room.size.w);
@@ -670,7 +671,7 @@ describe('the tree (map 2)', () => {
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
 
   it('is a room of its own map, gated, with owls a quarter bigger: level 1, four screens with the lobby second', () => {
-    expect(tree.map((r) => r.id)).toEqual(['l1']);
+    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4']);
     for (const r of tree) {
       expect(r.gated, `${r.id} is dark until the keepers open it`).toBe(true);
       expect(GATED_ROOMS).toContain(r.id);
@@ -689,6 +690,27 @@ describe('the tree (map 2)', () => {
     expect(backgroundTiles(l1).filter((t) => t.rate === 0.5).map(at)).toEqual([['tree-l1-e2-bg', 3], ['tree-l1-e1-bg', 2], ['tree-l1-w1-bg', 0], ['tree-l1-0-bg', 1]]);
     // The layers are drawn sky, middle distance, playfield: farthest first.
     expect(backgroundTiles(l1).map((t) => t.rate ?? 1)).toEqual([0.5, 0.5, 0.5, 0.5, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 1]);
+  });
+
+  it('level 4 is two screens in six layers: only the back scenery is quieted, the front props drawn over the owls (OP-159)', () => {
+    const l4 = getRoom('l4');
+    expect(l4.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
+    const at = (t: { key: string; x: number }) => [t.key, t.x / ROOM_W];
+    const ones = backgroundTiles(l4).filter((t) => (t.rate ?? 1) === 1);
+    expect(ones.map(at)).toEqual([['tree-l4-0-back', 0], ['tree-l4-e1-back', 1], ['tree-l4-0-play', 0], ['tree-l4-e1-play', 1]]);
+    expect(ones.map((t) => !!t.plain)).toEqual([false, false, true, true]);
+    // Farthest first: the skies (the landing's on top), the landing's middle distance, then the room.
+    expect(backgroundTiles(l4).map((t) => t.rate ?? 1)).toEqual([0.5, 0.5, 0.75, 1, 1, 1, 1]);
+    expect(backgroundTiles(l4).filter((t) => t.rate === 0.5).map(at)).toEqual([['tree-l4-e1-bg', 1], ['tree-l4-0-bg', 0]]);
+    // In front of the owls: the front props with the room, then the overlay over them.
+    expect(foregroundTiles(l4).map((t) => [...at(t), t.rate ?? 1, !!t.plain])).toEqual([
+      ['tree-l4-0-front', 0, 1, true],
+      ['tree-l4-e1-front', 1, 1, true],
+      ['tree-l4-0-fg', 0, 1.2, false],
+      ['tree-l4-e1-fg', 1, 1.2, false],
+    ]);
+    // No tile of today's park, nor of level 1, is drawn plain.
+    for (const r of ALL_ROOMS) if (r.id !== 'l4') expect([...backgroundTiles(r), ...foregroundTiles(r)].some((t) => t.plain), r.id).toBe(false);
   });
 
   it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {
@@ -733,7 +755,7 @@ describe('the tree (map 2)', () => {
     }
   });
 
-  it('lets an owl reach every ledge: each a jump and a flap at most above the floor or a ledge it stands over', () => {
+  it('lets an owl reach every ledge: a jump and a flap above the floor or a ledge, less what a glide sinks over any gap', () => {
     const rise = MAX_RISE - 20; // a jump and a flap at the top, without the room the limit keeps to spare
     for (const r of tree) {
       const ledges = r.perches ?? [];
@@ -747,7 +769,10 @@ describe('the tree (map 2)', () => {
         for (const p of ledges) {
           if (reached.has(p.id)) continue;
           const [a0, a1] = span(p.id);
-          const from = p.top <= rise || ledges.some((q) => reached.has(q.id) && p.top - q.top <= rise && Math.min(a1, span(q.id)[1]) - Math.max(a0, span(q.id)[0]) > 0);
+          // Over a ledge, straight up; across a gap from one, a glide off the top of the jump sinks a
+          // pixel for every GLIDE_SLOPE it goes on, so the far ledge must be that much lower.
+          const gap = (q: string) => Math.max(a0, span(q)[0]) - Math.min(a1, span(q)[1]);
+          const from = p.top <= rise || ledges.some((q) => reached.has(q.id) && p.top - q.top <= rise - Math.max(0, gap(q.id)) / GLIDE_SLOPE);
           if (from) {
             reached.add(p.id);
             grew = true;
