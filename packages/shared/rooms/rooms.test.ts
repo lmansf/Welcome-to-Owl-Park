@@ -4,7 +4,7 @@ import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type DoorDef, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
 import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
@@ -15,7 +15,7 @@ import { MAX_PERCH_TOP, PERCH_SLACK, footing, groundAt, type Raised } from '../s
 import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
-import { treeSpotsFor } from '../src/treeSpots';
+import { treeLevelOf, treeSpotsFor } from '../src/treeSpots';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -153,22 +153,18 @@ describe("the tree's ways into today's park (OP-162)", () => {
   it("a side view's doorways stand at a height, so a ledge over one is walked along without going through", () => {
     for (const room of ALL_ROOMS) {
       if (mapOf(room) !== 2) continue;
-      // On the ground, or (a stair taken from its top) at the height of the ledge it stands on.
+      // Every way through is on the ground (OP-220): none is taken from a ledge.
       for (const d of room.doors) {
         if (!d.to) continue;
-        expect(d.top, `${room.id} ${d.id}`).toBeDefined();
-        if (d.top === 0) continue;
-        const on = (room.perches ?? []).find((p) => p.top === d.top && Math.min(...p.area.map((v) => v.x)) <= d.rect.x && Math.max(...p.area.map((v) => v.x)) >= d.rect.x + d.rect.w);
-        expect(on, `${room.id} ${d.id} stands on a ledge at its height`).toBeDefined();
+        expect(d.top, `${room.id} ${d.id}`).toBe(0);
       }
     }
-    // The archway lies under the high roof's end and the balcony: both pass over it.
+    // The lobby's lintel lies over the way down: an owl standing on it walks on past the doorway under it.
     const l1 = ROOMS['l1']!;
-    const arch = l1.doors.find((d) => d.id === 'to-market')!;
-    for (const id of ['roof-high', 'tower-balcony']) {
-      const p = l1.perches!.find((x) => x.id === id)!;
-      expect(p.area.some((v) => v.x >= arch.rect.x && v.x <= arch.rect.x + arch.rect.w) || (Math.min(...p.area.map((v) => v.x)) < arch.rect.x && Math.max(...p.area.map((v) => v.x)) > arch.rect.x), id).toBe(true);
-    }
+    const down = l1.doors.find((d) => d.id === 'stair-l1-l0')!;
+    const lintel = l1.perches!.find((x) => x.id === 'lintel')!;
+    expect(Math.min(...lintel.area.map((v) => v.x))).toBeLessThan(down.rect.x);
+    expect(Math.max(...lintel.area.map((v) => v.x))).toBeGreaterThan(down.rect.x + down.rect.w);
   });
 
   it('the arrival from the market by the archway is where an owl coming back through it stands', () => {
@@ -734,7 +730,7 @@ describe('the tree (map 2)', () => {
     for (const r of ALL_ROOMS) if (mapOf(r) !== 2 || r.id === 'l1') expect([...backgroundTiles(r), ...foregroundTiles(r)].some((t) => t.plain), r.id).toBe(false);
   });
 
-  it('level 3 is three screens in six layers, its stair to level 4 taken from the top and its doorway into the stained-glass street (OP-160)', () => {
+  it('level 3 is three screens in six layers, its stair to level 4 taken from its foot and its doorway into the stained-glass street (OP-160, OP-220)', () => {
     const l3 = getRoom('l3');
     const l4 = getRoom('l4');
     expect(l3.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
@@ -745,12 +741,13 @@ describe('the tree (map 2)', () => {
     // Only the landing has front props, and only the landing and the reach a middle distance.
     expect(foregroundTiles(l3).filter((t) => t.plain).map(at)).toEqual([['tree-l3-0-front', 0]]);
     expect(backgroundTiles(l3).filter((t) => t.rate === 0.75).map(at)).toEqual([['tree-l3-0-mid', 0], ['tree-l3-e2-mid', 2]]);
-    // The stair joins the two levels both ways: up from level 3's landing, down from level 4's boardwalk.
+    // The stair joins the two levels both ways: up from level 3's boardwalk at the stair's foot, down from level 4's.
     const up = l3.doors.find((d) => d.id === 'stair-l4-l3')!;
     const down = l4.doors.find((d) => d.id === 'stair-l4-l3')!;
     expect(up.to).toEqual({ room: 'l4', spawn: 'from-l3' });
-    expect(up.top).toBe(l3.perches!.find((p) => p.id === 'stair-top')!.top);
+    expect([up.top, up.way]).toEqual([0, 'up']);
     expect(down.to).toEqual({ room: 'l3', spawn: 'from-l4' });
+    expect(down.way).toBe('down');
     expect(down.top).toBe(0);
     expect(l4.spawns['from-l3']).toBeDefined();
     expect(l3.spawns['from-l4']).toBeDefined();
@@ -773,20 +770,20 @@ describe('the tree (map 2)', () => {
     // The skies, farthest from the trunk first, so the landing's lies on top; only the landing has front props.
     expect(backgroundTiles(l2).filter((t) => t.rate === 0.5).map(at)).toEqual(screens.map((s, i) => [`tree-l2-${s}-bg`, i]));
     expect(foregroundTiles(l2).filter((t) => t.plain).map(at)).toEqual([['tree-l2-0-front', 2]]);
-    // Up: from level 2's landing at the stair's top to level 3's floor; down: from level 3's floor to level 2's stair foot.
+    // Up: from level 2's floor at the stair's foot to level 3's floor; down: from level 3's stairhead to level 2's floor.
     const up = l2.doors.find((d) => d.id === 'stair-l3-l2')!;
     const down = l3.doors.find((d) => d.id === 'stair-l3-l2')!;
     expect(up.to).toEqual({ room: 'l3', spawn: 'from-l2' });
-    expect(up.top).toBe(l2.perches!.find((p) => p.id === 'stair-top')!.top);
+    expect([up.top, up.way]).toEqual([0, 'up']);
     expect(down.to).toEqual({ room: 'l2', spawn: 'from-l3' });
-    expect(down.top).toBe(0);
-    // Level 1's lobby stair now leads up, from its balcony, and level 2's steps behind the trunk lead down.
+    expect([down.top, down.way]).toEqual([0, 'down']);
+    // Level 1's lobby stair leads up from its foot, and level 2's stairhead west of the trunk leads down.
     const fromL1 = l1.doors.find((d) => d.id === 'stair-l2-l1')!;
     const toL1 = l2.doors.find((d) => d.id === 'stair-l2-l1')!;
     expect(fromL1.to).toEqual({ room: 'l2', spawn: 'from-l1' });
-    expect(fromL1.top).toBe(l1.perches!.find((p) => p.id === 'balcony')!.top);
+    expect([fromL1.top, fromL1.way]).toEqual([0, 'up']);
     expect(toL1.to).toEqual({ room: 'l1', spawn: 'from-l2' });
-    expect(toL1.top).toBe(0);
+    expect([toL1.top, toL1.way]).toEqual([0, 'down']);
     for (const [room, spawn] of [[l2, 'from-l3'], [l2, 'from-l1'], [l3, 'from-l2'], [l1, 'from-l2']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
@@ -803,16 +800,20 @@ describe('the tree (map 2)', () => {
     // The front gate at the street's east end, its turnstiles into the canopy under the arch; back out by the canopy's west end.
     expect(street.doors.find((d) => d.id === 'gate')!.to).toEqual({ room: 'l5', spawn: 'default' });
     expect(canopy.doors.find((d) => d.id === 'to-street')!.to).toEqual({ room: 'l5-street', spawn: 'from-canopy' });
-    // Down to level 4 from the canopy's boardwalk; up from level 4's last spiral tread.
+    // Down to level 4 from the canopy's boardwalk, the way into the tree reading as down; up from level 4's floor.
     const down = canopy.doors.find((d) => d.id === 'stair-l5-l4')!;
     const up = l4.doors.find((d) => d.id === 'stair-l5-l4')!;
-    expect([down.to, down.top]).toEqual([{ room: 'l4', spawn: 'from-l5' }, 0]);
-    expect([up.to, up.top]).toEqual([{ room: 'l5', spawn: 'from-l4' }, l4.perches!.find((p) => p.id === 'stair-5')!.top]);
-    // The street's far end: a doorway for places beyond Owl Park, on the bough's highest perch, leading nowhere yet.
+    expect([down.to, down.top, down.way]).toEqual([{ room: 'l4', spawn: 'from-l5' }, 0, 'down']);
+    expect([up.to, up.top, up.way]).toEqual([{ room: 'l5', spawn: 'from-l4' }, 0, 'up']);
+    // The street's west end: a doorway for places beyond Owl Park at the foot of bough 6, leading nowhere
+    // yet, behind a fallen branch (OP-220); the boughs are shut, so neither room has a ledge.
     const beyond = street.doors.find((d) => d.id === 'closed-beyond')!;
     expect(beyond.to).toBeUndefined();
     expect(beyond.closedSign).toBe('Hatching Soon');
-    expect(beyond.top).toBe(Math.max(...street.perches!.map((p) => p.top)));
+    expect(beyond.top).toBe(0);
+    expect(street.barriers?.find((b) => b.id === 'closed-beyond')?.kind).toBe('branch');
+    expect(canopy.barriers?.find((b) => b.id === 'bough-7')?.kind).toBe('branch');
+    expect([street.perches ?? [], canopy.perches ?? []]).toEqual([[], []]);
     for (const [room, spawn] of [[street, 'from-canopy'], [canopy, 'from-l4'], [l4, 'from-l5']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
@@ -825,11 +826,11 @@ describe('the tree (map 2)', () => {
     expect(cave.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
     expect(backgroundTiles(l0).filter((t) => t.plain).map(at)).toEqual(['w1', '0'].map((s, i) => [`tree-l0-${s}-play`, i]));
     expect(backgroundTiles(cave).filter((t) => t.plain).map(at)).toEqual(['c0', 'c1', 'c2'].map((s, i) => [`tree-l0-${s}-play`, i]));
-    // Up to level 1 from the stair's top tread; down from level 1's way down, on its floor.
+    // Up to level 1 from the stair's foot; down from level 1's way down, both on the floor (OP-220).
     const up = l0.doors.find((d) => d.id === 'stair-l1-l0')!;
     const down = l1.doors.find((d) => d.id === 'stair-l1-l0')!;
-    expect([up.to, up.top]).toEqual([{ room: 'l1', spawn: 'from-l0' }, l0.perches!.find((p) => p.id === 'stair-top')!.top]);
-    expect([down.to, down.top]).toEqual([{ room: 'l0', spawn: 'from-l1' }, 0]);
+    expect([up.to, up.top, up.way]).toEqual([{ room: 'l1', spawn: 'from-l0' }, 0, 'up']);
+    expect([down.to, down.top, down.way]).toEqual([{ room: 'l0', spawn: 'from-l1' }, 0, 'down']);
     // The mouth into the cave and back.
     expect(l0.doors.find((d) => d.id === 'to-arcade')!.to).toEqual({ room: 'l0-arcade', spawn: 'from-l0' });
     expect(cave.doors.find((d) => d.id === 'to-l0')!.to).toEqual({ room: 'l0', spawn: 'from-arcade' });
@@ -912,5 +913,164 @@ describe('the tree (map 2)', () => {
       }
       expect([...reached].sort(), r.id).toEqual(ledges.map((p) => p.id).sort());
     }
+  });
+});
+
+describe("the tree's directions and barriers (OP-220)", () => {
+  const tree = ALL_ROOMS.filter((r) => mapOf(r) === 2);
+  const levels = tree.filter((r) => treeLevelOf(r.id) !== null);
+  const isStair = (d: DoorDef) => d.id.startsWith('stair-');
+  const x0 = (d: DoorDef) => d.rect.x;
+  const x1 = (d: DoorDef) => d.rect.x + d.rect.w;
+  const floorSpan = (r: RoomDef): [number, number] => {
+    const xs = r.walkable[0]!.map((p) => p.x);
+    return [Math.min(...xs), Math.max(...xs)];
+  };
+
+  it("every tree level's down stair is at its left end and its up stair at its right end", () => {
+    let pairs = 0;
+    for (const room of levels) {
+      const stairs = room.doors.filter(isStair);
+      const level = treeLevelOf(room.id)!;
+      for (const d of stairs) {
+        expect(d.way, `${room.id} ${d.id} says which way it goes`).toBeDefined();
+        // The way it says is the way it goes: a stair up leads to the level above, a stair down to the one below.
+        const to = doorTarget(d, 2);
+        if (to) expect(treeLevelOf(to.room), `${room.id} ${d.id} leads ${d.way}`).toBe(level + (d.way === 'up' ? 1 : -1));
+      }
+      const downs = stairs.filter((d) => d.way === 'down');
+      const ups = stairs.filter((d) => d.way === 'up');
+      for (const down of downs) {
+        for (const up of ups) {
+          pairs++;
+          expect(x1(down), `${room.id}: ${down.id} (down) west of ${up.id} (up)`).toBeLessThanOrEqual(x0(up));
+          // The two stairs bound the level's stairway: no other doorway stands between them.
+          const between = room.doors.filter((d) => d !== down && d !== up && x1(d) > x1(down) && x0(d) < x0(up));
+          expect(between.map((d) => d.id), `${room.id}: nothing between ${down.id} and ${up.id}`).toEqual([]);
+        }
+      }
+    }
+    // Levels 0 to 4 each have a stair down (level 0's is the closed challenge stair) and one up.
+    expect(pairs).toBe(5);
+    // The one stair out of the canopy, the way into the tree, goes down.
+    expect(ROOMS['l5']!.doors.filter(isStair).map((d) => [d.id, d.way])).toEqual([['stair-l5-l4', 'down']]);
+  });
+
+  it('every stair doorway is at floor height', () => {
+    for (const room of tree) {
+      for (const d of room.doors) {
+        if (!isStair(d) && !d.to && !d.closedSign) continue;
+        expect(d.top, `${room.id} ${d.id}`).toBe(0);
+        // On the floor itself, not past its ends.
+        const [a, b] = floorSpan(room);
+        const mid = d.rect.x + d.rect.w / 2;
+        expect(mid >= a && mid <= b, `${room.id} ${d.id} on the floor (${a} to ${b})`).toBe(true);
+      }
+    }
+  });
+
+  it("no doorway lies between an owl's floor and another doorway it must reach", () => {
+    for (const room of tree) {
+      // No doorway stands over or inside another: each is a stretch of the floor of its own.
+      const doors = [...room.doors].sort((a, b) => x0(a) - x0(b));
+      for (let i = 1; i < doors.length; i++) expect(x0(doors[i]!), `${room.id}: ${doors[i - 1]!.id} and ${doors[i]!.id} do not overlap`).toBeGreaterThanOrEqual(x1(doors[i - 1]!));
+    }
+    // An owl that comes in by one stair walks to the level's other stair without crossing a doorway: it
+    // lands on the side of its stair that faces the other one, and nothing stands between.
+    let walks = 0;
+    for (const room of levels) {
+      for (const other of ALL_ROOMS) {
+        for (const door of other.doors) {
+          const to = doorTarget(door, 2);
+          if (!isStair(door) || to?.room !== room.id) continue;
+          const at = room.spawns[to.spawn]!;
+          expect(at, `${other.id} ${door.id} lands at a spawn of ${room.id}`).toBeDefined();
+          for (const next of room.doors) {
+            if (!isStair(next) || !next.to || next.to.room === other.id) continue;
+            walks++;
+            const [a, b] = at.x < x0(next) ? [at.x, x0(next)] : [x1(next), at.x];
+            const crossed = room.doors.filter((d) => d !== next && x1(d) > a && x0(d) < b);
+            expect(crossed.map((d) => d.id), `${room.id}: from ${to.spawn} to ${next.id}`).toEqual([]);
+            expect(room.doors.some((d) => pointInRect(at, d.rect)), `${room.id} ${to.spawn} stands in no doorway`).toBe(false);
+          }
+        }
+      }
+    }
+    // Up and down through levels 1 to 4: each level's two open stairs, each way.
+    expect(walks).toBe(8);
+  });
+
+  it('every closed doorway of the tree has a barrier in it, with its own sign', () => {
+    // l1's closed gate, l5-street's way beyond and spare nest, l0's challenge stair.
+    const closed = tree.flatMap((r) => r.doors.filter((d) => d.closedSign).map((d) => [`${r.id}:${d.id}`, r.barriers?.find((b) => b.id === d.id)?.kind]));
+    expect(closed.sort()).toEqual([['l0:stair-challenge', 'boards'], ['l1:closed-west', 'gate'], ['l5-street:closed-beyond', 'branch'], ['l5-street:spare-nest', 'boards']]);
+    for (const room of tree) {
+      for (const d of room.doors.filter((x) => x.closedSign)) {
+        const b = room.barriers?.find((x) => x.id === d.id);
+        expect(b, `${room.id} ${d.id} has a barrier`).toBeDefined();
+        expect(b!.sign, `${room.id} ${d.id}`).toBe(d.closedSign);
+        expect(b!.x < x1(d) && b!.x + b!.w > x0(d), `${room.id} ${d.id}: the barrier stands in the doorway`).toBe(true);
+      }
+    }
+  });
+
+  it('a barrier is drawn on the floor with an approved sign, and no ledge stands over it or past one that ends the floor', () => {
+    let count = 0;
+    for (const room of ALL_ROOMS) {
+      if (mapOf(room) !== 2) {
+        expect(room.barriers ?? [], room.id).toEqual([]);
+        expect(room.landings ?? [], room.id).toEqual([]);
+        continue;
+      }
+      const [a, b] = floorSpan(room);
+      const ids = new Set<string>();
+      for (const bar of room.barriers ?? []) {
+        count++;
+        expect(ids.has(bar.id), `${room.id} ${bar.id} once`).toBe(false);
+        ids.add(bar.id);
+        expect(CLOSED_SIGNS as readonly string[], `${room.id} ${bar.id}`).toContain(bar.sign);
+        expect(['gate', 'rope', 'branch', 'boards']).toContain(bar.kind);
+        expect(bar.w, bar.id).toBeGreaterThan(0);
+        expect(bar.x >= 0 && bar.x + bar.w <= room.size.w, `${room.id} ${bar.id} inside the room`).toBe(true);
+        // It stands on the floor: over it or at one of its ends.
+        expect(bar.x <= b && bar.x + bar.w >= a, `${room.id} ${bar.id} on the floor`).toBe(true);
+        const endsWest = bar.x <= a && bar.x + bar.w >= a;
+        const endsEast = bar.x <= b && bar.x + bar.w >= b;
+        for (const p of room.perches ?? []) {
+          const xs = p.area.map((v) => v.x);
+          const [p0, p1] = [Math.min(...xs), Math.max(...xs)];
+          expect(p1 <= bar.x || p0 >= bar.x + bar.w, `${room.id} ${p.id} is not over ${bar.id}`).toBe(true);
+          if (endsWest) expect(p0, `${room.id} ${p.id} is not past ${bar.id}`).toBeGreaterThanOrEqual(bar.x + bar.w);
+          if (endsEast) expect(p1, `${room.id} ${p.id} is not past ${bar.id}`).toBeLessThanOrEqual(bar.x);
+        }
+      }
+    }
+    expect(count).toBe(8);
+  });
+
+  it("the parkour that leads nowhere yet is shut: the boughs, level 3's reach and level 1's roof run hold no ledge, behind a barrier", () => {
+    const ledges = (id: string) => (getRoom(id).perches ?? []).map((p) => p.id);
+    expect(ledges('l5-street')).toEqual([]);
+    expect(ledges('l5')).toEqual([]);
+    for (const id of ['stump', 'table', 'fungus', 'board-1', 'board-2', 'tip']) expect(ledges('l3'), id).not.toContain(id);
+    for (const id of ['crates-1', 'crates-2', 'crates-3', 'roof-low', 'barrel', 'roof-high', 'tower-balcony']) expect(ledges('l1'), id).not.toContain(id);
+    // Each has its barrier: the fallen branches across the boughs, the ropes across the reach and the roof run's foot.
+    const bar = (room: string, id: string) => getRoom(room).barriers?.find((b) => b.id === id);
+    expect([bar('l5-street', 'closed-beyond')?.kind, bar('l5', 'bough-7')?.kind, bar('l3', 'reach')?.kind, bar('l1', 'roof-run')?.kind]).toEqual(['branch', 'branch', 'rope', 'rope']);
+    // A stair is taken at its foot, so no stair's treads are ledges any more.
+    for (const room of tree) for (const p of room.perches ?? []) expect(p.id.startsWith('stair'), `${room.id} ${p.id}`).toBe(false);
+  });
+
+  it('a stairhead is drawn wherever a stair stands with no painted stair, under that stair', () => {
+    const drawn: string[] = [];
+    for (const room of tree) {
+      for (const l of room.landings ?? []) {
+        const d = room.doors.find((x) => x.id === l.id);
+        expect(d && isStair(d), `${room.id} ${l.id} is a stair's`).toBe(true);
+        expect(l.x <= x0(d!) && l.x + l.w >= x1(d!), `${room.id} ${l.id} spans its doorway`).toBe(true);
+        drawn.push(`${room.id}:${l.id}`);
+      }
+    }
+    expect(drawn.sort()).toEqual(['l2:stair-l2-l1', 'l3:stair-l3-l2']);
   });
 });

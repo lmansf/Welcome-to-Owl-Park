@@ -51,15 +51,15 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     for (const k of screens) expect(s.layers.find((l) => l.key === `tree-l1-${k}-fg`)!.fade).toEqual({ left: 120, right: 120 });
   });
 
-  test('climbs the spiral stair to the balcony a jump a step, and comes down off the balcony’s end', async ({ page }) => {
+  test('the spiral stair is taken from the floor at its foot: a jump there comes back down to the floor (OP-220)', async ({ page }) => {
     await openPark(page, { room: 'l1' });
+    // The stair's treads and its balcony are no ledges: an owl goes up by the doorway at the foot, on up.
     await walkAndStop(page, LOBBY + 1042, GROUND);
-    for (const top of [82, 153, 286]) {
-      await jump(page);
-      await standsAt(page, top);
-    }
-    await walkAndStop(page, LOBBY + 1300, GROUND);
+    await jump(page);
     await standsAt(page, 0);
+    const s = await state(page);
+    expect(s.room).toBe('l1');
+    expect(s.doorway).toBe('stair-l2-l1');
   });
 
   test('a jump and a flap up onto the lintel over the way down, and a jump on up to the shelf fungus', async ({ page }) => {
@@ -103,27 +103,19 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await openPark(page, { room: 'l1' });
     // The fronts: the west path's lamps, the square's post, the stair's banister (raised) and the tower's railing.
     // The way down to level 0 is a doorway now (OP-163), marked and no longer shaded.
-    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 5, lips: 25, marks: 3, behind: false });
+    // The stair's treads, its balcony and the roof run's climb are no ledges (OP-220); the closed gate's
+    // locked gate and the rope across the roof run's foot are drawn.
+    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 5, lips: 14, marks: 3, barriers: 2, landings: 0, behind: false });
   });
 
-  test('the stair’s banister is in front of an owl climbing the stair, and behind one walking by on the floor (OP-173)', async ({ page }) => {
-    test.slow(); // a climb up and down with a look at the drawing order at each step: 20 s here
+  test('the stair’s banister stays behind an owl walking by on the floor, at the stair’s foot and past it (OP-173, OP-220)', async ({ page }) => {
     await openPark(page, { room: 'l1' });
     const behind = async () => (await state(page)).tree!.behind;
-    // On the floor at the stair's foot, the owl is in front of the banister's post and rail.
-    await walkAndStop(page, LOBBY + 962, GROUND);
-    expect(await behind()).toBe(false);
-    // Up the stair a step and another: behind the banister.
-    await walkAndStop(page, LOBBY + 1042, GROUND);
-    for (const top of [82, 153]) {
-      await jump(page);
-      await standsAt(page, top);
-      expect(await behind()).toBe(true);
+    for (const x of [962, 1042, 1300]) {
+      await walkAndStop(page, LOBBY + x, GROUND);
+      await standsAt(page, 0);
+      expect(await behind(), `at ${x}`).toBe(false);
     }
-    // Off the stair's far end and down onto the floor: in front again.
-    await walkAndStop(page, LOBBY + 1300, GROUND);
-    await standsAt(page, 0);
-    expect(await behind()).toBe(false);
   });
 
   test('the west wall\'s top is a ledge: a hop up from the boulder', async ({ page }) => {
@@ -197,37 +189,20 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     expect(s.pos.y).toBe(GROUND);
   });
 
-  test('climbs the roof run in the market, crates a jump a step, up to the high roof and on to the lantern tower’s balcony', async ({ page }) => {
-    test.slow(); // seven ledges a walk and a jump apart, drawn with software WebGL
+  test('the roof run is roped off at the foot of its crates: a jump there comes back down, and the boardwalk runs on under it (OP-220)', async ({ page }) => {
+    test.slow(); // a walk across the roof run, drawn with software WebGL
     await openPark(page, { room: 'l1', spawn: 'east' });
     const RUN = 3 * 1600;
-    await walkAndStop(page, RUN + 200, GROUND);
-    await jump(page);
-    await standsAt(page, 95);
-    await jump(page);
-    await standsAt(page, 170);
-    await walkAndStop(page, RUN + 330, GROUND);
-    await standsAt(page, 170);
-    await jump(page);
-    await standsAt(page, 250);
-    await walkAndStop(page, RUN + 418, GROUND);
-    await jump(page);
-    await standsAt(page, 310);
-    // Up onto the barrel on the low roof, and on along the roof past it.
-    await walkAndStop(page, RUN + 572, GROUND);
-    await jump(page);
-    await standsAt(page, 383);
-    await walkAndStop(page, RUN + 960, GROUND);
-    await standsAt(page, 310);
-    await jump(page);
-    await standsAt(page, 402);
-    // Along the high roof to its end under the tower's balcony, a jump up, and off the balcony's far end.
-    await walkAndStop(page, RUN + 1300, GROUND);
-    await standsAt(page, 402);
-    await jump(page);
-    await standsAt(page, 530);
-    await walkAndStop(page, RUN + 1560, GROUND);
+    // Where the crates' first step was, and under the high roof: neither holds an owl now.
+    for (const x of [200, 1300]) {
+      await walkAndStop(page, RUN + x, GROUND);
+      await jump(page);
+      await standsAt(page, 0);
+    }
+    // West along the boardwalk past the rope, which shuts the climb but not the way.
+    await walkAndStop(page, RUN + 20, GROUND);
     await standsAt(page, 0);
+    expect((await state(page)).room).toBe('l1');
   });
 });
 
@@ -251,14 +226,11 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
     expect(s.doorway).toBeNull();
   });
 
-  test('standing in the stair up’s doorway on the balcony stays on level 1, the up arrow over it; up goes up to level 2', async ({ page, isMobile }) => {
+  test('standing in the stair up’s doorway at the stair’s foot stays on level 1, the up arrow over it; up goes up to level 2', async ({ page, isMobile }) => {
     await openPark(page, { room: 'l1' });
-    // Up the spiral stair a jump a step, to the balcony at its top: the stair up to level 2's doorway.
-    await walkAndStop(page, LOBBY + 1042, GROUND);
-    for (const top of [82, 153, 286]) {
-      await jump(page);
-      await standsAt(page, top);
-    }
+    // On the floor at the spiral stair's foot (OP-220): the stair up to level 2's doorway.
+    await walkAndStop(page, LOBBY + 1015, GROUND);
+    await standsAt(page, 0);
     await frames(page, 30);
     const s = await state(page);
     expect(s.room).toBe('l1');
@@ -269,16 +241,17 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
     if (isMobile) await doAction(page, 'door:stair-l2-l1');
     else await page.keyboard.press('ArrowUp');
     await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l2');
-    expect(Math.abs((await state(page)).pos.x - (2 * 1600 + 1120))).toBeLessThan(60);
+    // On level 2, just east of its stairhead down, facing its stair up (OP-220).
+    expect(Math.abs((await state(page)).pos.x - (2 * 1600 + 340))).toBeLessThan(60);
   });
 
   test('W held as the keys walk the owl into the way down goes down to level 0', async ({ page }) => {
-    // From the spawn just west of the way down (610 to 700), east into it with W held as well.
+    // From the spawn just east of the way down (610 to 700, OP-220), west into it with W held as well.
     await openPark(page, { room: 'l1', spawn: 'from-l0' });
     await page.keyboard.down('KeyW');
-    await page.keyboard.down('ArrowRight');
+    await page.keyboard.down('ArrowLeft');
     await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l0');
-    await page.keyboard.up('ArrowRight');
+    await page.keyboard.up('ArrowLeft');
     await page.keyboard.up('KeyW');
   });
 
@@ -294,5 +267,45 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
     await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('market');
     await page.keyboard.up('ArrowUp');
     expect((await state(page)).doorway).toBeNull();
+  });
+});
+
+test.describe('the tree’s directions: down on the left, up on the right (OP-220)', () => {
+  test.beforeEach(async ({ page, isMobile }) => {
+    if (isMobile) await page.setViewportSize(ON_ITS_SIDE);
+  });
+
+  test('up the tree two levels by the stairs on the floor, each arrival between its level’s stair down and stair up', async ({ page }) => {
+    test.slow(); // two stairs and two rooms opened, drawn with software WebGL
+    // Up from level 0 comes out just east of level 1's way down, west of its stair up.
+    await openPark(page, { room: 'l1', spawn: 'from-l0' });
+    const doorX = async (id: string) => {
+      const d = (await state(page)).doors.find((x) => x.id === id)!;
+      return d.x;
+    };
+    let s = await state(page);
+    expect(s.pos.x).toBeGreaterThan(await doorX('stair-l1-l0'));
+    expect(s.pos.x).toBeLessThan(await doorX('stair-l2-l1'));
+    await walkToDoor(page, 'stair-l2-l1');
+    await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l2');
+    s = await state(page);
+    expect(s.air.z).toBe(0);
+    expect(s.pos.x).toBeGreaterThan(await doorX('stair-l2-l1'));
+    expect(s.pos.x).toBeLessThan(await doorX('stair-l3-l2'));
+    await walkToDoor(page, 'stair-l3-l2');
+    await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l3');
+    s = await state(page);
+    expect(s.pos.x).toBeGreaterThan(await doorX('stair-l3-l2'));
+    expect(s.pos.x).toBeLessThan(await doorX('stair-l4-l3'));
+  });
+
+  test('the canopy’s way into the tree is its one stair, and it goes down to level 4', async ({ page }) => {
+    await openPark(page, { room: 'l5' });
+    await walkToDoor(page, 'stair-l5-l4');
+    await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l4');
+    const s = await state(page);
+    // Just west of level 4's stair up, which leads back up to the canopy.
+    const up = s.doors.find((d) => d.id === 'stair-l5-l4')!;
+    expect(s.pos.x).toBeLessThan(up.x);
   });
 });
