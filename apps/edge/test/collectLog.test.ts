@@ -9,12 +9,14 @@ import {
   furnitureId,
   logConfig,
   logRoom,
+  orderKey,
   realmKind,
   ROOM_KINDS,
   saltedHash,
   type FeedbackLogRow,
   type LogConfig,
   type LogRow,
+  type PurchaseRow,
 } from '../src/collectLog';
 import { ROOMS } from '../src/rooms';
 import { SqlCollectionStore } from '../src/sqlStore';
@@ -275,6 +277,32 @@ describe('the collection log (OP-107)', () => {
     expect(JSON.stringify(batch.body)).not.toContain(CID);
     expect(JSON.stringify(batch.body)).not.toContain(PASS);
     expect(t.log.waiting()).toBe(0);
+  });
+
+  it('sends ticket events with the order, the owl and the ticket hashed, each once by its event id (OP-192)', async () => {
+    const t = rig();
+    const paid = { event: 'paid' as const, order: '1001', cid: null, at: MON, kinds: ['day' as const, 'annual' as const], tickets: 2, cents: 4497, upsell: true, held: false };
+    t.log.purchase(paid);
+    t.log.purchase({ ...paid, at: MON + 5_000 }); // the webhook again
+    t.log.purchase({ event: 'claimed', order: '1001', cid: CID, at: MON + 60_000, kinds: [], tickets: 2, cents: null, via: 'claim' });
+    t.log.purchase({ event: 'scanned', order: null, cid: CID, at: MON + 120_000, kinds: ['day'], tickets: 1, cents: null, until: MON + 120_000 + 86_400_000, ref: 'OWL-AAAA-BBBB' });
+    t.log.purchase({ event: 'refunded', order: '1001', cid: null, at: MON + 180_000, kinds: [], tickets: 1, cents: 1499, ref: '5' });
+    await t.log.flush();
+    const rows = t.sent.filter((s) => s.body.kind === 'purchase').flatMap((s) => s.body.rows as unknown as PurchaseRow[]);
+    const key = await orderKey(CONFIG.salt, '1001');
+    const owl = await saltedHash(CONFIG.salt, 'collector', CID);
+    expect(rows[0]).toEqual({ event_id: expect.stringMatching(UUID), event: 'paid', order_key: key, collector_id: null, occurred_at: new Date(MON).toISOString(), ticket_kinds: ['day', 'annual'], tickets: 2, amount_cents: 4497, upsell: true, held: false, via: null, valid_until: null });
+    // The same sale sent twice keeps one event id, so the log keeps it once.
+    expect(rows[1]!.event_id).toBe(rows[0]!.event_id);
+    expect(rows.slice(2).map((r) => [r.event, r.order_key, r.collector_id, r.via, r.valid_until])).toEqual([
+      ['claimed', key, owl, 'claim', null],
+      ['scanned', null, owl, null, new Date(MON + 120_000 + 86_400_000).toISOString()],
+      ['refunded', key, null, null, null],
+    ]);
+    expect(new Set(rows.map((r) => r.event_id)).size).toBe(4);
+    // Never the order's number, the owl's id or the ticket's.
+    const text = JSON.stringify(rows);
+    for (const plain of ['1001', CID, 'OWL-AAAA-BBBB']) expect(text).not.toContain(plain);
   });
 
   it('keeps no note for the log while it is off', async () => {

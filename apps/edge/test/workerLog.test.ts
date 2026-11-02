@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, hashForLog } from '@owl-park/shared';
 import type { Env } from '../src/env';
+import { orderKey, type PurchaseData } from '../src/collectLog';
 import { forgetGate } from '../src/gateSwitch';
 import { captureLogs } from '../src/logs';
 import { forgetCatalogue, storeCatalogue } from '../src/opening';
@@ -63,6 +64,8 @@ class Park {
   /** What the overflow object answers a change with. */
   settingsStatus = 200;
   collectionsDown = false;
+  /** Ticket events the Worker handed the collections object for the park's log (OP-192). */
+  readonly purchases: PurchaseData[] = [];
   private readonly stub = (answer: (req: Request) => Promise<Response> | Response) => ({
     idFromName: (name: string) => name,
     get: () => ({ fetch: async (input: Request | string, init?: RequestInit) => answer(typeof input === 'string' ? new Request(input, init) : input) }),
@@ -91,6 +94,10 @@ class Park {
       },
       inventory: async () => {
         throw new Error('the collections object is away');
+      },
+      purchase: async (d: PurchaseData) => {
+        if (this.collectionsDown) throw new Error('the collections object is away');
+        this.purchases.push(d);
       },
     }),
   };
@@ -320,6 +327,61 @@ describe('the Worker’s log (OP-134)', () => {
     const theirs = await call(e, '/api/tickets/pass', { method: 'POST', headers: { Authorization: `Bearer ${other}` }, body: JSON.stringify({ id }) });
     expect(theirs.status).toBe(409);
     expect(await theirs.json()).toEqual({ ok: false, reason: 'not-yours' });
+  });
+
+  it('hands the park’s log each ticket event and the owner’s contacts each paid order’s buyer, and the page never the order (OP-192)', async () => {
+    const store = new FakeStore();
+    store.total = '29.98';
+    const logUrl = 'https://log.example/functions/v1/owl-park-log';
+    const posted: Array<{ kind: string; rows: Array<Record<string, unknown>> }> = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      if (url === logUrl) {
+        posted.push(JSON.parse(String(init.body)));
+        return Response.json({ ok: true });
+      }
+      return store.fetch(url, init);
+    });
+    const salt = 's'.repeat(24);
+    const e = park.env({ SHOPIFY_SHOP: SHOP, SHOPIFY_ADMIN_TOKEN: 'shpat_test', SHOPIFY_WEBHOOK_SECRET: HOOKS, PARK_LOG_URL: logUrl, FRAUD_SCORE_KEY: 'k'.repeat(32), FRAUD_HASH_SALT: salt });
+    const hook = async (topic: string, payload: Record<string, unknown>) => {
+      const body = JSON.stringify(payload);
+      return call(e, '/api/store/webhook', { method: 'POST', headers: { 'X-Shopify-Hmac-Sha256': await webhookSignature(HOOKS, body), 'X-Shopify-Topic': topic, 'X-Shopify-Shop-Domain': SHOP }, body });
+    };
+    const paid = { id: 1001, admin_graphql_api_id: 'gid://shopify/Order/1001', tags: '' };
+    expect((await hook('orders/paid', paid)).status).toBe(200);
+    await Promise.all(waits);
+    expect(park.purchases).toEqual([{ event: 'paid', order: '1001', cid: null, at: expect.any(Number), kinds: ['day', 'day'], tickets: 2, cents: 2998, upsell: false, held: false }]);
+    // The buyer, once, to the contacts: the email as the park keys emails, the customer's digits, and the order's salted key.
+    expect(posted).toEqual([{ kind: 'contact', rows: [{ shopify_order_id: '1001', order_key: await orderKey(salt, '1001'), email: 'buyer@example.com', shopify_customer_id: '77', ordered_at: expect.any(String) }] }]);
+    expect(JSON.stringify(cap.lines)).not.toContain('example.com');
+    // A claim link puts the order on this owl.
+    const sent = store.sent[0]!;
+    const secret = String((sent['trackingInfo'] as { url: string }).url).split('#claim=')[1]!;
+    const pass = await mintPass(KEY, { id: 'v_buyer00009', exp: nowS() + 600, adm: false, cid: 'c_buyer00009' });
+    const auth = { Authorization: `Bearer ${pass}` };
+    expect((await call(e, '/api/tickets/claim', { method: 'POST', headers: auth, body: JSON.stringify({ secret }) })).status).toBe(200);
+    // Its first scan at the gate starts a ticket's time on this owl; the page hears nothing of the order.
+    const scan = (await (await call(e, '/api/tickets/scan', { method: 'POST', headers: auth, body: '{}' })).json()) as Record<string, unknown>;
+    expect(scan).toMatchObject({ ok: true, started: true, kind: 'day' });
+    expect(scan).not.toHaveProperty('order');
+    // A refund of one ticket, and the store saying so twice: two events, which the log's ids make one.
+    await hook('refunds/create', { id: 5, order_id: 1001, refund_line_items: [{ line_item_id: 11, quantity: 1 }], transactions: [{ kind: 'refund', status: 'success', amount: '14.99' }] });
+    await Promise.all(waits);
+    expect(park.purchases.slice(1)).toEqual([
+      { event: 'claimed', order: '1001', cid: 'c_buyer00009', at: expect.any(Number), kinds: [], tickets: 2, cents: null, via: 'claim' },
+      { event: 'scanned', order: '1001', cid: 'c_buyer00009', at: expect.any(Number), kinds: ['day'], tickets: 1, cents: null, until: scan['validUntil'], ref: scan['id'] },
+      { event: 'refunded', order: '1001', cid: null, at: expect.any(Number), kinds: [], tickets: 1, cents: 1499, ref: '5' },
+    ]);
+    // A store that will not say whose order it was sends no contact, and the Worker says so without an address.
+    store.contact = { email: null, customer: null };
+    await hook('orders/paid', paid);
+    await Promise.all(waits);
+    expect(posted).toHaveLength(1);
+    // The collections object away: the event is not kept, and the Worker says so.
+    park.collectionsDown = true;
+    await hook('orders/cancelled', paid);
+    await Promise.all(waits);
+    logged(cap.lines, 'write_failed', { level: 'warn', component: 'worker.tickets', reason: 'cancelled', order_hash: hashForLog('1001') });
   });
 
   it('tells each store webhook: turned away, taken, an order recorded, a repeat, and one that failed', async () => {

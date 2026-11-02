@@ -91,6 +91,8 @@ describe('the player stats (OP-111)', () => {
         device_class: 'phone',
         realms_entered: 3,
         collectibles_gained: 2,
+        // The room server said nothing of spectators: a visit from before OP-192 goes without a kind.
+        visitor_kind: null,
       },
     ]);
     // Nothing that names the owl or its pass leaves.
@@ -109,6 +111,41 @@ describe('the player stats (OP-111)', () => {
     expect(sessions.map((s) => s.device_class).sort()).toEqual(['desktop', 'phone']);
     const collected = await t.sent<{ session_id: string }>('collect');
     expect(sessions.map((s) => s.session_id)).toContain(collected[0]!.session_id);
+  });
+
+  it('says of each visit whether it went past the turnstiles as a spectator or a full visitor, so free owls are counted too (OP-192)', async () => {
+    const t = rig();
+    const kinds = async () => Object.fromEntries((await t.sent<SessionRow>('session')).map((s) => [s.started_at, s.visitor_kind]));
+    // A free owl: its nest and the street say nothing; the hub as a spectator.
+    t.stats.seen({ ...ME, pass: 'v_spectate01', room: 'nest-abcdefgh' }, BARN, MON);
+    t.stats.seen({ ...ME, pass: 'v_spectate01', room: 'hub', spec: true }, BARN, MON + 60_000);
+    t.stats.alive([{ ...ME, pass: 'v_spectate01', room: 'homes' }], MON + 120_000);
+    // A spectator whose ticket went through mid-visit: a visitor's visit from then on, whatever comes after.
+    t.stats.seen({ ...ME, pass: 'v_convert001', room: 'hub', spec: true }, BARN, MON + 1_000);
+    t.stats.alive([{ ...ME, pass: 'v_convert001', room: 'hub', spec: false }], MON + 61_000);
+    t.stats.alive([{ ...ME, pass: 'v_convert001', room: 'grove', spec: true }], MON + 62_000);
+    // A visit that never went past the turnstiles: no kind.
+    t.stats.seen({ ...ME, pass: 'v_outside001', room: 'lobby' }, BARN, MON + 2_000);
+    t.stats.close(MON + 3600_000);
+    expect(await kinds()).toEqual({
+      [new Date(MON).toISOString()]: 'spectator',
+      [new Date(MON + 1_000).toISOString()]: 'visitor',
+      [new Date(MON + 2_000).toISOString()]: null,
+    });
+  });
+
+  it('adds the visit kind to an object that kept visits before OP-192, and sends those without one', async () => {
+    const sql = sqlStorage();
+    new SqlCollectionStore(sql);
+    sql.exec(`CREATE TABLE stats_visits (pass TEXT PRIMARY KEY, cid TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, device TEXT, rooms TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0)`);
+    sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms) VALUES (?, ?, ?, ?, ?, ?)`, PASS, CID, MON, MON, 'phone', '["hub"]');
+    const bodies: Array<{ kind: string; rows?: SessionRow[] }> = [];
+    const log = new CollectLog(sql, CONFIG, { fetch: async (_u, init) => (bodies.push(JSON.parse(String(init.body))), new Response('{"ok":true}')), now: () => MON, wake: () => undefined });
+    const stats = new ParkStats(sql, log);
+    stats.alive([{ ...ME, spec: true }], MON + 60_000);
+    stats.close(MON + 3600_000);
+    await log.flush();
+    expect(bodies.filter((b) => b.kind === 'session').flatMap((b) => b.rows!).map((r) => r.visitor_kind)).toEqual(['spectator']);
   });
 
   it('keeps nothing while the log is off', () => {
