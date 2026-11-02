@@ -6,7 +6,10 @@ import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
  * front of it, and what it can use.
  *
  * - The playfield is drawn a step quieter (a multiply tint), so what the game draws over it stands out.
- * - Every ledge has the same bright, simple edge along its top, the one look for "an owl can stand here".
+ * - Every ledge has the same bright, simple edge along its top, the one look for "an owl can stand here",
+ *   on a level painted as one picture. A level painted in six layers has its platforms painted on their
+ *   own, so the platform's own edge says it and no line is drawn over it (a cream line there read as a
+ *   white bar floating over the painting).
  * - Shapes of the playfield painted in front of the path (`fronts`, a lamp post, a post in front of a
  *   stall) are drawn again over the owls, so an owl passes behind them. A raised one (a stair's banister,
  *   which the floor runs in front of) is drawn between the owls on ledges and the owls on the floor: the
@@ -110,7 +113,9 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
   }
 
   const lips = scene.add.graphics().setDepth(opts.depths.lip);
-  const perches = room.perches ?? [];
+  // A level painted in layers (its platforms plain) shows its ledges in the painting: no line over them.
+  const painted = playTiles.some((img) => img.getData('plain'));
+  const perches = painted ? [] : (room.perches ?? []);
   for (const p of perches) {
     const xs = xsOf(p.area);
     const x0 = Math.min(...xs);

@@ -6,10 +6,6 @@ import { TREE_REALMS } from '../rooms';
  * tree, and still in a realm a level of the tree opens into (TREE_REALMS), whose way out then leads
  * back to the tree; today's park (1) again in any other room. Kept for the tab, so a reload inside
  * such a realm still knows its way back.
- *
- * TODO-DOCS (OP-162): docs/ARCHITECTURE.md's rooms table: a door's `toTree` (where it leads an owl
- * walking the tree) and `top` (a side view's doorway is taken only at its height); and that the page
- * keeps which park its owl walks for the tab (this module).
  */
 const STORE = 'owl-park-map';
 

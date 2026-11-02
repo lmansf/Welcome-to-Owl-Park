@@ -4,9 +4,6 @@
  * so the chaos harness's scripted pages (OP-132) are read like the Worker and the room server, and
  * `?run=<id>` puts the run's id on every line. Without it the page writes nothing new; its console
  * stays as it was.
- *
- * TODO-DOCS (OP-134): docs/LOGGING.md: the page's lines (client.net: room_join_ok, reconnect_ok with
- * gap_ms, room_join_refused and room_leave with the close code), `?log=` and `?run=`.
  */
 import { createLogger, logLevelOf, type Logger } from '@owl-park/shared';
 

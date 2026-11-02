@@ -29,9 +29,6 @@ import {
  * visual centres, worn-item anchors and where a marker stands; red shading: floor shut for now;
  * lime: a perch's top as an owl on it is drawn (its area lifted by its height), and faintly where
  * that is on the floor plan (OP-084).
- *
- * TODO-DOCS (OP-127): docs/PLAYBOOK.md (or the QA notes) explains `?boxes=1`: dev builds, or a build
- * with VITE_BOXES=on; what each colour means; re-run it whenever a style set adds wearables.
  */
 const C = { spot: 0xff2aa1, doorway: 0xc9a227, reach: 0x00e5ff, tap: 0x7be0c8, drawn: 0xf6f1e3, solid: 0xffd36a, mark: 0xff5a5a, perch: 0x9cff57 };
 

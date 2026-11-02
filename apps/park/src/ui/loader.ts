@@ -21,10 +21,6 @@ export interface LoadScreenState {
  * share of the bytes that have come. The page shows it from its first paint (index.html); this takes
  * it over. After two seconds an owl fact comes, a new one now and then; tapping the owl makes it hop
  * and hoot (no sound with the park's sounds off).
- *
- * TODO-DOCS (OP-129): docs/ARCHITECTURE.md: the load screen (index.html's #loader, this module), the
- * boot and each room reporting their art on it (loadArt's onProgress, bytes over the sizes the art
- * list carries), and that any new wait for art should show on it the same way.
  */
 export interface LoadScreen {
   /**

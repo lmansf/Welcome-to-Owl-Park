@@ -19,29 +19,10 @@
  * FRAUD_SCORE_KEY (the key that function checks, the fraud link's) and FRAUD_HASH_SALT. Without them
  * nothing is kept or sent. Written against `SqlStorage` and an injected fetch, so Node tests it.
  *
- * TODO-DOCS (OP-107): docs/ARCHITECTURE.md: the collection log (this outbox, the `owl-park-log`
- * function in apps/park-log, `game.collect_log` and `game.collectible_catalogue` with the views
- * `game.collect_player_stats` and `game.collect_item_stats`) and its privacy rule (anonymous by
- * construction: salted hashes for the collector and the visit, phone or desktop, neutral room ids;
- * never a name, email, order, ticket or pass). docs/COLLECTIBLES.md: the same rule, and that every
- * grant is logged when the log is on. docs/DEPLOY.md: PARK_LOG_URL with FRAUD_SCORE_KEY and
- * FRAUD_HASH_SALT turn it on (apps/park-log/README.md, steps 3 to 6), and the backfill
- * (`POST /api/admin/collect-log`).
- *
  * Ticket events (OP-192) go the same way: an order paid, its tickets put on an owl, refunded or
  * cancelled, and a ticket's first scan, so the owner can count free owls beside paid ones. The order,
  * the owl and the ticket leave as salted hashes; the buyer's email never comes here (the Worker sends
  * it to the owner's contacts on its own, buyerLog.ts).
- *
- * TODO-DOCS (OP-192): docs/ARCHITECTURE.md, beside the player stats: the ticket events (`purchase`
- * rows into `game.fact_purchase`), the visit's `visitor_kind`, the views in apps/park-log/sql/profiles.sql
- * (`game.v_visitor_profile`, `game.v_purchase`, `game.v_keepers_card`) and the owner's `contacts`
- * schema (buyerLog.ts), joined to an owl only through the order's salted key.
- *
- * TODO-DOCS (OP-166): docs/FEEDBACK.md, "Where notes are kept": with the log on, every note is also
- * copied to `game.feedback` in the owner's analytics project (the `feedback` kind here and in
- * apps/park-log), with the words, the kind, the room, phone or desktop and the hashed collector and
- * visit; never the screen size or the browser's description. The owner's morning run reads it.
  */
 import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FeedbackKind, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
 import { moduleLog } from './logs';

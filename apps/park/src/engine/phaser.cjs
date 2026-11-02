@@ -5,8 +5,6 @@
 // rectangles and ellipses). vite.config.ts builds this into the one module the dev server, the unit
 // tests and the build load as 'phaser'; engine.test.ts fails when the park's code asks for a part
 // left out here, which is then added below (Phaser's entry shows how).
-// TODO-DOCS: ARCHITECTURE: the client's engine is this slim Phaser build; a new kind of game object
-// or a Phaser system (sound, physics) is added here first.
 
 require('phaser/src/polyfills/requestVideoFrame');
 

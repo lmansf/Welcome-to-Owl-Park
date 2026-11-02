@@ -47,10 +47,6 @@ export function syncSettings(root: ParentNode, s: Settings): void {
 
 /**
  * The Send feedback row's words (OP-167): the first row of Settings, wherever they open.
- *
- * TODO-DOCS (OP-167): docs/FEEDBACK.md and PLAYBOOK.md section 7: Feedback is Send feedback, the first
- * row of Settings, in the Menu's Settings tab and in the home screen's Settings (before the park,
- * with no way back to a Menu); the same form and the same sending as before.
  */
 export const FEEDBACK_ROW_WORDS = {
   title: 'Something wrong? An idea?',

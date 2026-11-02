@@ -7,12 +7,16 @@
  *
  * The tree's card (OP-156): of every hundred new owls, how many start in the tree (map 2), kept with
  * the realms switch as `realms.tree` (0 to 100; 0, as deployed, keeps the tree dark).
- * TODO-DOCS (OP-156): docs/CAPACITY.md section 2 gains the tree's card and `{"realms": {"tree": n}}`
- * on the API. A share above 0 opens the tree's gated rooms to every owl; a guest pass while the front
- * gate takes tickets still starts in today's park. Back to 0, every owl in the tree is sent to the hub.
- * A changed share reaches new arrivals within half a minute, like the other settings. Each Play asks
- * again, and while the share stays the same an owl is sent the same way every time.
+ *
+ * Closed for setup (OP-205): the whole park shut while the keepers set something up, and open again
+ * with the same card, kept as `setup` ({on, words}). On, every owl in a room goes to the home screen,
+ * which shows the closed card's words over Play, and Play lets no one back in; an owl on a keeper's
+ * token still walks in. An owl in its own nest goes within a minute. Off, Play works again at once
+ * in the rooms, and within a minute in the nests.
+ * TODO-DOCS (OP-205): docs/CAPACITY.md gains the setup card and `{"setup": {"on": true, "words": "..."}}`,
+ * and docs/PLAYBOOK.md the setup hour's steps (the ribbon first, then the switch, the keeper's walk, and off).
  */
+import { SETUP_WORDS } from '@owl-park/shared';
 import { ADMIN_STYLE, adminPage } from './feedbackPage';
 
 const STYLE = `
@@ -22,7 +26,8 @@ section.card p{margin:0 0 10px;color:var(--dim)}
 section.card strong{color:var(--ink)}
 label{display:flex;gap:8px;align-items:center;color:var(--dim)}
 label input{flex:0 1 110px}
-#words{flex:1 1 280px}
+#words,#setup-words{flex:1 1 280px}
+#setup-card[data-on="true"]{border-color:#e07a5f}
 table{width:100%;border-collapse:collapse;margin:0 0 6px}
 th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
 td .tabs{gap:6px}
@@ -67,6 +72,14 @@ function show(s) {
   $('#ribbon-state').textContent = s.ribbon.on ? 'On for everyone: "' + words + '"' : (s.active ? 'On by itself while the line is: "' + words + '"' : 'Off.');
   for (const b of document.querySelectorAll('[data-ribbon]')) b.setAttribute('aria-pressed', String((b.dataset.ribbon === 'on') === s.ribbon.on));
   if (document.activeElement !== $('#words')) $('#words').value = s.ribbon.words || '';
+  // Closed for setup (OP-205).
+  const st = s.setup || { on: false, words: null };
+  $('#setup-card').dataset.on = String(!!st.on);
+  $('#setup-state').textContent = st.on
+    ? 'Closed for setup: every owl is on the home screen, which says "' + (st.words || $('#setup-words').placeholder) + '". Only keepers walk in.'
+    : 'Open: the park takes owls as usual.';
+  for (const b of document.querySelectorAll('[data-setup]')) b.setAttribute('aria-pressed', String((b.dataset.setup === 'on') === !!st.on));
+  if (document.activeElement !== $('#setup-words')) $('#setup-words').value = st.words || '';
   const room = s.sharding === 'room';
   $('#copies-note').textContent = room
     ? 'One object per room: a room can open copies. New owls go to the copy with the most free places; a draining copy takes none, and closes once empty.'
@@ -154,6 +167,13 @@ for (const b of document.querySelectorAll('[data-line]')) b.addEventListener('cl
 $('#line-save').addEventListener('click', () => change({ line: { threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Saved.'));
 for (const b of document.querySelectorAll('[data-ribbon]')) b.addEventListener('click', () => change({ ribbon: { on: b.dataset.ribbon === 'on' } }, 'Done. Owls in the rooms see it at once, and the home screen within a minute.'));
 $('#words-save').addEventListener('click', () => change({ ribbon: { words: $('#words').value } }, 'Saved.'));
+for (const b of document.querySelectorAll('[data-setup]')) b.addEventListener('click', () => {
+  const on = b.dataset.setup === 'on';
+  if (on && !confirm('Close the whole park for setup? Every owl goes to the home screen now, and only keepers can walk in until you open it again.')) return;
+  if (!on && !confirm('Open the park again? Play works again at once.')) return;
+  change({ setup: { on } }, on ? 'Closed. Owls in the rooms go home at once, and owls in their nests within a minute.' : 'Open again. Play works at once in the rooms, and within a minute in the nests.');
+});
+$('#setup-words-save').addEventListener('click', () => change({ setup: { words: $('#setup-words').value } }, 'Saved.'));
 $('#realms-save').addEventListener('click', () => {
   const open = [...document.querySelectorAll('[data-realm]')].filter((c) => c.checked).map((c) => c.dataset.realm);
   const night = $('#night').value || null;
@@ -186,13 +206,23 @@ function html(nonce: string, ribbonWords: string): string {
 <body>
 <main>
 <h1>Owl Park capacity</h1>
-<p class="lede">Busy nights: the line, the busy ribbon and copies of rooms; and the realms switch. No deploy needed. When to use which: docs/CAPACITY.md.</p>
+<p class="lede">Busy nights: the line, the busy ribbon and copies of rooms; the realms switch; and closing the park for setup. No deploy needed. When to use which: docs/CAPACITY.md.</p>
 <form id="key">
 <input type="password" name="key" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key" required>
 <button class="primary">Open</button>
 </form>
 <p id="say" role="status" aria-live="polite"></p>
 <div id="board" hidden>
+<section class="card" id="setup-card" aria-labelledby="setup-h">
+<h2 id="setup-h">Closed for setup</h2>
+<p id="setup-state"></p>
+<div class="tabs"><button data-setup="on">Close the park</button><button data-setup="off">Open the park</button></div>
+<p></p>
+<div class="tabs">
+<input id="setup-words" maxlength="90" placeholder="${SETUP_WORDS.replace(/"/g, '&quot;')}" aria-label="The closed card's words (empty: its own)">
+<button id="setup-words-save">Save words</button>
+</div>
+</section>
 <section class="card" aria-labelledby="line-h">
 <h2 id="line-h">The line</h2>
 <p id="line-state"></p>

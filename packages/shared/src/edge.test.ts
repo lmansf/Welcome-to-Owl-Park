@@ -22,8 +22,8 @@ describe('protocol v10, the climb', () => {
 });
 
 describe('protocol v9, the arcade', () => {
-  it('is version 15 (spectators, OP-191), and a page speaking the version before is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(15);
+  it('is version 16 (closed for setup, OP-205), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(16);
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);

@@ -11,11 +11,6 @@
  * top of the highest perch at or a little above its height where it is, else the floor. Walking at a
  * height is walking as before, on the footing for that height (`footing`): the floor and the tops
  * at or below the owl, less the solid perches it is under.
- *
- * TODO-DOCS (OP-084): docs/ARCHITECTURE.md (movement): perches, the ground under an owl, the footing
- * at a height, the landing on a perch told to the room, and things up on perches (`Raised`: a quest
- * spot, a leaf pile) reached only from that perch; docs/PLAYBOOK.md (controls): jump onto a perch,
- * walk off its edge to come down.
  */
 import { isWalkable, pointInPolygon, type Polygon, type Shut } from './geometry';
 import type { Vec2 } from './protocol';

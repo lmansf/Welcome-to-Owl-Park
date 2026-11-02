@@ -16,6 +16,7 @@ import {
   PLAY_FEATHERS_PER_DAY,
   QUIZ_ZONES,
   RESTART_NOTICE,
+  SETUP_WORDS,
   ROOM_W,
   NestBook,
   STARTER_FURNITURE,
@@ -938,6 +939,55 @@ describe('the tree (map 2), dark until it opens (OP-156)', () => {
     expect(owl.last('closed')).toMatchObject({ t: 'closed', room: 'l1', why: 'realm' });
     expect(owl.closed?.code).toBe(CLOSE.REALM_CLOSED);
     expect((await join(obj, 'l1', 'v_late')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
+});
+
+describe('closed for setup (OP-205)', () => {
+  const KEY = 'keeper-tests-signing-key-0123456789';
+  const nowS = () => Math.floor(clock / 1000);
+  const tell = (obj: Obj, setup: unknown) => obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, setup }) }));
+
+  it('sends every owl but a keeper’s home with the closed card’s words, and turns new owls away until it opens', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const a = await join(obj, 'hub', 'v_a');
+    const keeper = connect('hub', 'v_keeper');
+    await send(obj, keeper, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, keeper: await mintKeeper(KEY, nowS() + 600) });
+    expect(keeper.last('welcome')).toBeDefined();
+    const cap = captureLogs();
+    try {
+      await tell(obj, { on: true, words: 'Back at 5:15' });
+      logged(cap.lines, 'room_setup', { component: 'room.leave', owls: 1 });
+    } finally {
+      cap.restore();
+    }
+    expect(a.last('closed')).toEqual({ t: 'closed', room: 'hub', why: 'setup', sign: 'Back at 5:15' });
+    expect(a.closed?.code).toBe(CLOSE.SETUP);
+    expect(keeper.closed).toBeNull();
+    // A new owl is turned away at its hello, with the card's own words when the keepers wrote none.
+    await tell(obj, { on: true, words: null });
+    const late = await join(obj, 'hub', 'v_late');
+    expect(late.last('closed')).toEqual({ t: 'closed', room: 'hub', why: 'setup', sign: SETUP_WORDS });
+    expect(late.closed?.code).toBe(CLOSE.SETUP);
+    // A keeper still walks in.
+    const second = connect('hub', 'v_keeper2');
+    await send(obj, second, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, keeper: await mintKeeper(KEY, nowS() + 600) });
+    expect(second.closed).toBeNull();
+    // Open again: Play works at once.
+    await tell(obj, { on: false, words: null });
+    const back = await join(obj, 'hub', 'v_back');
+    expect(back.closed).toBeNull();
+    expect(back.last('welcome')).toBeDefined();
+  });
+
+  it('keeps the park closed through a wake from hibernation', async () => {
+    state = new KeepingState();
+    const env = { PASS_SIGNING_KEY: KEY };
+    const obj = roomObject(undefined, env);
+    await tell(obj, { on: true, words: null });
+    await settle();
+    const woken = roomObject(undefined, env);
+    await settle(); // the constructor reads its storage
+    expect((await join(woken, 'hub', 'v_a')).closed?.code).toBe(CLOSE.SETUP);
   });
 });
 

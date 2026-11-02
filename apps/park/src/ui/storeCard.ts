@@ -25,9 +25,6 @@
  * A Day Ticket's card may also offer the upgrade to the annual pass (`StoreUpgrade`; OP-198): then
  * Continue is named for the Day Ticket and a second button beside it buys the pass instead, under the
  * same line, in its own click, as Continue does. Not now stays first.
- *
- * TODO-DOCS (OP-153, OP-180, OP-198): the card before the store in docs/ARCHITECTURE.md (the purchase path)
- * and docs/PLAYBOOK.md section 7, with its line, which the owner approves (`STORE_WORDS.ask`).
  */
 import { createModal } from './modal';
 import { MENU_THEMES, themeAt, tokenStyle } from './menuTheme';

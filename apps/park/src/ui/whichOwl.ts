@@ -9,9 +9,6 @@
  *
  * Nothing typed, no names, no score shown, no back button. The answers are kept nowhere: only the
  * result goes on, as the look. The words, pictures and points are in packages/shared/src/whichOwlBank.ts.
- * TODO-DOCS (OP-076): PLAYBOOK.md section 7 ("Your owl") and the home screen's first run say Make your
- * owl opens the builder; it now opens this quiz first (Skip, Make it yours and Not me? as above), and
- * the Menu's Settings tab has Retake the quiz.
  */
 import { COLOUR_SETS, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
 import { createModal } from './modal';

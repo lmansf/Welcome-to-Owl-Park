@@ -59,7 +59,6 @@ export async function storeWebhookRoute(c: RouteCtx): Promise<Response> {
     if (r.recorded) log.info('worker.store', 'order_recorded', 'A paid order’s tickets were made.', { ...about, tickets: r.recorded.tickets, held: r.recorded.held });
     if (r.placed && order) {
       // The gate's checkout (OP-175, OP-180): the tickets are on the owl that paid, and its buyer is offered a link to protect it, as a claim's is (OP-186).
-      // TODO-DOCS (OP-175): docs/LOGGING.md: claim_moved's via takes checkout (no device_class: the store's webhook carries none).
       log.info('worker.tickets', 'claim_moved', 'A paid order’s tickets went onto the owl that checked out at the gate.', { via: 'checkout', collector_hash: hashForLog(r.placed.device), order_hash: hashForLog(order), tickets: r.placed.tickets });
       ctx.waitUntil(offerProtectByOrder(env, log, url.origin, r.placed.device, order));
     }
