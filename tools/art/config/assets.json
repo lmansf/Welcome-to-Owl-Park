@@ -280,7 +280,13 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
-    "glass-idol": {"w": 520, "h": 416, "kind": "piece", "key_colour": "#00FF00", "with_2x": true},
+    "glass-idol": {
+      "w": 520,
+      "h": 416,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
     "blockade-not-yet-fledged": {
       "w": 300,
       "h": 300,
@@ -1688,136 +1694,1911 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
-    "tree-l1-0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l1-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-w1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l1-w1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-w1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-e1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l1-e1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-e1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-e2-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l1-e2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-e2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-w1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-e1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l1-e2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l4-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-e1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l4-e1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-e1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-e1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-e1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l4-e1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l3-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l3-e1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e2-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l3-e2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l2-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l2-w1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w2-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l2-w2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l2-w2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w2-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l5-w2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l5-w1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-w1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l5-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l5-e1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e2-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l5-e2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e3-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l5-e3-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e3-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e3-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e3-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l5-e3-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-w1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l0-w1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-w1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-w1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-w1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-w1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l0-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c0-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l0-c0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c1-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l0-c1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c2-bg": {"w": 1600, "h": 900, "kind": "room"},
-    "tree-l0-c2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l0-c2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"}
+    "tree-l1-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-e2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l4-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l4-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l3-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l3-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l3-e2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l2-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l2-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l2-w2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-w2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-e2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-e3-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-c0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-c1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-c2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "kit-tex-bark": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-inner-wood": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-planks": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-moss": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-leaves": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-rope": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-earth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-roots": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-cloth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-branch-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-mid": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-thin-mid": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-stub": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-knob": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-fork": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-wide": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-mid": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-thin-mid": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-slope-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-slope-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-single": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-railed-mid": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-bridge-mid": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-end-post": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-mid": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-thin-mid": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-single": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-mossy-mid": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-step": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-ledge-end": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-moss-a": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-moss-b": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-grass": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-moss-hanging": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-leaves": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-roots": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-plank-edge": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-stone-edge": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-bark-edge": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-rope": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lantern-string-3": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lantern-string-5": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-wood-right": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-wood-left": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-stone-right": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-stone-left": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-step-wood": {
+      "w": 200,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-step-stone": {
+      "w": 200,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-spiral": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ladder-wood": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ladder-rope": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-rail-right": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-rail-left": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landing": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-door-round-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-door-round-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-door-plank": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-doorway-stone": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-doorway-knothole": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-hatch-down": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-portal-bare": {
+      "w": 360,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-portal-boarded": {
+      "w": 360,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-portal-open": {
+      "w": 360,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-small": {
+      "w": 240,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-top": {
+      "w": 360,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-pillar": {
+      "w": 120,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-gate-locked": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrier-rope": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrier-branch": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrier-boards": {
+      "w": 300,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-post-lantern": {
+      "w": 120,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-rope-coil": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-fence-section": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-fence-post": {
+      "w": 80,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-wall-low-stone": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-hedge": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-log-pile": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-boulder": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-bench-wood": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-bench-stone": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-seat-log": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stool": {
+      "w": 120,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-table-round": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-table-long": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-shelf-goods": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-shelf-empty": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-crate-stack": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrel": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-sack-pile": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-shelf-hanging": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-signpost": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-sign-hanging": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-sign-arrow": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-notice-board": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lamp-post": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lamp-hook": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stall-awning": {
+      "w": 480,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stall-counter": {
+      "w": 480,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-booth-ticket": {
+      "w": 480,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-turnstile": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stall-roof": {
+      "w": 480,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cart": {
+      "w": 480,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    }
   },
   "helpers": {
     "tree-master": {

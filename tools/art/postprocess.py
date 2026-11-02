@@ -509,6 +509,149 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+KIT_PATH = TOOLS_ART_DIR / "config" / "kit.json"
+
+
+def kit_table() -> dict:
+    return json.loads(KIT_PATH.read_text(encoding="utf-8"))
+
+
+def heal_tile(img: Image.Image, band: float = 0.25) -> Image.Image:
+    """``img`` (RGB) made to tile, one direction at a time: rolled by half its width, so its left and
+    right edges meet in the middle as one vertical seam, that seam covered by the original's own
+    middle (continuous there) under a feathered vertical band ``band`` of the width wide; then the
+    same down the other axis. Each pass keeps what the other made continuous, since a roll and a
+    band along one axis leave every line along the other axis intact."""
+    arr = np.asarray(img.convert("RGB")).astype(np.float32)
+
+    def ramp(n: int) -> np.ndarray:
+        # 1 within a quarter of the band of the centre line, 0 past three quarters, linear between
+        d = np.abs(np.arange(n, dtype=np.float32) - n / 2) / (n * band)
+        return np.clip(1.5 - 2.0 * d, 0, 1)
+
+    for axis in (1, 0):
+        n = arr.shape[axis]
+        rolled = np.roll(arr, n // 2, axis=axis)
+        mask = ramp(n)[None, :, None] if axis == 1 else ramp(n)[:, None, None]
+        arr = rolled * (1 - mask) + arr * mask
+    return Image.fromarray(np.clip(np.round(arr), 0, 255).astype(np.uint8), "RGB")
+
+
+def tile_seam_ratio(img: Image.Image) -> dict:
+    """How visible the wrap seams are: the mean difference between the last and first columns
+    (rows) against the mean difference between neighbouring columns (rows) inside; near 1 tiles."""
+    arr = np.asarray(img.convert("RGB")).astype(np.float32)
+    inner_x = float(np.abs(np.diff(arr, axis=1)).mean()); inner_y = float(np.abs(np.diff(arr, axis=0)).mean())
+    seam_x = float(np.abs(arr[:, 0] - arr[:, -1]).mean()); seam_y = float(np.abs(arr[0] - arr[-1]).mean())
+    # a floor of two grey levels of inner detail, so a flat tile's invisible seam is not a high ratio
+    return {"seam_x": round(seam_x / max(inner_x, 2.0), 3), "seam_y": round(seam_y / max(inner_y, 2.0), 3)}
+
+
+def resize_tiling(img: Image.Image, size: int) -> Image.Image:
+    """A periodic image resized without the filter disturbing its edges: tiled three by three,
+    resized, the middle tile kept."""
+    w, h = img.size
+    big = Image.new("RGB", (3 * w, 3 * h))
+    for i in range(3):
+        for j in range(3):
+            big.paste(img, (i * w, j * h))
+    big = big.resize((3 * size, 3 * size), Image.Resampling.LANCZOS)
+    return big.crop((size, size, 2 * size, 2 * size))
+
+
+def cmd_texture(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit texture (OP-229): the candidate healed to tile, resized to its logical size with the
+    tiling kept, shipped as WebP; the seam ratio recorded (and refused past --max-seam).
+
+    TODO-DOCS (OP-229): docs/ART-PIPELINE.md: the art kit section (texture, pieces, kit.json)."""
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    if ctx.assets.get(key, {}).get("kind") != "texture":
+        raise ArtError(f"{key!r} is not a texture key (kit-tex-<name> in config/kit.json)")
+    W, H = logical_size(key, ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw).convert("RGB")
+    before = tile_seam_ratio(img)
+    healed = heal_tile(img, a.band) if not a.no_heal else img
+    one = resize_tiling(healed, W)
+    after = tile_seam_ratio(one)
+    worst = max(after["seam_x"], after["seam_y"])
+    tools = [f"texture: heal band={a.band if not a.no_heal else 'none'} seam before x{before['seam_x']} y{before['seam_y']} after x{after['seam_x']} y{after['seam_y']}"]
+    if worst > a.max_seam:
+        raise ArtError(f"{key}: the tile's wrap seam is {worst}x its inner detail (limit {a.max_seam}); pick another candidate or widen --band")
+    data, info = webpmeta.encode_under_budget(one, ctx.budget)
+    outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("format", "quality", "colors", "mode", "budget_relaxed")}}}
+    tools.append(budget_line(info))
+    for name in remove_rasters(ctx.out, key, {f"{key}.webp"}):
+        note(f"removed stale final {name}")
+    # Review: the tile repeated two by two, so a seam shows at once.
+    rv = Image.new("RGB", (2 * W, 2 * H))
+    for i in range(2):
+        for j in range(2):
+            rv.paste(one, (i * W, j * H))
+    rvp = write_review(ctx, f"{key}.png", rv)
+    save_post_record(ctx, key, {"key": key, "kind": "texture", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "tiling": {"before": before, "after": after}})
+    note(f"{key} 1x: {key}.webp {outputs['1x']['bytes']} bytes WebP q{info.get('quality')}; seam x{after['seam_x']} y{after['seam_y']}")
+    note(f"review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit shape sheet (OP-229): the candidate keyed out, its grid of three by two cells cut,
+    each cell's prop trimmed and fitted into its piece's logical canvas at 2x, shipped as the
+    piece's WebP cut-outs (1x and 2x) with the alpha exact, one post record per piece."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    kit = kit_table()
+    name = key.removeprefix("kit-sheet-")
+    if not key.startswith("kit-sheet-") or name not in kit["sheets"]:
+        raise ArtError(f"{key!r} is not a sheet key (kit-sheet-<name> in config/kit.json)")
+    sheet = kit["sheets"][name]
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    cols, rows = 3, 2
+    cw, ch = rgba.width / cols, rgba.height / rows
+    alpha = np.asarray(rgba.getchannel("A"))
+    only = set(a.only.split(",")) if a.only else None
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    done = 0
+    for i, piece in enumerate(sheet["pieces"]):
+        pkey = f"kit-{piece['name']}"
+        if only and pkey not in only and piece["name"] not in only:
+            continue
+        x0, y0 = int(round((i % cols) * cw)), int(round((i // cols) * ch))
+        x1, y1 = int(round((i % cols + 1) * cw)), int(round((i // cols + 1) * ch))
+        cell = alpha[y0:y1, x0:x1] > 8
+        ys, xs = np.nonzero(cell)
+        if not len(ys):
+            raise ArtError(f"{key}: cell {i + 1} ({pkey}) is empty; the sheet painted fewer than six props or they strayed; pick another candidate")
+        bx0, by0, bx1, by1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+        touches = bx0 == 0 or by0 == 0 or bx1 == x1 - x0 or by1 == y1 - y0
+        if touches:
+            note(f"warning: {key}: cell {i + 1} ({pkey}) reaches its cell's edge; the prop may be cut or joined to a neighbour")
+        pad = 4
+        crop = rgba.crop((max(x0, x0 + bx0 - pad), max(y0, y0 + by0 - pad), min(x1, x0 + bx1 + pad), min(y1, y0 + by1 + pad)))
+        W, H = logical_size(pkey, ctx.assets)
+        canvas2x, finfo = fit_contain(crop, 2 * W, 2 * H, a.margin, 0.5, 0, a.valign)
+        one = downsample(canvas2x, W, H)
+        outputs, lines = finish_cutout_webp(ctx, pkey, one, canvas2x)
+        tools = [f"sheet: {key} cell {i + 1} of {cols}x{rows} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}" + (" edge-touching" if touches else ""), *lines]
+        save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                      "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo, "sheet": {"key": key, "cell": i + 1, "bbox": [x0 + bx0, y0 + by0, x0 + bx1, y0 + by1]}})
+        drw.rectangle((x0 + bx0, y0 + by0, x0 + bx1 - 1, y0 + by1 - 1), outline=(0, 255, 0) if not touches else (255, 64, 64), width=3)
+        drw.text((x0 + 8, y0 + 8), f"{i + 1} {pkey}", fill=(255, 255, 255))
+        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (cell {i + 1}, {bx1 - bx0}x{by1 - by0} px)")
+        done += 1
+    for cx in range(1, cols):
+        drw.line((cx * cw, 0, cx * cw, rgba.height), fill=(255, 255, 0), width=2)
+    for ry in range(1, rows):
+        drw.line((0, ry * ch, rgba.width, ry * ch), fill=(255, 255, 0), width=2)
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"sheet {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
 def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
     """Published cut-outs the table has since marked ``"format": "webp"``, re-encoded from their
     PNGs (the pixels approved and live, checked against their provenance lines) as WebP finals with
@@ -1649,6 +1792,25 @@ def build_parser() -> argparse.ArgumentParser:
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_room)
+
+    sp = sub.add_parser("texture", help="kit texture -> healed to tile, resized, WebP (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--band", type=float, default=0.25, help="width of the healing cross as a fraction of the tile")
+    sp.add_argument("--no-heal", action="store_true", help="ship the candidate as painted (it already tiles)")
+    sp.add_argument("--max-seam", type=float, default=1.6, help="refuse a tile whose wrap seam is more than this times its inner detail")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_texture)
+
+    sp = sub.add_parser("pieces", help="kit shape sheet -> chroma key, six cells cut into their pieces, WebP cut-outs 1x + 2x (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated piece names (or keys) to cut; default all six")
+    sp.add_argument("--margin", type=float, default=0.02)
+    sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_pieces)
 
     sp = sub.add_parser("piece", help="set piece -> chroma key, fit, 1x + 2x")
     sp.add_argument("key")

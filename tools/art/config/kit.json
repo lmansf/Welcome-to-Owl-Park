@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "about": "The art kit (OP-229): seamless textures and keyed shape sheets the level assembler (OP-234) builds screens from. Texture keys are kit-tex-<name>, 512 x 512, tileable. A sheet key is kit-sheet-<name>: one 2048 x 1152 painting on the key colour, six props in a grid of three across and two down, cut by `art:finish pieces` into the pieces listed here in reading order, each shipped as kit-<piece> at its logical size (w x h, 1x and 2x) with its alpha. tools/art/README.md describes the format.",
+  "palette": "bark #2B1C12 to #4A3322, inner wood #5C4632 to #8F8068, moss #3E5A3A and #6E8B4E, leaf #4F7A3E and #8DAE5A, lantern gold #C9A227 and #FFD36A, cream #F6F1E3, navy #0C1E36 to #07122A, dusk blue #2E4C7A, sky blue #6F9BC8",
+  "texture_size": 512,
+  "textures": {
+    "bark": "rough tree bark in deep brown, long vertical furrows and ridges with a little moss in the cracks",
+    "inner-wood": "the smooth inner wood of a hollow tree, warm grain running sideways, soft lit ridges",
+    "planks": "worn wooden planks laid side by side, nailed, a few knots, the grain running along each plank",
+    "moss": "a thick carpet of soft green moss, small tufts and a few tiny leaves",
+    "leaves": "a dense canopy of overlapping leaves seen close, layered leaf shapes in two greens",
+    "rope": "coiled hemp rope laid in parallel strands, the twist of each strand clear",
+    "stone": "fitted grey stone blocks with mossy mortar lines, cool and slightly blue in shadow",
+    "earth": "packed dark earth with small stones, root ends and fallen leaf bits",
+    "roots": "a tangle of thick tree roots woven over each other, deep brown with moss between",
+    "cloth": "heavy canvas cloth in cream, woven weave visible, gently creased"
+  },
+  "sheets": {
+    "platform-branch-a": { "w": 320, "h": 120, "pieces": [
+      { "name": "branch-cap-left", "w": 160, "desc": "the left end of a thick mossy branch platform, its flat top running off the right edge of the piece and its rounded end on the left" },
+      { "name": "branch-mid", "desc": "a straight middle section of a thick mossy branch platform, flat along the top, both ends cut straight so it repeats" },
+      { "name": "branch-cap-right", "w": 160, "desc": "the right end of a thick mossy branch platform, its rounded end on the right" },
+      { "name": "branch-thin-cap-left", "w": 160, "h": 60, "desc": "the left end of a thin branch, barely wider than a perch" },
+      { "name": "branch-thin-mid", "h": 60, "desc": "a straight middle section of a thin branch, both ends cut straight" },
+      { "name": "branch-thin-cap-right", "w": 160, "h": 60, "desc": "the right end of a thin branch, tapering to a leafy tip" }
+    ] },
+    "platform-branch-b": { "w": 320, "h": 200, "pieces": [
+      { "name": "branch-slope-up", "desc": "a thick branch rising from low on the left to high on the right, a walkable slope" },
+      { "name": "branch-slope-down", "desc": "a thick branch falling from high on the left to low on the right" },
+      { "name": "branch-stub", "w": 160, "h": 120, "desc": "a short stub of branch, flat on top, cut straight at the left where it leaves a trunk" },
+      { "name": "branch-knob", "w": 160, "h": 160, "desc": "a knobbly branch end with a glowing knothole and a tuft of moss" },
+      { "name": "branch-fork", "desc": "a branch that forks into two, both arms flat enough to stand on" },
+      { "name": "branch-wide", "h": 160, "desc": "a wide flat bough with a thick bed of moss along its top, both ends cut straight" }
+    ] },
+    "platform-plank-a": { "w": 320, "h": 120, "pieces": [
+      { "name": "plank-cap-left", "w": 160, "desc": "the left end of a plank walkway: a few worn planks on a beam, the end finished with a post stump" },
+      { "name": "plank-mid", "desc": "a straight middle section of plank walkway on a beam, both ends cut straight so it repeats" },
+      { "name": "plank-cap-right", "w": 160, "desc": "the right end of a plank walkway, the end finished with a post stump" },
+      { "name": "plank-thin-cap-left", "w": 160, "h": 60, "desc": "the left end of a single plank on two rope hangers" },
+      { "name": "plank-thin-mid", "h": 60, "desc": "a straight middle section of a single plank on rope hangers, ends cut straight" },
+      { "name": "plank-thin-cap-right", "w": 160, "h": 60, "desc": "the right end of a single plank on rope hangers" }
+    ] },
+    "platform-plank-b": { "w": 320, "h": 200, "pieces": [
+      { "name": "plank-slope-up", "desc": "a plank ramp rising from low on the left to high on the right, with a rope rail" },
+      { "name": "plank-slope-down", "desc": "a plank ramp falling from high on the left to low on the right, with a rope rail" },
+      { "name": "plank-single", "w": 160, "h": 120, "desc": "one short plank platform on a bracket, flat on top" },
+      { "name": "plank-railed-mid", "desc": "a middle section of plank walkway with a wooden railing of turned posts along its back, ends cut straight" },
+      { "name": "plank-bridge-mid", "desc": "a middle section of rope bridge: planks on two thick ropes with rope hand lines above, ends cut straight" },
+      { "name": "plank-end-post", "w": 160, "desc": "the end of a plank walkway with a tall post and a lantern hook" }
+    ] },
+    "platform-stone-a": { "w": 320, "h": 120, "pieces": [
+      { "name": "stone-cap-left", "w": 160, "desc": "the left end of a fitted stone ledge, flat on top, its left end a rounded corner stone" },
+      { "name": "stone-mid", "desc": "a straight middle section of fitted stone ledge, mossy mortar lines, ends cut straight so it repeats" },
+      { "name": "stone-cap-right", "w": 160, "desc": "the right end of a fitted stone ledge, a rounded corner stone on the right" },
+      { "name": "stone-thin-cap-left", "w": 160, "h": 60, "desc": "the left end of a thin stone slab shelf" },
+      { "name": "stone-thin-mid", "h": 60, "desc": "a straight middle section of a thin stone slab shelf, ends cut straight" },
+      { "name": "stone-thin-cap-right", "w": 160, "h": 60, "desc": "the right end of a thin stone slab shelf" }
+    ] },
+    "platform-stone-b": { "w": 320, "h": 200, "pieces": [
+      { "name": "stone-slope-up", "desc": "a stone ramp rising from low on the left to high on the right" },
+      { "name": "stone-slope-down", "desc": "a stone ramp falling from high on the left to low on the right" },
+      { "name": "stone-single", "w": 160, "h": 120, "desc": "one short flat stone block to stand on" },
+      { "name": "stone-mossy-mid", "desc": "a middle section of stone ledge with moss hanging over its front edge, ends cut straight" },
+      { "name": "stone-step", "w": 160, "h": 120, "desc": "a single wide stone step, flat on top" },
+      { "name": "stone-ledge-end", "w": 160, "desc": "the broken end of a stone ledge, a few stones fallen away" }
+    ] },
+    "trims-a": { "w": 320, "h": 80, "pieces": [
+      { "name": "trim-moss-a", "desc": "a fringe of moss to lay along the top edge of a platform, tufts and a few tiny flowers, ends cut straight" },
+      { "name": "trim-moss-b", "desc": "a second fringe of moss along a top edge, with a few fallen leaves on it" },
+      { "name": "trim-grass", "desc": "a row of grass tufts and ferns to lay along the top edge of a platform" },
+      { "name": "trim-moss-hanging", "h": 160, "desc": "moss hanging down from an edge in long soft strands" },
+      { "name": "trim-leaves", "h": 160, "desc": "a fringe of leaves hanging down from an edge, two greens" },
+      { "name": "trim-roots", "h": 160, "desc": "thin roots hanging down from an edge, a few ending in a curl" }
+    ] },
+    "trims-b": { "w": 320, "h": 80, "pieces": [
+      { "name": "trim-plank-edge", "desc": "the front edge board of a plank walkway, worn and nailed, ends cut straight" },
+      { "name": "trim-stone-edge", "desc": "the front edge of a stone ledge, a row of fitted stones, ends cut straight" },
+      { "name": "trim-bark-edge", "desc": "the front edge of a branch, a strip of rough bark, ends cut straight" },
+      { "name": "trim-rope", "h": 60, "desc": "a rope strung level between two points, sagging a little, ends cut straight" },
+      { "name": "lantern-string-3", "h": 160, "desc": "a string of three round amber paper lanterns hanging from a sagging cord" },
+      { "name": "lantern-string-5", "h": 160, "desc": "a string of five round amber paper lanterns hanging from a sagging cord" }
+    ] },
+    "stairs-a": { "w": 400, "h": 300, "pieces": [
+      { "name": "stair-wood-right", "desc": "a flight of four wooden steps rising from the lower left to the upper right, on a plank frame" },
+      { "name": "stair-wood-left", "desc": "a flight of four wooden steps rising from the lower right to the upper left" },
+      { "name": "stair-stone-right", "desc": "a flight of four fitted stone steps rising from the lower left to the upper right" },
+      { "name": "stair-stone-left", "desc": "a flight of four fitted stone steps rising from the lower right to the upper left" },
+      { "name": "step-wood", "w": 200, "h": 100, "desc": "one wooden step on a small bracket" },
+      { "name": "step-stone", "w": 200, "h": 100, "desc": "one stone step" }
+    ] },
+    "stairs-b": { "w": 400, "h": 300, "pieces": [
+      { "name": "stair-spiral", "desc": "a short run of wooden steps curving round a trunk, seen from the side" },
+      { "name": "ladder-wood", "w": 160, "h": 400, "desc": "a tall wooden ladder, two rails and rungs" },
+      { "name": "ladder-rope", "w": 160, "h": 400, "desc": "a tall rope ladder with wooden rungs" },
+      { "name": "stair-rail-right", "desc": "a wooden handrail on turned posts rising from the lower left to the upper right" },
+      { "name": "stair-rail-left", "desc": "a wooden handrail on turned posts rising from the lower right to the upper left" },
+      { "name": "landing", "h": 160, "desc": "a small square plank landing on a bracket, flat on top" }
+    ] },
+    "doors-a": { "w": 240, "h": 320, "pieces": [
+      { "name": "door-round-closed", "desc": "a round wooden door with an iron ring, shut, set in a bark frame" },
+      { "name": "door-round-open", "desc": "a round doorway in bark, open onto warm lantern light inside" },
+      { "name": "door-plank", "desc": "a tall plank door with iron straps, shut" },
+      { "name": "doorway-stone", "desc": "an arched stone doorway, open onto darkness" },
+      { "name": "doorway-knothole", "desc": "a tall knothole in a trunk, open onto warm light, its rim of bark" },
+      { "name": "hatch-down", "w": 240, "h": 120, "desc": "a wooden trapdoor in a floor, propped open, steps leading down" }
+    ] },
+    "arches-a": { "w": 360, "h": 420, "pieces": [
+      { "name": "arch-portal-bare", "desc": "a tall portal arch of inner wood and brass, empty inside, with a slot along its inner edge for a glow" },
+      { "name": "arch-portal-boarded", "desc": "the same tall portal arch with its opening boarded over with planks, a glow between the boards" },
+      { "name": "arch-portal-open", "desc": "the same tall portal arch, open, its inner edge glowing cream" },
+      { "name": "arch-small", "w": 240, "h": 280, "desc": "a small round-topped arch of bark, open" },
+      { "name": "arch-top", "w": 360, "h": 160, "desc": "the top piece of a wide arch, inner wood with brass studs, to sit on two pillars" },
+      { "name": "arch-pillar", "w": 120, "h": 420, "desc": "a tall pillar of inner wood with a brass base and cap" }
+    ] },
+    "barriers-a": { "w": 300, "h": 240, "pieces": [
+      { "name": "gate-locked", "desc": "a low iron gate between two posts, shut with a padlock and chain, a glow behind it" },
+      { "name": "barrier-rope", "desc": "a rope strung between two short wooden posts, a small lantern hanging from it" },
+      { "name": "barrier-branch", "desc": "a fallen branch lying across the way, leafy, too big to step over" },
+      { "name": "barrier-boards", "w": 300, "h": 320, "desc": "an arched opening boarded over with planks, light showing between the boards" },
+      { "name": "post-lantern", "w": 120, "h": 300, "desc": "a dark iron post with a round amber paper lantern on a hook" },
+      { "name": "rope-coil", "w": 160, "h": 120, "desc": "a coil of rope lying on its side" }
+    ] },
+    "barriers-b": { "w": 300, "h": 240, "pieces": [
+      { "name": "fence-section", "desc": "a section of low wooden picket fence, ends cut straight" },
+      { "name": "fence-post", "w": 80, "h": 240, "desc": "one wooden fence post" },
+      { "name": "wall-low-stone", "desc": "a low wall of fitted stone with moss on top, ends cut straight" },
+      { "name": "hedge", "desc": "a thick low hedge of leaves, ends cut straight" },
+      { "name": "log-pile", "desc": "a pile of cut logs, their round ends showing" },
+      { "name": "boulder", "desc": "a large mossy boulder" }
+    ] },
+    "benches-a": { "w": 240, "h": 160, "pieces": [
+      { "name": "bench-wood", "desc": "a plain wooden bench on two bark legs" },
+      { "name": "bench-stone", "desc": "a plain stone bench" },
+      { "name": "seat-log", "desc": "a short log lying on its side as a seat" },
+      { "name": "stool", "w": 120, "h": 120, "desc": "a round wooden stool" },
+      { "name": "table-round", "desc": "a round wooden table on one bark leg" },
+      { "name": "table-long", "w": 320, "desc": "a long plank table on two trestles" }
+    ] },
+    "shelves-a": { "w": 240, "h": 300, "pieces": [
+      { "name": "shelf-goods", "desc": "a wooden shelf unit of three shelves holding jars, folded cloth and small boxes" },
+      { "name": "shelf-empty", "desc": "the same wooden shelf unit, empty" },
+      { "name": "crate-stack", "desc": "three wooden crates stacked, moss on the lids" },
+      { "name": "barrel", "w": 160, "h": 200, "desc": "a wooden barrel with iron hoops" },
+      { "name": "sack-pile", "w": 240, "h": 160, "desc": "three cloth sacks leaning together, tied at the neck" },
+      { "name": "shelf-hanging", "w": 240, "h": 160, "desc": "a short shelf hanging from two ropes, a few jars on it" }
+    ] },
+    "signs-a": { "w": 160, "h": 300, "pieces": [
+      { "name": "signpost", "desc": "a wooden signpost with one blank board nailed to it, no writing" },
+      { "name": "sign-hanging", "w": 240, "h": 200, "desc": "a blank wooden sign board hanging on two chains from a bracket, no writing" },
+      { "name": "sign-arrow", "w": 240, "h": 200, "desc": "a blank arrow-shaped wooden board on a post, pointing right, no writing" },
+      { "name": "notice-board", "w": 240, "h": 300, "desc": "a blank notice board on two posts with a little roof, no writing" },
+      { "name": "lamp-post", "h": 400, "desc": "a dark iron lamp post with a round amber paper lantern hanging from its curled top" },
+      { "name": "lamp-hook", "w": 160, "h": 160, "desc": "a dark iron wall hook with a round amber paper lantern hanging from it" }
+    ] },
+    "stalls-a": { "w": 480, "h": 400, "pieces": [
+      { "name": "stall-awning", "desc": "a small wooden market stall with a striped cloth awning and goods on its counter" },
+      { "name": "stall-counter", "w": 480, "h": 240, "desc": "a plain wooden counter with a cloth over it, nothing on top" },
+      { "name": "booth-ticket", "desc": "a small wooden ticket booth with a round window and a little roof" },
+      { "name": "turnstile", "w": 240, "h": 300, "desc": "a brass turnstile between two short posts" },
+      { "name": "stall-roof", "w": 480, "h": 200, "desc": "the roof of a stall on its own: a striped cloth awning on a wooden frame" },
+      { "name": "cart", "desc": "a wooden hand cart with two spoked wheels, a cloth over its load" }
+    ] }
+  }
+}

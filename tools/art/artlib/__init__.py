@@ -118,7 +118,7 @@ def owl_master_of(key: str) -> str:
     return "owl-master"
 
 #: Helper keys used by the generator for anchors and masters; never published as art.
-HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master", "owl-wing-right",
+HELPER_KEYS = tuple(f"kit-sheet-{n}" for n in json.load(open(Path(__file__).resolve().parent.parent / "config" / "kit.json", encoding="utf-8"))["sheets"]) + ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master", "owl-wing-right",
                "owl-flight-master", "owl-barn-flight-master", "owl-burrowing-flight-master", "owl-snowy-flight-master", "owl-screech-flight-master",
                "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door", "glass-seam",
                "arcade-bays-a", "arcade-bays-b1", "arcade-bays-c1", "arcade-bays-b2", "arcade-bays-c2", "arcade-bays-b3", "arcade-bays-c3",

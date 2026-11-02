@@ -35,8 +35,8 @@ export const KEY_RE = /^[a-z][a-z0-9-]*$/;
 export const SIZE_RE = /^(\d{2,5})x(\d{2,5})$/;
 export const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 /** `wing` paints a room wider: an edit of the room's own painting (its edge on a grey canvas, `@canvas:<key>`). */
-export const KINDS = ['room', 'overlay', 'piece', 'owl', 'owl-edit', 'anchor', 'wing'];
-const KEYED_KINDS = new Set(['overlay', 'piece', 'owl', 'owl-edit']);
+export const KINDS = ['room', 'overlay', 'piece', 'owl', 'owl-edit', 'anchor', 'wing', 'texture', 'sheet'];
+const KEYED_KINDS = new Set(['overlay', 'piece', 'owl', 'owl-edit', 'sheet']);
 
 // ---------------------------------------------------------------------------------------------
 // Small helpers
@@ -816,9 +816,29 @@ export function drawMock({ kind, realm, width, height, seed, key, keyColour, reg
     return r;
   }
 
+  if (kind === 'texture') {
+    // A tile of the realm's ground with seeded blotches that wrap, so the mock already tiles.
+    r.fill(c(pal.ground));
+    for (let i = 0; i < 40; i += 1) {
+      const x = rnd() * w; const y = rnd() * h; const rad = w * (0.03 + rnd() * 0.05);
+      for (const dx of [-w, 0, w]) for (const dy of [-h, 0, h]) r.fillEllipse(x + dx, y + dy, rad, rad * 0.7, c(i % 2 ? pal.groundLit : pal.prop));
+    }
+    return r;
+  }
+
   const key_ = c(keyColour);
   r.fill(key_);
   const spill = { colour: key_, amount: 0.03, width: 3 };
+
+  if (kind === 'sheet') {
+    // Six props in a grid of three across and two down, each inside its cell.
+    for (let i = 0; i < 6; i += 1) {
+      const cx = (i % 3 + 0.5) * (w / 3) + jitter * w; const cy = (Math.floor(i / 3) + 0.5) * (h / 2);
+      r.fillEllipse(cx, cy + h * 0.05, w * 0.09, h * 0.1, c(pal.prop), { shadeBelow: 0.66, spill });
+      r.fillEllipse(cx, cy - h * 0.08, w * 0.05, w * 0.05, c(pal.propLit), { shadeBelow: 0.8, spill });
+    }
+    return r;
+  }
 
   if (kind === 'piece') {
     const cx = w * (0.5 + jitter);
@@ -1164,7 +1184,7 @@ async function runTask(task, cfg, provider, ctx) {
   if (bodyBytes > cfg.warnBodyBytes) ctx.warn(`${job.key} seed ${job.seed}: request body is ${(bodyBytes / 1048576).toFixed(1)} MB`);
   const result = await provider.generate(req, { job, cfg, refs: refsOk, http: ctx.http });
   if (result.width !== job.width || result.height !== job.height) ctx.warn(`${job.key} seed ${job.seed}: provider returned ${result.width}x${result.height}, requested ${job.size}`);
-  if (result.format === 'jpg' && (job.kind === 'piece' || job.kind === 'owl' || job.kind === 'owl-edit' || job.kind === 'overlay')) {
+  if (result.format === 'jpg' && (job.kind === 'piece' || job.kind === 'owl' || job.kind === 'owl-edit' || job.kind === 'overlay' || job.kind === 'sheet')) {
     ctx.warn(`${job.key} seed ${job.seed}: provider returned JPEG; ringing around key-colour edges costs matte quality. Ask for PNG, e.g. ARK_EXTRA_JSON='{"output_format":"png"}'.`);
   }
   await writeFileAtomic(imagePath(cfg.workDir, job.key, hash16, result.ext), result.bytes);
