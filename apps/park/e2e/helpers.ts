@@ -2,6 +2,8 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 export interface ParkState {
   room: string;
+  /** The owl walks this room as a spectator, as its welcome said (OP-191). */
+  spectator: boolean;
   pos: { x: number; y: number };
   walking: boolean;
   look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };

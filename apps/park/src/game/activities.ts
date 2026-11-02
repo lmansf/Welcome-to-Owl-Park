@@ -2,16 +2,20 @@ import Phaser from 'phaser';
 import {
   BITE_WINDOW_MS,
   BOBBER_AT,
+  COPY_FEATHERS,
   COPY_NOTE_MS,
   COPY_ROOM,
   COPY_SPOT,
+  COPY_WIN_FEATHERS,
   FISHING_REACH,
   FISHING_ROOM,
   FISHING_SPOT,
   LANTERNS,
+  LANTERN_FEATHERS,
   LANTERN_REACH_X,
   LANTERN_ROOM,
   QUIZ_BANK,
+  QUIZ_FEATHERS,
   QUIZ_ROOM,
   QUIZ_ZONES,
   TASKS_BONUS,
@@ -33,6 +37,7 @@ import type { ActRefusal, ActivityLink, CopyTune } from '../collect/service';
 import { ANCHORS } from '../rooms';
 import type { CopyView, QuizView } from '../ui/activities';
 import type { Hud } from '../ui/hud';
+import { wouldHaveEarned } from '../ui/spectator';
 import { FishingLine } from './Fishing';
 import { ART } from './art';
 import { LanternGlows } from './Lanterns';
@@ -55,6 +60,10 @@ export interface ActivityHost {
   cheer(): void;
   /** The robot owl's sprite (the market's idol), for its eyes to sing from; null until it is placed. */
   robot(): Phaser.GameObjects.Image | null;
+  /** The owl walks the park as a spectator (OP-191): its games earn nothing. */
+  spectating(): boolean;
+  /** A spectator's game is over (OP-191): this line as a toast, then the Day Ticket's offer (at most once in a while). */
+  spectatorOffer(line: string): void;
 }
 
 /** Something to do where the owl stands (the room scene shows a button, and E runs the first). */
@@ -147,6 +156,8 @@ export class ActivityLayer {
   private readonly fishing: FishingLine | null;
   private readonly robot: RobotSong | null;
   private copy: CopyGame | null = null;
+  /** What a spectator's copy game would have earned so far with a Day Ticket (OP-191). */
+  private copyWould = 0;
   /** The note the robot is singing (index in the tune), so each one flashes once. */
   private sung = -1;
   /** A request to the room is under way: one at a time. */
@@ -267,6 +278,8 @@ export class ActivityLayer {
     const fish = getFish(res.fish);
     const pays = fish?.feathers ?? 0;
     const caught = fish?.id === 'boot' ? 'You fished out an old boot!' : `You caught ${fish?.name ?? 'a fish'}!`;
+    // A spectator's catch (OP-191) earned nothing: what it would have, and the Day Ticket's offer.
+    if (res.practice) return this.host.spectatorOffer(`${caught} ${wouldHaveEarned(pays)}`);
     const tail = res.feathers > 0 ? ` ${feathersText(res.feathers)}` : pays > 0 ? ' (No more feathers from games today.)' : '';
     this.host.hud.toast(`${caught}${tail}`, 3400, '#FFD36A');
   }
@@ -278,6 +291,7 @@ export class ActivityLayer {
     if (!res) return;
     if (!res.ok) return this.refused(res.reason, { far: 'Stand in front of the robot owl to play.' });
     this.copy = { notes: res.notes, tune: res.tune, listenUntil: res.listenUntil, deadline: res.deadline, level: res.level, got: 0 };
+    this.copyWould = 0;
     this.sung = -1;
   }
 
@@ -308,18 +322,24 @@ export class ActivityLayer {
         this.copy = { ...game, tune: res.tune, listenUntil: res.listenUntil, deadline: res.deadline, level: res.level, got: 0 };
         this.sung = -1;
         this.host.feathers(res.total);
+        if (res.practice) this.copyWould += COPY_FEATHERS;
         this.host.hud.toast(`Tune copied!${res.feathers > 0 ? ` ${feathersText(res.feathers)}` : ''} Now a longer one...`, 2600, '#FFD36A');
         return;
       case 'won':
         this.copy = null;
         this.host.feathers(res.total);
         this.host.cheer();
+        // A spectator's game (OP-191): every tune and the win would have paid.
+        if (res.practice) return this.host.spectatorOffer(`You copied every tune the robot owl knows! ${wouldHaveEarned(this.copyWould + COPY_FEATHERS + COPY_WIN_FEATHERS)}`);
         this.host.hud.toast(`You copied every tune the robot owl knows!${res.feathers > 0 ? ` ${feathersText(res.feathers)}` : ''}`, 4200, '#FFD36A');
         return;
       case 'wrong':
       case 'slow':
         this.copy = null;
-        this.host.hud.toast(`${res.step === 'wrong' ? `Not quite: the robot owl played ${variantName(res.expected)}.` : 'Too slow!'} You copied ${tunes(res.level)}.`, 3600);
+        const over = `${res.step === 'wrong' ? `Not quite: the robot owl played ${variantName(res.expected)}.` : 'Too slow!'} You copied ${tunes(res.level)}.`;
+        // A spectator's game is over (OP-191): what its tunes would have earned, and the Day Ticket's offer.
+        if (this.host.spectating()) return this.host.spectatorOffer(`${over} ${wouldHaveEarned(this.copyWould)}`);
+        this.host.hud.toast(over, 3600);
         return;
     }
   }
@@ -332,8 +352,10 @@ export class ActivityLayer {
     if (won) this.host.me().playEmote('flap');
   }
 
-  onPaid(what: 'beam' | 'quiz', feathers: number, total: number): void {
+  onPaid(what: 'beam' | 'quiz', feathers: number, total: number, practice = false): void {
     this.host.feathers(total);
+    // A spectator's share (OP-191) earned nothing: what it would have (the beam's least share), and the Day Ticket's offer.
+    if (practice) return this.host.spectatorOffer(what === 'beam' ? `You helped light the whole beam! ${wouldHaveEarned(LANTERN_FEATHERS)}` : `Right answer! ${wouldHaveEarned(QUIZ_FEATHERS)}`);
     const more = feathers > 0 ? ` ${feathersText(feathers)}` : ' (No more feathers from games today.)';
     this.host.hud.toast(what === 'beam' ? `You helped light the whole beam!${more}` : `Right answer!${more}`, 3600, '#FFD36A');
   }
