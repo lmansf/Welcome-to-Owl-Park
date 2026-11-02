@@ -56,6 +56,18 @@ export const NEST_WORDS = {
 // ---------- the street ----------
 
 export const STREET_ROOM = 'homes';
+/** The tree's street of nests (OP-158): level 5's boardwalk west of the trunk, with the same six nest doors. */
+export const TREE_STREET_ROOM = 'l5-street';
+
+/** Whether a room is a street of nests: today's park's (`homes`) or the tree's (`l5-street`). */
+export function isStreetRoom(roomId: string | undefined): boolean {
+  return roomId === STREET_ROOM || roomId === TREE_STREET_ROOM;
+}
+
+/** The street of nests on the map an owl walks: the tree's on map 2, today's park's otherwise. */
+export function streetOf(map: 1 | 2): string {
+  return map === 2 ? TREE_STREET_ROOM : STREET_ROOM;
+}
 /** Nest doors along the street, `nest-door-0` to `nest-door-5`, each with a `from-nest-<n>` spawn in front. */
 export const STREET_DOORS = 6;
 

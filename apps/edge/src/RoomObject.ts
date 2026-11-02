@@ -38,7 +38,7 @@ import {
   type SetupSettings,
   RIBBON_MAX_CHARS,
   STREET_DOORS,
-  STREET_ROOM,
+  isStreetRoom,
   distance,
   filterOwnedWear,
   getInteractable,
@@ -1137,7 +1137,7 @@ export class RoomObject extends DurableObject<Env> {
   /** The street's nest doors for this visitor: its own nest behind door 0, and up to five other owls' open nests. */
   private async streetDoors(ws: WebSocket, att: Attachment, room: Room, r: number): Promise<void> {
     const refuse = (reason: 'unknown' | 'busy' | 'offline') => this.send(ws, { t: 'refused', r, reason });
-    if (att.room !== STREET_ROOM || !att.cid) return refuse('unknown');
+    if (!isStreetRoom(att.room) || !att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     if (!room.takeUse(att.id)) return refuse('busy');
     const look = room.lookOf(att.id);

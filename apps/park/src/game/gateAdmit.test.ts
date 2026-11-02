@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, distanceToRect, pointInRect } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, TREE_STREET_ROOM, distanceToRect, pointInRect } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
 import { AT_GATE_PX, admitTarget, type AdmitAsk } from './gateAdmit';
 import { takesDoorway } from './doors';
@@ -42,5 +42,21 @@ describe('in through the turnstiles once the ticket comes (OP-190)', () => {
     expect(admitTarget(ask({ gate: null }))).toBeNull();
     for (const status of ['held', 'used', 'expired', 'revoked'] as const) expect(admitTarget(ask({ status })), status).toBeNull();
     expect(admitTarget(ask({ busy: true }))).toBeNull();
+  });
+});
+
+describe('in through the tree\'s front gate once the ticket comes (OP-128)', () => {
+  const street = ROOMS[TREE_STREET_ROOM]!;
+  const treeGate = street.doors.find((d) => d.id === 'gate')!.rect;
+  // Turned back, the owl walks 140 back along the floor, the way it came (RoomScene's throughGate).
+  const back = { x: treeGate.x - 140, y: street.spawns['default']!.y };
+
+  it('walks an owl the gate turned back, or one back from checkout, into the gate along the floor', () => {
+    for (const pos of [back, street.spawns[LEFT_PARK_SPAWN]!]) {
+      expect(distanceToRect(pos, treeGate)).toBeLessThanOrEqual(AT_GATE_PX);
+      const to = admitTarget({ room: TREE_STREET_ROOM, pos, gate: treeGate, status: 'unused', busy: false })!;
+      expect(pointInRect(to, treeGate)).toBe(true);
+      expect(takesDoorway(treeGate, to, false, false)).toBe(true);
+    }
   });
 });

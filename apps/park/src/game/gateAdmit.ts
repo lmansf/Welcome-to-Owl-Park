@@ -6,7 +6,7 @@
  * off is only told that the ticket works at the turnstiles; a ticket held for the store's check takes
  * no owl in until it works.
  */
-import { LOBBY_ROOM, distanceToRect, type Rect, type Vec2 } from '@owl-park/shared';
+import { LOBBY_ROOM, TREE_STREET_ROOM, distanceToRect, type Rect, type Vec2 } from '@owl-park/shared';
 import type { WalletEntry } from '../net';
 
 /** How far from the turnstiles an owl still counts as at them (room pixels): they turn it back 70 below. */
@@ -29,11 +29,12 @@ export interface AdmitAsk {
 
 /**
  * Where the owl walks to go through the turnstiles with the ticket that came: into the turnstile in
- * its own lane, at their middle. Null when it does not go in by itself: not in the lobby, too far from
+ * its own lane, at their middle. Null when it does not go in by itself: not in the lobby or before the
+ * tree's front gate, too far from
  * the turnstiles, the ticket waits on the store's check (or does not work), or the room is busy.
  */
 export function admitTarget(a: AdmitAsk): Vec2 | null {
-  if (a.busy || a.room !== LOBBY_ROOM || !a.gate) return null;
+  if (a.busy || (a.room !== LOBBY_ROOM && a.room !== TREE_STREET_ROOM) || !a.gate) return null;
   if (a.status !== 'unused' && a.status !== 'active') return null;
   if (distanceToRect(a.pos, a.gate) > AT_GATE_PX) return null;
   const g = a.gate;

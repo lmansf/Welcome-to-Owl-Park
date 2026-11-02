@@ -14,9 +14,12 @@ import { LOBBY_ROOM, insidePark } from './wayout';
 /** Through the turnstiles an owl lands in the hub at its default spawn: the one way the gate is walked through. */
 export const GATE_ARRIVAL = { room: 'hub', spawn: 'default' } as const;
 
-/** Whether joining a room at this spawn is the owl walking through the front gate. */
+/** Through the tree's front gate (OP-158) an owl lands in the canopy under its entrance arch, at its default spawn. */
+export const TREE_GATE_ARRIVAL = { room: 'l5', spawn: 'default' } as const;
+
+/** Whether joining a room at this spawn is the owl walking through a front gate: today's park's or the tree's. */
 export function throughGate(room: string, spawn: string | undefined): boolean {
-  return room === GATE_ARRIVAL.room && spawn === GATE_ARRIVAL.spawn;
+  return [GATE_ARRIVAL, TREE_GATE_ARRIVAL].some((g) => room === g.room && spawn === g.spawn);
 }
 
 /**

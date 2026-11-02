@@ -66,10 +66,10 @@ describe('the entries setting (OP-156)', () => {
     expect((await pass(env, first.collector)).map).toBe(2);
   });
 
-  it('sends no guest into the tree while the park takes tickets: its pass would not get it past the gate there', async () => {
+  it('sends a guest into the tree while the park takes tickets: it arrives on the street before the tree\'s front gate, where a Day Ticket is sold', async () => {
     const r = await pass(park({ ...REALMS_DEFAULTS, tree: 100 }, 'ticket'));
     expect(r.gate).toBe('ticket');
-    expect(r.map).toBeUndefined();
+    expect(r.map).toBe(2);
   });
 
   it('sends about its share of owls, each the same way every visit', async () => {

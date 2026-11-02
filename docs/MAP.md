@@ -1,6 +1,6 @@
 # The tree (map 2)
 
-- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 5 BUILT as rooms (`l1` to `l4`, and level 5 as `l5-street` and `l5`; still to wire: level 5's nest doors and front gate sale, levels 1 to 3's idols, guardians and games); level 0 PLANNED (OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
+- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 5 BUILT as rooms (`l1` to `l4`, and level 5 as `l5-street` and `l5`, the street's nest doors and the front gate's ticket sale wired; still to wire: levels 1 to 3's idols, guardians and games); level 0 PLANNED (OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
 - Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting, the turn-your-phone card and the spot placer, OP-156); the Ticket Board as read 2026-11-01
 - Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/treeSpots.ts (`TREE_SPOTS`), packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
 - Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173
@@ -267,9 +267,12 @@ the market's common square (`e1`, +1) and its roof run (`e2`, +2). Each screen h
   `tree`). At 0, as deployed, the tree is dark and only a keeper's token reaches it. Above 0 its gated
   rooms are open to every owl the front gate lets in. Play still lands every owl in its own nest; for
   an owl the tree takes (about the share, each owl the same way every visit), the nest's door leads to
-  the tree's arrival (`TREE_ARRIVAL`: level 1 until level 5 is built). A guest pass while the park
-  takes tickets always starts in today's park. Back to 0, every owl in the tree is sent to the hub, and
-  an owl of the tree takes today's park's ways again. The same setting answers to the admin API as
+  the tree's arrival (`TREE_ARRIVAL`: level 5's street `l5-street`, in front of the owl's own nest
+  door). The street is outside the tree's front gate, a free room as the nests' street is, so a guest
+  pass starts there too while the park takes tickets and buys its Day Ticket at that gate (OP-128; it
+  started in today's park while the arrival was inside). Back to 0, every owl in the tree is sent to
+  the hub (one on the tree's street to the nests' street, outside the park as it was), and an owl of
+  the tree takes today's park's ways again. The same setting answers to the admin API as
   `{"realms": {"tree": n}}`.
 - **The turn-your-phone card [BUILT: OP-156].** In a tree room, a phone held upright (a touch screen
   under 600 CSS pixels across) sees a card over the game asking to turn it sideways, and nothing under
@@ -304,7 +307,12 @@ The recipe for OP-158 to OP-161 and OP-163, as level 1 was built:
   Ticket is sold where the tree's park begins: the nests street `l5-street` (-2 to 0, outside the
   gate, the trunk's crown included) and the canopy `l5` (+1 to +3, inside). The gate's turnstiles are
   the street's east end, and an owl comes through under the entrance arch. A level's second room is
-  named `l<n>-<word>` (`treeLevelOf`). The trunk's painted doorway on screen 0 leads nowhere yet. The street's far west end, on bough 6's highest perch, has a closed doorway
+  named `l<n>-<word>` (`treeLevelOf`). The street is the tree's nests street (`isStreetRoom`): its six
+  nest doors (`nest-door-0` to `-5`, the owl's own behind door 0, east to west) work as the nests'
+  street's do, and the seventh painted door, westmost, is closed ('Hatching Soon', `spare-nest`). The
+  front gate does what the lobby's turnstiles do (OP-180's sale, OP-190's walk in, OP-198's ask), and
+  an owl it turns back steps back west along the floor. Leave the park, and Play back from checkout,
+  put an owl of the tree before this gate. The trunk's painted doorway on screen 0 leads nowhere yet. The street's far west end, on bough 6's highest perch, has a closed doorway
   (`closed-beyond`, 'Hatching Soon') for places beyond Owl Park; no destination yet (the owner's
   steer, 2026-11-02). QUESTION FOR LATER: what lies beyond Owl Park, and how it connects.
 - OPEN QUESTION: the grid puts a ticket booth on level 5 (`booth-canopy`) and its window in the lobby
