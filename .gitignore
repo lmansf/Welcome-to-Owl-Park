@@ -16,6 +16,7 @@ e2e-screenshots/
 worker-configuration.d.ts
 # The load test's throwaway Worker config (tools/load/throwaway-config.mjs)
 apps/edge/wrangler.load.jsonc
+apps/edge/wrangler.load.secrets.json
 # Art pipeline: raw candidates and per-machine files (keys, private word list)
 work/
 tools/art/.local/
