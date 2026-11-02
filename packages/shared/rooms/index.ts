@@ -1040,6 +1040,8 @@ export const ROOMS: Record<string, RoomDef> = {
       west: { x: 720, y: TREE_GROUND },
       east: { x: 3 * ROOM_W + 1100, y: TREE_GROUND },
       market: { x: 3 * ROOM_W + 1230, y: TREE_GROUND },
+      // Down from level 2, at the lobby stair's foot.
+      'from-l2': { x: ROOM_W + 1180, y: TREE_GROUND },
     },
     doors: [
       // The closed gate at the west end: a blockade on the stone apron in front of it, its phrase on
@@ -1049,6 +1051,9 @@ export const ROOMS: Record<string, RoomDef> = {
       // The archway at the foot of the lantern tower, at the roof run's east end: into the market's
       // own screens (OP-155's grid), whose way out brings a tree owl back here. Taken on the
       // ground only, so an owl on the high roof or the balcony over it walks on past.
+      // Up to level 2, from the balcony at the top of the lobby's spiral stair (through the chamber's
+      // ceiling).
+      { id: 'stair-l2-l1', rect: { x: ROOM_W + 1010, y: 750, w: 90, h: 40 }, to: { room: 'l2', spawn: 'from-l1' }, top: 286, markAt: { x: ROOM_W + 1055, y: 440 } },
       { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0, markAt: { x: 3 * ROOM_W + 1365, y: 462 } },
     ],
   },
@@ -1129,7 +1134,8 @@ export const ROOMS: Record<string, RoomDef> = {
   // street's doorway stands and a stair of perches climbs the branch toward its tip. Painted in the six
   // layers as level 4 (only the landing has front props; the common area stays open, with no middle
   // distance). The stair up is taken from its top, so an owl climbs the treads to go up; down from
-  // level 4 it comes out at the stair's foot. The stairwell down to level 2 is added with that level.
+  // level 4 it comes out at the stair's foot. The stairwell down to level 2 is east of the trunk, taken from the
+  // boardwalk.
   l3: {
     id: 'l3',
     map: 2,
@@ -1190,13 +1196,82 @@ export const ROOMS: Record<string, RoomDef> = {
       east: { x: 2 * ROOM_W + 820, y: TREE_GROUND },
       // Back out of the stained-glass street, in front of its doorway.
       glass: { x: 2 * ROOM_W + 690, y: TREE_GROUND },
+      // Up from level 2, in front of the railed stairwell east of the trunk.
+      'from-l2': { x: 1180, y: TREE_GROUND },
     },
     doors: [
       // Up to level 4, from the landing at the stair's top.
       { id: 'stair-l4-l3', rect: { x: 990, y: 750, w: 80, h: 40 }, to: { room: 'l4', spawn: 'from-l3' }, top: 325, markAt: { x: 1030, y: 390 } },
+      // Down to level 2: the railed stairwell east of the trunk, taken from the boardwalk (the landing over
+      // it walks on past).
+      { id: 'stair-l3-l2', rect: { x: 1040, y: 750, w: 100, h: 40 }, to: { room: 'l2', spawn: 'from-l3' }, top: 0, markAt: { x: 1090, y: 610 } },
       // The stained-glass doorway on the reach: into the realm's street (today's stained-glass realm),
       // whose way out brings a tree owl back here.
       { id: 'to-glass', rect: { x: 2 * ROOM_W + 480, y: 750, w: 120, h: 40 }, to: { room: 'glass', spawn: 'default' }, top: 0, markAt: { x: 2 * ROOM_W + 538, y: 430 } },
+    ],
+  },
+  // Level 2, the high branch west (OP-161): three screens, the trunk's landing (0) with its stairs up to
+  // level 3 and down to level 1, the grove's common area (-1), left open for its idol, guardian and game,
+  // and its reach (-2), the treetop diner (OP-165) with the tip's perch at the branch's end. Painted in
+  // the six layers as levels 3 and 4 (only the landing has front props). The stair up is taken from the
+  // landing at its top; the stair down from the floor in front of the steps behind the trunk.
+  l2: {
+    id: 'l2',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: 3 * ROOM_W, h: ROOM_H },
+    background: 'tree-l2-0-back',
+    backgrounds: [
+      // The skies, farthest from the trunk first: each lies over the one beyond it and fades into it.
+      { key: 'tree-l2-w2-bg', x: 0, y: 0, rate: 0.5 },
+      { key: 'tree-l2-w1-bg', x: ROOM_W, y: 0, rate: 0.5, fade: { left: TREE_SKY_FADE } },
+      { key: 'tree-l2-0-bg', x: 2 * ROOM_W, y: 0, rate: 0.5, fade: { left: TREE_SKY_FADE } },
+      ...['w2', 'w1', '0'].map((s, i) => ({ key: `tree-l2-${s}-mid`, x: i * ROOM_W, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } })),
+      ...['w2', 'w1', '0'].map((s, i) => ({ key: `tree-l2-${s}-back`, x: i * ROOM_W, y: 0 })),
+      ...['w2', 'w1', '0'].map((s, i) => ({ key: `tree-l2-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
+    ],
+    foregrounds: [
+      { key: 'tree-l2-0-front', x: 2 * ROOM_W, y: 0, plain: true },
+      ...['w2', 'w1', '0'].map((s, i) => ({ key: `tree-l2-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    ],
+    mood: 'hub',
+    // The branch's top out to its tip in the west, the diner's deck, the common area and the landing, to
+    // the roots east of the trunk.
+    walkable: [
+      [
+        { x: 160, y: TREE_GROUND - TREE_STRIP },
+        { x: 3 * ROOM_W - 40, y: TREE_GROUND - TREE_STRIP },
+        { x: 3 * ROOM_W - 40, y: TREE_GROUND + TREE_STRIP },
+        { x: 160, y: TREE_GROUND + TREE_STRIP },
+      ],
+    ],
+    perches: [
+      // The reach: the round perch at the branch's tip, west of the diner's deck (the capstone's place).
+      treeLedge('tip', 82, 168, 64),
+      // The landing: the stair's eight treads up the trunk, each a hop, to the landing at its top.
+      treeLedge('stair-1', 2 * ROOM_W + 530, 2 * ROOM_W + 650, 58),
+      treeLedge('stair-2', 2 * ROOM_W + 600, 2 * ROOM_W + 700, 100),
+      treeLedge('stair-3', 2 * ROOM_W + 645, 2 * ROOM_W + 740, 143),
+      treeLedge('stair-4', 2 * ROOM_W + 688, 2 * ROOM_W + 780, 178),
+      treeLedge('stair-5', 2 * ROOM_W + 728, 2 * ROOM_W + 810, 208),
+      treeLedge('stair-6', 2 * ROOM_W + 765, 2 * ROOM_W + 845, 238),
+      treeLedge('stair-7', 2 * ROOM_W + 800, 2 * ROOM_W + 880, 266),
+      treeLedge('stair-8', 2 * ROOM_W + 835, 2 * ROOM_W + 905, 305),
+      treeLedge('stair-top', 2 * ROOM_W + 870, 2 * ROOM_W + 1075, 347),
+    ],
+    spawns: {
+      default: { x: 2 * ROOM_W + 300, y: TREE_GROUND },
+      west: { x: 460, y: TREE_GROUND },
+      // Down from level 3, at the stair's foot; up from level 1, by the steps down behind the trunk.
+      'from-l3': { x: 2 * ROOM_W + 420, y: TREE_GROUND },
+      'from-l1': { x: 2 * ROOM_W + 1120, y: TREE_GROUND },
+    },
+    doors: [
+      // Up to level 3, from the landing at the stair's top.
+      { id: 'stair-l3-l2', rect: { x: 2 * ROOM_W + 990, y: 750, w: 80, h: 40 }, to: { room: 'l3', spawn: 'from-l2' }, top: 347, markAt: { x: 2 * ROOM_W + 1030, y: 412 } },
+      // Down to level 1: the steps behind the trunk's east side, taken from the boardwalk.
+      { id: 'stair-l2-l1', rect: { x: 2 * ROOM_W + 1140, y: 750, w: 100, h: 40 }, to: { room: 'l1', spawn: 'from-l2' }, top: 0, markAt: { x: 2 * ROOM_W + 1190, y: 600 } },
     ],
   },
 };
