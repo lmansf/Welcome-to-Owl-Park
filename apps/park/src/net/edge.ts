@@ -248,8 +248,8 @@ export class EdgeTransport implements ParkTransport {
       const body = res.ok ? ((await res.json()) as { url?: unknown }) : {};
       return typeof body.url === 'string' && body.url.startsWith('https://') ? body.url : null;
     },
-    checkout: async () => {
-      const res = await this.api('/api/tickets/checkout', { method: 'POST', body: '{}' });
+    checkout: async (kind = 'day') => {
+      const res = await this.api('/api/tickets/checkout', { method: 'POST', body: kind === 'annual' ? JSON.stringify({ kind }) : '{}' });
       const body = res.ok ? ((await res.json()) as { url?: unknown }) : {};
       return typeof body.url === 'string' && body.url.startsWith('https://') ? body.url : null;
     },

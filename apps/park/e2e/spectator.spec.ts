@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { flyThrough, playAt, untilOver } from './arcadePlay';
-import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, doAction, expectStoreCard, openPark, state, storeContinue, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, E2E_STORE, GATE_ASK, GATE_ASK_LINE, STORE_CARD, doAction, enterAsGuest, expectStoreCard, openPark, state, storeContinue, walkToDoor } from './helpers';
 
 /**
  * Spectators (OP-191), the page's half, through the room server with SPECTATORS on (as every browser
@@ -20,7 +20,6 @@ import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, doAction, expectStoreCard, openPa
 const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
 /** The words, drafts for the owner (ui/spectator.ts). */
-const TURNSTILE = 'No ticket? Come in, look around and play. A Day Ticket lets you keep what you win.';
 const LOCKED = 'Quests and the shops are for ticket holders. You can get a Day Ticket right here.';
 const IDOL = 'Ticket holders vote here, one vote a day.';
 const KEEP = 'A Day Ticket lets you keep what you win. You can get a Day Ticket right here.';
@@ -114,12 +113,14 @@ test.describe('spectators (OP-191)', () => {
     expect((await state(a)).spectator).toBe(false);
     await expect(a.locator('[data-spectator].show')).toHaveCount(0);
     await walkToDoor(a, 'gate');
-    // One line and the Day Ticket on a button; no card before the store comes up by itself.
-    const offer = a.locator('[data-spectator-offer]');
-    await expect(offer).toContainText(TURNSTILE, { timeout: 15_000 });
-    await expect(offer.locator('[data-spectator-get]')).toHaveText('Get a Day Ticket');
+    // The turnstiles ask first (OP-198): no card before the store comes up by itself, and the owl waits.
+    await expect(a.locator(GATE_ASK)).toContainText(GATE_ASK_LINE, { timeout: 15_000 });
     await expect(a.locator(STORE_CARD)).toBeHidden();
     await expect(a.locator('[data-ticket-card].up')).toHaveCount(0);
+    expect((await state(a)).room).toBe('lobby');
+    await a.screenshot({ path: 'e2e-screenshots/gate-ask.png' });
+    await enterAsGuest(a);
+    await expect(a.getByText('Welcome in! You can get a Day Ticket any time from the button up top.')).toBeVisible({ timeout: 15_000 });
     await spectating(a, 'hub');
     await a.screenshot({ path: 'e2e-screenshots/spectator-hub.png' });
 
@@ -208,6 +209,7 @@ test.describe('spectators (OP-191)', () => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const a = await arrive(browser);
     await walkToDoor(a, 'gate');
+    await enterAsGuest(a);
     await spectating(a, 'hub');
     // A mark on this page: a reload would lose it.
     await a.evaluate(() => void ((window as unknown as { stillHere: boolean }).stillHere = true));
@@ -228,11 +230,8 @@ test.describe('spectators (OP-191)', () => {
     expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['day', 'active']]);
     await a.screenshot({ path: 'e2e-screenshots/spectator-admitted.png' });
 
-    // The half-price pass offer follows the ticket as ever (OP-180); then the quests are open.
-    const offer = a.locator('[data-free-pass="day"]');
-    await expect(offer).toBeVisible({ timeout: 20_000 });
-    await offer.getByRole('button', { name: 'No thanks' }).click();
-    await expect(a.locator('[data-free-pass]')).toBeHidden();
+    // No half-price pass after the ticket (OP-198: the Annual Pass was offered on the card); the quests are open.
+    await expect(a.locator('[data-free-pass]')).toHaveCount(0);
     await a.keyboard.press('KeyJ');
     const menu = a.getByRole('dialog', { name: 'Menu' });
     await expect(menu).toBeVisible();

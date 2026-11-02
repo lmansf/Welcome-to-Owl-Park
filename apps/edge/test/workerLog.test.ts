@@ -284,6 +284,42 @@ describe('the Worker’s log (OP-134)', () => {
     expect(JSON.stringify(cap.lines)).not.toContain(token);
   });
 
+  it('gives the annual pass’s checkout link with the same kind of token when the card asks for the pass (OP-198)', async () => {
+    const both = async (_url: string, init: RequestInit) => {
+      const { query } = JSON.parse(String(init.body)) as { query: string };
+      if (!query.includes('OwlParkCatalogue')) return Response.json({ data: null });
+      const nodes = [
+        { kind: { value: 'day' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/100' }] } },
+        { kind: { value: 'annual' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/200' }] } },
+      ];
+      return Response.json({ data: { products: { nodes } } });
+    };
+    vi.stubGlobal('fetch', both);
+    const e = park.env({ SHOPIFY_SHOP: SHOP, SHOPIFY_ADMIN_TOKEN: 'shpat_test', SHOPIFY_WEBHOOK_SECRET: HOOKS });
+    const pass = await mintPass(KEY, { id: 'v_buyer00009', exp: nowS() + 600, adm: false, cid: 'c_buyer00009' });
+    const auth = { Authorization: `Bearer ${pass}` };
+    const annual = await call(e, '/api/tickets/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ kind: 'annual' }) });
+    expect(annual.status).toBe(200);
+    const link = new URL(((await annual.json()) as { url: string }).url);
+    expect(link.origin + link.pathname).toBe(`https://${SHOP}/cart/200:1`);
+    expect(link.searchParams.get('attributes[owl_checkout]')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    // No discount code rides on it: the pass is at its own price here.
+    expect(link.searchParams.has('discount')).toBe(false);
+    // Anything else is the Day Ticket, as before.
+    const day = await call(e, '/api/tickets/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ kind: 'nope' }) });
+    expect(new URL(((await day.json()) as { url: string }).url).pathname).toBe('/cart/100:1');
+  });
+
+  it('answers the pass’s checkout as not set up when no annual pass is on sale (OP-198)', async () => {
+    const store = new FakeStore();
+    vi.stubGlobal('fetch', store.fetch);
+    const e = park.env({ SHOPIFY_SHOP: SHOP, SHOPIFY_ADMIN_TOKEN: 'shpat_test', SHOPIFY_WEBHOOK_SECRET: HOOKS });
+    const pass = await mintPass(KEY, { id: 'v_buyer00010', exp: nowS() + 600, adm: false, cid: 'c_buyer00010' });
+    const r = await call(e, '/api/tickets/checkout', { method: 'POST', headers: { Authorization: `Bearer ${pass}` }, body: JSON.stringify({ kind: 'annual' }) });
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'not-set-up' });
+  });
+
   it('answers the gate’s checkout as not set up without a store or a Day Ticket on sale (OP-175)', async () => {
     const pass = await mintPass(KEY, { id: 'v_buyer00002', exp: nowS() + 600, adm: false, cid: 'c_buyer00002' });
     const r = await call(park.env(), '/api/tickets/checkout', { method: 'POST', headers: { Authorization: `Bearer ${pass}` }, body: '{}' });

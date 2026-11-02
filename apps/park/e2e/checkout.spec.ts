@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, enterAsGuest, expectStoreCard, state, storeContinue, walkToDoor } from './helpers';
 
 /**
  * Buying a ticket without leaving the park (OP-175), the turnstiles' sale (OP-180), through the room
@@ -12,8 +12,8 @@ import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, expectStoreCard, state, storeCont
  * one-time token in the cart; the store's own checkout page is stood in for here (the test never
  * reaches a real store), the paid order comes in as a signed webhook, and the ticket lands on the owl
  * with no email opened. The turnstiles then scan it where the owl stands and the owl is a full visitor
- * in place (OP-191), and the half-price annual pass is offered right after it, all season (Logan,
- * Nov 1); No thanks puts it away (opening.spec.ts follows Get the pass). The store sends the buyer back
+ * in place (OP-191). The card offers the Annual Pass beside the Day Ticket (OP-198), so the half-price
+ * pass is no longer offered after the Day Ticket comes. The store sends the buyer back
  * to the park's return address (`/?checkout=done`, ui/checkoutReturn.ts), which closes checkout's
  * window or says where the ticket is when a game page is open, and otherwise becomes the park, where
  * Play takes the owl through the turnstiles with the ticket (OP-190).
@@ -67,6 +67,7 @@ async function arrive(browser: Browser, device: BrowserContextOptions, blockPopu
  */
 async function buyInside(page: Page): Promise<void> {
   await walkToDoor(page, 'gate');
+  await enterAsGuest(page);
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
   await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(true);
   await page.locator('[data-spectator-get="badge"]').click();
@@ -149,11 +150,9 @@ test.describe('buying a ticket without leaving the park (OP-175)', () => {
       await admittedInPlace(a);
       await expect(a.locator(STORE_CARD)).toBeHidden();
       expect((await a.evaluate(() => window.owlPark.wallet())).map((t) => [t.kind, t.status])).toEqual([['day', 'active']]);
-      // The annual pass offer follows, any night of the season; No thanks puts it away.
-      const offer = a.locator('[data-free-pass="day"]');
-      await expect(offer).toBeVisible({ timeout: 20_000 });
-      await offer.getByRole('button', { name: 'No thanks' }).click();
-      await expect(a.locator('[data-free-pass]')).toBeHidden();
+      // The Annual Pass was offered beside the Day Ticket before paying (OP-198): no second pitch after.
+      await a.waitForTimeout(3500);
+      await expect(a.locator('[data-free-pass]')).toHaveCount(0);
       await a.screenshot({ path: `e2e-screenshots/checkout-added-${shot}.png` });
       if (!popup.isClosed()) await popup.close();
       await a.context().close();

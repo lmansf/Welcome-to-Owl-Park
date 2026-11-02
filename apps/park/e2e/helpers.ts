@@ -157,7 +157,8 @@ export async function expectStoreCard(page: Page): Promise<void> {
   const card = page.locator(STORE_CARD);
   await expect(card).toBeVisible();
   await expect(card).toContainText(STORE_LINE);
-  await expect(card.locator('[data-store="continue"]')).toHaveText('Continue');
+  // A Day Ticket's card names Continue for the Day Ticket, with the Annual Pass beside it (OP-198).
+  await expect(card.locator('[data-store="continue"]')).toHaveText(/^(Continue|Day Ticket)$/);
   await expect(card.locator('[data-store="not-now"]')).toHaveText('Not now');
 }
 
@@ -166,6 +167,21 @@ export async function storeContinue(page: Page): Promise<void> {
   await expectStoreCard(page);
   await page.locator(`${STORE_CARD} [data-store="continue"]`).click();
   await expect(page.locator(STORE_CARD)).toBeHidden();
+}
+
+/** The turnstiles' question (OP-198): buy a Day Ticket or enter as a guest. */
+export const GATE_ASK = '[data-gate-ask=""]';
+/** What the question says above its buttons. */
+export const GATE_ASK_LINE = 'No ticket yet? A Day Ticket lets you keep what you win.';
+
+/** The turnstiles ask an owl without a ticket (OP-198); Enter as a guest walks it on in as a spectator. */
+export async function enterAsGuest(page: Page): Promise<void> {
+  const ask = page.locator(GATE_ASK);
+  await expect(ask).toBeVisible({ timeout: 15_000 });
+  await expect(ask).toContainText(GATE_ASK_LINE);
+  await expect(ask.locator('[data-gate-ask="buy"]')).toHaveText('Buy a Day Ticket');
+  await ask.locator('[data-gate-ask="guest"]').click();
+  await expect(ask).toBeHidden();
 }
 
 export async function walkToDoor(page: Page, doorId: string): Promise<void> {

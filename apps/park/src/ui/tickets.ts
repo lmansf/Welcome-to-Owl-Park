@@ -33,6 +33,14 @@ export const PASS_WORDS = {
   close: 'No thanks',
 } as const;
 
+/**
+ * Whether the half-price pass (PASS_WORDS) is offered after a Day Ticket bought in the park has come
+ * (OP-180). Off since OP-198: the card before the store offers the Annual Pass beside the Day Ticket,
+ * so a buyer hears about the pass once, before paying, and not again after. Opening night's offer
+ * after the turnstiles (C42) is not this one and stays.
+ */
+export const PASS_AFTER_DAY_TICKET = false;
+
 /** Kinds with a night of their own rather than a length from the first scan. */
 const windowed = (kind: WalletEntry['kind']) => kind === 'event' || kind === 'opening-night';
 
