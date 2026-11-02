@@ -642,6 +642,36 @@ def clear_polygon(img: Image.Image, poly: str, scale: float = 1) -> tuple[Image.
     return rgba, int((out < a).sum())
 
 
+def fade_edges(img: Image.Image, spec: str, scale: float = 1) -> tuple[Image.Image, int]:
+    """``img`` (RGBA) with its alpha ramped (smoothstep) from clear at a side edge to full over ``spec``'s
+    LEFT,RIGHT pixels of the 1x final (scaled for a larger one); and how many pixels lost alpha. For a
+    middle-distance tile whose paint reaches the side edge the room fades it over (OP-163): the room's
+    linear fade leaves a cut edge faintly visible for most of its width, a ramp in the layer itself does not.
+
+    TODO-DOCS (OP-163): docs/ART-PIPELINE.md's overlay section: `--edge-fade LEFT,RIGHT` (final pixels,
+    recorded in the post record's tools)."""
+    try:
+        left, right = (int(v) for v in spec.split(","))
+    except ValueError:
+        raise ArtError(f"--edge-fade takes LEFT,RIGHT as two integers, not {spec!r}") from None
+    if left < 0 or right < 0 or left + right > img.width * scale:
+        raise ArtError(f"--edge-fade {spec!r} does not fit a final {img.width}px wide")
+    rgba = img.convert("RGBA")
+    x = np.arange(rgba.width, dtype=np.float32) + 0.5
+    ramp = np.ones_like(x)
+    if left:
+        t = np.clip(x / (left * scale), 0, 1)
+        ramp *= t * t * (3 - 2 * t)
+    if right:
+        t = np.clip((rgba.width - x) / (right * scale), 0, 1)
+        ramp *= t * t * (3 - 2 * t)
+    a = np.asarray(rgba.getchannel("A")).astype(np.float32)
+    out = np.round(a * ramp[None, :]).astype(np.uint8)
+    rgba = rgba.copy()
+    rgba.putalpha(Image.fromarray(out, "L"))
+    return rgba, int((out < a).sum())
+
+
 def key_screen(img: Image.Image, w: int, h: int, crop: str, shift_y: int, params: ChromaParams) -> tuple[Image.Image, dict]:
     """The screen of ``img`` an overlay finishes (its w:h window at ``crop``), keyed on its own backdrop.
 
@@ -682,6 +712,10 @@ def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
             im, n = clear_polygon(im, poly, scale)
             if scale == 1:
                 tools.append(f"overlay: clear-poly {poly} {n} px")
+        if a.edge_fade:
+            im, n = fade_edges(im, a.edge_fade, scale)
+            if scale == 1:
+                tools.append(f"overlay: edge-fade {a.edge_fade} {n} px")
         return im
 
     one = cleared(apply_grade(resize_exact(rgba, W, H, a.crop, a.shift_y), pal, strength), 1)
@@ -1669,6 +1703,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze (keyed glow) transparent")
     sp.add_argument("--clear-signs", action="store_true", help="make the overlay transparent over closed signs' lettered boards")
     sp.add_argument("--clear-poly", action="append", default=None, help="x,y,x,y,...: a polygon in room pixels of the final where the overlay is made transparent (a prop the frame cut, which would float mid-view); repeatable")
+    sp.add_argument("--edge-fade", default=None, help="LEFT,RIGHT: final pixels over which the layer's alpha ramps from clear at its side edges (a middle-distance tile whose paint reaches the edge the room fades it over)")
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_overlay)
