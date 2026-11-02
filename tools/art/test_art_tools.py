@@ -735,6 +735,19 @@ class TestSplit(unittest.TestCase):
             px = np.asarray(Image.open(made[0]).convert("RGB"))
             self.assertEqual(tuple(int(v) for v in px[1100, 1000]), (150, 110, 70), "the walkway, at the full size")
             self.assertEqual(tuple(int(v) for v in px[300, 1000]), (255, 0, 255))
+            # The right screen of a row of two, mended at their join: --box takes it out of the row first.
+            row = Path(td) / "row.png"
+            r = Image.new("RGB", (4096, 1152), (255, 0, 255))
+            r.paste(Image.open(base), (2048, 0))
+            r.save(row)
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["split", "tree-l4-e1-play", "--base-key", "tree-l4-0-back", "--base", str(row), "--box", "2048,0,4096,1152",
+                                       "--map-key", "tree-l4-0-scene", "--map", str(mp), "--colour", "#00FF00", "--min-area", "1500", "--work", td])
+            self.assertEqual(rc, 0)
+            made = list((Path(td) / "raw" / "tree-l4-e1-play").glob("*.png"))
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["split"]["box"], [2048, 0, 4096, 1152])
+            self.assertEqual(tuple(int(v) for v in np.asarray(Image.open(made[0]).convert("RGB"))[1100, 1000]), (150, 110, 70), "the walkway of the right screen")
             with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
                 self.assertEqual(postprocess.main(["split", "tree-l4-0-bg", "--base-key", "tree-l4-0-back", "--base", str(base), "--map-key", "tree-l4-0-scene",
                                                    "--map", str(mp), "--colour", "#00FF00", "--work", td]), 1, "the sky plate has no key colour to cut onto")

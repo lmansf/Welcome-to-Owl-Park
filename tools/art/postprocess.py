@@ -1043,6 +1043,13 @@ def cmd_split(ctx: Ctx, a: argparse.Namespace) -> int:
     if not kc:
         raise ArtError(f"{key}: split writes a keyed layer, and the key has no key colour in the table")
     base_img, base_name, base_sc = open_base(ctx, a.base_key, a.base)
+    box = parse_ints(a.box, 4, "--box") if a.box else None
+    if box:
+        # One screen of a row of screens mended at their joins (the patched row is the base key's pick).
+        try:
+            base_img = cut_crop(base_img, box)
+        except ValueError as e:
+            raise ArtError(f"{key}: {e}") from None
     code, code_sc = resolve_raw(ctx, a.map_key, a.map)
     try:
         img, rep = split_layer(base_img, open_raw(code), parse_hex(a.colour), parse_hex(kc), tolerance=a.tolerance,
@@ -1059,7 +1066,7 @@ def cmd_split(ctx: Ctx, a: argparse.Namespace) -> int:
           "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
           "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
           "key_colour": kc, "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "split", "cost_estimate_usd": 0, "provider_meta": {},
-          "split": {"base": src(base_name, base_sc), "map": src(code.name, code_sc), **rep}}
+          "split": {"base": src(base_name, base_sc), **({"box": list(box)} if box else {}), "map": src(code.name, code_sc), **rep}}
     (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
     note(f"split {key}: {rel_to_repo(d / f'{h}.png')}, {rep['kept_px']} px of {base_name} in {rep['parts']} part(s) where {code.name} is {a.colour} "
          f"(bbox {rep['kept_bbox']}); select it with: node tools/art/generate.mjs select {key} {h}")
@@ -1642,7 +1649,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("split", help="a tree screen's platforms or front props: the picked painting's pixels where a colour-coded edit of it shows one code colour; writes a new raw candidate of <key>")
     sp.add_argument("key", help="the layer the cut-out is for (a keyed key in the table)")
     sp.add_argument("--base-key", required=True, help="the key whose picked candidate is cut (the screen's back scenery)")
-    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b)")
+    sp.add_argument("--box", default=None, help="x0,y0,x1,y1: the screen to cut from the base (one screen of a row of screens mended at their joins)")
     sp.add_argument("--map-key", required=True, help="the colour-coded edit's key (its SELECTED candidate unless --map)")
     sp.add_argument("--map", default=None, help="a raw candidate file instead of the SELECTED one")
     sp.add_argument("--colour", required=True, help="#RRGGBB: the code colour of the things kept (platforms #00FF00, front props #0000FF)")

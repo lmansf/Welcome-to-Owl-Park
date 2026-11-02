@@ -1589,7 +1589,9 @@ const TREE_L4_SCREENS = {
     mid: 'the rounded crowns of two or three other great trees far away across a misty valley, the nearest on the right, rising to about this height, with a few tiny warm gold lantern points among their boughs.',
     composition: `THE SCREEN (2048x1152): high in a colossal ancient tree at night, the overlook at the end of a great bough reaching east from the trunk, seen from the side; the trunk stands in the neighbouring screen to the left, and no part of it is in this frame. The walking floor is one level walkway of thick wooden planks along the top of the bough: a flat strip seen side-on, with a broad, clean, flat top edge five sixths of the way down, arriving from the left edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the left edge. Under it, the walkway's thick timber edge, a row of carved wooden brackets and a dense mass of dark leaves and small branches fill the frame down to the bottom edge. The walkway runs on to about four fifths of the way across, where it ends at a stout carved wooden railing; beyond the railing the bough narrows and dips away out of the bottom right corner, and nothing leads on to the right. THE PERCHES: above the walkway, standable tops rise from left to right in three steps of difficulty: first a broad flat-topped burl on the walkway about half a visitor's height tall, a third of the way across; then a small platform of planks built on a side branch growing up out of the bough, its flat top about two visitors' heights above the walkway, a hop up from the burl; then, across a clear gap about two visitors wide, a broad shelf fungus with a flat top on a second branch, about three visitors' heights up; then, right of the middle and high up, a small flat wooden lookout perch on the tip of a slender branch, about three and a half visitors' heights above the walkway, bare (a reward appears there later), reached by gliding across from the shelf fungus. One curly black iron lantern post stands at the walkway's front edge just before the railing, hung with a round paper lantern. A visitor added later by the game stands about one sixth of the frame's height tall; every hop, gap and ledge is sized for it.`,
     scene: 'a walkway along a great bough high in a colossal tree at night, ending at an overlook',
-    props: `from the upper left corner, a few dark leaves and hanging strands of moss, no further down than a sixth of the frame; the whole right half of the top of the frame stays empty magenta, because high perches stand there in the scene behind; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches.`,
+    // The first round's four overlays each missed: tropical blade leaves, a moon-like glow, or leaves over
+    // the walkway's ends. The second keeps the tree's own leaves and leaves the walkway clear.
+    props: `from the upper left corner only, a few clusters of dark, broad, rounded leaves of the same kind as the tree's own and a few hanging strands of moss, no further down than a sixth of the frame; the whole right half of the top of the frame stays empty magenta, because high perches stand there in the scene behind; along the bottom edge, below the walkway only (the bottom eighth of the frame), the small dark tips of a few leafy branches, low and sparse, leaving the walkway, its railing and its lantern post at the right completely uncovered; no moon and no bright glow anywhere.`,
   }),
 };
 
@@ -1600,3 +1602,115 @@ const TREE_L4_JOBS = treeLevelJobs(4, { 0: 4401, e1: 4405 }, TREE_L4_PROMPTS);
 Object.assign(PROMPTS, TREE_L4_PROMPTS);
 HELPER_KEYS.push(...TREE_L4_KEYS.filter((k) => k.endsWith('-scene')));
 JOBS.push(...TREE_L4_JOBS);
+
+// ---- Level 4's colour-coded maps (OP-159): which pixels of each screen are the platforms and the
+// front props. Each map is an edit of the screen's back scenery (its picked scene, moved onto the
+// ground line and mended at its join), sent at half size as `@canvas:<map>` (`pnpm art:finish cut
+// tree-l4-<screen>-codes --base-key tree-l4-<screen>-back --box 0,0,2048,1152 --half`). The finish
+// step `split` reads the green and the blue out of the picked map and keeps the back scenery's own
+// pixels there (tools/art/artlib/split.py), so what the model redraws elsewhere does not matter.
+
+/** The edit that colour-codes one screen: what a visitor stands on in green, what stands in front of the walkway in blue. */
+function treeCodes({ stand, front, keep }) {
+  return `Edit this painting: one screen of a side-scrolling 2D game, whose open sky is flat magenta #FF00FF. Make it a colour-coded map of the very same picture for the game's tools: every shape stays exactly where it is, exactly its size and outline, and only colours change. Fill every surface a small visitor stands on with flat, solid, uniform pure green #00FF00, exactly to its outline: ${stand} Fill every thing that stands in front of the walkway with flat, solid, uniform pure blue #0000FF, exactly to its outline: ${front} Everything else stays exactly as it is painted, unchanged: ${keep} and the flat magenta sky. The green and the blue are flat fills with no shading, texture, outline, highlight or glow, and no green or blue appears anywhere else. No text, no watermark. AVOID: moving, resizing, adding or removing anything; redrawing the picture in another style; green or blue on anything not listed; soft or feathered edges on the fills; any change to the magenta.`;
+}
+
+const TREE_L4_CODES = {
+  // The picked scene (seed 4424): a pale plank walkway across the frame, the stair's pale treads up the
+  // trunk's right side to a landing, a small railed balcony on the trunk's left, one lantern post.
+  'tree-l4-0-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its carved front edge and the carved brackets under it; each pale wooden tread of the stair that climbs the right side of the trunk, and the flat wooden landing at the top of those treads; and the floor of the small balcony on the left side of the trunk, without its railing.`,
+    front: `the curly black iron lantern post standing on the walkway right of the stair, with the round lantern hanging from it.`,
+    keep: `the trunk and its bark, the banister and every railing (the balcony's railing, the stair's banister and the low railing around the stairwell at the back of the walkway), the steps going down in the stairwell, the boughs, the leaves and the strings of lanterns, the mass of leaves under the walkway,`,
+  }),
+  // The picked scene (seed 4428): the walkway along the bough to a railing at its end, a stump, a plank
+  // platform and a shelf fungus on branches, a railed lookout at a slender branch's tip, one lantern post.
+  'tree-l4-e1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks from the left edge to the railing at its end, with its timber front edge and the carved brackets under it; the flat-topped stump standing on the walkway; the small square platform of planks on its branch; the broad shelf fungus; and the floor of the small railed lookout at the tip of the slender branch, without its railing.`,
+    front: `the curly black iron lantern post standing at the walkway's end beside the railing, with the round lantern hanging from it.`,
+    keep: `the great dark bough on the left, the branches that hold the platform, the fungus and the lookout, the railing at the walkway's end and the lookout's railing, the bough curving down under the walkway's end, the leaves under the walkway,`,
+  }),
+};
+export const TREE_L4_CODE_KEYS = Object.keys(TREE_L4_CODES);
+const TREE_L4_CODE_JOBS = TREE_L4_CODE_KEYS.map((key, i) => ({
+  key,
+  // A map, never published: `split` reads the screen's platforms and front props out of it.
+  kind: 'anchor',
+  derives: ['play', 'front'].map((l) => key.replace('-codes', `-${l}`)),
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4451 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L4_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L4_CODES);
+HELPER_KEYS.push(...TREE_L4_CODE_KEYS);
+JOBS.push(...TREE_L4_CODE_JOBS);
+
+// The join between level 4's two screens (OP-159), mended as level 1's were (OP-125's recipe): the two
+// picked back sceneries, moved onto the ground line, side by side (4096x1152, the join at x 2048); a
+// square across the join cut at half size (`cut tree-l4-seam-0-e1 --base-key tree-l4-0-back --base
+// <0>,<e1> --box 1472,0,2624,1152 --half`), its middle half repainted, and pasted back into the row
+// (`patch tree-l4-0-back ... --at 1472,0 --box 192,0,960,1152 --threshold 0 --join 96`: the box keeps the
+// paste between screen 0's lantern post and the overlook's stump, so the joins cross only planks and sky). The row is then the base of both
+// screens' maps, their splits (`split --box`) and their back scenery (`overlay --crop 0|1,0.5`).
+const TREE_L4_SEAM_PROMPTS = {
+  'tree-l4-seam-0-e1': treeSeam(
+    'the end of a level walkway of pale wooden planks on a great bough, under open sky, with clusters of dark leaves and strings of small glowing lanterns hanging from the boughs above and an iron lantern post near the left edge',
+    'a great dark bough of the tree flecked with glowing gold sap, rising from just behind the same walkway of pale wooden planks up out of the top of the frame, and the walkway running on to the right past a flat-topped stump',
+    'the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its timber edge and the bough beneath it running on below; the leaves and lantern strings on the left end in a few leafy twigs against open sky, and the great dark bough on the right rises from behind the walkway a little right of the middle, straight up out of the top of the frame, with open sky between them. The flat-topped stump at the right edge stays exactly where it is, the only stump in the frame.',
+  ),
+};
+export const TREE_L4_SEAM_KEYS = Object.keys(TREE_L4_SEAM_PROMPTS);
+const TREE_L4_SEAM_JOBS = TREE_L4_SEAM_KEYS.map((key) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the two screens' back sceneries.
+  kind: 'anchor',
+  derives: ['tree-l4-0-back', 'tree-l4-e1-back'],
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4471,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L4_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L4_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L4_SEAM_KEYS);
+JOBS.push(...TREE_L4_SEAM_JOBS);
+
+// The top strip of level 4's row (OP-159). Moving each picked scene down onto the ground line filled the
+// top of its frame by mirroring (170 and 195 painted px), which left an upside-down copy of the canopy
+// there: a seam across screen 0's trunk, lantern strings meeting their reflections and, over the overlook,
+// a bough meeting its own reflection in an arrowhead. One edit across the join repaints the strip (`cut
+// tree-l4-top-0-e1 --base-key tree-l4-0-back --base <row> --box 768,0,2816,1152 --half`), and only the
+// strip goes back into the row (`patch tree-l4-0-back --base <row> --edit-key tree-l4-top-0-e1 --at 768,0
+// --box 0,0,2048,260 --threshold 0 --join 96`), above every platform, so the maps, the splits and the
+// play and front layers stand. Its sky is a lighter magenta than the row's, so both back sceneries are
+// finished with `--t0 70 --t1 150`. Screen 0's strip west of x 768 keeps its mirror: the overlay's leaves
+// cover it whenever it is in view.
+const TREE_L4_TOP_PROMPTS = {
+  'tree-l4-top-0-e1': `Edit this painting: a crop of the playfield layer of a side-scrolling 2D game, in which the open sky is flat pure magenta #FF00FF so that the game can cut it out. Along the top of the frame, about the top sixth, the painting was filled by mirroring the strip just below it, so everything up there is an upside-down reflection that meets itself along a straight horizontal line: the great trunk on the left has a seam across it, the strings of small glowing lanterns are reflected, and on the right a second great dark trunk splits into two boughs that meet their own reflections in a pointed arrowhead. Repaint only that top strip, the top fifth of the frame, so that everything continues naturally up and out of the top of the frame, with no reflection, line or seam anywhere: the great trunk on the left rises straight on up out of the frame, its bark running on unbroken; the boughs, the clusters of dark leaves and the strings of small glowing lanterns in the upper middle continue upward and outward, the lantern strings hanging in gentle downward curves from the boughs above; the dark trunk on the right rises on, and its bough toward the upper right curves on up and out of the top of the frame, thinning, with a few clusters of dark leaves, never folding back on itself. Wherever the sky would show, the frame stays one flat, solid, uniform pure magenta #FF00FF, the same magenta as in the rest of the frame now, with no gradient, no clouds, no stars, no moon, no glow and no haze. Keep everything below the top strip exactly as it is (the walkway, the stair, the balcony, the lantern post, the stump, the leaves and lanterns already there and the open magenta sky), and match its colours, light and brushwork in the repainted strip: the same strict side view with no perspective tilt, hand-painted 2D game art with clean cel-shaded shapes, soft painted gradients and crisp clean edges against the magenta. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`,
+};
+export const TREE_L4_TOP_KEYS = Object.keys(TREE_L4_TOP_PROMPTS);
+const TREE_L4_TOP_JOBS = TREE_L4_TOP_KEYS.map((key) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the two screens' back sceneries.
+  kind: 'anchor',
+  derives: ['tree-l4-0-back', 'tree-l4-e1-back'],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4481,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L4_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L4_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L4_TOP_KEYS);
+JOBS.push(...TREE_L4_TOP_JOBS);
