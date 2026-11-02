@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LINE_DEFAULTS, RIBBON_WORDS, hashForLog, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS } from '@owl-park/shared';
+import { LINE_DEFAULTS, RIBBON_WORDS, hashForLog, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS, SETUP_DEFAULTS } from '@owl-park/shared';
 import { CLAIM_GRACE_MS, Line } from '../src/line';
 import { ENTRY_TTL_S, mintEntry, mintPass, verifyEntry, verifyPass } from '../src/pass';
 import type { Env } from '../src/env';
@@ -333,7 +333,7 @@ describe('the overflow object (OP-075)', () => {
     rooms.counts.set('park', { hub: 1 });
     await post('/settings', { line: { mode: 'on', threshold: 1 } });
     expect(rooms.told.at(-1)).toEqual({ name: 'park', words: 'The market is packed tonight' });
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: 'The market is packed tonight', realms: REALMS_DEFAULTS });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: 'The market is packed tonight', realms: REALMS_DEFAULTS, setup: SETUP_DEFAULTS });
   });
 
   it('keeps the realms switch (the stained-glass climb), refuses a room that is not gated or a night it does not know, and tells the rooms', async () => {
@@ -344,10 +344,10 @@ describe('the overflow object (OP-075)', () => {
     expect(r.status).toBe(200);
     const realms = { open: ['glass'], portal: true, night: 'hard' };
     expect(r.body.realms).toEqual(realms);
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms, setup: SETUP_DEFAULTS });
     // Closing it again reaches the rooms through the same notice.
     await post('/settings', { realms: { open: [] } });
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { ...realms, open: [] } });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { ...realms, open: [] }, setup: SETUP_DEFAULTS });
   });
 
   it('keeps the tree’s share of new arrivals with the realms switch, 0 to 100, and tells the rooms (OP-156)', async () => {
@@ -355,9 +355,26 @@ describe('the overflow object (OP-075)', () => {
     const r = await post<OverflowState>('/settings', { realms: { tree: 40 } });
     expect(r.status).toBe(200);
     expect(r.body.realms).toEqual({ open: [], portal: false, night: null, tree: 40 });
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { open: [], portal: false, night: null, tree: 40 } });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: { open: [], portal: false, night: null, tree: 40 }, setup: SETUP_DEFAULTS });
     // 0 darkens the tree again, and the switch reads as one never touched.
     expect((await post<OverflowState>('/settings', { realms: { tree: 0 } })).body.realms).toEqual({ open: [], portal: false, night: null });
+  });
+
+  it('keeps the setup switch and its words, refuses words out of bounds, and tells the rooms (OP-205)', async () => {
+    expect((await post('/settings', { setup: { on: 'yes' } })).status).toBe(400);
+    expect((await post('/settings', { setup: { words: 'x'.repeat(200) } })).status).toBe(400);
+    const cap = captureLogs();
+    try {
+      const r = await post<OverflowState>('/settings', { setup: { on: true, words: '  Back at 5:15  ' } });
+      expect(r.status).toBe(200);
+      expect(r.body.setup).toEqual({ on: true, words: 'Back at 5:15' });
+      logged(cap.lines, 'setup_on', { component: 'overflow' });
+      expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS, setup: { on: true, words: 'Back at 5:15' } });
+      expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back at 5:15' });
+      logged(cap.lines, 'setup_off', { component: 'overflow' });
+    } finally {
+      cap.restore();
+    }
   });
 
   it('refuses settings out of bounds, and copies while the park runs in one object', async () => {
@@ -417,7 +434,7 @@ describe('the rooms asking for the ribbon (OP-075)', () => {
     await obj.fetch(new Request('https://park/settings', { method: 'POST', body: JSON.stringify({ line: { mode: 'auto', threshold: 10 } }) }));
     rooms.asked.length = 0;
     vi.setSystemTime(T0 + 60_000);
-    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS });
+    expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS, setup: SETUP_DEFAULTS });
     expect(rooms.asked).toEqual([]);
     vi.useRealTimers();
   });
