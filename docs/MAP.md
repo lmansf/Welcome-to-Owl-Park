@@ -1,6 +1,6 @@
 # The tree (map 2)
 
-- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 4 BUILT (rooms `l1` to `l4`; level 2's grove common area, levels 2 and 3's idols, guardians and games still to place); levels 0 and 5 PLANNED (OP-158, OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
+- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 5 BUILT as rooms (`l1` to `l4`, and level 5 as `l5-street` and `l5`; still to wire: level 5's nest doors and front gate sale, levels 1 to 3's idols, guardians and games); level 0 PLANNED (OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
 - Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting, the turn-your-phone card and the spot placer, OP-156); the Ticket Board as read 2026-11-01
 - Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/treeSpots.ts (`TREE_SPOTS`), packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
 - Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173
@@ -300,9 +300,11 @@ The recipe for OP-158 to OP-161 and OP-163, as level 1 was built:
 
 ## 11. Open questions
 
-- OPEN QUESTION: level 5 has six screens (-2 to +3) but a room is at most `ROOM_MAX_W` (four screens)
-  wide: raise the limit for `l5` or split the canopy into two rooms. OP-158 also counts five screens
-  (about $8.10 of its $8); six come to about $9.70 before re-runs.
+- DECIDED (2026-11-01): level 5 is two rooms, joined by the trunk's doorway: the nests street
+  `l5-street` (-2, -1) and the canopy `l5` (0 to +3). A level's second room is named `l<n>-<word>`
+  (`treeLevelOf`). The street's far west end, on bough 6's highest perch, has a closed doorway
+  (`closed-beyond`, 'Hatching Soon') for places beyond Owl Park; no destination yet (the owner's
+  steer, 2026-11-02). QUESTION FOR LATER: what lies beyond Owl Park, and how it connects.
 - OPEN QUESTION: the grid puts a ticket booth on level 5 (`booth-canopy`) and its window in the lobby
   ring (`booth-lobby`); OP-180 sells tickets at the turnstiles and drops today's booth. Whether the tree
   keeps a booth is the owner's.

@@ -1122,11 +1122,15 @@ export const ROOMS: Record<string, RoomDef> = {
       east: { x: ROOM_W + 1240, y: TREE_GROUND },
       // Up from level 3, at the foot of the way down.
       'from-l3': { x: 780, y: TREE_GROUND },
+      // Down from level 5, at the foot of the spiral stair behind the trunk.
+      'from-l5': { x: 1180, y: TREE_GROUND },
     },
     doors: [
       // The way down to level 3: the stair behind the railing west of the trunk, taken from the boardwalk
       // (the balcony over it walks on past).
       { id: 'stair-l4-l3', rect: { x: 640, y: 750, w: 100, h: 40 }, to: { room: 'l3', spawn: 'from-l4' }, top: 0, markAt: { x: 690, y: 560 } },
+      // Up to level 5, from the spiral stair's last tread behind the trunk.
+      { id: 'stair-l5-l4', rect: { x: 1044, y: 750, w: 40, h: 40 }, to: { room: 'l5', spawn: 'from-l4' }, top: 239, markAt: { x: 1064, y: 470 } },
     ],
   },
   // Level 3, the high branch east (OP-160): three screens, the trunk's landing (0) with its stair up to
@@ -1272,6 +1276,120 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'stair-l3-l2', rect: { x: 2 * ROOM_W + 990, y: 750, w: 80, h: 40 }, to: { room: 'l3', spawn: 'from-l2' }, top: 347, markAt: { x: 2 * ROOM_W + 1030, y: 412 } },
       // Down to level 1: the steps behind the trunk's east side, taken from the boardwalk.
       { id: 'stair-l2-l1', rect: { x: 2 * ROOM_W + 1140, y: 750, w: 100, h: 40 }, to: { room: 'l1', spawn: 'from-l2' }, top: 0, markAt: { x: 2 * ROOM_W + 1190, y: 600 } },
+    ],
+  },
+  // Level 5, the canopy (OP-158): six screens, split in two rooms at the trunk so a room stays at most
+  // four screens (decided 2026-11-01). The nests street (`l5-street`) is the two screens west of the
+  // trunk: the second parkour bough (6) climbing west to the street's far end, where a closed doorway
+  // waits for the places beyond Owl Park (the owner's steer, 2026-11-02), then the nest doors along the
+  // boardwalk. The canopy (`l5`) is the trunk's crown (0) with its doorway back to the street, the park
+  // entrance (+1) with the front gate's arch and the stair down to level 4, the lounge and gift shop
+  // (+2), and the first parkour bough (7) east of them (+3). Painted in the six layers as levels 2 to 4
+  // (only the trunk has front props).
+  'l5-street': {
+    id: 'l5-street',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'tree-l5-w1-back',
+    backgrounds: [
+      { key: 'tree-l5-w2-bg', x: 0, y: 0, rate: 0.5 },
+      { key: 'tree-l5-w1-bg', x: ROOM_W, y: 0, rate: 0.5, fade: { left: TREE_SKY_FADE } },
+      ...['w2', 'w1'].map((s, i) => ({ key: `tree-l5-${s}-mid`, x: i * ROOM_W, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } })),
+      ...['w2', 'w1'].map((s, i) => ({ key: `tree-l5-${s}-back`, x: i * ROOM_W, y: 0 })),
+      ...['w2', 'w1'].map((s, i) => ({ key: `tree-l5-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
+    ],
+    foregrounds: ['w2', 'w1'].map((s, i) => ({ key: `tree-l5-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    mood: 'hub',
+    // The boardwalk past the nest doors, from the foot of the bough in the west to the trunk in the east.
+    walkable: [
+      [
+        { x: 550, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W - 20, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W - 20, y: TREE_GROUND + TREE_STRIP },
+        { x: 550, y: TREE_GROUND + TREE_STRIP },
+      ],
+    ],
+    perches: [
+      // Bough 6, west up the branch: three stepping stones (Tier 1), the plank over a gap (Tier 2), the
+      // shelf mushroom across a glide (Tier 3) and, highest, the perch at the street's far end.
+      treeLedge('stone-1', 515, 556, 18),
+      treeLedge('stone-2', 476, 518, 42),
+      treeLedge('stone-3', 428, 484, 65),
+      treeLedge('plank', 302, 412, 121),
+      treeLedge('mushroom', 125, 292, 208),
+      treeLedge('far-end', 4, 78, 264),
+    ],
+    spawns: {
+      default: { x: ROOM_W + 800, y: TREE_GROUND },
+      west: { x: 640, y: TREE_GROUND },
+      // Back through the trunk's doorway from the canopy.
+      'from-canopy': { x: 2 * ROOM_W - 200, y: TREE_GROUND },
+    },
+    doors: [
+      // East, into the trunk and out on the canopy's side of it.
+      { id: 'to-canopy', rect: { x: 2 * ROOM_W - 100, y: 750, w: 80, h: 40 }, to: { room: 'l5', spawn: 'from-street' }, top: 0, markAt: { x: 2 * ROOM_W - 60, y: 600 } },
+      // The street's far end, on the bough's highest perch: a doorway for the places beyond Owl Park, shut
+      // until one exists (no destination yet; the owner's steer, OP-158).
+      { id: 'closed-beyond', rect: { x: 8, y: 750, w: 60, h: 40 }, closedSign: 'Hatching Soon', top: 264, marker: { x: 40, y: TREE_GROUND - 264 } },
+    ],
+  },
+  l5: {
+    id: 'l5',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: 4 * ROOM_W, h: ROOM_H },
+    background: 'tree-l5-0-back',
+    backgrounds: [
+      // The skies, farthest from the trunk first: each lies over the one beyond it and fades into it.
+      { key: 'tree-l5-e3-bg', x: 3 * ROOM_W, y: 0, rate: 0.5 },
+      { key: 'tree-l5-e2-bg', x: 2 * ROOM_W, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      { key: 'tree-l5-e1-bg', x: ROOM_W, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      { key: 'tree-l5-0-bg', x: 0, y: 0, rate: 0.5, fade: { right: TREE_SKY_FADE } },
+      ...['0', 'e1', 'e2', 'e3'].map((s, i) => ({ key: `tree-l5-${s}-mid`, x: i * ROOM_W, y: 0, rate: 0.75, fade: { left: TREE_MID_FADE, right: TREE_MID_FADE } })),
+      ...['0', 'e1', 'e2', 'e3'].map((s, i) => ({ key: `tree-l5-${s}-back`, x: i * ROOM_W, y: 0 })),
+      ...['0', 'e1', 'e2', 'e3'].map((s, i) => ({ key: `tree-l5-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
+    ],
+    foregrounds: [
+      { key: 'tree-l5-0-front', x: 0, y: 0, plain: true },
+      ...['0', 'e1', 'e2', 'e3'].map((s, i) => ({ key: `tree-l5-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    ],
+    mood: 'hub',
+    // The boardwalk from the trunk's west side, under the entrance arch, past the lounge and the gift shop,
+    // to the end of the pier where bough 7 starts.
+    walkable: [
+      [
+        { x: 120, y: TREE_GROUND - TREE_STRIP },
+        { x: 3 * ROOM_W + 700, y: TREE_GROUND - TREE_STRIP },
+        { x: 3 * ROOM_W + 700, y: TREE_GROUND + TREE_STRIP },
+        { x: 120, y: TREE_GROUND + TREE_STRIP },
+      ],
+    ],
+    perches: [
+      // Bough 7, east off the pier: a stone, the two cut stumps (Tier 1), the plank over a gap (Tier 2),
+      // the long branch across a glide (Tier 3), and the top plank at the bough's tip.
+      treeLedge('stone', 3 * ROOM_W + 695, 3 * ROOM_W + 788, 64),
+      treeLedge('stump-high', 3 * ROOM_W + 755, 3 * ROOM_W + 845, 128),
+      treeLedge('stump-low', 3 * ROOM_W + 828, 3 * ROOM_W + 884, 95),
+      treeLedge('plank', 3 * ROOM_W + 887, 3 * ROOM_W + 1032, 215),
+      treeLedge('branch', 3 * ROOM_W + 1100, 3 * ROOM_W + 1295, 294),
+      treeLedge('tip', 3 * ROOM_W + 1298, 3 * ROOM_W + 1445, 351),
+    ],
+    spawns: {
+      default: { x: 900, y: TREE_GROUND },
+      // Out of the trunk's doorway from the street.
+      'from-street': { x: 780, y: TREE_GROUND },
+      // Up from level 4, at the foot of the stair behind the entrance.
+      'from-l4': { x: ROOM_W + 1160, y: TREE_GROUND },
+      east: { x: 3 * ROOM_W + 560, y: TREE_GROUND },
+    },
+    doors: [
+      // The doorway in the trunk: back west to the nests street.
+      { id: 'to-street', rect: { x: 610, y: 750, w: 80, h: 40 }, to: { room: 'l5-street', spawn: 'from-canopy' }, top: 0, markAt: { x: 650, y: 560 } },
+      // Down to level 4: the railed stair behind the entrance, taken from the boardwalk.
+      { id: 'stair-l5-l4', rect: { x: ROOM_W + 1230, y: 750, w: 100, h: 40 }, to: { room: 'l4', spawn: 'from-l5' }, top: 0, markAt: { x: ROOM_W + 1280, y: 600 } },
     ],
   },
 };
