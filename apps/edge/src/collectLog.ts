@@ -28,6 +28,16 @@
  * FRAUD_HASH_SALT turn it on (apps/park-log/README.md, steps 3 to 6), and the backfill
  * (`POST /api/admin/collect-log`).
  *
+ * Ticket events (OP-192) go the same way: an order paid, its tickets put on an owl, refunded or
+ * cancelled, and a ticket's first scan, so the owner can count free owls beside paid ones. The order,
+ * the owl and the ticket leave as salted hashes; the buyer's email never comes here (the Worker sends
+ * it to the owner's contacts on its own, buyerLog.ts).
+ *
+ * TODO-DOCS (OP-192): docs/ARCHITECTURE.md, beside the player stats: the ticket events (`purchase`
+ * rows into `game.fact_purchase`), the visit's `visitor_kind`, the views in apps/park-log/sql/profiles.sql
+ * (`game.v_visitor_profile`, `game.v_purchase`, `game.v_keepers_card`) and the owner's `contacts`
+ * schema (buyerLog.ts), joined to an owl only through the order's salted key.
+ *
  * TODO-DOCS (OP-166): docs/FEEDBACK.md, "Where notes are kept": with the log on, every note is also
  * copied to `game.feedback` in the owner's analytics project (the `feedback` kind here and in
  * apps/park-log), with the words, the kind, the room, phone or desktop and the hashed collector and
@@ -36,6 +46,7 @@
 import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FeedbackKind, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
 import { moduleLog } from './logs';
 import { ROOMS } from './rooms';
+import type { TicketKind } from './tickets';
 
 export interface LogConfig {
   url: string;
@@ -309,6 +320,8 @@ export interface SessionData {
   device: DeviceClass | null;
   rooms: string[];
   gained: number;
+  /** What the visit was past the turnstiles (OP-192): a full visitor's, a spectator's, or null for one that never went past them. */
+  kind?: 'visitor' | 'spectator' | null;
 }
 
 /** A visit as the log takes it: the same session id as its collection rows. */
@@ -320,6 +333,7 @@ export interface SessionRow {
   device_class: DeviceClass | null;
   realms_entered: number;
   collectibles_gained: number;
+  visitor_kind: 'visitor' | 'spectator' | null;
 }
 
 async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
@@ -331,6 +345,7 @@ async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
     device_class: d.device,
     realms_entered: d.rooms.length,
     collectibles_gained: d.gained,
+    visitor_kind: d.kind === 'visitor' || d.kind === 'spectator' ? d.kind : null,
   };
 }
 
@@ -436,6 +451,81 @@ async function feedbackRow(salt: string, d: FeedbackData): Promise<FeedbackLogRo
   };
 }
 
+// ---------- tickets and passes (OP-192) ----------
+
+/**
+ * What happened to a ticket order, or to a ticket at the gate: the order was paid (its tickets made),
+ * its tickets went onto an owl (a claim link, or the gate's checkout), some were refunded, all were
+ * cancelled, or a ticket's first scan started its time on an owl.
+ */
+export type PurchaseEvent = 'paid' | 'claimed' | 'refunded' | 'cancelled' | 'scanned';
+
+/** A ticket event as the outbox keeps it: raw, in this object only, until the order, the owl and the ticket are hashed on their way out. */
+export interface PurchaseData {
+  event: PurchaseEvent;
+  /** The store's order number, or null for a ticket the keepers gave (it has no order in the store). */
+  order: string | null;
+  /** The owl the tickets went onto, or the one that scanned; null for the order's own events. */
+  cid: string | null;
+  at: number;
+  /** paid: each ticket's kind, one per ticket; scanned: the ticket's own. */
+  kinds: TicketKind[];
+  /** Tickets made, moved or refunded (1 for a scan). */
+  tickets: number;
+  /** paid: what the order came to; refunded: what went back. In cents; null where the store did not say. */
+  cents: number | null;
+  /** paid: the order is the annual pass offered after a ticket (opening night's half price, OP-062, OP-180). */
+  upsell?: boolean;
+  /** paid: its tickets wait for the owner's fraud check. */
+  held?: boolean;
+  /** claimed: by the emailed claim link, or by the gate's checkout. */
+  via?: 'claim' | 'checkout' | null;
+  /** scanned: when the ticket's time runs out. */
+  until?: number | null;
+  /** What makes one event of its kind apart from another: a refund's id, a scanned ticket's id. Leaves only hashed. */
+  ref?: string | null;
+}
+
+/** A ticket event as the log takes it: the order and the owl as salted hashes, never a name, an email, an order number or a ticket's id. */
+export interface PurchaseRow {
+  event_id: string;
+  event: PurchaseEvent;
+  order_key: string | null;
+  collector_id: string | null;
+  occurred_at: string;
+  ticket_kinds: TicketKind[];
+  tickets: number;
+  amount_cents: number | null;
+  upsell: boolean;
+  held: boolean;
+  via: 'claim' | 'checkout' | null;
+  valid_until: string | null;
+}
+
+/** The salted key of a store order, the one the purchase rows and the owner's contacts share (OP-192). */
+export function orderKey(salt: string, order: string): Promise<string> {
+  return saltedUuid(salt, 'order', order);
+}
+
+async function purchaseRow(salt: string, d: PurchaseData): Promise<PurchaseRow> {
+  // One id per order and kind of event (and per owl a claim moved it to, refund, or scanned ticket): one sent twice lands once.
+  const ref = d.ref ?? (d.event === 'refunded' ? String(d.at) : '');
+  return {
+    event_id: await saltedUuid(salt, 'purchase', `${d.event}|${d.order ?? ''}|${d.event === 'claimed' || d.event === 'scanned' ? (d.cid ?? '') : ''}|${ref}`),
+    event: d.event,
+    order_key: d.order ? await orderKey(salt, d.order) : null,
+    collector_id: d.cid ? await saltedHash(salt, 'collector', d.cid) : null,
+    occurred_at: iso(d.at),
+    ticket_kinds: d.kinds,
+    tickets: d.tickets,
+    amount_cents: d.cents,
+    upsell: d.upsell === true,
+    held: d.held === true,
+    via: d.via ?? null,
+    valid_until: typeof d.until === 'number' ? iso(d.until) : null,
+  };
+}
+
 /** Each kind of row the outbox holds, and how its data becomes the row the log takes. */
 const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   collect: collectRow,
@@ -443,6 +533,7 @@ const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   session: sessionRow,
   realm_visit: realmVisitRow,
   feedback: feedbackRow,
+  purchase: purchaseRow,
 };
 
 export class CollectLog {
@@ -512,6 +603,11 @@ export class CollectLog {
   /** Keep a time in one room to send (OP-113): after its visit's own row, which the log keeps first. */
   realmVisit(d: RealmVisitData): void {
     if (this.config) this.keep('realm_visit', d);
+  }
+
+  /** Keep a ticket event to send (OP-192): the order, the owl and the ticket hashed on their way out. */
+  purchase(d: PurchaseData): void {
+    if (this.config) this.keep('purchase', d);
   }
 
   /** Keep a note a visitor sent to send (OP-166): the room as the log names rooms, the visit hashed on its way out. */

@@ -206,7 +206,8 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
         const kind = r.reason === 'unknown' || r.reason === 'elsewhere' ? undefined : book.get(id)?.kind;
         return json({ ok: false, reason: r.reason, ...(r.reason === 'unknown' ? {} : { id }), ...(kind ? { kind } : {}) });
       }
-      return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil });
+      // The order is for the Worker alone (OP-192: the park's log of passes); the page is never sent it.
+      return json({ ok: true, id, started: r.started, kind: r.ticket.kind, validUntil: r.ticket.validUntil, order: r.ticket.order });
     }
     case '/link-pass': {
       // A pass order from opening night's offer (C42, OP-180): the ticket its link named (or none) and what its passes sold for, kept once.

@@ -67,7 +67,7 @@ import {
 } from '@owl-park/shared';
 import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
 import { TravelBook } from './travelBook';
-import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type Visit } from './collectLog';
+import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type PurchaseData, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { randomDeviceId } from './pass';
@@ -183,6 +183,13 @@ export class Collections extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     this.closeVisits();
     await this.log.flush();
+  }
+
+  /** A ticket event, by the Worker's word (OP-192): into the log's outbox, and sent at once. */
+  async purchase(d: PurchaseData): Promise<void> {
+    if (!this.log.on) return;
+    this.log.purchase(d);
+    this.ctx.waitUntil(this.log.flush());
   }
 
   /** The owner's backfill (OP-107): every collectible held now, queued for the log once (a row it has already lands once). */

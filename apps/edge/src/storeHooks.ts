@@ -14,7 +14,8 @@
  */
 import { hashForLog, type Logger } from '@owl-park/shared';
 import { adminQuery, FULFILL_MUTATION, FULFILLMENT_ORDERS_QUERY, fulfillmentInput, StoreError, TICKET_UPSERT_MUTATION, ticketLinesOpen, ticketUpsert, type FulfillmentOrders, type StoreConfig, type TicketMirror } from './storeApi';
-import { checkoutTokenOf, freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, usedCode, type AdminOrder } from './shopify';
+import { checkoutTokenOf, freeOrder, fromTicketOf, gidTail, lowRisk, ORDER_QUERY, paidFor, ticketLines, totalCents, usedCode, type AdminOrder } from './shopify';
+import type { TicketKind } from './tickets';
 
 /** The order tag that releases a held order: the owner's fraud check passed it. */
 export const RELEASE_TAG = 'owl-park-release';
@@ -47,6 +48,14 @@ export interface HookResult {
   repeat?: true;
   /** The gate's checkout put the order's tickets on this owl just now (OP-175): the Worker mails the order's email a link to protect it, as a claim does (OP-186). */
   placed?: { device: string; tickets: number };
+  /**
+   * A paid ticket order, on every delivery (OP-192): each ticket's kind, what the order came to, whether
+   * it is the pass offered after a ticket, and whether it waits for the fraud check. The Worker sends it
+   * to the park's log (the same event lands once however often it comes).
+   */
+  sold?: { kinds: TicketKind[]; cents: number | null; upsell: boolean; held: boolean };
+  /** Tickets a refund or a cancellation switched off just now (OP-192), what went back where the refund says, and the refund's id. */
+  revoked?: { event: 'refunded' | 'cancelled'; tickets: number; cents: number | null; refund: string | null };
 }
 
 /** The link the shipping email carries; the page reads the secret from the fragment. */
@@ -156,13 +165,16 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
   const again = existed && (issued['held'] === true || issued['sent'] === true) ? { repeat: true as const } : {};
   // A pass from opening night's offer: linked to the ticket the park's link named, or counted without one, with what it sold for.
   const from = fromTicketOf(order);
-  if (lines.some((l) => l.kind === 'annual') && (from || usedCode(order, deps.openingCode))) await deskOk(deps, '/tickets/link-pass', { order: id, from, cents: paidFor(order, lines, 'annual') });
+  const upsell = lines.some((l) => l.kind === 'annual') && (!!from || usedCode(order, deps.openingCode));
+  if (upsell) await deskOk(deps, '/tickets/link-pass', { order: id, from, cents: paidFor(order, lines, 'annual') });
+  // For the park's log (OP-192): each ticket's kind, what the order came to, and how it went out.
+  const sold = { sold: { kinds: lines.flatMap((l) => Array<TicketKind>(l.quantity).fill(l.kind)), cents: totalCents(order), upsell, held: issued['held'] === true } };
   // Before the email goes out, so the owl that paid holds the tickets first; a held order's tickets wait on it, held (OP-175).
   const placed = await place(deps, id, order);
   const onOwl = placed ? { placed } : {};
-  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id, ...made, ...again, ...onOwl };
+  if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id, ...made, ...again, ...onOwl, ...sold };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
-  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id, ...made, ...again, ...onOwl };
+  return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id, ...made, ...again, ...onOwl, ...sold };
 }
 
 /** A held order changed or got a new rating: release it if the owner tagged it or the store now rates it low. */
@@ -192,13 +204,29 @@ async function refunded(deps: HookDeps, id: string, payload: Record<string, unkn
   // The refund's own id, so the book switches tickets off once for it however often the store sends it (OP-145).
   const rawRefund = payload['id'];
   const refund = typeof rawRefund === 'number' ? String(rawRefund) : typeof rawRefund === 'string' ? gidTail(rawRefund) : '';
-  const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which, ...(/^\d{1,20}$/.test(refund) ? { refund } : {}) }))['revoked'] as string[]).length;
-  return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
+  const known = /^\d{1,20}$/.test(refund);
+  const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which, ...(known ? { refund } : {}) }))['revoked'] as string[]).length;
+  const back = { revoked: { event: 'refunded' as const, tickets: revoked, cents: refundCents(payload), refund: known ? refund : null } };
+  return { status: 200, body: { revoked }, ...(revoked ? { mirror: id, ...back } : {}) };
+}
+
+/** What a refund sent back, in cents: its successful refund transactions (OP-192); null where it lists none. */
+export function refundCents(payload: Record<string, unknown>): number | null {
+  const list = Array.isArray(payload['transactions']) ? (payload['transactions'] as Array<Record<string, unknown>>) : [];
+  const done = list.filter((t) => t['kind'] === 'refund' && t['status'] === 'success');
+  if (!done.length) return null;
+  let sum = 0;
+  for (const t of done) {
+    const n = Number(t['amount']);
+    if (!Number.isFinite(n) || n < 0) return null;
+    sum += Math.round(n * 100);
+  }
+  return sum;
 }
 
 async function cancelled(deps: HookDeps, id: string): Promise<HookResult> {
   const revoked = ((await deskOk(deps, '/tickets/revoke', { order: id, which: 'all' }))['revoked'] as string[]).length;
-  return { status: 200, body: { revoked }, ...(revoked ? { mirror: id } : {}) };
+  return { status: 200, body: { revoked }, ...(revoked ? { mirror: id, revoked: { event: 'cancelled', tickets: revoked, cents: null, refund: null } } : {}) };
 }
 
 /** How long a webhook waits for another one working on the same order: well inside the store's 5 seconds. */

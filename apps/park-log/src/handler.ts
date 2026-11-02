@@ -19,9 +19,15 @@
  * - `kind: "feedback"` (OP-166): notes visitors sent from the Feedback form, into `game.feedback`,
  *   for the owner's morning feedback run; one already there (by its event id) is skipped. The only
  *   rows here that carry words a visitor typed: they are kept as text and never read as anything else.
+ * - `kind: "purchase"` (OP-192): ticket events (an order paid, its tickets put on an owl, refunded or
+ *   cancelled, a ticket's first scan), into `game.fact_purchase`; one already there (by its event id)
+ *   is skipped. Anonymous like the rest: the order and the owl are salted hashes.
+ * - `kind: "contact"` (OP-192): a paid order's buyer (email and the store's customer id), into the
+ *   owner's `contacts` schema, never the `game` one: the only rows here that name a person. The
+ *   Worker sends them straight from the store; one order sent again lands once.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
- * The rows are anonymous by construction, and checked again here before anything is kept: the
+ * Every other row is anonymous by construction, and checked again here before anything is kept: the
  * collector and the visit are hashes, the device is phone or desktop, the place a room's neutral id,
  * and no other field is taken. A row that fails the check is left out and the rest are kept. The
  * park's key (`FRAUD_SCORE_KEY`, the fraud link's, sent as a bearer token) is checked here: the
@@ -46,6 +52,12 @@ export const CHANGE_REASONS = ['first', 'chosen', 'quest', 'seasonal'] as const;
 /** A room's kind of place, and how an owl came into it (OP-113). */
 export const REALM_KINDS = ['realm', 'hub', 'nest'] as const;
 export const ENTRY_SOURCES = ['walked', 'spawn', 'deep_link', 'reconnect', 'travel'] as const;
+/** What a visit was past the turnstiles (OP-192): a full visitor's or a spectator's (OP-191). */
+export const VISITOR_KINDS = ['visitor', 'spectator'] as const;
+/** What happened to a ticket order, or to a ticket at the gate (OP-192). */
+export const PURCHASE_EVENTS = ['paid', 'claimed', 'refunded', 'cancelled', 'scanned'] as const;
+/** The park's ticket kinds: a fixed list, never free text. */
+export const TICKET_KINDS = ['day', 'night', 'annual', 'event', 'opening-night'] as const;
 
 /** A row of `game.collect_log` as the park sends it, after the check. */
 export interface LogRow {
@@ -80,6 +92,33 @@ export interface SessionRow {
   device_class: 'phone' | 'desktop' | null;
   realms_entered: number;
   collectibles_gained: number;
+  /** A full visitor's or a spectator's past the turnstiles, or null (never past them, or a Worker from before OP-192). */
+  visitor_kind: (typeof VISITOR_KINDS)[number] | null;
+}
+
+/** A ticket event, for `game.fact_purchase` (OP-192). */
+export interface PurchaseRow {
+  event_id: string;
+  event: (typeof PURCHASE_EVENTS)[number];
+  order_key: string | null;
+  collector_id: string | null;
+  occurred_at: string;
+  ticket_kinds: (typeof TICKET_KINDS)[number][];
+  tickets: number;
+  amount_cents: number | null;
+  upsell: boolean;
+  held: boolean;
+  via: 'claim' | 'checkout' | null;
+  valid_until: string | null;
+}
+
+/** A paid order's buyer, for the owner's `contacts` schema (OP-192): never a `game` table. */
+export interface ContactRow {
+  shopify_order_id: string;
+  order_key: string;
+  email: string;
+  shopify_customer_id: string | null;
+  ordered_at: string;
 }
 
 /** A time in one room, for `game.fact_realm_visit`. */
@@ -140,6 +179,10 @@ export interface Tables {
   addRealmVisits(rows: RealmVisitRow[]): Promise<number>;
   /** Keeps the notes not there yet; returns how many those were. */
   addFeedback(rows: FeedbackRow[]): Promise<number>;
+  /** Keeps the ticket events not there yet; returns how many those were. */
+  addPurchases(rows: PurchaseRow[]): Promise<number>;
+  /** Keeps each buyer and the order they paid for; returns how many orders were new. */
+  addContacts(rows: ContactRow[]): Promise<number>;
 }
 
 export interface Deps {
@@ -264,6 +307,9 @@ export function checkSession(v: unknown): SessionRow | string {
   if (realms === null) return 'realms_entered';
   const gained = count(r['collectibles_gained'], 10_000);
   if (gained === null) return 'collectibles_gained';
+  // A Worker from before OP-192 sends none: the visit is kept without one.
+  const kind = r['visitor_kind'] ?? null;
+  if (kind !== null && !VISITOR_KINDS.includes(kind as SessionRow['visitor_kind'] & string)) return 'visitor_kind';
   return {
     session_id: r['session_id'],
     collector_id: r['collector_id'],
@@ -272,7 +318,72 @@ export function checkSession(v: unknown): SessionRow | string {
     device_class: device as SessionRow['device_class'],
     realms_entered: realms,
     collectibles_gained: gained,
+    visitor_kind: kind as SessionRow['visitor_kind'],
   };
+}
+
+/** A ticket event as the table takes it, or the reason it is left out (OP-192). */
+export function checkPurchase(v: unknown): PurchaseRow | string {
+  const r = obj(v);
+  if (typeof r['event_id'] !== 'string' || !UUID.test(r['event_id'])) return 'event_id';
+  const event = r['event'] as PurchaseRow['event'];
+  if (!PURCHASE_EVENTS.includes(event)) return 'event';
+  const order = r['order_key'] ?? null;
+  if (order !== null && (typeof order !== 'string' || !UUID.test(order))) return 'order_key';
+  // Every event but a scan names its order; a scan of a ticket the keepers gave has none.
+  if (order === null && event !== 'scanned') return 'order_key';
+  const owl = r['collector_id'] ?? null;
+  if (owl !== null && (typeof owl !== 'string' || !HASH.test(owl))) return 'collector_id';
+  if (owl === null && (event === 'claimed' || event === 'scanned')) return 'collector_id';
+  const at = iso(r['occurred_at']);
+  if (!at) return 'occurred_at';
+  const kinds = r['ticket_kinds'] ?? [];
+  if (!Array.isArray(kinds) || kinds.length > MAX_ROWS || !kinds.every((k) => TICKET_KINDS.includes(k as PurchaseRow['ticket_kinds'][number]))) return 'ticket_kinds';
+  const tickets = count(r['tickets'], 10_000);
+  if (tickets === null) return 'tickets';
+  const cents = r['amount_cents'] ?? null;
+  if (cents !== null && count(cents, 100_000_000) === null) return 'amount_cents';
+  const upsell = r['upsell'] ?? false;
+  if (typeof upsell !== 'boolean') return 'upsell';
+  const held = r['held'] ?? false;
+  if (typeof held !== 'boolean') return 'held';
+  const via = r['via'] ?? null;
+  if (via !== null && via !== 'claim' && via !== 'checkout') return 'via';
+  const untilSent = r['valid_until'] ?? null;
+  const until = untilSent === null ? null : iso(untilSent);
+  if (untilSent !== null && until === null) return 'valid_until';
+  return {
+    event_id: r['event_id'],
+    event,
+    order_key: order as string | null,
+    collector_id: owl as string | null,
+    occurred_at: at,
+    ticket_kinds: kinds as PurchaseRow['ticket_kinds'],
+    tickets,
+    amount_cents: cents as number | null,
+    upsell,
+    held,
+    via: via as PurchaseRow['via'],
+    valid_until: until,
+  };
+}
+
+/** An email as the park keys emails (trimmed, lower case, at most 254 characters, one @ with a dot after it). */
+const EMAIL = /^[^\s@<>()[\]\\,;:"\u0000-\u001F\u007F]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const STORE_ID = /^\d{1,20}$/;
+
+/** A buyer as the contacts take it, or the reason it is left out (OP-192). The email is checked for shape only, never sent anywhere. */
+export function checkContact(v: unknown): ContactRow | string {
+  const r = obj(v);
+  if (typeof r['shopify_order_id'] !== 'string' || !STORE_ID.test(r['shopify_order_id'])) return 'shopify_order_id';
+  if (typeof r['order_key'] !== 'string' || !UUID.test(r['order_key'])) return 'order_key';
+  const email = r['email'];
+  if (typeof email !== 'string' || email.length > 254 || email !== email.trim().toLowerCase() || !EMAIL.test(email)) return 'email';
+  const customer = r['shopify_customer_id'] ?? null;
+  if (customer !== null && (typeof customer !== 'string' || !STORE_ID.test(customer))) return 'shopify_customer_id';
+  const at = iso(r['ordered_at']);
+  if (!at) return 'ordered_at';
+  return { shopify_order_id: r['shopify_order_id'], order_key: r['order_key'], email, shopify_customer_id: customer as string | null, ordered_at: at };
 }
 
 /** A time in one room as the table takes it, or the reason it is left out. */
@@ -402,8 +513,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json({ ok: true, dry_run: true, tables });
   }
   const kind = body['kind'];
-  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback') {
-    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit or feedback' }, 400);
+  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback' && kind !== 'purchase' && kind !== 'contact') {
+    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit, feedback, purchase or contact' }, 400);
   }
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
   const tables = deps.tables;
@@ -420,6 +531,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkRealmVisit, (rows) => tables.addRealmVisits(rows));
       case 'feedback':
         return await keepRows(kind, body, checkFeedback, (rows) => tables.addFeedback(rows));
+      case 'purchase':
+        return await keepRows(kind, body, checkPurchase, (rows) => tables.addPurchases(rows));
+      case 'contact':
+        return await keepRows(kind, body, checkContact, (rows) => tables.addContacts(rows));
       case 'catalogue':
         return await catalogue(body, tables);
     }
@@ -439,7 +554,10 @@ export interface Db {
 
 const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, realm, acquired_at, session_id, device_class, first_entry_at, backfill';
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
-const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained';
+const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained, visitor_kind';
+const PURCHASE_COLUMNS = 'event_id, event, order_key, collector_id, occurred_at, ticket_kinds, tickets, amount_cents, upsell, held, via, valid_until';
+/** The owner's buyers (OP-192): a schema of their own, apart from the park's anonymous `game` tables. */
+export const CONTACTS_SCHEMA = 'contacts';
 const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, map_id, entered_at, exited_at, entry_source, collectibles_gained';
 const FEEDBACK_COLUMNS = 'event_id, park_feedback_id, collector_id, session_id, kind, body, realm, realm_kind, device_class, submitted_at';
 
@@ -518,6 +636,19 @@ export function gameTables(db: Db): Tables {
         [JSON.stringify(rows)],
       );
       return Array.isArray(kept) ? kept.length : 0;
+    },
+    async addPurchases(rows) {
+      const kept = await db.unsafe(
+        `insert into ${SCHEMA}.fact_purchase (${PURCHASE_COLUMNS}) select ${PURCHASE_COLUMNS} from jsonb_populate_recordset(null::${SCHEMA}.fact_purchase, $1::text::jsonb) on conflict (event_id) do nothing returning event_id`,
+        [JSON.stringify(rows)],
+      );
+      return Array.isArray(kept) ? kept.length : 0;
+    },
+    async addContacts(rows) {
+      // The database keeps each buyer by email and each order once (sql/profiles.sql): the rows go as the one JSON parameter.
+      const res = await db.unsafe(`select ${CONTACTS_SCHEMA}.add_contacts($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
+      const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
+      return Number.isFinite(kept) ? kept : 0;
     },
     async addFeedback(rows) {
       // The words go in the batch's one JSON parameter like every other field: never part of the query.
