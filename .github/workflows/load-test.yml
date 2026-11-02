@@ -60,6 +60,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Write the throwaway copy's config
         run: |
+          # The copy signs its passes with a key made for this run only (OP-209: a Worker without one
+          # refuses every pass), masked from the log, since Wrangler prints the copy's vars.
+          signing=$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")
+          echo "::add-mask::$signing"
+          export LOAD_SIGNING_KEY="$signing"
           # The rehearsal changes settings with an admin key made for this run only, masked from the log.
           if [ "$LOAD_MODE" = "capacity" ]; then
             key=$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")

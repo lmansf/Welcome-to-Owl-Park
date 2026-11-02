@@ -9,6 +9,7 @@
  *
  *   node tools/load/throwaway-config.mjs
  */
+import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 export const LOAD_NAME = 'owl-park-load';
@@ -56,6 +57,9 @@ config.vars = {
   MAX_SOCKETS_PER_IP: '64',
   // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
   ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120 }),
+  // The copy's own signing key (OP-209: off this machine a Worker without one signs and takes no pass):
+  // the workflow's, made for this run and masked, else one made here. The copy is deleted after.
+  PASS_SIGNING_KEY: process.env.LOAD_SIGNING_KEY || randomBytes(24).toString('hex'),
   // A throwaway key made for this one run (the workflow masks it); the copy is deleted after.
   ...(capacity && process.env.LOAD_ADMIN_KEY ? { ADMIN_KEY: process.env.LOAD_ADMIN_KEY } : {}),
 };
