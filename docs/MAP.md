@@ -274,7 +274,8 @@ the market's common square (`e1`, +1) and its roof run (`e2`, +2). Each screen h
 - **The turn-your-phone card [BUILT: OP-156].** In a tree room, a phone held upright (a touch screen
   under 600 CSS pixels across) sees a card over the game asking to turn it sideways, and nothing under
   it takes a tap; it goes once the phone is turned. The cards that ask the visitor something ("Still
-  here?", the account screens) stay above it. Its words wait on the owner's approval.
+  here?", the account screens) stay above it. Its one line, under a picture of a phone turning, is the
+  owner's pick: "This part of the park plays with your phone on its side." (`TURN_PHONE_WORDS`).
 
 ## 10. Building a level, step by step
 
