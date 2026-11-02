@@ -3,7 +3,7 @@
 - Status: BUILT (the caps, the line, the busy ribbon, copies of a room, the capacity page and the tree's share)
 - Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02); the process write-up from 9f7326a (OP-075, 2026-10-24)
 - Code: apps/edge/src/rooms.ts, apps/edge/src/Room.ts, apps/edge/src/RoomObject.ts, apps/edge/src/Overflow.ts, apps/edge/src/line.ts, apps/edge/src/capacityPage.ts, apps/edge/src/routes/admin.ts, apps/edge/src/routes/rooms.ts, packages/shared/src/overflow.ts, apps/park/src/ui/ribbon.ts, apps/park/src/game/RoomScene.ts, tools/load
-- Tickets: OP-068, OP-075, OP-088, OP-100, OP-156
+- Tickets: OP-068, OP-075, OP-088, OP-100, OP-156, OP-211
 - Related: docs/ARCHITECTURE.md sections 3 and 6, docs/PLAYBOOK.md section 5
 
 What the park holds, what happens at the cap, and how the park bends instead of breaking on a night
@@ -67,9 +67,10 @@ pages reconnect on their own, from half a second up to eight seconds apart.
 
 With one object per room (`ROOM_SHARDING=room`, today's setting since OP-106), each room holds its own
 cap and a room that overloads no longer takes the others with it: the four rooms at their caps
-(240 owls, all walking) held with an echo p95 of 39 ms. The park switched to it ahead of the full
-opening (`docs/PLAYBOOK.md`, section 5). Each busy room's object is awake, and billed, on its own
-(`docs/ARCHITECTURE.md`, section 3).
+(240 owls, all walking) held with an echo p95 of 39 ms on 2026-10-23, and of 69 to 287 ms in eight
+runs on 2026-11-02 (the runner's network, not the code: `docs/ARCHITECTURE.md`, section 6). The park
+switched to it ahead of the full opening (`docs/PLAYBOOK.md`, section 5). Each busy room's object is
+awake, and billed, on its own (`docs/ARCHITECTURE.md`, section 3).
 
 ## Busy nights: adding and removing capacity
 
@@ -84,7 +85,8 @@ objects). `ROOM_SHARDING` in `apps/edge/wrangler.jsonc` decides how many:
   so the nightly restart, the setup switch, the ribbon and the counts reach the nests too.
 
 What runs out first is an object's fan-out: every move goes to everyone else in its room. Measured
-(OP-068): one object holds 80 owls walking at once (echo p95 71 ms) and overloads at 120 (moves lag
+(OP-068, OP-211): one object holds 80 owls walking at once (echo p95 71 ms on 2026-10-23, 71 to 283 ms
+across seven runs on 2026-11-02, with every owl welcomed) and overloads at 120 (moves lag
 by seconds, then Cloudflare closes every socket in it with 1013 and the owls reconnect). With the
 whole park in one object, the whole park holds about what one busy room does: about 80 owls walking
 at once. Room caps, as deployed: lobby and hub 80, the grove, the market, the arcade and the street
@@ -214,13 +216,13 @@ Verify: the capacity page shows the room's new cap.
 ## 6. One object per room [BUILT]
 
 `"ROOM_SHARDING": "room"` in the `vars` of `apps/edge/wrangler.jsonc`, then a deploy: today's setting
-since OP-106. Each room holds its own cap (240 busy owls across four rooms held at p95 39 ms, against
-an overload with one object); every nest shares one object of its own (`nests`), which the nightly
-restart, the setup switch, the ribbon, the moved card and the counts reach like any room's. What
-changes for visitors: the park-wide count in the HUD covers only the owl's own room
-(`/api/counts` still adds up every room, copy and the nests), and the lanterns and the quiz start
-afresh in the hub's own object. At the deploy that switches, every owl in the park reconnects once,
-on its own, into the room it was in. Cost: each room's object is awake, and billed on Workers Paid, on its own while owls are
+since OP-106. Each room holds its own cap (240 busy owls across four rooms held at p95 39 ms on
+2026-10-23 and 69 to 287 ms on 2026-11-02, against an overload with one object); every nest shares one
+object of its own (`nests`), which the nightly restart, the setup switch, the ribbon, the moved card
+and the counts reach like any room's. What changes for visitors: the park-wide count in the HUD covers
+only the owl's own room (`/api/counts` still adds up every room, copy and the nests), and the lanterns
+and the quiz start afresh in the hub's own object. At the deploy that switches, every owl in the park
+reconnects once, on its own, into the room it was in. Cost: each room's object is awake, and billed on Workers Paid, on its own while owls are
 in it (`docs/ARCHITECTURE.md`, section 3). Switching back is the same edit and a deploy; owls connected
 at the time reconnect on their own.
 

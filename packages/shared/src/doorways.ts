@@ -68,6 +68,7 @@ export function laneThrough(room: RoomDef, door: DoorDef, p: Vec2): Lane {
  */
 /** Where `door` leads an owl walking `map`: its way back to the tree for a tree owl, where it has one, else its own (OP-162). */
 export function doorTarget(door: DoorDef, map: 1 | 2): DoorDef['to'] {
+  if (map === 2 && door.closedInTree) return undefined;
   return map === 2 && door.toTree ? door.toTree : door.to;
 }
 
