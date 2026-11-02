@@ -301,7 +301,7 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `SPECTATORS` (`off` or `on`; on lets an owl without a ticket past the turnstiles as a spectator that earns nothing, OP-191; leave it `off` until the owner says yes), `SPECTATOR_SHARE` (the share of a room's cap spectators may fill, default `0.75`), `PARK_TZ` (the park
+`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `SPECTATORS` (`off` or `on`; on lets an owl without a ticket past the turnstiles as a spectator that earns nothing, OP-191; `on` in production since 2026-11-01; set it back to `off` and deploy to turn spectators away again), `SPECTATOR_SHARE` (the share of a room's cap spectators may fill, default `0.75`), `PARK_TZ` (the park
 day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
 to close a month by hand, to issue tickets without a store order, to read visitors' feedback on
