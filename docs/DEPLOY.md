@@ -326,7 +326,9 @@ asked; it signs in to your Cloudflare account through the browser). For other pr
 guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
-Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
+Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`room`, today's setting since
+OP-106: one object per room and copy, the nests sharing one; or `single`, the whole park in one
+object; `docs/CAPACITY.md`, section 6),
 `GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `SPECTATORS` (`off` or `on`; on lets an owl without a ticket past the turnstiles as a spectator that earns nothing, OP-191; `on` in production since 2026-11-01; set it back to `off` and deploy to turn spectators away again), `SPECTATOR_SHARE` (the share of a room's cap spectators may fill, default `0.75`), `ACCOUNTS` (above),
 `RATE_LIMITS` (`on` always; `off` only for a load test's throwaway copy, `docs/PLAYBOOK.md` section
 9), `LOG_LEVEL`, `PARK_TZ` (the park day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:

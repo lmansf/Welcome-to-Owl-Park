@@ -9,7 +9,7 @@
  * an owl whose socket dropped goes back to the copy it was in while that copy is still there. Inside
  * its object a copy is simply its room: quests, NPC owls and activities see the room's own id.
  */
-import { COPY_MAX, type Copies, type CopyState } from '@owl-park/shared';
+import { COPY_MAX, type Copies, type CopyState, isNestRoom } from '@owl-park/shared';
 
 /** The object a room's copy lives in, with one object per room: copy 1 is the room's own. */
 export function copyObjectName(room: string, copy: number): string {
@@ -17,9 +17,23 @@ export function copyObjectName(room: string, copy: number): string {
 }
 
 /**
- * Every room object there is now: the park's one (`single`), or each room's own and its copies'
- * (`room`). Nests are not among them: with one object per room each nest is an object of its own,
- * made when an owl first walks in.
+ * The one object every nest lives in with one object per room (OP-106). Nests are small (12 owls at
+ * most), so together they are far less fan-out than one busy room; kept in one object they are a
+ * name the park can list, so the nightly restart, the setup switch, the busy ribbon, the moved card
+ * and the counts reach every nest as they do with the whole park in one object. Never `room:` anything,
+ * so no room id can name it.
+ */
+export const NESTS_OBJECT = 'nests';
+
+/** The room object a room (or a copy of it, or a nest) lives in: `park` for the whole park in one object. */
+export function roomObjectName(sharding: string | undefined, room: string, copy = 1): string {
+  if (sharding !== 'room') return 'park';
+  return isNestRoom(room) ? NESTS_OBJECT : copyObjectName(room, copy);
+}
+
+/**
+ * Every room object there is now: the park's one (`single`), or each room's own and its copies',
+ * and the nests' (`room`).
  */
 export function roomObjectNames(sharding: string | undefined, rooms: readonly string[], copies: Copies): string[] {
   if (sharding !== 'room') return ['park'];
@@ -29,6 +43,7 @@ export function roomObjectNames(sharding: string | undefined, rooms: readonly st
     const { open, draining } = copiesIn(copies, room);
     for (const n of [...open, ...draining]) names.push(copyObjectName(room, n));
   }
+  names.push(NESTS_OBJECT);
   return names;
 }
 

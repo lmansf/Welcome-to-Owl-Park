@@ -161,9 +161,11 @@ describe('the nightly restart’s cron (OP-181)', () => {
     park.down.add('room:grove');
     await cron(park.env({ ROOM_SHARDING: 'room' }), RESTART_CRON);
     const told = park.reached.filter((r) => r.startsWith('rooms:') && r.endsWith(' /restart'));
-    expect(told).toHaveLength(Object.keys(ROOMS).length);
+    // Every room's own object, and the one the nests share (OP-106), so no owl in a nest stays past the restart.
+    expect(told).toHaveLength(Object.keys(ROOMS).length + 1);
+    expect(told).toContain('rooms:nests /restart');
     logged(cap.lines, 'send_failed', { component: 'worker', level: 'error', object: 'room:grove', by: 'cron' });
-    logged(cap.lines, 'park_restart', { level: 'warn', objects: Object.keys(ROOMS).length, missed: 1, owls: 2 * (Object.keys(ROOMS).length - 1) });
+    logged(cap.lines, 'park_restart', { level: 'warn', objects: Object.keys(ROOMS).length + 1, missed: 1, owls: 2 * Object.keys(ROOMS).length });
   });
 
   it('restarts the rooms though the ledger does not keep its time, and says so', async () => {

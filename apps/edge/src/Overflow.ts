@@ -191,7 +191,7 @@ export class Overflow extends DurableObject<Env> {
     return this.env.ROOMS.get(this.env.ROOMS.idFromName(name));
   }
 
-  /** Owls in the park's rooms now (the nests, each its own object with one object per room, are left out there). */
+  /** Owls in the park now: its rooms, their copies and the nests. */
   private async parkCount(): Promise<number> {
     const totals = await Promise.all(
       this.roomObjects().map(async (name) => {
