@@ -9,7 +9,7 @@ declare global {
 }
 const tests = import.meta.glob('./*.test.ts', { query: '?raw', import: 'default', eager: true });
 // The keepers' pages are the browser's own scripts, served as text: not the Worker's code.
-const sources = import.meta.glob(['../src/*.ts', '!../src/*Page.ts'], { query: '?raw', import: 'default', eager: true });
+const sources = import.meta.glob(['../src/**/*.ts', '!../src/**/*Page.ts'], { query: '?raw', import: 'default', eager: true });
 
 describe('the log’s events (OP-134)', () => {
   it('each fires in a test: every event in the list is looked for with logged() in these tests, the shared logger’s own in its tests', () => {
