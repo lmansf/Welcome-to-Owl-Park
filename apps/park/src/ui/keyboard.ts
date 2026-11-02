@@ -1,7 +1,9 @@
 import type { Vec2 } from '@owl-park/shared';
 
 /**
- * Keyboard controls: WASD and the arrow keys walk the owl while held, E interacts with what the
+ * Keyboard controls: WASD and the arrow keys walk the owl while held (in a room seen from the side,
+ * the tree, only left and right walk, and a press of W or the up arrow goes through the doorway or up
+ * the stair the owl stands in, OP-212), E interacts with what the
  * owl stands at, the space bar jumps (OP-084: again in the air to flap, held to glide), M opens the Menu on its map (OP-130) and closes it, T the Say wheel, 1 to 8 play an
  * emote, Q goes to the mirror in the owl's nest where Your owl is (OP-077), J the quests, and
  * Escape closes whatever is open. Keys are matched by place (`KeyboardEvent.code`), so ZQSD walks
@@ -35,7 +37,33 @@ export function heldDirection(codes: Iterable<string>): Vec2 | null {
   return { x: x / len, y: y / len };
 }
 
+/** How far sideways (of 1) a held direction must point to walk a side view: a diagonal does, a near-vertical push does not. */
+export const SIDEWAYS_MIN = 0.35;
+
+/**
+ * The held direction as a room seen from the side walks it (the tree, OP-212): along the floor only,
+ * left or right, since up goes through doorways there and the floor is a line. A thumbstick pushed
+ * mostly up or down walks nowhere; one pushed sideways enough walks that way at full pace.
+ */
+export function alongTheFloor(dir: Vec2 | null): Vec2 | null {
+  if (!dir || Math.abs(dir.x) < SIDEWAYS_MIN) return null;
+  return { x: Math.sign(dir.x), y: 0 };
+}
+
+/** How far up (of 1) a held direction must point to hold up in a side view (OP-212): the up key, alone or with a side key, or the thumbstick pushed up at least as steep as a diagonal. */
+export const UP_HELD = 0.7;
+
+/** Whether the held direction holds up (OP-212): in a side view, an owl walking or standing in a doorway with up held goes through it. */
+export function holdsUp(dir: Vec2 | null): boolean {
+  return !!dir && dir.y <= -UP_HELD;
+}
+
+/** The keys that press up (OP-212): W and the up arrow. */
+const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
+
 export interface KeyActions {
+  /** W or the up arrow goes down (once a press, OP-212): in a side view, through the doorway the owl stands in. They walk as well, held. `at`: when (ms since 1970). */
+  up(at?: number): void;
   /** E: use whatever the owl is standing at. */
   interact(): void;
   /** The space bar goes down (the Jump button on a phone, OP-084): a jump, or a flap in the air. `at`: when (ms since 1970). */
@@ -92,6 +120,7 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
     if (e.code in WALK_KEYS) {
       held.add(e.code);
       e.preventDefault(); // arrow keys would otherwise scroll whatever has focus
+      if (UP_KEYS.has(e.code) && !e.repeat) actions.up(eventTime(e));
       return;
     }
     if (e.code === 'Space') {

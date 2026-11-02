@@ -161,6 +161,10 @@ const jumpEnd = (at?: number) => roomScene()?.jumpUp(at);
 hud.onInteract(interact);
 hud.onJump(jump, jumpEnd);
 const keyboard = attachKeyboard(window, {
+  // W or the up arrow (OP-212): in the tree, through the doorway or up the stair the owl stands in.
+  up: (at) => {
+    if (!atHome && !hud.isBlocking()) roomScene()?.upKey(at);
+  },
   interact,
   jump,
   jumpEnd,
