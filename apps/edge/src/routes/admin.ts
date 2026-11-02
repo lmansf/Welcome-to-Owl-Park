@@ -8,7 +8,7 @@ import { gateMode } from '../gate';
 import { type GateSet, forgetGate, gateFrom } from '../gateSwitch';
 import { passLinkReady, storeCatalogue } from '../opening';
 import { forgetOverflow } from '../overflowState';
-import { KEEPER_TTL_S, isCollectorId, mintKeeper, signingSecret } from '../pass';
+import { KEEPER_TTL_S, isCollectorId, mintKeeper, requireSecret } from '../pass';
 import { ROOMS, roomCap } from '../rooms';
 import { KINDS, type TicketLine } from '../shopify';
 import { storeCheck } from '../storeApi';
@@ -114,10 +114,10 @@ export async function adminPing(c: RouteCtx): Promise<Response> {
 
 // ---- A keeper's token: this tab's owl walks the tree (map 2) while it is dark (OP-156) ----
 export async function adminKeeper(c: RouteCtx): Promise<Response> {
-  const { request, env, log } = c;
+  const { request, env, url, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
-  return json({ token: await mintKeeper(signingSecret(env)), ttl: KEEPER_TTL_S });
+  return json({ token: await mintKeeper(requireSecret(env, url)), ttl: KEEPER_TTL_S });
 }
 
 // ---- Collectibles (the collector comes from the pass) ----

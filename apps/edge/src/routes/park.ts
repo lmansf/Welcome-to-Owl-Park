@@ -45,7 +45,10 @@ export async function offerProtectByOrder(env: Env, log: Logger, origin: string,
   const mail = mailSender(env);
   const store = storeConfig(env);
   if (!keys || !mail || !store || order.startsWith('comp-')) return;
-  const deps = { rpc: collections(env), secret: signingSecret(env), keys, mail, origin, log };
+  // No signing key off this machine (OP-209): no link is made (signingSecret has said so).
+  const secret = signingSecret(env, new URL(origin));
+  if (secret === null) return;
+  const deps = { rpc: collections(env), secret, keys, mail, origin, log };
   await orderEmail(store, order)
     .then((email) => offerOrderProtect(deps, cid, order, email))
     .catch((e: unknown) =>

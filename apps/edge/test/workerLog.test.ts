@@ -8,7 +8,7 @@ import { forgetCatalogue, storeCatalogue } from '../src/opening';
 import type { OverflowState } from '../src/Overflow';
 import { forgetCounts, forgetOverflow, overflowNow } from '../src/overflowState';
 import { forgetLimits } from '../src/limits';
-import { mintPass, verifyKeeper } from '../src/pass';
+import { forgetSigningKeyNotes, mintKeeper, mintPass, signingSecret, verifyKeeper, verifyPass } from '../src/pass';
 import { webhookSignature } from '../src/shopify';
 import { MemoryTicketStore, TicketBook } from '../src/TicketBook';
 import { ticketDesk } from '../src/ticketDesk';
@@ -110,6 +110,8 @@ let park: Park;
 let cap: ReturnType<typeof captureLogs>;
 const nowS = () => Math.floor(Date.now() / 1000);
 const call = (e: Env, path: string, init: RequestInit = {}) => worker.fetch(new Request(`https://park.example${path}`, init), e, CTX);
+/** The same, on this machine: local development and the browser tests (wrangler dev on localhost). */
+const callLocal = (e: Env, path: string, init: RequestInit = {}, host = 'localhost:8787') => worker.fetch(new Request(`http://${host}${path}`, init), e, CTX);
 const asKeeper = (key: string | null, init: RequestInit = {}): RequestInit => ({ ...init, headers: { ...(key === null ? {} : { 'X-Admin-Key': key }), ...(init.headers as Record<string, string> | undefined) } });
 
 beforeEach(() => {
@@ -119,6 +121,7 @@ beforeEach(() => {
   forgetCounts();
   forgetLimits();
   forgetCatalogue();
+  forgetSigningKeyNotes();
   cap = captureLogs();
 });
 
@@ -131,8 +134,8 @@ afterEach(() => {
 describe('the Worker’s log (OP-134)', () => {
   it('tells each pass it gives out, takes and refuses with why, and says once that no signing key is set', async () => {
     const noKey = park.env({ PASS_SIGNING_KEY: undefined });
-    await call(noKey, '/api/pass');
-    await call(noKey, '/api/pass');
+    await callLocal(noKey, '/api/pass');
+    await callLocal(noKey, '/api/pass');
     logged(cap.lines, 'signing_key_missing', { level: 'warn', component: 'worker.pass' });
     expect(cap.lines.filter((l) => l.event === 'signing_key_missing')).toHaveLength(1);
     logged(cap.lines, 'pass_issued', { component: 'worker.pass', new_collector: true });
@@ -460,5 +463,106 @@ describe('the Worker’s log (OP-134)', () => {
     const pass = await mintPass(KEY, { id: 'v_pass00003', exp: nowS() + 600, adm: false, cid: 'c_owl0000003' });
     await expect(call(park.env(), '/api/collection', { headers: { Authorization: `Bearer ${pass}` } })).rejects.toThrow('away');
     logged(cap.lines, 'unhandled_error', { component: 'worker', route: '/api/collection', error: { name: 'Error', message: 'the collections object is away' } });
+  });
+});
+
+// ---- OP-209: no signing key off this machine refuses to sign or take anything; on it, the development key still works ----
+
+describe('a missing signing key fails closed off this machine (OP-209)', () => {
+  const DEV = signingSecret({}, true) as string;
+  const NO_KEY = 'no-signing-key';
+  const socketTo = (pass: string) => `/ws/hub?pass=${encodeURIComponent(pass)}`;
+  const upgrade = { headers: { Upgrade: 'websocket', Origin: 'https://park.example' } };
+
+  it('gives out no pass, takes none forged with the public development key, opens no room, and says so once', async () => {
+    const e = park.env({ PASS_SIGNING_KEY: undefined });
+    for (let i = 0; i < 2; i++) {
+      const r = await call(e, '/api/pass');
+      expect(r.status).toBe(503);
+      expect(await r.json()).toEqual({ ok: false, error: NO_KEY });
+    }
+    // A pass marked admitted through a ticket, naming another owl's collection, made with the key in the repository.
+    const forged = await mintPass(DEV, { id: 'v_forged0001', exp: nowS() + 600, adm: true, tid: 'T-FORGED', cid: 'c_someoneelse1' });
+    for (const path of ['/api/entry', '/api/collection', '/api/travel', '/api/vote/me']) {
+      const r = await call(e, path, { headers: { Authorization: `Bearer ${forged}` } });
+      expect(r.status, path).toBe(503);
+    }
+    expect((await call(e, '/api/line', { method: 'POST', headers: { Authorization: `Bearer ${forged}` }, body: '{}' })).status).toBe(503);
+    expect((await call(e, '/api/feedback', { method: 'POST', headers: { Authorization: `Bearer ${forged}` }, body: '{}' })).status).toBe(503);
+    expect((await call(park.env({ PASS_SIGNING_KEY: undefined, ACCOUNTS: 'on' }), '/api/account/protect', { method: 'POST', headers: { Authorization: `Bearer ${forged}` }, body: '{}' })).status).toBe(503);
+    // The room's socket is refused before any room is asked.
+    const ws = await call(e, socketTo(forged), upgrade);
+    expect(ws.status).toBe(503);
+    // A short key is no key.
+    expect((await call(park.env({ PASS_SIGNING_KEY: '0123456789abcde' }), '/api/pass')).status).toBe(503);
+    logged(cap.lines, 'signing_key_refused', { level: 'error', component: 'worker.pass' });
+    expect(cap.lines.filter((l) => l.event === 'signing_key_refused')).toHaveLength(1);
+    expect(cap.lines.filter((l) => l.event === 'signing_key_missing')).toEqual([]);
+    expect(JSON.stringify(cap.lines)).not.toContain(DEV);
+  });
+
+  it('gives no keeper a token, and saves no ledge draft on one forged with the development key, even with no keepers’ key set', async () => {
+    expect((await call(park.env({ PASS_SIGNING_KEY: undefined }), '/api/admin/keeper', asKeeper(ADMIN, { method: 'POST' }))).status).toBe(503);
+    const forged = await mintKeeper(DEV);
+    const r = await call(park.env({ PASS_SIGNING_KEY: undefined, ADMIN_KEY: undefined }), '/api/admin/masks/l1', { method: 'POST', headers: { 'X-Keeper-Token': forged, 'Content-Type': 'application/json' }, body: '{}' });
+    expect(r.status).toBe(503);
+    expect(cap.lines.filter((l) => l.event === 'masks_saved')).toEqual([]);
+    // The keepers' key alone still answers the routes that need nothing signed.
+    expect((await call(park.env({ PASS_SIGNING_KEY: undefined }), '/api/admin/ping', asKeeper(ADMIN))).status).toBe(200);
+  });
+
+  it('answers the health check not ok (503, so the uptime check alerts) with which key is not set, never its value', async () => {
+    for (const [more, configured] of [
+      [{ PASS_SIGNING_KEY: undefined }, { signing: false, admin: true }],
+      [{ ADMIN_KEY: undefined }, { signing: true, admin: false }],
+      [{ PASS_SIGNING_KEY: 'short', ADMIN_KEY: 'short' }, { signing: false, admin: false }],
+    ] as const) {
+      const r = await call(park.env(more), '/api/health');
+      expect(r.status).toBe(503);
+      const body = await r.json();
+      expect(body).toMatchObject({ ok: false, parts: { rooms: true, tickets: true, collections: true }, configured });
+      expect(JSON.stringify(body)).not.toMatch(/key|secret|shop|short/i);
+      logged(cap.lines, 'health_check', { level: 'error', ok: false, configured });
+    }
+    const r = await call(park.env(), '/api/health');
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ok: true, configured: { signing: true, admin: true } });
+    expect(JSON.stringify(cap.lines)).not.toContain(KEY);
+    expect(JSON.stringify(cap.lines)).not.toContain(ADMIN);
+  });
+
+  it('keeps local development and the browser tests working with the development key, on localhost and 127.0.0.1', async () => {
+    for (const host of ['localhost:8787', '127.0.0.1:8787']) {
+      forgetSigningKeyNotes();
+      const e = park.env({ PASS_SIGNING_KEY: undefined });
+      const r = await callLocal(e, '/api/pass', {}, host);
+      expect(r.status, host).toBe(200);
+      const { pass } = (await r.json()) as { pass: string };
+      expect(await verifyPass(DEV, pass)).toMatchObject({ adm: false });
+      expect((await callLocal(e, '/api/entry', { headers: { Authorization: `Bearer ${pass}` } }, host)).status).toBe(200);
+      expect((await callLocal(e, socketTo(pass), { headers: { Upgrade: 'websocket', Origin: `http://${host}` } }, host)).status).toBe(200); // the 101, as Node shows it
+      const k = await callLocal(e, '/api/admin/keeper', asKeeper(ADMIN, { method: 'POST' }), host);
+      expect(k.status).toBe(200);
+      expect(await verifyKeeper(DEV, ((await k.json()) as { token: string }).token)).toBe(true);
+      // Health on this machine: ok without the key, and says it is not set.
+      const h = await callLocal(e, '/api/health', {}, host);
+      expect(h.status).toBe(200);
+      expect(await h.json()).toMatchObject({ ok: true, configured: { signing: false, admin: true } });
+      logged(cap.lines, 'signing_key_missing', { level: 'warn' });
+    }
+    expect(cap.lines.filter((l) => l.event === 'signing_key_refused')).toEqual([]);
+  });
+
+  it('with the key set, signs and takes passes off this machine as before', async () => {
+    const r = await call(park.env(), '/api/pass');
+    expect(r.status).toBe(200);
+    const { pass } = (await r.json()) as { pass: string };
+    expect(await verifyPass(KEY, pass)).toMatchObject({ adm: false });
+    expect(await verifyPass(DEV, pass)).toBeNull();
+    expect((await call(park.env(), '/api/entry', { headers: { Authorization: `Bearer ${pass}` } })).status).toBe(200);
+    // One forged with the development key is refused as any bad pass is.
+    const forged = await mintPass(DEV, { id: 'v_forged0002', exp: nowS() + 600, adm: true });
+    expect((await call(park.env(), '/api/entry', { headers: { Authorization: `Bearer ${forged}` } })).status).toBe(401);
+    expect(cap.lines.filter((l) => l.event === 'signing_key_missing' || l.event === 'signing_key_refused')).toEqual([]);
   });
 });

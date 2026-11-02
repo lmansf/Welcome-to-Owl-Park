@@ -12,6 +12,10 @@ import {
   mintPass,
   passRefusal,
   readCollector,
+  forgetSigningKeyNotes,
+  requireSecret,
+  SigningKeyMissing,
+  signingKeySet,
   signingSecret,
   verifyEntry,
   verifyKeeper,
@@ -44,14 +48,61 @@ describe('a collector id', () => {
 });
 
 describe('the signing key', () => {
-  it('is the one set when it has 16 characters or more, otherwise the development key, said once', () => {
+  const LOCAL = ['http://localhost:8787/api/pass', 'http://127.0.0.1:8787/ws/hub', 'http://[::1]:8787/api/pass'].map((u) => new URL(u));
+  const LIVE = ['https://exploreowlpark.com/api/pass', 'https://www.exploreowlpark.com/ws/hub', 'https://owl-park.example.workers.dev/api/pass', 'https://localhost.exploreowlpark.com/api/pass', 'https://127.0.0.1.nip.io/api/pass'].map((u) => new URL(u));
+
+  it('is the one set when it has 16 characters or more, anywhere, and never said missing', () => {
+    forgetSigningKeyNotes();
     const cap = captureLogs();
     try {
-      expect(signingSecret({ PASS_SIGNING_KEY: '0123456789abcdef' })).toBe('0123456789abcdef');
-      const dev = signingSecret({});
+      for (const at of [...LOCAL, ...LIVE, true, false]) expect(signingSecret({ PASS_SIGNING_KEY: '0123456789abcdef' }, at)).toBe('0123456789abcdef');
+      expect(signingKeySet({ PASS_SIGNING_KEY: '0123456789abcdef' })).toBe(true);
+      expect(cap.lines.filter((l) => l.event === 'signing_key_missing' || l.event === 'signing_key_refused')).toEqual([]);
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it('falls back to the development key only on this machine, said once (OP-209)', () => {
+    forgetSigningKeyNotes();
+    const cap = captureLogs();
+    try {
+      const dev = signingSecret({}, LOCAL[0]!);
+      expect(dev).toEqual(expect.any(String));
       expect(dev).not.toBe('0123456789abcde');
-      expect(signingSecret({ PASS_SIGNING_KEY: '0123456789abcde' })).toBe(dev);
+      for (const at of [...LOCAL, true]) {
+        expect(signingSecret({}, at)).toBe(dev);
+        expect(signingSecret({ PASS_SIGNING_KEY: '0123456789abcde' }, at)).toBe(dev);
+        expect(requireSecret({}, at)).toBe(dev);
+      }
       expect(cap.lines.filter((l) => l.event === 'signing_key_missing')).toHaveLength(1);
+      expect(cap.lines.find((l) => l.event === 'signing_key_missing')).toMatchObject({ level: 'warn', component: 'worker.pass' });
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it('is none off this machine when the key is missing or short: nothing is signed or checked, said once as an error (OP-209)', async () => {
+    forgetSigningKeyNotes();
+    const cap = captureLogs();
+    try {
+      const dev = signingSecret({}, true) as string;
+      for (const at of [...LIVE, false]) {
+        expect(signingSecret({}, at)).toBeNull();
+        expect(signingSecret({ PASS_SIGNING_KEY: '0123456789abcde' }, at)).toBeNull();
+        expect(signingSecret({ PASS_SIGNING_KEY: '' }, at)).toBeNull();
+        expect(() => requireSecret({}, at)).toThrow(SigningKeyMissing);
+      }
+      expect(signingKeySet({})).toBe(false);
+      expect(signingKeySet({ PASS_SIGNING_KEY: '0123456789abcde' })).toBe(false);
+      // A pass or a keeper's token signed with the public development key is taken nowhere without a key.
+      const now = Math.floor(Date.now() / 1000);
+      expect(await verifyPass(null, await mintPass(dev, { id: 'v_abcdefgh', exp: now + 600, adm: true }))).toBeNull();
+      expect(await verifyKeeper(null, await mintKeeper(dev))).toBe(false);
+      const refused = cap.lines.filter((l) => l.event === 'signing_key_refused');
+      expect(refused).toHaveLength(1);
+      expect(refused[0]).toMatchObject({ level: 'error', component: 'worker.pass' });
+      expect(JSON.stringify(cap.lines)).not.toContain(dev);
     } finally {
       cap.restore();
     }

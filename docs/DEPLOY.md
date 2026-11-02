@@ -93,8 +93,10 @@ the deploys use.
    Objects and the static assets. The park is live at `https://owl-park.<your-subdomain>.workers.dev`.
 3. Set the two secrets (each `secret put` deploys a new version immediately):
    `pnpm --filter @owl-park/edge exec wrangler secret put PASS_SIGNING_KEY` (32+ random characters)
-   and `... secret put ADMIN_KEY` (16+ random characters). Until then the Worker uses a development
-   signing key and logs a warning, and the admin routes stay closed. If your sign-in reaches more
+   and `... secret put ADMIN_KEY` (16+ random characters). Until then the Worker gives out no pass,
+   opens no room socket and gives no keeper a token (each answered 503, OP-209), `/api/health`
+   answers 503 with `configured` saying which key is missing, and the admin routes stay closed. Only
+   on this machine (`wrangler dev` on localhost) does it fall back to the development key. If your sign-in reaches more
    than one Cloudflare account (`... wrangler whoami` lists them), first set `CLOUDFLARE_ACCOUNT_ID`
    to the Account ID of the one that holds `owl-park` (on its Workers overview page): in PowerShell
    `$env:CLOUDFLARE_ACCOUNT_ID = "<id>"`, in bash `export CLOUDFLARE_ACCOUNT_ID=<id>`. If Wrangler
@@ -117,7 +119,8 @@ What the owner hit setting the secrets on Windows on 2026-10-23 (OP-001), and wh
 | `vite build` inside `apps/edge`: cannot resolve entry module `index.html` | The client is `apps/park`; `apps/edge` has no site of its own | Do not build there. `pnpm build:edge` at the root |
 | `'..' is not recognized as an internal or external command` from `pnpm deploy:edge` | Before main 67ca3ab the script used bash syntax (`VITE_TRANSPORT=edge pnpm build`), which the Command Prompt and PowerShell cannot run | Pull `main` (the script now runs through `tools/build-edge.mjs` on any shell). If it persists on a current `main`, say so on the board: the exact `'..'` message could not be traced to anything in the repository |
 | The deploy workflow's "Upload PASS_SIGNING_KEY" or "Upload ADMIN_KEY" step is marked skipped | GitHub has no Actions secret by that name (one under Variables, Codespaces or Dependabot does not count) | Settings → Secrets and variables → Actions → New repository secret, then Actions → Deploy to Cloudflare → Run workflow; the step then lists the Worker's secret names |
-| `/api/health` is fine but the Worker still logs the development-key warning, or `/admin/*` refuses with the right key | The secrets are not on the Worker that serves the park (see the account row) | Check the upload steps of the latest deploy run; `/api/health` never reports the keys by design |
+| `/api/health` answers 503 with `"configured"` showing `"signing": false` or `"admin": false`, `/api/pass` answers 503 `no-signing-key`, or `/admin/*` refuses with the right key | The secrets are not on the Worker that serves the park (see the account row) | Check the upload steps of the latest deploy run; `/api/health` says only whether each key is set, never its value |
+| The deploy workflow fails at "Check PASS_SIGNING_KEY is there to upload", before deploying | GitHub has no Actions secret `PASS_SIGNING_KEY` for the workflow (OP-209): without it a fresh Worker would refuse every visitor | Add the repository secret (above), then Actions → Deploy to Cloudflare → Run workflow |
 
 ### Deploys from GitHub (every push to `main`)
 
@@ -130,8 +133,9 @@ What the owner hit setting the secrets on Windows on 2026-10-23 (OP-001), and wh
    - optional variable `VITE_SITE_URL`: the park's https origin (for example the workers.dev URL
      wrangler prints). Link previews on some sites need the share image's absolute URL; without
      it the image URL stays relative to the page.
-   - optional secrets `PASS_SIGNING_KEY` and `ADMIN_KEY`: the workflow uploads each one it finds to
-     the Worker after the deploy, so step 3 above is not needed when they are set here. This is the
+   - secret `PASS_SIGNING_KEY` (required: the workflow stops before deploying without it, OP-209)
+     and optional secret `ADMIN_KEY`: the workflow uploads each one it finds to the Worker after the
+     deploy, so step 3 above is not needed when they are set here. This is the
      simplest way to set them: nothing to install, and they go to the account the deploys use. To
      send them up without a push, run the workflow by hand (**Actions → Deploy to Cloudflare → Run
      workflow**, branch `main`); its upload steps then list the Worker's secret names. A step marked

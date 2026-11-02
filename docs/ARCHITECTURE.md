@@ -1245,6 +1245,6 @@ is not admitted opens only the lobby, the street and the nests (`mayEnter` in
 7. Collectibles: how purchases with money reach a collection (quest rewards, leaf-pile feathers and the shop follow canon C31; defaults in `docs/QUESTS.md` and `docs/COLLECTIBLES.md`).
 8. Activities (C30): their numbers and words, defaults in `docs/ACTIVITIES.md`.
 9. The fraud link's contract (section 12): the JSON shape each way, once OP-052 settles it.
-10. Whether a Worker without its secrets should refuse to start rather than sign with the development key and warn (QA's OP-091 recommends refusing once OP-001 is done).
+10. Settled (OP-209): off this machine a Worker without `PASS_SIGNING_KEY` refuses (every pass, socket and keeper's token answered 503, `/api/health` not ok); only localhost falls back to the development key.
 11. OPEN QUESTION: OP-108's note (`apps/park/src/ui/menuTheme.ts`) puts Go home in the Menu's Nest tab. The code has no Go home: the Map tab travels the owl home (OP-130), and the Nest tab, away from home, opens the map. This file describes the code (section 9, Leaving the park).
 12. OPEN QUESTION: `game.v_player_lifetime` still answers null for `purchases_count` and `lifetime_value`, which its comment says wait on the store and the ticket gate (OP-024, OP-010), while `game.fact_purchase` and `game.v_visitor_profile` (OP-192) already carry each owl's ticket events and what it bought (section 13, the park's analytics log).

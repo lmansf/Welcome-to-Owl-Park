@@ -3,7 +3,7 @@ import { type Logger, hashForLog } from '@owl-park/shared';
 import { type Visit, deviceClass } from '../collectLog';
 import type { Env } from '../env';
 import { sameKey } from '../guard';
-import { type PassPayload, passRefusal, signingSecret, verifyKeeper, verifyPass } from '../pass';
+import { type PassPayload, passRefusal, requireSecret, signingSecret, verifyKeeper, verifyPass } from '../pass';
 
 // Which pages may read an answer is the front door's to say, as each answer leaves (guard.ts `finished`): the park's own only.
 export const CORS = {
@@ -16,6 +16,9 @@ export const CORS = {
 export const whoOf = (pass: PassPayload) => pass.cid ?? pass.id;
 
 export const json = (body: unknown, status = 200) => Response.json(body, { status, headers: CORS });
+
+/** What a call that needs the signing key is answered off this machine while none is set (OP-209): nothing signed, nothing taken. */
+export const noSigningKey = () => json({ ok: false, error: 'no-signing-key' }, 503);
 
 /** A feedback request body is a few lines of words: anything past this is refused unread. */
 export const FEEDBACK_BODY_MAX = 16_384;
@@ -36,12 +39,17 @@ export async function readJson(request: Request): Promise<Record<string, unknown
   }
 }
 
+/** Whether the deployment's keepers' key is set: 16 characters or more (OP-131). Never the key itself. */
+export function adminKeySet(env: Env): boolean {
+  return !!env.ADMIN_KEY && env.ADMIN_KEY.length >= 16;
+}
+
 /** Whether the request carries the keepers' key: logged either way with its route and, refused, why (never the key). */
 export function isAdmin(request: Request, env: Env, log: Logger): boolean {
-  const key = env.ADMIN_KEY;
+  const key = adminKeySet(env) ? (env.ADMIN_KEY as string) : null;
   const given = request.headers.get('X-Admin-Key') ?? '';
   const route = new URL(request.url).pathname;
-  const reason = !key || key.length < 16 ? 'no-key-set' : !given ? 'no-key-given' : !sameKey(given, key) ? 'wrong-key' : null;
+  const reason = key === null ? 'no-key-set' : !given ? 'no-key-given' : !sameKey(given, key) ? 'wrong-key' : null;
   if (reason) log.warn('worker.admin', 'admin_denied', 'A keepers’ route was asked without the keepers’ key.', { route, reason });
   else log.info('worker.admin', 'admin_ok', 'A keepers’ route was asked with the keepers’ key.', { route });
   return reason === null;
@@ -56,7 +64,7 @@ export function isAdmin(request: Request, env: Env, log: Logger): boolean {
 export async function keeperOf(request: Request, env: Env, log: Logger): Promise<'keeper' | 'key' | null> {
   const token = request.headers.get('X-Keeper-Token');
   const route = new URL(request.url).pathname;
-  if (token !== null && (await verifyKeeper(signingSecret(env), token))) {
+  if (token !== null && (await verifyKeeper(requireSecret(env, new URL(request.url)), token))) {
     log.info('worker.admin', 'admin_ok', 'A keepers’ route was asked with a keeper’s token.', { route, by: 'keeper' });
     return 'keeper';
   }
@@ -78,7 +86,8 @@ const checked = new WeakMap<Request, PassPayload | null>();
 
 export async function passOf(request: Request, env: Env): Promise<PassPayload | null> {
   if (checked.has(request)) return checked.get(request) ?? null;
-  const pass = await verifyPass(signingSecret(env), tokenOf(request));
+  // No key to check it with (OP-209): no pass, so the rate limits count by address alone.
+  const pass = await verifyPass(signingSecret(env, new URL(request.url)), tokenOf(request));
   checked.set(request, pass);
   return pass;
 }
@@ -87,7 +96,7 @@ export async function passOf(request: Request, env: Env): Promise<PassPayload | 
 export async function passFrom(request: Request, env: Env, log: Logger) {
   const url = new URL(request.url);
   const token = tokenOf(request);
-  const secret = signingSecret(env);
+  const secret = requireSecret(env, url);
   const pass = await passOf(request, env);
   if (pass) log.debug('worker.pass', 'pass_verified', 'A pass was taken.', { route: url.pathname, session_id: hashForLog(pass.id), adm: pass.adm });
   else log.info('worker.pass', 'pass_rejected', 'A pass was refused.', { route: url.pathname, reason: await passRefusal(secret, token) });
