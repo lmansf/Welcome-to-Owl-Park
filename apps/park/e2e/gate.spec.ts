@@ -138,14 +138,16 @@ test.describe('the opening switch (OP-067)', () => {
 
     // The owl inside is no spectator: it came in while the gate was open.
     expect((await state(inside)).spectator).toBe(false);
+    // Parks drawing at once starve a test machine's browser to a few frames a second, which stretches
+    // the game's timers (the pause before the hub ran past twenty seconds with two parks up): the owl
+    // inside has shown what it came to show, so the late owl and then the holder each come alone.
+    await inside.context().close();
     // An owl arriving now walks in as a spectator (OP-191).
     await pastTheClose(closed['closedAt'] as number);
     const late = await arrive(browser, COMPUTER);
     await walkToDoor(late, 'gate');
     await inAsSpectator(late);
-    // Three parks drawing at once starve a test machine's browser to a few frames a second, which
-    // stretches the game's timers (the pause before the hub ran twenty seconds): the holder comes alone.
-    for (const p of [inside, late]) await p.context().close();
+    await late.context().close();
 
     // With a ticket, it goes through.
     const issued = await request.post('/api/admin/tickets', { headers: ADMIN, data: { kind: 'day' } });
