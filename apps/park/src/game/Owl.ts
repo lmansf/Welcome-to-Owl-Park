@@ -719,7 +719,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     }
 
     this.fx?.tick(now);
-    this.pet?.tick(now, this.pos.x, this.pos.y, this.dir, this.alpha);
+    this.pet?.tick(now, this.pos.x, this.pos.y, this.dir, this.alpha, air);
     return finished;
   }
 
