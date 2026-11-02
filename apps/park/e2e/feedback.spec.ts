@@ -103,3 +103,75 @@ test.describe('Send feedback is the first row of Settings (OP-167)', () => {
     expect(notes.find((n) => n.text === words)).toMatchObject({ kind: 'praise' });
   });
 });
+
+/**
+ * The feedback bug (OP-208): until the full opening on December 1, a small button on screen
+ * everywhere opens the same Feedback form, clear of the movement controls, and over a covering
+ * screen (the owl builder here, the arcade and the climb alike) leaves that screen as it was.
+ */
+const FULL_OPENING_MS = Date.parse('2026-12-01T00:00:00-05:00');
+
+/** The bug covers none of what `selectors` find on screen. */
+async function expectClear(bug: Locator, selectors: string[]): Promise<void> {
+  const box = (await bug.boundingBox())!;
+  for (const sel of selectors) {
+    for (const el of await bug.page().locator(sel).all()) {
+      if (!(await el.isVisible())) continue;
+      const o = (await el.boundingBox())!;
+      const overlaps = box.x < o.x + o.width && o.x < box.x + box.width && box.y < o.y + o.height && o.y < box.y + box.height;
+      expect(overlaps, `the bug overlaps ${sel}`).toBe(false);
+    }
+  }
+}
+
+test.describe('The feedback bug, until the full opening (OP-208)', () => {
+  test.skip(Date.now() >= FULL_OPENING_MS, 'the bug goes away at the full opening');
+
+  test('on the home screen and in the park: on screen, clear of the controls, and it opens the Feedback form', async ({ page }) => {
+    test.skip(isEdge(), 'the room server suite sends from the home screen above');
+    await page.goto('/?transport=local');
+    await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
+    const bug = page.locator('[data-feedback-bug]');
+    await expect(bug).toBeVisible();
+    await expect(bug).toBeInViewport();
+    await expectClear(bug, ['[data-home-btn]']);
+
+    await openPark(page);
+    await expect(bug).toBeVisible();
+    await expect(bug).toBeInViewport();
+    // Clear of the movement controls along the bottom and the bar along the top.
+    await expectClear(bug, ['[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]', '[data-pad-jump]', '[data-pad-interact]', '#hud .stick', '#hud .bar']);
+
+    await bug.click();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    await expect(feedback.getByRole('textbox', { name: 'Your note' })).toBeVisible();
+    const words = `The bug button by the hub (${Date.now()})`;
+    await feedback.getByRole('button', { name: 'Bug' }).click();
+    await feedback.getByRole('textbox', { name: 'Your note' }).fill(words);
+    await feedback.getByRole('button', { name: 'Send' }).click();
+    await expect(page.getByText('your note is saved on this device')).toBeVisible();
+    await expect(feedback).toBeHidden();
+    const kept = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]') as Array<{ kind: string; text: string; room: string | null }>, KEPT_FEEDBACK_KEY);
+    expect(kept.at(-1)).toMatchObject({ kind: 'bug', text: words, room: 'hub' });
+    // The form closed gives the focus back to the bug.
+    await expect(bug).toBeFocused();
+  });
+
+  test('over a covering screen: the form opens on top, and closing it leaves the screen as it was', async ({ page }) => {
+    test.skip(isEdge(), 'the same in every suite');
+    await openPark(page, { tz: 'UTC' });
+    await page.evaluate(() => window.owlPark.openBuilder());
+    const builder = page.getByRole('dialog', { name: 'Your owl' });
+    await expect(builder).toBeVisible();
+    const bug = page.locator('[data-feedback-bug]');
+    await expect(bug).toBeVisible();
+    await bug.click();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    await expect(builder).toBeVisible();
+    await feedback.getByRole('button', { name: 'Close feedback' }).click();
+    await expect(feedback).toBeHidden();
+    await expect(builder).toBeVisible();
+  });
+});
