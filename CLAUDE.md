@@ -10,6 +10,9 @@ secrets). Run Wrangler through the package scripts so the pinned version is used
 - The Worker's routes (OP-201): each in `apps/edge/src/routes/` by area, listed in `routes/table.ts`;
   shared request helpers in `routes/http.ts`, the park's objects in `routes/park.ts`. A new route is a
   handler there and a line in the table.
+- Formatter and linter (OP-203): Biome, set in `biome.json` (line width 140), run by `pnpm format`,
+  `pnpm format:check` and `pnpm lint`. The repo is not formatted yet: the one reformat commit lands when
+  no PRs are open, and CI checks it from then on. Until then never run `pnpm format` on a branch.
 - Checks before a push: `pnpm check` (typecheck, unit tests, build) and `pnpm e2e` (Playwright).
 - The edge typecheck runs `wrangler types` first; `apps/edge/worker-configuration.d.ts` is generated
   and ignored by git. Never hand-write the `Env` bindings; change `wrangler.jsonc` instead.

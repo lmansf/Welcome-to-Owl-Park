@@ -20,20 +20,6 @@
  * keepers set: one row of `overflow_settings` per room, under `masks:<room>`, read only when a
  * keeper's painter or the pull script asks. A draft kept before spots (OP-156, part 3) reads back with
  * none (`spots: []`).
- *
- * TODO-DOCS (OP-075): built. docs/CAPACITY.md still marks the line, the ribbon and the capacity
- * process PLANNED. OP-075's write-up of all three is docs/CAPACITY.md at commit 9f7326a (`git show
- * 9f7326a:docs/CAPACITY.md`), to fold in: the keepers' page (/admin/capacity) and its API, how the line
- * moves and what it costs, raising a cap, one object per room, opening, draining and closing a copy of
- * a room, the rehearsal on a throwaway copy (Load test run 4, 2026-10-23) and the defaults chosen. Two
- * changes since that commit: a turn given as an owl joins is taken then, so it counts only until the
- * owl is in a room; and a socket the line turns away is closed once its page says hello. The same
- * commit's docs/ARCHITECTURE.md (section 6, item 3: copies of a room and the overflow object) and
- * docs/PLAYBOOK.md (section 5: the capacity page) carry the matching edits. In the page, the ribbon sits
- * under the top bar (to the left of the activity cards on a wide screen) and the 2 s notices move below
- * it while it shows. The visitor-facing words, awaiting the owner's approval, are LINE_WORDS
- * (apps/park/src/ui/home.ts), RIBBON_WORDS (packages/shared/src/overflow.ts) and RIBBON_UI_WORDS
- * (apps/park/src/ui/ribbon.ts).
  */
 import { DurableObject } from 'cloudflare:workers';
 import {

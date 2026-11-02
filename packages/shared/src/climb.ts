@@ -10,8 +10,6 @@
  * thorns send the owl back to its last safe ground; the last pane gone is the shade, which returns
  * the owl to the bench (the balcony) it last stood on with its panes relit. A rest on a bench relights
  * them too. Nothing is ever lost but time.
- *
- * TODO-DOCS: docs/ACTIVITIES.md gets a section for the climb (the portal, the bands, the moon).
  */
 import { BAND_COUNT } from './edge';
 import { LAYOUTS } from './climbCity';

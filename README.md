@@ -29,24 +29,34 @@ pnpm dev          # http://localhost:5173
 Open the URL in two browser tabs: each tab is its own owl, and they see each other.
 That zero-backend mode uses the browser's BroadcastChannel and needs no configuration.
 
-For internet multiplayer there are two backends (see [docs/DEPLOY.md](docs/DEPLOY.md)):
+For internet multiplayer, run the room server (see [docs/DEPLOY.md](docs/DEPLOY.md)):
 
 ```bash
 pnpm dev:edge     # the authoritative room server (Cloudflare Worker + Durable Object), local, no account needed
 ```
 
-or copy `apps/park/.env.example` to `apps/park/.env.local` with a Supabase project URL and anon
-key to use Supabase Realtime instead (no server code, higher message cost as rooms fill).
+It builds the client and serves it with the Worker at http://localhost:8787. To keep Vite's dev
+server instead, set `VITE_EDGE_URL` in `apps/park/.env.local` (copied from `apps/park/.env.example`).
+The park has no database transport (OP-150).
 
 Useful query parameters while developing:
 
 | Parameter | Effect |
 | --- | --- |
 | `?debug=1` | Draw walkable areas, doors and spawn points |
-| `?room=market` | Start in a given room (`hub`, `grove`, `market`) |
+| `?room=market` | Skip the home screen and start in a given room: `lobby` (the default), `hub`, `grove`, `market`, `glass`, `arcade`, `homes`, or the tree's `l1` to `l4`, `l5-street` and `l5` (with a keeper's token while the tree is dark); `&spawn=<id>` picks the spawn point |
+| `?home=0` | Skip the home screen and start in the lobby |
 | `?transport=local` | Force a transport: `local` (tabs on one device) or `edge` (room server) |
 | `?id=owl-a&look=%23C9A227,%23F6F1E3,%23FF2AA1` | Fixed id and colours (tests) |
 | `?collector=e2e-a` | Fixed collection when there is no room server (tests) |
+| `?tz=Europe/London` | The home time zone instead of the device's, local mode only (tests) |
+| `?night=<key>` | The climb's night, local mode and browser tests only |
+| `?sleep=45&away=600&answer=60` | Seconds before an idle owl sleeps, before "Still here?" and before it leaves (OP-126) |
+| `?boxes=1` | The fit overlay: every trigger box and sprite (development builds, or `VITE_BOXES=on`) (OP-127) |
+| `?pos=1` | The position overlay, once the keepers' key checks out (OP-138) |
+| `?keeper=1` | Trade the keepers' key for a keeper's token in this tab, to walk the tree while it is dark (OP-156) |
+| `?paint=1` | The ledge painter over a tree room, with a keeper's token (OP-156, docs/MAP.md) |
+| `?log=info&run=<id>` | The page's own log lines, at that level (any value but `0`), tagged with a chaos run's id (OP-134, docs/LOGGING.md) |
 
 ## Check it
 
@@ -97,6 +107,11 @@ table, and the Ticket Board conventions. Agents new to the project read
 - [docs/NESTS.md](docs/NESTS.md): every owl's own nest on the street outside the turnstiles: decorating it, the day's furniture gift, and visiting other owls' nests.
 - [docs/FEEDBACK.md](docs/FEEDBACK.md): Feedback in the Menu, where notes are kept, and the keepers' page that reads them.
 - [docs/ART-PIPELINE.md](docs/ART-PIPELINE.md): how to replace the placeholder art.
+- [docs/MAP.md](docs/MAP.md): the tree (map 2): its levels and screens, the style sheet, the layers and the steps for building a level.
+- [docs/MENU.md](docs/MENU.md): the Menu's shell, its five tabs, the colour tokens and the clarity rules.
+- [docs/LOGGING.md](docs/LOGGING.md): every log event the Worker, the rooms and the page write, with their fields, and how to read them.
+- [docs/TESTING.md](docs/TESTING.md): which check to run when: unit tests, browser tests, CI's tiers, mutation, load, chaos and security tests.
+- [docs/SECURITY.md](docs/SECURITY.md): what the park keeps and where, the headers and limits, and the security check.
 
 ## Ground rules baked into the code
 

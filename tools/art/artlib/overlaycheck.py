@@ -87,11 +87,7 @@ def check_overlay(img: Image.Image, geom: dict, room_id: str, erode_px: int = 60
                   board_max_cover: float = 0.01, key_colour: str | None = None, spill_max: float = 0.005, behind: bool = False) -> dict:
     """What would make an overlay wrong over its room. A layer drawn in front of the owls must keep the
     walkable floor, the spawns, the doorways and the closed signs clear; one drawn behind them
-    (``behind``: the tree's playfield, OP-156, which the owls stand on) is checked for key haze only.
-
-    TODO-DOCS (OP-157): docs/ART-PIPELINE.md's overlay section: a room layer the table marks
-    ``"overlay": true`` is finished like a ``-fg`` (keyed out of its backdrop), as WebP with its alpha
-    when it is also marked webp, and one a room draws behind the owls is checked for key haze only."""
+    (``behind``: the tree's playfield, OP-156, which the owls stand on) is checked for key haze only."""
     room = room_of(geom, room_id)
     if img.mode != "RGBA":
         img = img.convert("RGBA")

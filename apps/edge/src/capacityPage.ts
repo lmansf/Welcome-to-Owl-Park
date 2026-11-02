@@ -7,11 +7,6 @@
  *
  * The tree's card (OP-156): of every hundred new owls, how many start in the tree (map 2), kept with
  * the realms switch as `realms.tree` (0 to 100; 0, as deployed, keeps the tree dark).
- * TODO-DOCS (OP-156): docs/CAPACITY.md section 2 gains the tree's card and `{"realms": {"tree": n}}`
- * on the API. A share above 0 opens the tree's gated rooms to every owl; a guest pass while the front
- * gate takes tickets still starts in today's park. Back to 0, every owl in the tree is sent to the hub.
- * A changed share reaches new arrivals within half a minute, like the other settings. Each Play asks
- * again, and while the share stays the same an owl is sent the same way every time.
  *
  * Closed for setup (OP-205): the whole park shut while the keepers set something up, and open again
  * with the same card, kept as `setup` ({on, words}). On, every owl in a room goes to the home screen,

@@ -314,6 +314,8 @@ export class RoomScene extends Phaser.Scene {
   private keyTurns = 0;
   /** The hint chips last sent to the HUD, so an unchanged frame touches no DOM. */
   private hintsShown = '';
+  /** The view, screen and doors the hints were last placed for: unchanged, nothing is placed again (OP-204). */
+  private hintsFor: { at: string; doors: unknown } = { at: '', doors: null };
   /** When to look again for doorways to fetch the next room's art through. */
   private prefetchAt = 0;
   private voting = false;
@@ -486,6 +488,7 @@ export class RoomScene extends Phaser.Scene {
     this.keyWalk = false;
     this.keyTurns = 0;
     this.hintsShown = '';
+    this.hintsFor = { at: '', doors: null };
     this.voting = false;
     this.pendingVote = false;
     this.pieces = {};
@@ -1292,8 +1295,11 @@ export class RoomScene extends Phaser.Scene {
   private updateHints(): void {
     const own = this.room.id === STREET_ROOM ? 'nest-door-0' : null;
     const toPark = parkwardDoor(this.room.id);
-    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const v = this.cameras.main.worldView;
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight}`;
+    if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
+    this.hintsFor = { at, doors: this.room.doors };
+    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
     const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: TOUCH_HINT_BOTTOM } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;

@@ -6,9 +6,6 @@
  * And the fit rules that read it: an interactable's trigger box is what it draws plus a margin, never
  * smaller than a fingertip on a phone, centred on what is drawn rather than on the file's frame; its
  * '!' marker sits just above what is drawn.
- *
- * TODO-DOCS (OP-127): docs/ARCHITECTURE.md describes the manifest (sprites.json: size, drawn box and
- * centre per published sprite, measured by `pnpm art:finish sprites`) and the fit rules here.
  */
 import type { Vec2 } from './protocol';
 import type { Rect } from './geometry';

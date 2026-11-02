@@ -27,7 +27,9 @@ import type { ActivityLink } from '../collect/service';
 import type { ArcadeInput } from '../ui/arcadeScreen';
 import type { Hud } from '../ui/hud';
 import { arcadeWouldEarn, endOfGameLine } from '../ui/spectator';
-import { ARCADE_INK, type ArcadeScene, type ArcadeSim } from './ArcadeScene';
+import { ARCADE_INK } from './arcadeInk';
+import type { ArcadeScene, ArcadeSim } from './ArcadeScene';
+import { sceneReady } from './lazyScenes';
 import type { PreviewRect } from './BuilderScene';
 
 /** A box on the arcade's painting, in room pixels. */
@@ -132,20 +134,6 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
  * hall, and a run of a game from Play at a cabinet to what it paid. The game itself is drawn by
  * ArcadeScene over the room, in the HUD's arcade screen; the room server (or the local mode) starts
  * each run and pays it.
- *
- * TODO-DOCS (OP-059): docs/ACTIVITIES.md (Neon Roost) has the arcade one screen wide, its cabinets
- * under the score board, and the games drawn in neon lines. Now: the hall is three screens (arcade,
- * arcade-mid, arcade-end) entered from the street at its west end, a bay per game with the game's
- * title sign over its cabinet, the score wall on the board in the middle; each game is drawn from its
- * painted field and pieces (arcade/paint.ts) once every piece has loaded, in neon lines until then.
- *
- * TODO-DOCS (OP-137): docs/ACTIVITIES.md (Neon Roost) and docs/ARCHITECTURE.md section 4: a run is
- * kept by its collector in the collections object (not on the socket), so it outlasts a dropped
- * connection; past the owl's best, the page sends `act` `record` (the score so far, at most once a
- * second) and the room keeps it as the owl's best and shows it on the wall, paying nothing, so a run
- * cut short keeps its best; the end pays as before, a new best and the day's best judged against the
- * standings as the run started. Moon Flap flaps with the pad's Interact on a touch screen, and each
- * game opens on a how-to card before its first run on a device.
  */
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();
@@ -233,11 +221,23 @@ export class Arcade {
     const acts = this.host.acts();
     if (!acts || this.destroyed) return;
     const physics = game === 'sling' ? loadPhysics().catch(() => null) : null;
+    // The games' scene, fetched alongside the room's answer the first time (OP-204).
+    const scene = sceneReady(this.host.scene.scene, 'arcade').then(
+      () => true,
+      () => false,
+    );
     const reply = await acts.run(game);
     if (this.destroyed) return;
     if (!reply.ok) {
       const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : 'The park did not catch that. Try again in a moment.';
       this.host.hud.toast(line);
+      this.host.hud.closeArcade();
+      return;
+    }
+    const ready = await scene;
+    if (this.destroyed) return;
+    if (!ready) {
+      this.host.hud.toast('The park did not catch that. Try again in a moment.');
       this.host.hud.closeArcade();
       return;
     }
