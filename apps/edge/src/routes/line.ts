@@ -1,5 +1,5 @@
-/** Busy nights (OP-075): a visitor's place in the line, and the busy ribbon's words. */
-import { type LineStatus, waitMinutes } from '@owl-park/shared';
+/** Busy nights (OP-075): a visitor's place in the line, and the busy ribbon's words; and whether the park is closed for setup (OP-233). */
+import { type LineStatus, closedView, waitMinutes } from '@owl-park/shared';
 import type { LineAnswer } from '../Overflow';
 import { mintEntry, requireSecret, verifyEntry } from '../pass';
 import { CORS, json, passFrom, readJson, whoOf } from './http';
@@ -47,4 +47,24 @@ export async function notice(c: RouteCtx): Promise<Response> {
   // The busy ribbon's words now (null while it is off), for the home screen.
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
   return json({ words: (await overflowOf(env)).notice });
+}
+
+/**
+ * How long a browser or a cache in between may keep the closed state (OP-233): a few seconds, so a
+ * classroom's pages polling together cost the Worker little, and a reopening reaches the home screen
+ * within the page's poll and this.
+ */
+export const CLOSED_CACHE = 'public, max-age=5';
+
+/**
+ * Whether the park is closed for setup (OP-205), for the home screen (OP-233): closed or not, the closed
+ * card's words and the time the keepers expect to open, if they gave one. Anyone may ask: it says nothing
+ * else of the keepers' settings, and needs no pass or token.
+ * TODO-DOCS (OP-233): docs/ARCHITECTURE.md's route table and its `public` rate limit gain `/api/closed`.
+ */
+export async function closed(c: RouteCtx): Promise<Response> {
+  const { request, env } = c;
+  if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (request.method !== 'GET') return json({ error: 'not found' }, 404);
+  return Response.json(closedView((await overflowOf(env)).setup, Date.now()), { headers: { ...CORS, 'Cache-Control': CLOSED_CACHE } });
 }
