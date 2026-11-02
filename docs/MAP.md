@@ -1,6 +1,6 @@
 # The tree (map 2)
 
-- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 5 BUILT as rooms (`l1` to `l4`, and level 5 as `l5-street` and `l5`, the street's nest doors and the front gate's ticket sale wired; still to wire: levels 1 to 3's idols, guardians and games); level 0 PLANNED (OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
+- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 5 BUILT as rooms (`l1` to `l4`, and level 5 as `l5-street` and `l5`, the street's nest doors and the front gate's ticket sale wired; still to wire: levels 1 to 3's idols, guardians and games); level 0 BUILT as `l0` and the arcade cave `l0-arcade` (OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
 - Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting, the turn-your-phone card and the spot placer, OP-156); the Ticket Board as read 2026-11-01
 - Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/treeSpots.ts (`TREE_SPOTS`), packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
 - Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173
@@ -318,9 +318,12 @@ The recipe for OP-158 to OP-161 and OP-163, as level 1 was built:
 - OPEN QUESTION: the grid puts a ticket booth on level 5 (`booth-canopy`) and its window in the lobby
   ring (`booth-lobby`); OP-180 sells tickets at the turnstiles and drops today's booth. Whether the tree
   keeps a booth is the owner's.
-- OPEN QUESTION: the arcade cave (level 0, +1) is its own room with a cap of 40, as today's arcade is;
-  its room id, and whether today's `arcade` moves to map 2 or a new room takes its place, are set by
-  OP-163.
+- DECIDED (built 2026-11-02, OP-163): the arcade cave is a new room, `l0-arcade` (cap 40, the default),
+  beside today's `arcade`, which stays for today's park. Both are the arcade (`isArcadeRoom`): the same
+  three cabinets, score wall and book. The cave's paintings leave bare alcoves, so the game draws each
+  cabinet in its alcove, the score wall in the middle screen's chrome panel, and Hatching Soon in the
+  last screen's two small alcoves. For an owl walking the tree, the market's arcade door leads to the
+  cave (`toTree`), so the old hall is no longer a realm the tree opens into.
 
 ## 12. What changes from today's park
 
