@@ -1733,7 +1733,25 @@
     "tree-l3-e2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
     "tree-l3-e2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
     "tree-l3-e2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
-    "tree-l3-e2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"}
+    "tree-l3-e2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-0-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l2-0-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-0-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-0-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-0-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-0-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w1-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l2-w1-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w1-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w1-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w1-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w1-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w2-bg": {"w": 1600, "h": 900, "kind": "room"},
+    "tree-l2-w2-mid": {"w": 800, "h": 450, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w2-back": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w2-play": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w2-front": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"},
+    "tree-l2-w2-fg": {"w": 1600, "h": 900, "kind": "room", "overlay": true, "key_colour": "#FF00FF", "format": "webp"}
   },
   "helpers": {
     "tree-master": {
