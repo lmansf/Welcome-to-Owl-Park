@@ -22,6 +22,7 @@ names (C31, C35, ...), and the docs it touched.
 
 ## Week of 2026-11-02
 
+- OP-183 (2026-11-02): a ticket admits its owl on any screen, and the card before the store at the turnstiles offers "Have a ticket on another screen?" with Bring your owl here, the account's emailed link (branch claude/gate-bring-owl).
 - OP-191 (2026-11-02): spectators, the page's half: an owl without a ticket that works walks on past the turnstiles as a spectator with one line and Get a Day Ticket, a "Just looking" badge, quests, the Realm Vote and the stores sell a Day Ticket instead, games end with what they would have earned, and a ticket bought inside makes the owl a visitor in place; off until `SPECTATORS` is `on` (branch claude/spectator-client, stacked on claude/spectator-server).
 
 ## Week of 2026-10-26
