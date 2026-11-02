@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WAY_OUT_DOOR } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
-import { LOBBY, admitted, beforeRestart, gateMode, isFreeRoom, mayEnter } from '../src/gate';
+import { LOBBY, admitted, beforeRestart, gateMode, isFreeRoom, mayEnter, spectating, spectatorsOn } from '../src/gate';
 
 describe('the front gate', () => {
   it('reads GATE: only "ticket" takes tickets', () => {
@@ -106,5 +106,37 @@ describe('the front gate', () => {
       // Nor before the first restart.
       expect(admitted({ mode: 'ticket', closedAt: null, restartAt: null }, { adm: true, iat: 1 })).toBe(true);
     });
+  });
+});
+
+describe('spectators (OP-191)', () => {
+  const restartAt = Date.UTC(2026, 10, 2, 9, 0);
+  const s = (ms: number) => Math.floor(ms / 1000);
+  const ticket = { mode: 'ticket' as const, closedAt: null, restartAt };
+
+  it('are on only with SPECTATORS "on"', () => {
+    expect(spectatorsOn({ SPECTATORS: 'on' })).toBe(true);
+    for (const v of ['off', 'On', 'true', '']) expect(spectatorsOn({ SPECTATORS: v }), v).toBe(false);
+    expect(spectatorsOn({})).toBe(false);
+  });
+
+  it('are exactly the passes the turnstiles turn away, and only inside the park', () => {
+    const table: Array<[string, Parameters<typeof spectating>[0], { adm: boolean; iat?: number }, string, boolean]> = [
+      ['a guest in the hub, the gate taking tickets', 'ticket', { adm: false }, 'hub', true],
+      ['a guest in the arcade', 'ticket', { adm: false }, 'arcade', true],
+      ['a guest in the lobby', 'ticket', { adm: false }, LOBBY, false],
+      ['a guest on the street', 'ticket', { adm: false }, 'homes', false],
+      ['a guest in a nest', 'ticket', { adm: false }, 'nest-abcd1234', false],
+      ['a ticket holder in the hub', 'ticket', { adm: true }, 'hub', false],
+      ['a guest, the gate open', 'open', { adm: false }, 'hub', false],
+      ['a ticket holder’s pass from before the restart', ticket, { adm: true, iat: s(restartAt) - 60 }, 'hub', true],
+      ['a ticket holder’s pass from after it', ticket, { adm: true, iat: s(restartAt) + 60 }, 'hub', false],
+      ['a guest already in when the switch closed the gate', { mode: 'ticket', closedAt: restartAt + 3_600_000, restartAt }, { adm: false, iat: s(restartAt) + 60 }, 'grove', false],
+    ];
+    for (const [what, gate, pass, room, spec] of table) {
+      expect(spectating(gate, pass, room), what).toBe(spec);
+      // Never both: a pass is let in as a visitor, or would be turned away and may be a spectator.
+      expect(mayEnter(gate, pass, room), what).toBe(!spec);
+    }
   });
 });

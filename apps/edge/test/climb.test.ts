@@ -47,6 +47,14 @@ for (const [name, make] of STORES) {
       expect(s.openRun('c_owlbbbbb')).toMatchObject({ seed: 8 });
     });
 
+    it('keeps a spectator’s run marked practice, and no other (OP-191)', () => {
+      const s = make();
+      s.putRun({ cid: CID, seed: 7, night: 'easy', layout: 'city-1', startedAt: MON, banked: 2, practice: true });
+      expect(s.openRun(CID)).toEqual({ cid: CID, seed: 7, night: 'easy', layout: 'city-1', startedAt: MON, banked: 2, practice: true });
+      s.putRun({ cid: CID, seed: 8, night: 'easy', layout: 'city-1', startedAt: MON, banked: 0 });
+      expect(s.openRun(CID)).toEqual({ cid: CID, seed: 8, night: 'easy', layout: 'city-1', startedAt: MON, banked: 0 });
+    });
+
     it('keeps one row per band of a run, lists the day’s paid bands, finds a run by its reference and sweeps old rows', () => {
       const s = make();
       s.upsertBand(bandRow(CID, 7, 1));
@@ -82,6 +90,16 @@ for (const [name, make] of STORES) {
 }
 
 describe('the climb tables', () => {
+  it('give a run table from before spectators their practice column, every run there a ticket holder’s (OP-191)', () => {
+    const sql = sqlStorage();
+    sql.exec(`CREATE TABLE climb_runs (cid TEXT PRIMARY KEY, seed INTEGER NOT NULL, night TEXT NOT NULL, layout TEXT NOT NULL, started_at INTEGER NOT NULL, banked INTEGER NOT NULL)`);
+    sql.exec(`INSERT INTO climb_runs VALUES ('${CID}', 7, 'easy', 'city-1', ${MON}, 1)`);
+    const s = new SqlClimbStore(sql);
+    expect(s.openRun(CID)).toEqual({ cid: CID, seed: 7, night: 'easy', layout: 'city-1', startedAt: MON, banked: 1 });
+    s.putRun({ cid: 'c_owlbbbbb', seed: 8, night: 'easy', layout: 'city-1', startedAt: MON, banked: 0, practice: true });
+    expect(new SqlClimbStore(sql).openRun('c_owlbbbbb')?.practice).toBe(true);
+  });
+
   it('reads a row whose reference or band no longer holds as nothing rather than failing', () => {
     const sql = sqlStorage();
     const s = new SqlClimbStore(sql);

@@ -108,7 +108,11 @@ The free plan fails closed at the daily cap (the park goes dark at 00:00 UTC rat
 degrading), so the runbook is: set a usage alert at 50 % and buy Workers Paid ($5) before
 the first promoted weekend.
 
-## 4. Wire protocol v8 (`packages/shared/src/edge.ts`)
+## 4. Wire protocol v15 (`packages/shared/src/edge.ts`)
+
+`EDGE_PROTOCOL_VERSION` is 15. Its doc comment lists what each version added; this section
+describes v8 and v15's spectators. OPEN QUESTION: the frames of v9 to v14 (the arcade, the climb
+and the realms switch, owls asleep, flight, travel from the map, perches) are not described here yet.
 
 One WebSocket per visitor to `wss://<host>/ws/<room>?pass=<park pass>`. Every frame is one
 JSON object of at most 1 KiB, except the literal heartbeat text frame `hb`, which the
@@ -121,7 +125,8 @@ Client to server: `hello` (once, within 5 s; look, optional spawn name and resum
 `accept`, `abandon`, `handin`, `use` (an interactable) and `gather` (a quest item); and `act` for
 the activities (light a lantern, cast and reel, the robot owl's copy game, today's tasks); and for
 the nests `street` (on the street: the visitor's own nest and five other owls' open ones) and
-`nest` (in its own nest, the owner puts a piece in a spot, takes one away, or opens or closes it).
+`nest` (in its own nest, the owner puts a piece in a spot, takes one away, or opens or closes it),
+and `admit` (a spectator's new admitted pass, with a request number `r`; v15).
 
 Server to client: `welcome` (your id and position, every owl in the room with any walk in
 progress, server `now`, room cap, park counts), `enter`, `move` (validated walk, sent to
@@ -132,7 +137,8 @@ for quests `quests` (the board, as an answer or a push), `handin`, `useResult`, 
 the activities `act` (the answer), `lanterns`, `quiz`, `paid` and `tasks` (see
 `docs/ACTIVITIES.md`), and for the nests `street` (the answer), `nest` (a nest as it stands: to a
 newcomer after its welcome, to everyone inside when its owner changes it, and as the answer to the
-change) and `closed` (a nest turned the visitor away or closed with it inside; close 4011 follows).
+change) and `closed` (a nest turned the visitor away or closed with it inside; close 4011 follows),
+and `admitted` (the answer to `admit`; v15).
 
 Server rules: moves are clamped with the same `resolveTarget` the client uses, so echoes
 normally match the client's prediction; a walk in progress is continued from its current
@@ -167,6 +173,39 @@ evicted rebuilds every room, nests included, from its sockets. Used-up leaf pile
 lantern beam and the last stage quiz round paid are kept in the object's storage as well, so an
 evicted object brings them back; while owls are in the hub, the alarm also wakes the object when a
 quiz question closes.
+
+**Spectators (v15, OP-191)** [BUILT on the server; off until `SPECTATORS` is `on` and the page's
+half ships]. A spectator is an owl past the turnstiles without a ticket that works. The Worker sends
+every socket to its room object with `X-Visitor-Kind: visitor` or `spectator`, after deleting any
+copy the page sent (`/ws` in `apps/edge/src/index.ts`; `spectating` in `apps/edge/src/gate.ts`).
+The room object keeps the kind in the socket attachment (`spec`), so it survives hibernation.
+Default-deny: inside the park, a socket the Worker did not call a visitor is a spectator
+(`spectatorSocket` in `apps/edge/src/RoomObject.ts`); in the lobby, the street and the nests
+nobody is one. A spectator's `welcome` says `spectator: true`. It walks, emotes, says phrases, flies
+and plays every game, and earns nothing:
+
+- Every award a game pays goes through `earnFor` in `RoomObject.ts`. A spectator gets 0 feathers,
+  its balance as it stands and `practice: true` on the answer (`act` for fishing and the copy game,
+  `paid` for the beam and the quiz). No task moves.
+- The lantern beam counts a spectator among its helpers, so everyone's share is as big as the
+  owls who lit it; only ticket holders are paid. The quiz pays only ticket holders in the right
+  zone; the `quiz` frame's winners name everyone who stood there.
+- The arcade's and the climb's runs are practice runs (`practice` on the run row in
+  `ArcadeBook` and `ClimbBook`): a practice run's record and score answer with the wall as it
+  stands and `practice: true`, keep nothing on the wall or in the owl's bests, and pay nothing; a
+  practice climb's bands answer `added: 0`, keep no band rows and grant no item. A run started as a
+  spectator stays practice after a ticket. A ticket holder's climb start drops an open practice run.
+- The quests, the NPC owls, the leaf piles, the stalls, the quest items and today's tasks answer
+  `refused` (or `act` with `ok: false`) with reason `spectator`. A spectator's arrivals and emotes
+  count for no quest.
+- A spectator's look shows no Realm Vote pledge.
+- A room lets a spectator in while it holds fewer owls than its cap times `SPECTATOR_SHARE`
+  (`spectatorLimit` in `apps/edge/src/rooms.ts`); past that a spectator gets `full` with
+  `spectators: true`. Ticket holders come in up to the full cap.
+- `admit` with a pass the turnstiles gave this owl since its socket opened (admitted, signed, the
+  same visitor id and collector, `iat` not before the socket's `joinedAt`) makes the socket a full
+  visitor in place and counts its arrival; anything else answers `admitted` with `ok: false`.
+  A visitor's `admit` answers `ok: true` and changes nothing.
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
@@ -515,6 +554,18 @@ with another ticket. A $0 order takes the same path but is not held for the frau
 Not covered yet: an owl already inside keeps its entry pass until it runs out (at most 12 hours)
 when its ticket is refunded or cancelled; the refund stops the next scan. Tests:
 `apps/edge/test/gateHardening.test.ts`.
+
+### Spectators past the turnstiles (OP-191) [BUILT on the server; off]
+
+`SPECTATORS` in `apps/edge/wrangler.jsonc` is the kill switch, `off` by default. Off, the
+turnstiles turn an owl without a ticket away with 403 exactly as before, and `/api/entry` answers
+as before. On, `/ws` lets that owl into the rooms inside the park as a spectator (section 4), and
+`/api/entry` adds `spectators: true`. The Realm Vote and the gift shop stay locked to it either way
+(`/api/vote`, `/api/vote/me`, `/api/shop`, `/api/shop/buy`, `/api/shop/gift` answer 403). A spectator's
+pass is the guest pass it already holds; buying a ticket and scanning it gives the page an admitted
+pass, which the page sends to its room as `admit`. The page's half (the spectator banner, the
+turnstile's offer and the reconnect after a ticket) follows in a second pull request. Tests:
+`apps/edge/test/spectators.test.ts`, the spectator describe in `apps/edge/test/RoomObject.test.ts`.
 
 ## 10. Feedback from visitors [BUILT]
 

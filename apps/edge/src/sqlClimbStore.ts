@@ -2,17 +2,18 @@
  * The climb's runs and bands in the collections object's SQLite, behind the portable `ClimbStore`
  * (packages/shared/src/climbbook.ts): one open run per collector, and one row per band a run
  * reached, kept CLIMB_ROW_KEEP_DAYS and then swept on the next write. The run table is never
- * swept: a new run overwrites the collector's row. No wrangler migration is needed for the tables:
+ * swept: a new run overwrites the collector's row; a spectator's run (OP-191) is marked practice. No
+ * wrangler migration is needed for the tables:
  * the constructor creates them and adds the columns that came later.
  */
 import { BAND_COUNT, isClimbRef, type BandRow, type ClimbStore, type ClimbWhy, type RunRow } from '@owl-park/shared';
 
-type RunRec = { cid: string; seed: number; night: string; layout: string; started_at: number; banked: number };
+type RunRec = { cid: string; seed: number; night: string; layout: string; started_at: number; banked: number; practice: number };
 type BandRec = { cid: string; seed: number; band: number; day: string; arrived_at: number; verdict: string; floor_ms: number; elapsed_ms: number; due: number; added: number; brisk: number; why: string | null; night: string; ref: string };
 
 const WHYS: ReadonlySet<string> = new Set(['capped', 'paid-today', 'item-already-given']);
 
-const run = (r: RunRec): RunRow => ({ cid: r.cid, seed: r.seed >>> 0, night: r.night, layout: r.layout, startedAt: r.started_at, banked: Math.min(BAND_COUNT, Math.max(0, r.banked)) });
+const run = (r: RunRec): RunRow => ({ cid: r.cid, seed: r.seed >>> 0, night: r.night, layout: r.layout, startedAt: r.started_at, banked: Math.min(BAND_COUNT, Math.max(0, r.banked)), ...(r.practice === 1 ? { practice: true as const } : {}) });
 
 const band = (r: BandRec): BandRow | null =>
   isClimbRef(r.ref) && r.band >= 1 && r.band <= BAND_COUNT
@@ -38,7 +39,10 @@ const BAND_COLUMNS = 'cid, seed, band, day, arrived_at, verdict, floor_ms, elaps
 
 export class SqlClimbStore implements ClimbStore {
   constructor(private readonly sql: SqlStorage) {
-    sql.exec(`CREATE TABLE IF NOT EXISTS climb_runs (cid TEXT PRIMARY KEY, seed INTEGER NOT NULL, night TEXT NOT NULL, layout TEXT NOT NULL, started_at INTEGER NOT NULL, banked INTEGER NOT NULL)`);
+    sql.exec(`CREATE TABLE IF NOT EXISTS climb_runs (cid TEXT PRIMARY KEY, seed INTEGER NOT NULL, night TEXT NOT NULL, layout TEXT NOT NULL, started_at INTEGER NOT NULL, banked INTEGER NOT NULL, practice INTEGER NOT NULL DEFAULT 0)`);
+    // Spectators' practice runs (OP-191) came after the first tables: a run table from before them gains the column.
+    const runColumns = sql.exec<{ name: string }>(`PRAGMA table_info(climb_runs)`).toArray();
+    if (!runColumns.some((c) => c.name === 'practice')) sql.exec(`ALTER TABLE climb_runs ADD COLUMN practice INTEGER NOT NULL DEFAULT 0`);
     sql.exec(
       `CREATE TABLE IF NOT EXISTS climb_bands (cid TEXT NOT NULL, seed INTEGER NOT NULL, band INTEGER NOT NULL, day TEXT NOT NULL, arrived_at INTEGER NOT NULL, verdict TEXT NOT NULL, floor_ms INTEGER NOT NULL, elapsed_ms INTEGER NOT NULL, due INTEGER NOT NULL, added INTEGER NOT NULL, brisk INTEGER NOT NULL DEFAULT 0, why TEXT, night TEXT NOT NULL, ref TEXT NOT NULL, PRIMARY KEY (cid, seed, band))`,
     );
@@ -52,11 +56,11 @@ export class SqlClimbStore implements ClimbStore {
   }
 
   openRun(cid: string) {
-    const r = this.sql.exec<RunRec>(`SELECT cid, seed, night, layout, started_at, banked FROM climb_runs WHERE cid = ?`, cid).toArray()[0];
+    const r = this.sql.exec<RunRec>(`SELECT cid, seed, night, layout, started_at, banked, practice FROM climb_runs WHERE cid = ?`, cid).toArray()[0];
     return r ? run(r) : null;
   }
   putRun(row: RunRow) {
-    this.sql.exec(`INSERT OR REPLACE INTO climb_runs (cid, seed, night, layout, started_at, banked) VALUES (?, ?, ?, ?, ?, ?)`, row.cid, row.seed >>> 0, row.night, row.layout, row.startedAt, row.banked);
+    this.sql.exec(`INSERT OR REPLACE INTO climb_runs (cid, seed, night, layout, started_at, banked, practice) VALUES (?, ?, ?, ?, ?, ?, ?)`, row.cid, row.seed >>> 0, row.night, row.layout, row.startedAt, row.banked, row.practice ? 1 : 0);
   }
   upsertBand(row: BandRow) {
     this.sql.exec(

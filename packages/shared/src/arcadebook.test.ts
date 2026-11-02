@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ARCADE_TASK, PLAY_FEATHERS_PER_DAY, dailyTasks, taskProgress } from './activities';
 import { DAY_BEST_FEATHERS, GAMES, RUN_MAX_MS, WALL_SIZE, leastRunMs, runFeathers, type PortraitLook, type RunResult } from './arcade';
 import { ArcadeBook, MemoryScoreStore, sanitizePortrait } from './arcadebook';
@@ -190,5 +190,58 @@ describe('the arcade’s book', () => {
       const kinds = dailyTasks(parkDay(T0 + d * 86_400_000)).map((t) => t.kind);
       expect(new Set(kinds).size).toBe(3);
     }
+  });
+});
+
+describe('a spectator’s practice run in the arcade’s book (OP-191)', () => {
+  it('is checked like any run, but keeps nothing, pays nothing and moves no task', () => {
+    const { arcade, book, scores } = setup();
+    const play = vi.spyOn(book, 'play');
+    const result: RunResult = { game: 'flight', score: 12 };
+    arcade.start('c_s', 'flight', 5, T0 - leastRunMs(result) - 1000, true);
+    expect(scores.openRun('c_s')).toMatchObject({ practice: true });
+    // Its best as it goes is checked, and not kept.
+    expect(arcade.record('c_s', { game: 'flight', score: 30 }, 5, look('#333333'), T0 - leastRunMs(result))).toEqual({ ok: false, reason: 'unknown' });
+    expect(arcade.record('c_s', result, 5, look('#333333'), T0)).toEqual({ ok: true, wall: { game: 'flight', top: [] }, mine: {}, changed: false, practice: true });
+    const done = arcade.finish('c_s', result, 5, look('#333333'), T0);
+    expect(done).toEqual({ ok: true, paid: { game: 'flight', score: 12, added: 0, total: 0, best: false, top: false, wall: { game: 'flight', top: [] }, mine: {}, practice: true }, changed: false });
+    // One result per run, as any: the run is over.
+    expect(arcade.finish('c_s', result, 5, look('#333333'), T0 + 1)).toEqual({ ok: false, reason: 'idle' });
+    expect(play).not.toHaveBeenCalled();
+    expect(scores.snapshot()).toEqual({ scores: [], runs: [] });
+    expect(book.tasks('c_s', T0).tasks.every((t) => t.done === 0)).toBe(true);
+  });
+
+  it('stays practice to its end once the owl has a ticket, and a spectator’s socket makes a holder’s run practice too', () => {
+    const { arcade, book, scores } = setup();
+    const result: RunResult = { game: 'crossing', score: 21 };
+    arcade.start('c_s', 'crossing', 1, T0 - leastRunMs(result) - 1000, true);
+    // The run's end comes from a ticket holder's socket now: still nothing.
+    expect(arcade.finish('c_s', result, 1, look('#333333'), T0)).toMatchObject({ ok: true, paid: { added: 0, practice: true } });
+    // A holder's run whose end comes from a spectator's socket (its ticket ran out meanwhile) pays nothing either.
+    arcade.start('c_h', 'crossing', 2, T0 - leastRunMs(result) - 1000);
+    expect(arcade.record('c_h', result, 2, look('#444444'), T0, true)).toMatchObject({ ok: true, changed: false, practice: true });
+    expect(arcade.finish('c_h', result, 2, look('#444444'), T0, true)).toMatchObject({ ok: true, paid: { added: 0, practice: true } });
+    expect(book.feathers('c_s', T0) + book.feathers('c_h', T0)).toBe(0);
+    expect(scores.snapshot().scores).toEqual([]);
+  });
+
+  it('leaves the wall, and the day’s best bonus, to ticket holders', () => {
+    const { arcade } = setup();
+    const big: RunResult = { game: 'crossing', score: 56 };
+    arcade.start('c_s', 'crossing', 1, T0 - leastRunMs(big) - 1000, true);
+    arcade.finish('c_s', big, 1, look('#333333'), T0);
+    const holder = ran(arcade, 'c_h', { game: 'crossing', score: 7 }, T0 + 60_000, '#444444');
+    expect(holder.paid).toMatchObject({ top: true, added: runFeathers('crossing', 7) + DAY_BEST_FEATHERS });
+    expect(holder.paid.wall.top.map((e) => e.score)).toEqual([7]);
+  });
+
+  it('keeps the practice mark through a snapshot of the memory store', () => {
+    const { arcade, scores } = setup();
+    arcade.start('c_s', 'sling', 3, T0, true);
+    arcade.start('c_h', 'sling', 4, T0);
+    const back = MemoryScoreStore.from(JSON.parse(JSON.stringify(scores.snapshot())));
+    expect(back.openRun('c_s')?.practice).toBe(true);
+    expect(back.openRun('c_h')?.practice).toBeUndefined();
   });
 });

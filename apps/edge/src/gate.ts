@@ -12,8 +12,13 @@
  * Once a night the park restarts (OP-181) and sends every owl to the home screen. While the gate
  * takes tickets, no pass from before the last restart goes past the turnstiles: the owl walks
  * through them again, and they scan its ticket again (an expired one is refused there).
+ *
+ * Spectators (OP-191): with SPECTATORS on, an owl without a ticket that works walks on past the
+ * turnstiles all the same, as a spectator. It may go everywhere and play every game, but earns nothing,
+ * and the quests, the stores and the Realm Vote stay locked to it (the room object enforces that, by the
+ * kind the Worker gives each socket). With SPECTATORS off such an owl is turned away, as before.
  */
-import { LOBBY_ROOM, isFreeRoom } from '@owl-park/shared';
+import { LOBBY_ROOM, insidePark, isFreeRoom } from '@owl-park/shared';
 import type { PassPayload } from './pass';
 
 /** The room every visitor may enter. */
@@ -66,4 +71,18 @@ export function admitted(gate: GateMode | Gate, pass: Pick<PassPayload, 'adm' | 
 /** Whether a pass may join a room. */
 export function mayEnter(gate: GateMode | Gate, pass: Pick<PassPayload, 'adm' | 'iat'>, roomId: string): boolean {
   return admitted(gate, pass) || isFreeRoom(roomId);
+}
+
+/** Whether an owl without a ticket that works may walk the park as a spectator (OP-191): SPECTATORS is "on". */
+export function spectatorsOn(env: { SPECTATORS?: string }): boolean {
+  return env.SPECTATORS === 'on';
+}
+
+/**
+ * Whether a pass joins this room as a spectator (OP-191): the gate takes tickets, no ticket admitted the
+ * pass (or it is from before the last nightly restart), and the room is inside the turnstiles. Exactly
+ * the passes `mayEnter` turns away; whether they are let in as spectators is the SPECTATORS switch's.
+ */
+export function spectating(gate: GateMode | Gate, pass: Pick<PassPayload, 'adm' | 'iat'>, roomId: string): boolean {
+  return asGate(gate).mode === 'ticket' && !admitted(gate, pass) && insidePark(roomId);
 }

@@ -15,6 +15,12 @@
  * frames `run` (start a run at a cabinet; answered with the run's seed) and `score` (its result;
  * answered with what it paid), and the `wall` frame the room sends a newcomer in the arcade and
  * everyone there whenever a run changes today's best five.
+ *
+ * v15 adds spectators (OP-191): an owl without a ticket that works may walk the park as one. Its
+ * welcome says `spectator`; its games answer `practice` and earn nothing; the quests and today's
+ * tasks refuse it with the reason `spectator`; a room it would fill past its spectators' share
+ * answers `full` with `spectators`. A ticket bought meanwhile makes it a full visitor in place: the
+ * page sends `admit` with its admitted pass, answered with `admitted`.
  */
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
@@ -29,9 +35,9 @@ import type { QuestBoard, QuestUpdate } from './quests';
 import type { Air } from './flight';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 14;
-// TODO-DOCS: docs/ARCHITECTURE.md section 4 says protocol v8; it is v11 (the arcade, then the climb's `climb` and `ascent` acts, `realms` in the welcome and the `realms` frame, then `rest` both ways and `asleep` on an owl, OP-126).
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 15;
+// TODO-DOCS: docs/ARCHITECTURE.md section 4 now names v15 and describes its spectators (OP-191); the frames v9 to v14 added (the arcade, the climb's `climb` and `ascent` acts, `realms`, `rest` and `asleep`, flight, travel, perches) are still to be described there.
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
 export const BAND_COUNT = 6;
@@ -198,6 +204,15 @@ export interface ClientAct {
 export type ClimbTier = 'easy' | 'medium' | 'hard';
 /** Why an `ascent` added fewer feathers than its bands are worth. */
 export type ClimbWhy = 'capped' | 'paid-today' | 'item-already-given';
+/**
+ * A spectator's ticket went through the turnstiles meanwhile (OP-191): its pass, now admitted, makes it a
+ * full visitor in this room without a new socket. Answered with `admitted`.
+ */
+export interface ClientAdmit {
+  t: 'admit';
+  pass: string;
+  r: number;
+}
 /** On the street: ask for its nest doors, this visitor's own nest and other owls' open ones. Answered with `street`. */
 export interface ClientStreet {
   t: 'street';
@@ -205,7 +220,7 @@ export interface ClientStreet {
 }
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest;
+export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -226,6 +241,11 @@ export interface ServerWelcome {
   notice?: string | null;
   /** The realms switch as the room object holds it: which gated rooms are open, whether the climb's portal is live, the special night. */
   realms?: RealmsSettings;
+  /**
+   * This owl is a spectator (OP-191): no ticket that works let it past the turnstiles. It walks, emotes,
+   * chats and plays every game, but earns nothing, and the quests and today's tasks are locked to it.
+   */
+  spectator?: true;
 }
 export interface ServerEnter {
   t: 'enter';
@@ -270,6 +290,8 @@ export interface ServerFull {
   t: 'full';
   room: string;
   cap: number;
+  /** A spectator turned away (OP-191): the room holds its spectators' share of owls; a ticket holder still gets in. */
+  spectators?: true;
 }
 export interface ServerEmote {
   t: 'emote';
@@ -326,7 +348,7 @@ export interface ServerUseResult {
 export interface ServerRefused {
   t: 'refused';
   r: number;
-  reason: 'far' | 'unknown' | 'busy' | 'offline';
+  reason: 'far' | 'unknown' | 'busy' | 'offline' | 'spectator';
 }
 /** The hub's lantern beam: lantern id -> when it goes out, and while the whole beam glows, until when. */
 export interface ServerLanterns {
@@ -350,6 +372,8 @@ export interface ServerPaid {
   what: 'beam' | 'quiz';
   feathers: number;
   total: number;
+  /** A spectator's share (OP-191): it earned nothing (`feathers` is 0), and `total` is its balance as it stands. */
+  practice?: true;
 }
 /** Progress on today's tasks: the tasks as they stand, the ones just finished, and the feathers they paid. */
 export interface ServerTasks {
@@ -359,27 +383,30 @@ export interface ServerTasks {
   paid: number;
   total: number;
 }
-/** The answer to an `act`. */
+/**
+ * The answer to an `act`. A spectator's games (OP-191) answer `practice`: they ran as they would for
+ * anyone, but paid nothing (`feathers` or `added` is 0), kept nothing on the wall, and moved no task.
+ */
 export type ServerAct = { t: 'act'; r: number } & (
   | { a: 'light'; ok: true; id: string }
   | { a: 'cast'; ok: true; biteAt: number }
   | { a: 'reel'; ok: true; outcome: 'early' | 'late' }
-  | { a: 'reel'; ok: true; outcome: 'caught'; fish: string; feathers: number; total: number }
+  | { a: 'reel'; ok: true; outcome: 'caught'; fish: string; feathers: number; total: number; practice?: true }
   | { a: 'copy'; ok: true; notes: string[]; tune: string[]; listenUntil: number; deadline: number; level: number }
   | { a: 'note'; ok: true; step: 'note' | 'early'; deadline: number }
-  | { a: 'note'; ok: true; step: 'tune'; tune: string[]; listenUntil: number; deadline: number; level: number; feathers: number; total: number }
-  | { a: 'note'; ok: true; step: 'won'; level: number; feathers: number; total: number }
+  | { a: 'note'; ok: true; step: 'tune'; tune: string[]; listenUntil: number; deadline: number; level: number; feathers: number; total: number; practice?: true }
+  | { a: 'note'; ok: true; step: 'won'; level: number; feathers: number; total: number; practice?: true }
   | { a: 'note'; ok: true; step: 'wrong' | 'slow'; level: number; expected: string }
   | { a: 'tasks'; ok: true; tasks: TaskView }
-  | { a: 'run'; ok: true; game: ArcadeGame; seed: number; startedAt: number }
+  | { a: 'run'; ok: true; game: ArcadeGame; seed: number; startedAt: number; practice?: true }
   | { a: 'score'; ok: true; paid: RunPaid }
   /** A run's best so far kept: its game's column on the wall and the owl's own bests after it. */
-  | { a: 'record'; ok: true; wall: GameWall; mine: OwnBests }
+  | { a: 'record'; ok: true; wall: GameWall; mine: OwnBests; practice?: true }
   /** A climb started or resumed (the stained-glass climb, designs/the-stained-glass-climb.md). */
-  | { a: 'climb'; ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean }
+  | { a: 'climb'; ok: true; seed: number; startedAt: number; night: string; tier: ClimbTier; banked: number; remainingCap: number; bestBandToday: number; resumed: boolean; previousForgotten: boolean; practice?: true }
   /** A band reached: the run's banked band after it, what this frame added and the balance, and the first-time item when the clouds grant it. */
-  | { a: 'ascent'; ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string }
-  | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' }
+  | { a: 'ascent'; ok: true; banked: number; added: number; feathers: number; total: number; brisk: number; why?: ClimbWhy; item?: { variant: string; first: true }; ref: string; practice?: true }
+  | { a: ActKind; ok: false; reason: 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' | 'spectator' }
 );
 /**
  * The arcade's score wall: today's best five per game (portraits and scores, no names). A newcomer
@@ -442,6 +469,17 @@ export interface ServerRestart {
   words: string;
   ms: number;
 }
+/**
+ * The answer to `admit` (OP-191): `ok`, the owl is a full visitor here from now on (also for one that
+ * was one already); otherwise the pass did not do it (`pass`: not this owl's, not admitted, expired, or
+ * from before this socket opened) and it stays a spectator.
+ */
+export interface ServerAdmitted {
+  t: 'admitted';
+  r: number;
+  ok: boolean;
+  reason?: 'pass';
+}
 /** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
 export interface ServerRealms {
   t: 'realms';
@@ -476,7 +514,8 @@ export type ServerFrame =
   | ServerClosed
   | ServerNotice
   | ServerRestart
-  | ServerRealms;
+  | ServerRealms
+  | ServerAdmitted;
 
 // ---- validation (server side, strict) ----
 
@@ -484,6 +523,8 @@ const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 /** A keeper's token as the Worker signs it: two base64url parts, short enough for a hello. */
 const KEEPER_TOKEN = /^[A-Za-z0-9_-]{1,200}\.[A-Za-z0-9_-]{43}$/;
 const OBJECT_ID = /^[a-z][a-z0-9-]{0,47}$/;
+/** A pass as the Worker signs it (apps/edge/src/pass.ts): two base64url parts, at most 512 characters. */
+const PASS_TOKEN = /^[A-Za-z0-9_-]{1,466}\.[A-Za-z0-9_-]{43}$/;
 
 const isRequest = (r: unknown): r is number => typeof r === 'number' && Number.isInteger(r) && r >= 0 && r <= 1e9;
 /** A whole number from 0 to `max`. */
@@ -577,6 +618,9 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     }
     case 'street':
       return isRequest(v['r']) ? { t: 'street', r: v['r'] } : null;
+    case 'admit':
+      // Whether the pass is good, and this owl's, is the room's to decide.
+      return isRequest(v['r']) && typeof v['pass'] === 'string' && PASS_TOKEN.test(v['pass']) ? { t: 'admit', pass: v['pass'], r: v['r'] } : null;
     case 'nest': {
       const r = v['r'];
       const edit = parseNestEdit(v);
@@ -587,7 +631,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

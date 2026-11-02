@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionBook, FURNITURE, FURNITURE_GIFT_FEATHERS, MemoryNestStore, NEST_SPOTS, NestBook, STARTER_FURNITURE, STARTER_LAYOUT, STREET_ROOM, secureNestId, type NestLook, type NestRow, type NestStore } from '@owl-park/shared';
 import { NEST_ROOM, ROOMS as PARK_ROOMS } from '@owl-park/shared/rooms';
-import { NEST_CAP, isRoomId, publicCounts, roomCap, roomDef } from '../src/rooms';
+import { DEFAULT_SPECTATOR_SHARE, NEST_CAP, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit, spectatorShare } from '../src/rooms';
 import { SqlNestStore } from '../src/sqlNestStore';
 import { SqlCollectionStore } from '../src/sqlStore';
 import type { Env } from '../src/env';
@@ -167,6 +167,17 @@ describe('the rooms a socket may ask for', () => {
     expect(roomCap(env('{"nest-k3x9q2ab": 2}'), 'nest-k3x9q2ab')).toBe(NEST_CAP);
     expect(roomCap(env('{"nest": 500}'), 'nest-k3x9q2ab')).toBe(NEST_CAP);
     expect(roomCap(env('not json'), 'nest-k3x9q2ab')).toBe(NEST_CAP);
+  });
+
+  it('lets spectators into a room up to its cap times SPECTATOR_SHARE, three quarters unless set (OP-191)', () => {
+    const shared = (share?: string, caps?: string) => ({ ...(share === undefined ? {} : { SPECTATOR_SHARE: share }), ...(caps === undefined ? {} : { ROOM_CAPS: caps }) }) as unknown as Env;
+    expect(DEFAULT_SPECTATOR_SHARE).toBe(0.75);
+    expect(spectatorLimit(shared(), 'hub')).toBe(60);
+    expect(spectatorLimit(shared(), 'grove')).toBe(30);
+    expect(spectatorLimit(shared('0.5', '{"hub": 9}'), 'hub')).toBe(4);
+    expect(spectatorLimit(shared('0'), 'hub')).toBe(0);
+    expect(spectatorLimit(shared('1'), 'hub')).toBe(80);
+    for (const bad of ['', 'half', '-0.1', '1.5', 'NaN']) expect(spectatorShare(shared(bad)), bad).toBe(DEFAULT_SPECTATOR_SHARE);
   });
 });
 
