@@ -2267,3 +2267,138 @@ const TREE_L5_TOP_JOBS = TREE_L5_TOP_KEYS.map((key, i) => ({
 Object.assign(PROMPTS, TREE_L5_TOP_PROMPTS);
 HELPER_KEYS.push(...TREE_L5_TOP_KEYS);
 JOBS.push(...TREE_L5_TOP_JOBS);
+// ---- Level 0, the cavern (OP-163): the stair foot and the realm challenge stair, room `l0` ----
+// Under the tree there is no sky: the far layer is the cavern's depth, the middle distance its
+// hanging roots, and the overlay's roots and moss may cross the middle of the frame as long as the
+// floor stays clear (OP-163). Screen 0 is the stair foot: the stair down from the lobby ring reaches
+// the cavern's floor, the cavern's mouth opens east toward the arcade cave (its own room, painted
+// separately once the owner settles its width), and one find waits on a high root ledge reached by
+// gliding. Screen -1 (`w1`) is the realm challenge stair: a stone stairwell sunk into the floor goes
+// down into the dark, closed until OP-115's first lock ships; the game draws its door and the
+// two-owl plate, so the floor before it stays bare. The floor sits six sevenths of the way down.
+const TREE_CAVE_LIGHT = `LIGHT (the same in every layer): cold blue-white light filtering down from high on the left through gaps in the roots overhead; warm gold sap-light glowing from cracks and knotholes in the roots; deep navy shadow in the depths and on the right-hand sides of forms.`;
+const TREE_CAVE_STYLE = TREE_STYLE.replace(/LIGHT \(the same in every layer\):[^.]*\./, TREE_CAVE_LIGHT);
+function treeCaveFar(far) {
+  return `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's layers, which the game scrolls at half speed behind the others. Paint ONLY the far depth of a vast root cavern under a colossal tree, edge to edge, with no empty areas and no flat backdrop: ${far} Everything is soft, dark and low in contrast, receding into deep navy, so the nearer layers read in front of it; the bottom fifth of the frame is plain deep navy and dark brown shadow with no detail (the game covers it with the floor). The bands of roots and shadow run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no floor, no path, no ledge, no stair, no railing, no lantern, and no root in front, because the game's nearer layers paint everything near. ${TREE_CAVE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any floor, path or platform; anything in the foreground; sky, moon, stars, daylight; busy detailed texture; exact mirror symmetry.`;
+}
+function treeCaveMid(shapes) {
+  return `Middle-distance layer for one screen of a side-scrolling 2D game: the layer between the far depth of a root cavern and the playfield, which the game scrolls at three quarters of the camera's pace, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette and no cast shadows, 16:9, 2048x1152. Paint only middle-distance silhouettes: ${shapes} They hang from the top edge of the frame or rise from the bottom edge, and the middle of the frame between them stays mostly empty magenta so the far depth shows through. Toward the left and right edges they thin out, and the outer tenth of the frame on each side is empty magenta, so neighbouring screens blend. Flat shapes in muted, desaturated night blues and blue-greys, paler and softer than anything near so they read as distant, with only a few tiny warm gold sap-light points; crisp clean opaque edges against the magenta, no soft haze, glow or mist bleeding onto the backdrop, no semi-transparent edges, no magenta tint on the shapes. ${TREE_CAVE_STYLE} No text, no watermark. AVOID: any text, letters or writing; any owls, birds, animals, people, faces or characters; any floor, path or ledge in front; sky, moon or stars; bright saturated colours; busy detailed texture; exact mirror symmetry.`;
+}
+function treeCaveOverlay(scene, props) {
+  return `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is ${scene}, with a walking floor five sixths of the way down the frame. Props only, nearer than everything else: ${props} The floor and everything standing on it in the scene behind stay uncovered: nothing in this layer comes lower than three quarters of the way down the frame except at the far left and far right edges, and the bottom quarter of the frame in the middle stays empty magenta, so the visitor is never hidden. The props are darker and a little larger than the scene behind them, rim-lit by cold blue-white light from the upper left and warm gold sap-light. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_CAVE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything over the floor; any floor, wall or scenery; magenta tint on the props; soft or feathered edges.`;
+}
+const TREE_L0_FLOOR = `The walking floor is one level path of packed earth and flat stone among the roots, a flat strip seen side-on with a broad, clean, flat top edge six sevenths of the way down the frame; below it there is only a narrow band, about a seventh of the frame, of dark earth and root ends, down to the bottom edge. Where the cavern's open depth would show behind the roots and above the floor, the frame is flat pure magenta #FF00FF, and the roots, the walls and the floor are painted fully and opaquely against it.`;
+const TREE_L0_SCREENS = {
+  0: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots, thick as columns, diving from the top of the frame down into dark earth, with dark hollows between them, a few small knotholes glowing warm gold far away among the roots, and low down a faint cold blue mist in the farthest hollows.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and the right third, reaching down to at most the middle of the frame, with a few fine root threads and strands of moss hanging from them, and a few low rounded root humps rising from the bottom edge to a fifth of the way up at the sides; the middle third of the frame stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): a vast cavern among the roots under a colossal ancient tree at night, the foot of the stair down from the tree's lobby, seen strictly from the side with no perspective tilt. ${TREE_L0_FLOOR} It runs across the whole width of the frame. THE STAIR'S FOOT: right of the middle, a broad wooden stair of thick plank treads comes down from a round opening in the cavern's roof at the top of the frame, winding down around a great root to its foot on the floor, its lowest treads bare and plain, with a carved wooden banister along its outer edge; the opening above is plain and dark, with no glow (a doorway the game marks later). THE MOUTH: at the right edge, the floor leaves the frame at exactly its height through a tall rounded opening between two great roots, about two and a half visitors' heights tall, its far side plain, dark and bare (the way into the next cave, which the game marks later), with nothing standing on the floor within a tenth of the frame of the right edge. THE WEST: at the left edge, the floor leaves the frame at exactly its height as a plain run of packed earth between roots, with nothing standing on it within a tenth of the frame of the left edge. THE FIND: left of the middle, high up, a broad flat-topped root ledge juts from the cavern's wall about three visitors' heights above the floor, reached by gliding from the stair, its top plain and bare (a reward appears there later); below it, two smaller flat-topped root knobs a hop apart lead up from the floor to a flat stone shelf about one and a half visitors' heights up, a step on the way. Great roots arch over everything, the cavern's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; a few lanterns of plain glass hang on hooks from the roots along the floor and glow warm gold. A visitor added later by the game stands about one sixth of the frame's height tall; every tread, ledge and opening is sized for it.`),
+    fg: treeCaveOverlay('the foot of a wooden stair in a vast root cavern under a colossal tree, with a flat path among the roots', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, one of them reaching to about the middle of the frame, with fine root threads and long strands of moss hanging from them; at the far left and far right edges, a thick dark root runs from the top of the frame down past the floor, each no wider than an eighth of the frame.`),
+  },
+  w1: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, the hollows between them deeper and darker toward the left, where the cavern falls away into a black depth with a faint cold blue mist low down; a few small knotholes glow warm gold far away on the right.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the right third and a few in the left third, reaching down to at most the middle of the frame, with fine root threads and strands of moss hanging from them, and a few low rounded root humps rising from the bottom edge to a fifth of the way up at the right; the middle stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): a vast cavern among the roots under a colossal ancient tree at night, the far end of the cavern where a stair goes down to a deeper place, seen strictly from the side with no perspective tilt. ${TREE_L0_FLOOR} It arrives from the right edge at exactly that height as a plain run of packed earth between roots, with nothing standing on it within a tenth of the frame of the right edge, and runs to the left to about a quarter of the way across, where it ends at a low wall of fitted stone blocks. THE STAIR DOWN: left of the middle, set into the back of the floor behind its unbroken front edge, a stairwell of old fitted stone, its mouth edged with a low carved stone rim and two squat stone posts, where worn stone steps go down into deep black shadow; the stairwell is plain, dark and bare, with no door, no gate, no glow and no sign (the game closes it later), and the floor in front of it, between the stairwell and the right edge, is a plain, even stretch of packed earth and flat stone with nothing on it (the game sets a plate there later). THE END: beyond the low stone wall at the left, the cavern falls away into a black depth, and nothing leads on to the left. Great roots arch over everything, thicker and older than elsewhere, the cavern's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; a few lanterns of plain glass hang on hooks from the roots along the floor and glow warm gold. A visitor added later by the game stands about one sixth of the frame's height tall; the stairwell and the floor are sized for it.`),
+    fg: treeCaveOverlay('the far end of a vast root cavern under a colossal tree, where a stone stair goes down into the dark', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, the largest at the right reaching to about the middle of the frame, with fine root threads and long strands of moss hanging from them; at the far right edge, a thick dark root runs from the top of the frame down past the floor, no wider than an eighth of the frame; the left edge stays open.`),
+  },
+};
+
+/** Level 0's screens so far, each in four painted jobs: `tree-l0-<screen>-bg|mid|scene|fg` (OP-163). */
+const TREE_L0_PROMPTS = treeLevelPrompts(0, TREE_L0_SCREENS);
+export const TREE_L0_KEYS = Object.keys(TREE_L0_PROMPTS);
+const TREE_L0_JOBS = treeLevelJobs(0, { 0: 4605, w1: 4601 }, TREE_L0_PROMPTS);
+Object.assign(PROMPTS, TREE_L0_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L0_JOBS);
+
+// ---- Level 0's join, colour-coded maps and top strips (OP-163), made as level 2's were ----
+// The two picked scenes, moved onto the ground line, side by side west to east (the challenge stair,
+// the stair foot) make a row of 4096x1152 with the join at x 2048, held under `tree-l0-w1-back`.
+const TREE_L0_SEAM_PROMPTS = {
+  'tree-l0-seam-w1-0': treeSeam(
+    `a level floor of packed earth and flat stone among the roots of a vast cavern, a great gnarled root rising at the left edge with a lantern of plain glass on a hook, and the cavern's open depth as flat magenta between the roots`,
+    `the same floor of packed earth running on, a great gnarled root rising on the right with a lantern of plain glass on a hook, more roots arching over, and the cavern's open depth as flat magenta between them`,
+    `the floor of packed earth and flat stone runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; the great roots on either side arch toward each other over the middle and join into the cavern's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle, and the lanterns stay exactly where they are.`,
+  ),
+};
+export const TREE_L0_SEAM_KEYS = Object.keys(TREE_L0_SEAM_PROMPTS);
+const TREE_L0_SEAM_JOBS = TREE_L0_SEAM_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: ['tree-l0-w1-back', 'tree-l0-0-back'],
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4681 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L0_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_SEAM_KEYS);
+JOBS.push(...TREE_L0_SEAM_JOBS);
+
+const TREE_L0_CODES = {
+  // The picked scene (seed 4621): the floor from the right edge to a low stone wall at the left, a stone
+  // stairwell with a rim and two posts left of the middle, lanterns on the roots.
+  'tree-l0-w1-codes': treeCodes({
+    stand: `the long floor of packed earth and flat stone from the right edge of the frame to the low wall of stone blocks on the left, with its lit top edge.`,
+    front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`,
+    keep: `the low stone wall, the stone stairwell with its rim, its posts and its dark steps, the great roots, the lanterns on their hooks, the dark earth under the floor,`,
+  }),
+  // The picked scene (seed 4626): the floor across the frame, the stair's pale treads down the great
+  // root to the floor, a flat stone shelf and a stump on the left, a high root shelf above them.
+  'tree-l0-0-codes': treeCodes({
+    stand: `the long floor of packed earth and flat stone across the whole width of the frame, with its lit top edge; each pale wooden tread of the stair that comes down the great root to the floor; the flat top of the stump and the flat stone shelf on the left; and the top of the broad flat root ledge high on the left above them.`,
+    front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`,
+    keep: `the great roots, the stair's banister, the round dark opening in the roof, the tall rounded opening at the right edge, the lanterns on their hooks, the dark earth under the floor,`,
+  }),
+};
+export const TREE_L0_CODE_KEYS = Object.keys(TREE_L0_CODES);
+const TREE_L0_CODE_JOBS = TREE_L0_CODE_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [key.replace('-codes', '-play')],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4651 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L0_CODES);
+HELPER_KEYS.push(...TREE_L0_CODE_KEYS);
+JOBS.push(...TREE_L0_CODE_JOBS);
+
+const TREE_L0_TOP_PROMPTS = {
+  'tree-l0-top-w1': treeTopStrip(
+    `the great roots and the cavern's roof meet their own reflections, and the lanterns on their hooks are reflected.`,
+    `the great roots rise on and join into the cavern's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the lanterns hang below their hooks.`,
+    `the floor, the low stone wall, the stone stairwell, the roots, the lanterns and the open magenta depth already there`,
+  ),
+  'tree-l0-top-0': treeTopStrip(
+    `the great roots and the cavern's roof meet their own reflections, the round opening in the roof is reflected, and the lanterns on their hooks are reflected.`,
+    `the great roots rise on and join into the cavern's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the round opening in the roof stays one opening, where the stair comes down; the lanterns hang below their hooks.`,
+    `the floor, the stair, the shelf and the stump, the high root ledge, the roots, the lanterns and the open magenta depth already there`,
+  ),
+};
+export const TREE_L0_TOP_KEYS = Object.keys(TREE_L0_TOP_PROMPTS);
+const TREE_L0_TOP_JOBS = TREE_L0_TOP_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l0-top-', 'tree-l0-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4695 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L0_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_TOP_KEYS);
+JOBS.push(...TREE_L0_TOP_JOBS);
