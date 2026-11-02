@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOSE, RESTART_NOTICE, type PlayerState } from '@owl-park/shared';
 import { EdgeTransport } from './edge';
+import { EMOTE_SEND_EVERY_MS } from './budget';
 import type { RoomHandlers } from './transport';
 
 // The park's nightly restart (OP-181) as the page hears it: the room's words, then its close code,
@@ -150,5 +151,29 @@ describe('the park’s nightly restart on the page (OP-181)', () => {
     await park.join('nest-abc', SELF, listening());
     expect(FakeSocket.made[1]!.url).toContain('pass=pass-2');
     expect(asked).toEqual(['/api/pass']);
+  });
+});
+
+describe('emotes on the page (OP-210)', () => {
+  const emotesSent = (socket: FakeSocket) => socket.sent.map((t) => JSON.parse(t) as { t: string; e?: string }).filter((f) => f.t === 'emote');
+
+  it('sends one emote, drops the ones that come too soon after it, and sends the next once the spacing has passed', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const conn = await park.join('hub', SELF, listening());
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    // A child mashing the number keys: eight a second for three seconds.
+    for (let i = 0; i < 24; i++) {
+      conn.send({ t: 'emote', id: 'local', e: i % 2 ? 'hoot' : 'flap' });
+      await vi.advanceTimersByTimeAsync(125);
+    }
+    const sent = emotesSent(socket);
+    expect(sent.length).toBeGreaterThanOrEqual(2);
+    expect(sent.length).toBeLessThanOrEqual(Math.ceil(3_000 / EMOTE_SEND_EVERY_MS));
+    expect(sent[0]).toEqual({ t: 'emote', e: 'flap' }); // the first press goes at once
+    // Nothing dropped is sent later: once the keys stop, no more emotes go.
+    const before = socket.sent.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(socket.sent.slice(before).filter((t) => (JSON.parse(t) as { t: string }).t === 'emote')).toHaveLength(0);
   });
 });

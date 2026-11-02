@@ -9,6 +9,7 @@ import {
   MOVE_REFILL_PER_S,
   AIR_BURST,
   AIR_REFILL_PER_S,
+  EMOTE_EVERY_MS,
   GROUNDED,
   MAX_RISE,
   carryOn,
@@ -141,7 +142,7 @@ export const LIMITS = {
   resumeRadius: 240,
   leaverMemoryMs: 120_000,
   /** One emote per visitor this often; faster ones are dropped quietly. */
-  emoteEveryMs: 1_500,
+  emoteEveryMs: EMOTE_EVERY_MS,
   /** Air states (OP-084): a burst, then this many more a second; more are dropped quietly, and only those count towards the flood. */
   airBurst: AIR_BURST,
   airRefillPerS: AIR_REFILL_PER_S,
