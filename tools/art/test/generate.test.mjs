@@ -227,7 +227,7 @@ test('every generated asset key in art.ts has a job (directly or derived) and th
     assert.ok(!j.prompt.includes('{'), `${j.key}: no unresolved placeholders`);
     if (j.key_colour) assert.ok(j.prompt.includes(j.key_colour), `${j.key}: the prompt names the job's key colour ${j.key_colour}`);
     // The tree's layers (map 2) are painted at OP-157's size, 2048x1152; today's rooms at 2x.
-    if (j.kind === 'room' || j.kind === 'overlay') assert.equal(j.size, [...P.TREE_FRAME_KEYS, ...P.TREE_L1_KEYS, ...P.TREE_L1_MID_KEYS].includes(j.key) ? '2048x1152' : '3200x1800', `${j.key}: rooms generate at 2x`);
+    if (j.kind === 'room' || j.kind === 'overlay') assert.equal(j.size, j.realm === 'tree' ? '2048x1152' : '3200x1800', `${j.key}: rooms generate at 2x`);
     for (const r of j.refs) assert.ok(/^(refs\/|@guide:|@raw:|@final:|@canvas:|https:\/\/)/.test(r.ref));
   }
   const byKey = Object.fromEntries(jobs.map((j) => [j.key, j]));
@@ -474,7 +474,7 @@ test('selectJobs supports lists and globs and rejects unmatched patterns', () =>
   const flight = Object.keys(P.FLIGHT_MASTERS);
   assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, ...flight, 'owl-wing-right']);
   assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), [...P.SPECIES_MASTER_KEYS, ...flight]);
-  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'tree-l1-0-fg', 'tree-l1-w1-fg', 'tree-l1-e1-fg', 'tree-l1-e2-fg']);
+  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'tree-l1-0-fg', 'tree-l1-w1-fg', 'tree-l1-e1-fg', 'tree-l1-e2-fg', 'tree-l4-0-fg', 'tree-l4-e1-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }), [10, 11, 12]);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }, { variants: 2, seed: 50 }), [50, 51]);

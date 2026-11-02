@@ -1495,3 +1495,108 @@ const TREE_L1_SEAM_JOBS = TREE_L1_SEAM_KEYS.map((key, i) => ({
 Object.assign(PROMPTS, TREE_L1_SEAM_PROMPTS);
 HELPER_KEYS.push(...TREE_L1_SEAM_KEYS);
 JOBS.push(...TREE_L1_SEAM_JOBS);
+
+// ---- The tree in six layers (OP-173), from level 4 on (OP-159) ----
+// The next levels are painted in six layers a screen (docs/MAP.md section 6): the sky (0.5), the
+// middle distance (0.75), the back scenery, the platforms and the front props (all three at the
+// camera's pace) and the overlay (1.2). The three at the camera's pace have to stay in register to
+// the pixel (a tread against the bark behind it, a lantern post on the walkway's edge), so they come
+// from ONE painting of the screen, the scene, painted as level 1's playfields were: the back scenery
+// is the scene itself, which the game draws a step quieter, and the platforms and the front props
+// are its own pixels cut out over it. Which pixels are which is the second round's work, once the
+// scene is picked. The scene is a helper (never published); its job derives the three layers.
+
+/** The sky plate of one screen of the six-layer levels: the far distance, edge to edge. */
+function treeSky(far, horizon) {
+  return `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's layers, which the game scrolls at half speed behind the others. Paint ONLY the far distance, edge to edge, with no empty areas and no flat backdrop: ${far} ${horizon} The horizon, the clouds and the forest band run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no ground, no path, no floor, no walkway, no stairs, no ledges, no railings, no lanterns on posts, and no trunk, boughs or leaves in front, because the game's nearer layers paint everything near. Keep it calm and low in contrast so the nearer layers read in front of it. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any ground, floor, path or platform; anything in the foreground; a moon; daylight; a sun; busy detailed texture; exact mirror symmetry.`;
+}
+
+/**
+ * The scene of one screen of the six-layer levels: everything at the camera's pace, on a magenta sky,
+ * in level 1's playfield wording, with OP-173's readability asked of the painting itself (what can be
+ * stood on is crisp and lit, what stands behind is quieter, and only lanterns glow).
+ */
+function treeScene(composition) {
+  return `The playfield painting for one screen of a side-scrolling 2D game: everything at the visitor's own depth, which the game draws over a separate sky painting, a small visitor walking and jumping on it. Paint the open sky as FLAT PURE MAGENTA #FF00FF: every part of the frame where the night sky or the far distance would show is one flat, solid, uniform pure magenta #FF00FF, with no gradient, no clouds, no stars, no moon, no glow, no haze and no cast shadow, so the game can cut it out. ${composition} READABILITY: every surface a visitor can stand on is a solid, simple shape with a broad, flat, clearly lit top edge, lighter and crisper than anything behind it; everything behind the walkway (the trunk, the boughs, the leaves) is a step darker, softer and less detailed, so nothing behind looks like somewhere to stand; the things that stand in front of the walkway are simple dark shapes with crisp outlines. Only lanterns glow: stairwells, doorways and the bare places where the game adds things later are painted plainly, with no glow, no light and no sign. Everything solid is painted fully and opaquely, with crisp clean edges against the magenta: no soft glow, haze or light halo bleeding onto the magenta, no semi-transparent edges, no magenta tint on the painting. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing anywhere; any owls, birds, animals, people, faces, statues or characters; any sky, moon, stars, clouds or distant scenery (all of that is flat magenta); a gradient or vignette on the magenta; a sloping or curving walkway; perspective; exact mirror symmetry.`;
+}
+
+/** The overlay of one screen of the six-layer levels: props at the frame's edges only, nearer than everything. */
+function treeOverlay(scene, props) {
+  return `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is ${scene}, with a walkway five sixths of the way down the frame. Props only, at the edges of the screen, nearer than everything else: ${props} The whole middle of the frame, and every place a visitor walks or jumps, stays completely empty magenta. The props are darker and a little larger than the scene behind them, rim-lit by cream moonlight from the upper left and warm gold from the lanterns. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; any sky, trunk, walkway or scenery; magenta tint on the props; soft or feathered edges.`;
+}
+
+/** A screen's four painted jobs' prompts: `tree-l<n>-<screen>-bg|mid|scene|fg`. */
+function treeSixLayers({ far, horizon, mid, composition, scene, props }) {
+  return { bg: treeSky(far, horizon), mid: treeMid(mid), scene: treeScene(composition), fg: treeOverlay(scene, props) };
+}
+
+/** The three layers at the camera's pace that a screen's scene is cut into (OP-173). */
+export const TREE_CUT_LAYERS = ['back', 'play', 'front'];
+
+/**
+ * Jobs for a level's screens: the sky (a room), and the middle distance, the scene and the overlay
+ * (keyed on magenta), four candidates each at 2048x1152. `seeds` maps each screen to the base of its
+ * seeds; the four layers take base, base + 10, base + 20 and base + 30, and a job's candidates seed
+ * to seed + 3.
+ */
+function treeLevelJobs(level, seeds, prompts) {
+  return Object.entries(seeds).flatMap(([s, n]) => {
+    const k = (layer) => `tree-l${level}-${s}-${layer}`;
+    return [
+      { key: k('bg'), kind: 'room', seed: n },
+      { key: k('mid'), kind: 'overlay', seed: n + 10, key_colour: '#FF00FF' },
+      { key: k('scene'), kind: 'overlay', seed: n + 20, key_colour: '#FF00FF', derives: TREE_CUT_LAYERS.map(k) },
+      { key: k('fg'), kind: 'overlay', seed: n + 30, key_colour: '#FF00FF' },
+    ];
+  }).map((j) => ({
+    ...j,
+    realm: 'tree',
+    optional: true,
+    size: '2048x1152',
+    variants: 4,
+    providers: { fal: { output_format: 'png' } },
+    prompt: prompts[j.key],
+  }));
+}
+
+/** Prompts by key for a level's screens, from `treeSixLayers` per screen. */
+function treeLevelPrompts(level, screens) {
+  return Object.fromEntries(
+    Object.entries(screens).flatMap(([s, p]) => Object.entries(p).map(([layer, prompt]) => [`tree-l${level}-${s}-${layer}`, prompt])),
+  );
+}
+
+// ---- Level 4, the sky landing (OP-159): two screens, room `l4` ----
+// Screen 0 is the stair landing on the trunk: the spiral stair up to the canopy (level 5) and the
+// stairwell down to level 3, and the walkway east. Screen +1 (`e1`) is the overlook at the end of a
+// great bough: a quiet perch over the park, nothing to use, and one find (`find-overlook`) on its
+// highest perch, reached by gliding. The game draws the doorway marks and the find, so the paintings
+// leave the stair's ends and the perch bare. The two screens meet on a plain run of planks with
+// nothing standing on it, so the join is easy to mend. No moon: it is only in the lobby's sky.
+const TREE_L4_HORIZON = `Far below, a far forest of rounded misty tree crowns, seen from high above, spreads to the horizon in the lower third in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy shadow with no detail (the game covers it with the walkway).`;
+const TREE_L4_SCREENS = {
+  0: treeSixLayers({
+    far: `a night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; high across the top of the frame, the dark silhouettes of the colossal tree's own upper boughs and leaves reaching out from the canopy above, hung with a few tiny warm gold lantern points.`,
+    horizon: TREE_L4_HORIZON,
+    mid: 'in the left third and the right third of the frame, the dark rounded crowns of other great trees far away across a misty valley, rising to about this height, with a few tiny warm gold lantern points among their boughs; the middle third stays almost empty.',
+    composition: `THE SCREEN (2048x1152): high in a colossal ancient tree at night, the sky landing where a spiral stair climbs around the trunk, seen from the side. The trunk rises through the middle of the frame, about two fifths of the frame's width, from below the walkway up out of the top edge: deep gnarled bark with a few thin cracks of glowing gold sap. The walking floor is one level walkway of thick wooden planks across the whole width of the frame, built around the trunk: a flat strip seen side-on, with a broad, clean, flat top edge five sixths of the way down. Under it, the walkway's thick timber edge, a row of carved wooden brackets and a dense mass of dark leaves and small branches fill the frame down to the bottom edge. THE WAY UP: right of the middle, a spiral stair of thick wooden plank treads fixed to the bark climbs from the walkway up and to the left across the front of the trunk in five broad treads, each about half a visitor's height above the last and about a visitor wide, to a small flat wooden landing on the trunk's left side about three visitors' heights above the walkway; from that landing the stair winds on up around the trunk and out of the top edge, lost among the leaves. A carved wooden banister on slim posts runs along the outer edge of the treads. THE WAY DOWN: left of the trunk, set into the back of the walkway behind its unbroken front edge, an open stairwell edged at its back with a low carved wooden railing, where the stair's first worn steps wind down around the trunk into soft shadow. THE EDGES: at the far left the walkway ends against a great bough that grows up out of the trunk's side and curves up out of the top left corner, thick with leaves, so nothing leads on to the left. At the right edge the walkway leaves the frame at exactly the floor's height as a plain, level run of planks along the top of a great bough reaching away east, with nothing standing on it within a tenth of the frame of the right edge. One curly black iron lantern post stands at the walkway's front edge about four fifths of the way across, hung with a round paper lantern; strings of small round lanterns hang from the boughs high above. A visitor added later by the game stands about one sixth of the frame's height tall; every tread, landing and ledge is sized for it.`,
+    scene: 'a walkway around the trunk of a colossal tree high above the ground at night, where a spiral stair climbs around the trunk',
+    props: `along the top edge, clusters of dark leaves and a few hanging strands of moss from the upper left and upper right corners, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta because the stair climbs out of the frame there in the scene behind; on the far left edge, a dark near leafy twig no wider than a tenth of the frame; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches.`,
+  }),
+  e1: treeSixLayers({
+    far: `a wide, open night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, the calmest sky of the level, with no moon in this frame; far away among the misty crowns near the horizon, the faint warm gold lights of a park glow in a few small clusters.`,
+    horizon: TREE_L4_HORIZON,
+    mid: 'the rounded crowns of two or three other great trees far away across a misty valley, the nearest on the right, rising to about this height, with a few tiny warm gold lantern points among their boughs.',
+    composition: `THE SCREEN (2048x1152): high in a colossal ancient tree at night, the overlook at the end of a great bough reaching east from the trunk, seen from the side; the trunk stands in the neighbouring screen to the left, and no part of it is in this frame. The walking floor is one level walkway of thick wooden planks along the top of the bough: a flat strip seen side-on, with a broad, clean, flat top edge five sixths of the way down, arriving from the left edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the left edge. Under it, the walkway's thick timber edge, a row of carved wooden brackets and a dense mass of dark leaves and small branches fill the frame down to the bottom edge. The walkway runs on to about four fifths of the way across, where it ends at a stout carved wooden railing; beyond the railing the bough narrows and dips away out of the bottom right corner, and nothing leads on to the right. THE PERCHES: above the walkway, standable tops rise from left to right in three steps of difficulty: first a broad flat-topped burl on the walkway about half a visitor's height tall, a third of the way across; then a small platform of planks built on a side branch growing up out of the bough, its flat top about two visitors' heights above the walkway, a hop up from the burl; then, across a clear gap about two visitors wide, a broad shelf fungus with a flat top on a second branch, about three visitors' heights up; then, right of the middle and high up, a small flat wooden lookout perch on the tip of a slender branch, about three and a half visitors' heights above the walkway, bare (a reward appears there later), reached by gliding across from the shelf fungus. One curly black iron lantern post stands at the walkway's front edge just before the railing, hung with a round paper lantern. A visitor added later by the game stands about one sixth of the frame's height tall; every hop, gap and ledge is sized for it.`,
+    scene: 'a walkway along a great bough high in a colossal tree at night, ending at an overlook',
+    props: `from the upper left corner, a few dark leaves and hanging strands of moss, no further down than a sixth of the frame; the whole right half of the top of the frame stays empty magenta, because high perches stand there in the scene behind; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches.`,
+  }),
+};
+
+/** Level 4's screens, each in four painted jobs: `tree-l4-<screen>-bg|mid|scene|fg` (OP-159). */
+const TREE_L4_PROMPTS = treeLevelPrompts(4, TREE_L4_SCREENS);
+export const TREE_L4_KEYS = Object.keys(TREE_L4_PROMPTS);
+const TREE_L4_JOBS = treeLevelJobs(4, { 0: 4401, e1: 4405 }, TREE_L4_PROMPTS);
+Object.assign(PROMPTS, TREE_L4_PROMPTS);
+HELPER_KEYS.push(...TREE_L4_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L4_JOBS);
