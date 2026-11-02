@@ -520,7 +520,7 @@ describe("doorways keep the owl's lane (OP-124)", () => {
     // In the tree, the stairs between levels and level 3's doorway into the stained-glass street
     // do too: an owl comes out as far along the floor from the spawn as it went in from the doorway's middle.
     expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual([
-      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:to-canopy', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
+      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:gate', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
     ]);
   });
 
@@ -786,18 +786,18 @@ describe('the tree (map 2)', () => {
     for (const [room, spawn] of [[l2, 'from-l3'], [l2, 'from-l1'], [l3, 'from-l2'], [l1, 'from-l2']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
-  it('level 5 is two rooms joined at the trunk: the nests street west and the canopy east, its stair down to level 4 (OP-158)', () => {
+  it('level 5 is two rooms joined at the front gate: the nests street to the trunk outside, the canopy inside, its stair down to level 4 (OP-158)', () => {
     const street = getRoom('l5-street');
     const canopy = getRoom('l5');
     const l4 = getRoom('l4');
     const at = (t: { key: string; x: number }) => [t.key, t.x / ROOM_W];
-    expect(street.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
-    expect(canopy.size).toEqual({ w: 4 * ROOM_W, h: ROOM_H });
-    expect(backgroundTiles(street).filter((t) => t.plain).map(at)).toEqual([['tree-l5-w2-play', 0], ['tree-l5-w1-play', 1]]);
-    expect(backgroundTiles(canopy).filter((t) => t.plain).map(at)).toEqual(['0', 'e1', 'e2', 'e3'].map((s, i) => [`tree-l5-${s}-play`, i]));
-    expect(foregroundTiles(canopy).filter((t) => t.plain).map(at)).toEqual([['tree-l5-0-front', 0]]);
-    // Through the trunk both ways.
-    expect(street.doors.find((d) => d.id === 'to-canopy')!.to).toEqual({ room: 'l5', spawn: 'from-street' });
+    expect(street.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+    expect(canopy.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+    expect(backgroundTiles(street).filter((t) => t.plain).map(at)).toEqual(['w2', 'w1', '0'].map((s, i) => [`tree-l5-${s}-play`, i]));
+    expect(backgroundTiles(canopy).filter((t) => t.plain).map(at)).toEqual(['e1', 'e2', 'e3'].map((s, i) => [`tree-l5-${s}-play`, i]));
+    expect(foregroundTiles(street).filter((t) => t.plain).map(at)).toEqual([['tree-l5-0-front', 2]]);
+    // The front gate at the street's east end, its turnstiles into the canopy under the arch; back out by the canopy's west end.
+    expect(street.doors.find((d) => d.id === 'gate')!.to).toEqual({ room: 'l5', spawn: 'default' });
     expect(canopy.doors.find((d) => d.id === 'to-street')!.to).toEqual({ room: 'l5-street', spawn: 'from-canopy' });
     // Down to level 4 from the canopy's boardwalk; up from level 4's last spiral tread.
     const down = canopy.doors.find((d) => d.id === 'stair-l5-l4')!;
@@ -809,7 +809,7 @@ describe('the tree (map 2)', () => {
     expect(beyond.to).toBeUndefined();
     expect(beyond.closedSign).toBe('Hatching Soon');
     expect(beyond.top).toBe(Math.max(...street.perches!.map((p) => p.top)));
-    for (const [room, spawn] of [[street, 'from-canopy'], [canopy, 'from-street'], [canopy, 'from-l4'], [l4, 'from-l5']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
+    for (const [room, spawn] of [[street, 'from-canopy'], [canopy, 'from-l4'], [l4, 'from-l5']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
   it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {

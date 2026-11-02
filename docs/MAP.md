@@ -300,9 +300,11 @@ The recipe for OP-158 to OP-161 and OP-163, as level 1 was built:
 
 ## 11. Open questions
 
-- DECIDED (2026-11-01): level 5 is two rooms, joined by the trunk's doorway: the nests street
-  `l5-street` (-2, -1) and the canopy `l5` (0 to +3). A level's second room is named `l<n>-<word>`
-  (`treeLevelOf`). The street's far west end, on bough 6's highest perch, has a closed doorway
+- DECIDED (2026-11-01, built 2026-11-02): level 5 is two rooms, split at the front gate so the Day
+  Ticket is sold where the tree's park begins: the nests street `l5-street` (-2 to 0, outside the
+  gate, the trunk's crown included) and the canopy `l5` (+1 to +3, inside). The gate's turnstiles are
+  the street's east end, and an owl comes through under the entrance arch. A level's second room is
+  named `l<n>-<word>` (`treeLevelOf`). The trunk's painted doorway on screen 0 leads nowhere yet. The street's far west end, on bough 6's highest perch, has a closed doorway
   (`closed-beyond`, 'Hatching Soon') for places beyond Owl Park; no destination yet (the owner's
   steer, 2026-11-02). QUESTION FOR LATER: what lies beyond Owl Park, and how it connects.
 - OPEN QUESTION: the grid puts a ticket booth on level 5 (`booth-canopy`) and its window in the lobby
