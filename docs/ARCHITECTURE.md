@@ -174,8 +174,7 @@ lantern beam and the last stage quiz round paid are kept in the object's storage
 evicted object brings them back; while owls are in the hub, the alarm also wakes the object when a
 quiz question closes.
 
-**Spectators (v15, OP-191)** [BUILT on the server; off until `SPECTATORS` is `on` and the page's
-half ships]. A spectator is an owl past the turnstiles without a ticket that works. The Worker sends
+**Spectators (v15, OP-191)** [BUILT, the room server and the page; off until `SPECTATORS` is `on`]. A spectator is an owl past the turnstiles without a ticket that works. The Worker sends
 every socket to its room object with `X-Visitor-Kind: visitor` or `spectator`, after deleting any
 copy the page sent (`/ws` in `apps/edge/src/index.ts`; `spectating` in `apps/edge/src/gate.ts`).
 The room object keeps the kind in the socket attachment (`spec`), so it survives hibernation.
@@ -206,6 +205,26 @@ and plays every game, and earns nothing:
   same visitor id and collector, `iat` not before the socket's `joinedAt`) makes the socket a full
   visitor in place and counts its arrival; anything else answers `admitted` with `ok: false`.
   A visitor's `admit` answers `ok: true` and changes nothing.
+
+The page's half (`apps/park/src/ui/spectator.ts`, its words and choices, unit-tested in
+`spectator.test.ts`; `game/RoomScene.ts`): the welcome's `spectator` is kept in the game's registry
+(`spectator`) and in `hud.setSpectator`, which shows the "Just looking" badge (CSS only) with its
+Get a Day Ticket button. Every Get a Day Ticket opens the turnstiles' own sale (`sellDayTicket`, the
+card before the store then checkout, OP-180) with a line above it. Locked on the page as well as on
+the server: no NPC marks or quest items are drawn, talking to an NPC owl (the feather shop's keeper
+and the gift included), a leaf pile or a stall, the gift shop's door and the Quests tab sell a Day
+Ticket instead, and the idol says the vote line, then the card. A `refused` with reason `spectator`
+opens the card too. The arcade's and the climb's result cards for a practice run say what the run
+would have earned (worked out on the page with `runFeathers` and `BAND_FEATHERS`, without the
+day's-best or brisk bonus) over Get a Day Ticket and Play again; fishing, the copy game, the quiz
+and the beam toast the game's line with what it would have earned, then open the card at most once
+every five minutes for the page (`createOfferPacer`). `full` with `spectators: true` says the room
+is busy and offers the card. A ticket that lands while the owl is a spectator inside is scanned
+where the owl stands, then sent to the room as `admit` (`RoomConnection.admit`), falling back to
+`renew` (a new socket on the admitted pass); `onSpectator(false)` takes the badge off, draws the
+quest marks and items, refreshes the board and the collection, and says "Your Day Ticket is in. Have
+fun!", with no reload. Tests: `apps/park/e2e/spectator.spec.ts`, with SPECTATORS on for the browser
+tests' room server (`playwright.config.ts`).
 
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
@@ -579,7 +598,7 @@ Not covered yet: an owl already inside keeps its entry pass until it runs out (a
 when its ticket is refunded or cancelled; the refund stops the next scan. Tests:
 `apps/edge/test/gateHardening.test.ts`.
 
-### Spectators past the turnstiles (OP-191) [BUILT on the server; off]
+### Spectators past the turnstiles (OP-191) [BUILT; off]
 
 `SPECTATORS` in `apps/edge/wrangler.jsonc` is the kill switch, `off` by default. Off, the
 turnstiles turn an owl without a ticket away with 403 exactly as before, and `/api/entry` answers
@@ -587,9 +606,14 @@ as before. On, `/ws` lets that owl into the rooms inside the park as a spectator
 `/api/entry` adds `spectators: true`. The Realm Vote and the gift shop stay locked to it either way
 (`/api/vote`, `/api/vote/me`, `/api/shop`, `/api/shop/buy`, `/api/shop/gift` answer 403). A spectator's
 pass is the guest pass it already holds; buying a ticket and scanning it gives the page an admitted
-pass, which the page sends to its room as `admit`. The page's half (the spectator banner, the
-turnstile's offer and the reconnect after a ticket) follows in a second pull request. Tests:
-`apps/edge/test/spectators.test.ts`, the spectator describe in `apps/edge/test/RoomObject.test.ts`.
+pass, which the page sends to its room as `admit`. On the page (`turnstileWay` in
+`apps/park/src/ui/spectator.ts`), with `/api/entry` saying `spectators`, a turnstile reached without
+a ticket that works says one line with Get a Day Ticket on a button and the owl walks on into the hub;
+a ticket the store still holds, or one for a night to come, lets the owl in as a spectator with the
+turnstiles' reason and nothing to sell; turnstiles that cannot reach the park, or `spectators`
+missing, turn the owl back as OP-180 does. An expired ticket scans as no ticket, so its owl comes in
+as a spectator. Tests: `apps/edge/test/spectators.test.ts`, the spectator describe in
+`apps/edge/test/RoomObject.test.ts`, `apps/park/e2e/spectator.spec.ts`.
 
 ## 10. Feedback from visitors [BUILT]
 
