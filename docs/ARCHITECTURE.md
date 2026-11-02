@@ -392,6 +392,30 @@ another reason (a ticket held for the store's check, not yet in its window, offl
 sells nothing. A ticket belongs to the owl, not the screen (OP-183): every ticket route keys on the
 pass's collector id, so a ticket bought or claimed on one screen admits the same owl on any other.
 
+**In with the ticket, back from checkout** BUILT (OP-190; `apps/park/src/game/gateAdmit.ts`,
+`apps/park/src/ui/checkoutReturn.ts`): when the bought ticket lands while the owl still stands at
+the lobby's turnstiles (within `AT_GATE_PX` of them, where they turned it back), the owl walks back
+into the turnstile it tried by itself, and the turnstiles scan the ticket as for any owl that walks
+in (its first scan, the ticket card, on into the hub); the page says "Your ticket is here. In you
+go!", and the half-price pass offer follows after the ticket card's moment. An owl that wandered
+off hears "Your ticket is here. It works at the turnstiles."; a ticket held for the store's check
+takes no owl in ("Your ticket is here. It works as soon as the store’s quick check is done."). The
+page cannot close checkout's window (the store's page cuts it off), so the store sends the buyer
+back: a theme snippet on the store's home page (`docs/DEPLOY.md`, Selling tickets, step 11; not yet
+applied, the owner's) forwards a visitor who came from checkout to the return address
+`https://exploreowlpark.com/?checkout=done`, and any other visitor to the park. A page loaded there
+takes `checkout` out of its address and says on the BroadcastChannel `owl-park-checkout` that
+checkout is done. A game page with a checkout watched (or whose ticket came in the last ten minutes)
+answers, looks at the wallet at once and asks for the focus. An answer within `ANSWER_MS` (400 ms)
+means this is checkout's window: it calls `window.close()` and, where the browser keeps it open,
+shows "You're all set. Your ticket is waiting in the park window." with Play here instead, which
+starts the park in that window. With no answer (a phone's game tab asleep or closed, or checkout in
+the game's own window), the park starts there: it watches the wallet, says "Your ticket is here.
+Press Play and in you go!", and Play lands the owl in front of the turnstiles (`from-hub`), where it
+goes through them with the ticket. Nothing in this relies on `window.opener` (the park cuts it
+before the store's page loads). What a second screen of the same owl does is unchanged: the return
+page starts no park while a game window answers, unless the buyer presses Play here instead.
+
 **The opening switch** BUILT (OP-067, `apps/edge/src/gateSwitch.ts`): the keepers flip the gate on
 `/admin/gate` (or `POST /api/admin/gate` with `{"mode": "ticket" | "open" | "deployed"}`), both
 behind the admin key, with no deploy. The setting lives in the vote ledger's object beside the
@@ -627,7 +651,9 @@ sequenceDiagram
     W->>T: /tickets/issue: one ticket per unit, held unless low risk or free
     W->>S: Fulfil the ticket lines with the claim link as tracking link
     W->>T: With an owl_checkout token: the tickets land on that owl at once
-    B->>W: The page reads the wallet while checkout is open: "Ticket added"
+    B->>W: The page reads the wallet while checkout is open (and at once when the return page says so)
+    S->>B: Thank you page, then the store's home page sends the buyer to /?checkout=done (OP-190)
+    B->>B: The return page tells the game page (BroadcastChannel) and closes; the owl walks into the turnstiles
     S->>B: As always, the store's shipping email, "Your ticket", with the claim link (another screen)
     B->>W: Open the link: POST /api/tickets/claim (the link's secret, device = the collector id)
     W->>T: /tickets/claim: the order's live tickets move onto this owl (any screen, OP-183)

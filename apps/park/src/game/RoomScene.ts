@@ -115,7 +115,7 @@ import type { CollectionState } from '../collect/state';
 import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
-import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply } from '../net';
+import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type WalletEntry } from '../net';
 import type { Ribbon } from '../ui/ribbon';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
@@ -139,6 +139,7 @@ import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { doorwaysOff, roomsAhead, takesDoorway } from './doors';
+import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
@@ -163,6 +164,11 @@ export interface RoomStart {
   lane?: Lane | undefined;
   /** Come by travel from the Menu's map (OP-130): into the park, the room server lets it in only once it has walked through the gate. */
   via?: 'travel' | undefined;
+  /**
+   * Back from the store's checkout in a page of its own (OP-190): the bought ticket, on the owl now.
+   * Play lands the owl in front of the turnstiles, and it goes through them with it by itself.
+   */
+  ticket?: WalletEntry | undefined;
 }
 
 /** How far a tap may drift before it counts as a drag (game pixels). */
@@ -282,6 +288,8 @@ export class RoomScene extends Phaser.Scene {
   private atIdol = false;
   /** Going through the lobby's turnstiles (the welcome is playing, or the gate is checking the pass). */
   private passingGate = false;
+  /** The ticket bought in checkout's own page that Play came in with (OP-190): through the turnstiles once the room is up. */
+  private cameWith: WalletEntry | null = null;
   /** Where the owl was at the last look for doorways, and the walk it was on: a doorway takes it from where its step crossed in (OP-124). */
   private doorLook: { pos: Vec2; walk: Walk | null } | null = null;
   /** What the owl can do where it stands (spots, NPC owls, interactables), in order: E runs the first. */
@@ -468,6 +476,7 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false;
     this.pieces = {};
     this.cameFrom = data.from;
+    this.cameWith = data.ticket ?? null;
     this.lane = data.lane;
     this.via = data.via;
     this.sleptAt = 0;
@@ -841,6 +850,10 @@ export class RoomScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
+    // Back from checkout in a page of its own (OP-190): in front of the turnstiles, and on through them with the ticket.
+    const came = this.cameWith;
+    this.cameWith = null;
+    if (came) this.time.delayedCall(450, () => void this.ticketCame(came));
   }
 
   override update(): void {
@@ -2383,7 +2396,7 @@ export class RoomScene extends Phaser.Scene {
    * park says whether this ticket's owl may have it (never an owl with an annual pass already); with
    * no code or no pass on sale, or for a Day Ticket outside opening night, there is no offer.
    */
-  private async offerPass(id: string, words: FreePassOffer['words'], open?: Opener): Promise<void> {
+  private async offerPass(id: string, words: FreePassOffer['words'], open?: Opener, afterMs = words === 'night' ? 2700 : 0): Promise<void> {
     const tickets = this.transport.tickets;
     if (!tickets) return;
     if (words === 'night') {
@@ -2394,7 +2407,7 @@ export class RoomScene extends Phaser.Scene {
     if (!link || !offerOnce(id)) return;
     const show = () => this.hud.offerFreePass({ link, words, claimed: () => this.passCame(id), ...(open ? { open } : {}) });
     // After a scan, the ticket card has its moment first.
-    if (words === 'night') setTimeout(show, 2700);
+    if (afterMs > 0) setTimeout(show, afterMs);
     else show();
   }
 
@@ -2415,10 +2428,40 @@ export class RoomScene extends Phaser.Scene {
       ...(tickets.checkout ? { checkout: () => tickets.checkout!() } : {}),
       wallet: () => tickets.wallet(),
       before: new Set(before.map((t) => t.id)),
-      bought: (t, open) => {
-        if (t.kind === 'day' || t.kind === 'night') void this.offerPass(t.id, 'day', open);
-      },
+      bought: (t, open) => this.ticketCame(t, open),
     });
+  }
+
+  /**
+   * A ticket bought in checkout has come onto this owl (OP-190). An owl still at the lobby's turnstiles
+   * walks back into the turnstile it tried, by itself, and the turnstiles scan the ticket as for any
+   * owl that walks in (the first scan, the ticket card, on into the hub); a held ticket takes no owl in.
+   * Then the half-price pass may be offered, after the ticket card's moment when the owl went in, with
+   * `open`, the opener the card before the store handed that purchase. True when the owl goes in.
+   */
+  ticketCame(ticket: WalletEntry, open?: Opener): boolean {
+    const goingIn = this.admitAtGate(ticket);
+    if (ticket.kind === 'day' || ticket.kind === 'night') void this.offerPass(ticket.id, 'day', open, goingIn ? 2700 : 0);
+    return goingIn;
+  }
+
+  /** Into the turnstiles with a ticket that came (OP-190): false when the owl is not at them, or the ticket does not work yet. */
+  private admitAtGate(ticket: WalletEntry): boolean {
+    const gate = this.room.doors.find((d) => d.id === 'gate') ?? null;
+    const target = admitTarget({
+      room: this.room.id,
+      pos: this.built ? this.me.pos : { x: -1e6, y: -1e6 },
+      gate: gate?.rect ?? null,
+      status: ticket.status,
+      busy: !this.built || this.leaving || !this.scene.isActive(),
+    });
+    if (!target) return false;
+    this.errand = null;
+    this.pendingVote = false;
+    // Turned back a moment ago, the turnstiles are still deciding: the walk goes as soon as they are done.
+    if (this.passingGate) this.time.delayedCall(1600, () => void this.walkTo(target));
+    else this.walkTo(target);
+    return true;
   }
 
   /**

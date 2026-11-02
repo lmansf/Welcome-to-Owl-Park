@@ -56,6 +56,10 @@ board (PM hat).
   it (`docs/DEPLOY.md`, Selling tickets, step 7).
 - A guest whose ticket is lost for good: a ticket without a store order, `POST /api/admin/tickets`
   (step 9), and the link it answers with.
+- A buyer left on the store's Thank you page or its home page after paying: the ticket is already on
+  their owl. Back at the park (`https://exploreowlpark.com/`), the turnstiles take it. Until the
+  theme snippet (`docs/DEPLOY.md`, Selling tickets, step 11) is on the store, nothing sends them
+  back by itself.
 
 ## 5. The free plan's daily limits
 
@@ -80,7 +84,7 @@ its own cap of 80.
 
 Nothing more specific (no times, no refunds, no causes) without the owner's word.
 
-## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077, OP-180)]
+## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-082, OP-083, OP-077, OP-180, OP-190)]
 
 What a visitor has in hand on main 8a1bbb9. Nothing a visitor does needs typing.
 
@@ -97,7 +101,16 @@ shows its own labelled button (Light a lantern, Cast a line, Vote for this realm
 turnstile reached without a ticket that works says why and offers a Day Ticket on the card before
 the store ("Ask a grown-up", once, right before the purchase); Continue opens checkout in its own
 window, and a small card over the game keeps Back to checkout and Cancel until the ticket lands.
-During opening night the annual pass at half price follows the Day Ticket once. A ticket's status
+When it lands, the owl, still at the turnstiles, goes through them by itself with it (OP-190), and
+the page says "Your ticket is here. In you go!"; an owl that wandered off hears "Your ticket is here.
+It works at the turnstiles.", and a ticket held for the store's check "Your ticket is here. It works
+as soon as the store’s quick check is done." (no owl goes in on it until then). The store sends the
+buyer from its Thank you page back to `https://exploreowlpark.com/?checkout=done` (once the theme
+snippet in `docs/DEPLOY.md`, Selling tickets, step 11, is applied): with the game open in another
+window, checkout's window closes itself, or shows "You're all set. Your ticket is waiting in the
+park window." with **Play here instead**; with no game open (a phone's tab put to sleep), the park
+starts in that window, says "Your ticket is here. Press Play and in you go!", and Play takes the owl
+to the turnstiles and through them. The half-price annual pass follows the Day Ticket once. A ticket's status
 shows only at the turnstiles; the Menu's Settings keep the tickets in a closed row (Tickets), with
 their IDs for the keepers. A ticket is the owl's, not the screen's (OP-183): it lets the owl in on
 any screen it plays on.
