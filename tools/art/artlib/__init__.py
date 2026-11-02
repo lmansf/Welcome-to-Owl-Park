@@ -131,7 +131,8 @@ HELPER_KEYS = ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", 
                "tree-l2-seam-w2-w1", "tree-l2-seam-w1-0", "tree-l2-0-codes", "tree-l2-w1-codes", "tree-l2-w2-codes",
                "tree-l2-top-0", "tree-l2-top-w1", "tree-l2-top-w2",
                "tree-l5-w2-scene", "tree-l5-w1-scene", "tree-l5-0-scene", "tree-l5-e1-scene", "tree-l5-e2-scene", "tree-l5-e3-scene",
-               "tree-l0-w1-scene", "tree-l0-0-scene")
+               "tree-l0-w1-scene", "tree-l0-0-scene",
+               "tree-l0-seam-w1-0", "tree-l0-w1-codes", "tree-l0-0-codes", "tree-l0-top-w1", "tree-l0-top-0")
 PUBLIC_ROOMS = ("hub", "grove", "market", "lobby", "homes")
 OVERLAY_KEYS = ("hub-fg", "grove-fg", "market-fg")
 PIECE_KEYS = ("guardian", "robot-owl")

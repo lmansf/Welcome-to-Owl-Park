@@ -2185,3 +2185,95 @@ const TREE_L0_JOBS = treeLevelJobs(0, { 0: 4605, w1: 4601 }, TREE_L0_PROMPTS);
 Object.assign(PROMPTS, TREE_L0_PROMPTS);
 HELPER_KEYS.push(...TREE_L0_KEYS.filter((k) => k.endsWith('-scene')));
 JOBS.push(...TREE_L0_JOBS);
+
+// ---- Level 0's join, colour-coded maps and top strips (OP-163), made as level 2's were ----
+// The two picked scenes, moved onto the ground line, side by side west to east (the challenge stair,
+// the stair foot) make a row of 4096x1152 with the join at x 2048, held under `tree-l0-w1-back`.
+const TREE_L0_SEAM_PROMPTS = {
+  'tree-l0-seam-w1-0': treeSeam(
+    `a level floor of packed earth and flat stone among the roots of a vast cavern, a great gnarled root rising at the left edge with a lantern of plain glass on a hook, and the cavern's open depth as flat magenta between the roots`,
+    `the same floor of packed earth running on, a great gnarled root rising on the right with a lantern of plain glass on a hook, more roots arching over, and the cavern's open depth as flat magenta between them`,
+    `the floor of packed earth and flat stone runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; the great roots on either side arch toward each other over the middle and join into the cavern's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle, and the lanterns stay exactly where they are.`,
+  ),
+};
+export const TREE_L0_SEAM_KEYS = Object.keys(TREE_L0_SEAM_PROMPTS);
+const TREE_L0_SEAM_JOBS = TREE_L0_SEAM_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: ['tree-l0-w1-back', 'tree-l0-0-back'],
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4681 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L0_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_SEAM_KEYS);
+JOBS.push(...TREE_L0_SEAM_JOBS);
+
+const TREE_L0_CODES = {
+  // The picked scene (seed 4621): the floor from the right edge to a low stone wall at the left, a stone
+  // stairwell with a rim and two posts left of the middle, lanterns on the roots.
+  'tree-l0-w1-codes': treeCodes({
+    stand: `the long floor of packed earth and flat stone from the right edge of the frame to the low wall of stone blocks on the left, with its lit top edge.`,
+    front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`,
+    keep: `the low stone wall, the stone stairwell with its rim, its posts and its dark steps, the great roots, the lanterns on their hooks, the dark earth under the floor,`,
+  }),
+  // The picked scene (seed 4626): the floor across the frame, the stair's pale treads down the great
+  // root to the floor, a flat stone shelf and a stump on the left, a high root shelf above them.
+  'tree-l0-0-codes': treeCodes({
+    stand: `the long floor of packed earth and flat stone across the whole width of the frame, with its lit top edge; each pale wooden tread of the stair that comes down the great root to the floor; the flat top of the stump and the flat stone shelf on the left; and the top of the broad flat root ledge high on the left above them.`,
+    front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`,
+    keep: `the great roots, the stair's banister, the round dark opening in the roof, the tall rounded opening at the right edge, the lanterns on their hooks, the dark earth under the floor,`,
+  }),
+};
+export const TREE_L0_CODE_KEYS = Object.keys(TREE_L0_CODES);
+const TREE_L0_CODE_JOBS = TREE_L0_CODE_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [key.replace('-codes', '-play')],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4651 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L0_CODES);
+HELPER_KEYS.push(...TREE_L0_CODE_KEYS);
+JOBS.push(...TREE_L0_CODE_JOBS);
+
+const TREE_L0_TOP_PROMPTS = {
+  'tree-l0-top-w1': treeTopStrip(
+    `the great roots and the cavern's roof meet their own reflections, and the lanterns on their hooks are reflected.`,
+    `the great roots rise on and join into the cavern's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the lanterns hang below their hooks.`,
+    `the floor, the low stone wall, the stone stairwell, the roots, the lanterns and the open magenta depth already there`,
+  ),
+  'tree-l0-top-0': treeTopStrip(
+    `the great roots and the cavern's roof meet their own reflections, the round opening in the roof is reflected, and the lanterns on their hooks are reflected.`,
+    `the great roots rise on and join into the cavern's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the round opening in the roof stays one opening, where the stair comes down; the lanterns hang below their hooks.`,
+    `the floor, the stair, the shelf and the stump, the high root ledge, the roots, the lanterns and the open magenta depth already there`,
+  ),
+};
+export const TREE_L0_TOP_KEYS = Object.keys(TREE_L0_TOP_PROMPTS);
+const TREE_L0_TOP_JOBS = TREE_L0_TOP_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l0-top-', 'tree-l0-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4695 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L0_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_TOP_KEYS);
+JOBS.push(...TREE_L0_TOP_JOBS);
