@@ -33,6 +33,8 @@ from artlib import fields  # noqa: E402
 from artlib.grade import grade, load_palette  # noqa: E402
 from artlib.guide import render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.labels import erode, fill_holes, label_components, remove_specks  # noqa: E402
+from artlib.split import split as split_layer  # noqa: E402
+from artlib.match import match_colours, solid_mask  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards, sign_board_rect  # noqa: E402
 from artlib.resize import fit_contain, resize_exact  # noqa: E402
 from artlib.synth import (TRUTH_ACCENT, TRUTH_BEAK, TRUTH_BELLY, TRUTH_BODY, TRUTH_EYES, fixture_geometry, synth_keyed_subject,  # noqa: E402
@@ -648,6 +650,37 @@ class TestShift(unittest.TestCase):
         with self.assertRaises(ArtError):
             postprocess.shift_down(img, 10)
 
+    def test_shift_down_from_a_row_moves_only_the_band_below_it(self):
+        img = Image.new("RGB", (4, 12))
+        for y in range(12):
+            ImageDraw.Draw(img).line((0, y, 3, y), fill=(y * 20, 0, 0))
+        out = np.asarray(postprocess.shift_down(img, 3, top=6))
+        self.assertEqual([int(out[y, 0][0]) for y in range(6)], [y * 20 for y in range(6)], "the rows above the band stay")
+        self.assertEqual([int(out[y, 0][0]) for y in range(6, 9)], [100, 80, 60], "the gap mirrors the three rows above the band")
+        self.assertEqual([int(out[y, 0][0]) for y in range(9, 12)], [120, 140, 160], "the band starts three rows lower")
+        with self.assertRaises(ArtError):
+            postprocess.shift_down(img, 3, top=2)  # too few rows above the band to mirror
+
+    def test_the_shift_command_lowers_an_overlays_bottom_band(self):
+        with tempfile.TemporaryDirectory() as td:
+            raw = Path(td) / "fg.png"
+            base = Image.new("RGB", (2048, 1152), (250, 3, 248))
+            ImageDraw.Draw(base).rectangle((0, 0, 300, 200), fill=(20, 40, 30))  # leaves in the top corner
+            ImageDraw.Draw(base).rectangle((900, 930, 1100, 1151), fill=(20, 40, 30))  # leaves rising over the walkway
+            base.save(raw)
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["shift", "tree-l3-0-fg", "--dy", "60", "--from-y", "600", "--raw", str(raw), "--work", td, "--now", "2026-11-02T03:00:00Z"])
+            self.assertEqual(rc, 0, out.getvalue())
+            made = list((Path(td) / "raw" / "tree-l3-0-fg").glob("*.png"))
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["shifted"], {"base": "fg.png", "dy_room": 60, "dy_px": 77, "fill": "mirror", "from_y_room": 600, "from_y_px": 768})
+            px = np.asarray(Image.open(made[0]).convert("RGB"))
+            self.assertEqual(tuple(int(c) for c in px[100, 100]), (20, 40, 30), "the top corner's leaves stay")
+            self.assertEqual(tuple(int(c) for c in px[1000, 1000]), (250, 3, 248), "the leaves no longer reach the walkway's top")
+            self.assertEqual(tuple(int(c) for c in px[1010, 1000]), (20, 40, 30), "they start 77 px lower")
+            self.assertEqual(tuple(int(c) for c in px[800, 1000]), (250, 3, 248), "the gap is the painting's own key colour")
+
     def test_the_shift_command_writes_a_new_candidate_with_its_record(self):
         with tempfile.TemporaryDirectory() as td:
             raw = Path(td) / "base.png"
@@ -673,6 +706,124 @@ class TestShift(unittest.TestCase):
             with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
                 self.assertEqual(postprocess.main(["shift", "tree-l1-w1-play", "--dy", "300", "--raw", str(raw), "--work", td]), 1, "more than a quarter of the height is refused")
 
+
+class TestSplit(unittest.TestCase):
+    """A tree screen's platforms and front props are cut out of its painting by a colour-coded edit of it (OP-173, OP-159)."""
+
+    @staticmethod
+    def scene_and_map():
+        sky, bark, plank, post = (248, 2, 200), (60, 40, 28), (150, 110, 70), (20, 20, 24)
+        scene = Image.new("RGB", (400, 240), sky)
+        d = ImageDraw.Draw(scene)
+        d.rectangle((150, 0, 250, 239), fill=bark)  # the trunk, behind
+        d.rectangle((0, 200, 399, 239), fill=plank)  # the walkway and what is under it
+        d.rectangle((260, 120, 330, 132), fill=plank)  # a ledge
+        d.rectangle((60, 120, 66, 199), fill=post)  # a lantern post in front of the walkway
+        # The model's map: the same picture redrawn a pixel off, the walkway and ledge green (shaded), the post blue,
+        # and a stray green fleck in the sky that is not a platform.
+        code = scene.copy()
+        c = ImageDraw.Draw(code)
+        c.rectangle((1, 201, 399, 239), fill=(30, 230, 40))
+        c.rectangle((261, 121, 331, 133), fill=(10, 250, 10))
+        c.rectangle((61, 121, 67, 199), fill=(15, 15, 240))
+        c.rectangle((20, 20, 26, 26), fill=(0, 255, 0))
+        return scene, code
+
+    def test_split_keeps_the_paintings_own_pixels_where_the_map_is_coded(self):
+        scene, code = self.scene_and_map()
+        out, rep = split_layer(scene, code, (0, 255, 0), (255, 0, 255), min_area=100, grow=2)
+        a, s = np.asarray(out), np.asarray(scene)
+        self.assertEqual(tuple(int(v) for v in a[220, 200]), tuple(int(v) for v in s[220, 200]), "the walkway is the painting's own")
+        self.assertEqual(tuple(int(v) for v in a[126, 300]), tuple(int(v) for v in s[126, 300]), "so is the ledge")
+        self.assertEqual(tuple(int(v) for v in a[200, 0]), tuple(int(v) for v in s[200, 0]), "grown past the map's pixel-off outline, the top edge is kept")
+        self.assertEqual(tuple(int(v) for v in a[60, 200]), (255, 0, 255), "the trunk behind is not a platform")
+        self.assertEqual(tuple(int(v) for v in a[23, 23]), (255, 0, 255), "a stray fleck of green is dropped")
+        self.assertEqual(rep["parts"], 2)
+        self.assertEqual(rep["specks_dropped"], 1)
+        front, rep = split_layer(scene, code, (0, 0, 255), (255, 0, 255), min_area=100, grow=2)
+        f = np.asarray(front)
+        self.assertEqual(tuple(int(v) for v in f[160, 63]), (20, 20, 24), "the post is cut out")
+        self.assertEqual(tuple(int(v) for v in f[220, 200]), (255, 0, 255), "and nothing else")
+        with self.assertRaises(ValueError):
+            split_layer(scene, scene, (0, 255, 0), (255, 0, 255))
+
+    def test_the_split_command_writes_a_keyed_candidate_with_its_record(self):
+        scene, code = self.scene_and_map()
+        with tempfile.TemporaryDirectory() as td:
+            base, mp = Path(td) / "scene.png", Path(td) / "codes.png"
+            scene.resize((2048, 1152), Image.Resampling.NEAREST).save(base)
+            code.resize((2048, 1152), Image.Resampling.NEAREST).save(mp)
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["split", "tree-l4-0-play", "--base-key", "tree-l4-0-back", "--base", str(base), "--map-key", "tree-l4-0-scene",
+                                       "--map", str(mp), "--colour", "#00FF00", "--min-area", "1500", "--work", td, "--now", "2026-11-02T01:00:00Z"])
+            self.assertEqual(rc, 0, out.getvalue())
+            made = list((Path(td) / "raw" / "tree-l4-0-play").glob("*.png"))
+            self.assertEqual(len(made), 1)
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["now_source"], "split")
+            self.assertEqual(sc["key_colour"], "#FF00FF")
+            self.assertEqual((sc["split"]["base"]["file"], sc["split"]["map"]["file"], sc["split"]["parts"]), ("scene.png", "codes.png", 2))
+            px = np.asarray(Image.open(made[0]).convert("RGB"))
+            self.assertEqual(tuple(int(v) for v in px[1100, 1000]), (150, 110, 70), "the walkway, at the full size")
+            self.assertEqual(tuple(int(v) for v in px[300, 1000]), (255, 0, 255))
+            # The right screen of a row of two, mended at their join: --box takes it out of the row first.
+            row = Path(td) / "row.png"
+            r = Image.new("RGB", (4096, 1152), (255, 0, 255))
+            r.paste(Image.open(base), (2048, 0))
+            r.save(row)
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["split", "tree-l4-e1-play", "--base-key", "tree-l4-0-back", "--base", str(row), "--box", "2048,0,4096,1152",
+                                       "--map-key", "tree-l4-0-scene", "--map", str(mp), "--colour", "#00FF00", "--min-area", "1500", "--work", td])
+            self.assertEqual(rc, 0)
+            made = list((Path(td) / "raw" / "tree-l4-e1-play").glob("*.png"))
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["split"]["box"], [2048, 0, 4096, 1152])
+            self.assertEqual(tuple(int(v) for v in np.asarray(Image.open(made[0]).convert("RGB"))[1100, 1000]), (150, 110, 70), "the walkway of the right screen")
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(postprocess.main(["split", "tree-l4-0-bg", "--base-key", "tree-l4-0-back", "--base", str(base), "--map-key", "tree-l4-0-scene",
+                                                   "--map", str(mp), "--colour", "#00FF00", "--work", td]), 1, "the sky plate has no key colour to cut onto")
+
+
+
+class TestMatch(unittest.TestCase):
+    """One screen's keyed layer is matched to its neighbour's colours (OP-159)."""
+
+    @staticmethod
+    def overlay(fill):
+        img = Image.new("RGB", (200, 120), (255, 0, 255))
+        d = ImageDraw.Draw(img)
+        d.ellipse((10, 10, 90, 70), fill=fill)
+        d.rectangle((120, 20, 180, 40), fill=tuple(min(255, v + 30) for v in fill))
+        return img
+
+    def test_match_moves_the_props_to_the_references_colours_and_keeps_the_key(self):
+        pale, dark = self.overlay((150, 150, 175)), self.overlay((20, 26, 48))
+        out, rep = match_colours(pale, dark, (255, 0, 255))
+        a, d = np.asarray(out).astype(float), np.asarray(dark).astype(float)
+        props = solid_mask(np.asarray(pale), (255, 0, 255))
+        want = d[solid_mask(np.asarray(dark), (255, 0, 255))].mean(axis=0)
+        self.assertTrue(np.allclose(a[props].mean(axis=0), want, atol=1.0), "the props take the reference's colours")
+        self.assertEqual(tuple(int(v) for v in np.asarray(out)[5, 195]), (255, 0, 255), "the key colour is left as it is")
+        self.assertEqual(rep["matched_px"], int(props.sum()))
+
+    def test_the_match_command_writes_a_candidate_with_its_record(self):
+        with tempfile.TemporaryDirectory() as td:
+            src, ref = Path(td) / "pale.png", Path(td) / "dark.png"
+            self.overlay((150, 150, 175)).save(src)
+            self.overlay((20, 26, 48)).save(ref)
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["match", "tree-l4-e1-fg", "--to-key", "tree-l4-0-fg", "--raw", str(src), "--to", str(ref), "--work", td])
+            self.assertEqual(rc, 0)
+            made = list((Path(td) / "raw" / "tree-l4-e1-fg").glob("*.png"))
+            self.assertEqual(len(made), 1)
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["now_source"], "match")
+            self.assertEqual(sc["matched"]["base"], "pale.png")
+            self.assertEqual(sc["matched"]["to"]["key"], "tree-l4-0-fg")
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+                self.assertEqual(postprocess.main(["match", "tree-l4-0-bg", "--to-key", "tree-l4-0-fg", "--raw", str(src), "--to", str(ref), "--work", td]), 1,
+                                 "the sky plate has no key colour to keep")
 
 class TestKeyScreen(unittest.TestCase):
     """A row of screens laid side by side is keyed one screen at a time (OP-162)."""

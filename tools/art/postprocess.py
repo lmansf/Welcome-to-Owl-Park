@@ -16,6 +16,8 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
   patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
   shift <key> --dy N   a keyed candidate moved N room px down, its top rows mirrored into the gap: a new raw candidate
+  split <key>          a tree screen's platforms or front props: its painting's pixels where a colour-coded edit shows one code colour
+  match <key>          a keyed candidate's props moved to another's colours (mean and spread): a new raw candidate
   field [game...]      the arcade games' field guides at 2x (the generator's @canvas:arcade-<game>-bg)
   canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
   wing <room>         stitch the room's picked wings onto its painting; finish every screen and the end overlays
@@ -73,6 +75,9 @@ from artlib.grade import grade as grade_image, load_palette  # noqa: E402
 from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
 from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
 from artlib.patch import cut as cut_crop, patch as patch_edit  # noqa: E402
+from artlib import parse_hex  # noqa: E402
+from artlib.split import CODE_TOLERANCE, split as split_layer  # noqa: E402
+from artlib.match import SOLID_DISTANCE, match_colours  # noqa: E402
 from artlib.resize import crop_to_aspect, downsample, fit_contain, resize_exact  # noqa: E402
 from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
 from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
@@ -1026,18 +1031,106 @@ def cmd_patch(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
-def shift_down(img: Image.Image, n: int) -> Image.Image:
+def cmd_split(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A tree screen's platforms or front props (OP-173, OP-159): the picked painting's own pixels
+    where a colour-coded edit of it is filled with one code colour, the key colour everywhere else,
+    written as a new raw candidate of the key (select it with generate.mjs select, finish it as any
+    keyed layer). The painting is the screen's back scenery, so the layers stay in register.
+
+    TODO-DOCS (OP-159): docs/ART-PIPELINE.md and docs/MAP.md section 10: the six-layer recipe: one
+    scene a screen, picked, shifted onto the ground line and mended at its joins as the screen's back
+    scenery; a colour-coded map of it (platforms green, front props blue) as an edit of its half-size
+    cut; `split <screen>-play|front --base-key <screen>-back --map-key <map> --colour #00FF00|#0000FF`."""
+    key = validate_key(a.key, assets=ctx.assets)
+    kc = ctx.assets.get(key, {}).get("key_colour")
+    if not kc:
+        raise ArtError(f"{key}: split writes a keyed layer, and the key has no key colour in the table")
+    base_img, base_name, base_sc = open_base(ctx, a.base_key, a.base)
+    box = parse_ints(a.box, 4, "--box") if a.box else None
+    if box:
+        # One screen of a row of screens mended at their joins (the patched row is the base key's pick).
+        try:
+            base_img = cut_crop(base_img, box)
+        except ValueError as e:
+            raise ArtError(f"{key}: {e}") from None
+    code, code_sc = resolve_raw(ctx, a.map_key, a.map)
+    try:
+        img, rep = split_layer(base_img, open_raw(code), parse_hex(a.colour), parse_hex(kc), tolerance=a.tolerance,
+                               min_area=a.min_area, close=a.close, max_hole=a.max_hole, grow=a.grow)
+    except ValueError as e:
+        raise ArtError(f"{key}: {e}") from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    src = lambda name, sc: {"key": (sc or {}).get("key"), "file": name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
+    b = base_sc or {}
+    sc = {"schema": 1, "key": key, "kind": ctx.assets.get(key, {}).get("kind"), "realm": b.get("realm"), "provider": b.get("provider"), "model": b.get("model"),
+          "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
+          "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
+          "key_colour": kc, "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "split", "cost_estimate_usd": 0, "provider_meta": {},
+          "split": {"base": src(base_name, base_sc), **({"box": list(box)} if box else {}), "map": src(code.name, code_sc), **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
+    note(f"split {key}: {rel_to_repo(d / f'{h}.png')}, {rep['kept_px']} px of {base_name} in {rep['parts']} part(s) where {code.name} is {a.colour} "
+         f"(bbox {rep['kept_bbox']}); select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def cmd_match(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A keyed candidate with its props' colours moved to another candidate's (OP-159): the mean and
+    spread of each RGB channel over the pixels well away from the key colour, the key colour and the
+    rim left as they are, written as a new raw candidate of the key (select it with generate.mjs
+    select, finish it as before). For two screens' overlays painted in different keys of the palette.
+
+    TODO-DOCS (OP-159): docs/ART-PIPELINE.md and docs/MAP.md section 10: `match <key> --to-key <key>`
+    when one screen's overlay (or another keyed layer) comes back paler or darker than its neighbour's."""
+    key = validate_key(a.key, assets=ctx.assets)
+    kc = ctx.assets.get(key, {}).get("key_colour")
+    if not kc:
+        raise ArtError(f"{key}: match is for a keyed layer, and the key has no key colour in the table")
+    ref_key = validate_key(a.to_key, assets=ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    ref, ref_sc = resolve_raw(ctx, ref_key, a.to)
+    rkc = ctx.assets.get(ref_key, {}).get("key_colour") or kc
+    try:
+        img, rep = match_colours(open_raw(raw), open_raw(ref), parse_hex(kc), parse_hex(rkc), distance=a.distance)
+    except ValueError as e:
+        raise ArtError(f"{key}: {e}") from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    r = ref_sc or {}
+    sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{img.width}x{img.height}", "width": img.width, "height": img.height, "format": "png",
+              "source_url": None, "generated_at": ctx.now, "now_source": "match", "cost_estimate_usd": 0, "provider_meta": {},
+              "matched": {"base": raw.name, "to": {"key": ref_key, "file": ref.name, "seed": r.get("seed"), "model": r.get("model"), "provider": r.get("provider")}, **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
+    note(f"match {key}: {rel_to_repo(d / f'{h}.png')}, {raw.name}'s {rep['matched_px']} px of props moved from mean {rep['from_mean']} to {ref_key}'s "
+         f"{rep['to_mean']}; select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def shift_down(img: Image.Image, n: int, top: int = 0) -> Image.Image:
     """The image moved down n pixels: its bottom n rows fall off, and the gap at the top mirrors the
     painting's own top rows (rows 1 to n, upside down). What ran out of the frame (a bamboo stalk, a
     branch) still runs out of it, and the border the keyer reads keeps the painting's own shades of
     the key colour: a generated "flat" magenta is rarely the exact #FF00FF and varies across the sky.
-    Repeating the first row drew stalks as flat bars and swayed the keyer's estimate of the backdrop."""
-    if not 0 < n < img.height:
-        raise ArtError(f"a shift of {n} px does not fit an image {img.height} px tall")
+    Repeating the first row drew stalks as flat bars and swayed the keyer's estimate of the backdrop.
+
+    With ``top``, only the rows from ``top`` down move (an overlay's bottom band of leaves, lowered
+    below the walkway while its top band stays where it is), and the gap they leave mirrors the n rows
+    just above ``top``: the empty middle of an overlay, so the gap is the painting's own key colour."""
+    if not 0 <= top < img.height or not 0 < n < img.height - top:
+        raise ArtError(f"a shift of {n} px from row {top} does not fit an image {img.height} px tall")
+    if 0 < top < n:
+        raise ArtError(f"a band moved {n} px needs at least {n} rows above it to mirror into the gap; it starts at row {top}")
     src = img.convert("RGB")
-    out = Image.new("RGB", src.size)
-    out.paste(src.crop((0, 1, src.width, n + 1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
-    out.paste(src.crop((0, 0, src.width, src.height - n)), (0, n))
+    out = src.copy()
+    if top:
+        out.paste(src.crop((0, top - n, src.width, top)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, top))
+    else:
+        out.paste(src.crop((0, 1, src.width, n + 1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
+    out.paste(src.crop((0, top, src.width, src.height - n)), (0, top + n))
     return out
 
 
@@ -1049,7 +1142,10 @@ def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
     TODO-DOCS (OP-162): docs/ART-PIPELINE.md: `shift <key> --dy N` (a tree playfield whose floor sits
     above the shared ground line, moved down with its top rows mirrored into the gap, then selected
     and finished as usual), and that the tree's WebP layers snap alpha within ALPHA_SNAP of clear or
-    opaque before encoding (the Lanczos ringing that cost bytes nobody sees)."""
+    opaque before encoding (the Lanczos ringing that cost bytes nobody sees).
+    TODO-DOCS (OP-160): `shift <key> --dy N --from-y Y` moves only the rows from room y Y down: an
+    overlay whose bottom leaves reach over the walkway has that band lowered below the ground line,
+    its top band left where it is."""
     key = validate_key(a.key, assets=ctx.assets)
     raw, sc = resolve_raw(ctx, key, a.raw)
     if not ((sc or {}).get("key_colour") or ctx.assets.get(key, {}).get("key_colour")):
@@ -1059,16 +1155,19 @@ def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
     n = int(round(a.dy * img.height / h_room))
     if not 0 < n <= img.height // 4:
         raise ArtError(f"--dy {a.dy} is {n} px of a {img.height} px candidate: give a drop above 0 and at most a quarter of the height")
-    out = shift_down(img, n)
+    top = int(round(a.from_y * img.height / h_room))
+    out = shift_down(img, n, top)
     data = pngmeta.encode(out, compress_level=6, optimize=False)
     h = sha256_bytes(data)[:16]
     d = ctx.work / "raw" / key
     pngmeta.write_bytes(d / f"{h}.png", data)
     sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{out.width}x{out.height}", "width": out.width, "height": out.height, "format": "png",
               "source_url": None, "generated_at": ctx.now, "now_source": "shift", "cost_estimate_usd": 0, "provider_meta": {},
-              "shifted": {"base": raw.name, "dy_room": a.dy, "dy_px": n, "fill": "mirror"}}
+              "shifted": {"base": raw.name, "dy_room": a.dy, "dy_px": n, "fill": "mirror",
+                          **({"from_y_room": a.from_y, "from_y_px": top} if top else {})}}
     (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
-    note(f"shift {key}: {rel_to_repo(d / f'{h}.png')}, {raw.name} moved down {n} px ({a.dy} room px); select it with: node tools/art/generate.mjs select {key} {h}")
+    what = f"its rows from {top} px (room y {a.from_y})" if top else raw.name
+    note(f"shift {key}: {rel_to_repo(d / f'{h}.png')}, {what} moved down {n} px ({a.dy} room px); select it with: node tools/art/generate.mjs select {key} {h}")
     return 0
 
 
@@ -1599,12 +1698,38 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(sp)
     sp.set_defaults(fn=cmd_patch)
 
+    sp = sub.add_parser("split", help="a tree screen's platforms or front props: the picked painting's pixels where a colour-coded edit of it shows one code colour; writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the layer the cut-out is for (a keyed key in the table)")
+    sp.add_argument("--base-key", required=True, help="the key whose picked candidate is cut (the screen's back scenery)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b)")
+    sp.add_argument("--box", default=None, help="x0,y0,x1,y1: the screen to cut from the base (one screen of a row of screens mended at their joins)")
+    sp.add_argument("--map-key", required=True, help="the colour-coded edit's key (its SELECTED candidate unless --map)")
+    sp.add_argument("--map", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--colour", required=True, help="#RRGGBB: the code colour of the things kept (platforms #00FF00, front props #0000FF)")
+    sp.add_argument("--tolerance", type=float, default=CODE_TOLERANCE, help="RGB distance from the code colour that still counts as coded")
+    sp.add_argument("--min-area", type=int, default=400, help="px below which a coded fleck is dropped")
+    sp.add_argument("--close", type=int, default=4, help="px of gaps bridged in the mask")
+    sp.add_argument("--max-hole", type=int, default=2000, help="px below which an enclosed hole in the mask is filled")
+    sp.add_argument("--grow", type=int, default=3, help="px the mask grows past the coded outline")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_split)
+
     sp = sub.add_parser("shift", help="move a keyed candidate down, its top rows mirrored into the gap; writes a new raw candidate of <key>")
     sp.add_argument("key")
     sp.add_argument("--dy", type=int, required=True, help="room pixels to move the painting down (its floor onto the ground line)")
+    sp.add_argument("--from-y", type=int, default=0, help="move only the rows from this room y down (an overlay's bottom band), the gap mirroring the rows above it")
     sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
     add_common(sp)
     sp.set_defaults(fn=cmd_shift)
+
+    sp = sub.add_parser("match", help="move a keyed candidate's colours to another's (mean and spread of the props); writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the keyed layer whose candidate is matched")
+    sp.add_argument("--to-key", required=True, help="the keyed layer whose candidate it is matched to (its SELECTED one unless --to)")
+    sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--to", default=None, help="a raw candidate file of --to-key instead of its SELECTED one")
+    sp.add_argument("--distance", type=float, default=SOLID_DISTANCE, help="RGB distance from the key colour past which a pixel counts as the props")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_match)
 
     sp = sub.add_parser("field", help="layout guides of the arcade games' fields (the generator's @canvas:arcade-<game>-bg)")
     sp.add_argument("games", nargs="*", help=f"games (default: all of {', '.join(FIELD_GAMES)})")
