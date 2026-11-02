@@ -125,8 +125,8 @@ afterEach(() => {
 });
 
 describe('spectators at the turnstiles (OP-191)', () => {
-  it('start off in wrangler.jsonc, with a share of three quarters', () => {
-    expect(/"SPECTATORS":\s*"off"/.test(wrangler)).toBe(true);
+  it('are on in wrangler.jsonc since the owner said yes (2026-11-01), with a share of three quarters', () => {
+    expect(/"SPECTATORS":\s*"on"/.test(wrangler)).toBe(true);
     expect(/"SPECTATOR_SHARE":\s*"0\.75"/.test(wrangler)).toBe(true);
   });
 
