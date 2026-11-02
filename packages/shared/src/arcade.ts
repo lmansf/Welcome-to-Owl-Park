@@ -43,6 +43,13 @@ import { CLOSED_SIGNS } from '../rooms';
 import type { OwlLook } from './protocol';
 
 export const ARCADE_ROOM = 'arcade';
+/** The arcade rebuilt as level 0's cave (OP-163): the same cabinets, wall and book, for an owl walking the tree. */
+export const TREE_ARCADE_ROOM = 'l0-arcade';
+
+/** Whether a room is the arcade: today's hall or the tree's cave. */
+export function isArcadeRoom(roomId: string | undefined): boolean {
+  return roomId === ARCADE_ROOM || roomId === TREE_ARCADE_ROOM;
+}
 /** The arcade's name, for visitors. */
 export const ARCADE_NAME = 'Neon Roost';
 
@@ -74,7 +81,7 @@ export const CABINET_OFF: (typeof CLOSED_SIGNS)[number] = 'Hatching Soon';
 
 /** The cabinet at this spot of the arcade, if there is one. */
 export function cabinetAt(room: string, spot: string): CabinetDef | undefined {
-  return room === ARCADE_ROOM ? CABINETS.find((c) => c.spot === spot) : undefined;
+  return isArcadeRoom(room) ? CABINETS.find((c) => c.spot === spot) : undefined;
 }
 
 /** The cabinet that plays a game (among `cabinets`, the arcade's by default). */

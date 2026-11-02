@@ -1,5 +1,5 @@
 import {
-  ARCADE_ROOM,
+  isArcadeRoom,
   Activities,
   ArcadeBook,
   ClimbBook,
@@ -488,7 +488,7 @@ export class LocalCollections implements CollectionService {
     // The room server sends a newcomer the beam as it burns, and the arcade's wall; so does this.
     const beam = acts.lanternState();
     if (Object.keys(beam.lit).length) later(() => pushes.onLanterns?.({ lit: beam.lit, glowUntil: beam.glowUntil }, null));
-    if (room === ARCADE_ROOM) {
+    if (isArcadeRoom(room)) {
       const wall = this.arcade((a) => ({ walls: a.walls(this.now()), mine: a.mine(cid, this.now()) }));
       later(() => pushes.onWall?.(wall.walls, wall.mine));
     }

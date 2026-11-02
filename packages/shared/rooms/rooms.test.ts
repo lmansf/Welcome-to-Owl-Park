@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CABINETS } from '../src/arcade';
 import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
@@ -142,7 +143,9 @@ describe("the tree's ways into today's park (OP-162)", () => {
   });
 
   it("the realms the tree opens into are the market and the rooms it leads to, never today's park's own streets", () => {
-    expect([...TREE_REALMS].sort()).toEqual(['arcade', 'glass', 'market']);
+    // Not today's arcade: for an owl of the tree the market's arcade door leads down to level 0's cave (OP-163).
+    expect([...TREE_REALMS].sort()).toEqual(['glass', 'market']);
+    expect(doorTarget(ROOMS['market']!.doors.find((d) => d.id === 'to-arcade')!, 2)).toEqual({ room: 'l0-arcade', spawn: 'from-market' });
     for (const id of ['hub', 'lobby', STREET_ROOM]) expect(TREE_REALMS.has(id), id).toBe(false);
   });
 
@@ -520,7 +523,7 @@ describe("doorways keep the owl's lane (OP-124)", () => {
     // In the tree, the stairs between levels and level 3's doorway into the stained-glass street
     // do too: an owl comes out as far along the floor from the spawn as it went in from the doorway's middle.
     expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual([
-      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:gate', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
+      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l0:stair-l1-l0', 'l1:stair-l1-l0', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:gate', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
     ]);
   });
 
@@ -688,7 +691,7 @@ describe('the tree (map 2)', () => {
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
 
   it('is a room of its own map, gated, with owls a quarter bigger: level 1, four screens with the lobby second', () => {
-    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4', 'l3', 'l2', 'l5-street', 'l5']);
+    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4', 'l3', 'l2', 'l5-street', 'l5', 'l0', 'l0-arcade']);
     for (const r of tree) {
       expect(r.gated, `${r.id} is dark until the keepers open it`).toBe(true);
       expect(GATED_ROOMS).toContain(r.id);
@@ -810,6 +813,34 @@ describe('the tree (map 2)', () => {
     expect(beyond.closedSign).toBe('Hatching Soon');
     expect(beyond.top).toBe(Math.max(...street.perches!.map((p) => p.top)));
     for (const [room, spawn] of [[street, 'from-canopy'], [canopy, 'from-l4'], [l4, 'from-l5']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
+  });
+
+  it('level 0 is the cavern and the arcade cave beside it: the stair up to level 1, the mouth into the cave, the closed stairwell (OP-163)', () => {
+    const l0 = getRoom('l0');
+    const cave = getRoom('l0-arcade');
+    const l1 = getRoom('l1');
+    const at = (t: { key: string; x: number }) => [t.key, t.x / ROOM_W];
+    expect(l0.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
+    expect(cave.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+    expect(backgroundTiles(l0).filter((t) => t.plain).map(at)).toEqual(['w1', '0'].map((s, i) => [`tree-l0-${s}-play`, i]));
+    expect(backgroundTiles(cave).filter((t) => t.plain).map(at)).toEqual(['c0', 'c1', 'c2'].map((s, i) => [`tree-l0-${s}-play`, i]));
+    // Up to level 1 from the stair's top tread; down from level 1's way down, on its floor.
+    const up = l0.doors.find((d) => d.id === 'stair-l1-l0')!;
+    const down = l1.doors.find((d) => d.id === 'stair-l1-l0')!;
+    expect([up.to, up.top]).toEqual([{ room: 'l1', spawn: 'from-l0' }, l0.perches!.find((p) => p.id === 'stair-top')!.top]);
+    expect([down.to, down.top]).toEqual([{ room: 'l0', spawn: 'from-l1' }, 0]);
+    // The mouth into the cave and back.
+    expect(l0.doors.find((d) => d.id === 'to-arcade')!.to).toEqual({ room: 'l0-arcade', spawn: 'from-l0' });
+    expect(cave.doors.find((d) => d.id === 'to-l0')!.to).toEqual({ room: 'l0', spawn: 'from-arcade' });
+    // The cave holds the arcade's three cabinets, on its floor.
+    for (const c of CABINETS) {
+      const spot = cave.doors.find((d) => d.id === c.spot)!;
+      expect(spot, c.spot).toBeDefined();
+      expect(spot.top, c.spot).toBe(0);
+    }
+    // The stairwell to OP-115's first lock is closed.
+    expect(l0.doors.find((d) => d.id === 'stair-challenge')!.closedSign).toBe('Not Yet Fledged');
+    for (const [room, spawn] of [[l0, 'from-l1'], [l0, 'from-arcade'], [cave, 'from-l0'], [cave, 'from-market'], [l1, 'from-l0']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
   it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {

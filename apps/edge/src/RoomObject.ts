@@ -18,7 +18,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ARCADE_ROOM,
+  isArcadeRoom,
   Activities,
   CLOSE,
   COPY_BASE_EMOTES,
@@ -955,7 +955,7 @@ export class RoomObject extends DurableObject<Env> {
     if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
     if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
-    if (att.room === ARCADE_ROOM) this.serial(att, () => this.sendWall(ws, att));
+    if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
     // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;

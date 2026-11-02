@@ -33,7 +33,7 @@ import {
   type QuizRound,
   type QuizZone,
 } from './activities';
-import { ARCADE_ROOM, CABINETS, cabinetOf, type ArcadeGame, type CabinetDef } from './arcade';
+import { CABINETS, cabinetOf, isArcadeRoom, type ArcadeGame, type CabinetDef } from './arcade';
 import type { ServerLanterns } from './edge';
 import { distance, distanceToRect } from './geometry';
 import type { Vec2 } from './protocol';
@@ -202,7 +202,7 @@ export type RunStart = { ok: true; run: ArcadeRun } | { ok: false; reason: 'far'
  */
 export function startRun(roomId: string, pos: Vec2 | null, game: ArcadeGame, seed: number, now: number, cabinets: readonly CabinetDef[] = CABINETS): RunStart {
   const cabinet = cabinetOf(game, cabinets);
-  const spot = roomId === ARCADE_ROOM ? ROOMS[ARCADE_ROOM]?.doors.find((d) => d.id === cabinet.spot) : undefined;
+  const spot = isArcadeRoom(roomId) ? ROOMS[roomId]?.doors.find((d) => d.id === cabinet.spot) : undefined;
   if (!cabinet.live || !spot) return { ok: false, reason: 'unknown' };
   if (!pos || distanceToRect(pos, spot.rect) > ACT_SLACK) return { ok: false, reason: 'far' };
   return { ok: true, run: { game, seed, startedAt: now } };
