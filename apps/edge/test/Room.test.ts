@@ -130,6 +130,28 @@ describe('Room', () => {
     }
   });
 
+  it('lets spectators in only below their share of the cap, ticket holders up to the cap, and says so in the welcome (OP-191)', () => {
+    const r = new Room(def, { now: () => now, cap: 4, spectatorLimit: 2, counts: () => ({}) });
+    expect(r.spectatorLimit).toBe(2);
+    const a = new FakePeer();
+    expect(r.join(a, 'a', hello(), 'sa', { spectator: true })).toBe('ok');
+    expect(a.last('welcome')?.spectator).toBe(true);
+    expect(r.join(new FakePeer(), 'b', hello(), 'sb')).toBe('ok');
+    // Two owls in: no more spectators, though there is room for ticket holders.
+    expect(r.join(new FakePeer(), 'c', hello(), 'sc', { spectator: true })).toBe('full');
+    const d = new FakePeer();
+    expect(r.join(d, 'd', hello(), 'sd')).toBe('ok');
+    expect(d.last('welcome')?.spectator).toBeUndefined();
+    // A spectator back on a new socket replaces its own owl, however full.
+    expect(r.join(new FakePeer(), 'a', hello(), 'sa2', { spectator: true })).toBe('ok');
+    expect(r.join(new FakePeer(), 'e', hello(), 'se')).toBe('ok');
+    expect(r.join(new FakePeer(), 'f', hello(), 'sf')).toBe('full');
+    // Nobody inside is sent out, and a limit above the cap is the cap.
+    expect(r.count).toBe(4);
+    expect(new Room(def, { now: () => now, cap: 3, spectatorLimit: 9 }).spectatorLimit).toBe(3);
+    expect(new Room(def, { now: () => now, cap: 3 }).spectatorLimit).toBe(3);
+  });
+
   it('refuses when full and replaces a duplicate session', () => {
     const peers = ['a', 'b', 'c'].map((id, i) => {
       const p = new FakePeer();

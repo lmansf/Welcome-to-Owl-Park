@@ -52,6 +52,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onRestartNotice?(words: string): void;
   /** The park restarted for the night (OP-181): the owl goes to the home screen, and Play brings it back in. */
   onRestart?(): void;
+  /** Whether this owl walks the park as a spectator (OP-191): said with every welcome, and false once a ticket admits it in place. */
+  onSpectator?(spectator: boolean): void;
 }
 
 export interface RoomConnection {
@@ -68,6 +70,10 @@ export interface RoomConnection {
   nests?: NestLink;
   /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */
   drop?(): void;
+  /** A spectator's ticket went through (OP-191): the room server takes the admitted pass in place. False: it did not, and `renew` is the fallback. */
+  admit?(): Promise<boolean>;
+  /** Open the room's socket again at once, on the pass as it now stands (the room server only, OP-191). */
+  renew?(): void;
 }
 
 /**

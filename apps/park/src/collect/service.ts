@@ -84,8 +84,8 @@ export interface QuestPushes {
   onUsed?(id: string, by: string | null, until: number): void;
 }
 
-/** Why the room did not take an activity. */
-export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten';
+/** Why the room did not take an activity (`spectator`: today's tasks are locked to a spectator, OP-191; the page's half shows it). */
+export type ActRefusal = 'far' | 'busy' | 'lit' | 'glowing' | 'idle' | 'emote' | 'offline' | 'unknown' | 'closed' | 'too-fast' | 'forgotten' | 'spectator';
 type No = { ok: false; reason: ActRefusal };
 
 /** The robot owl's tune to copy: played until `listenUntil`, then each note due by `deadline`. */

@@ -68,10 +68,12 @@ defines it. Alphabetical. Grep the term.
 - **Metaobject mirror**: the store's optional copy of each ticket (`owl_park_ticket`), kept current by the Worker and never read by the park; `apps/edge/src/storeApi.ts`.
 - **Opening switch**: the keepers' flip of the gate between open and taking tickets on `/admin/gate`, no deploy; `apps/edge/src/gateSwitch.ts` (OP-067).
 - **Opening night**: C42; a free Opening Night Ticket for a 24-hour window and the annual pass at half price through the in-park link (OP-062); `/admin/opening`.
+- **Practice run**: an arcade or climb run started by a spectator (`practice` on the run row); it answers as any run and keeps or pays nothing; `ArcadeBook`, `ClimbBook` (OP-191).
 - **Preview** (Preview Ticket): PLANNED (OP-063); the park opens early, target 2026-12-01 (OP-066), with a $0.99 ticket and a feedback pledge.
 - **Release tag**: the order tag `owl-park-release` the owner adds to release a held order (`RELEASE_TAG`).
 - **Risk rating**: Shopify's own fraud assessment of an order (`risk` in `ORDER_QUERY`); low risk releases tickets at once under C35's default.
 - **Share link**: `#take=<secret>`; passes one unused ticket to another device; `TicketBook.share`, `take`.
+- **Spectator**: an owl past the turnstiles without a ticket that works, while `SPECTATORS` is `on`; plays every game for nothing, the quests, tasks, vote and shop locked; `spectating` in `apps/edge/src/gate.ts`, `docs/ARCHITECTURE.md` section 4 (OP-191).
 - **Ticket ID**: the visual id such as `OWL-7K3Q-PX9M` (`ID_ALPHABET` in `tickets.ts`); for display and support only, the link carries the secret.
 - **Ticket kind**: `day`, `night`, `annual`, `event`, `opening-night` (and `preview`, PLANNED); the store's metafield `owl_park.ticket_kind`.
 - **Webhook**: the store's signed message to `/api/store/webhook` (`orders/paid`, `orders/create`, `orders/updated`, `orders/cancelled`, `refunds/create`, `orders/risk_assessment_changed`); refused without a key.

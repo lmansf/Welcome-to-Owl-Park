@@ -36,6 +36,12 @@ the defaults in `apps/edge/src/rooms.ts`:
 A cap set in `ROOM_CAPS` must be 1 to 120. Changing a cap is a change to `wrangler.jsonc` and a
 deploy (`docs/DEPLOY.md`); there is no switch for it yet.
 
+Spectators (OP-191, off while `SPECTATORS` is `off`) come into a room only while it holds fewer owls
+than its cap times `SPECTATOR_SHARE` (in `wrangler.jsonc`, a number from 0 to 1, default `0.75`;
+any other value logs `read_failed` once and the default holds), rounded down: 60 of the hub's 80,
+30 of a realm's 40. Ticket holders still come in up to the full cap, and nobody inside is sent out.
+Changing the share is a change to `wrangler.jsonc` and a deploy.
+
 Two more limits: at most 8 sockets per client address per object (`MAX_SOCKETS_PER_IP` in
 `wrangler.jsonc`; a household shares one address), and the free plan's daily request caps
 (`docs/PLAYBOOK.md`, section 5).
@@ -49,6 +55,8 @@ Two more limits: at most 8 sockets per client address per object (`MAX_SOCKETS_P
   `roomFull`). No place is held in the room itself; the line (below) is what holds places, in
   front of the whole park, when the keepers turn it on.
 - A nest's owner is let in however full the nest is (`overCap`); visitors are not.
+- A spectator turned away at its share gets `full` with `spectators: true`, and the log says
+  `room_join_refused` with reason `spectators`, the cap and the limit (OP-191).
 
 ## What the park holds [MEASURED (OP-068)]
 

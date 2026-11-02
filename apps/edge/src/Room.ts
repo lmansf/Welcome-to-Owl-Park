@@ -97,6 +97,11 @@ export interface RoomOptions {
   now: () => number;
   random?: () => number;
   cap: number;
+  /**
+   * Spectators (OP-191) come in only while the room holds fewer owls than this (its cap times the
+   * spectators' share); ticket holders come in up to the cap. Unset: the cap.
+   */
+  spectatorLimit?: number;
   /** Provides park-wide counts for welcome frames. */
   counts?: () => Record<string, number>;
   /** Where a frame that could not be sent says so (OP-134). */
@@ -192,6 +197,10 @@ export class Room {
   }
   get cap(): number {
     return this.opts.cap;
+  }
+  /** Owls the room may hold and still let a spectator in (OP-191). */
+  get spectatorLimit(): number {
+    return Math.min(this.opts.cap, this.opts.spectatorLimit ?? this.opts.cap);
   }
   has(id: string): boolean {
     return this.visitors.has(id);
@@ -320,15 +329,14 @@ export class Room {
   }
 
   /**
-   * Admit a visitor. Returns 'full' (caller sends `full` and closes 4010) or 'ok' after
-   * the welcome and enter frames have been sent. A second session for the same id
-   * replaces the first (closed 4005). `overCap` lets a nest's owner into its own nest however full.
+   * Put a visitor in the room and send its welcome. Returns 'full' (caller sends `full` and closes 4010)
+   * or 'ok' after the welcome and enter frames have been sent. A second session for the same id
+   * replaces the first (closed 4005). `overCap` lets a nest's owner into its own nest however full;
+   * a `spectator` (OP-191) comes in only below the spectators' limit, and its welcome says so.
+   * `welcome` adds what the room object knows beyond the room: which copy it is, the visitor's entry,
+   * the busy ribbon (OP-075) and the realms switch.
    */
-  /**
-   * Put a visitor in the room and send its welcome. `welcome` adds what the room object knows beyond
-   * the room: which copy it is, the visitor's entry, the busy ribbon (OP-075) and the realms switch.
-   */
-  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean; welcome?: Pick<ServerWelcome, 'copy' | 'entry' | 'notice' | 'realms'> } = {}): 'ok' | 'full' {
+  join(peer: Peer, id: string, hello: ClientHello, sid = '', opts: { overCap?: boolean; spectator?: boolean; welcome?: Pick<ServerWelcome, 'copy' | 'entry' | 'notice' | 'realms'> } = {}): 'ok' | 'full' {
     const existing = this.visitors.get(id);
     if (existing) {
       // The newer session wins; remember where the old one stood so the newcomer can resume there.
@@ -337,6 +345,8 @@ export class Room {
       this.visitors.delete(id);
       this.broadcast({ t: 'leave', id });
     } else if (this.visitors.size >= this.opts.cap && !opts.overCap) {
+      return 'full';
+    } else if (opts.spectator && this.visitors.size >= this.spectatorLimit) {
       return 'full';
     }
     // An explicit spawn name means the visitor came through a door: keep them close to it.
@@ -380,6 +390,7 @@ export class Room {
       owls: this.snapshot(id),
       counts: this.opts.counts?.() ?? { [this.def.id]: this.visitors.size },
       ...opts.welcome,
+      ...(opts.spectator ? { spectator: true as const } : {}),
     });
     this.send(v, { t: 'objects', until: this.objectStates() });
     this.broadcast({ t: 'enter', owl: { id, look: v.st.look, pos, walk: null } }, id);
