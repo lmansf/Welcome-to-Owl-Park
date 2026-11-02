@@ -16,6 +16,9 @@
  *   there; time with the Menu open counts, as the owl is still in the room. They go to the log with
  *   their visit, right after its row.
  *
+ * - What each visit was past the turnstiles (OP-192): a full visitor's or a spectator's (OP-191),
+ *   from the room server's word on each socket, so free owls are counted beside paid ones.
+ *
  * Nothing here is kept while the log is off. Written against `SqlStorage`, so Node tests it.
  *
  * TODO-DOCS (OP-111): docs/ARCHITECTURE.md, beside the collection log (OP-107): the player stats
@@ -50,7 +53,20 @@ export interface Sighting extends Visit {
   own?: boolean;
   /** It came by travel from the Menu's map (OP-130). */
   travel?: boolean;
+  /**
+   * Inside the park, whether the socket is a spectator's (OP-191, OP-192): true for a spectator, false
+   * for a full visitor. Left out outside the turnstiles (the lobby, the street, the nests), where
+   * nobody is either.
+   */
+  spec?: boolean;
 }
+
+/**
+ * What a visit was past the turnstiles (OP-192): `visitor` once any of its sockets inside the park
+ * was a full visitor's (a spectator whose ticket went through mid-visit counts as one), `spectator`
+ * when it was only ever there as a spectator, and null for a visit that never went past them.
+ */
+export type VisitorKind = 'visitor' | 'spectator';
 
 /** What of an owl's look the stats keep: its kind and its body colour. */
 export interface StatsLook {
@@ -60,7 +76,7 @@ export interface StatsLook {
 
 const SPECIES_IDS = new Set<string>(SPECIES.map((s) => s.id));
 
-type VisitRow = { pass: string; cid: string; started: number; seen: number; device: string | null; rooms: string; gained: number };
+type VisitRow = { pass: string; cid: string; started: number; seen: number; device: string | null; rooms: string; gained: number; kind: string | null };
 /** A time in one room: `place` is the room's own id (which nest it was), kept here only; `room` is the log's name for it. */
 type RoomTime = { pass: string; seq: number; cid: string; place: string; room: string; entered: number; exited: number | null; source: EntrySource; gained: number };
 
@@ -71,8 +87,11 @@ export class ParkStats {
   ) {
     sql.exec(`CREATE TABLE IF NOT EXISTS stats_players (cid TEXT PRIMARY KEY, species TEXT NOT NULL, color TEXT NOT NULL, at INTEGER NOT NULL)`);
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS stats_visits (pass TEXT PRIMARY KEY, cid TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, device TEXT, rooms TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0)`,
+      `CREATE TABLE IF NOT EXISTS stats_visits (pass TEXT PRIMARY KEY, cid TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, device TEXT, rooms TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0, kind TEXT)`,
     );
+    // Visits kept before OP-192 have no kind: they go to the log without one, as visits before spectators did.
+    const visitColumns = sql.exec<{ name: string }>(`PRAGMA table_info(stats_visits)`).toArray();
+    if (!visitColumns.some((c) => c.name === 'kind')) sql.exec(`ALTER TABLE stats_visits ADD COLUMN kind TEXT`);
     sql.exec(
       `CREATE TABLE IF NOT EXISTS stats_rooms (pass TEXT NOT NULL, seq INTEGER NOT NULL, cid TEXT NOT NULL, place TEXT NOT NULL, room TEXT NOT NULL, entered INTEGER NOT NULL, exited INTEGER, source TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (pass, seq))`,
     );
@@ -109,7 +128,16 @@ export class ParkStats {
   close(now: number): number | null {
     const over = this.sql.exec<VisitRow>(`SELECT * FROM stats_visits WHERE seen <= ?`, now - VISIT_GRACE_MS).toArray();
     for (const v of over) {
-      this.log.session({ cid: v.cid, pass: v.pass, started: v.started, ended: v.seen, device: v.device === 'phone' || v.device === 'desktop' ? v.device : null, rooms: rooms(v.rooms), gained: v.gained });
+      this.log.session({
+        cid: v.cid,
+        pass: v.pass,
+        started: v.started,
+        ended: v.seen,
+        device: v.device === 'phone' || v.device === 'desktop' ? v.device : null,
+        rooms: rooms(v.rooms),
+        gained: v.gained,
+        kind: v.kind === 'visitor' || v.kind === 'spectator' ? v.kind : null,
+      });
       // The room the owl was last in ends when the visit was last seen.
       const times = this.sql.exec<RoomTime>(`SELECT * FROM stats_rooms WHERE pass = ? ORDER BY seq`, v.pass).toArray();
       const maps = visitMaps(times.map((t) => t.place));
@@ -126,14 +154,17 @@ export class ParkStats {
   private sighted(s: Sighting, now: number): void {
     const v = cleanVisit(s);
     if (!v.pass) return;
+    // Past the turnstiles (OP-192): a full visitor's socket makes the visit a visitor's for good; a spectator's, a spectator's until then.
+    const seenAs: VisitorKind | null = s.spec === true ? 'spectator' : s.spec === false ? 'visitor' : null;
     const was = this.sql.exec<VisitRow>(`SELECT * FROM stats_visits WHERE pass = ?`, v.pass).toArray()[0];
     if (!was) {
-      this.sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms) VALUES (?, ?, ?, ?, ?, ?)`, v.pass, s.cid, now, now, v.device, JSON.stringify(v.room ? [v.room] : []));
+      this.sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms, kind) VALUES (?, ?, ?, ?, ?, ?, ?)`, v.pass, s.cid, now, now, v.device, JSON.stringify(v.room ? [v.room] : []), seenAs);
       return;
     }
     const list = rooms(was.rooms);
     if (v.room && !list.includes(v.room)) list.push(v.room);
-    this.sql.exec(`UPDATE stats_visits SET seen = MAX(seen, ?), device = COALESCE(device, ?), rooms = ? WHERE pass = ?`, now, v.device, JSON.stringify(list), v.pass);
+    const kind = was.kind === 'visitor' || seenAs === 'visitor' ? 'visitor' : (seenAs ?? was.kind);
+    this.sql.exec(`UPDATE stats_visits SET seen = MAX(seen, ?), device = COALESCE(device, ?), rooms = ?, kind = ? WHERE pass = ?`, now, v.device, JSON.stringify(list), kind, v.pass);
   }
 
   /**

@@ -207,6 +207,14 @@ function cents(m: Money | undefined): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
+/** What the order came to, in cents (tax and discounts in); null where the store gave no total (OP-192). */
+export function totalCents(order: AdminOrder): number | null {
+  const amount = order.totalPriceSet?.shopMoney?.amount;
+  if (typeof amount !== 'string' || amount.trim() === '') return null;
+  const n = Number(amount);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null;
+}
+
 /**
  * What the buyer paid for the order's lines of one kind, in cents before tax: each line's price less
  * every discount on it. Opening night's pass (OP-062): the annual pass at half price with the code.

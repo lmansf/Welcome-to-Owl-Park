@@ -61,7 +61,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { RESTART_CLOSE_MS, RoomObject, spectatorSocket } = await import('../src/RoomObject');
+const { RESTART_CLOSE_MS, RoomObject, sightingOf, spectatorSocket } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -955,12 +955,21 @@ describe('the player stats from the room object (OP-111)', () => {
   const LOGGED = { PARK_LOG_URL: 'https://log.example/functions/v1/owl-park-log', FRAUD_SCORE_KEY: 'k'.repeat(32), FRAUD_HASH_SALT: 's'.repeat(24) };
   const PASS = 'v_visitAAAA1';
 
+  it('tells the player stats whether an owl inside the park is a spectator, and says nothing of one outside it (OP-192)', () => {
+    const owl = { cid: OWNER, id: PASS, device: 'phone' as const };
+    expect(sightingOf({ ...owl, room: 'grove', spec: true })).toEqual({ cid: OWNER, pass: PASS, device: 'phone', room: 'grove', spec: true });
+    expect(sightingOf({ ...owl, room: 'hub' })).toMatchObject({ spec: false });
+    for (const room of ['lobby', 'homes', 'nest-abcdefgh']) expect(sightingOf({ ...owl, room })).not.toHaveProperty('spec');
+    expect(sightingOf({ id: PASS, room: 'hub' })).toBeNull();
+  });
+
   it('tells the collections object of each owl that comes in, changes its look, is still here, and leaves', async () => {
     const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
     const obj = new RoomObject(state as unknown as DurableObjectState, env);
     const ws = await join(obj, 'hub', PASS, OWNER);
     await settle();
-    const me = { cid: OWNER, pass: PASS, device: null, room: 'hub' };
+    // Inside the park, a full visitor (OP-192: the open gate's owls are visitors, never spectators).
+    const me = { cid: OWNER, pass: PASS, device: null, room: 'hub', spec: false };
     // Its hello: it came into the room (OP-113).
     expect(collections.seenCalls).toEqual([[{ ...me, entered: true }, { body: LOOK.body, species: 'barn' }]]);
     await send(obj, ws, { t: 'look', look: { ...LOOK, species: 'snowy' } });

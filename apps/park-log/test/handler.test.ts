@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_ROWS,
+  checkContact,
   checkFeedback,
   checkItem,
+  checkPurchase,
   checkPlayer,
   checkRealmVisit,
   checkRow,
@@ -10,10 +12,12 @@ import {
   gameTables,
   handle,
   type CatalogueRow,
+  type ContactRow,
   type Db,
   type FeedbackRow,
   type LogRow,
   type PlayerRow,
+  type PurchaseRow,
   type RealmVisitRow,
   type SessionRow,
   type Tables,
@@ -39,8 +43,19 @@ const row = (i: number, extra: Record<string, unknown> = {}): Record<string, unk
 });
 
 /** The tables in memory, as the database keeps them: one row per event id, and per collector and collectible. */
-function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>; players: PlayerRow[]; sessions: SessionRow[]; realmVisits: RealmVisitRow[]; feedback: FeedbackRow[] } {
+function memoryTables(): Tables & {
+  rows: LogRow[];
+  catalogue: Map<string, CatalogueRow & { in_catalogue: boolean }>;
+  players: PlayerRow[];
+  sessions: SessionRow[];
+  realmVisits: RealmVisitRow[];
+  feedback: FeedbackRow[];
+  purchases: PurchaseRow[];
+  contacts: ContactRow[];
+} {
   const rows: LogRow[] = [];
+  const purchases: PurchaseRow[] = [];
+  const contacts: ContactRow[] = [];
   const catalogue = new Map<string, CatalogueRow & { in_catalogue: boolean }>();
   const players: PlayerRow[] = [];
   const sessions: SessionRow[] = [];
@@ -53,7 +68,19 @@ function memoryTables(): Tables & { rows: LogRow[]; catalogue: Map<string, Catal
     sessions,
     realmVisits,
     feedback,
+    purchases,
+    contacts,
     async check() {},
+    async addPurchases(batch) {
+      let kept = 0;
+      for (const p of batch) if (!purchases.some((x) => x.event_id === p.event_id) && purchases.push(p)) kept++;
+      return kept;
+    },
+    async addContacts(batch) {
+      let kept = 0;
+      for (const c of batch) if (!contacts.some((x) => x.shopify_order_id === c.shopify_order_id) && contacts.push(c)) kept++;
+      return kept;
+    },
     async addFeedback(batch) {
       let kept = 0;
       for (const f of batch) if (!feedback.some((x) => x.event_id === f.event_id) && feedback.push(f)) kept++;
@@ -230,7 +257,7 @@ describe('the player stats (OP-111)', () => {
     expect(await (await post({ kind: 'player', rows: [version(1), version(2, { owl_type: 'snowy', change_reason: 'chosen' })] }, { tables })).json()).toEqual({ ok: true, kept: 2, duplicates: 0, skipped: 0 });
     expect(await (await post({ kind: 'player', rows: [version(1)] }, { tables })).json()).toEqual({ ok: true, kept: 0, duplicates: 1, skipped: 0 });
     expect(await (await post({ kind: 'session', rows: [visit(10), visit(10)] }, { tables })).json()).toEqual({ ok: true, kept: 1, duplicates: 1, skipped: 0 });
-    expect(tables.sessions[0]).toEqual(visit(10));
+    expect(tables.sessions[0]).toEqual({ ...visit(10), visitor_kind: null });
   });
 
   it('takes an owl kind only from the fixed list and a colour only as a hex value, and a visit only forwards in time', () => {
@@ -240,7 +267,10 @@ describe('the player stats (OP-111)', () => {
     expect(checkPlayer(version(1, { color: 'purple' }))).toBe('color');
     expect(checkPlayer(version(1, { change_reason: 'because' }))).toBe('change_reason');
     expect(checkPlayer(version(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
-    expect(checkSession(visit(1))).toEqual(visit(1));
+    // A visit from a Worker before OP-192 has no kind: kept without one.
+    expect(checkSession(visit(1))).toEqual({ ...visit(1), visitor_kind: null });
+    expect(checkSession(visit(1, { visitor_kind: 'spectator' }))).toEqual(visit(1, { visitor_kind: 'spectator' }));
+    expect(checkSession(visit(1, { visitor_kind: 'free' }))).toBe('visitor_kind');
     expect(checkSession(visit(1, { ended_at: '2026-10-19T15:59:00.000Z' }))).toBe('ended_at');
     expect(checkSession(visit(1, { realms_entered: -1 }))).toBe('realms_entered');
     expect(checkSession(visit(1, { collectibles_gained: 2.5 }))).toBe('collectibles_gained');
@@ -340,6 +370,75 @@ describe("visitors' feedback (OP-166)", () => {
   });
 });
 
+describe('tickets and buyers (OP-192)', () => {
+  const B = 'b'.repeat(64);
+  const event = (i: number, extra: Record<string, unknown> = {}) => ({
+    event_id: uuid(i),
+    event: 'paid',
+    order_key: uuid(500),
+    collector_id: null,
+    occurred_at: '2026-11-02T16:00:00.000Z',
+    ticket_kinds: ['day', 'annual'],
+    tickets: 2,
+    amount_cents: 4497,
+    upsell: true,
+    held: false,
+    via: null,
+    valid_until: null,
+    ...extra,
+  });
+  const buyer = (extra: Record<string, unknown> = {}) => ({
+    shopify_order_id: '1001',
+    order_key: uuid(500),
+    email: 'buyer@example.com',
+    shopify_customer_id: '77',
+    ordered_at: '2026-11-02T16:00:00.000Z',
+    ...extra,
+  });
+
+  it('keeps each ticket event once, however often it is sent', async () => {
+    const tables = memoryTables();
+    const claimed = event(2, { event: 'claimed', collector_id: B, ticket_kinds: [], amount_cents: null, upsell: false, via: 'claim' });
+    expect(await (await post({ kind: 'purchase', rows: [event(1), claimed, event(1)] }, { tables })).json()).toEqual({ ok: true, kept: 2, duplicates: 1, skipped: 0 });
+    expect(tables.purchases).toEqual([event(1), claimed]);
+  });
+
+  it('takes an event and a ticket kind only from their lists, the order and the owl only as hashes, and nothing that names anyone', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(checkPurchase(event(1))).toEqual(event(1));
+    expect(checkPurchase(event(1, { event: 'gifted' }))).toBe('event');
+    expect(checkPurchase(event(1, { order_key: '1001' }))).toBe('order_key');
+    expect(checkPurchase(event(1, { order_key: null }))).toBe('order_key');
+    // A scan of a ticket the keepers gave has no order, but always an owl.
+    const scan = event(3, { event: 'scanned', order_key: null, collector_id: B, ticket_kinds: ['day'], tickets: 1, amount_cents: null, upsell: false, valid_until: '2026-11-03T16:00:00.000Z' });
+    expect(checkPurchase(scan)).toEqual(scan);
+    expect(checkPurchase({ ...scan, collector_id: null })).toBe('collector_id');
+    expect(checkPurchase(event(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkPurchase(event(1, { ticket_kinds: ['vip'] }))).toBe('ticket_kinds');
+    expect(checkPurchase(event(1, { amount_cents: 12.5 }))).toBe('amount_cents');
+    expect(checkPurchase(event(1, { via: 'email' }))).toBe('via');
+    expect(checkPurchase(event(1, { valid_until: 'tomorrow' }))).toBe('valid_until');
+    expect(Object.keys(checkPurchase({ ...event(1), email: 'buyer@example.com', order_id: '1001' }) as object)).toEqual(Object.keys(event(1)));
+  });
+
+  it('keeps a buyer by order, the email only in the shape the park keys emails, and refuses one into any other kind', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const tables = memoryTables();
+    expect(await (await post({ kind: 'contact', rows: [buyer(), buyer()] }, { tables })).json()).toEqual({ ok: true, kept: 1, duplicates: 1, skipped: 0 });
+    expect(tables.contacts).toEqual([buyer()]);
+    expect(checkContact(buyer({ shopify_customer_id: null }))).toEqual(buyer({ shopify_customer_id: null }));
+    expect(checkContact(buyer({ email: 'Buyer@Example.com' }))).toBe('email');
+    expect(checkContact(buyer({ email: 'not an email' }))).toBe('email');
+    expect(checkContact(buyer({ email: 'a\u0000b@example.com' }))).toBe('email');
+    expect(checkContact(buyer({ shopify_order_id: 'comp-abc' }))).toBe('shopify_order_id');
+    expect(checkContact(buyer({ shopify_customer_id: 'gid://shopify/Customer/77' }))).toBe('shopify_customer_id');
+    expect(checkContact(buyer({ order_key: '1001' }))).toBe('order_key');
+    expect(Object.keys(checkContact({ ...buyer(), name: 'Someone', address: '1 Owl Way' }) as object)).toEqual(Object.keys(buyer()));
+    // An email never lands in a game table: a session or a ticket event takes no such field.
+    expect(JSON.stringify(checkPurchase({ ...event(1), email: 'buyer@example.com' }))).not.toContain('example.com');
+  });
+});
+
 describe("the game schema's tables", () => {
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
@@ -391,6 +490,20 @@ describe("the game schema's tables", () => {
     expect(query).toContain('on conflict (event_id) do nothing');
     expect(params).toEqual([JSON.stringify([f])]);
     expect(query).not.toContain('drop table');
+  });
+
+  it('keeps a ticket event once by its event id in the game schema, and a buyer only through the contacts schema (OP-192)', async () => {
+    const db = recorder([{ event_id: uuid(1) }]);
+    const p = checkPurchase({ event_id: uuid(1), event: 'claimed', order_key: uuid(2), collector_id: A, occurred_at: '2026-11-02T16:00:00Z', ticket_kinds: [], tickets: 2, amount_cents: null, upsell: false, held: false, via: 'checkout', valid_until: null }) as PurchaseRow;
+    expect(await gameTables(db).addPurchases([p])).toBe(1);
+    expect(db.calls[0]!.query).toContain('insert into game.fact_purchase');
+    expect(db.calls[0]!.query).toContain('on conflict (event_id) do nothing');
+    expect(db.calls[0]!.params).toEqual([JSON.stringify([p])]);
+    const c2 = recorder([{ kept: 1 }]);
+    const c = checkContact({ shopify_order_id: '1001', order_key: uuid(2), email: "o'brien@example.com", shopify_customer_id: null, ordered_at: '2026-11-02T16:00:00Z' }) as ContactRow;
+    expect(await gameTables(c2).addContacts([c])).toBe(1);
+    expect(c2.calls[0]!.query).toBe('select contacts.add_contacts($1::text::jsonb) as kept');
+    expect(c2.calls[0]!.params).toEqual([JSON.stringify([c])]);
   });
 
   it("keeps a time in a room only under a visit that is there, tied to the owl's version when it came in (OP-113)", async () => {

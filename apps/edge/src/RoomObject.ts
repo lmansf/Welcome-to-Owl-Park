@@ -92,7 +92,7 @@ import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from 
 import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
 import type { Env } from './env';
 
-interface Attachment {
+export interface Attachment {
   room: string;
   id: string;
   /** Random per-socket session id, so a replaced socket's close never removes its successor. */
@@ -149,13 +149,17 @@ interface LeaveWhy {
 }
 
 /** The visit a socket's owl is on, as the collection log takes it: its pass's id, its device and its room. */
-function visitOf(att: Attachment): Visit {
+function visitOf(att: Pick<Attachment, 'id' | 'device' | 'room'>): Visit {
   return { pass: att.id, device: att.device ?? null, room: att.room };
 }
 
-/** A socket's owl as the player stats see it (OP-111): its collector and its visit. Null without a collector. */
-function sightingOf(att: Attachment | null): Sighting | null {
-  return att?.cid ? { cid: att.cid, ...visitOf(att) } : null;
+/**
+ * A socket's owl as the player stats see it (OP-111): its collector and its visit, and inside the park
+ * whether it is a spectator (OP-192), so the log counts free owls beside paid ones. Null without a collector.
+ */
+export function sightingOf(att: Pick<Attachment, 'cid' | 'id' | 'device' | 'room' | 'spec'> | null): Sighting | null {
+  if (!att?.cid) return null;
+  return { cid: att.cid, ...visitOf(att), ...(insidePark(att.room) ? { spec: att.spec === true } : {}) };
 }
 
 /** What a collector owns, as last read from the collections object. */

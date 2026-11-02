@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryTicketStore, TicketBook } from '../src/TicketBook';
 import { FakeStore, seq } from './fakeStore';
-import { claimLink, mirrorTickets, orderIdOf, RELEASE_TAG, storeWebhook, type Desk, type HookDeps } from '../src/storeHooks';
+import { claimLink, mirrorTickets, orderIdOf, refundCents, RELEASE_TAG, storeWebhook, type Desk, type HookDeps } from '../src/storeHooks';
+import { totalCents } from '../src/shopify';
 import { ticketDesk } from '../src/ticketDesk';
 import type { TicketMirror } from '../src/storeApi';
 
@@ -32,7 +33,8 @@ describe('the store webhooks', () => {
     const { book, deps, secretOf } = park(store);
     const r = await storeWebhook('orders/paid', PAID, deps);
     // Made just now (OP-134 logs it as order_recorded).
-    expect(r).toEqual({ status: 200, body: { tickets: 2, sent: true }, mirror: '1001', recorded: { tickets: 2, held: false } });
+    // OP-192: each ticket's kind and how the order went out, for the park's log (the fake store gives no total).
+    expect(r).toEqual({ status: 200, body: { tickets: 2, sent: true }, mirror: '1001', recorded: { tickets: 2, held: false }, sold: { kinds: ['day', 'day'], cents: null, upsell: false, held: false } });
     expect(store.sent).toHaveLength(1);
     const f = store.sent[0]!;
     expect(f['notifyCustomer']).toBe(true);
@@ -44,7 +46,8 @@ describe('the store webhooks', () => {
     // The link works, and the store sending the webhook again changes nothing.
     expect(await book.claim(secretOf(f), 'c_buyer')).toHaveLength(2);
     // Again: nothing new is recorded, and the repeat is said (OP-134's webhook_duplicate).
-    expect(await storeWebhook('orders/paid', PAID, deps)).toEqual({ status: 200, body: { tickets: 2, sent: true }, mirror: '1001', repeat: true });
+    // The sale is said again too (OP-192): the park's log keeps it once by its event id.
+    expect(await storeWebhook('orders/paid', PAID, deps)).toEqual({ status: 200, body: { tickets: 2, sent: true }, mirror: '1001', repeat: true, sold: { kinds: ['day', 'day'], cents: null, upsell: false, held: false } });
     expect(store.sent).toHaveLength(1);
     expect(book.orderOf('1001')!.tickets).toHaveLength(2);
   });
@@ -184,11 +187,28 @@ describe('the store webhooks', () => {
     const { book, deps } = park(store);
     await storeWebhook('orders/paid', PAID, deps);
     const refund = { id: 5, order_id: 1001, refund_line_items: [{ line_item_id: 11, quantity: 1 }, { line_item_id: 12, quantity: 1 }] };
-    expect(await storeWebhook('refunds/create', refund, deps)).toEqual({ status: 200, body: { revoked: 1 }, mirror: '1001' });
+    expect(await storeWebhook('refunds/create', refund, deps)).toEqual({ status: 200, body: { revoked: 1 }, mirror: '1001', revoked: { event: 'refunded', tickets: 1, cents: null, refund: '5' } });
     expect(book.orderOf('1001')!.tickets.filter((t) => t.revoked !== null)).toHaveLength(1);
     expect((await storeWebhook('refunds/create', { id: 6, order_id: 1001, refund_line_items: [] }, deps)).body).toEqual({ revoked: 0 });
     expect((await storeWebhook('orders/cancelled', PAID, deps)).body).toEqual({ revoked: 1 });
     expect(book.orderOf('1001')!.tickets.every((t) => t.revoked !== null)).toBe(true);
+  });
+
+  it('says what a sale was, and what a refund or a cancellation sent back, for the park’s log (OP-192)', async () => {
+    const store = new FakeStore();
+    store.total = '31.50';
+    const { deps } = park(store);
+    expect((await storeWebhook('orders/paid', PAID, deps)).sold).toEqual({ kinds: ['day', 'day'], cents: 3150, upsell: false, held: false });
+    const refund = { id: 7, order_id: 1001, refund_line_items: [{ line_item_id: 11, quantity: 1 }], transactions: [{ kind: 'refund', status: 'success', amount: '15.75' }, { kind: 'refund', status: 'failure', amount: '15.75' }] };
+    expect((await storeWebhook('refunds/create', refund, deps)).revoked).toEqual({ event: 'refunded', tickets: 1, cents: 1575, refund: '7' });
+    // A refund that switched nothing off (sent again) says nothing.
+    expect((await storeWebhook('refunds/create', refund, deps)).revoked).toBeUndefined();
+    expect((await storeWebhook('orders/cancelled', PAID, deps)).revoked).toEqual({ event: 'cancelled', tickets: 1, cents: null, refund: null });
+    expect(refundCents({ transactions: [{ kind: 'refund', status: 'success', amount: 'lots' }] })).toBeNull();
+    expect(refundCents({})).toBeNull();
+    expect(totalCents(store.order())).toBe(3150);
+    store.total = null;
+    expect(totalCents(store.order())).toBeNull();
   });
 
   it('leaves alone what it does not handle', async () => {
