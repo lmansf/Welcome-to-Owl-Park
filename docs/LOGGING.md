@@ -133,7 +133,7 @@ page writes nothing new to its console.
   are read like the Worker and the room server.
 - Its lines are all `client.net`, `info`, from the room connection (`apps/park/src/net/edge.ts`):
   `room_join_ok`, `reconnect_ok` (with `gap_ms`), `room_join_refused` and `room_leave` (each with the
-  close `code`). The table gives their fields.
+  close `code`), and `emote_throttled` (with `count`, OP-210). The table gives their fields.
 
 ## Adding an event [BUILT]
 
@@ -186,6 +186,7 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `queue_depth` | `room.queue` | info | How the line stands: every `DEPTH_EVERY_MS` (10 s) while anyone waits or holds a place, and once more as it empties | `waiting`, `held` (places held for called numbers), `front`, `owls` (in the rooms), `rate` (owls called per minute over the last ten minutes, `lineRate`) |
 | `tick_latency_p95` | `room.tick` | info | Once a room's window has run `TICK_EVERY_MS` (10 s), on its next frame: the window's 95th percentile frame-handling time, from at most `TICK_SAMPLE_MAX` (2,000) frames | `room` (every nest together as `nest`), `p95_ms`, `frames`, `window_ms` |
 | `emote_throttled` | `room.emote` | info | Emotes came too fast and were dropped: at once, then at most every `THROTTLE_TELL_MS` (10 s) per socket, and once more for the rest when the socket ends | socket fields, `count` (dropped since last told) |
+| `emote_throttled` | `client.net` | info | The page dropped emotes that came sooner than `EMOTE_SEND_EVERY_MS` (`apps/park/src/net/budget.ts`, OP-210) after the last one it sent: told with the next emote it sends | `room`, `count` (dropped since last told) |
 | `position_rejected` | `room.move` | info | The room would not take a place or stance as the page asked (OP-149): at once, then at most every `REJECTED_TELL_MS` (60 s) per socket, and once more when the socket ends | socket fields; `reason` (the last one): `room`, `floor`, `perch`, `arrival` (`PositionRejection`, `Room.ts`); `count` (since last told) |
 | `webhook_received` | `worker.store` | info | A store webhook was taken (`routes/store.ts`) | `topic`, `order_hash` (when the payload names an order), `status`, `duration_ms` |
 | `webhook_rejected` | `worker.store` | warn | A store webhook was turned away before its work | `topic`, `reason`: `signature`, `not-set-up`, `other-store`, `bad-body` |
