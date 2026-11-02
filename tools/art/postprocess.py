@@ -1110,18 +1110,27 @@ def cmd_match(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
-def shift_down(img: Image.Image, n: int) -> Image.Image:
+def shift_down(img: Image.Image, n: int, top: int = 0) -> Image.Image:
     """The image moved down n pixels: its bottom n rows fall off, and the gap at the top mirrors the
     painting's own top rows (rows 1 to n, upside down). What ran out of the frame (a bamboo stalk, a
     branch) still runs out of it, and the border the keyer reads keeps the painting's own shades of
     the key colour: a generated "flat" magenta is rarely the exact #FF00FF and varies across the sky.
-    Repeating the first row drew stalks as flat bars and swayed the keyer's estimate of the backdrop."""
-    if not 0 < n < img.height:
-        raise ArtError(f"a shift of {n} px does not fit an image {img.height} px tall")
+    Repeating the first row drew stalks as flat bars and swayed the keyer's estimate of the backdrop.
+
+    With ``top``, only the rows from ``top`` down move (an overlay's bottom band of leaves, lowered
+    below the walkway while its top band stays where it is), and the gap they leave mirrors the n rows
+    just above ``top``: the empty middle of an overlay, so the gap is the painting's own key colour."""
+    if not 0 <= top < img.height or not 0 < n < img.height - top:
+        raise ArtError(f"a shift of {n} px from row {top} does not fit an image {img.height} px tall")
+    if 0 < top < n:
+        raise ArtError(f"a band moved {n} px needs at least {n} rows above it to mirror into the gap; it starts at row {top}")
     src = img.convert("RGB")
-    out = Image.new("RGB", src.size)
-    out.paste(src.crop((0, 1, src.width, n + 1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
-    out.paste(src.crop((0, 0, src.width, src.height - n)), (0, n))
+    out = src.copy()
+    if top:
+        out.paste(src.crop((0, top - n, src.width, top)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, top))
+    else:
+        out.paste(src.crop((0, 1, src.width, n + 1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
+    out.paste(src.crop((0, top, src.width, src.height - n)), (0, top + n))
     return out
 
 
@@ -1133,7 +1142,10 @@ def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
     TODO-DOCS (OP-162): docs/ART-PIPELINE.md: `shift <key> --dy N` (a tree playfield whose floor sits
     above the shared ground line, moved down with its top rows mirrored into the gap, then selected
     and finished as usual), and that the tree's WebP layers snap alpha within ALPHA_SNAP of clear or
-    opaque before encoding (the Lanczos ringing that cost bytes nobody sees)."""
+    opaque before encoding (the Lanczos ringing that cost bytes nobody sees).
+    TODO-DOCS (OP-160): `shift <key> --dy N --from-y Y` moves only the rows from room y Y down: an
+    overlay whose bottom leaves reach over the walkway has that band lowered below the ground line,
+    its top band left where it is."""
     key = validate_key(a.key, assets=ctx.assets)
     raw, sc = resolve_raw(ctx, key, a.raw)
     if not ((sc or {}).get("key_colour") or ctx.assets.get(key, {}).get("key_colour")):
@@ -1143,16 +1155,19 @@ def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
     n = int(round(a.dy * img.height / h_room))
     if not 0 < n <= img.height // 4:
         raise ArtError(f"--dy {a.dy} is {n} px of a {img.height} px candidate: give a drop above 0 and at most a quarter of the height")
-    out = shift_down(img, n)
+    top = int(round(a.from_y * img.height / h_room))
+    out = shift_down(img, n, top)
     data = pngmeta.encode(out, compress_level=6, optimize=False)
     h = sha256_bytes(data)[:16]
     d = ctx.work / "raw" / key
     pngmeta.write_bytes(d / f"{h}.png", data)
     sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{out.width}x{out.height}", "width": out.width, "height": out.height, "format": "png",
               "source_url": None, "generated_at": ctx.now, "now_source": "shift", "cost_estimate_usd": 0, "provider_meta": {},
-              "shifted": {"base": raw.name, "dy_room": a.dy, "dy_px": n, "fill": "mirror"}}
+              "shifted": {"base": raw.name, "dy_room": a.dy, "dy_px": n, "fill": "mirror",
+                          **({"from_y_room": a.from_y, "from_y_px": top} if top else {})}}
     (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
-    note(f"shift {key}: {rel_to_repo(d / f'{h}.png')}, {raw.name} moved down {n} px ({a.dy} room px); select it with: node tools/art/generate.mjs select {key} {h}")
+    what = f"its rows from {top} px (room y {a.from_y})" if top else raw.name
+    note(f"shift {key}: {rel_to_repo(d / f'{h}.png')}, {what} moved down {n} px ({a.dy} room px); select it with: node tools/art/generate.mjs select {key} {h}")
     return 0
 
 
@@ -1702,6 +1717,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("shift", help="move a keyed candidate down, its top rows mirrored into the gap; writes a new raw candidate of <key>")
     sp.add_argument("key")
     sp.add_argument("--dy", type=int, required=True, help="room pixels to move the painting down (its floor onto the ground line)")
+    sp.add_argument("--from-y", type=int, default=0, help="move only the rows from this room y down (an overlay's bottom band), the gap mirroring the rows above it")
     sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
     add_common(sp)
     sp.set_defaults(fn=cmd_shift)

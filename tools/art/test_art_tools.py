@@ -650,6 +650,37 @@ class TestShift(unittest.TestCase):
         with self.assertRaises(ArtError):
             postprocess.shift_down(img, 10)
 
+    def test_shift_down_from_a_row_moves_only_the_band_below_it(self):
+        img = Image.new("RGB", (4, 12))
+        for y in range(12):
+            ImageDraw.Draw(img).line((0, y, 3, y), fill=(y * 20, 0, 0))
+        out = np.asarray(postprocess.shift_down(img, 3, top=6))
+        self.assertEqual([int(out[y, 0][0]) for y in range(6)], [y * 20 for y in range(6)], "the rows above the band stay")
+        self.assertEqual([int(out[y, 0][0]) for y in range(6, 9)], [100, 80, 60], "the gap mirrors the three rows above the band")
+        self.assertEqual([int(out[y, 0][0]) for y in range(9, 12)], [120, 140, 160], "the band starts three rows lower")
+        with self.assertRaises(ArtError):
+            postprocess.shift_down(img, 3, top=2)  # too few rows above the band to mirror
+
+    def test_the_shift_command_lowers_an_overlays_bottom_band(self):
+        with tempfile.TemporaryDirectory() as td:
+            raw = Path(td) / "fg.png"
+            base = Image.new("RGB", (2048, 1152), (250, 3, 248))
+            ImageDraw.Draw(base).rectangle((0, 0, 300, 200), fill=(20, 40, 30))  # leaves in the top corner
+            ImageDraw.Draw(base).rectangle((900, 930, 1100, 1151), fill=(20, 40, 30))  # leaves rising over the walkway
+            base.save(raw)
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out), mock.patch("sys.stderr", io.StringIO()):
+                rc = postprocess.main(["shift", "tree-l3-0-fg", "--dy", "60", "--from-y", "600", "--raw", str(raw), "--work", td, "--now", "2026-11-02T03:00:00Z"])
+            self.assertEqual(rc, 0, out.getvalue())
+            made = list((Path(td) / "raw" / "tree-l3-0-fg").glob("*.png"))
+            sc = json.loads(made[0].with_suffix(".json").read_text())
+            self.assertEqual(sc["shifted"], {"base": "fg.png", "dy_room": 60, "dy_px": 77, "fill": "mirror", "from_y_room": 600, "from_y_px": 768})
+            px = np.asarray(Image.open(made[0]).convert("RGB"))
+            self.assertEqual(tuple(int(c) for c in px[100, 100]), (20, 40, 30), "the top corner's leaves stay")
+            self.assertEqual(tuple(int(c) for c in px[1000, 1000]), (250, 3, 248), "the leaves no longer reach the walkway's top")
+            self.assertEqual(tuple(int(c) for c in px[1010, 1000]), (20, 40, 30), "they start 77 px lower")
+            self.assertEqual(tuple(int(c) for c in px[800, 1000]), (250, 3, 248), "the gap is the painting's own key colour")
+
     def test_the_shift_command_writes_a_new_candidate_with_its_record(self):
         with tempfile.TemporaryDirectory() as td:
             raw = Path(td) / "base.png"
