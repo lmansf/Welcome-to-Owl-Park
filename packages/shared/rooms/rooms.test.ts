@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CABINETS } from '../src/arcade';
 import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
-import { FURNITURE, NEST_SPOTS, nestDoorIndex } from '../src/homes';
+import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
@@ -119,8 +119,9 @@ describe('doors and spawns', () => {
     });
 
     it(`${room.id}: no spawn stands in a doorway, where an owl would walk straight back out`, () => {
-      // A spot to stand at (a door with nowhere to go, such as the nest's mirror) may have one.
-      const ways = room.doors.filter((d) => d.to);
+      // A spot to stand at (a door with nowhere to go, such as the nest's mirror) may have one. A street's
+      // nest door is a way through too: an owl standing in it goes into the nest (OP-128).
+      const ways = room.doors.filter((d) => d.to || (isStreetRoom(room.id) && nestDoorIndex(d.id) !== null));
       for (const [name, p] of Object.entries(room.spawns)) for (const d of ways) expect(pointInRect(p, d.rect), `${room.id} spawn ${name} in ${d.id}`).toBe(false);
     });
   }

@@ -1338,13 +1338,14 @@ export const ROOMS: Record<string, RoomDef> = {
       'from-canopy': { x: 3 * ROOM_W - 220, y: TREE_GROUND },
       // Out of the park by the Menu, or back from checkout in this page: before the gate, as the lobby's 'from-hub' is (LEFT_PARK_SPAWN).
       'from-hub': { x: 3 * ROOM_W - 220, y: TREE_GROUND },
-      // Out of a nest, in front of its door (door 0 the owl's own, nearest the gate).
-      'from-nest-0': { x: 3010, y: TREE_GROUND },
-      'from-nest-1': { x: 2695, y: TREE_GROUND },
-      'from-nest-2': { x: 2150, y: TREE_GROUND },
-      'from-nest-3': { x: 1855, y: TREE_GROUND },
-      'from-nest-4': { x: 1275, y: TREE_GROUND },
-      'from-nest-5': { x: 1050, y: TREE_GROUND },
+      // Out of a nest, just east of its door (door 0 the owl's own, nearest the gate): beside the doorstep,
+      // not on it, since an owl standing in a nest's doorway goes in as soon as the street says whose it is.
+      'from-nest-0': { x: 3080, y: TREE_GROUND },
+      'from-nest-1': { x: 2765, y: TREE_GROUND },
+      'from-nest-2': { x: 2220, y: TREE_GROUND },
+      'from-nest-3': { x: 1925, y: TREE_GROUND },
+      'from-nest-4': { x: 1345, y: TREE_GROUND },
+      'from-nest-5': { x: 1120, y: TREE_GROUND },
     },
     doors: [
       // The tree's front gate, at the street's east end past the trunk: its turnstiles let an owl with a

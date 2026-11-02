@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, TREE_ARRIVAL, roomFor } from '../rooms';
 import { doorTarget } from './doorways';
-import { isWalkable, pointInRect, rectCenter } from './geometry';
+import { distanceToRect, isWalkable, pointInRect, rectCenter } from './geometry';
 import { STREET_ROOM, TREE_STREET_ROOM, isStreetRoom, streetOf } from './homes';
 import { resolveTarget } from './resolveTarget';
 import { findSpawn } from './room';
@@ -98,15 +98,15 @@ describe('the tree\'s street, outside its front gate (OP-128)', () => {
     expect(gate.to).toEqual({ room: 'l5', spawn: 'default' });
   });
 
-  it('has six nest doors, each with the spawn in front of it, and the seventh painted door hatching soon', () => {
+  it('has six nest doors, each with the spawn just beside it (not on the doorstep, which would walk the owl back in), and the seventh painted door hatching soon', () => {
     const street = roomFor(TREE_STREET_ROOM)!;
     for (let n = 0; n < 6; n++) {
       const door = street.doors.find((d) => d.id === `nest-door-${n}`)!;
       expect(door, String(n)).toBeDefined();
       const spawn = street.spawns[`from-nest-${n}`]!;
       expect(isWalkable(spawn, street.walkable), String(n)).toBe(true);
-      expect(spawn.x).toBeGreaterThan(door.rect.x);
-      expect(spawn.x).toBeLessThan(door.rect.x + door.rect.w);
+      expect(pointInRect(spawn, door.rect), String(n)).toBe(false);
+      expect(distanceToRect(spawn, door.rect), String(n)).toBeLessThanOrEqual(40);
     }
     expect(street.doors.find((d) => d.id === 'spare-nest')?.closedSign).toBe('Hatching Soon');
   });
