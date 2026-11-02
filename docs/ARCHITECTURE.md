@@ -27,7 +27,7 @@ A pnpm monorepo (`pnpm-workspace.yaml`): `apps/`, `packages/` and `tools/`. Node
 | Package | What it is | Entry points |
 | --- | --- | --- |
 | `apps/park` (`@owl-park/park`) | The browser client: Vite + TypeScript + Phaser 3. Scenes, the owl, rooms, the HUD (DOM), the home screen, the transports, the collection service, the browser tests (`e2e/`) | `src/main.ts`; `pnpm dev`, `pnpm build`, `pnpm e2e` |
-| `apps/edge` (`@owl-park/edge`) | The Cloudflare project: the Worker (`src/index.ts`, the router), three Durable Objects (`RoomObject`, `VoteLedger`, `Collections`), the ticket book, the store link, the keepers' pages under `/admin/*`, `wrangler.jsonc` | `pnpm dev:edge`, `pnpm deploy:edge`; `pnpm --filter @owl-park/edge exec wrangler <command>` |
+| `apps/edge` (`@owl-park/edge`) | The Cloudflare project: the Worker (`src/index.ts`, the front door; each route's handler in `src/routes/`, listed in `routes/table.ts`, OP-201), three Durable Objects (`RoomObject`, `VoteLedger`, `Collections`), the ticket book, the store link, the keepers' pages under `/admin/*`, `wrangler.jsonc` | `pnpm dev:edge`, `pnpm deploy:edge`; `pnpm --filter @owl-park/edge exec wrangler <command>` |
 | `packages/shared` (`@owl-park/shared`) | Rules with no platform code, shared by the client and the server and unit-tested in Node: the wire protocol (`src/edge.ts`), geometry and walks, room data (`rooms/index.ts`), collectibles, quests, the shop, activities, nests, phrases, feedback limits | imported by both apps |
 | `tools/` | `build-edge.mjs` (the client build for the room server, on any shell), `render-svg.mjs`, `load/` (the bot swarm and the stepped load test), `art/` (the Seedream pipeline, `docs/ART-PIPELINE.md`), `dev/` (debug scripts), `cloudflare-skills.sh` | `pnpm build:edge`, `pnpm load`, `pnpm art:*` |
 
@@ -176,7 +176,7 @@ quiz question closes.
 
 **Spectators (v15, OP-191)** [BUILT, the room server and the page; off until `SPECTATORS` is `on`]. A spectator is an owl past the turnstiles without a ticket that works. The Worker sends
 every socket to its room object with `X-Visitor-Kind: visitor` or `spectator`, after deleting any
-copy the page sent (`/ws` in `apps/edge/src/index.ts`; `spectating` in `apps/edge/src/gate.ts`).
+copy the page sent (`/ws` in `apps/edge/src/routes/rooms.ts`; `spectating` in `apps/edge/src/gate.ts`).
 The room object keeps the kind in the socket attachment (`spec`), so it survives hibernation.
 Default-deny: inside the park, a socket the Worker did not call a visitor is a spectator
 (`spectatorSocket` in `apps/edge/src/RoomObject.ts`); in the lobby, the street and the nests

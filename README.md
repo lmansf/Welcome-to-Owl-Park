@@ -71,7 +71,7 @@ apps/park/            the browser app (Vite + TypeScript + Phaser 3)
   e2e/                Playwright tests (local transport, and the room server)
 apps/edge/            the room server: Cloudflare Worker + Durable Object (hibernating WebSockets)
   src/Room.ts         the rules, with no platform dependency (unit-tested in Node)
-  src/RoomObject.ts   the Durable Object adapter; src/index.ts the router; src/pass.ts guest passes
+  src/RoomObject.ts   the Durable Object adapter; src/index.ts the front door; src/routes/ one handler per route (table.ts lists them); src/pass.ts guest passes
   src/Collections.ts  every collection, quest and feather (Durable Object, SQLite; tables in src/sqlStore.ts)
 packages/shared/      protocol v1 + v4, geometry and walk maths, target resolution, room data, collectibles, quests, the shop
 tools/                render-svg.mjs (rasterize art exactly as the game will), load/swarm.mjs (bot swarm)

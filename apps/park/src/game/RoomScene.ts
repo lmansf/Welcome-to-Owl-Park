@@ -2871,7 +2871,8 @@ export class RoomScene extends Phaser.Scene {
   private onRealmClosed(sign: string): void {
     if (this.leaving) return;
     this.hud.toast(sign || 'Pardon Our Feathers', 3000);
-    if (this.room.id === TREE_STREET_ROOM) return void this.goTo(STREET_ROOM, 'from-nest-0', undefined);
+    // Off the tree's street, onto the nests' street in the middle of the lane: not on the own nest's doorstep, which would walk it in.
+    if (this.room.id === TREE_STREET_ROOM) return void this.goTo(STREET_ROOM, 'default', undefined);
     const back = `from-${this.room.id}`;
     void this.goTo('hub', Object.hasOwn(ROOMS['hub']?.spawns ?? {}, back) ? back : 'default', undefined);
   }
