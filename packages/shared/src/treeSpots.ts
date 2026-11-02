@@ -86,9 +86,12 @@ export const TREE_SPOTS: readonly TreeSpot[] = [
   on(0, 1, 'score-wall', 'wall', 'The arcade cave’s score wall.'),
 ];
 
-/** The level of the tree a room is (`l0` to `l5`: 0 to 5), or null for any other room. */
+/**
+ * The level of the tree a room is (`l0` to `l5`: 0 to 5, and a level's second room, such as level 5's
+ * nests street `l5-street`), or null for any other room.
+ */
 export function treeLevelOf(roomId: string): number | null {
-  const m = /^l(\d)$/.exec(roomId);
+  const m = /^l(\d)(?:-[a-z]+)?$/.exec(roomId);
   const n = m ? Number(m[1]) : -1;
   return n >= 0 && n <= TREE_LEVEL_MAX ? n : null;
 }

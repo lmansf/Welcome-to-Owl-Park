@@ -74,7 +74,9 @@ describe('the tree’s named spots (OP-155, OP-156)', () => {
 
   it('knows a level of the tree by its room’s id, and nothing else as one', () => {
     expect(levels.map((n) => treeLevelOf(`l${n}`))).toEqual(levels);
-    for (const id of ['l6', 'l9', 'l-1', 'l01', 'l', 'L1', 'l1 ', 'hub', 'market', 'nest-l1', '']) {
+    // A level's second room, such as level 5's nests street, is on its level too.
+    expect(treeLevelOf('l5-street')).toBe(5);
+    for (const id of ['l6', 'l9', 'l-1', 'l01', 'l', 'L1', 'l1 ', 'l5-', 'l5-Street', 'l5-street-2', 'hub', 'market', 'nest-l1', '']) {
       expect(treeLevelOf(id), id).toBeNull();
       expect(treeSpotsFor(id), id).toEqual([]);
     }
