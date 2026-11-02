@@ -130,7 +130,7 @@ import type { SettingsStore } from '../settings';
 import type { Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
-import { gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
+import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
 import { SPECTATOR_WORDS, createOfferPacer, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
@@ -2508,7 +2508,7 @@ export class RoomScene extends Phaser.Scene {
       line,
       preview: earlyPreview(entry.gate),
       ticketsUrl: this.cfg.ticketsUrl || null,
-      ...(tickets.checkout ? { checkout: () => tickets.checkout!() } : {}),
+      ...(tickets.checkout ? { checkout: () => tickets.checkout!(), checkoutPass: () => tickets.checkout!('annual') } : {}),
       wallet: () => tickets.wallet(),
       before: new Set(before.map((t) => t.id)),
       bought: (t, open) => this.ticketCame(t, open),
@@ -2525,7 +2525,8 @@ export class RoomScene extends Phaser.Scene {
   ticketCame(ticket: WalletEntry, open?: Opener): boolean {
     // A spectator inside the park (OP-191) is admitted where it stands; at the lobby's turnstiles it walks through them (OP-190).
     const goingIn = this.admitInPlace(ticket) || this.admitAtGate(ticket);
-    if (ticket.kind === 'day' || ticket.kind === 'night') void this.offerPass(ticket.id, 'day', open, goingIn ? 2700 : 0);
+    // The Annual Pass was offered beside the Day Ticket before paying (OP-198): not again after, unless the switch says so.
+    if (PASS_AFTER_DAY_TICKET && (ticket.kind === 'day' || ticket.kind === 'night')) void this.offerPass(ticket.id, 'day', open, goingIn ? 2700 : 0);
     return goingIn;
   }
 
@@ -2584,7 +2585,9 @@ export class RoomScene extends Phaser.Scene {
    * the ticket card flips up and the owl goes on into the hub. Without a ticket that goes through,
    * the turnstiles let everyone in while the gate is open; once the park takes tickets
    * (GATE=ticket) they send the owl back out of the turnstile it tried and say why, offering a Day
-   * Ticket right there when it has none that works (OP-180). The owl keeps its
+   * Ticket right there when it has none that works (OP-180). With spectators on, they ask first
+   * (OP-198): Buy a Day Ticket (the sale, the owl back out until the ticket comes) or Enter as a guest
+   * (on in as a spectator, OP-191); neither steps the owl back out. The owl keeps its
    * lane: it stands still while the turnstiles decide and comes out in the hub as far across (OP-124).
    */
   private async throughGate(door: DoorDef, at: Vec2): Promise<void> {
@@ -2600,26 +2603,53 @@ export class RoomScene extends Phaser.Scene {
     const entry = await this.entry();
     if (this.leaving) return;
     const way = turnstileWay(scan, entry);
+    /** Back out of the turnstile it tried, 70 below them; the turnstiles take the next owl in a moment. */
+    const stepBack = () => {
+      this.walkTo({ x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
+      this.time.delayedCall(1500, () => {
+        this.passingGate = false;
+      });
+    };
+    /** On through the turnstiles into the hub; the ticket card (if any) stays up a moment first. */
+    const goIn = (ms: number) => this.time.delayedCall(ms, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
     if (way.go === 'back') {
       // OP-180: without a ticket that works, a Day Ticket right here; otherwise why the turnstiles stay shut.
       if (way.sale && this.transport.tickets) void this.sellDayTicket(way.line, entry);
       else this.hud.toast(way.line, 4500);
-      this.walkTo({ x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
-      this.time.delayedCall(1500, () => {
-        this.passingGate = false;
+      stepBack();
+      return;
+    }
+    if (way.go === 'spectate' && way.sale && this.transport.tickets) {
+      // OP-198: the owl stands in the turnstile while they ask: buy a Day Ticket (back out, the sale, and in
+      // by itself once it has come, OP-190), or enter as a guest (a spectator, OP-191); neither steps it back out.
+      const gen = this.gen;
+      const here = () => gen === this.gen && !this.leaving;
+      this.hud.askAtGate({
+        lines: [way.line],
+        buy: () => {
+          if (!here()) return;
+          stepBack();
+          void this.sellDayTicket(SPECTATOR_WORDS.keep, entry);
+        },
+        guest: () => {
+          if (!here()) return;
+          this.pieces.gate?.react();
+          this.hud.toast(SPECTATOR_WORDS.guestIn, 4500);
+          goIn(700);
+        },
+        stay: () => {
+          if (here()) stepBack();
+        },
       });
       return;
     }
     this.pieces.gate?.react();
     if (scan.ok) this.hud.showTicket(gateCard(scan, Date.now()));
-    // A spectator (OP-191): one line, with the Day Ticket on a button (or why its ticket did not go through), and on in.
-    else if (way.go === 'spectate') {
-      if (way.sale && this.transport.tickets) this.hud.offerTicket(way.line);
-      else this.hud.toast(way.line, 4500);
-    } else this.hud.toast('Welcome to Owl Park!', 2600);
+    // A spectator whose ticket did not go through yet (held for the store's check, or not its night): why, and on in.
+    else if (way.go === 'spectate') this.hud.toast(way.line, 4500);
+    else this.hud.toast('Welcome to Owl Park!', 2600);
     if (scan.ok && scan.kind === 'opening-night') void this.offerPass(scan.id, 'night');
-    // The card stays up a moment before the walk on into the hub.
-    this.time.delayedCall(scan.ok ? 1400 : 700, () => void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, lane));
+    goIn(scan.ok ? 1400 : 700);
   }
 
   /** The gift shop's door: the store, after the card before the store (OP-153); soon, until it has a page. */

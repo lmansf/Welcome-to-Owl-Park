@@ -27,6 +27,7 @@ import { createShopPanel, type ShopPanel } from './shop';
 import { GATE_WORDS, createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createGateSale, withBring, type GateSale, type GateSalePanel } from './gateSale';
 import { createStoreCard, type StoreGo } from './storeCard';
+import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { createTurnPhone } from './turnPhone';
 
@@ -143,6 +144,11 @@ export interface Hud {
    * park's accounts on, the card also offers to bring here an owl with a ticket on another screen (OP-183).
    */
   sellAtGate(sale: GateSale): void;
+  /**
+   * The turnstiles' question (OP-198): an owl without a ticket that works, with spectators on, is asked
+   * to buy a Day Ticket or enter as a guest; neither steps it back out.
+   */
+  askAtGate(a: GateAsk): void;
   /**
    * The card before the store (OP-153): Continue goes on to the store (`go`), Not now back to where
    * the visitor was. Every way from the park to the store asks through it; `opener` gets the focus back.
@@ -605,6 +611,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
   /** The card before the store (OP-153), before a purchase at the turnstiles, the pass offer or the gift shop; it closes alone on Escape. */
   const storeCard = createStoreCard(root);
+  /** The turnstiles' question (OP-198), before the card before the store. */
+  const gatePrompt = createGatePrompt(root);
   // Its Send feedback opens the same form as the Menu's (OP-167); closed, it gives the focus back to the home screen's Settings button.
   const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
   // Which owl are you (OP-076) covers the whole screen, like the owl builder.
@@ -654,8 +662,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     accountScreens?.close();
     leaveCard.close();
     storeCard.close();
+    gatePrompt.close();
   };
-  const isBlocking = () => storeCard.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  const isBlocking = () => storeCard.isOpen() || gatePrompt.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
   /** The account's cards for the Menu (OP-139): none while accounts are off. */
   function accountCards(): HTMLElement[] | null {
     if (!account || !accountScreens) return null;
@@ -976,6 +985,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       const screens = accountScreens;
       gateSale.sell(withBring(sale, screens && account ? () => screens.openEmail('restore') : null));
     },
+    askAtGate: (a) => gatePrompt.ask(a),
     askStore: (go, opener) => storeCard.ask(go, opener),
     showTicket(card) {
       ticketCard ??= createTicketCard(root);

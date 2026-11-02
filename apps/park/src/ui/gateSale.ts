@@ -15,12 +15,18 @@
  * screen (OP-183): its button opens the account's Bring your owl here box (account.ts, OP-139), the
  * same emailed link as the home screen's I already have an owl. The owl then plays on this screen
  * and not the other, as ever.
+ *
+ * The same card offers the annual pass beside the Day Ticket (OP-198): Continue is named Day Ticket,
+ * and Annual Pass beside it opens checkout for the pass instead, with the same token, so the pass lands
+ * on this owl and takes it through the turnstiles the same way. That is the pass's one pitch for this
+ * purchase: the half-price pass is no longer offered after a Day Ticket that came from this card
+ * (PASS_AFTER_DAY_TICKET, tickets.ts).
  */
 import type { WalletEntry } from '../net';
 import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, arrivedWords, createCheckoutWatch, startCheckout, type CheckoutWatch, type Opener, type Started, type WatchClock } from './checkout';
 import { ANSWER_AFTER_MS, answerReturns, pageChannel, type MakeChannel } from './checkoutReturn';
 import { PREVIEW_WORDS } from './preview';
-import type { AskStore, LinkMaker, StoreAside, StoreGo } from './storeCard';
+import type { AskStore, LinkMaker, StoreAside, StoreGo, StoreUpgrade } from './storeCard';
 import { GATE_WORDS } from './tickets';
 
 export interface GateSale {
@@ -32,6 +38,11 @@ export interface GateSale {
   ticketsUrl: string | null;
   /** The Day Ticket's cart link with this owl's one-time token (OP-175); null when there is none. */
   checkout?: () => Promise<string | null>;
+  /**
+   * The annual pass's cart link with this owl's one-time token (OP-198): the card offers the pass beside
+   * the Day Ticket when there is one. Absent: the card sells only the Day Ticket.
+   */
+  checkoutPass?: () => Promise<string | null>;
   /** The tickets on this owl, read again while checkout is open. */
   wallet: () => Promise<WalletEntry[]>;
   /** The tickets on this owl before checkout opened: the bought one is the one not among them. */
@@ -55,6 +66,27 @@ export interface GateSale {
 export function withBring(sale: GateSale, restore: (() => void) | null): GateSale {
   if (!restore) return sale;
   return { ...sale, bring: restore };
+}
+
+/** The annual pass beside the Day Ticket on the card (OP-198): drafts for the owner's approval. */
+export const UPGRADE_WORDS = {
+  /** Above the card's own line, under what the turnstiles say. */
+  line: 'Or get the Annual Pass and come back all year.',
+  /** Continue, when the pass is beside it. */
+  day: 'Day Ticket',
+  /** The second purchase button. */
+  pass: 'Annual Pass',
+} as const;
+
+/**
+ * The annual pass beside the Day Ticket (OP-198), when the park can make the pass's cart link: its
+ * button opens checkout for the pass in its own click, as Continue does for the Day Ticket, and
+ * `started` hears how it went the same way. Nothing without the link.
+ */
+export function passUpgrade(sale: Pick<GateSale, 'ticketsUrl' | 'checkoutPass'>, started: (s: Started, open: Opener, link: LinkMaker) => void): StoreUpgrade | undefined {
+  const pass = sale.checkoutPass;
+  if (!pass) return undefined;
+  return { line: UPGRADE_WORDS.line, goLabel: UPGRADE_WORDS.day, label: UPGRADE_WORDS.pass, go: gateBuy({ ticketsUrl: sale.ticketsUrl, checkout: pass }, started) };
 }
 
 /** What the card shows under its buttons for an owl whose ticket may be on another screen (OP-183); nothing without a way to bring it. */
@@ -229,7 +261,7 @@ export function createGateSale(root: HTMLElement, ask: AskStore, toast: (message
       opener = null;
       cancelled = false;
       el.classList.remove('open');
-      ask(gateBuy(next, started), null, saleLines(next), bringAside(next));
+      ask(gateBuy(next, started), null, saleLines(next), bringAside(next), passUpgrade(next, started));
     },
     busy: () => watch.active() && !cancelled,
   };

@@ -1,6 +1,6 @@
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Locator, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, doAction, expectStoreCard, openPark, state, storeContinue, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, E2E_STORE, STORE_CARD, doAction, expectStoreCard, openPark, state, storeContinue, enterAsGuest, walkToDoor } from './helpers';
 
 /**
  * The card before the store (OP-153), through the room server and the stand-in store
@@ -60,6 +60,7 @@ const DAY_TICKET = `${KEEP} You can get a Day Ticket right here.`;
 /** Through a turnstile with no ticket, on into the hub as a spectator (OP-191). */
 async function inAsSpectator(page: Page): Promise<void> {
   await walkToDoor(page, 'gate');
+  await enterAsGuest(page);
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
   await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(true);
 }

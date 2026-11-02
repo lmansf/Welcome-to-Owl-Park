@@ -22,7 +22,11 @@
  * (`StoreAside`; OP-183: at the turnstiles, bringing an owl whose ticket is on another screen here).
  * It closes the card and runs in its click, and Tab reaches it after Continue.
  *
- * TODO-DOCS (OP-153, OP-180): the card before the store in docs/ARCHITECTURE.md (the purchase path)
+ * A Day Ticket's card may also offer the upgrade to the annual pass (`StoreUpgrade`; OP-198): then
+ * Continue is named for the Day Ticket and a second button beside it buys the pass instead, under the
+ * same line, in its own click, as Continue does. Not now stays first.
+ *
+ * TODO-DOCS (OP-153, OP-180, OP-198): the card before the store in docs/ARCHITECTURE.md (the purchase path)
  * and docs/PLAYBOOK.md section 7, with its line, which the owner approves (`STORE_WORDS.ask`).
  */
 import { createModal } from './modal';
@@ -66,11 +70,22 @@ export interface StoreAside {
 }
 
 /**
+ * The upgrade beside a Day Ticket (OP-198): a short line above the card's own, Continue named for the
+ * Day Ticket (`goLabel`), and a second purchase button (`label`) whose way is `go`.
+ */
+export interface StoreUpgrade {
+  line: string;
+  goLabel: string;
+  label: string;
+  go: StoreGo;
+}
+
+/**
  * Asks before the store; `opener` takes the focus back after Not now. `say`: lines the card shows
  * above its own (what the turnstiles say before they sell a Day Ticket, OP-180). `aside`: a choice
- * beside the purchase that stays in the park (OP-183).
+ * beside the purchase that stays in the park (OP-183). `upgrade`: the annual pass beside a Day Ticket (OP-198).
  */
-export type AskStore = (go: StoreGo, opener?: HTMLElement | null, say?: readonly string[], aside?: StoreAside) => void;
+export type AskStore = (go: StoreGo, opener?: HTMLElement | null, say?: readonly string[], aside?: StoreAside, upgrade?: StoreUpgrade) => void;
 
 export interface StoreCard {
   ask: AskStore;
@@ -110,6 +125,7 @@ const CSS = `
 #hud .store-ask .ask{margin:0;font-size:var(--m-heading);font-weight:800}
 #hud .store-ask .row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
 #hud .store-ask .row > .go,#hud .store-ask .row > .stay{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--m-target);min-width:max(var(--m-target),116px);margin:0;padding:10px 20px;border-radius:999px;font:inherit;font-size:var(--m-body);font-weight:800;text-decoration:none;box-shadow:none;text-shadow:none;cursor:pointer}
+#hud .store-ask .row > .go.pass{box-shadow:0 0 0 2px var(--m-frame)}
 #hud .store-ask .row > .go{background:var(--m-accent);color:var(--m-on-accent);border:2px solid var(--m-accent)}
 #hud .store-ask .row > .stay{background:transparent;color:var(--m-text);border:2px solid var(--m-frame)}
 #hud .store-ask .aside{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding-top:14px;border-top:1px solid var(--m-frame)}
@@ -178,10 +194,13 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
 
   /** The way waiting on Continue; a press of an older card's Continue does nothing. */
   let waiting: StoreGo | null = null;
+  /** The annual pass's way beside it (OP-198), when the card offers the upgrade. */
+  let upgrading: StoreGo | null = null;
   /** The choice beside it on the open card, if the way gave one. */
   let beside: StoreAside | null = null;
   modal.onClose(() => {
     waiting = null;
+    upgrading = null;
     beside = null;
   });
   asideGo.addEventListener('click', () => {
@@ -193,7 +212,7 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
   });
 
   /** Continue for this way: the link itself, or a button that opens the way's window in its click. */
-  const continueFor = (go: StoreGo): HTMLElement => {
+  const continueFor = (go: StoreGo, label: string = STORE_WORDS.go, which: 'continue' | 'upgrade' = 'continue'): HTMLElement => {
     let c: HTMLAnchorElement | HTMLButtonElement;
     if ('link' in go) {
       c = storeLink(go.link, '');
@@ -202,11 +221,11 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
       b.type = 'button';
       c = b;
     }
-    c.className = 'go';
-    c.dataset['store'] = 'continue';
-    c.textContent = STORE_WORDS.go;
+    c.className = which === 'upgrade' ? 'go pass' : 'go';
+    c.dataset['store'] = which;
+    c.textContent = label;
     c.addEventListener('click', (e) => {
-      if (waiting !== go) {
+      if ((which === 'upgrade' ? upgrading : waiting) !== go) {
         e.preventDefault();
         return;
       }
@@ -218,24 +237,30 @@ export function createStoreCard(root: HTMLElement, open: Opener = openWindow): S
   };
 
   return {
-    ask(go, opener, say, side) {
+    ask(go, opener, say, side, upgrade) {
       if (modal.isOpen()) modal.close();
       waiting = go;
+      upgrading = upgrade?.go ?? null;
       beside = side ?? null;
       aside.hidden = !side;
       asideLine.textContent = side?.line ?? '';
       asideGo.textContent = side?.label ?? '';
       says.innerHTML = '';
-      says.hidden = !say?.length;
-      for (const [i, text] of (say ?? []).entries()) {
+      const lines = [...(say ?? []), ...(upgrade ? [upgrade.line] : [])];
+      says.hidden = !lines.length;
+      for (const [i, text] of lines.entries()) {
         const p = document.createElement('p');
-        // The first line is what the turnstiles say; a second (the early preview's warning) is smaller.
-        p.className = i === 0 ? 'say' : 'say small';
+        // The first line is what the turnstiles say; a second (the early preview's warning) is smaller; the upgrade's is its own.
+        const isUpgrade = !!upgrade && i === lines.length - 1;
+        p.className = i === 0 || isUpgrade ? 'say' : 'say small';
+        if (isUpgrade) p.dataset['store'] = 'upgrade-line';
         p.textContent = text;
         says.appendChild(p);
       }
       row.querySelector('[data-store="continue"]')?.remove();
-      row.appendChild(continueFor(go));
+      row.querySelector('[data-store="upgrade"]')?.remove();
+      row.appendChild(continueFor(go, upgrade?.goLabel ?? STORE_WORDS.go));
+      if (upgrade) row.appendChild(continueFor(upgrade.go, upgrade.label, 'upgrade'));
       box.setAttribute('style', tokenStyle(MENU_THEMES[themeAt(new Date())]));
       modal.open(opener ?? null);
       box.focus({ preventScroll: true });

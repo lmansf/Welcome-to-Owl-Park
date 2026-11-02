@@ -1,6 +1,6 @@
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, STORE_CARD, state, walkAndStop, walkToDoor } from './helpers';
+import { GATE_ASK, GATE_ASK_LINE, enterAsGuest, E2E_ADMIN_KEY, STORE_CARD, state, walkAndStop, walkToDoor } from './helpers';
 
 /**
  * A ticket's status shows only at the turnstiles (OP-180, in place of OP-172's card on the plaza),
@@ -14,7 +14,7 @@ const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 /** On the plaza before the middle turnstile, where OP-172's status card used to come up. */
 const PLAZA = { x: 2570, y: 800 };
 /** What the turnstiles say to an owl with no ticket as it walks on in as a spectator (OP-191). */
-const SPECTATE = 'No ticket? Come in, look around and play. A Day Ticket lets you keep what you win.';
+const SPECTATE = GATE_ASK_LINE;
 
 async function flip(request: APIRequestContext, mode: 'open' | 'ticket' | 'deployed'): Promise<Record<string, unknown>> {
   const r = await request.post('/api/admin/gate', { headers: ADMIN, data: { mode } });
@@ -65,9 +65,10 @@ test.describe('ticket status only at the turnstiles (OP-180)', () => {
 
     // Into the turnstiles: one line with the Day Ticket on a button, no card, and on into the hub as a spectator (OP-191).
     await walkToDoor(a, 'gate');
-    await expect(a.locator('[data-spectator-offer]')).toContainText(SPECTATE, { timeout: 15_000 });
+    await expect(a.locator(GATE_ASK)).toContainText(SPECTATE, { timeout: 15_000 });
     await expect(a.locator(STORE_CARD)).toBeHidden();
     await expect(raisedCard(a)).toHaveCount(0);
+    await enterAsGuest(a);
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
     await expect.poll(async () => (await state(a)).spectator, { timeout: 15_000 }).toBe(true);
     // Out again onto the plaza: nothing of the ticket stays up.
