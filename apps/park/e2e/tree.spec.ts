@@ -97,10 +97,11 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     });
   }
 
-  test('reads at a glance: an edge on every ledge, the shapes in front and the shaded glows drawn, and the archway and the stair up marked (OP-173)', async ({ page }) => {
+  test('reads at a glance: an edge on every ledge, the shapes in front and the shaded glows drawn, and the archway, the stair up and the way down to level 0 marked (OP-173, OP-163)', async ({ page }) => {
     await openPark(page, { room: 'l1' });
     // The fronts: the west path's lamps, the square's post, the stair's banister (raised) and the tower's railing.
-    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 6, lips: 25, marks: 2, behind: false });
+    // The way down to level 0 is a doorway now (OP-163), marked and no longer shaded.
+    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 5, lips: 25, marks: 3, behind: false });
   });
 
   test('the stair’s banister is in front of an owl climbing the stair, and behind one walking by on the floor (OP-173)', async ({ page }) => {
