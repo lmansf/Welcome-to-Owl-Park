@@ -29,6 +29,7 @@ import type { Hud } from '../ui/hud';
 import { climbWouldEarn, endOfGameLine } from '../ui/spectator';
 import type { PreviewRect } from './BuilderScene';
 import type { ClimbScene } from './ClimbScene';
+import { sceneReady } from './lazyScenes';
 
 /** The realm whose portal opens the climb. */
 export const CLIMB_ROOM = 'glass';
@@ -163,11 +164,22 @@ export class Climb {
       this.host.hud.toast(PORTAL_OFF);
       return;
     }
+    // The climb's scene, fetched alongside the room's answer the first time (OP-204).
+    const scene = sceneReady(this.host.scene.scene, 'climb').then(
+      () => true,
+      () => false,
+    );
     const reply = await acts.climb();
     if (this.destroyed) return;
     if (!reply.ok) {
       const line = reply.reason === 'far' ? 'Stand at the portal to climb.' : reply.reason === 'closed' ? PORTAL_OFF : 'The park did not catch that. Try again in a moment.';
       this.host.hud.toast(line);
+      return;
+    }
+    const ready = await scene;
+    if (this.destroyed) return;
+    if (!ready) {
+      this.host.hud.toast('The park did not catch that. Try again in a moment.');
       return;
     }
     this.open(reply);

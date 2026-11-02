@@ -27,7 +27,9 @@ import type { ActivityLink } from '../collect/service';
 import type { ArcadeInput } from '../ui/arcadeScreen';
 import type { Hud } from '../ui/hud';
 import { arcadeWouldEarn, endOfGameLine } from '../ui/spectator';
-import { ARCADE_INK, type ArcadeScene, type ArcadeSim } from './ArcadeScene';
+import { ARCADE_INK } from './arcadeInk';
+import type { ArcadeScene, ArcadeSim } from './ArcadeScene';
+import { sceneReady } from './lazyScenes';
 import type { PreviewRect } from './BuilderScene';
 
 /** A box on the arcade's painting, in room pixels. */
@@ -233,11 +235,23 @@ export class Arcade {
     const acts = this.host.acts();
     if (!acts || this.destroyed) return;
     const physics = game === 'sling' ? loadPhysics().catch(() => null) : null;
+    // The games' scene, fetched alongside the room's answer the first time (OP-204).
+    const scene = sceneReady(this.host.scene.scene, 'arcade').then(
+      () => true,
+      () => false,
+    );
     const reply = await acts.run(game);
     if (this.destroyed) return;
     if (!reply.ok) {
       const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : 'The park did not catch that. Try again in a moment.';
       this.host.hud.toast(line);
+      this.host.hud.closeArcade();
+      return;
+    }
+    const ready = await scene;
+    if (this.destroyed) return;
+    if (!ready) {
+      this.host.hud.toast('The park did not catch that. Try again in a moment.');
       this.host.hud.closeArcade();
       return;
     }
