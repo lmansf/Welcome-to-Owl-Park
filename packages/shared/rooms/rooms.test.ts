@@ -14,6 +14,7 @@ import { MAX_PERCH_TOP, PERCH_SLACK, footing, groundAt, type Raised } from '../s
 import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
+import { treeSpotsFor } from '../src/treeSpots';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -196,6 +197,28 @@ describe('reading the tree at a glance (OP-173)', () => {
         expect(d.to, d.id).toBeDefined();
         expect(d.markAt.y, `${d.id}'s mark stands over it`).toBeLessThan(d.rect.y);
         expect(Math.abs(d.markAt.x - (d.rect.x + d.rect.w / 2)), `${d.id}'s mark is over it`).toBeLessThan(80);
+      }
+    }
+  });
+});
+
+describe('a tree level’s placed spots (OP-156)', () => {
+  it('are each one of its level’s named spots, once, at a whole room pixel inside the room; no other room has any', () => {
+    for (const room of ALL_ROOMS) {
+      const places = room.places ?? [];
+      if (mapOf(room) !== 2) {
+        expect(places, room.id).toEqual([]);
+        continue;
+      }
+      const names = treeSpotsFor(room.id).map((s) => s.id);
+      expect(names.length, `${room.id} is a level of the tree with named spots`).toBeGreaterThan(0);
+      const seen = new Set<string>();
+      for (const { id, at } of places) {
+        expect(names, `${room.id} ${id} is one of its level's names`).toContain(id);
+        expect(seen.has(id), `${room.id} ${id} twice`).toBe(false);
+        seen.add(id);
+        expect(Number.isInteger(at.x) && Number.isInteger(at.y), `${room.id} ${id} at whole pixels`).toBe(true);
+        expect(at.x >= 0 && at.x <= room.size.w && at.y >= 0 && at.y <= room.size.h, `${room.id} ${id} inside the room`).toBe(true);
       }
     }
   });

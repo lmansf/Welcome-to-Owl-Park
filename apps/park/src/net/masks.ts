@@ -4,7 +4,7 @@
  * (`?keeper=1`, net/keeper.ts) in X-Keeper-Token. What comes back is checked as the server checks
  * what it keeps (checkMasks), so the painter never starts from something it cannot edit.
  */
-import { checkMasks, type MaskDraft, type SavedMasks } from '@owl-park/shared';
+import { checkMasks, draftOf, type MaskDraft, type SavedMasks } from '@owl-park/shared';
 
 /** The room a draft is for: its id and its size. */
 export interface MaskRoom {
@@ -34,7 +34,8 @@ export async function loadMasks(base: string, room: MaskRoom, fetchImpl: typeof 
   const body: unknown = await res.json().catch(() => null);
   const savedAt = isRecord(body) ? body['savedAt'] : undefined;
   if (!isRecord(body) || body['room'] !== room.id || typeof savedAt !== 'number') return { kind: 'failed', why: 'the saved draft does not read' };
-  const checked = checkMasks({ ledges: body['ledges'], walls: body['walls'], hazards: body['hazards'], fronts: body['fronts'] }, room.size);
+  // A draft saved before spots (OP-156, part 3) reads as one with none.
+  const checked = checkMasks(draftOf(body), room.size);
   if (!checked.ok) return { kind: 'failed', why: 'the saved draft does not read' };
   return { kind: 'saved', masks: { room: room.id, ...checked.draft, savedAt } };
 }
@@ -64,4 +65,4 @@ export async function saveMasks(base: string, room: string, token: string, json:
 }
 
 /** A draft as the painter sends it. */
-export const draftJson = (draft: MaskDraft): string => JSON.stringify({ ledges: draft.ledges, walls: draft.walls, hazards: draft.hazards, fronts: draft.fronts });
+export const draftJson = (draft: MaskDraft): string => JSON.stringify({ ledges: draft.ledges, walls: draft.walls, hazards: draft.hazards, fronts: draft.fronts, spots: draft.spots });

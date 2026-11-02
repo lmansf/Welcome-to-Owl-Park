@@ -12,6 +12,8 @@ import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
 import { NEST_SPAWN, RESTARTED_KEY, RoomScene, type RoomStart } from './game/RoomScene';
+import { startWalking } from './game/walkingMap';
+import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { sendFeedback } from './net/feedback';
@@ -350,6 +352,8 @@ let backSay: string | null = null;
  * (OP-077), every visit and on coming back alike. A first visit's nest is made as it is asked for.
  * Should the nests not answer, the lobby, outside the turnstiles, so that Play always gets the owl in.
  * Back from checkout in this page (OP-190), the lobby before the turnstiles, with the ticket once it has come.
+ * An owl the keepers send into the tree (OP-156's entries setting, its pass says so) walks the tree
+ * from here: its nest's door leads out into the tree, and without a nest it starts at the tree's arrival.
  */
 async function playStart(): Promise<RoomStart> {
   if (backFromCheckout) {
@@ -359,9 +363,12 @@ async function playStart(): Promise<RoomStart> {
     backWith = null;
     return { room: LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
   }
+  const map = transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  startWalking(map);
   const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
-  return room ? { room, spawn: NEST_SPAWN } : { room: LOBBY_ROOM, spawn: undefined };
+  if (room) return { room, spawn: NEST_SPAWN };
+  return map === 2 ? { room: TREE_ARRIVAL.room, spawn: TREE_ARRIVAL.spawn } : { room: LOBBY_ROOM, spawn: undefined };
 }
 let collecting = false;
 /** Load the collection (a first visit waits for its owl to be made): worn items this collector does not own come off, and a present is announced once. */
