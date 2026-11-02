@@ -1508,7 +1508,10 @@ export const ROOMS: Record<string, RoomDef> = {
       ...['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-back`, x: i * ROOM_W, y: 0 })),
       ...['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
     ],
-    foregrounds: ['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    // No overlay for now (OP-216): the cave's three root overlays covered about a third of the view and
+    // showed a cut band at the floor, so the cave is drawn without them until OP-215 repaints them as
+    // thin roots at the screen's edges. The overlays stay published (tree-l0-c0-fg to c2-fg).
+    foregrounds: [],
     mood: 'arcade',
     // The wet stone floor, from the mouth in the west to the wall of roots that closes the east end.
     walkable: [
