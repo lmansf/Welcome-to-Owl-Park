@@ -34,9 +34,9 @@ test.describe('the tree, level 3 (OP-160)', () => {
     ]);
   });
 
-  test('reads at a glance: an edge on each of its fifteen ledges, the stair up and the stained-glass doorway marked (OP-173)', async ({ page }) => {
+  test('reads at a glance: an edge on each of its fifteen ledges, the stairs up and down and the stained-glass doorway marked (OP-173)', async ({ page }) => {
     await openPark(page, { room: 'l3' });
-    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 15, marks: 2, behind: false });
+    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 15, marks: 3, behind: false });
   });
 
   for (const [spawn, screen] of [['default', 0], ['east', 2]] as const) {

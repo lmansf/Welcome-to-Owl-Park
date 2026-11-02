@@ -1,6 +1,6 @@
 # The tree (map 2)
 
-- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); level 1 BUILT; levels 0, 2, 3, 4 and 5 PLANNED (OP-158 to OP-161, OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
+- Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 4 BUILT (rooms `l1` to `l4`; level 2's grove common area, levels 2 and 3's idols, guardians and games still to place); levels 0 and 5 PLANNED (OP-158, OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
 - Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting, the turn-your-phone card and the spot placer, OP-156); the Ticket Board as read 2026-11-01
 - Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/treeSpots.ts (`TREE_SPOTS`), packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
 - Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173

@@ -514,10 +514,10 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       return a.x !== b.x || a.y !== b.y;
     });
     // The stained-glass street's way back is its painted arch in the far wall (OP-127), as the hub's east arch is.
-    // In the tree, the stair between levels 3 and 4 and level 3's doorway into the stained-glass street
+    // In the tree, the stairs between levels and level 3's doorway into the stained-glass street
     // do too: an owl comes out as far along the floor from the spawn as it went in from the doorway's middle.
     expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual([
-      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'lobby:gate', 'lobby:to-homes',
+      'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'lobby:gate', 'lobby:to-homes',
     ]);
   });
 
@@ -682,7 +682,7 @@ describe('the tree (map 2)', () => {
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
 
   it('is a room of its own map, gated, with owls a quarter bigger: level 1, four screens with the lobby second', () => {
-    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4', 'l3']);
+    expect(tree.map((r) => r.id)).toEqual(['l1', 'l4', 'l3', 'l2']);
     for (const r of tree) {
       expect(r.gated, `${r.id} is dark until the keepers open it`).toBe(true);
       expect(GATED_ROOMS).toContain(r.id);
@@ -721,7 +721,7 @@ describe('the tree (map 2)', () => {
       ['tree-l4-e1-fg', 1, 1.2, false],
     ]);
     // No tile of today's park, nor of level 1 (painted before the six layers), is drawn plain.
-    for (const r of ALL_ROOMS) if (!['l3', 'l4'].includes(r.id)) expect([...backgroundTiles(r), ...foregroundTiles(r)].some((t) => t.plain), r.id).toBe(false);
+    for (const r of ALL_ROOMS) if (!['l2', 'l3', 'l4'].includes(r.id)) expect([...backgroundTiles(r), ...foregroundTiles(r)].some((t) => t.plain), r.id).toBe(false);
   });
 
   it('level 3 is three screens in six layers, its stair to level 4 taken from the top and its doorway into the stained-glass street (OP-160)', () => {
@@ -749,6 +749,35 @@ describe('the tree (map 2)', () => {
     const out = ROOMS['glass']!.doors.find((d) => d.id === 'to-hub')!;
     expect(doorTarget(out, 1)).toEqual({ room: 'hub', spawn: 'from-glass' });
     expect(doorTarget(out, 2)).toEqual({ room: 'l3', spawn: 'glass' });
+  });
+
+  it('level 2 is three screens in six layers, its stairs up to level 3 and down to level 1 joining the levels both ways (OP-161)', () => {
+    const l2 = getRoom('l2');
+    const l3 = getRoom('l3');
+    expect(l2.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+    const at = (t: { key: string; x: number }) => [t.key, t.x / ROOM_W];
+    const screens = ['w2', 'w1', '0'];
+    const ones = backgroundTiles(l2).filter((t) => (t.rate ?? 1) === 1);
+    expect(ones.filter((t) => !t.plain).map(at)).toEqual(screens.map((s, i) => [`tree-l2-${s}-back`, i]));
+    expect(ones.filter((t) => t.plain).map(at)).toEqual(screens.map((s, i) => [`tree-l2-${s}-play`, i]));
+    // The skies, farthest from the trunk first, so the landing's lies on top; only the landing has front props.
+    expect(backgroundTiles(l2).filter((t) => t.rate === 0.5).map(at)).toEqual(screens.map((s, i) => [`tree-l2-${s}-bg`, i]));
+    expect(foregroundTiles(l2).filter((t) => t.plain).map(at)).toEqual([['tree-l2-0-front', 2]]);
+    // Up: from level 2's landing at the stair's top to level 3's floor; down: from level 3's floor to level 2's stair foot.
+    const up = l2.doors.find((d) => d.id === 'stair-l3-l2')!;
+    const down = l3.doors.find((d) => d.id === 'stair-l3-l2')!;
+    expect(up.to).toEqual({ room: 'l3', spawn: 'from-l2' });
+    expect(up.top).toBe(l2.perches!.find((p) => p.id === 'stair-top')!.top);
+    expect(down.to).toEqual({ room: 'l2', spawn: 'from-l3' });
+    expect(down.top).toBe(0);
+    // Level 1's lobby stair now leads up, from its balcony, and level 2's steps behind the trunk lead down.
+    const fromL1 = l1.doors.find((d) => d.id === 'stair-l2-l1')!;
+    const toL1 = l2.doors.find((d) => d.id === 'stair-l2-l1')!;
+    expect(fromL1.to).toEqual({ room: 'l2', spawn: 'from-l1' });
+    expect(fromL1.top).toBe(l1.perches!.find((p) => p.id === 'balcony')!.top);
+    expect(toL1.to).toEqual({ room: 'l1', spawn: 'from-l2' });
+    expect(toL1.top).toBe(0);
+    for (const [room, spawn] of [[l2, 'from-l3'], [l2, 'from-l1'], [l3, 'from-l2'], [l1, 'from-l2']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
   it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {
