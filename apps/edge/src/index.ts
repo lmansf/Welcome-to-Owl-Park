@@ -8,7 +8,8 @@ import { CLOSE, MASK_ID, RIBBON_WORDS, checkMasks, hashForLog, isClimbRef, isTim
 import { SOURCES, entryMap, treeShare, type Source } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, mailSender, offerOrderProtect, orderEmail } from './accounts';
 import { capacityPage } from './capacityPage';
-import { deviceClass, type Visit } from './collectLog';
+import { sendContact } from './buyerLog';
+import { deviceClass, logConfig, type PurchaseData, type Visit } from './collectLog';
 import { copiesIn, copyObjectName, pickCopy, roomObjectNames } from './copies';
 import type { LineAnswer, OverflowState } from './Overflow';
 import { countIn, countedOneMore, forgetOverflow, keepMasks, masksKept, overflowNow } from './overflowState';
@@ -232,6 +233,37 @@ async function offerProtectByOrder(env: Env, log: Logger, origin: string, cid: s
     .catch((e: unknown) =>
       log.error('worker.accounts', 'write_failed', 'A ticket’s buyer could not be offered a link to protect their owl: it stays as it was.', { collector_hash: hashForLog(cid), order_hash: hashForLog(order), error: e }),
     );
+}
+
+/**
+ * A ticket event for the park's log (OP-192): handed to the collections object's outbox after the
+ * answer, which hashes the order, the owl and the ticket on their way out. Nothing while the log is off.
+ */
+// TODO-DOCS (OP-192): docs/LOGGING.md: write_failed (worker.tickets, warn) with reason, the ticket event (paid, claimed,
+// refunded, cancelled or scanned) the park's log missed; and (worker.store, warn) a paid order's buyer that missed the contacts.
+function logPurchase(ctx: ExecutionContext, env: Env, log: Logger, d: PurchaseData): void {
+  if (!logConfig(env)) return;
+  ctx.waitUntil(
+    collections(env)
+      .purchase(d)
+      .catch((e: unknown) => log.warn('worker.tickets', 'write_failed', 'A ticket event did not reach the park’s log.', { reason: d.event, ...(d.order ? { order_hash: hashForLog(d.order) } : {}), error: e })),
+  );
+}
+
+/**
+ * A paid order's buyer, for the owner's contacts (OP-192): read from the store and sent on after the
+ * answer, kept by nobody here. A row that does not go is said without the address; the order's next
+ * webhook sends it again.
+ */
+function logContact(ctx: ExecutionContext, env: Env, log: Logger, order: string): void {
+  const config = logConfig(env);
+  const store = storeConfig(env);
+  if (!config || !store) return;
+  ctx.waitUntil(
+    sendContact(config, store, order, Date.now()).catch((e: unknown) =>
+      log.warn('worker.store', 'write_failed', 'A paid order’s buyer did not reach the owner’s contacts: the order’s next webhook sends it again.', { order_hash: hashForLog(order), error: e }),
+    ),
+  );
 }
 
 /** The visit a call comes in, for the collection log (OP-107): its pass's id (one per page load) and the device's class. */
@@ -823,6 +855,13 @@ const park = {
           ctx.waitUntil(offerProtectByOrder(env, log, url.origin, r.placed.device, order));
         }
         if (r.mirror) mirrorLater(ctx, env, log, url.origin, { order: r.mirror });
+        // The park's log of tickets and the owner's contacts (OP-192): each lands once however often the webhook comes.
+        if (order && r.sold) {
+          logPurchase(ctx, env, log, { event: 'paid', order, cid: null, at: Date.now(), kinds: r.sold.kinds, tickets: r.sold.kinds.length, cents: r.sold.cents, upsell: r.sold.upsell, held: r.sold.held });
+          logContact(ctx, env, log, order);
+        }
+        if (order && r.placed) logPurchase(ctx, env, log, { event: 'claimed', order, cid: r.placed.device, at: Date.now(), kinds: [], tickets: r.placed.tickets, cents: null, via: 'checkout' });
+        if (order && r.revoked) logPurchase(ctx, env, log, { event: r.revoked.event, order, cid: null, at: Date.now(), kinds: [], tickets: r.revoked.tickets, cents: r.revoked.cents, ref: r.revoked.refund });
         return json(r.body, r.status);
       } catch (e) {
         log.error('worker.store', 'webhook_failed', 'A store webhook failed: the store sends it again later, and every step is safe to repeat.', { ...about, duration_ms: Date.now() - t0, error: e });
@@ -879,6 +918,10 @@ const park = {
           });
         }
         if (status === 200 && typeof order === 'string') ctx.waitUntil(offerProtectByOrder(env, log, url.origin, device, order));
+        // A claim link put a store order's tickets on this owl (OP-192): the order is this owl's in the park's log.
+        if (status === 200 && !share && typeof order === 'string' && /^\d{1,20}$/.test(order) && typeof claimed === 'number' && claimed > 0) {
+          logPurchase(ctx, env, log, { event: 'claimed', order, cid: device, at: Date.now(), kinds: [], tickets: claimed, cents: null, via: 'claim' });
+        }
         return json(rest, status);
       }
       if (url.pathname === '/api/tickets/share') return reply(await desk('/tickets/share', { id: body['id'], device }));
@@ -908,6 +951,8 @@ const park = {
       if (url.pathname === '/api/tickets/scan') {
         const r = await desk('/tickets/scan', body['id'] === undefined ? { device } : { device, id: body['id'] });
         if (r.status !== 200 || r.body['ok'] !== true) return reply(r);
+        // The ticket's order stays with the Worker (OP-192): the page is never sent it.
+        const { order: scanOrder, ...scanned } = r.body;
         // Through the gate: the same owl, now admitted by this ticket, until the ticket runs out.
         const tid = r.body['id'] as string;
         const nowS = Math.floor(Date.now() / 1000);
@@ -915,8 +960,14 @@ const park = {
         const exp = Math.min(nowS + GUEST_PASS_TTL_S, typeof until === 'number' ? Math.floor(until / 1000) : Infinity);
         // Issued now: the turnstiles admit it after any nightly restart that went before (OP-181).
         const admittedPass = await mintPass(signingSecret(env), { ...pass, iat: nowS, exp, adm: true, tid });
-        if (r.body['started'] === true) mirrorLater(ctx, env, log, url.origin, { id: tid });
-        return json({ ...r.body, pass: admittedPass, exp, gate: (await gateOf(env)).mode, adm: true });
+        if (r.body['started'] === true) {
+          mirrorLater(ctx, env, log, url.origin, { id: tid });
+          // Its first scan started its time on this owl (OP-192): the pass the owl holds, and until when. A ticket the keepers gave has no store order.
+          const kind = KINDS.find((k) => k === r.body['kind']);
+          const storeOrder = typeof scanOrder === 'string' && /^\d{1,20}$/.test(scanOrder) ? scanOrder : null;
+          if (kind) logPurchase(ctx, env, log, { event: 'scanned', order: storeOrder, cid: device, at: Date.now(), kinds: [kind], tickets: 1, cents: null, until: typeof until === 'number' ? until : null, ref: tid });
+        }
+        return json({ ...scanned, pass: admittedPass, exp, gate: (await gateOf(env)).mode, adm: true });
       }
       return json({ error: 'not found' }, 404);
     }

@@ -23,6 +23,10 @@ export class FakeStore {
   readonly sent: Array<Record<string, unknown>> = [];
   /** The cart's attributes on the order (OP-175: the gate's checkout token). */
   attributes: Array<{ key: string; value: string }> = [];
+  /** What the order came to, as the store writes it; none by default (OP-192). */
+  total: string | null = null;
+  /** The order's email and customer, as OwlParkOrderContact answers them (OP-192); `refused` answers as a store that will not say whose order it was. */
+  contact: { email: string | null; customer: string | null } | 'refused' = { email: 'Buyer@Example.com', customer: 'gid://shopify/Customer/77' };
 
   order(): AdminOrder {
     const risk = this.risk.length > 1 ? this.risk.shift()! : this.risk[0]!;
@@ -30,6 +34,7 @@ export class FakeStore {
       id: 'gid://shopify/Order/1001',
       cancelledAt: null,
       customAttributes: this.attributes,
+      ...(this.total === null ? {} : { totalPriceSet: { shopMoney: { amount: this.total } } }),
       risk: { recommendation: risk === 'LOW' ? 'ACCEPT' : risk === 'PENDING' ? 'NONE' : 'INVESTIGATE', assessments: [{ riskLevel: risk }] },
       lineItems: {
         nodes: [
@@ -81,6 +86,11 @@ export class FakeStore {
         const handle = (variables['handle'] as { handle: string }).handle;
         return data({ metaobjectUpsert: { metaobject: { id: `gid://shopify/Metaobject/${handle}` }, userErrors: [] } });
       }
+      case 'OwlParkOrderContact':
+        if (this.contact === 'refused') return Response.json({ data: null, errors: [{ message: 'This app is not approved to access the Customer object.' }] });
+        return data({ order: { email: this.contact.email, customer: this.contact.customer ? { id: this.contact.customer } : null } });
+      case 'OwlParkOrderEmail':
+        return data({ order: { email: this.contact === 'refused' ? 'Buyer@Example.com' : this.contact.email } });
       case 'OwlParkOrderTickets':
         return data({ metafieldsSet: { metafields: [{ id: 'gid://shopify/Metafield/1' }], userErrors: [] } });
       default:
