@@ -170,7 +170,7 @@ export async function storeContinue(page: Page): Promise<void> {
 }
 
 /** The turnstiles' question (OP-198): buy a Day Ticket or enter as a guest. */
-export const GATE_ASK = '[data-gate-ask]';
+export const GATE_ASK = '[data-gate-ask=""]';
 /** What the question says above its buttons. */
 export const GATE_ASK_LINE = 'No ticket yet? A Day Ticket lets you keep what you win.';
 
