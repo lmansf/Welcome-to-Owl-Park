@@ -50,7 +50,7 @@ two panels, each climbing from its foot to 540, joined at the fold.
     eave (a shelter span `{ x0, x1 }` under a roof), when it keeps the full 4000 ms.
   - The room server must let an owl stand on a painted perch: each one is declared in the room data
     (as here, `k1~`, `k4~1` and so on), so `standingHeights` and `groundAt` know its top. Course
-    rooms are shared (the owner, 2026-11-02), so a painted bridge is drawn for every owl in the
+    rooms are shared (decided 2026-11-02), so a painted bridge is drawn for every owl in the
     room: the room tells everyone who painted what, and when, and no owl is seen standing on air.
     Any owl may stand on a bridge while it lasts, as on a gust in the Updraft Canopy. To settle when
     the room is built: whether owls riding one another's bridges past a brush stone needs a limit
@@ -62,7 +62,7 @@ two panels, each climbing from its foot to 540, joined at the fold.
   computer and a button on a phone, only in courses; on a hop it adds 115 px, counted at 0.8 as +92
   (the README). The two dash hops (`n2` to `n3`, and the optional `m2` to `m3`) are checked at that.
 - **Shortcuts that stay open, per owl:** the bamboo, the raft and the crane, kept for good in the
-  course book (`coursebook.ts`, PR 72), as the owner decided on 2026-11-02.
+  course book (`coursebook.ts`, PR 72), as decided on 2026-11-02.
 - **Seals.** A red seal is picked up by standing on its ledge; it counts for this run. The scroll at
   the pavilion takes four. Every shortcut keeps the seals on its path: the bamboo ends before seal 1,
   the raft lands below the falls (seal 2), the crane lands below seals 3 and 4.

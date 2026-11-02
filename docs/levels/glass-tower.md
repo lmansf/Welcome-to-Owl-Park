@@ -71,7 +71,7 @@ The act doors are drawn on the band lines: the climb is one field, so a door is 
 passes through on the line, with the act's name, not a room change.
 
 **Benches.** The tower will have fifteen. The course counts four as its checkpoints: `L2`, `B4`
-(y 4200), `L5` (y 6000) and `B7` (y 7800). The other eleven stay benches, as the owner decided on
+(y 4200), `L5` (y 6000) and `B7` (y 7800). The other eleven stay benches, as decided on
 2026-11-02: they catch the shade and relight the panes as they do today, so the climb's difficulty
 does not move.
 

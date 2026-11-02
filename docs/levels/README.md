@@ -123,10 +123,10 @@ tree courses are built on that.
   skips no longer work (the Canopy's past updraft U12 and Brushstroke's past the bridge from `k8`),
   so those mechanics are now always needed. Every gap that must stay shut even with the dash holds
   at +130.
-- **The tower was short:** about 4.6 minutes for a first clear. Fix, the owner's call: bands 7 and 8,
+- **The tower was short:** about 4.6 minutes for a first clear. Fix (Claude Duet's call; the owner can change it): bands 7 and 8,
   measured with the pilot; about 6.5 minutes now, and about 7 with the hidden pane room.
 
-## Decided (the owner, 2026-11-02)
+## Decided (Claude Duet's calls, 2026-11-02; the owner can change any of them)
 
 - **Course rooms are shared,** like every other room in the park. Every owl in a room sees the same
   gusts (they run on park time) and every painted bridge (the room tells everyone who painted what).

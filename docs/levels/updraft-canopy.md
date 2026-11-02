@@ -68,7 +68,7 @@ three-screen vertical climb cannot fit in one room. Each storey's hatch is a doo
 - **Shortcuts that stay open.** The log, the vine and the bough open for one owl for good, from their
   far side. Each is a door pair (the log, the vine) or a perch (the bough) that is shut until that
   owl's record says it was opened. That record is the course book (`coursebook.ts`, PR 72), which
-  keeps each owl's opened shortcuts for good (the owner, 2026-11-02).
+  keeps each owl's opened shortcuts for good (decided 2026-11-02).
 - **Bells.** An acorn bell rings when an owl stands next to it on its ledge; it counts for this run
   only. The hut's door stays shut until this run has rung all five. Each shortcut leaves the bells on
   its path: the log ends under bell 2, the vine starts after bell 3, the bough leaves bells 4 and 5
@@ -623,7 +623,7 @@ than the estimated best. Set it from real runs once the course is built.
 - **The trunk's hatches** are doors with a `top`; an owl arrives on the next storey's floor at its
   left, as if it climbed through the hatch. OPEN QUESTION: whether the hatch should instead lead
   to a spawn on a ledge (a smoother climb, at the cost of the act 2 rooms' simple floors).
-- **Shared gusts.** Course rooms are shared, like every other room in the park (the owner,
+- **Shared gusts.** Course rooms are shared, like every other room in the park (decided
   2026-11-02), so every owl in a room sees the same gusts, which run on park time.
 - **Bells per run.** A run starts at the course gate and ends at the shrine. OPEN QUESTION: whether
   leaving the course (the Commons door) clears the bells rung so far.
