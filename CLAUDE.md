@@ -7,6 +7,9 @@ Supabase Edge Function in the owner's analytics project (its README). `apps/ig-c
 Worker too, not the park's: the Instagram MCP connector (OP-168; its README has the setup and
 secrets). Run Wrangler through the package scripts so the pinned version is used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec wrangler <command>`.
 
+- The Worker's routes (OP-201): each in `apps/edge/src/routes/` by area, listed in `routes/table.ts`;
+  shared request helpers in `routes/http.ts`, the park's objects in `routes/park.ts`. A new route is a
+  handler there and a line in the table.
 - Checks before a push: `pnpm check` (typecheck, unit tests, build) and `pnpm e2e` (Playwright).
 - The edge typecheck runs `wrangler types` first; `apps/edge/worker-configuration.d.ts` is generated
   and ignored by git. Never hand-write the `Env` bindings; change `wrangler.jsonc` instead.
