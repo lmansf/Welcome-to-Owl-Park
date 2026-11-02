@@ -1,9 +1,9 @@
 # The docs: a map
 
 - Status: current
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged); the Ticket Board as read 2026-10-23
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02, the docs catch-up OP-202); the Ticket Board as read 2026-11-02
 - Code: none
-- Tickets: OP-101, OP-102, OP-176
+- Tickets: OP-101, OP-102, OP-176, OP-202
 - Related: docs/agents.md, docs/GLOSSARY.md
 
 The map of `docs/`: which file answers which question, how the files are written so an agent can
@@ -18,7 +18,9 @@ here: read `agents.md` first, then `GLOSSARY.md`.
 | Pick up any ticket that touches code | `ARCHITECTURE.md` section 0, then the section for the area | the area doc below; `CHANGELOG.md` for what shipped |
 | Deploy, set a secret, set up the store | `DEPLOY.md` | `PLAYBOOK.md` if something breaks |
 | The park is down or slow | `PLAYBOOK.md` | `CAPACITY.md` |
-| Review or test a ticket (QA) | the ticket's Done-when; `ARCHITECTURE.md` for the mechanism | `agents.md` (QA hat), `CAPACITY.md` (OP-088) |
+| Review or test a ticket (QA) | the ticket's Done-when; `TESTING.md` for which check to run | `ARCHITECTURE.md` for the mechanism, `agents.md` (QA hat), `CAPACITY.md` (OP-088) |
+| Read or add a log line | `LOGGING.md` | `PLAYBOOK.md` for what a line means on a bad night |
+| Change the Menu | `MENU.md` | `ARCHITECTURE.md` section 9 |
 | Answer a visitor's question | `PLAYBOOK.md` section 7 | `ACTIVITIES.md`, `QUESTS.md`, `NESTS.md` |
 | Change art | `ART-PIPELINE.md`, `CLAUDE.md` | `tools/art/README.md` |
 | Find what a word means | `GLOSSARY.md` | the file it points to |
@@ -60,21 +62,24 @@ Build hat's and goes as a pull request.
 | `GLOSSARY.md` | Every term the code, the board and the Bible use, one line each, with the file that defines it | A word is unclear |
 | `agents.md` | Who does what: the owner and Claude Duet, with one hat per old role (PM, Build, Marketing, QA, Docs, Shopify, Red team); what each may write to and never does; how work moves; the board's columns and statuses | You are new, or handing work to another agent |
 | `ARCHITECTURE.md` | The system: the repository's packages, the room server and its Durable Objects, the wire protocol, room data, capacity numbers, the Realm Vote, collectibles, tickets and the gate, the home screen, feedback, chat, the fraud link (planned), operations, a diagram from purchase to the hub, open questions | Before any ticket that touches code |
-| `DEPLOY.md` | Cloudflare, GitHub and Supabase setup; where to run commands (bash and PowerShell); the error table; deploys from GitHub; selling tickets (the store's app, secrets, webhooks, products, opening night) | Deploying, setting a secret, setting up the store |
-| `PLAYBOOK.md` | When the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits, words for visitors; the controls (the phone pad, the hop, the keys), the Menu and quest news as a visitor has them | Something is wrong, or a visitor asks how to do something |
-| `CAPACITY.md` | Room caps, what happens at the cap, what the park holds (measured), the planned queue and ribbon (OP-075), what QA tests (OP-088) | A busy night is coming, or a cap question |
+| `DEPLOY.md` | Cloudflare, GitHub and Supabase setup (the analytics log); where to run commands (bash and PowerShell); the error table; deploys from GitHub and CI's tiers; selling tickets (the store's app, secrets, webhooks, products, opening night); accounts; the keepers' routes | Deploying, setting a secret, setting up the store |
+| `PLAYBOOK.md` | When the park is in trouble: is it down, roll back, pause ticket sales, missing tickets, the free plan's limits, words for visitors; the controls (the phone pad, the jump and flight, the keys), the Menu and quest news as a visitor has them; a lost owl; the front door's and the rate limits' lines; the keepers' overlays; the chaos runbook | Something is wrong, or a visitor asks how to do something |
+| `CAPACITY.md` | Room caps, what happens at the cap, what the park holds (measured), the line and the ribbon (OP-075), what QA tests (OP-088) | A busy night is coming, or a cap question |
 | `CHANGELOG.md` | One line per Done ticket, newest first, by week; the rule for appending | What shipped when |
 | `COLLECTIBLES.md` | Wearables, pets, effects and emotes: the catalogue, the numbers, identity (collector token and pass), the server, the client, adding a drop | Anything an owl owns or wears |
 | `QUESTS.md` | Quests, NPC owls, leaf piles, feathers, the feather shop, owl species, the Quest Log sheet | Anything an owl does for feathers |
-| `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade (and its planned games), three tasks a day, quests in the Menu, emotes and the hop, seasons (planned) | Anything to do in a room |
+| `ACTIVITIES.md` | The lantern beam, the stage quiz, fishing, the copy game, the arcade's three games, the stained-glass climb, talking to characters, the perches, three tasks a day, quests in the Menu, emotes and the jump, seasons (planned) | Anything to do in a room |
 | `NESTS.md` | The street of nests, a nest, decorating, furniture and the day's gift, the mirror (Your owl), the room server and the local mode | The nests |
 | `MAP.md` | The tree (map 2): the grid of levels and screens, the named spots, the style sheet for painting a screen, the layers and how a tree room reads, level 1 as built, the tools and the steps for building a level | Any tree ticket (OP-155 to OP-163) |
 | `FEEDBACK.md` | Feedback in the Menu, where notes are kept, reading and triaging them, candidates raised by tickets | Reading visitors' notes |
 | `SECURITY.md` | What the park is and is not (no typed chat, no purchases in the park, no passwords), where things are kept, the headers and limits in place, and the security check (`tools/security/security-test.sh`, nightly) | Judging the park's risk, running the security check, or before testing the live park (the owner's written authorisation first) |
-| `ART-PIPELINE.md` | How art is made and replaced: Seedream through `tools/art`, sizes, the owl's layers, provenance | Any art change; the owner picks every image |
+| `ART-PIPELINE.md` | How art is made and replaced: Seedream through `tools/art`, sizes, the owl's layers and wings, overlays, the tree's layers, WebP, provenance | Any art change; the owner picks every image |
+| `MENU.md` | The Menu's shell and five tabs, every `--m-*` colour token by day and night, the clarity rules, a realm's skin (planned) | Changing anything in the Menu |
+| `LOGGING.md` | Every log event (`LOG_EVENTS`): its component, level and fields; `LOG_LEVEL`, the page's own log, a chaos run's id | Reading the Worker's or the rooms' lines, or adding an event |
+| `TESTING.md` | Which check to run when: `pnpm check`, `pnpm e2e`, CI's tiers, mutation testing, load tests, chaos experiments, the security tests, the art tests | Before a push, or when a check fails |
 
-Not under `docs/` but read with them: the root `README.md` (how to run and check the park; note
-that its Docs list predates `agents.md`, `CAPACITY.md`, `CHANGELOG.md` and this file), `CLAUDE.md`
+Not under `docs/` but read with them: the root `README.md` (how to run and check the park, with a
+shorter Docs list), `CLAUDE.md`
 (the rules for coding agents, including what stays out of this public repository) and
 `tools/art/README.md`.
 

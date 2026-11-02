@@ -24,10 +24,6 @@ const OWL_IN_FIELD = 0.5;
 /**
  * Moon Flap's owl in flight (OP-135): a single stroke of its wings at each flap, a beat this often
  * while it hovers before the first, and this long to tumble off a branch down to the ground.
- *
- * TODO-DOCS (OP-135): docs/ACTIVITIES.md's Moon Flap gains how the owl looks: in its own flight body
- * with its wings out, as it flies in the park (OP-084, OP-136), a stroke at each flap, a tumble off a
- * branch, and standing with its wings folded once the run is over.
  */
 const FLAP_BEAT: WingBeat = { ms: 280, beats: 1 };
 const HOVER_EVERY_MS = 560;

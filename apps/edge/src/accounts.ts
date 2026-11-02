@@ -12,14 +12,6 @@
  * nobody: the buyer is mailed one protect link that carries the address, sealed, in its own token, and
  * only opening it protects the owl (offerOrderProtect).
  *
- * TODO-DOCS (OP-186): docs/SECURITY.md's "No passwords" item: a ticket's order email is read from the
- * store as its tickets land on an owl and mailed one protect link (good for ORDER_LINK_MS, 7 days, and
- * used once) that carries it sealed; the park keeps nothing about the address unless the link is
- * opened, and the mail service keeps its delivery log as for every mail. docs/DEPLOY.md's store step 2
- * ("the park reads no names, emails or addresses"): the park reads an order's email for that mail
- * and nothing else, so the app's protected customer data access covers the email only, and is asked
- * for once this is live.
- *
  * The routes (POST, JSON):
  *   /api/account/protect  {email}        the pass's owl: mail a link that protects it with this email
  *   /api/account/confirm  {token}        open a protect link: the owl it names, or the pass's own owl
@@ -380,7 +372,6 @@ export interface OrderOfferDeps {
 export async function offerOrderProtect(d: OrderOfferDeps, cid: string, order: string, email: string | null): Promise<OrderOffer> {
   if (!d.keys || !d.mail) return 'off';
   const about = { collector_hash: hashForLog(cid), order_hash: hashForLog(order) };
-  // TODO-DOCS (OP-186): docs/LOGGING.md: order_protect_mailed (worker.accounts, info) and order_protect_unsent (worker.accounts, warn, reason no-email or mail-failed), each with collector_hash and order_hash.
   const to = normalEmail(email);
   if (!to) {
     // An app not yet allowed customers' emails reads as this on every ticket: the line says so.

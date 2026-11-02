@@ -1,10 +1,10 @@
 # Things to do in the park
 
-- Status: the first wave BUILT (C36); quests in the Menu and the hop BUILT (OP-082, OP-083); the arcade's games and seasons PLANNED
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
-- Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, book.ts; apps/park/src/game/activities.ts; apps/park/src/ui/activities.ts
-- Tickets: OP-004, OP-026, OP-037, OP-082, OP-083, OP-152; planned OP-038, OP-059, OP-074, OP-084
-- Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7
+- Status: the first wave BUILT (C36); quests in the Menu BUILT (OP-083); the jump BUILT (OP-082, OP-084); the arcade's three games BUILT (OP-038, OP-059, OP-137); the stained-glass climb BUILT, its realm gated; the perches BUILT (OP-084); seasons PLANNED
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
+- Code: packages/shared/src/activities.ts, roomActivities.ts, arcade.ts, arcadebook.ts, climb.ts, climbbook.ts, book.ts, routes.ts, interactables.ts, npcs.ts; packages/shared/rooms/index.ts (perches); apps/park/src/game/activities.ts, arcade.ts, ArcadeScene.ts, climb.ts, Npc.ts; apps/park/src/arcade/; apps/park/src/ui/activities.ts, arcadeScreen.ts
+- Tickets: OP-004, OP-026, OP-037, OP-038, OP-059, OP-082, OP-083, OP-084, OP-114, OP-135, OP-137, OP-152, OP-191; planned OP-074
+- Related: docs/QUESTS.md, docs/PLAYBOOK.md section 7, designs/the-stained-glass-climb.md, docs/TESTING.md
 
 The first wave of activities (C30): lanterns that a room lights together under the great tree, a
 quiz on the stump stage answered by standing in a zone, fishing from the jetty in the treehouse
@@ -86,27 +86,98 @@ wrong note or a slow one ends the game. The robot uses the starter pair (Hoot an
 to two more emotes the owl owns, so every owl can play. The right notes are danced for everyone in
 the street.
 
-## The arcade (off the neon street's east end) [BUILT room; games PLANNED (OP-038, OP-059)]
+## The arcade, Neon Roost (off the neon street's east end) [BUILT (OP-038, OP-059, OP-137)]
 
-A doorway under a joystick sign where the neon street bends away leads into the arcade: a hall
-with three game cabinets along its back wall under a blank score board (`packages/shared/src/arcade.ts`).
-Each cabinet is a spot in the room data and will play one game, as the visitor's own owl. Until a
-cabinet's game is live its screen is switched off and reads "Hatching Soon", and an owl standing
-at it is told the same; none is live yet, so the arcade pays nothing and has no daily task.
+The arcade is "Neon Roost" (`ARCADE_NAME`) and "the Owl Park arcade" in public; the names were
+knockout-screened (OP-036). The rules are `packages/shared/src/arcade.ts` and `arcadebook.ts`; the
+room is `arcade`.
 
-PLANNED (C40, amended C46; OP-059 the hall and its art, OP-038 the games): the arcade becomes
-a hall about three screens wide with a bay per game, each with its title as a neon sign and a
-cabinet of its own, and the score wall in the middle. The three games, all in one wave and played
-as the visitor's own owl: **Hoot & Hop** (hop across lanes of drones and noodle carts; each crossing
-banks a tier; a hit ends the run), **Moon Flap** (tap to flap through gaps on a night flight; the
-score is gaps passed) and **Nest Knockdown** (pull back and launch at stacked neon crates; ten
-levels, fewer shots scores higher). The names were knockout-screened (OP-036); the arcade is
-"Neon Roost" and "the Owl Park arcade" in public. The room server starts each run, pays 0 to 6
-feathers a run by score band plus 3 the first time a day's best is beaten per game, inside the
-shared 25-a-day games cap, and keeps a score-against-time check; the score wall shows today's top
-five per game as owl portraits, no names, reset at the park's midnight. A daily task "Play a round
-in the arcade" joins the rotation. Painted art, three candidates per piece, the owner picks; the
-arcade goes live only with the new look.
+**The hall.** Three screens (`arcade`, `arcade-mid`, `arcade-end`), entered from the neon street at
+its west end. A bay per game, each with the game's title sign over its cabinet, and the score wall on
+the board in the middle. The cabinets from west to east are Hoot & Hop, Moon Flap and Talon Toss
+(`CABINETS`); each is a spot in the room data. All three are live. A cabinet whose game is not live
+would show a dark screen reading "Hatching Soon" (`CABINET_OFF`) and no sign, and say so to an owl at
+it. Each game is drawn from its painted field and pieces (`apps/park/src/arcade/paint.ts`) once every
+piece has loaded, and in neon lines until then.
+
+**A run.** Play at a cabinet asks the room for a run: the room starts it with a seed and keeps it
+under the owl's collector in the collections object, not on the socket, so it outlasts a dropped
+connection (OP-137). Each game opens on a how-to card before its first run on a device
+(`owl-park:arcade-how-to`). The game plays on the page over the room (`ArcadeScene`, in the HUD's
+arcade screen). Past the owl's best, the page sends `act` `record` with the score so far, at most
+once a second (`RECORD_EVERY_MS`); the room keeps it as the owl's best and shows it on the wall,
+paying nothing, so a run cut short keeps its best. The end sends `act` `score`; the room checks it
+against the time the run took (`plausibleRun`, `leastRunMs`) and pays. A new best and the day's best
+are judged against the standings as the run started. A run left open longer than `RUN_MAX_MS`
+(20 minutes) is forgotten.
+
+| Game | How it plays | Score | Feather bands (1 to 6) |
+| --- | --- | --- | --- |
+| Hoot & Hop | hop four ways up the field from the kerb to the perch: up is forward, left and right a column, down a row back (the arrow keys or WASD, a swipe on the field, a flick of the pad's stick; a tap is a hop up). Lanes of noodle carts, drones and, from level 4, bats; rivers crossed on logs from level 4. Ten levels laid out by hand, then levels from the run's seed, each quicker; three lives (`HOP_LIVES`) | a point for each row first reached in a level and one for the perch: seven a level (`HOP_LANES` + 2) | 7, 21, 35, 56, 84, 119 |
+| Moon Flap | tap (Space, or the pad's Interact on a touch screen) to flap through the gaps between neon branches on a night flight; a branch or the ground ends the run | the gaps passed | 2, 5, 10, 15, 25, 40 |
+| Talon Toss | pull back and launch at three targets on their stands (a stack of crates, a tower, a nest sheltered under a plank), five shots at each (`KNOCK_LEVELS`, `KNOCK_SHOTS`), on a physics engine (matter.js, fetched only for this game). A shot ends once everything has been still a second, eight seconds at most | a point for each crate or plank knocked to the ground, broken or off the field, and `KNOCK_NEST_POINTS` (8) for the nest; 30 at most (`KNOCK_MAX_SCORE`) | 2, 5, 9, 14, 20, 26 |
+
+**Moon Flap's owl** (OP-135) flies in its own flight body with its wings out, as it flies in the park
+(OP-084, OP-136): a stroke of the wings at each flap, a beat every 560 ms while it hovers before the
+first, a 650 ms tumble off a branch, and standing with its wings folded once the run is over.
+
+**Pay.** A run pays 0 to 6 feathers, one for each band its score reaches (`runFeathers`), and 3 more
+(`DAY_BEST_FEATHERS`) the first time a day the owl beats the day's best on the wall in that game, all
+inside the activities' shared daily cap (`PLAY_FEATHERS_PER_DAY`). The task "Play a round in the
+arcade" (`ARCADE_TASK`) joins the day's second slot while a cabinet is live.
+
+**The score wall.** Today's best five per game (`WALL_SIZE`), as owl portraits in the owl's colours
+and kind (`PortraitLook`), no names and no collector ids, reset at the park's midnight. It is kept by
+`ArcadeBook` over the collections object's `arcade_scores` table (this browser's storage in the local
+mode), and pushed to the room as the `wall` frame.
+
+Spectators (OP-191) play practice runs: checked like any, but they keep nothing for the wall, pay
+nothing and move no task.
+
+## The stained-glass climb [BUILT; the realm gated]
+
+The design is `designs/the-stained-glass-climb.md`; the rules are `packages/shared/src/climb.ts`
+(the simulation and the nights), `climbCity.ts` (the tower) and `climbbook.ts` (the pay).
+
+**The realm and the portal.** The room `glass` is two screens behind the hub's stained-glass arch:
+the arch back to the hub and the idol on the west screen, the portal at the foot of a tall window on
+the east. It is gated (`gated: true`): closed until the keepers open it with the realms setting
+(`RealmsSettings`: `open`, `portal`, `night`; the Actions workflow `realms.yml` or the keepers' page).
+Out of the box nothing is open and the portal is off (`REALMS_DEFAULTS`). With the portal off, Climb
+at the portal says "Pardon Our Feathers" (`PORTAL_OFF`).
+
+**A climb.** Climb at the portal asks the room for a run, or the open one: a run survives any socket
+and is forgotten an hour after it started (`CLIMB_RUN_MAX_MS`). The climb is a solo platformer up a
+tower of backlit glass, played on the page as the visitor's own owl: a short heavy jump with a cut, a
+double jump, a dash, a cling and kick off walls, and a pogo off a hazard. Panes of glass are its
+health; a hazard cracks one, thorns send the owl back to its last safe ground, and the last pane gone
+returns the owl to the bench it last stood on with its panes relit. Nothing is ever lost but time.
+Stop and Escape close the screen and send nothing; the run waits.
+
+**The bands.** The tower has six height bands (`BAND_COUNT`), named First storey to Fifth storey and
+The clouds (`BAND_NAMES`). Each band line reached goes to the room as `act` `ascent`; the room checks
+every band above the run's banked one against its floor (the scripted route's time less 20 %,
+`CLIMB_FLOOR_MARGIN`) and pays it.
+
+| Band | 1 | 2 | 3 | 4 | 5 | 6 (the clouds) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Feathers (`BAND_FEATHERS`) | 1 | 1 | 2 | 2 | 2 | 2 |
+| Brisk feather | none | +1 | +1 | +1 | +1 | +1 |
+
+Each band pays once a park day, inside the shared daily cap: ten for the whole tower. A band climbed
+within its brisk window (the high road's scripted time through it times `CLIMB_BRISK_FACTOR`, 1.1)
+pays `BRISK_FEATHERS` (1) on top; band 1 has no high road and no brisk feather. Reaching the clouds
+grants the Glass Circlet (`CLOUDS_ITEM`, a head wearable) the first time ever.
+
+**The moon.** The park's moon sets the night's difficulty: an eight-phase cycle of 28 days
+(`MOON_CYCLE_DAYS`, `MOON_PHASE_DAYS`, `parkMoon`), easy around the new moon, hard at the full moon,
+medium between (`moonTier`). The keepers can name a night instead (`night` in the realms setting).
+The three nights (`NIGHTS`) share the tower `city-2`: easy has 4 panes and the hazards at 0.9 pace,
+medium 3 panes at 1, hard 2 panes at 1.15. A run is judged by the night it started under.
+
+Spectators (OP-191) climb practice runs: banked as any, but paying nothing and granting no item, so
+the same bands pay once the owl has a ticket that day. The six tower pieces (`climb-*`) are drawn in
+plain glass by the climb scene until their art ships.
 
 ## Three small tasks a day
 
@@ -114,7 +185,8 @@ The same three for everyone each park day (`dailyTasks`), one from each slot and
 kind twice:
 
 1. at the lanterns: light 3, or light 5, or light the whole beam;
-2. at a game: catch a fish, or 3, or answer a quiz question right, or copy a tune;
+2. at a game: catch a fish, or 3, or answer a quiz question right, or copy a tune, or play a round
+   in the arcade (`ARCADE_TASK`, while a cabinet is live);
 3. around the park: flop into 2 leaf piles, or browse 2 stalls, or answer a quiz question right,
    or copy 2 tunes.
 
@@ -135,20 +207,57 @@ hands it in there (the owner's call, 2026-10-23). The quest state and reward rul
 welcome line stays. The owner kept the New quest line for now. The preview's feedback nudge
 (PLANNED, OP-063) should use the same line and dot when it is built.
 
-## Emotes and the hop [BUILT (OP-082)]
+## Talking to characters [BUILT (OP-114)]
+
+The park's characters (the NPC owls: quest givers, the shopkeeper) are talked to with Interact (the
+"!" on the pad, or E). Within `NPC_TALK_RADIUS` (120 px) of one, the nearest in reach offers "Talk to"
+its name, and a "!" over it shows the one Interact would talk to now (`setApproach` in
+`apps/park/src/game/Npc.ts`): Interact's mark on a dark pill, one colour in every realm. It shows
+only while talking is what Interact would do, not while the owl stands at a spot first (such as the
+gift shop) or is asleep. It pops in, bobs once a second (still under calm motion) and fades as the
+owl walks off; a quest's marker rises above it meanwhile. A tap on the character talks too: its tap
+area is its drawn body grown by `NPC_TAP_EXTRA` (20 px). A dialogue closes once the owl wanders
+`NPC_TALK_RADIUS` + `REACH_SLACK` + 40 px away.
+
+## Emotes and the jump [BUILT (OP-082, OP-084)]
 
 The emotes an owl can play are collectibles (`docs/COLLECTIBLES.md`): 24 in the catalogue, every
 owl starts with Hoot and Wing Flap (plus the Sparkle effect), and the rest come from quests and the
 shop. The emote wheel (the Emotes button; 1 to 8 on a keyboard) plays one; the room server relays
 the emote's id to everyone else in the room, checks that the owl owns it, and allows one per 1.5 s
-per owl. The **hop** (OP-082) is a move every owl has, not a collectible: the Jump button on the
-pad or the space bar on a computer plays a 0.4 s jump with a two-frame wing flap that lifts only the
-drawing of the owl, never its place (`apps/park/src/game/hop.ts`). It travels as the emote `jump`
-(`JUMP_EMOTE`; `hop` is a collectible emote's id), at most one per 600 ms from a page
-(`JUMP_EVERY_MS`) and one per 480 ms per owl through the room server (`jumpEveryMs`), apart from the
-emotes' limit; no collection is asked and no quest counts it. The controls: `docs/PLAYBOOK.md`,
-section 7. LATER (OP-084): flight may grow out of the hop; it is built as its own height offset so
-that can happen without changing how a hop is asked for.
+per owl.
+
+The jump is a move every owl has, not a collectible: flight (OP-084, `packages/shared/src/flight.ts`).
+Jump on the pad, or the space bar, jumps; a second press in the air flaps once more; Jump held on the
+way down glides, one down for `GLIDE_SLOPE` (3) along. Its physics is the climb's. Flight is a height
+above the owl's spot on the floor plan, so doorways, spots and walks are as before, and it carries
+the owl up onto the perches (below). The controls: `docs/PLAYBOOK.md`, section 7; the air state on
+the wire: `docs/ARCHITECTURE.md`.
+
+## Up on the perches [BUILT (OP-084)]
+
+The jump, the second flap in the air and the glide reach perches: raised places an owl stands on,
+part of the room data (`perches` in `packages/shared/rooms/index.ts`). Each perch is tiered by what
+reaching it from the floor takes (`perchTiers`, `packages/shared/src/routes.ts`): 1, single jumps;
+2, a jump and the second flap somewhere on the way; 3, only a glide. A quest never asks for more than
+a tier 1 perch (`docs/TESTING.md`). A thing up on a perch (its `top`) is in reach only from that
+perch, and a thing on the floor only from the floor.
+
+- **The hub** (the west wing's back wall): the root bench under the lantern beam, a jump up (tier 1,
+  `hub-bench`), and the beam itself, a jump and the flap up from the bench (tier 2, `hub-beam`). A
+  leaf pile waits on the beam.
+- **The grove's treetop walk** (the east wing): the fallen log on the lawn, a jump up; the ladder up
+  the middle tree, a rung halfway and the porch at its top, a jump each, with a leaf pile on the
+  porch; from the porch the loft's deck, a jump more. All single jumps (tier 1); the porch is also a
+  jump and the flap straight from the floor. The far treehouse on the left tree is across the gap from
+  the loft, past the painted rope bridge, and only a glide gets there (tier 3, `grove-hut`); a leaf
+  pile waits in it.
+- **The market's rooftops**: on the west screen the stall row's roof, a jump up from the curb all
+  along it, and along it the neon signboards at its east end; the feather shop's roof at the giant
+  robot owl's feet, a jump up from the curb right of the shop's door; on the east screen the stalls'
+  roofs, a jump up from the plaza. All single jumps (tier 1). The big food stall's roof and the big
+  tent's ridge stand higher: a jump and the flap from in front of each (tier 2). No gap in the street
+  needs a glide.
 
 ## Seasons [PLANNED (OP-074)]
 
@@ -179,6 +288,11 @@ hub when a lantern is lit, and to a newcomer), `quiz` (a question closed: the ri
 owls in it), `paid` (feathers for a full beam or a right answer) and `tasks` (the day's tasks when
 something moved them).
 
+The arcade and the climb add `act` kinds (`ACT_KINDS`): `run` (with `g`, the game) starts or
+resumes an arcade run, `record` keeps its best so far, `score` ends it; `climb` starts or resumes a
+climb and `ascent` banks a band. The room pushes `wall` (the score wall). The protocol's version is
+`EDGE_PROTOCOL_VERSION` (15); `docs/ARCHITECTURE.md` section 4 has the frames.
+
 The room server (`RoomObject`) checks every activity against the owl's position on its own clock
 (plus 40 px of slack), allows one note of the copy game per 250 ms, and pays through the
 `Collections` ledger (`play`). Times on the wire are server milliseconds; the page converts them
@@ -192,6 +306,12 @@ to its own clock, and runs the quiz card on the server's clock.
 - `ui/activities.ts`: the quiz and copy cards (top right on wide screens, under the top bar on
   phones); `ui/quests.ts`: today's tasks in the quests screen (the tracker is gone, OP-083);
   `collect/tasks.ts` keeps them.
+- `game/arcade.ts`: the arcade in its room (the title signs, the score wall's portraits, a run from
+  Play to its pay); `game/ArcadeScene.ts` draws the game over the room; `arcade/hop.ts`,
+  `arcade/flap.ts` and `arcade/knock.ts` are the three games' simulations, `arcade/paint.ts` their
+  painted fields and pieces, `ui/arcadeScreen.ts` the HUD's arcade screen and its how-to cards.
+- `game/climb.ts`: the climb at the portal (the run, the screen, each `ascent`); `ui/climbScreen.ts`
+  its screen.
 - `collect/local.ts`: the local mode runs `Activities` for the one owl on the device; its beam is
   that page's alone, and its quiz settles on a timer while the owl is in the hub.
 - Spectators (OP-191, `docs/ARCHITECTURE.md` section 4): every game plays and the room answers
@@ -212,6 +332,13 @@ to its own clock, and runs the quiz card on the server's clock.
   up to 90 s).
 - `apps/park/e2e/edge.spec.ts` (the room server): two owls light the beam together and are both
   paid, a catch, and a tune danced for another owl.
+- The arcade: `packages/shared/src/arcade.test.ts` and `arcadebook.test.ts`, `apps/park/src/arcade/*.test.ts`,
+  `apps/edge/test/arcade.test.ts`, and `apps/park/e2e/arcade.spec.ts` (with `arcadePlay.ts`).
+- The climb: `packages/shared/src/climb.test.ts` (its floors and brisk windows frozen) and
+  `climbbook.test.ts`, `apps/edge/test/climb.test.ts`, and `apps/park/e2e/climb.spec.ts` (with
+  `climbPlay.ts`, on `desktop`, `phone` and `edge`).
+- The perches: `packages/shared/src/routes.test.ts`, `packages/shared/rooms/rooms.test.ts` and
+  `apps/park/e2e/perches.spec.ts`.
 
 ## Waiting on the owner
 

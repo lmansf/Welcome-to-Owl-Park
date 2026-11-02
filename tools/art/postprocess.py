@@ -509,10 +509,6 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
-# TODO-DOCS (OP-129): docs/ART-PIPELINE.md says everything but the room backgrounds ships as PNG.
-# The nests' furniture (decor-*) ships as WebP now, marked "format": "webp" in config/assets.json:
-# `piece` finishes such a key as WebP (lossy colour, the alpha exact), `webp` re-encodes one already
-# published as PNG keeping its provenance, and `check` refuses a PNG published for a key marked webp.
 def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
     """Published cut-outs the table has since marked ``"format": "webp"``, re-encoded from their
     PNGs (the pixels approved and live, checked against their provenance lines) as WebP finals with
@@ -620,11 +616,7 @@ def clear_polygon(img: Image.Image, poly: str, scale: float = 1) -> tuple[Image.
     """``img`` (RGBA) made transparent inside the polygon ``poly`` (``x,y,x,y,...`` in room pixels of
     the 1x final, scaled for a larger one), its edge feathered over a pixel or two; and how many
     pixels lost alpha. For a prop cut by the frame's edge: an overlay scrolls faster than the room,
-    so between screens a prop the frame cut in half floats in mid-view (OP-162).
-
-    TODO-DOCS (OP-162): docs/ART-PIPELINE.md's overlay section: `--clear-poly x,y,...` (repeatable,
-    recorded in the post record's tools), and that an overlay is keyed one screen at a time
-    (key_screen), so a row of screens laid side by side finishes each screen with `--crop fx,fy`."""
+    so between screens a prop the frame cut in half floats in mid-view (OP-162)."""
     try:
         v = [int(x) for x in poly.split(",")]
     except ValueError:
@@ -1137,15 +1129,7 @@ def shift_down(img: Image.Image, n: int, top: int = 0) -> Image.Image:
 def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
     """A keyed candidate moved down by --dy room pixels, the strip it leaves at the top mirroring its top rows,
     written as a new raw candidate of the key (select it with generate.mjs select). For a tree playfield
-    whose painted floor sits above the ground line its neighbouring screens share (OP-162).
-
-    TODO-DOCS (OP-162): docs/ART-PIPELINE.md: `shift <key> --dy N` (a tree playfield whose floor sits
-    above the shared ground line, moved down with its top rows mirrored into the gap, then selected
-    and finished as usual), and that the tree's WebP layers snap alpha within ALPHA_SNAP of clear or
-    opaque before encoding (the Lanczos ringing that cost bytes nobody sees).
-    TODO-DOCS (OP-160): `shift <key> --dy N --from-y Y` moves only the rows from room y Y down: an
-    overlay whose bottom leaves reach over the walkway has that band lowered below the ground line,
-    its top band left where it is."""
+    whose painted floor sits above the ground line its neighbouring screens share (OP-162)."""
     key = validate_key(a.key, assets=ctx.assets)
     raw, sc = resolve_raw(ctx, key, a.raw)
     if not ((sc or {}).get("key_colour") or ctx.assets.get(key, {}).get("key_colour")):

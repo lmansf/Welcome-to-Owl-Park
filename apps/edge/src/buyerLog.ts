@@ -10,12 +10,6 @@
  * the owl that claimed the order's tickets; an owl that never bought or claimed a ticket has no contact.
  * A row that does not go (the log down, the store not telling) is said in the Worker's log, without
  * the address, and the next delivery of the order's webhook sends it again.
- *
- * TODO-DOCS (OP-192): docs/SECURITY.md, beside OP-186's line on the order email: with the park log on,
- * a paid order's email and customer id are read from the store and sent to the owner's contacts schema
- * (row-level security on, no grants: the owner's own queries only); the park keeps neither.
- * docs/DEPLOY.md's store step 2: the app's protected customer data access covers the email and the
- * customer's id.
  */
 import { normalEmail } from '@owl-park/shared';
 import { orderEmail } from './accounts';

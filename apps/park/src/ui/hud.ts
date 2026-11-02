@@ -306,11 +306,6 @@ const CSS = `
  * Map are the Menu's. Three 56 px buttons whose centres sit 45.25 px from the cluster's middle
  * (81.25 px in, 73.25 px up), so Jump is 8 px from each; Emotes and Say, 44 px, sit above the Menu
  * and Interact, 9 px clear of them. All see-through, like the stick.
- * TODO-DOCS (OP-114, OP-084): docs/PLAYBOOK.md's controls (OP-099): Interact, the Menu and Jump (tap,
- * tap again in the air, hold to glide; the space bar on a keyboard), travel held on the Menu's map
- * (OP-130), the '!' for Interact; docs/ACTIVITIES.md,
- * talking to characters: the '!' over the one the owl can talk to now (game/Npc.ts), at the reach
- * Interact talks from.
  */
 @media (pointer:coarse){
   #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}

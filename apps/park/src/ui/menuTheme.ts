@@ -9,14 +9,6 @@
  * body text 16 px or more, touch targets 44 px or more, every text colour 4.5:1 or better against its
  * surface (the wood grain's lines included), and the active tab told by its weight and bar as well as
  * its colour.
- *
- * TODO-DOCS (OP-108): a docs/MENU.md with these tokens (each `--m-*` name, what it dresses, its day and
- * night values) and the clarity rules above, for whoever makes a realm's skin (OP-109). The Menu is now
- * tabs (Quests, Collection, Nest, Map, Settings) and Say is its own button on the bar: PLAYBOOK.md
- * section 7, GLOSSARY.md (Menu, Pad; `ui/menu.ts` is gone, the shell is `ui/menuShell.ts`),
- * FEEDBACK.md and ARCHITECTURE.md (Feedback, the ways out and Home screen are in the Settings tab, Go
- * home in the Nest tab; Say on the bar) and QUESTS.md (Quests is the Menu's first tab) still describe
- * the list of tiles. Settings gained Sounds (the knock as the Menu opens).
  */
 
 /** One theme: the values the shell's CSS reads, each a custom property `--m-<name>`. */

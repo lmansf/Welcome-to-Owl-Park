@@ -38,7 +38,6 @@ export async function tickets(c: RouteCtx): Promise<Response> {
     const share = url.pathname === '/api/tickets/take';
     const deviceClassNow = () => deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile'));
     if (status === 200) {
-      // TODO-DOCS (OP-174): docs/LOGGING.md: claim_moved (via claim) gains in_use, the order's running tickets left on another owl.
       log.info('worker.tickets', 'claim_moved', share ? 'A share link moved a ticket onto this device.' : 'A claim link moved its order’s tickets onto this device.', {
         via: share ? 'share' : 'claim',
         collector_hash: hashForLog(device),
@@ -49,7 +48,6 @@ export async function tickets(c: RouteCtx): Promise<Response> {
     }
     if (status === 409) {
       // A link that tried to move a ticket already running on another owl (OP-174): the sign of a forwarded email.
-      // TODO-DOCS (OP-174): docs/LOGGING.md: claim_in_use (worker.tickets, info): via (claim or share), collector_hash, device_class, order_hash (claim only), in_use.
       log.info('worker.tickets', 'claim_in_use', share ? 'A share link named a ticket already in use; it stayed where it was.' : 'A claim link found its order’s tickets already in use on another owl; nothing moved.', {
         via: share ? 'share' : 'claim',
         collector_hash: hashForLog(device),

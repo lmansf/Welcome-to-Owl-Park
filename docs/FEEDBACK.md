@@ -1,13 +1,17 @@
 # Feedback from visitors
 
 - Status: BUILT (OP-028); the preview nudge and the feedback reward PLANNED (OP-063, OP-064)
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
-- Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts; apps/park/src/ui/feedback.ts
-- Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
+- Code: packages/shared/src/feedback.ts; apps/edge/src/feedbackBox.ts, feedbackPage.ts, collectLog.ts, routes/feedback.ts; apps/park/src/ui/feedback.ts, settingsScreen.ts; apps/park-log
+- Tickets: OP-028, OP-034, OP-063, OP-064, OP-082, OP-083, OP-089, OP-108, OP-166, OP-167
 - Related: docs/ARCHITECTURE.md section 10
 
-**Feedback** in the Menu (its tile picked out in gold) opens a short form: what kind of note it is
-(Bug, Idea, Praise, Other) and a few words, up to 1,000 characters. The form asks visitors to leave
+**Send feedback** is the first row of Settings (OP-167): in the Menu's Settings tab, and in the home
+screen's Settings, before the park, where the form has no way back to a Menu. The row says
+"Something wrong? An idea?" and "Tell the park’s keepers: they read every note."
+(`FEEDBACK_ROW_WORDS`, `apps/park/src/ui/settingsScreen.ts`). It opens a short form: what kind of
+note it is (Bug, Idea, Praise, Other) and a few words, up to 1,000 characters
+(`FEEDBACK_MAX_CHARS`). The form and its sending are the same from either place. The form asks visitors to leave
 out names, emails and other personal details. On a phone it sits at the top of the screen, so the
 keyboard never covers what is being typed (`apps/park/src/ui/feedback.ts`).
 
@@ -19,8 +23,14 @@ keyboard never covers what is being typed (`apps/park/src/ui/feedback.ts`).
   table `feedback` (`apps/edge/src/feedbackBox.ts`): when, the kind, the words, the collector token,
   the room, the screen size, the browser's user agent and a status (`open`, `done`, `dropped`).
   Never an IP address or a name.
-- **Without a server** (the local and Supabase transports, development, the browser tests): the
-  newest 50 notes stay in that browser's `localStorage` under `owl-park:feedback`.
+- **In the owner's analytics project** (OP-166): with the analytics log on (`docs/DEPLOY.md`, The
+  analytics log), every note is also copied to `game.feedback`, as the `feedback` kind of row
+  (`apps/edge/src/collectLog.ts`, `apps/park-log`): the words, the kind, the room, phone or desktop,
+  and the hashed collector and visit. Never the screen size or the browser's description. The
+  row carries the note's id on the room server, so it matches the keepers' page. The owner's morning
+  run reads it.
+- **Without a server** (the local transport, development, the browser tests): the newest 50 notes
+  stay in that browser's `localStorage` under `owl-park:feedback`.
 
 Limits: one note per visitor every 30 seconds and 10 a day; 1,000 a day for the whole park, so a
 flood cannot grow the table without bound. The numbers live in `packages/shared/src/feedback.ts`.

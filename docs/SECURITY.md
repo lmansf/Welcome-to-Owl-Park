@@ -1,13 +1,13 @@
 # Security: what the park is, and how it is checked
 
 - Status: BUILT (the headers, limits and checks below); the nightly check BUILT, its Finding on the board PLANNED (OP-133)
-- Verified against: main ee09af3 (2026-11-01)
-- Code: apps/edge/src/guard.ts, apps/edge/src/limits.ts, apps/edge/src/index.ts, apps/edge/src/routes/, apps/edge/src/page.ts, apps/edge/src/accounts.ts, apps/edge/src/collectLog.ts, apps/edge/src/Collections.ts, packages/shared/src/phrases.ts, tools/security/security-test.sh, .github/workflows/security-nightly.yml
-- Tickets: OP-151, OP-139, OP-140, OP-141, OP-142, OP-143, OP-144, OP-150, OP-133
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
+- Code: apps/edge/src/guard.ts, apps/edge/src/limits.ts, apps/edge/src/index.ts, apps/edge/src/routes/, apps/edge/src/page.ts, apps/edge/src/accounts.ts, apps/edge/src/buyerLog.ts, apps/edge/src/collectLog.ts, apps/edge/src/Collections.ts, packages/shared/src/phrases.ts, tools/security/security-test.sh, .github/workflows/security-nightly.yml
+- Tickets: OP-151, OP-139, OP-140, OP-141, OP-142, OP-143, OP-144, OP-150, OP-133, OP-186, OP-192
 - Related: docs/ARCHITECTURE.md, docs/PLAYBOOK.md, docs/FEEDBACK.md, docs/DEPLOY.md
 
 What the park does and does not do, for anyone judging its risk, and how its defences are checked.
-Every claim names the file that makes it true on `main` ee09af3.
+Every claim names the file that makes it true on `main` 01e9722.
 
 **Testing the live park needs the owner's written authorisation.** That covers the script below,
 any scanner and any hand test against the park's address. A local copy (`pnpm dev:edge`) needs none.
@@ -30,6 +30,18 @@ any scanner and any hand test against the park's address. A local copy (`pnpm de
   is good for `MAGIC_LINK_MS` (15 minutes) and used once. At most `LINKS_PER_EMAIL_PER_HOUR` (3) per
   email and `LINKS_PER_IP_PER_HOUR` (10) per address go out (`packages/shared/src/accounts.ts`). The
   email is kept only as a keyed hash and a sealed copy (AES-GCM), and is never logged.
+- **A ticket's order email** (OP-186): as an order's tickets land on an owl, the Worker reads the
+  order's email from the store and mails it one protect link (`offerOrderProtect`,
+  `apps/edge/src/accounts.ts`). The link is good for `ORDER_LINK_MS` (7 days) and used once, and it
+  carries the address sealed in its own token. The park keeps nothing about the address unless the
+  link is opened; then the owl is protected as above. The mail service keeps its delivery log, as for
+  every mail.
+- **A paid order's buyer** (OP-192): with the analytics log on, the Worker reads a paid order's email
+  and the store's customer id (`ORDER_CONTACT_QUERY`, `apps/edge/src/buyerLog.ts`) and sends them
+  straight to the owner's `contacts` schema (`apps/park-log`), never into an outbox or a log line.
+  That schema has row-level security on and no grants: only the owner's own queries read it. The
+  park keeps neither. A contact names its order by the order's salted key, the one the purchase rows
+  carry.
 - OPEN QUESTION: whether the live Worker has `ACCOUNT_SECRET` and `RESEND_API_KEY` set. Without
   them no email is kept or sent (`emailKeys`, `mailSender`, `apps/edge/src/accounts.ts`).
 
@@ -41,9 +53,11 @@ any scanner and any hand test against the park's address. A local copy (`pnpm de
 - **Supabase holds the collection log, in the owner's analytics project.** The `Collections` object
   queues rows and sends them to the `owl-park-log` function (`apps/edge/src/collectLog.ts`,
   `apps/park-log`). The rows: collectibles granted, owl versions (kind and colour), visits, rooms
-  visited, the catalogue, and a copy of each feedback note (its words, kind and room; OP-166). The
-  collector and the visit go as salted hashes. No name, email, order, ticket, pass or address is in a
-  row. The log is off unless `PARK_LOG_URL`, `FRAUD_SCORE_KEY` and `FRAUD_HASH_SALT` are all set.
+  visited, the catalogue, a copy of each feedback note (its words, kind and room; OP-166) and the
+  ticket events (OP-192). The collector and the visit go as salted hashes. A ticket event's order,
+  owl and ticket go as salted hashes too. No name, email, order, ticket, pass or address is in a
+  `game` row. The one exception is the owner's `contacts` schema (above), apart from the `game`
+  tables. The log is off unless `PARK_LOG_URL`, `FRAUD_SCORE_KEY` and `FRAUD_HASH_SALT` are all set.
 - The Worker's answers carry no database address or key (`apps/edge/test/hostile.test.ts`, OP-150).
   CI checks the built page for one (`tools/security/bundle-check.mjs`).
 

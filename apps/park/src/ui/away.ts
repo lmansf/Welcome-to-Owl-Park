@@ -2,12 +2,6 @@
  * An owl asleep a long while (OP-126). "Still here?" asks with one big button; any touch or key
  * answers it, since the room wakes the owl on any input and closes the card. With no answer the owl
  * leaves its room, freeing its place, and the screen here waits for a tap to bring it home to its nest.
- *
- * TODO-DOCS (OP-126): docs/PLAYBOOK.md gets a note on idle owls: asleep after 45 s with nothing done
- * on the page; "Still here?" after 10 minutes asleep, never in the owl's own nest; no answer in a
- * minute and it leaves its room as any visitor does (the room server sees a normal leave, so the
- * place frees and the session ends there); `?sleep=`, `?away=` and `?answer=` (seconds) shorten
- * them for a visit. Sleeping is one flag on the owl (`rest` frames, protocol v11), never logged.
  */
 export interface Away {
   /** "Still here?" over the park. */

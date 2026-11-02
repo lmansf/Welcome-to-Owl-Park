@@ -1,19 +1,21 @@
 # Deploying Owl Park (free tiers only)
 
 - Status: BUILT; the store's setup (Selling tickets) is the owner's, PLANNED (OP-024)
-- Verified against: main 67ca3ab (2026-10-23)
-- Code: apps/edge/wrangler.jsonc, tools/build-edge.mjs, .github/workflows/deploy-worker.yml, apps/edge/src/env.ts
-- Tickets: OP-001, OP-002, OP-020, OP-024, OP-062, OP-067, OP-071, OP-097
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
+- Code: apps/edge/wrangler.jsonc, tools/build-edge.mjs, .github/workflows/deploy-worker.yml, .github/workflows/ci.yml, apps/edge/src/env.ts, apps/edge/src/routes/table.ts, apps/edge/src/routes/admin.ts, apps/edge/src/accounts.ts, apps/edge/src/buyerLog.ts, apps/edge/src/collectLog.ts, apps/park/src/config.ts, apps/park/e2e/shard.mjs
+- Tickets: OP-001, OP-002, OP-020, OP-024, OP-062, OP-067, OP-071, OP-097, OP-107, OP-123, OP-139, OP-150, OP-156, OP-181, OP-186, OP-192
 - Related: docs/PLAYBOOK.md, docs/ARCHITECTURE.md section 13
 
-The park is a static site plus a multiplayer backend. There are three ways to run it, all
+The park is a static site plus a multiplayer backend. There are two ways to run it, both
 free at a small scale. The code is the same; only configuration differs.
 
 | Mode | Backend | Multiplayer | Accounts needed |
 | --- | --- | --- | --- |
 | A. Static demo | none | tabs on one device | GitHub only |
-| B. Static + Supabase Realtime | Supabase (no server code) | internet | GitHub + Supabase |
-| C. Room server (recommended) | Cloudflare Worker + Durable Object | internet, authoritative | GitHub + Cloudflare |
+| C. Room server (recommended) | Cloudflare Worker + Durable Objects | internet, authoritative | GitHub + Cloudflare |
+
+Mode B (Supabase Realtime) is gone (OP-150): the page holds no database client or key, and CI checks
+the built page for one (`tools/security/bundle-check.mjs`).
 
 ## A. Static site on GitHub Pages
 
@@ -22,22 +24,13 @@ free at a small scale. The code is the same; only configuration differs.
    workflow is skipped, which keeps `main` green for a park that deploys to Cloudflare instead.
 2. Merge to `main`. `.github/workflows/deploy-pages.yml` builds and publishes to `https://<owner>.github.io/<repo>/`.
 3. Optional repository variables (Settings → Secrets and variables → Actions → Variables; all are
-   public values that ship in the bundle): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (mode B),
-   `VITE_EDGE_URL` (point the static client at a room server hosted in mode C), `VITE_SHOP_URL`,
-   `VITE_SITE_URL` (the site's https origin, for link previews).
-
-## B. Supabase Realtime (no server code)
-
-Version 1 needs no tables and no auth: public Realtime channels only (Presence for who is here,
-Broadcast for walks).
-
-1. Create a Supabase project (free plan is enough to start; note that the free plan allows two
-   active projects per organisation and pauses projects after a week without activity).
-2. Project **Settings → API**: copy the Project URL and the anon key into the variables above
-   (or `apps/park/.env.local` locally).
-3. Budget: Realtime bills one message per sender plus one per recipient. The park sends one
-   message per tap and a presence refresh at most every 3 s per owl, but a 20-owl room still
-   uses a few million messages a month under normal play. See `docs/ARCHITECTURE.md` §2.
+   public values that ship in the bundle): `VITE_SHOP_URL` and `VITE_SITE_URL` (the site's https
+   origin, for link previews). A park published here has no room server: its multiplayer is tabs on
+   one device. The workflow checks the build for a database client or key before publishing
+   (`pnpm security:bundle`).
+4. OPEN QUESTION: the client reads `VITE_EDGE_URL` (a room server hosted in mode C) and the Worker
+   takes `PARK_ORIGINS` (other origins allowed to open its sockets), but `deploy-pages.yml` does not
+   pass `VITE_EDGE_URL`, so a Pages copy never reaches a room server as deployed.
 
 ## C. Room server on Cloudflare (recommended)
 
@@ -183,7 +176,12 @@ turnstiles let everyone through. The steps, in order:
    `GET /api/admin/store` with the `X-Admin-Key` header checks them: which are set (never their
    values), whether the app signs in, any scope it still lacks, and whether the store lets it read
    orders (they hold customer data: if not, request protected customer data access for the app in
-   the Dev Dashboard; the park reads no names, emails or addresses).
+   the Dev Dashboard). The park reads no names or addresses. It reads an order's email for one
+   thing: the protect link mailed as the order's tickets land on an owl (OP-186, `docs/SECURITY.md`).
+   With the analytics log on, it also reads a paid order's email and the store's customer id and
+   sends them to the owner's contacts (OP-192, `apps/edge/src/buyerLog.ts`). So the app's protected
+   customer data access covers the email and the customer's id, and nothing else; ask for it once
+   these are live.
 3. **Webhooks** (JSON) to `https://<the park's own domain>/api/store/webhook`: `orders/paid`,
    `orders/create`, `orders/updated`, `orders/cancelled` and `refunds/create`, plus
    `orders/risk_assessment_changed` where the store offers it, made under Settings → Notifications →
@@ -292,6 +290,34 @@ turnstiles let everyone through. The steps, in order:
     on the Thank you page itself, with no wait for Continue shopping. It needs an app with an
     extension deployed through the Shopify CLI and placed in the checkout editor, the owner's.
 
+### Accounts: the email key and the mail sender (OP-139)
+
+With `ACCOUNTS` `"on"` (`apps/edge/wrangler.jsonc`, on since 2026-10-31), an owl can be protected
+with an email and brought back by a magic link (`apps/edge/src/accounts.ts`). Three Worker secrets,
+set with `wrangler secret put` or as repository secrets, which the deploy workflow uploads:
+
+- `ACCOUNT_SECRET`: 32 or more random characters. It keys the hash an email is found by and seals the
+  copy the park writes to. Never change it once owls are protected: their emails are lost to the park.
+- `RESEND_API_KEY` and `MAIL_FROM`: the mail sender. Links go out through Resend, from `MAIL_FROM`, a
+  sender on a domain verified there. The workflow uploads the two together, or neither.
+
+Without all three no email is kept and no link is sent (`emailKeys`, `mailSender`); friend codes and
+one screen at a time still work. `ACCOUNTS` `"off"` leaves every page as it was before accounts.
+
+### The analytics log (OP-107, OP-192)
+
+The collection log, the player stats, the ticket events and the owner's contacts go to the
+`owl-park-log` function in the owner's Supabase project (`apps/park-log`). The log is on once the
+Worker has all three of `PARK_LOG_URL` (the function's address), `FRAUD_SCORE_KEY` (the key the
+function checks) and `FRAUD_HASH_SALT` (16 or more random characters, which salts the hashes; never
+change it, or every owl looks new). Set them as repository secrets: the deploy workflow uploads the
+three together, or none. The steps on the Supabase side are `apps/park-log/README.md`, steps 1 to 6;
+`FRAUD_SCORE_URL` is not needed (the fraud link stays off without it).
+
+- `GET /api/admin/collect-log` (the admin key) says whether the log is on and how many rows wait.
+- `POST /api/admin/collect-log` sends, once, the collectibles the collections already hold, as
+  backfill rows (their real acquisition times; no visit, room or device).
+
 ### Coding agents
 
 Claude Code picks up the Cloudflare skills vendored in `.claude/skills/` and the Cloudflare MCP
@@ -301,13 +327,91 @@ guidance installs with `/plugin marketplace add cloudflare/skills` and
 `/plugin install cloudflare@cloudflare`. `tools/cloudflare-skills.sh` refreshes the vendored copy.
 
 Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or `room`),
-`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `SPECTATORS` (`off` or `on`; on lets an owl without a ticket past the turnstiles as a spectator that earns nothing, OP-191; `on` in production since 2026-11-01; set it back to `off` and deploy to turn spectators away again), `SPECTATOR_SHARE` (the share of a room's cap spectators may fill, default `0.75`), `PARK_TZ` (the park
-day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
+`GATE` (where the front gate starts: `open`, everyone walks through the lobby's turnstiles; `ticket`, visitors without a ticket stay in the lobby; the opening switch on `/admin/gate` overrides it with no deploy), optional `ROOM_CAPS` JSON, `SPECTATORS` (`off` or `on`; on lets an owl without a ticket past the turnstiles as a spectator that earns nothing, OP-191; `on` in production since 2026-11-01; set it back to `off` and deploy to turn spectators away again), `SPECTATOR_SHARE` (the share of a room's cap spectators may fill, default `0.75`), `ACCOUNTS` (above),
+`RATE_LIMITS` (`on` always; `off` only for a load test's throwaway copy, `docs/PLAYBOOK.md` section
+9), `LOG_LEVEL`, `PARK_TZ` (the park day for the Realm Vote) and `VOTE_TALLY_PUBLIC`. Secrets, set once with `wrangler secret put`:
 `PASS_SIGNING_KEY` and `ADMIN_KEY` (16+ random characters; needed to read the private vote tally,
 to close a month by hand, to issue tickets without a store order, to read visitors' feedback on
 `/admin/feedback` and opening night's count on `/admin/opening`, and to flip the gate on
 `/admin/gate`), and the store's
-secrets (above). A cron trigger closes the Realm Vote month automatically.
+secrets (above). Two cron triggers (`triggers.crons`, `apps/edge/src/crons.ts`): 05:05 UTC on the 1st
+closes the Realm Vote month, and 09:00 UTC every day restarts the park for the night (OP-181,
+below).
+
+## The keepers' routes
+
+Every path the Worker answers is in `apps/edge/src/routes/table.ts`; the keepers' handlers are in
+`apps/edge/src/routes/admin.ts`, and the key check (`isAdmin`, the `X-Admin-Key` header against
+`ADMIN_KEY`) and the keeper's-token check (`keeperOf`) in `apps/edge/src/routes/http.ts`. Without
+`ADMIN_KEY` on the Worker (16 or more characters) every one of them refuses. Each refusal is logged
+as `admin_denied` with its reason, never the key. The pages under `/admin/` ask for the key in the
+page and keep it in that tab only.
+
+| Route | Method | Needs | What it does |
+| --- | --- | --- | --- |
+| `/api/admin/ping` | GET | the key | `{"ok": true}`: the key is the keepers' (the position overlay asks, `docs/PLAYBOOK.md` section 10) |
+| `/api/admin/keeper` | POST | the key | a keeper's token, good for `KEEPER_TTL_S` (12 hours): a tab's owl into a realm the keepers keep closed (OP-156) |
+| `/api/admin/masks/<room>` | POST | a keeper's token (`X-Keeper-Token`) or the key | keep the ledge painter's draft for a room of the tree (OP-156) |
+| `/api/masks/<room>` | GET | nothing | that draft as saved (level geometry only); 404 before one is saved |
+| `/api/admin/grant` | POST | the key | `{cid, variant, source}`: give an owl a collectible (`docs/COLLECTIBLES.md`) |
+| `/api/admin/climb` | GET | the key | `?ref=`: a climb run by the reference a visitor quotes |
+| `/api/admin/collect-log` | GET, POST | the key | the analytics log's state; the backfill (above) |
+| `/api/admin/store` | GET | the key | the store's setup check (Selling tickets, step 2) |
+| `/api/admin/tickets` | POST | the key | tickets without a store order (step 9) |
+| `/api/admin/feedback`, `/admin/feedback` | GET, POST | the key | visitors' notes (`docs/FEEDBACK.md`) |
+| `/api/admin/opening`, `/admin/opening` | GET | the key | opening night's count, `?csv` for the CSV (step 10) |
+| `/api/admin/gate`, `/admin/gate` | GET, POST | the key | the opening switch (step 8) |
+| `/api/admin/restart` | POST | the key | the nightly restart, now (OP-181, below) |
+| `/api/admin/capacity`, `/admin/capacity` | GET, POST | the key | the busy-night settings and the tree's share (`docs/CAPACITY.md`, section 2) |
+| `/api/vote/tally` | GET | the key, unless `VOTE_TALLY_PUBLIC` is `"true"` | the Realm Vote's standings |
+| `/api/vote/close` | POST | the key | close the vote's month by hand |
+
+**The nightly restart** (OP-181): the 09:00 UTC cron restarts the park, and
+`POST /api/admin/restart` with the `X-Admin-Key` header does the same at once (to try it on a copy).
+The vote ledger keeps when it was, so no pass from before it goes past the turnstiles while the gate
+takes tickets; then every room object, copies included, tells its owls and a moment later sends them
+all to the home screen. It answers `{"restartAt", "objects", "missed", "owls"}`: when the ledger kept
+it, the room objects told, those that could not be told (their owls stay until they leave), and the
+owls sent home.
+
+**Walking a closed realm**: open the park with `?keeper=1` and give the keepers' key once; the page
+swaps it at `/api/admin/keeper` for the 12-hour token, kept in that tab only (never the key), and its
+hello carries the token past the closed arch. The painter and the overlays are `docs/PLAYBOOK.md`,
+section 10.
+
+## CI [BUILT (OP-123)]
+
+`.github/workflows/ci.yml` runs in two tiers.
+
+| Tier | When | What runs |
+| --- | --- | --- |
+| Quick | a push to a branch other than `main` | typecheck, unit tests and build as three jobs at once, then the browser smoke set: the tests tagged `@smoke`, on the `desktop` and `edge` projects; under five minutes |
+| Full | a pull request, a push to `main`, the nightly run (07:00 UTC) and a run by hand | the same three jobs, then the whole browser suite split across twelve runners by the tests' measured times, their reports merged into one; and mutation testing (OP-131, `docs/TESTING.md`) |
+
+- A push that changes only `docs/` or Markdown files runs nothing (`paths-ignore`). A pull request
+  always runs.
+- A failed typecheck or unit test run cancels the rest of the run.
+- The unit job also runs the chaos harness's tests (`pnpm chaos:test`), the security script's
+  (`pnpm security:test`, and shellcheck), and the ledge painter's pull script's (`pnpm masks:test`).
+  The build job checks the built page for a database client or key (`pnpm security:bundle`).
+- **Tagging a test `@smoke`**: give it the tag in Playwright's options,
+  `test('…', { tag: '@smoke' }, async (…) => …)`. The quick tier runs
+  `pnpm e2e --grep @smoke --project=desktop --project=edge`, so a smoke test must sit in a spec file
+  one of those two projects matches (`apps/park/playwright.config.ts`). Keep the set small: the quick
+  tier is meant to finish in under five minutes.
+- **The shard timings**: `apps/park/e2e/shard.mjs` shares the suite out by
+  `apps/park/e2e/durations.json` (seconds per test on a CI runner), longest first onto the shard with
+  the least so far; a test with no measured time counts as the median. A full run that passes uploads
+  a refreshed copy as the `durations` artifact (one run's times averaged with the table's). When tests
+  are added, take that artifact from a passing full run and commit it as `apps/park/e2e/durations.json`
+  (or run `node e2e/shard.mjs durations <report.json>` in `apps/park` on a merged JSON report).
+- **Waiting in browser tests**: a test waits on the park's own state (`window.owlPark.state()`,
+  through `state` in `apps/park/e2e/helpers.ts`, `expect.poll` or `page.waitForFunction`) or on the
+  game's frames (`frames` in `helpers.ts`, counted in the game's updates, so a slow runner gets as many
+  as a quick one), never on a fixed sleep.
+- OPEN QUESTION: the suite still calls `waitForTimeout` in about two dozen places
+  (`grep -rn waitForTimeout apps/park/e2e`). Some hold a key down for a set time (`holdSpace`), which
+  is a press, not a wait; the others are fixed sleeps the rule above rules out.
 
 ## Checking a deployment
 
@@ -315,7 +419,8 @@ secrets (above). A cron trigger closes the Realm Vote month automatically.
   ticket book, the collections) answer; a 503 names the part that did not. When something is wrong,
   `docs/PLAYBOOK.md` says what to check, how to roll back and how to pause ticket sales.
 - Open the site in two browsers (or a phone and a laptop) and watch the owls see each other.
-- `?debug=1` draws the walkable areas and doors. `?transport=local|supabase|edge` forces a transport.
+- `?debug=1` draws the walkable areas and doors. `?transport=local|edge` forces a transport
+  (`apps/park/src/config.ts`; the `supabase` transport is gone, OP-150).
 - The status dot in the top-right pill is gold when connected, grey when the park is offline.
 - `node tools/load/swarm.mjs --url https://<host> --bots 20 --seconds 30` runs a small bot swarm and reports echo latency.
   The full load test runs on GitHub: Actions → Load test → Run workflow. It deploys a throwaway copy

@@ -1,9 +1,9 @@
 # Glossary
 
 - Status: first pass (OP-081 names this file; written by the doc agent 2026-10-23)
-- Verified against: main 8a1bbb9 (2026-10-23, the pad OP-082, quests in the Menu OP-083 and the mirror OP-077 merged)
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
 - Code: the file named on each line
-- Tickets: OP-081
+- Tickets: OP-081, OP-084, OP-108, OP-112, OP-114, OP-150, OP-201
 - Related: docs/README.md (the map), docs/agents.md (the roster)
 
 One line per term, as the code, the Ticket Board and the Creative Bible use it, with the file that
@@ -24,21 +24,21 @@ defines it. Alphabetical. Grep the term.
 - **Feathers**: the park's free currency; earned from quests, leaf piles, activities and duplicates; spent in the shop; never sold for money (C31).
 - **Gate** (the turnstiles): where a ticket is scanned on the way from the lobby into the hub, and, while the gate takes tickets, where an owl without one buys a Day Ticket (OP-180); `apps/edge/src/gate.ts`, `apps/park/src/ui/gateSale.ts`.
 - **Grove**: the room id of the storybook realm (public description: the treehouse clearing). Realm names stay out of this repository.
-- **Guardian**: the storybook realm's mythical owl, its idol for the Realm Vote; a different character from the mascot (C25).
+- **Guardian**: a realm's mythical owl, its idol for the Realm Vote; every realm has one, each a species of its own: the grove's a great horned owl, the market's robot owl a barred owl, `glass`'s a barn owl, and two species held for realms not open yet; a different character from the mascot (C25); `GUARDIANS` in `packages/shared/rooms/index.ts` (OP-112).
 - **Homes**: the room id of the street of nests outside the turnstiles; `docs/NESTS.md`. Tickets call the area "the Village", a working name visitors never see.
-- **Hop** (Jump): the 0.4 s wing-flap jump every owl has, from the pad's Jump button or the space bar; lifts only the drawing, travels as the emote `jump` (`JUMP_EMOTE`); `apps/park/src/game/hop.ts` (OP-082).
 - **Hub**: the room id of the central room inside the great tree; the arrival spot after the turnstiles is also the way out (C43).
 - **Idol**: a realm's mythical owl, tapped to cast the Realm Vote; `docs/ARCHITECTURE.md` section 7.
+- **Jump** (flight): every owl's jump, from the pad's Jump button or the space bar; a second press in the air flaps once more, and Jump held on the way down glides (`GLIDE_SLOPE` 3, one down for three along); the climb's physics in room pixels; the owl's air state goes to the room only when it changes; `packages/shared/src/flight.ts` (OP-084).
 - **Interactable**: a leaf pile, stall or moonbeam an owl uses with one action; `packages/shared/src/interactables.ts`.
 - **Keepers**: the people who run the park (the owner and the agents); the keepers' pages are `/admin/*`.
 - **Lobby**: the room id where every visitor arrives: the turnstiles and the lane to the nests.
 - **Market**: the room id of the neon market realm (public description: the neon street); holds Nova's shop and the robot owl.
 - **Mascot**: the great horned owl of the feed and the home screen; not the guardian (C25).
-- **Menu**: the one button that opens Say, Quests, Settings, Feedback and the ways out; on a phone the small dark button in the pad's corner; `apps/park/src/ui/menu.ts`.
+- **Menu**: the one button that opens a shell of five tabs: Quests, Collection, Nest, Map and Settings; Settings holds Send feedback, Sounds and the ways out; Say is its own button; on a phone the darker button outside Interact on the pad; `apps/park/src/ui/menuShell.ts`, its tabs in `menuTabs.ts`, its tokens in `menuTheme.ts` (OP-108).
 - **Mirror**: the standing mirror in every nest where an owl changes how it looks (Look in the mirror opens Your owl); `NEST_MIRROR`, `apps/park/src/game/mirror.ts` (OP-077).
 - **Nest**: an owl's own round room on the street; room id `nest-<nestId>`; `packages/shared/src/homes.ts`.
 - **NPC owl**: one of six resident owls that give quests; `packages/shared/src/npcs.ts`.
-- **Pad**: the phone controls: the thumbstick on the right, Interact and Jump on a diagonal on the left, the Menu small in the corner, Emotes above; `apps/park/src/ui/hud.ts` (OP-082).
+- **Pad**: the phone controls: the thumbstick in the bottom-right corner; on the left Interact, the Menu and Jump, with Emotes and Say above the Menu and Interact; `apps/park/src/ui/hud.ts` (OP-082, OP-114).
 - **Park day**: midnight to midnight in `PARK_TIME_ZONE` (America/New_York, `packages/shared/src/parktime.ts`); daily quests, the shop and the vote turn on it.
 - **Phrase** (Say): one of 24 prewritten lines an owl can say; only its number travels; `packages/shared/src/phrases.ts` (C44).
 - **Quest**: a giver, ordered steps and a reward; cadence story, daily or weekly; `packages/shared/src/quests.ts`, `questCatalog.ts`, `questbook.ts`.
@@ -47,7 +47,7 @@ defines it. Alphabetical. Grep the term.
 - **Realm Vote**: one vote per wallet per park day at an idol; the month's winner sets the next merch drop; `apps/edge/src/Ledger.ts` (C27, C42).
 - **Room**: a painted stage of one or more 1600 x 900 screens with walkable polygons, spawns and doors; `packages/shared/rooms/index.ts`.
 - **Shop** (Nova's feather shop): the rotating shelf on the neon street; `packages/shared/src/shop.ts`.
-- **Species**: the kind of owl (great horned, barn, burrowing, snowy, screech); `packages/shared/src/species.ts`.
+- **Species**: the kind of owl a visitor can be (great horned, barn, burrowing, snowy, screech; `SPECIES`); `OWL_SPECIES` adds the barred owl, which only the market's guardian is; `packages/shared/src/species.ts` (OP-112).
 - **Tasks** (three a day): the same three small tasks for everyone each park day; `dailyTasks` in `activities.ts`.
 - **Variant**: one owned thing: `<item>~<colourway>` for wearables, pets and effects, a bare id for emotes.
 - **Wallet** (ticket wallet): the tickets held on this device; `apps/edge/src/TicketBook.ts` `wallet`.
@@ -80,16 +80,16 @@ defines it. Alphabetical. Grep the term.
 
 ## The system
 
-- **Durable Object** (object): Cloudflare's single-threaded stateful unit; the park has three classes: `RoomObject` (rooms, nests, sockets), `VoteLedger` (votes, the ticket book, the opening switch), `Collections` (collections, quests, the shop, feedback, nests' data); `apps/edge/wrangler.jsonc`.
-- **Edge** (transport): the room server path, `?transport=edge`; the other transports are `local` (tabs on one device) and `supabase`; `apps/park/src/net`.
+- **Durable Object** (object): Cloudflare's single-threaded stateful unit; the park has four classes: `RoomObject` (rooms, nests, sockets), `VoteLedger` (votes, the ticket book, the opening switch), `Collections` (collections, quests, the shop, feedback, nests' data), `Overflow` (the line, the ribbon, copies of rooms, the ledge painter's drafts; OP-075); `apps/edge/wrangler.jsonc`.
+- **Edge** (transport): the room server path, `?transport=edge`; the only other transport is `local` (tabs on one device); `TransportKind` in `apps/park/src/config.ts`, `apps/park/src/net` (OP-150).
 - **Frame**: one JSON message on the socket (at most 1 KiB), or the heartbeat text `hb`; `packages/shared/src/edge.ts`.
 - **Hibernation**: Durable Object WebSockets that survive the object being evicted; everything a visitor needs is in the socket attachment; `apps/edge/src/RoomObject.ts`.
-- **Protocol version**: `EDGE_PROTOCOL_VERSION` (8) in `packages/shared/src/edge.ts`; a mismatch makes the page reload itself once.
+- **Protocol version**: `EDGE_PROTOCOL_VERSION` (15) in `packages/shared/src/edge.ts`; a mismatch makes the page reload itself once.
 - **Room server**: the Worker plus the `RoomObject`; authoritative for positions, quests and activities; `apps/edge`.
 - **`ROOM_SHARDING`**: `single` (the whole park in one object, today) or `room` (one object per room); `wrangler.jsonc`, `docs/CAPACITY.md`.
 - **Secrets**: `PASS_SIGNING_KEY`, `ADMIN_KEY`, `SHOPIFY_SHOP`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_WEBHOOK_SECRET`, `OPENING_PASS_CODE`; set with `wrangler secret put` or as GitHub repository secrets, never in a file; `apps/edge/src/env.ts`.
 - **Walk**: a straight move at `WALK_SPEED` (260 px/s, `packages/shared/src/walk.ts`) from a tap, clamped to the walkable area by `resolveTarget`.
-- **Worker**: the Cloudflare Worker that serves the client, the API and the sockets; `apps/edge/src/index.ts`.
+- **Worker**: the Cloudflare Worker that serves the client, the API and the sockets; its front door is `apps/edge/src/index.ts` and its routes are in `apps/edge/src/routes/`, listed in `table.ts` (OP-201).
 
 ## The project
 

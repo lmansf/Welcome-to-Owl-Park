@@ -19,25 +19,8 @@
  * screen reading "Hatching Soon" (one of the approved closed-sign phrases), and standing at it
  * says so. Every number and every visitor-facing word here is a default the owner may change.
  *
- * TODO-DOCS (OP-038, OP-059): docs/ACTIVITIES.md marks the arcade's games PLANNED and
- * docs/ARCHITECTURE.md section 4 is protocol v8. Once the games go live: the three games, their pay
- * (runFeathers and the day's-best bonus) under the activities' daily cap, the score wall (ArcadeBook
- * over the arcade_scores table), the task "Play a round in the arcade", protocol v9 (`act` run and
- * score, the `wall` frame), and the page's arcade/ modules and ArcadeScene. The write-up drafted with
- * OP-038 is in commit c342d60 (its docs/ACTIVITIES.md and docs/ARCHITECTURE.md) to start from; the
- * hall and the paintings are noted in apps/park/src/game/arcade.ts.
- *
- * TODO-DOCS (OP-137): the slingshot game is Talon Toss (the owner renamed it from Nest Knockdown on
- * 2026-10-28, its title sign repainted): docs/ACTIVITIES.md and docs/CHANGELOG.md still name it Nest
- * Knockdown. Hoot & Hop is played in levels now (apps/park/src/arcade/hop.ts): four-way hops (the
- * arrow keys or WASD, a swipe on the field, a flick of the pad's stick on a touch screen; a tap is a
- * hop up), ten levels laid out by hand and seeded ones after, rivers crossed on logs and bats from
- * level 4, three lives; seven points a level (a row each, one for the top), so its feather bands are
- * seven times the old crossings' (7, 21, 35, 56, 84, 119) and its time check counts a hop a point.
- * Talon Toss is played on a physics engine (matter.js, fetched only for that game): three targets (a
- * stack, a tower, a nest sheltered under a plank), five shots at each, a point for each crate or plank
- * knocked to the ground, broken or off the field and eight for the nest; a shot ends once everything
- * has been still a second (eight seconds at most); its best is 30, as before, with the same bands.
+ * TODO-DOCS (OP-137): docs/CHANGELOG.md's earlier lines still call the slingshot game Nest Knockdown, its
+ * name before the owner renamed it Talon Toss on 2026-10-28.
  */
 import { CLOSED_SIGNS } from '../rooms';
 import type { OwlLook } from './protocol';

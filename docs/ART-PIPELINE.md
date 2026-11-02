@@ -1,9 +1,9 @@
 # Art pipeline: replacing the placeholder art
 
 - Status: BUILT; the owner picks every image before anything is published or committed
-- Verified against: main 67ca3ab (2026-10-23) by the doc agent for headings and paths only; the content is Claude Code's as written
-- Code: tools/art (generate.mjs, prompts.mjs, postprocess.py, preview.mjs, provenance.jsonl), apps/park/public/art, apps/park/src/game/artFiles.ts
-- Tickets: OP-003, OP-019, OP-027, OP-031, OP-033, OP-037
+- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02) by the doc agent for headings, paths and the OP-202 additions; the rest of the content is Claude Code's as written
+- Code: tools/art (generate.mjs, prompts.mjs, postprocess.py, wing_layers.py, artlib/overlaycheck.py, config/assets.json, preview.mjs, provenance.jsonl), apps/park/public/art, apps/park/src/game/artFiles.ts
+- Tickets: OP-003, OP-019, OP-027, OP-031, OP-033, OP-037, OP-084, OP-112, OP-125, OP-129, OP-136, OP-157, OP-159, OP-160, OP-162
 - Related: tools/art/README.md, CLAUDE.md (art rules)
 
 Every image in the park lives under `apps/park/public/art/` and is referenced by key. For each
@@ -16,8 +16,10 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
   every screen.
 - **WebP and PNG** are used as-is. Supply `<key>@2x.*` at twice the logical size for phones and
   `<key>.*` at the logical size; the game picks the 2x file on dense screens when it exists. Painted
-  room backgrounds (`hub`, `grove`, `market`) ship as lossy WebP, everything else as PNG (overlays,
-  set pieces and owl layers need exact alpha and grey levels).
+  room backgrounds (`hub`, `grove`, `market` and every room screen) ship as lossy WebP. So does any
+  key `config/assets.json` marks `"format": "webp"`: the nests' furniture (`decor-*`) and the tree's
+  painted layers, with their alpha exact, and the arcade's game fields (OP-129, OP-157). Everything
+  else ships as PNG (overlays, set pieces and owl layers need exact alpha and grey levels).
 - Art for a room is loaded when the room opens and released when the visitor leaves it, so memory
   stays at one room's worth whatever the park grows to.
 
@@ -31,16 +33,18 @@ does not change. Whatever the file's resolution, it is drawn at the logical size
 | `guardian` | 720 x 820 | The guardian owl, transparent background, bottom-centre on its perch |
 | `market`, `market-fg` | 1600 x 900 | Neon market background (WebP) and foreground (PNG) |
 | `arcade` | 1600 x 900 | The arcade off the market street's east end (WebP): a neon hall with three game cabinets painted along its back wall under a blank score board; the park draws a cabinet's screen over the painting while its game is off |
-| `robot-owl` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored |
+| `robot-owl` | 900 x 900 | The giant robot owl behind the skyline, bottom-centre anchored; built as a barred owl, the market guardian's species (OP-112): a round domed head with no ear tufts, a facial disc of chrome rings, barred plates across the chest |
 | `blockade-<phrase>` (two keys) | 300 x 300 | Construction blockades in the hub's closed arches, each carrying its doorway's approved phrase; transparent PNG, 1x and 2x, bottom-centre on the door's marker |
 | `owl-body`, `owl-belly`, `owl-accent` | 200 x 240 | Visitor owl layers: white, with shading as grey luminance and full alpha; the game multiplies them by the visitor's colours |
 | `owl-face`, `owl-blink` | 200 x 240 | Eyes and beak in fixed colours (not tinted); the blink frame replaces the face for a moment, so it must include the beak |
 | `owl-<species>-body` and the rest (barn, burrowing, snowy, screech) | 200 x 240 | A species' own five layers, by the same rules as the owl's; loaded when an owl of that species shows up, and until then (or without them) it wears the great horned owl's at its own size |
+| `owl-flight-body`, `owl-flight-belly`, `owl-flight-accent` (and `owl-<species>-flight-*`) | 200 x 240 | The body an owl wears in flight, its folded wings taken away (OP-136); tintable like the owl's own, split from the kind's flight master (below) |
+| `owl-wing-body`, `owl-wing-accent` | 200 x 120 | The owl's right wing spread open, drawn behind the body in flight (OP-084): white with grey shading, tinted with the owl's body and accent colours like the owl's own layers; the root, where it meets the shoulder, at `ROOT` (12, 72) and the tip `SPAN` (176) to its right (`tools/art/wing_layers.py`); the game mirrors it for the left wing and turns both at the root; every owl kind wears it |
 | `item-<id>` (82 keys) | head 140 x 100, face 120 x 60, neck 130 x 80, pet 90 x 90 | Collectible wearables and pets (`docs/COLLECTIBLES.md`), in owl canvas units, drawn at the owl's scale; transparent PNG, 1x and 2x |
 | `icon-<id>` (48 keys) | 64 x 64 | Collection icons for the 24 effects and 24 emotes: white with grey shading on transparency; the game multiplies them by the effect's tint (or the emote colour), so one painting serves every colourway |
 | `homes-west`, `homes` | 1600 x 900 | The street of nests, two screens (WebP): a lane of tree houses at dusk with six round nest doors; `homes` (x 1600, nearest the lobby) is the painting and `homes-west` (x 0) its wing |
 | `nest` | 1600 x 900 | The inside of every nest (WebP): a round room in a trunk with a bare floor and bare wall, because its owner furnishes it |
-| `decor-<id>` (16 keys) | 100 to 260 wide, sizes in `art.ts` | Nest furniture, floor and wall pieces: transparent PNG, 1x and 2x, drawn with the bottom centre on its spot |
+| `decor-<id>` (16 keys) | 100 to 260 wide, sizes in `art.ts` | Nest furniture, floor and wall pieces: WebP with exact alpha (`"format": "webp"`, OP-129), 1x and 2x, drawn with the bottom centre on its spot |
 
 The site icons and the link-preview card (`apps/park/public/favicon.png`, `apple-touch-icon.png`
 and `og-image.jpg`) are not pipeline keys: they are composed from the approved mascot headshot and
@@ -228,6 +232,35 @@ enclosed holes filled, grown a few pixels and feathered, and toned to the painti
 patch. Every other pixel is the painting's own. The result is a new raw candidate of the target
 key whose sidecar names both sources; `room` and `wing` carry a `patch:` line into the provenance.
 
+**A seam between two screens** (OP-125). A realm's second screen is painted out from the first
+screen's edge, as the wings are: two screens painted apart, the second with the first only as a
+style reference, do not continue at the join (the glass realm's buildings and pavement did not). To
+mend such a join, cut a crop across it from the two published screens laid side by side, repaint its
+middle half, join it back and finish each screen from the result:
+
+```bash
+pnpm art:finish cut glass-seam --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --box 2560,0,3840,1800 --half
+pnpm art:generate --provider fal --only glass-seam                 # repaints the crop's middle half
+pnpm art:finish sheet glass-seam && node tools/art/generate.mjs select glass-seam <hash16>
+pnpm art:finish patch glass --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --edit-key glass-seam --at 2560,0 --threshold 0 --join <px>
+pnpm art:finish room glass --crop left && pnpm art:finish room glass-east --crop right
+```
+
+`--base a,b` lays the files side by side; `cut --half` writes the crop at half size when its PNG is
+over the generator's inline limit (the edit job still asks for the full size); `patch --join <px>`
+joins the edit to the painting along the cheapest top-to-bottom cut within that many pixels of the
+box's left and right sides, and with `--threshold 0` the whole box is the edit's; `room --crop
+left|right` finishes one screen from the joined row. The job is `GLASS_SEAM_JOB` in `prompts.mjs`.
+
+**The same for keyed layers, four screens in a row** (OP-162). Level 1's four playfields were mended
+the same way: the four selected playfields laid side by side west to east (8192 x 1152, the joins at
+x 2048, 4096 and 6144), a square across each join cut out (`cut tree-l1-seam-<pair> --base-key
+tree-l1-w1-play --base <w1>,<0>,<e1>,<e2> --box <J-576>,0,<J+576>,1152 --half`), its middle half
+repainted on the magenta key, and each edit pasted back into the row of four in turn (`patch
+--threshold 0 --join 96`). Each screen is then finished from the patched row with `overlay
+tree-l1-<screen>-play --crop <i/3>,0.5` (i = 0 to 3, west to east): `--crop fx,fy` picks the screen's
+window in the row by its share across and down.
+
 The arcade's doorway on the market street was made the same way, on the published screen rather
 than a raw candidate: `market-arcade-door` is an edit of a crop of `market-east@2x.webp` (`cut
 market-arcade-door --base-key market-east --base apps/park/public/art/market-east@2x.webp`),
@@ -287,6 +320,21 @@ the key's hue fails: green halos round lanterns, while cyan neon next to a green
 Prompts cannot pin props to exact places, so the finish has two deterministic fixes, each recorded
 in provenance: `overlay <key> --clear-signs` makes the overlay transparent over the sign boards
 (hanging roots then read as passing behind the board) and `--clear-haze` removes keyed glow.
+
+Overlays and other keyed room layers (OP-157, OP-162):
+
+- A room layer the table marks `"overlay": true` is finished like a `-fg`, keyed out of its
+  backdrop, by `overlay <key>`; marked `"format": "webp"` as well (the tree's painted layers), it
+  ships as WebP with its alpha. A layer the room draws behind the owls (the tree's playfield, which
+  the owls stand on) is checked for key haze only, not for covering the floor, the spawns, the
+  doorways or the signs.
+- `overlay <key> --clear-poly x,y,x,y,...` makes the overlay transparent inside a polygon in the 1x
+  final's room pixels, its edge feathered a pixel or two. It is repeatable and recorded in the post
+  record's `tools`. It is for a prop the frame cut in half: an overlay scrolls faster than the room,
+  so between screens such a prop floats in mid-view.
+- An overlay is keyed one screen at a time (`key_screen`): each screen was painted on its own shade
+  of the key colour, and one backdrop estimated for a whole row would leave a darker screen's sky half
+  opaque. So a row of screens laid side by side finishes each screen with `--crop fx,fy`.
 
 ### Collectible items
 
@@ -369,6 +417,59 @@ the same colour code (`owl-barn-master` and so on in `prompts.mjs`), finished wi
 the accent hue, so its value floor is higher; rounder heads with wider-set eyes get a wider face
 area. The game measures where hats, glasses and scarves sit from each species' own layers.
 
+**In flight** (OP-136). An owl's wings open behind its body in flight, so a body with its folded
+wings painted on would show four. Each kind gets a flight master (`owl-flight-master`,
+`owl-barn-flight-master` and so on, in `FLIGHT_MASTERS`): an edit of its selected master with the
+folded wings taken away and nothing else. The recipe: cut, edit, patch, `owl --flight`.
+
+```bash
+pnpm art:finish cut owl-flight-master --base-key owl-master --box 0,0,1040,1248   # the whole master, small enough to send
+pnpm art:generate --provider fal --only owl-flight-master                         # the edit job: refs @canvas:owl-flight-master
+pnpm art:finish sheet owl-flight-master && node tools/art/generate.mjs select owl-flight-master <hash16>
+pnpm art:finish patch owl-flight-master --base-key owl-master --edit-key owl-flight-master --at 0,0 --box <below the face>
+pnpm art:finish owl --flight [--species barn]                                     # owl-flight-body, -belly and -accent
+```
+
+`patch` pastes back only what the edit changed below the face (`--box`). `owl --flight` splits the
+flight master with the master's own registration, so the flight body sits
+exactly where the body does, and the face, the eyes and the feet stay the master's own.
+
+**The wing** (OP-084). `owl-wing-right` is one right wing spread open, painted in the master's colour
+code (the covert feathers flat red, the long flight feathers flat blue, on magenta) as an edit of the
+selected `owl-master`, so it shares the owls' style. Generate, pick, then `pnpm art:finish wings`
+splits it into `owl-wing-body` (the whole wing, tinted with the body colour, so the wing is never
+see-through) and `owl-wing-accent` (the flight feathers), registered on 200 x 120 with the root on
+`ROOT`, at 1x and 2x (`tools/art/wing_layers.py`). Publish them with `pnpm art:finish publish
+owl-wing-body owl-wing-accent`.
+
+### The tree's layers: split, match, shift (OP-159, OP-160, OP-162)
+
+The tree (map 2) is painted in layers per screen (`docs/MAP.md` sections 6 and 10). The six-layer
+recipe (OP-159, OP-173): one scene a screen, picked, shifted onto the ground line and mended at its
+joins, is the screen's back scenery (`<screen>-back`). A colour-coded map of it, platforms green
+`#00FF00` and front props blue `#0000FF`, is an edit of its half-size cut. `split` then cuts the
+playfield and the front props out of the back scenery's own pixels, so the layers stay in register:
+
+```bash
+pnpm art:finish split <screen>-play  --base-key <screen>-back --map-key <map> --colour '#00FF00'
+pnpm art:finish split <screen>-front --base-key <screen>-back --map-key <map> --colour '#0000FF'
+```
+
+Each writes a new raw candidate of its key; select it and finish it as any keyed layer. `--box`
+cuts one screen from a row mended at its joins.
+
+- `match <key> --to-key <key>`: when one screen's overlay (or another keyed layer) comes back paler
+  or darker than its neighbour's, its props' colours are moved to the neighbour's (each RGB channel's
+  mean and spread away from the key colour); a new raw candidate.
+- `shift <key> --dy N`: a tree playfield whose painted floor sits above the ground line its
+  neighbours share is moved down N room pixels (at most a quarter of its height), its top rows
+  mirrored into the gap so what ran out of the frame still does; a new raw candidate, then select and
+  finish it as usual. With `--from-y Y` only the rows from room y Y down move (OP-160): an overlay
+  whose bottom leaves reach over the walkway has that band lowered below the ground line, its top band
+  left where it is.
+- Before a tree layer is encoded as WebP its alpha snaps to clear or opaque within `ALPHA_SNAP` (4)
+  of either end: Lanczos ringing left faint alpha nobody sees, which cost the bamboo screen 60 KB.
+
 ### File budget and the 2x policy
 
 Every published file must encode under 200 000 bytes. Room backgrounds are WebP: a painted
@@ -378,7 +479,10 @@ and steps down to 50 until the file fits, and records the quality in the post re
 provenance `tools` (`budget: webp q86`). `room --with-2x` adds a 3200 x 1800 WebP for dense
 screens under `--budget-2x` (default 640 000 bytes; a painted room lands around 500 KB); without
 it the loader falls back to `<key>.webp`, which phones upscale (fine for painterly art, and half
-the GPU memory). Everything else is PNG: the finish tries truecolour first, then palettes of 256
+the GPU memory). A cut-out marked `"format": "webp"` (the nests' furniture, the tree's layers) is
+finished by `piece` or `overlay` as WebP, lossy colour with the alpha exact; `webp <key>` re-encodes
+one already published as PNG, keeping its provenance, and `publish` then removes the PNG. Everything
+else is PNG: the finish tries truecolour first, then palettes of 256
 down to 64 colours (alpha-preserving for keyed assets), takes the first that fits and records
 the colour count; it warns below 128 colours. Dithering is off by default because it inflates
 PNGs about tenfold on smooth gradients; `--dither ordered` breaks sky banding at little cost. An
@@ -402,7 +506,7 @@ finish does not have, a PNG the new WebP replaces or the reverse), since the loa
 on dense screens and WebP over PNG and would otherwise keep showing the old art. `pnpm art:finish
 check --all` verifies everything published: sizes equal the logical size or exactly twice it,
 budgets, chunk allowlists, SVG/raster conflicts, a key published as both PNG and WebP, WebP only
-for room backgrounds, a `@2x` with no 1x, overlay rules, owl layer modes and feet, that every
+for room backgrounds and keys marked `"format": "webp"` (and no PNG for those), a `@2x` with no 1x, overlay rules, owl layer modes and feet, that every
 published file has a provenance line whose hash matches the file (a stale or hand-edited file
 fails), that no `@2x` is older than its 1x, and the provenance file.
 

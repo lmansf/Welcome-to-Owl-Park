@@ -16,10 +16,6 @@
  * back; then write the run's folder (lib/runlog.mjs) and its proposed tickets (lib/propose.mjs).
  * Exit 0 when the hypothesis held and the park came back, 1 when not, 2 when the run could not start.
  * In GitHub Actions: .github/workflows/chaos.yml, started by hand, keeps the run's folder 90 days.
- *
- * TODO-DOCS (OP-132): docs/TESTING.md: a chaos section (the steady state, the eight experiments and
- * which are built, how to run one here and in Actions, the run's folder, the proposer and QA's
- * filing); docs/PLAYBOOK.md: the runbook lines; results/INDEX.md is the doc agent's to keep.
  */
 import { execFileSync } from 'node:child_process';
 import { setTimeout as sleepFor } from 'node:timers/promises';

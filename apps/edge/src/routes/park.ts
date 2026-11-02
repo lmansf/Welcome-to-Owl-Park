@@ -57,8 +57,6 @@ export async function offerProtectByOrder(env: Env, log: Logger, origin: string,
  * A ticket event for the park's log (OP-192): handed to the collections object's outbox after the
  * answer, which hashes the order, the owl and the ticket on their way out. Nothing while the log is off.
  */
-// TODO-DOCS (OP-192): docs/LOGGING.md: write_failed (worker.tickets, warn) with reason, the ticket event (paid, claimed,
-// refunded, cancelled or scanned) the park's log missed; and (worker.store, warn) a paid order's buyer that missed the contacts.
 export function logPurchase(ctx: ExecutionContext, env: Env, log: Logger, d: PurchaseData): void {
   if (!logConfig(env)) return;
   ctx.waitUntil(
