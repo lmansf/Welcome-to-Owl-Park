@@ -907,6 +907,8 @@ export class RoomScene extends Phaser.Scene {
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
+    // Where in the tree the owl is, on the computer's minimap (OP-213); none out of the tree.
+    this.hud.setTreeSpot(this.sideView() ? { room: this.room.id, x: this.me.pos.x } : null);
     if (!this.leaving) {
       this.steer();
       this.checkDoors(finished);

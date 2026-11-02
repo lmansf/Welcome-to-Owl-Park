@@ -316,3 +316,76 @@ test.describe('the tree’s directions: down on the left, up on the right (OP-22
     expect(s.pos.x).toBeLessThan(up.x);
   });
 });
+
+test.describe('the tree’s minimap on a computer (OP-213)', () => {
+  const map = (page: Page) => page.locator('[data-tree-map]');
+  const level = (page: Page) => page.locator('[data-tree-map] [data-level]');
+
+  test('shows at the top left in a tree room, under the top bar and clear of the feedback bug; never on a phone', async ({ page, isMobile }) => {
+    if (isMobile) {
+      await page.setViewportSize(ON_ITS_SIDE);
+      await openPark(page, { room: 'l1' });
+      await expect(map(page)).toBeHidden();
+      return;
+    }
+    await openPark(page, { room: 'l1' });
+    await expect(map(page)).toBeVisible();
+    await expect(level(page)).toHaveText('Ground level');
+    await expect(page.locator('[data-tree-map] [data-room="l1"]')).toHaveClass(/here/);
+    const box = (await map(page).boundingBox())!;
+    const bar = (await page.locator('#hud .bar').boundingBox())!;
+    expect(box.x).toBeLessThan(40);
+    expect(box.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+    const bug = page.locator('[data-feedback-bug]');
+    if (await bug.isVisible()) expect(box.y + box.height).toBeLessThan((await bug.boundingBox())!.y);
+    // A window the size of a phone on its side: no room for it.
+    await page.setViewportSize(ON_ITS_SIDE);
+    await expect(map(page)).toBeHidden();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(map(page)).toBeVisible();
+    // The Menu over the room hides it.
+    await page.keyboard.press('KeyM');
+    await expect(map(page)).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(map(page)).toBeVisible();
+  });
+
+  test('its dot moves along the level as the owl walks, and seen from above (the hub) there is none', async ({ page, isMobile }) => {
+    await openPark(page, { room: 'l1' });
+    // The minimap is a computer's: a phone's tree room has none.
+    if (isMobile) return expect(map(page)).toBeHidden();
+    const dot = page.locator('[data-tree-map] [data-owl]');
+    await expect(map(page)).toBeVisible();
+    const before = Number(await dot.getAttribute('cx'));
+    await walkAndStop(page, LOBBY + 1500, GROUND);
+    await expect.poll(async () => Number(await dot.getAttribute('cx'))).toBeGreaterThan(before + 8);
+    await openPark(page, { room: 'hub' });
+    await expect(map(page)).toBeHidden();
+  });
+
+  test('names the level the owl is on, after up a stair and down another', async ({ page, isMobile }) => {
+    test.slow(); // two room changes drawn with software WebGL
+    // Up the stair at the spiral stair's foot to level 2, and down level 2's stair on its left again (OP-220).
+    await openPark(page, { room: 'l1' });
+    // The minimap is a computer's: a phone's tree room has none.
+    if (isMobile) return expect(map(page)).toBeHidden();
+    await expect(level(page)).toHaveText('Ground level');
+    // Into the stair up's doorway (960 to 1070) by the keys, which never take it by themselves, then up.
+    await walkAndStop(page, LOBBY + 880, GROUND);
+    await page.keyboard.down('ArrowRight');
+    await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
+    await page.keyboard.up('ArrowRight');
+    await standsAt(page, 0);
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l2');
+    await expect(level(page)).toHaveText('Low branches');
+    await expect(page.locator('[data-tree-map] [data-room="l2"]')).toHaveClass(/here/);
+    // Down level 2's stair, just west of where the owl came up: walked into with W held.
+    await page.keyboard.down('KeyW');
+    await page.keyboard.down('ArrowLeft');
+    await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l1');
+    await page.keyboard.up('ArrowLeft');
+    await page.keyboard.up('KeyW');
+    await expect(level(page)).toHaveText('Ground level');
+  });
+});
