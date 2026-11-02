@@ -7,6 +7,9 @@ Supabase Edge Function in the owner's analytics project (its README). `apps/ig-c
 Worker too, not the park's: the Instagram MCP connector (OP-168; its README has the setup and
 secrets). Run Wrangler through the package scripts so the pinned version is used: `pnpm dev:edge`, `pnpm deploy:edge`, or `pnpm --filter @owl-park/edge exec wrangler <command>`.
 
+- Formatter and linter (OP-203): Biome, set in `biome.json` (line width 140), run by `pnpm format`,
+  `pnpm format:check` and `pnpm lint`. The repo is not formatted yet: the one reformat commit lands when
+  no PRs are open, and CI checks it from then on. Until then never run `pnpm format` on a branch.
 - Checks before a push: `pnpm check` (typecheck, unit tests, build) and `pnpm e2e` (Playwright).
 - The edge typecheck runs `wrangler types` first; `apps/edge/worker-configuration.d.ts` is generated
   and ignored by git. Never hand-write the `Env` bindings; change `wrangler.jsonc` instead.
