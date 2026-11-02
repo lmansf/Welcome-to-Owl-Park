@@ -30,7 +30,8 @@
  * `game.v_realm_time` and `game.v_player_realm`, and `minutes_by_realm` in `game.v_player_lifetime`
  * (apps/park-log/sql/realms.sql): how the times add up to the visit's, and what each entry source means.
  */
-import { DEFAULT_SPECIES, SPECIES, isHexColour, type SpeciesId } from '@owl-park/shared';
+import { DEFAULT_SPECIES, SPECIES, isHexColour, isNestRoom, mapOf, type SpeciesId } from '@owl-park/shared';
+import { TREE_REALMS, roomFor } from '@owl-park/shared/rooms';
 import { moduleLog } from './logs';
 import { cleanVisit, type CollectLog, type EntrySource, type Visit } from './collectLog';
 
@@ -111,7 +112,10 @@ export class ParkStats {
       this.log.session({ cid: v.cid, pass: v.pass, started: v.started, ended: v.seen, device: v.device === 'phone' || v.device === 'desktop' ? v.device : null, rooms: rooms(v.rooms), gained: v.gained });
       // The room the owl was last in ends when the visit was last seen.
       const times = this.sql.exec<RoomTime>(`SELECT * FROM stats_rooms WHERE pass = ? ORDER BY seq`, v.pass).toArray();
-      for (const t of times) this.log.realmVisit({ cid: t.cid, pass: t.pass, seq: t.seq, room: t.room, entered: t.entered, exited: t.exited ?? Math.max(t.entered, v.seen), source: t.source, gained: t.gained });
+      const maps = visitMaps(times.map((t) => t.place));
+      times.forEach((t, i) =>
+        this.log.realmVisit({ cid: t.cid, pass: t.pass, seq: t.seq, room: t.room, map: maps[i]!, entered: t.entered, exited: t.exited ?? Math.max(t.entered, v.seen), source: t.source, gained: t.gained }),
+      );
       this.sql.exec(`DELETE FROM stats_rooms WHERE pass = ?`, v.pass);
       this.sql.exec(`DELETE FROM stats_visits WHERE pass = ?`, v.pass);
     }
@@ -149,6 +153,25 @@ export class ParkStats {
     if (open) this.sql.exec(`UPDATE stats_rooms SET exited = MAX(entered, ?) WHERE pass = ? AND seq = ?`, now, v.pass, open.seq);
     this.sql.exec(`INSERT INTO stats_rooms (pass, seq, cid, place, room, entered, source) VALUES (?, ?, ?, ?, ?, ?, ?)`, v.pass, (last?.seq ?? 0) + 1, s.cid, place, v.room, now, source);
   }
+}
+
+/**
+ * Which park each of a visit's rooms was walked in (OP-113, for the tree's second map, OP-128): a
+ * room of the tree is map 2 and a room only today's park has is map 1. A room both parks share (a
+ * realm a level of the tree opens into, such as the market, and every nest) takes the park of the
+ * room before it in the visit, or for the visit's first rooms the park of the first room that tells,
+ * so a tree owl's market and its nest count for the tree. A visit of shared rooms only is map 1.
+ * `places` are the rooms' own ids in the order the owl went into them.
+ */
+export function visitMaps(places: readonly string[]): (1 | 2)[] {
+  const own = places.map((place): 1 | 2 | null => {
+    if (isNestRoom(place) || TREE_REALMS.has(place)) return null;
+    const room = roomFor(place);
+    return room ? mapOf(room) : null;
+  });
+  const first = own.find((m) => m !== null) ?? 1;
+  let carry: 1 | 2 = first;
+  return own.map((m) => (carry = m ?? carry));
 }
 
 function rooms(text: string): string[] {
