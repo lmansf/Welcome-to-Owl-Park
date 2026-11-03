@@ -421,7 +421,9 @@ describe('the Worker’s log (OP-134)', () => {
     await hook('orders/cancelled', paid);
     await Promise.all(waits);
     logged(cap.lines, 'write_failed', { level: 'warn', component: 'worker.tickets', reason: 'cancelled', order_hash: hashForLog('1001') });
-  });
+    // It takes about five seconds on its own (on main too), right at the default five-second limit:
+    // a busy runner timed it out, so it gets room.
+  }, 15_000);
 
   it('tells each store webhook: turned away, taken, an order recorded, a repeat, and one that failed', async () => {
     const store = new FakeStore();

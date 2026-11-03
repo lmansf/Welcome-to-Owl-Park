@@ -221,6 +221,8 @@ describe('puzzle quests in this browser (OP-255)', () => {
     // The root door's key is hidden in this room: standing at it picks it up.
     const door = started.view!.locks.find((l) => l.id === 'root-door')!;
     expect(door.key?.room).toBe('hub');
+    // Well away from the key (its spot is picked per run, so it can fall next to Pip).
+    Object.assign(stand, { x: door.key!.x + 3000, y: door.key!.y, top: 0 });
     expect((await link.puzzle('take', 'puzzle-moon-gate', { lock: 'root-door' })).reason).toBe('far');
     Object.assign(stand, { x: door.key!.x, y: door.key!.y, top: door.key!.top ?? 0 });
     const took = await link.puzzle('take', 'puzzle-moon-gate', { lock: 'root-door' });
