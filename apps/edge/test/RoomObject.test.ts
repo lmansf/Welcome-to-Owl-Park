@@ -2103,8 +2103,11 @@ describe('a parkour course in the room object (OP-224)', () => {
 describe('puzzle quests in the room object (OP-255)', () => {
   it('lists the owls next to you that are in a run, joins one by its owl id, and refuses an owl not next to you', async () => {
     const obj = roomObject();
-    const a = await join(obj, 'hub', 'v_a', OWNER);
-    await join(obj, 'hub', 'v_b', GUEST);
+    // Both on the spawn, side by side: a plain join scatters them, sometimes too far apart to be next to each other.
+    const a = connect('hub', 'v_a', OWNER);
+    await send(obj, a, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 2400, y: 730 } });
+    const b = connect('hub', 'v_b', GUEST);
+    await send(obj, b, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 2440, y: 730 } });
     collections.inRuns.add(GUEST);
     await send(obj, a, { t: 'puzzle', op: 'near', quest: 'puzzle-lockbox', r: 1 });
     await settle();
