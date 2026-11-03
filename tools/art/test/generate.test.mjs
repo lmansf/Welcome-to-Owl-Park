@@ -742,7 +742,7 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'l1', 'lobby', 'market', 'nest']);
+  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'l0', 'l0-arcade', 'l1', 'l2', 'l3', 'l4', 'l5', 'l5-street', 'lobby', 'market', 'nest']);
   // The tree's level 1 (map 2, OP-156, OP-162): four screens, each a sky plate, a middle distance and an
   // overlay scrolling at rates of their own over its playfield, the fading tiles with their fades.
   const l1 = g.rooms.l1;
@@ -978,4 +978,60 @@ test('the models command lists every family and marks the selected one', () => {
   assert.equal(r.status, 0, r.stderr);
   for (const id of Object.keys(G.MODELS)) assert.ok(r.stdout.includes(id), id);
   assert.match(r.stdout, /seedream-v4\.5 \*/);
+});
+
+test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets table agree', async () => {
+  const K = await import('../kit.mjs');
+  const art = parseArtTable();
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.equal(Object.keys(K.KIT.textures).length, 10);
+  assert.equal(Object.keys(K.KIT.sheets).length, 18);
+  for (const key of K.KIT_TEXTURE_KEYS) {
+    assert.deepEqual(art[key], { w: K.KIT.texture_size, h: K.KIT.texture_size, kind: 'texture' }, `${key} in art.ts`);
+    assert.equal(ASSETS.keys[key].format, 'webp', `${key} ships as WebP`);
+    const job = jobs.get(key);
+    assert.equal(job.kind, 'texture');
+    assert.equal(job.size, `${2 * K.KIT.texture_size}x${2 * K.KIT.texture_size}`, `${key} generated at twice the tile`);
+    assert.match(job.prompt, /tileable/);
+  }
+  const names = new Set();
+  for (const [name, sheet] of Object.entries(K.KIT.sheets)) {
+    assert.equal(sheet.pieces.length, 6, `${name}: six pieces, three across and two down`);
+    const job = jobs.get(`kit-sheet-${name}`);
+    assert.ok(job && job.kind === 'sheet' && job.key_colour === K.KIT_KEY_COLOUR, `${name} has a sheet job on the key colour`);
+    assert.ok(P.HELPER_KEYS.includes(`kit-sheet-${name}`), `${name} is a helper key, not a shipped asset`);
+    for (const p of sheet.pieces) {
+      assert.ok(!names.has(p.name), `piece ${p.name} named once`);
+      names.add(p.name);
+      assert.match(p.name, /^[a-z][a-z0-9-]*$/);
+      assert.match(job.prompt, new RegExp(p.desc.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${name}: the prompt names ${p.name}`);
+      const key = `kit-${p.name}`;
+      assert.deepEqual(art[key], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' }, `${key} in art.ts at its size`);
+      assert.equal(ASSETS.keys[key].key_colour, K.KIT_KEY_COLOUR, `${key} keyed on the sheet's colour`);
+      assert.equal(ASSETS.keys[key].format, 'webp');
+      assert.ok(!jobs.has(key), `${key} is cut from its sheet, not generated on its own`);
+    }
+  }
+  assert.equal(names.size, 108);
+  // The area sets: accent textures, prop sheets and seven sideways-repeating backdrop layers each.
+  for (const [areaName, area] of Object.entries(K.KIT_AREAS)) {
+    assert.deepEqual(Object.keys(area.layers), ['sky-a', 'sky-b', 'far-a', 'far-b', 'mid-a', 'mid-b', 'mid-c'], `${areaName}: seven layers`);
+    assert.equal(Object.keys(area.textures).length, 3); assert.equal(Object.keys(area.sheets).length, 3);
+    for (const name of Object.keys(area.layers)) {
+      const key = `kit-${areaName}-${name}`;
+      const [w, h] = K.LAYER_SIZES[name.split('-')[0]];
+      assert.deepEqual(art[key], { w, h, kind: 'layer' }, `${key} in art.ts`);
+      const job = jobs.get(key);
+      assert.ok(job && job.kind === 'layer', `${key} has a layer job`);
+      assert.equal(Boolean(job.key_colour), !name.startsWith('sky'), `${key}: far and middle layers are keyed, skies are not`);
+      assert.equal(Boolean(ASSETS.keys[key].key_colour), !name.startsWith('sky'));
+      assert.match(job.prompt, /repeats sideways/);
+    }
+    for (const [name, sheet] of Object.entries(area.sheets)) {
+      const key = `kit-sheet-${areaName}-${name}`;
+      assert.ok(P.HELPER_KEYS.includes(key) && jobs.get(key)?.kind === 'sheet', `${key} is a helper key with a sheet job`);
+      for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
+    }
+  }
+  for (const job of [jobs.get('kit-tex-bark'), jobs.get('kit-sheet-signs-a')]) assert.match(job.prompt, /No text, letters or numbers anywhere/, 'the prompts ask for no text');
 });

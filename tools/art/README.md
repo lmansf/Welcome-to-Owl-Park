@@ -204,6 +204,45 @@ moved down by the post stage: `shift <key> --dy N` (room pixels) writes a new ca
 painting's top rows mirrored into the gap, so what ran out of the frame still does; `select` it and
 finish it as any other playfield.
 
+## The art kit (OP-229)
+
+`config/kit.json` is the one list of what the kit holds, and `kit.mjs` turns it into jobs. The level
+assembler (OP-234) builds screens from the published files, whose format is this:
+
+- **Textures** are the keys `kit-tex-<name>` (bark, inner-wood, planks, moss, leaves, rope, stone,
+  earth, roots, cloth): one `apps/park/public/art/kit-tex-<name>.webp` each, 512 x 512, opaque, and
+  tileable in both directions, so a tile sprite can repeat it at any size and scale. Generated at
+  1024 x 1024 as a painting that asks to tile, then `art:finish texture <key>` heals the wrap
+  (rolled by half, the cross of the old edges covered by the painting's own middle under a
+  feathered mask), resizes with the tiling kept and refuses a tile whose wrap seam is more than
+  `--max-seam` (1.6) times its inner detail; the post record keeps the seam ratios before and
+  after. No `@2x`: the assembler scales the tile.
+- **Shape sheets** are the helper keys `kit-sheet-<name>` (eighteen of them): one 2048 x 1152
+  painting on magenta `#FF00FF` with six props in a grid of three across and two down, listed in
+  `kit.json` in reading order. `art:finish pieces <key>` keys the sheet out, finds the six props as blobs (the painter's grid
+  is never exact) and takes them in reading order, trims each to its own pixels and fits it (contain, bottom-aligned, 2 % margin) into the piece's logical canvas, and
+  ships it as the public key `kit-<piece>`: `kit-<piece>.webp` (1x, w x h from the table) and
+  `kit-<piece>@2x.webp`, RGBA with the alpha exact, each with its own post record naming the sheet
+  and cell. Pieces that repeat (`*-mid`) are cut straight at both ends; caps (`*-cap-left`,
+  `*-cap-right`) end a run; slopes rise left to right (`*-slope-up`) or fall (`*-slope-down`).
+  `packages/shared/src/sprites.json` records each piece's drawn box, centre and solid box, as for
+  any cut-out, which is what the assembler should place by. Fewer than six props refuses the candidate; a small extra blob
+  (a leaf, a lantern on a thread) is dropped with a warning.
+- **Sizes**: a sheet gives its pieces one logical size (`w`, `h` in `kit.json`); a piece may set its
+  own. The same sizes sit in `apps/park/src/game/art.ts` (kind `texture` or `piece`) and
+  `config/assets.json`, which the tests hold in step with `kit.json`.
+- **Area sets** live under `kit.areas.<area>` and follow the same two formats with the area's name in
+  the key: accent textures `kit-tex-<area>-<name>`, prop sheets `kit-sheet-<area>-<name>` cut to
+  `kit-<area>-<piece>`, and seven **backdrop layers** `kit-<area>-sky-a|b` (1600 x 900, opaque),
+  `kit-<area>-far-a|b` (1600 x 900, keyed) and `kit-<area>-mid-a|b|c` (800 x 450, keyed), finished by
+  `art:finish layer <key>`: a sky as painted, a far or middle layer keyed out of its magenta, each
+  healed to repeat sideways (its left and right edges continue into each other, the sideways seam
+  ratio in the post record) so the assembler can run one along any number of screens at the tree's
+  rates (sky 0.5, far about 0.6, middle 0.75). No `@2x`.
+- **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
+  clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
+  it is published; nothing from the kit is published without that.
+
 ## Output contract (read by the post stage)
 
 ```

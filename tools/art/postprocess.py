@@ -509,6 +509,293 @@ def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+KIT_PATH = TOOLS_ART_DIR / "config" / "kit.json"
+
+
+def kit_table() -> dict:
+    return json.loads(KIT_PATH.read_text(encoding="utf-8"))
+
+
+def kit_sheet(key: str) -> tuple[dict, str]:
+    """A sheet's table entry and the prefix its pieces' keys carry: ``kit-`` for the core set,
+    ``kit-<area>-`` for an area set."""
+    kit = kit_table()
+    name = key.removeprefix("kit-sheet-")
+    if key.startswith("kit-sheet-"):
+        if name in kit["sheets"]:
+            return kit["sheets"][name], "kit-"
+        for area, spec in kit.get("areas", {}).items():
+            if name.startswith(area + "-") and name[len(area) + 1:] in spec["sheets"]:
+                return spec["sheets"][name[len(area) + 1:]], f"kit-{area}-"
+    raise ArtError(f"{key!r} is not a sheet key (kit-sheet-<name> or kit-sheet-<area>-<name> in config/kit.json)")
+
+
+def heal_tile(img: Image.Image, band: float = 0.25, axes: tuple[int, ...] = (1, 0)) -> Image.Image:
+    """``img`` made to tile along ``axes`` (1 is sideways, 0 is up and down), one at a time: rolled by
+    half its size along the axis, so its two edges meet in the middle as one seam, that seam covered by
+    the original's own middle (continuous there) under a feathered band ``band`` of the size wide. Each
+    pass keeps what the other made continuous. An RGBA image is blended premultiplied, so a keyed
+    layer's edge carries no fringe."""
+    mode = "RGBA" if "A" in img.getbands() else "RGB"
+    arr = np.asarray(img.convert(mode)).astype(np.float32)
+    if mode == "RGBA":
+        arr[..., :3] *= arr[..., 3:4] / 255.0
+
+    def ramp(n: int) -> np.ndarray:
+        # 1 within a quarter of the band of the centre line, 0 past three quarters, linear between
+        d = np.abs(np.arange(n, dtype=np.float32) - n / 2) / (n * band)
+        return np.clip(1.5 - 2.0 * d, 0, 1)
+
+    for axis in axes:
+        n = arr.shape[axis]
+        rolled = np.roll(arr, n // 2, axis=axis)
+        mask = ramp(n)[None, :, None] if axis == 1 else ramp(n)[:, None, None]
+        arr = rolled * (1 - mask) + arr * mask
+    if mode == "RGBA":
+        a = np.maximum(arr[..., 3:4], 1e-3)
+        arr[..., :3] = np.where(arr[..., 3:4] > 0, arr[..., :3] * 255.0 / a, 0)
+    return Image.fromarray(np.clip(np.round(arr), 0, 255).astype(np.uint8), mode)
+
+
+def tile_seam_ratio(img: Image.Image) -> dict:
+    """How visible the wrap seams are: the mean difference between the last and first columns
+    (rows) against the mean difference between neighbouring columns (rows) inside; near 1 tiles."""
+    arr = np.asarray(img.convert("RGBA")).astype(np.float32)
+    arr = arr[..., :3] * arr[..., 3:4] / 255.0  # premultiplied: a keyed layer's clear sky is one flat colour
+    inner_x = float(np.abs(np.diff(arr, axis=1)).mean()); inner_y = float(np.abs(np.diff(arr, axis=0)).mean())
+    seam_x = float(np.abs(arr[:, 0] - arr[:, -1]).mean()); seam_y = float(np.abs(arr[0] - arr[-1]).mean())
+    # a floor of two grey levels of inner detail, so a flat tile's invisible seam is not a high ratio
+    return {"seam_x": round(seam_x / max(inner_x, 2.0), 3), "seam_y": round(seam_y / max(inner_y, 2.0), 3)}
+
+
+def resize_tiling(img: Image.Image, size: int) -> Image.Image:
+    """A periodic image resized without the filter disturbing its edges: tiled three by three,
+    resized, the middle tile kept."""
+    w, h = img.size
+    big = Image.new("RGB", (3 * w, 3 * h))
+    for i in range(3):
+        for j in range(3):
+            big.paste(img, (i * w, j * h))
+    big = big.resize((3 * size, 3 * size), Image.Resampling.LANCZOS)
+    return big.crop((size, size, 2 * size, 2 * size))
+
+
+def cmd_texture(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit texture (OP-229): the candidate healed to tile, resized to its logical size with the
+    tiling kept, shipped as WebP; the seam ratio recorded (and refused past --max-seam).
+
+    TODO-DOCS (OP-229): docs/ART-PIPELINE.md: the art kit section (texture, pieces, kit.json)."""
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    if ctx.assets.get(key, {}).get("kind") != "texture":
+        raise ArtError(f"{key!r} is not a texture key (kit-tex-<name> in config/kit.json)")
+    W, H = logical_size(key, ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw).convert("RGB")
+    before = tile_seam_ratio(img)
+    healed = heal_tile(img, a.band) if not a.no_heal else img
+    one = resize_tiling(healed, W)
+    after = tile_seam_ratio(one)
+    worst = max(after["seam_x"], after["seam_y"])
+    tools = [f"texture: heal band={a.band if not a.no_heal else 'none'} seam before x{before['seam_x']} y{before['seam_y']} after x{after['seam_x']} y{after['seam_y']}"]
+    if worst > a.max_seam:
+        raise ArtError(f"{key}: the tile's wrap seam is {worst}x its inner detail (limit {a.max_seam}); pick another candidate or widen --band")
+    data, info = webpmeta.encode_under_budget(one, ctx.budget)
+    outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("format", "quality", "colors", "mode", "budget_relaxed")}}}
+    tools.append(budget_line(info))
+    for name in remove_rasters(ctx.out, key, {f"{key}.webp"}):
+        note(f"removed stale final {name}")
+    # Review: the tile repeated two by two, so a seam shows at once.
+    rv = Image.new("RGB", (2 * W, 2 * H))
+    for i in range(2):
+        for j in range(2):
+            rv.paste(one, (i * W, j * H))
+    rvp = write_review(ctx, f"{key}.png", rv)
+    save_post_record(ctx, key, {"key": key, "kind": "texture", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "tiling": {"before": before, "after": after}})
+    note(f"{key} 1x: {key}.webp {outputs['1x']['bytes']} bytes WebP q{info.get('quality')}; seam x{after['seam_x']} y{after['seam_y']}")
+    note(f"review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def sheet_blobs(alpha: np.ndarray, scale: int = 4, grow: int = 3, min_px: int = 400) -> list[dict]:
+    """The props on a keyed sheet as blobs: the alpha pooled down by ``scale``, grown by ``grow``
+    pooled pixels (so a lantern on its thread stays with its hook), labelled into connected
+    components; each blob's full-size bbox, area and centroid, largest first."""
+    h, w = alpha.shape
+    H, W = h // scale, w // scale
+    m = (alpha[:H * scale, :W * scale].reshape(H, scale, W, scale).max(axis=(1, 3)) > 8)
+    for _ in range(grow):
+        g = m.copy()
+        g[1:] |= m[:-1]; g[:-1] |= m[1:]; g[:, 1:] |= m[:, :-1]; g[:, :-1] |= m[:, 1:]
+        m = g
+    labels = np.zeros((H, W), dtype=np.int32)
+    parent: list[int] = [0]
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]; x = parent[x]
+        return x
+
+    nxt = 1
+    for y in range(H):
+        row = m[y]
+        for x in range(W):
+            if not row[x]:
+                continue
+            up = labels[y - 1, x] if y else 0
+            left = labels[y, x - 1] if x else 0
+            if up and left:
+                a, b = find(up), find(left)
+                labels[y, x] = a
+                if a != b:
+                    parent[b] = a
+            elif up or left:
+                labels[y, x] = up or left
+            else:
+                parent.append(nxt); labels[y, x] = nxt; nxt += 1
+    flat = np.array([find(i) for i in range(nxt)], dtype=np.int32)
+    labels = flat[labels]
+    out = []
+    for lab in np.unique(labels):
+        if lab == 0:
+            continue
+        ys, xs = np.nonzero(labels == lab)
+        # the blob's own pixels at full size (not the grown ones): the alpha inside its grown box
+        x0, y0 = int(max(0, (xs.min() - grow) * scale)), int(max(0, (ys.min() - grow) * scale))
+        x1, y1 = int(min(w, (xs.max() + 1 + grow) * scale)), int(min(h, (ys.max() + 1 + grow) * scale))
+        sub = alpha[y0:y1, x0:x1] > 8
+        if not sub.any():
+            continue
+        sy, sx = np.nonzero(sub)
+        area = int(sub.sum())
+        if area < min_px:
+            continue
+        out.append({"bbox": [int(x0 + sx.min()), int(y0 + sy.min()), int(x0 + sx.max() + 1), int(y0 + sy.max() + 1)], "area": area,
+                    "cx": x0 + float(sx.mean()), "cy": y0 + float(sy.mean()), "mask": (labels == lab)})
+    out.sort(key=lambda b: -b["area"])
+    return out
+
+
+def order_blobs(blobs: list[dict], cols: int, rows: int) -> list[dict]:
+    """The sheet's ``cols * rows`` largest blobs in reading order: split into rows at the widest gap
+    between centroid heights, each row left to right."""
+    keep = sorted(blobs[: cols * rows], key=lambda b: b["cy"])
+    if rows > 1 and len(keep) > rows:
+        gaps = [keep[i + 1]["cy"] - keep[i]["cy"] for i in range(len(keep) - 1)]
+        cuts = sorted(sorted(range(len(gaps)), key=lambda i: -gaps[i])[: rows - 1])
+        groups, start = [], 0
+        for c in cuts:
+            groups.append(keep[start:c + 1]); start = c + 1
+        groups.append(keep[start:])
+    else:
+        groups = [keep]
+    out = []
+    for g in groups:
+        out.extend(sorted(g, key=lambda b: b["cx"]))
+    return out
+
+
+def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit shape sheet (OP-229): the candidate keyed out, its props found as blobs (the painter's
+    grid is never exact, so the six are taken in reading order of where they sit), each trimmed to
+    its own pixels and fitted into its piece's logical canvas at 2x, shipped as the piece's WebP
+    cut-outs (1x and 2x) with the alpha exact, one post record per piece."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    sheet, prefix = kit_sheet(key)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    cols, rows = 3, 2
+    alpha = np.asarray(rgba.getchannel("A"))
+    blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
+    n = cols * rows
+    if len(blobs) < n:
+        raise ArtError(f"{key}: {len(blobs)} prop(s) found, not {n}; the sheet painted fewer props or two touch (try --grow 1); pick another candidate")
+    extra = blobs[n:]
+    if extra:
+        note(f"warning: {key}: {len(extra)} small blob(s) past the six props dropped (largest {extra[0]['area']} px); a lantern on a thread or a leaf may be lost")
+    ordered = order_blobs(blobs, cols, rows)
+    only = set(a.only.split(",")) if a.only else None
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    done = 0
+    scale = 4
+    for i, (piece, blob) in enumerate(zip(sheet["pieces"], ordered)):
+        pkey = f"{prefix}{piece['name']}"
+        x0, y0, x1, y1 = blob["bbox"]
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        drw.text((x0 + 6, max(0, y0 - 16)), f"{i + 1} {pkey}", fill=(255, 255, 255))
+        if only and pkey not in only and piece["name"] not in only:
+            continue
+        # the blob's own pixels only: another prop's overhang into this box is cleared
+        own = np.kron(blob["mask"], np.ones((scale, scale), dtype=bool))[:alpha.shape[0], :alpha.shape[1]]
+        crop = rgba.crop((x0, y0, x1, y1))
+        ca = np.asarray(crop.getchannel("A")).astype(np.uint8) * own[y0:y1, x0:x1]
+        crop.putalpha(Image.fromarray(ca, "L"))
+        W, H = logical_size(pkey, ctx.assets)
+        canvas2x, finfo = fit_contain(crop, 2 * W, 2 * H, a.margin, 0.5, 0, a.valign)
+        one = downsample(canvas2x, W, H)
+        outputs, lines = finish_cutout_webp(ctx, pkey, one, canvas2x)
+        tools = [f"pieces: {key} prop {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}", *lines]
+        save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                      "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo, "sheet": {"key": key, "cell": i + 1, "bbox": [x0, y0, x1, y1]}})
+        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (prop {i + 1}, {x1 - x0}x{y1 - y0} px)")
+        done += 1
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"sheet {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit backdrop layer (OP-229): a sky plate as painted, or a far or middle layer keyed out of its
+    backdrop; cropped to its aspect, healed to repeat sideways, resized to its logical size and shipped
+    as WebP (the alpha exact for a keyed layer); the sideways seam ratio recorded and refused past
+    --max-seam."""
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    spec = ctx.assets.get(key, {})
+    if spec.get("kind") != "layer":
+        raise ArtError(f"{key!r} is not a layer key (kit-<area>-sky|far|mid-<x> in config/kit.json)")
+    W, H = logical_size(key, ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    keyed = bool(spec.get("key_colour"))
+    tools = []
+    if keyed:
+        kc = key_colour_for(ctx, key, a.key_colour, sc)
+        img, cinfo = key_out(img, chroma_params(a, kc))
+        tools.append(f"layer: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}")
+    else:
+        cinfo = {}
+        img = img.convert("RGB")
+    img = crop_to_aspect(img, W, H, a.crop, 0)
+    before = tile_seam_ratio(img)
+    healed = heal_tile(img, a.band, axes=(1,)) if not a.no_heal else img
+    one = healed.resize((W, H), Image.Resampling.LANCZOS)
+    after = tile_seam_ratio(one)
+    tools.append(f"layer: heal band={a.band if not a.no_heal else 'none'} sideways seam before x{before['seam_x']} after x{after['seam_x']}")
+    if after["seam_x"] > a.max_seam:
+        raise ArtError(f"{key}: the layer's sideways seam is {after['seam_x']}x its inner detail (limit {a.max_seam}); pick another candidate or widen --band")
+    if keyed:
+        outputs, lines = finish_cutout_webp(ctx, key, one, None)
+    else:
+        data, info = webpmeta.encode_under_budget(one, ctx.budget)
+        outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("format", "quality", "colors", "mode", "budget_relaxed")}}}
+        lines = [budget_line(info)]
+        for name in remove_rasters(ctx.out, key, {f"{key}.webp"}):
+            note(f"removed stale final {name}")
+    tools.extend(lines)
+    # Review: the layer twice side by side on a dark board, so the sideways join shows at once.
+    rv = Image.new("RGBA", (2 * W, H), (40, 40, 48, 255))
+    for i in range(2):
+        rv.alpha_composite(one.convert("RGBA"), (i * W, 0))
+    rvp = write_review(ctx, f"{key}.png", rv.convert("RGB"))
+    save_post_record(ctx, key, {"key": key, "kind": "layer", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                 **({"chroma": {k: v for k, v in cinfo.items() if k != "params"}} if cinfo else {}), "tiling": {"before": before, "after": after}})
+    note(f"{key} 1x: {key}.webp {outputs['1x']['bytes']} bytes; sideways seam x{after['seam_x']}")
+    note(f"review: {rel_to_repo(rvp)}")
+    return 0
+
+
 def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
     """Published cut-outs the table has since marked ``"format": "webp"``, re-encoded from their
     PNGs (the pixels approved and live, checked against their provenance lines) as WebP finals with
@@ -1649,6 +1936,38 @@ def build_parser() -> argparse.ArgumentParser:
     add_grade_flags(sp)
     add_common(sp)
     sp.set_defaults(fn=cmd_room)
+
+    sp = sub.add_parser("texture", help="kit texture -> healed to tile, resized, WebP (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--band", type=float, default=0.25, help="width of the healing cross as a fraction of the tile")
+    sp.add_argument("--no-heal", action="store_true", help="ship the candidate as painted (it already tiles)")
+    sp.add_argument("--max-seam", type=float, default=1.6, help="refuse a tile whose wrap seam is more than this times its inner detail")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_texture)
+
+    sp = sub.add_parser("layer", help="kit backdrop layer -> keyed (far, mid) or as painted (sky), healed to repeat sideways, WebP (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
+    sp.add_argument("--band", type=float, default=0.2, help="width of the sideways healing band as a fraction of the width")
+    sp.add_argument("--no-heal", action="store_true")
+    sp.add_argument("--max-seam", type=float, default=1.6)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_layer)
+
+    sp = sub.add_parser("pieces", help="kit shape sheet -> chroma key, six cells cut into their pieces, WebP cut-outs 1x + 2x (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated piece names (or keys) to cut; default all six")
+    sp.add_argument("--grow", type=int, default=3, help="how far (in quarter-size pixels) a prop's parts may be apart and still count as one prop")
+    sp.add_argument("--min-blob", type=int, default=400, help="px below which a blob is not a prop")
+    sp.add_argument("--margin", type=float, default=0.02)
+    sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_pieces)
 
     sp = sub.add_parser("piece", help="set piece -> chroma key, fit, 1x + 2x")
     sp.add_argument("key")
