@@ -319,11 +319,16 @@ export interface PuzzleBookDeps {
  * period by its caller (the quest's park week or month) and forgets rows from older periods.
  */
 export class PuzzleBook {
-  constructor(
-    private readonly store: PuzzleStore,
-    private readonly spots: PuzzleSpots,
-    private readonly deps: PuzzleBookDeps,
-  ) {}
+  // Plain fields, not parameter properties: Node's type stripping loads this module (tools/chaos).
+  private readonly store: PuzzleStore;
+  private readonly spots: PuzzleSpots;
+  private readonly deps: PuzzleBookDeps;
+
+  constructor(store: PuzzleStore, spots: PuzzleSpots, deps: PuzzleBookDeps) {
+    this.store = store;
+    this.spots = spots;
+    this.deps = deps;
+  }
 
   private mine(cid: string, p: PuzzleDef, period: string): PuzzleProgressRow {
     return this.store.progress(cid, p.id, period) ?? { cid, puzzle: p.id, period, opened: [], run: null };
