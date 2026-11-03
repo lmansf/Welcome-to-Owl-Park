@@ -60,6 +60,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Write the throwaway copy's config
         run: |
+          # The copy signs its passes with a key made for this run only (OP-209: a Worker without one
+          # refuses every pass), masked from the log. It goes up as a secret (throwaway-config.mjs).
+          signing=$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")
+          echo "::add-mask::$signing"
+          export LOAD_SIGNING_KEY="$signing"
           # The rehearsal changes settings with an admin key made for this run only, masked from the log.
           if [ "$LOAD_MODE" = "capacity" ]; then
             key=$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")
@@ -77,7 +82,10 @@ jobs:
       - name: Deploy the throwaway copy
         working-directory: apps/edge
         run: |
-          if ! pnpm exec wrangler deploy -c wrangler.load.jsonc --name "$LOAD_NAME" > ../../deploy.log 2>&1; then
+          ok=true
+          pnpm exec wrangler deploy -c wrangler.load.jsonc --name "$LOAD_NAME" --secrets-file wrangler.load.secrets.json > ../../deploy.log 2>&1 || ok=false
+          rm -f wrangler.load.secrets.json
+          if [ "$ok" != true ]; then
             sed -E 's#https://[a-z0-9.-]+\.workers\.dev#https://***.workers.dev#g' ../../deploy.log
             exit 1
           fi
@@ -108,4 +116,5 @@ jobs:
         run: |
           test "$LOAD_NAME" = "owl-park-load"
           test -f wrangler.load.jsonc || node ../../tools/load/throwaway-config.mjs
+          rm -f wrangler.load.secrets.json
           pnpm exec wrangler delete -c wrangler.load.jsonc "$LOAD_NAME" --force 2>&1 | sed -E 's#https://[a-z0-9.-]+\.workers\.dev#https://***.workers.dev#g'

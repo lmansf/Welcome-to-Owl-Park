@@ -848,7 +848,8 @@ test.describe('room server', () => {
 
   test("feedback from the Menu reaches the keepers' page, which needs the admin key and marks notes done", async ({ browser, request }) => {
     const a = await visitor(browser);
-    const words = `More lanterns by the pond, please (${Date.now()})`;
+    // A marker in letters as well as digits: the Worker takes ten digits or more out of a note as a phone number (OP-236).
+    const words = `More lanterns by the pond, please (${Date.now().toString(36)})`;
     const sheet = a.getByRole('dialog', { name: 'Feedback' });
     const openFeedback = async () => {
       await a.locator('[data-menu-btn]').click();
@@ -896,7 +897,7 @@ test.describe('room server', () => {
 
   test("a hostile note reaches the keepers' page as plain words: no markup, no script (OP-143)", async ({ browser }) => {
     const a = await visitor(browser);
-    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now()})`;
+    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now().toString(36)})`;
     await a.locator('[data-menu-btn]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
     await a.locator('[data-screen="feedback"]').click();
