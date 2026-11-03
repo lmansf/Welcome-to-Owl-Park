@@ -50,5 +50,6 @@ export * from './log';
 export * from './whichOwl';
 export * from './kit';
 export * from './kitArt';
+export * from './kitCatalog';
 export * from './raster';
 export * from './puzzleQuests';

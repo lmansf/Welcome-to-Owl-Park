@@ -6,17 +6,22 @@
  *
  * - A surface is a rectangle filled with a seamless texture, repeated from the room's origin, so two
  *   surfaces of one texture side by side read as one.
- * - A path or a ledge is a run from x0 to x1 at a height: its cap along the top (what says "stand
- *   here"), its mid under that, a slope at each end, and a trim hung along its front. A ledge is the
- *   room's perch of the same id (kitPerches); a stair draws its ledges as treads on posts instead.
- * - A doorway's piece stands centred on its trigger, its foot at the doorway's height; a barrier, a
- *   prop or a decal stands where it is placed.
+ * - A path or a ledge is a run from x0 to x1 at a height, drawn from the published kit's run pieces
+ *   (OP-241): its left end, its middle repeated across in whole copies and its right end, each with
+ *   its art's measured top edge at the walking line; a texture under it and a trim along its front.
+ *   A run of the recut kit (OP-251) names its row instead: the row's caps, and its middles of three
+ *   lengths laid in a seeded order around any joins set into it (a transition, a corner).
+ * - A column (OP-251) is a piece repeated down at the column's width, art to art, with a head and a
+ *   foot at the same scale: a trunk with its taper and its flare.
+ *   A ledge is the room's perch of the same id (kitPerches); a stair draws its ledges as treads.
+ * - A doorway's piece stands centred on its trigger, the foot of its art (as measured) at the
+ *   doorway's height; a barrier or a prop stands on its height the same way, a decal where placed.
  * - The backdrops are the room's tiles (kitRoom), so their parallax and fades are a painted room's.
  */
 import { pointInPolygon } from './geometry';
-import { KIT_ART, kitGroup, type KitTile } from './kitArt';
+import { KIT_ART, kitGroup, type KitArtSpec, type KitTile } from './kitArt';
 import type { Perch } from './perches';
-import { ROOM_W, type KitBackdrop, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
+import { ROOM_W, type KitBackdrop, type KitColumn, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
 import { perchTiers } from './routes';
 
 /** How deep a ledge's mid is drawn when the ledge does not say (room px). */
@@ -39,8 +44,8 @@ export interface KitDraw {
   w: number;
   h: number;
   /**
-   * `none`: the piece stretched to its box. Otherwise the piece at its own size, repeated across the
-   * box on the axes it repeats on, counted from the room's origin, so neighbours line up.
+   * `none`: the piece drawn to its box. `xy` (a texture): repeated at its own size from the room's
+   * origin, so neighbours line up. `x` or `y`: whole copies fitted along the box (kitCells).
    */
   tile: KitTile;
   layer: KitLayer;
@@ -92,31 +97,218 @@ export function kitTiles(kit: RoomKit): { backgrounds: RoomTile[]; foregrounds: 
 /** A room drawn from its kit: its backdrops become its tiles (its `background` the first of them), the rest of it as given. */
 export function kitRoom(def: Omit<RoomDef, 'background' | 'backgrounds' | 'foregrounds' | 'foreground' | 'kit'> & { kit: RoomKit }): RoomDef {
   const { backgrounds, foregrounds } = kitTiles(def.kit);
-  return { ...def, background: backgrounds[0]?.key ?? 'kit-back-sky-ground', backgrounds, ...(foregrounds.length ? { foregrounds } : {}) };
+  return { ...def, background: backgrounds[0]?.key ?? 'kit-ground-sky-a', backgrounds, ...(foregrounds.length ? { foregrounds } : {}) };
 }
 
-/** A piece's logical size (its catalogue size; a key outside the catalogue counts as 64 square). */
-function sizeOf(key: string): { w: number; h: number; tile: KitTile } {
-  return KIT_ART[key] ?? { w: 64, h: 64, tile: 'none' };
+/** A piece's catalogue entry (a key outside the catalogue counts as 64 square, its art filling its box). */
+function sizeOf(key: string): KitArtSpec {
+  return KIT_ART[key] ?? { w: 64, h: 64, tile: 'none', kind: 'piece' };
 }
 
-/** A run's pieces: the mid, the cap over it, the trim under the cap's lip, and the slopes at its ends. */
-function runDraws(run: KitRun, ground: number, depth: number, role: 'path' | 'ledge', out: KitDraw[]): void {
-  const y = ground - run.top;
-  const w = run.x1 - run.x0;
-  const cap = run.cap ? sizeOf(run.cap) : null;
-  const capH = cap?.h ?? 0;
-  if (run.mid && depth > capH) out.push({ key: run.mid, x: run.x0, y: y + capH, w, h: depth - capH, tile: sizeOf(run.mid).tile, layer: 'play', role, id: run.id });
-  if (run.cap && cap) out.push({ key: run.cap, x: run.x0, y, w, h: cap.h, tile: cap.tile, layer: 'play', role, id: run.id });
-  if (run.trim) {
+/** Where a piece's art begins and ends down its box (its own px): as measured, or its whole box. */
+function artBand(s: KitArtSpec): { top: number; foot: number } {
+  return { top: s.top ?? 0, foot: s.foot ?? s.h };
+}
+
+/** Where a piece's art begins and ends across its box (its own px): as measured, or its whole box. */
+function artSpan(s: KitArtSpec): { left: number; right: number; w: number } {
+  const left = s.left ?? 0;
+  const right = s.right ?? s.w;
+  return { left, right, w: Math.max(1, right - left) };
+}
+
+/**
+ * How far into a run piece's art, below its upper edge, an owl's feet stand (its own px): the kit's
+ * platforms are seen a little from above, so the walking line is a step into the top face, not on
+ * its back edge.
+ */
+export const KIT_STAND_SINK = 10;
+
+/**
+ * A run's pieces: the texture under it, its ends and the cap between them (each piece's top edge at
+ * the run's height, KIT_STAND_SINK above the walking line), the trim at the cap's foot, and the slopes
+ * outside its ends.
+ */
+function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | 'ledge', out: KitDraw[]): void {
+  const run = withRow(given);
+  const walk = ground - run.top;
+  // A piece whose art spans x0 to x1 at scale k (one copy, its box wider by its margins), or repeated
+  // across x0 to x1 at its own size; its top KIT_STAND_SINK over the walk either way.
+  const at = (key: string, x0: number, x1: number, k: number, opts: { repeats?: boolean; flip?: boolean } = {}): KitDraw => {
+    const s = sizeOf(key);
+    const span = artSpan(s);
+    const repeats = !!opts.repeats;
+    const flip = !!opts.flip;
+    return {
+      key,
+      ...(repeats ? { x: x0, w: x1 - x0 } : { x: Math.round(x0 - (flip ? s.w - span.right : span.left) * k), w: Math.round(s.w * k) }),
+      y: Math.round(walk - (artBand(s).top + KIT_STAND_SINK) * k),
+      h: Math.round(s.h * k),
+      tile: repeats ? 'x' : 'none',
+      layer: 'play',
+      ...(flip ? { flip: true } : {}),
+      role,
+      id: run.id,
+    };
+  };
+  if (run.mid) out.push({ key: run.mid, x: run.x0, y: walk, w: run.x1 - run.x0, h: depth, tile: sizeOf(run.mid).tile, layer: 'play', role, id: run.id });
+  const lw = run.left ? artSpan(sizeOf(run.left)).w : 0;
+  const rw = run.right ? artSpan(sizeOf(run.right)).w : 0;
+  const pieces: KitDraw[] = [];
+  const mids = run.mids?.filter((m) => KIT_ART[m]) ?? [];
+  if (mids.length) {
+    // The middles of several lengths, art to art, around the joins set into the run.
+    const joins = [...(run.joins ?? [])].sort((a, b) => a.x - b.x);
+    let from = run.x0 + lw;
+    joins.forEach((j, i) => {
+      pieces.push(...midFill(mids, from, j.x, `${run.id}:${i}`).map((m) => ({ ...at(m.key, m.x0, m.x1, 1), ...stretched(m.key, m.x0, m.x1) })));
+      pieces.push(at(j.piece, j.x, j.x + artSpan(sizeOf(j.piece)).w, 1));
+      from = j.x + artSpan(sizeOf(j.piece)).w;
+    });
+    pieces.push(...midFill(mids, from, run.x1 - rw, `${run.id}:${joins.length}`).map((m) => ({ ...at(m.key, m.x0, m.x1, 1), ...stretched(m.key, m.x0, m.x1) })));
+  } else if (run.cap) {
+    const c = sizeOf(run.cap);
+    const x0 = run.x0 + lw;
+    const x1 = run.x1 - rw;
+    // A single platform spans the run with its art, scaled to it, and so does a middle piece on a run
+    // too short for one whole copy at its own size; a longer run repeats the middle at its own height.
+    const single = c.tile === 'none' || (!run.left && !run.right && x1 - x0 < artSpan(c).w * 0.75);
+    if (x1 > x0) pieces.push(single ? at(run.cap, run.x0, run.x1, (run.x1 - run.x0) / artSpan(c).w) : at(run.cap, x0, x1, 1, { repeats: true }));
+  }
+  if (run.left) pieces.push(at(run.left, run.x0, run.x0 + lw, 1));
+  if (run.right) pieces.push(at(run.right, run.x1 - rw, run.x1, 1));
+  if (run.trim && pieces[0]) {
+    const cap = pieces[0];
     const t = sizeOf(run.trim);
-    out.push({ key: run.trim, x: run.x0, y: y + capH, w, h: t.h, tile: t.tile, layer: 'play', role, id: run.id });
+    const foot = cap.y + (artBand(sizeOf(cap.key)).foot * cap.h) / sizeOf(cap.key).h;
+    out.push({ key: run.trim, x: run.x0, y: Math.round(foot - artBand(t).top - 6), w: run.x1 - run.x0, h: t.h, tile: t.tile, layer: 'play', role, id: run.id });
   }
+  out.push(...pieces);
   if (run.slope) {
-    const s = sizeOf(run.slope);
-    out.push({ key: run.slope, x: run.x0 - s.w, y, w: s.w, h: s.h, tile: 'none', layer: 'play', role, id: run.id });
-    out.push({ key: run.slope, x: run.x1, y, w: s.w, h: s.h, tile: 'none', layer: 'play', flip: true, role, id: run.id });
+    const s = artSpan(sizeOf(run.slope));
+    out.push(at(run.slope, run.x0 - s.w, run.x0, 1));
+    out.push(at(run.slope, run.x1, run.x1 + s.w, 1, { flip: true }));
   }
+}
+
+/** The lengths of a recut row's middle pieces (OP-251): `<row>-mid-<length>`. */
+export const KIT_ROW_LENGTHS = [320, 480, 640] as const;
+
+/** A run with its row (OP-251) spelled out: the row's caps and middles wherever the run names none of its own. */
+export function withRow(run: KitRun): KitRun {
+  if (!run.row) return run;
+  const has = (k: string) => Object.hasOwn(KIT_ART, k);
+  const left = run.left ?? (has(`${run.row}-cap-left`) ? `${run.row}-cap-left` : undefined);
+  const right = run.right ?? (has(`${run.row}-cap-right`) ? `${run.row}-cap-right` : undefined);
+  const mids = run.mids ?? KIT_ROW_LENGTHS.map((l) => `${run.row}-mid-${l}`).filter(has);
+  return { ...run, ...(left ? { left } : {}), ...(right ? { right } : {}), mids };
+}
+
+/** A small hash of a string, the seed of a run's order of middles: the same run is always laid the same way. */
+function seedOf(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/** A seeded stream of numbers in [0, 1) (mulberry32). */
+function stream(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** How far a middle piece may be stretched or squeezed across to fill its stretch of run (1 is its own size). */
+export const KIT_MID_STRETCH = { min: 0.85, max: 1.2 } as const;
+
+/**
+ * Middle pieces filling x0 to x1, art to art (OP-251): a few seeded orders of the lengths are tried and
+ * the one that needs the least stretch kept, never the same piece twice running where another fits;
+ * each piece then spans its share of the run, all stretched alike. A stretch too short for the shortest
+ * piece takes the shortest, squeezed.
+ */
+export function midFill(mids: string[], x0: number, x1: number, seed: string): { key: string; x0: number; x1: number }[] {
+  const len = x1 - x0;
+  if (len <= 0 || !mids.length) return [];
+  const widths = mids.map((m) => artSpan(sizeOf(m)).w);
+  const shortest = Math.min(...widths);
+  const rand = stream(seedOf(seed));
+  let best: { order: number[]; k: number } | null = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const order: number[] = [];
+    let used = 0;
+    while (len - used > shortest * 0.5) {
+      const left = len - used;
+      const fits = widths.flatMap((w, i) => (w <= left + shortest * 0.25 ? [i] : []));
+      const last = order[order.length - 1];
+      const fresh = fits.filter((i) => i !== last);
+      const pool = fresh.length ? fresh : fits.length ? fits : [widths.indexOf(shortest)];
+      const pick = pool[Math.floor(rand() * pool.length)] ?? 0;
+      order.push(pick);
+      used += widths[pick] ?? shortest;
+    }
+    if (!order.length) order.push(widths.indexOf(shortest));
+    const k = len / order.reduce((t, i) => t + (widths[i] ?? shortest), 0);
+    if (!best || Math.abs(Math.log(k)) < Math.abs(Math.log(best.k))) best = { order, k };
+  }
+  const out: { key: string; x0: number; x1: number }[] = [];
+  let x = x0;
+  for (const i of best?.order ?? []) {
+    const w = (widths[i] ?? shortest) * (best?.k ?? 1);
+    out.push({ key: mids[i] ?? mids[0]!, x0: x, x1: x + w });
+    x += w;
+  }
+  return out;
+}
+
+/** A piece's box across when its art is stretched (not scaled) to span x0 to x1. */
+function stretched(key: string, x0: number, x1: number): { x: number; w: number } {
+  const s = sizeOf(key);
+  const span = artSpan(s);
+  const k = (x1 - x0) / span.w;
+  return { x: Math.round(x0 - span.left * k), w: Math.round(s.w * k) };
+}
+
+/** A column's pieces (OP-251): its head, its middle repeated down at the column's width, its foot. */
+function columnDraws(c: KitColumn, out: KitDraw[]): void {
+  const m = sizeOf(c.mid);
+  const u = (c.x1 - c.x0) / artSpan(m).w;
+  const box = (key: string) => {
+    const s = sizeOf(key);
+    const span = artSpan(s);
+    const w = Math.round(s.w * u);
+    // Centred on the column, so a wider foot spreads both ways.
+    return { x: Math.round((c.x0 + c.x1) / 2 - ((span.left + span.right) / 2) * u), w, h: Math.round(s.h * u), s };
+  };
+  let y0 = c.y0;
+  let y1 = c.y1;
+  const ends: KitDraw[] = [];
+  if (c.head) {
+    const b = box(c.head);
+    ends.push({ key: c.head, x: b.x, y: Math.round(c.y0 - artBand(b.s).top * u), w: b.w, h: b.h, tile: 'none', layer: 'back', role: 'surface', id: c.id });
+    y0 = Math.round(c.y0 + (artBand(b.s).foot - artBand(b.s).top) * u);
+  }
+  if (c.foot) {
+    const b = box(c.foot);
+    const y = Math.round(c.y1 - artBand(b.s).foot * u);
+    ends.push({ key: c.foot, x: b.x, y, w: b.w, h: b.h, tile: 'none', layer: 'back', role: 'surface', id: c.id });
+    y1 = Math.round(y + artBand(b.s).top * u);
+  }
+  const b = box(c.mid);
+  if (y1 > y0) out.push({ key: c.mid, x: b.x, y: y0, w: b.w, h: y1 - y0, tile: 'y', layer: 'back', role: 'surface', id: c.id });
+  out.push(...ends);
+}
+
+/** A piece stood with its art's foot at `foot` (room y), centred on x, at scale k. */
+function standing(key: string, x: number, foot: number, k = 1): { x: number; y: number; w: number; h: number } {
+  const s = sizeOf(key);
+  const w = Math.round(s.w * k);
+  const h = Math.round(s.h * k);
+  return { x: Math.round(x - w / 2), y: Math.round(foot - artBand(s).foot * k), w, h };
 }
 
 /** Every piece a kit room draws, back to front (backdrops aside: they are the room's tiles). Empty for a painted room. */
@@ -126,6 +318,7 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
   const out: KitDraw[] = [];
   const g = kit.ground;
   for (const s of kit.surfaces ?? []) out.push({ key: s.texture, ...s.rect, tile: sizeOf(s.texture).tile, layer: 'back', role: 'surface', id: s.id });
+  for (const c of kit.columns ?? []) columnDraws(c, out);
   for (const p of kit.paths ?? []) runDraws(p, g, p.depth ?? room.size.h - (g - p.top), 'path', out);
   const treads = new Map<string, { stair: string; tread: string | undefined; post: string | undefined }>();
   for (const st of kit.stairs ?? []) for (const id of st.treads) treads.set(id, { stair: st.id, tread: st.tread, post: st.post });
@@ -147,52 +340,66 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
   for (const d of kit.doors ?? []) {
     const door = room.doors.find((x) => x.id === d.door);
     if (!door) continue;
-    const s = sizeOf(d.piece);
-    const foot = g - (door.top ?? 0);
-    out.push({ key: d.piece, x: Math.round(door.rect.x + door.rect.w / 2 - s.w / 2), y: foot - s.h, w: s.w, h: s.h, tile: 'none', layer: 'piece', role: 'door', id: d.door });
+    out.push({ key: d.piece, ...standing(d.piece, door.rect.x + door.rect.w / 2, g - (door.top ?? 0), d.scale), tile: 'none', layer: 'piece', role: 'door', id: d.door });
   }
   for (const b of kit.barriers ?? []) {
+    // A repeating barrier is repeated across its box; any other spans it with its art, scaled to it.
     const s = sizeOf(b.piece);
-    const foot = g - b.top;
-    out.push({ key: b.piece, x: b.x0, y: foot - s.h, w: b.x1 - b.x0, h: s.h, tile: s.tile === 'x' || s.tile === 'xy' ? 'x' : 'none', layer: 'piece', role: 'barrier', id: b.id });
+    const span = artSpan(s);
+    const repeats = s.tile !== 'none';
+    const k = repeats ? 1 : (b.x1 - b.x0) / span.w;
+    const box = repeats ? { x: b.x0, w: b.x1 - b.x0 } : { x: Math.round(b.x0 - span.left * k), w: Math.round(s.w * k) };
+    out.push({ key: b.piece, ...box, y: Math.round(g - b.top - artBand(s).foot * k), h: Math.round(s.h * k), tile: repeats ? 'x' : 'none', layer: 'piece', role: 'barrier', id: b.id });
   }
   for (const p of kit.props ?? []) {
-    const s = sizeOf(p.piece);
-    out.push({ key: p.piece, x: Math.round(p.x - s.w / 2), y: g - p.top - s.h, w: s.w, h: s.h, tile: 'none', layer: p.front ? 'front' : 'piece', ...(p.flip ? { flip: true } : {}), role: 'prop', id: p.id });
+    out.push({ key: p.piece, ...standing(p.piece, p.x, g - p.top, p.scale), tile: 'none', layer: p.front ? 'front' : 'piece', ...(p.flip ? { flip: true } : {}), role: 'prop', id: p.id });
   }
   for (const [i, d] of (kit.decals ?? []).entries()) {
     const s = sizeOf(d.piece);
-    out.push({ key: d.piece, x: Math.round(d.x - s.w / 2), y: Math.round(d.y - s.h / 2), w: s.w, h: s.h, tile: 'none', layer: d.front ? 'front' : 'piece', ...(d.alpha === undefined ? {} : { alpha: d.alpha }), role: 'decal', id: `${d.piece}-${i}` });
+    const k = d.scale ?? 1;
+    const w = Math.round(s.w * k);
+    const h = Math.round(s.h * k);
+    out.push({ key: d.piece, x: Math.round(d.x - w / 2), y: Math.round(d.y - h / 2), w, h, tile: 'none', layer: d.front ? 'front' : 'piece', ...(d.flip ? { flip: true } : {}), ...(d.alpha === undefined ? {} : { alpha: d.alpha }), role: 'decal', id: `${d.piece}-${i}` });
   }
   return out;
 }
 
 /**
- * The images a drawn piece takes: one for a piece stretched to its box; for a repeating one, a cell
- * per repeat the box covers, counted from the room's origin, each cropped to the box.
+ * The images a drawn piece takes: one for a piece drawn to its box. A texture (repeating both ways) is
+ * a cell per repeat the box covers, counted from the room's origin and each cropped to the box, so
+ * neighbouring surfaces of one texture continue into each other. A piece that repeats along one axis
+ * (a run's middle, a trim) is a whole number of whole copies laid art to art from the box's start
+ * (their transparent margins overlapping), each stretched a little so their art fills the box
+ * exactly, so no copy is cut through.
  */
 export function kitCells(d: KitDraw): KitCell[] {
   const s = sizeOf(d.key);
-  if (d.tile === 'none') return [{ x: d.x, y: d.y, w: d.w, h: d.h, crop: { x: 0, y: 0, w: s.w, h: s.h } }];
-  const across = d.tile === 'x' || d.tile === 'xy';
-  const down = d.tile === 'y' || d.tile === 'xy';
-  // Along an axis it does not repeat on, a piece is anchored to the box and drawn its own size.
-  const cw = across ? s.w : d.w;
-  const ch = down ? s.h : d.h;
-  const x0 = across ? Math.floor(d.x / s.w) * s.w : d.x;
-  const y0 = down ? Math.floor(d.y / s.h) * s.h : d.y;
+  const whole = { x: 0, y: 0, w: s.w, h: s.h };
+  if (d.tile === 'none') return [{ x: d.x, y: d.y, w: d.w, h: d.h, crop: whole }];
+  if (d.tile === 'x' || d.tile === 'y') {
+    // Copies meet art to art: each is laid one art width on from the last, its margins over its neighbours'.
+    // Down a column (y) each copy is first scaled to the box's width, so the piece keeps its shape.
+    const u = d.tile === 'y' ? d.w / s.w : 1;
+    const along =
+      d.tile === 'x'
+        ? { size: d.w, at: d.x, ...artSpan(s) }
+        : { size: d.h, at: d.y, left: artBand(s).top * u, w: Math.max(1, artBand(s).foot - artBand(s).top) * u };
+    const n = Math.max(1, Math.round(along.size / along.w));
+    const k = along.size / (n * along.w);
+    return Array.from({ length: n }, (_, i) => {
+      const p = along.at + (i * along.w - along.left) * k;
+      return d.tile === 'x' ? { x: p, y: d.y, w: s.w * k, h: d.h, crop: whole } : { x: d.x, y: p, w: d.w, h: s.h * u * k, crop: whole };
+    });
+  }
   const cells: KitCell[] = [];
-  for (let y = y0; y < d.y + d.h; y += ch) {
-    for (let x = x0; x < d.x + d.w; x += cw) {
+  for (let y = Math.floor(d.y / s.h) * s.h; y < d.y + d.h; y += s.h) {
+    for (let x = Math.floor(d.x / s.w) * s.w; x < d.x + d.w; x += s.w) {
       const ix0 = Math.max(x, d.x);
       const iy0 = Math.max(y, d.y);
-      const ix1 = Math.min(x + cw, d.x + d.w);
-      const iy1 = Math.min(y + ch, d.y + d.h);
+      const ix1 = Math.min(x + s.w, d.x + d.w);
+      const iy1 = Math.min(y + s.h, d.y + d.h);
       if (ix1 <= ix0 || iy1 <= iy0) continue;
-      // Crop in the piece's own pixels: a cell stretched along an axis it does not repeat on scales its crop.
-      const kx = s.w / cw;
-      const ky = s.h / ch;
-      cells.push({ x, y, w: cw, h: ch, crop: { x: (ix0 - x) * kx, y: (iy0 - y) * ky, w: (ix1 - ix0) * kx, h: (iy1 - iy0) * ky } });
+      cells.push({ x, y, w: s.w, h: s.h, crop: { x: ix0 - x, y: iy0 - y, w: ix1 - ix0, h: iy1 - iy0 } });
     }
   }
   return cells;

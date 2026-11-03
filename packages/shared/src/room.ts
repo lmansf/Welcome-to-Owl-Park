@@ -156,6 +156,8 @@ export interface RoomKit {
   ground: number;
   /** Surfaces filled with a seamless texture (bark, earth, planking), drawn behind everything else, in order. */
   surfaces?: KitSurface[];
+  /** Columns drawn from a piece repeated down at the column's width (a trunk, OP-251), after the surfaces. */
+  columns?: KitColumn[];
   /** Walkways drawn along a height: the floor's boardwalk is a path with top 0. */
   paths?: KitRun[];
   /** What an owl stands on over the floor: each is the room's perch of the same id (kitPerches), unless `perch: false`. */
@@ -181,22 +183,57 @@ export interface KitSurface {
   rect: Rect;
 }
 
-/** Something drawn along a height from x0 to x1: a cap along its top, a mid under it `depth` deep, a slope at each end. */
+/**
+ * A column of the recut kit (OP-251): its middle piece scaled so its art spans x0 to x1 and repeated
+ * down, art to art, from y0 to y1 (room y), with a head piece over its top and a foot piece under it
+ * at the same scale (a trunk's taper and flare).
+ */
+export interface KitColumn {
+  id: string;
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  mid: string;
+  head?: string;
+  foot?: string;
+}
+
+/**
+ * Something drawn along a height from x0 to x1 (OP-241): the published kit's run pieces, its left end, its middle repeated across (whole
+ * copies, fitted to the run) and its right end, each with its art's top edge at the height an owl stands at; a texture under it `depth`
+ * deep; a trim along its front.
+ */
 export interface KitRun {
   id: string;
   x0: number;
   x1: number;
   top: number;
-  /** The strip along the top (repeats across): what says "stand here". */
+  /** The piece along the top: what says "stand here". A repeating `…-mid` piece is repeated between the ends; a single platform is drawn across the run, scaled. */
   cap?: string;
-  /** What fills under the cap, `depth` deep (repeats both ways). */
+  /** End pieces, each at its own size inside the run's ends. */
+  left?: string;
+  right?: string;
+  /** The texture under the top, `depth` deep (repeats both ways). */
   mid?: string;
-  /** The end piece, drawn at the left end and mirrored at the right. */
+  /** A piece drawn outside the run's left end and mirrored at its right. */
   slope?: string;
-  /** A strip hung along the front just under the cap (a rope, a vine). */
+  /** A strip along the front at the foot of the cap's art (a rope, a vine, a stone edge). */
   trim?: string;
   /** How deep the mid is drawn (room px); a path's default runs down to the room's foot, a ledge's is KIT_LEDGE_DEPTH. */
   depth?: number;
+  /**
+   * A row of the recut kit (OP-251, `kit-cut-plank`): its caps stand for `left` and `right` and its
+   * middles of every length for `mids`, where those are not given.
+   */
+  row?: string;
+  /**
+   * Middle pieces of several lengths laid art to art between the ends in place of `cap`: an order fixed
+   * by the run's id, never the same piece twice running where another fits, stretched together to fill.
+   */
+  mids?: string[];
+  /** Pieces set into the run (a transition, a corner), each with its art's left edge at x; the middles fill around them. */
+  joins?: { x: number; piece: string }[];
 }
 
 export interface KitLedge extends KitRun {
@@ -220,13 +257,16 @@ export interface KitDoor {
   /** The doorway's id in the room's `doors`: the piece stands centred on its rect, its foot at the doorway's `top`. */
   door: string;
   piece: string;
+  /** Drawn bigger or smaller than its logical size (1). */
+  scale?: number;
 }
 
 export interface KitBarrier {
   id: string;
+  /** Its box across: a repeating piece is repeated over it, any other drawn across it, its height scaled with its width. */
   x0: number;
   x1: number;
-  /** The height its foot stands at. */
+  /** The height its foot (its art's, as measured) stands at. */
   top: number;
   piece: string;
 }
@@ -234,9 +274,11 @@ export interface KitBarrier {
 export interface KitProp {
   id: string;
   piece: string;
-  /** The middle of its foot, and the height that foot stands at. */
+  /** The middle of its foot, and the height that foot (the foot of its art, as measured) stands at. */
   x: number;
   top: number;
+  /** Drawn bigger or smaller than its logical size (1). */
+  scale?: number;
   flip?: boolean;
   /** Drawn in front of the owls (a lamp post on the path), under the overlay. */
   front?: boolean;
@@ -247,6 +289,9 @@ export interface KitDecal {
   /** The decal's middle (room px). */
   x: number;
   y: number;
+  /** Drawn bigger or smaller than its logical size (1). */
+  scale?: number;
+  flip?: boolean;
   alpha?: number;
   front?: boolean;
 }

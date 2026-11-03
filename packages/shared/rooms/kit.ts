@@ -15,62 +15,62 @@ import { TREE_GROUND } from './index';
 /** Pixels over which the kit's backdrops fade at their edges, as the painted tree's layers do. */
 const SKY_FADE = 220;
 const MID_FADE = 230;
-const EDGE_FADE = 120;
 
 /**
- * Level 4, the sky landing, from the kit: high off the ground (docs/TREE_STYLE.md: clear blue-navy
- * air, crowns below), the trunk on screen 0 with its stairs taken from the floor at their feet (down
- * on the left, up on the right, OP-220), and the overlook's perches up the bough on screen 1. The
- * boardwalk is drawn edge to edge, and a
- * railing closes it at each end of the walk (the barrier rule).
+ * Level 4, the sky landing, from the published kit (OP-241) and its recut (OP-251): high off the ground
+ * (docs/TREE_STYLE.md: clear blue-navy air, crowns below), the high area's sky and far layer behind
+ * (no middle layer on screen 0, as the approved target has none), the trunk on screen 0 with its stairs taken from the floor (the hatch down on the left, the knothole up into the
+ * trunk on the right, OP-220), and the overlook's perches up the bough on screen 1: a stump, two mist
+ * platforms and a stub off the bough. The boardwalk is drawn edge to edge over the air, and a
+ * rope barrier closes it at each end of the walk (the barrier rule).
  */
 const L4_KIT: RoomKit = {
   ground: TREE_GROUND,
   backdrops: [
-    { key: 'kit-back-sky-high', rate: 0.5, screens: [1, 1] },
-    { key: 'kit-back-sky-high', rate: 0.5, screens: [0, 0], fade: { right: SKY_FADE } },
-    { key: 'kit-back-mid-high', rate: 0.75, screens: [0, 0], fade: { left: MID_FADE, right: MID_FADE } },
-    { key: 'kit-back-over-leaves', rate: 1.2, screens: [0, 1], fade: { left: EDGE_FADE, right: EDGE_FADE }, front: true },
+    { key: 'kit-high-sky-b', rate: 0.5, screens: [1, 1] },
+    { key: 'kit-high-sky-a', rate: 0.5, screens: [0, 0], fade: { right: SKY_FADE } },
+    { key: 'kit-high-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+    { key: 'kit-high-mid-b', rate: 0.75, screens: [1, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
+  // The trunk, about 660 wide at this height, centred at x 800 of screen 0 and running off its top: the
+  // recut's rounded trunk column (OP-251), one copy drawn the room's height (its cut top would show as a
+  // ledge where two copies meet).
+  columns: [{ id: 'trunk', x0: 470, x1: 1130, y0: -40, y1: 900, mid: 'kit-cut-trunk-mid' }],
   surfaces: [
-    // The trunk, about 660 wide at this height, centred at x 800 of screen 0 and running off its top.
-    { id: 'trunk', texture: 'kit-tex-bark', rect: { x: 470, y: 0, w: 660, h: TREE_GROUND } },
-    { id: 'trunk-heart', texture: 'kit-tex-wood', rect: { x: 760, y: 360, w: 90, h: 180 } },
     // The bough the overlook climbs, rising behind the lookout.
     { id: 'bough', texture: 'kit-tex-bark', rect: { x: ROOM_W + 1150, y: 0, w: 200, h: TREE_GROUND } },
     { id: 'bough-moss', texture: 'kit-tex-moss', rect: { x: ROOM_W + 1150, y: 0, w: 200, h: 60 } },
   ],
-  paths: [{ id: 'boardwalk', x0: 0, x1: 2 * ROOM_W, top: 0, cap: 'kit-cap-plank', mid: 'kit-mid-plank', trim: 'kit-trim-rope' }],
+  paths: [{ id: 'boardwalk', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-plank' }],
   ledges: [
-    { id: 'stump', x0: ROOM_W + 352, x1: ROOM_W + 520, top: 111, cap: 'kit-cap-moss', mid: 'kit-mid-branch', depth: 111 },
-    { id: 'board', x0: ROOM_W + 584, x1: ROOM_W + 732, top: 233, cap: 'kit-cap-plank', mid: 'kit-mid-plank', slope: 'kit-slope-plank' },
-    { id: 'mushroom', x0: ROOM_W + 800, x1: ROOM_W + 1056, top: 330, cap: 'kit-cap-moss', mid: 'kit-mid-branch', slope: 'kit-slope-branch', trim: 'kit-trim-vine' },
-    { id: 'lookout', x0: ROOM_W + 1124, x1: ROOM_W + 1224, top: 431, cap: 'kit-cap-branch', mid: 'kit-mid-branch', slope: 'kit-slope-branch' },
+    { id: 'stump', x0: ROOM_W + 352, x1: ROOM_W + 520, top: 111, cap: 'kit-ground-tree-stump' },
+    { id: 'board', x0: ROOM_W + 584, x1: ROOM_W + 732, top: 233, cap: 'kit-high-mist-platform' },
+    { id: 'mushroom', x0: ROOM_W + 800, x1: ROOM_W + 1056, top: 330, cap: 'kit-high-mist-platform' },
+    { id: 'lookout', x0: ROOM_W + 1124, x1: ROOM_W + 1224, top: 431, cap: 'kit-branch-stub' },
   ],
   doors: [
-    { door: 'stair-l4-l3', piece: 'kit-door-stair' },
-    { door: 'stair-l5-l4', piece: 'kit-door-stair' },
+    { door: 'stair-l4-l3', piece: 'kit-hatch-down', scale: 1.3 },
+    { door: 'stair-l5-l4', piece: 'kit-doorway-knothole' },
   ],
   barriers: [
-    // The boardwalk's ends: past them the planks run on into the view, not somewhere to go.
-    { id: 'west-railing', x0: 20, x1: 148, top: 0, piece: 'kit-barrier-railing' },
-    { id: 'overlook-railing', x0: ROOM_W + 1320, x1: 2 * ROOM_W - 20, top: 0, piece: 'kit-barrier-railing' },
+    // The boardwalk's ends: a rope between two posts, the near post where the walk ends.
+    { id: 'west-rope', x0: -112, x1: 150, top: 0, piece: 'kit-high-rope-barrier' },
+    { id: 'overlook-rope', x0: ROOM_W + 1310, x1: ROOM_W + 1572, top: 0, piece: 'kit-high-rope-barrier' },
   ],
   props: [
-    // Each screen's lantern post, in front of the owls; a bench on the overlook.
-    { id: 'post-0', piece: 'kit-prop-lamppost', x: 330, top: 0, front: true },
-    { id: 'post-1', piece: 'kit-prop-lamppost', x: ROOM_W + 220, top: 0, front: true },
-    { id: 'bench', piece: 'kit-bench-plank', x: ROOM_W + 700, top: 0 },
-    { id: 'shelf', piece: 'kit-shelf-fungus', x: 520, top: 160 },
-    { id: 'sign-down', piece: 'kit-sign-arrow', x: 560, top: 0, flip: true },
+    // Each screen's lantern pole, in front of the owls; a bench on the overlook; the sign by the way down.
+    { id: 'pole-0', piece: 'kit-high-lantern-pole', x: 330, top: 0, front: true },
+    { id: 'pole-1', piece: 'kit-high-lantern-pole', x: ROOM_W + 220, top: 0, front: true },
+    { id: 'bench', piece: 'kit-high-cloud-bench', x: ROOM_W + 120, top: 0 },
+    { id: 'sign-down', piece: 'kit-high-sign-board', x: 545, top: 0, scale: 0.8 },
   ],
   decals: [
-    { piece: 'kit-decal-moss', x: 600, y: 140 },
-    { piece: 'kit-decal-moss', x: 1020, y: 620 },
-    { piece: 'kit-decal-knot', x: 700, y: 520 },
-    { piece: 'kit-decal-roots', x: 800, y: 60 },
-    { piece: 'kit-decal-glow', x: 375, y: 520 },
-    { piece: 'kit-decal-glow', x: ROOM_W + 265, y: 520 },
+    { piece: 'kit-high-hanging-moss', x: 560, y: 120 },
+    { piece: 'kit-high-hanging-moss', x: 1050, y: 90, flip: true },
+    { piece: 'kit-high-leaf-cluster', x: 1130, y: 40 },
+    { piece: 'kit-high-wind-chime', x: ROOM_W + 1290, y: 200 },
+    { piece: 'kit-high-cloud-tuft', x: 1400, y: 860, front: true },
+    { piece: 'kit-high-cloud-tuft', x: ROOM_W + 640, y: 870, front: true, flip: true },
   ],
 };
 
@@ -103,6 +103,94 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
       { id: 'stair-l5-l4', rect: { x: 880, y: 750, w: 100, h: 40 }, to: { room: 'l5', spawn: 'from-l4' }, top: 0, way: 'up', markAt: { x: 930, y: 600 } },
     ],
     kit: L4_KIT,
+  }),
+};
+
+/**
+ * The Realm Gate plaza (docs/TREE_STYLE.md, section 4), laid out from the kit ahead of the room itself
+ * (OP-241): past the Gift Shop Gate's turnstiles, at the top of the canopy, in full sky. Its west edge
+ * is the way back to the Gift Shop Gate, the trunk stair down into the tree stands at its left end
+ * (down is left), and along it one portal arch per realm: an open one glows, one not open yet is
+ * boarded with light behind. A stone balustrade closes it in the east. No room of the park uses it
+ * yet: its doorways lead nowhere until the remap builds the plaza, and only the preview tools draw it.
+ */
+/**
+ * The plaza's stone middles: the two longer lengths only, for now. The recut's stone row darkens to
+ * the left (its run was painted lit from the right and cut across), so its shortest middle reads as a
+ * darker block among the others until the row is levelled (OP-251).
+ */
+const PLAZA_STONE = ['kit-cut-stone-mid-480', 'kit-cut-stone-mid-640'];
+
+const PLAZA_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    { key: 'kit-entrance-sky-b', rate: 0.5, screens: [1, 1] },
+    { key: 'kit-entrance-sky-a', rate: 0.5, screens: [0, 0], fade: { right: SKY_FADE } },
+    { key: 'kit-entrance-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+    { key: 'kit-entrance-mid-c', rate: 0.75, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+  ],
+  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mids: PLAZA_STONE, mid: 'kit-tex-entrance-plaza-stone' }],
+  doors: [
+    { door: 'stair-down', piece: 'kit-entrance-stair-head' },
+    { door: 'realm-ink', piece: 'kit-arch-portal-boarded' },
+    { door: 'realm-clearing', piece: 'kit-arch-portal-boarded' },
+    { door: 'realm-neon', piece: 'kit-arch-portal-boarded' },
+    { door: 'realm-glass', piece: 'kit-arch-portal-open' },
+  ],
+  barriers: [{ id: 'balustrade', x0: ROOM_W + 1340, x1: ROOM_W + 1640, top: 0, piece: 'kit-wall-low-stone' }],
+  props: [
+    { id: 'planter-west', piece: 'kit-entrance-planter-tree', x: 560, top: 0 },
+    { id: 'map', piece: 'kit-entrance-map-board', x: 730, top: 0 },
+    { id: 'bench', piece: 'kit-entrance-plaza-bench', x: 930, top: 0 },
+    { id: 'bath', piece: 'kit-entrance-bird-bath', x: 1120, top: 0 },
+    { id: 'pole-a', piece: 'kit-entrance-pennant-pole', x: 1575, top: 0 },
+  ],
+};
+
+/** A walk along the ground line from x0 to x1, as the tree's floors are (TREE_STRIP 4 each side). */
+const floor = (x0: number, x1: number) => [
+  [
+    { x: x0, y: TREE_GROUND - 4 },
+    { x: x1, y: TREE_GROUND - 4 },
+    { x: x1, y: TREE_GROUND + 4 },
+    { x: x0, y: TREE_GROUND + 4 },
+  ],
+];
+
+/** A realm's arch on the plaza: its trigger at the floor, closed with the approved sign until the realm opens. */
+const arch = (id: string, x: number, open: boolean) => ({
+  id,
+  rect: { x: x - 80, y: TREE_GROUND - 20, w: 160, h: 40 },
+  top: 0,
+  markAt: { x, y: TREE_GROUND - 450 },
+  ...(open ? {} : { closedSign: 'Hatching Soon' }),
+});
+
+/** Kit rooms laid out ahead of a room of the park: drawn only by the preview tools (tools/kit). */
+export const KIT_PREVIEWS: Readonly<Record<string, RoomDef>> = {
+  plaza: kitRoom({
+    id: 'plaza',
+    map: 2,
+    gated: true,
+    owlScale: 1.25,
+    size: { w: 2 * ROOM_W, h: 900 },
+    mood: 'hub',
+    walkable: floor(0, ROOM_W + 1390),
+    perches: [],
+    spawns: {
+      default: { x: 900, y: TREE_GROUND },
+      'from-gate': { x: 120, y: TREE_GROUND },
+      'from-stair': { x: 380, y: TREE_GROUND },
+    },
+    doors: [
+      { id: 'to-gate', rect: { x: 0, y: TREE_GROUND - 60, w: 60, h: 120 }, top: 0 },
+      { id: 'stair-down', rect: { x: 330, y: TREE_GROUND - 20, w: 120, h: 40 }, top: 0, way: 'down', markAt: { x: 390, y: TREE_GROUND - 260 } },
+      arch('realm-ink', 1350, false),
+      arch('realm-clearing', ROOM_W + 200, false),
+      arch('realm-neon', ROOM_W + 650, false),
+      arch('realm-glass', ROOM_W + 1100, true),
+    ],
+    kit: PLAZA_KIT,
   }),
 };
 

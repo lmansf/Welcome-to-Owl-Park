@@ -16,19 +16,18 @@ describe('the art kit in the park (OP-234)', () => {
   const demo = KIT_DEMOS['l4']!;
   const painted = ROOMS['l4']!;
 
-  it('knows every kit piece as art: the published kit’s own entry where it has one (OP-229), else a placeholder at its logical size', () => {
+  it('knows every kit piece as the published kit’s own art (OP-229, OP-241), at the size the assembler lays it out at', () => {
     for (const [key, spec] of Object.entries(KIT_ART)) {
       const art = ART[key];
       expect(art, key).toBeDefined();
-      if (art!.kind === 'kit') expect(art, key).toEqual({ w: spec.w, h: spec.h, kind: 'kit' });
-      else expect(['texture', 'piece', 'layer'], key).toContain(art!.kind);
+      expect(art, key).toEqual({ w: spec.w, h: spec.h, kind: spec.kind });
     }
   });
 
   it('looks a kit key up like any other art: its shipped files, best first, or none (its placeholder)', () => {
     expect(rasterNames('kit-tex-bark', 2, shipping('kit-tex-bark.webp', 'kit-tex-bark@2x.webp'))).toEqual(['kit-tex-bark@2x.webp', 'kit-tex-bark.webp']);
-    expect(rasterNames('kit-cap-plank', 1, shipping('kit-cap-plank.png'))).toEqual(['kit-cap-plank.png']);
-    expect(rasterNames('kit-door-arch', 1, shipping())).toEqual([]);
+    expect(rasterNames('kit-plank-mid', 1, shipping('kit-plank-mid.png'))).toEqual(['kit-plank-mid.png']);
+    expect(rasterNames('kit-doorway-stone', 1, shipping())).toEqual([]);
   });
 
   it('draws the painted level unless the page asks for kit rooms', () => {

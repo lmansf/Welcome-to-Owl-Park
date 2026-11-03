@@ -2,7 +2,9 @@
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 import { test } from 'node:test';
-import { encodePng, kitRooms, loadShared, renderGreybox } from './greybox.mjs';
+import { readFileSync } from 'node:fs';
+import { CATALOG_FILE, catalogSource } from './catalog.mjs';
+import { encodePng, kitRooms, loadShared, planOf, renderGreybox } from './greybox.mjs';
 
 const shared = await loadShared();
 
@@ -53,4 +55,22 @@ test('draws the placeholders in the tree palette and leaves no part of the room 
   let clear = 0;
   for (let i = 3; i < r.data.length; i += 4) if (r.data[i] !== 255) clear++;
   assert.equal(clear, 0);
+});
+
+test('lays out the plaza ahead of its room, and dumps any kit room’s drawing as data for the preview', () => {
+  const rooms = kitRooms(shared);
+  assert.ok(rooms['plaza'], 'the plaza');
+  const p = planOf(shared, rooms['l4']);
+  assert.deepEqual(p.problems, []);
+  assert.equal(p.ground, rooms['l4'].kit.ground);
+  assert.ok(p.images.length > 20);
+  for (const c of p.images) assert.ok(shared.kitArt.KIT_ART[c.key], c.key);
+  // In drawing order: back, play, piece, then front.
+  const order = ['back', 'play', 'piece', 'front'];
+  const layers = p.images.map((c) => order.indexOf(c.layer));
+  assert.deepEqual(layers, [...layers].sort((a, b) => a - b));
+});
+
+test('keeps the shared catalogue in step with the art kit’s config and measurements (pnpm kit:catalog)', () => {
+  assert.equal(readFileSync(CATALOG_FILE, 'utf8'), catalogSource());
 });
