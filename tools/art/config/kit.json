@@ -783,13 +783,6 @@
     }
   },
   "layer_refs": {
-    "kit-high-mid-a": [
-      {
-        "ref": "@guide:target-l4-ref",
-        "role": "the approved target screen for this height: its light, colour and value bands",
-        "optional": false
-      }
-    ],
     "kit-high-mid-b": [
       {
         "ref": "@guide:target-l4-ref",
