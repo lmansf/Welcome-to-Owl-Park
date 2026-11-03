@@ -19,26 +19,38 @@ const standsAt = (page: Page, top: number) =>
   expect.poll(async () => { const s = await state(page); return [s.air.s, Math.round(s.air.z)]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, top]);
 
 /**
- * Hold the right arrow until the owl is past `x`, and let it go in the page itself on the frame it is:
- * a let-go sent from the test arrives a round trip late, which on a slow runner carried the owl right
- * across a doorway and on to the screen's end.
+ * Walk the owl by the arrow keys until it stands inside `left` to `right` (a doorway: the keys never
+ * take one by themselves, OP-212). The page lets go of the key itself, on the frame the owl is in, since
+ * a let-go sent from the test arrives a round trip late. A slow runner can still hitch for most of a
+ * second with the key down and carry the owl past, so it walks back the other way until it is in.
  */
-async function keyRightPast(page: Page, x: number): Promise<void> {
-  await page.keyboard.down('ArrowRight');
-  await page.evaluate(
-    (x) =>
-      new Promise<void>((done) => {
-        const look = () => {
-          if ((window.owlPark?.state()?.pos.x ?? 0) > x) {
-            window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' }));
-            done();
-          } else requestAnimationFrame(look);
-        };
-        look();
-      }),
-    x,
-  );
-  await page.keyboard.up('ArrowRight');
+async function keyInto(page: Page, left: number, right: number): Promise<void> {
+  const margin = 20;
+  for (let tries = 0; tries < 6; tries += 1) {
+    const x = (await state(page)).pos.x;
+    if (x > left + margin && x < right - margin) return;
+    const east = x <= left + margin;
+    const key = east ? 'ArrowRight' : 'ArrowLeft';
+    await page.keyboard.down(key);
+    await page.evaluate(
+      ({ key, east, past }) =>
+        new Promise<void>((done) => {
+          const look = () => {
+            const x = window.owlPark?.state()?.pos.x ?? 0;
+            if (east ? x > past : x < past) {
+              window.dispatchEvent(new KeyboardEvent('keyup', { code: key, key }));
+              done();
+            } else requestAnimationFrame(look);
+          };
+          look();
+        }),
+      { key, east, past: east ? left + margin + 5 : right - margin - 5 },
+    );
+    await page.keyboard.up(key);
+    await expect.poll(async () => (await state(page)).walking, { timeout: 10_000, intervals: [50] }).toBe(false);
+  }
+  const x = (await state(page)).pos.x;
+  expect(x > left + margin && x < right - margin, `owl at ${x}, not in ${left} to ${right}`).toBe(true);
 }
 
 /** The phone project's phone (a Pixel 7), held upright and on its side. */
@@ -79,7 +91,7 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     // The stair's treads and its balcony are no ledges: an owl goes up by the doorway at the foot, on up.
     // In on the keys, which never take a doorway (OP-212); a walk aimed into it would go on up to level 2.
     await walkAndStop(page, LOBBY + 880, GROUND);
-    await keyRightPast(page, LOBBY + 985);
+    await keyInto(page, LOBBY + 960, LOBBY + 1070);
     await standsAt(page, 0);
     // The jump's own landing, not the floor it took off from: a take-off counted, then the floor.
     const before = (await state(page)).flown.n;
@@ -265,7 +277,7 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
     // by themselves. The page itself watches for the owl inside, frame by frame, so the keys let go
     // well before it could walk out the far side (960 to 1070) on a slow runner.
     await walkAndStop(page, LOBBY + 880, GROUND);
-    await keyRightPast(page, LOBBY + 985);
+    await keyInto(page, LOBBY + 960, LOBBY + 1070);
     await standsAt(page, 0);
     await frames(page, 30);
     const s = await state(page);
@@ -401,7 +413,7 @@ test.describe('the tree’s minimap on a computer (OP-213)', () => {
     await expect(level(page)).toHaveText('Ground level');
     // Into the stair up's doorway (960 to 1070) by the keys, which never take it by themselves, then up.
     await walkAndStop(page, LOBBY + 880, GROUND);
-    await keyRightPast(page, LOBBY + 985);
+    await keyInto(page, LOBBY + 960, LOBBY + 1070);
     await standsAt(page, 0);
     await page.keyboard.press('ArrowUp');
     await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l2');
