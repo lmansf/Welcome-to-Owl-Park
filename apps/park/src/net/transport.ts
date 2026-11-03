@@ -1,4 +1,4 @@
-import type { Air, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
+import type { Air, ClosedView, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -104,6 +104,11 @@ export interface ParkTransport {
   readonly tickets?: TicketWallet;
   /** The line in front of the park on busy nights (OP-075); only the room server has one. */
   readonly line?: LineLink;
+  /**
+   * Whether the park is closed for setup (OP-233), for the home screen; null when the park did not say
+   * (out of reach, or too many asks). Transports without a server are never closed.
+   */
+  closed?(): Promise<ClosedView | null>;
   /** The owl's account (OP-139): only the room server keeps them, and only with ACCOUNTS on. */
   readonly accounts?: AccountLink;
 }
