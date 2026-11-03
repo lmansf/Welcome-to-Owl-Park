@@ -116,6 +116,18 @@ export interface RoomDef {
    */
   landings?: Array<{ id: string; x: number; w: number }>;
   /**
+   * A room built from the art kit (OP-234) instead of painted screens: seamless textures over its
+   * surfaces, shape pieces along its ledges, stairs, doorways and barriers, decals, and backdrop layers
+   * per stretch of screens (RoomKit). The kit's backdrops are the room's `backgrounds` and `foregrounds`
+   * (kitRoom fills them in), so the tiles' parallax and fades are drawn as for a painted room; the rest
+   * is drawn from kitDrawPlan (kit.ts). Without it the room is painted, as before, so rooms move over
+   * one at a time.
+   *
+   * TODO-DOCS (OP-234): docs/ARCHITECTURE.md's rooms table gains `kit`; docs/MAP.md gains the kit's
+   * catalogue (KIT_ART, `kit-<group>-<name>`), how a kit room is laid out and the barrier rule.
+   */
+  kit?: RoomKit;
+  /**
    * An act of a parkour course (OP-224, course.ts): which course and which act, and its course pieces
    * (benches, the objective's parts, the lost feathers, shortcuts, the pits an owl falls through and,
    * in the last act, the finish shrine). An owl in such a room holds the dash (dash.ts).
@@ -132,6 +144,123 @@ export interface RoomDef {
    * tiles name no art, nothing is loaded for them, and the scene paints the floor plan instead.
    */
   drawn?: true;
+}
+
+/**
+ * The art kit's layout of a room (OP-234), in room pixels. Heights (`top`) are over `ground`, as a
+ * perch's are; every piece names its art by key (`kit-<group>-<name>`, KIT_ART), and a key with no
+ * art yet is drawn as a placeholder in the tree's palette.
+ */
+export interface RoomKit {
+  /** The ground line the kit's heights stand on (room px): the tree's TREE_GROUND. */
+  ground: number;
+  /** Surfaces filled with a seamless texture (bark, earth, planking), drawn behind everything else, in order. */
+  surfaces?: KitSurface[];
+  /** Walkways drawn along a height: the floor's boardwalk is a path with top 0. */
+  paths?: KitRun[];
+  /** What an owl stands on over the floor: each is the room's perch of the same id (kitPerches), unless `perch: false`. */
+  ledges?: KitLedge[];
+  /** Stairs: ledges drawn as treads on posts instead of as platforms. */
+  stairs?: KitStair[];
+  /** The piece drawn at each doorway of the room's `doors` (an arch, a stairwell, a portal). */
+  doors?: KitDoor[];
+  /** Barriers (railings, roots): what says "no way on" at the end of a path or the foot of a ledge an owl cannot reach. */
+  barriers?: KitBarrier[];
+  /** Placed pieces standing on a height: benches, shelves, signs, lanterns. */
+  props?: KitProp[];
+  /** Pieces laid over the surfaces where they are placed (moss, a knot, a lantern's glow). */
+  decals?: KitDecal[];
+  /** Backdrop layers, each one key drawn on a stretch of screens at its scroll rate (the sky, the middle distance, the overlay). */
+  backdrops?: KitBackdrop[];
+}
+
+/** A rectangle of the room filled with a seamless texture, repeated from the room's origin so neighbours line up. */
+export interface KitSurface {
+  id: string;
+  texture: string;
+  rect: Rect;
+}
+
+/** Something drawn along a height from x0 to x1: a cap along its top, a mid under it `depth` deep, a slope at each end. */
+export interface KitRun {
+  id: string;
+  x0: number;
+  x1: number;
+  top: number;
+  /** The strip along the top (repeats across): what says "stand here". */
+  cap?: string;
+  /** What fills under the cap, `depth` deep (repeats both ways). */
+  mid?: string;
+  /** The end piece, drawn at the left end and mirrored at the right. */
+  slope?: string;
+  /** A strip hung along the front just under the cap (a rope, a vine). */
+  trim?: string;
+  /** How deep the mid is drawn (room px); a path's default runs down to the room's foot, a ledge's is KIT_LEDGE_DEPTH. */
+  depth?: number;
+}
+
+export interface KitLedge extends KitRun {
+  /** Drawn but not stood on (no perch): the barrier rule then asks for a barrier at its foot. */
+  perch?: false;
+  /** The perch is solid (a wall to an owl below its top). */
+  solid?: boolean;
+}
+
+export interface KitStair {
+  id: string;
+  /** The ledges that are its treads, by id. */
+  treads: string[];
+  /** The tread's strip (repeats across). */
+  tread?: string;
+  /** The post under each tread, down to the ground (repeats down). */
+  post?: string;
+}
+
+export interface KitDoor {
+  /** The doorway's id in the room's `doors`: the piece stands centred on its rect, its foot at the doorway's `top`. */
+  door: string;
+  piece: string;
+}
+
+export interface KitBarrier {
+  id: string;
+  x0: number;
+  x1: number;
+  /** The height its foot stands at. */
+  top: number;
+  piece: string;
+}
+
+export interface KitProp {
+  id: string;
+  piece: string;
+  /** The middle of its foot, and the height that foot stands at. */
+  x: number;
+  top: number;
+  flip?: boolean;
+  /** Drawn in front of the owls (a lamp post on the path), under the overlay. */
+  front?: boolean;
+}
+
+export interface KitDecal {
+  piece: string;
+  /** The decal's middle (room px). */
+  x: number;
+  y: number;
+  alpha?: number;
+  front?: boolean;
+}
+
+export interface KitBackdrop {
+  key: string;
+  /** Its scroll rate, as a tile's (0.5 the sky, 0.75 the middle distance, 1 back scenery, 1.2 the overlay). */
+  rate: number;
+  /** The screens it is drawn on, first and last (0 is the room's west screen). */
+  screens: readonly [number, number];
+  /** As a tile's `fade`, at each screen's edges. */
+  fade?: { left?: number; right?: number };
+  /** Drawn in front of the owls (the overlay). */
+  front?: boolean;
 }
 
 /** What a barrier looks like (OP-220): a locked gate, a rope across, a fallen branch, or boards nailed over an arch. */

@@ -95,6 +95,8 @@ export interface TreeDressOptions {
   open: (door: DoorDef) => boolean;
   /** Calm motion: the marks stand still. */
   calm: boolean;
+  /** Whether to draw the bright edge along each ledge (absent: yes); a room built from the art kit has its caps (OP-234). */
+  lips?: boolean;
   /** A tap on a doorway's mark. */
   onMarkTap?: (door: DoorDef) => void;
 }
@@ -127,7 +129,7 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
   const lips = scene.add.graphics().setDepth(opts.depths.lip);
   // A level painted in layers (its platforms plain) shows its ledges in the painting: no line over them.
   const painted = playTiles.some((img) => img.getData('plain'));
-  const perches = painted ? [] : (room.perches ?? []);
+  const perches = painted || opts.lips === false ? [] : (room.perches ?? []);
   for (const p of perches) {
     const xs = xsOf(p.area);
     const x0 = Math.min(...xs);
