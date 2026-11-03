@@ -217,7 +217,7 @@ assembler (OP-234) builds screens from the published files, whose format is this
   feathered mask), resizes with the tiling kept and refuses a tile whose wrap seam is more than
   `--max-seam` (1.6) times its inner detail; the post record keeps the seam ratios before and
   after. No `@2x`: the assembler scales the tile.
-- **Shape sheets** are the helper keys `kit-sheet-<name>` (eighteen of them): one 2048 x 1152
+- **Shape sheets** are the helper keys `kit-sheet-<name>` (twenty-two of them: eighteen core sheets and the four slope sheets of top-up G2b, OP-240): one 2048 x 1152
   painting on magenta `#FF00FF` with six props in a grid of three across and two down, listed in
   `kit.json` in reading order. `art:finish pieces <key>` keys the sheet out, finds the six props as blobs (the painter's grid
   is never exact) and takes them in reading order, trims each to its own pixels and fits it (contain, bottom-aligned, 2 % margin) into the piece's logical canvas, and

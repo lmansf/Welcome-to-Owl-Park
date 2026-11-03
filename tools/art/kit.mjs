@@ -19,7 +19,7 @@ export const KIT_TEXTURE_KEYS = Object.keys(KIT.textures).map((name) => `kit-tex
 export const KIT_TEXTURE_PROMPTS = Object.fromEntries(Object.entries(KIT.textures).map(([name, desc]) => [`kit-tex-${name}`,
   `A seamless, tileable texture of ${desc}, filling the whole square evenly from edge to edge so that it repeats with no visible seam: the pattern continues across the left and right edges and across the top and bottom edges, even lighting with no vignette, no hot spot, no large single feature, no border, no frame, no shadow, the same scale of detail everywhere, seen flat on. ${KIT_STYLE}`]));
 
-/** The eighteen sheets: six props each on the key colour, in a grid of three across and two down. */
+/** The sheets (eighteen core, four slope sheets from top-up G2b, OP-240): six props each on the key colour, in a grid of three across and two down. */
 export const KIT_SHEET_KEYS = Object.keys(KIT.sheets).map((name) => `kit-sheet-${name}`);
 export const KIT_SHEET_PROMPTS = Object.fromEntries(Object.entries(KIT.sheets).map(([name, sheet]) => {
   const items = sheet.pieces.map((p, i) => `${i + 1}) ${p.desc}`);

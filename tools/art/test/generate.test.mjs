@@ -985,7 +985,7 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
   const art = parseArtTable();
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
   assert.equal(Object.keys(K.KIT.textures).length, 10);
-  assert.equal(Object.keys(K.KIT.sheets).length, 18);
+  assert.equal(Object.keys(K.KIT.sheets).length, 22);
   for (const key of K.KIT_TEXTURE_KEYS) {
     assert.deepEqual(art[key], { w: K.KIT.texture_size, h: K.KIT.texture_size, kind: 'texture' }, `${key} in art.ts`);
     assert.equal(ASSETS.keys[key].format, 'webp', `${key} ships as WebP`);
@@ -1012,7 +1012,7 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
       assert.ok(!jobs.has(key), `${key} is cut from its sheet, not generated on its own`);
     }
   }
-  assert.equal(names.size, 108);
+  assert.equal(names.size, 132);
   // The area sets: accent textures, prop sheets and seven sideways-repeating backdrop layers each.
   for (const [areaName, area] of Object.entries(K.KIT_AREAS)) {
     assert.deepEqual(Object.keys(area.layers), ['sky-a', 'sky-b', 'far-a', 'far-b', 'mid-a', 'mid-b', 'mid-c'], `${areaName}: seven layers`);

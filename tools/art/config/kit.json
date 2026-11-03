@@ -644,6 +644,142 @@
           "desc": "a wooden hand cart with two spoked wheels, a cloth over its load"
         }
       ]
+    },
+    "slopes-branch": {
+      "w": 320,
+      "h": 160,
+      "pieces": [
+        {
+          "name": "branch-slope-gentle-up",
+          "desc": "a thick mossy branch platform twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope rising from exactly halfway up the left edge to the very top of the right edge, a bed of soft green moss along its walkable top, its bark deep brown with long furrows, its underside bare bark, its underside flat and level along the bottom, no side branches, twigs or ledges"
+        },
+        {
+          "name": "branch-slope-gentle-down",
+          "desc": "a thick mossy branch platform twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope falling from the very top of the left edge to exactly halfway up the right edge, a bed of soft green moss along its walkable top, its underside flat and level along the bottom, no side branches, twigs or ledges"
+        },
+        {
+          "name": "branch-slope-steep-up",
+          "h": 240,
+          "desc": "a thick mossy branch platform four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope rising from a third of the way up the left edge to the very top of the right edge, a bed of soft green moss along its walkable top, its underside flat and level along the bottom, no side branches, twigs or ledges"
+        },
+        {
+          "name": "branch-slope-steep-down",
+          "h": 240,
+          "desc": "a thick mossy branch platform four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope falling from the very top of the left edge to a third of the way up the right edge, a bed of soft green moss along its walkable top, its underside flat and level along the bottom, no side branches, twigs or ledges"
+        },
+        {
+          "name": "branch-crest",
+          "h": 180,
+          "desc": "a thick mossy branch platform sixteen wide by nine tall, both ends cut straight and vertical, its walkable top flat and level at both ends at two thirds of the height and swelling up to one smooth rounded crest that touches the top edge in the middle, a bed of soft green moss along its walkable top, its underside flat and level along the bottom, no side branches, twigs or ledges"
+        },
+        {
+          "name": "branch-dip",
+          "h": 120,
+          "desc": "a thick mossy branch platform eight wide by three tall, both ends cut straight and vertical, its walkable top flat and level at both ends at the very top edge and sinking to one smooth rounded hollow halfway down in the middle, a bed of soft green moss along its walkable top, its underside flat and level along the bottom, no side branches, twigs or ledges"
+        }
+      ]
+    },
+    "slopes-earth": {
+      "w": 320,
+      "h": 160,
+      "pieces": [
+        {
+          "name": "earth-slope-gentle-up",
+          "desc": "a bank of packed dark earth for a forest floor twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope rising from exactly halfway up the left edge to the very top of the right edge, a thick carpet of green moss and a few grass tufts along its walkable top, small stones, root ends and fallen leaf bits in the packed earth of its face, its underside flat and level along the bottom, no ledges or steps in its face"
+        },
+        {
+          "name": "earth-slope-gentle-down",
+          "desc": "a bank of packed dark earth for a forest floor twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope falling from the very top of the left edge to exactly halfway up the right edge, a thick carpet of green moss and a few grass tufts along its walkable top, its underside flat and level along the bottom, no ledges or steps in its face"
+        },
+        {
+          "name": "earth-slope-steep-up",
+          "h": 240,
+          "desc": "a bank of packed dark earth for a forest floor four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope rising from a third of the way up the left edge to the very top of the right edge, a thick carpet of green moss and a few grass tufts along its walkable top, its underside flat and level along the bottom, no ledges or steps in its face"
+        },
+        {
+          "name": "earth-slope-steep-down",
+          "h": 240,
+          "desc": "a bank of packed dark earth for a forest floor four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope falling from the very top of the left edge to a third of the way up the right edge, a thick carpet of green moss and a few grass tufts along its walkable top, its underside flat and level along the bottom, no ledges or steps in its face"
+        },
+        {
+          "name": "earth-crest",
+          "h": 180,
+          "desc": "a bank of packed dark earth for a forest floor sixteen wide by nine tall, both ends cut straight and vertical, its walkable top flat and level at both ends at two thirds of the height and swelling up to one smooth rounded crest that touches the top edge in the middle, a thick carpet of green moss and a few grass tufts along its walkable top, its underside flat and level along the bottom, no ledges or steps in its face"
+        },
+        {
+          "name": "earth-dip",
+          "h": 120,
+          "desc": "a bank of packed dark earth for a forest floor eight wide by three tall, both ends cut straight and vertical, its walkable top flat and level at both ends at the very top edge and sinking to one smooth rounded hollow halfway down in the middle, a thick carpet of green moss and a few grass tufts along its walkable top, its underside flat and level along the bottom, no ledges or steps in its face"
+        }
+      ]
+    },
+    "slopes-stone": {
+      "w": 320,
+      "h": 160,
+      "pieces": [
+        {
+          "name": "stone-slope-gentle-up",
+          "desc": "a fitted grey stone ledge twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope rising from exactly halfway up the left edge to the very top of the right edge, a flat course of pale worn capstones along its walkable top with moss in the joints, cool blue-grey blocks with mossy mortar lines, slightly blue in shadow, its underside flat and level along the bottom, no ledges or jutting blocks in its face"
+        },
+        {
+          "name": "stone-slope-gentle-down",
+          "desc": "a fitted grey stone ledge twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope falling from the very top of the left edge to exactly halfway up the right edge, a flat course of pale worn capstones along its walkable top with moss in the joints, its underside flat and level along the bottom, no ledges or jutting blocks in its face"
+        },
+        {
+          "name": "stone-slope-steep-up",
+          "h": 240,
+          "desc": "a fitted grey stone ledge four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope rising from a third of the way up the left edge to the very top of the right edge, a flat course of pale worn capstones along its walkable top with moss in the joints, its underside flat and level along the bottom, no ledges or jutting blocks in its face"
+        },
+        {
+          "name": "stone-slope-steep-down",
+          "h": 240,
+          "desc": "a fitted grey stone ledge four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope falling from the very top of the left edge to a third of the way up the right edge, a flat course of pale worn capstones along its walkable top with moss in the joints, its underside flat and level along the bottom, no ledges or jutting blocks in its face"
+        },
+        {
+          "name": "stone-crest",
+          "h": 180,
+          "desc": "a fitted grey stone ledge sixteen wide by nine tall, both ends cut straight and vertical, its walkable top flat and level at both ends at two thirds of the height and swelling up to one smooth rounded crest that touches the top edge in the middle, a flat course of pale worn capstones along its walkable top with moss in the joints, its underside flat and level along the bottom, no ledges or jutting blocks in its face"
+        },
+        {
+          "name": "stone-dip",
+          "h": 120,
+          "desc": "a fitted grey stone ledge eight wide by three tall, both ends cut straight and vertical, its walkable top flat and level at both ends at the very top edge and sinking to one smooth rounded hollow halfway down in the middle, a flat course of pale worn capstones along its walkable top with moss in the joints, its underside flat and level along the bottom, no ledges or jutting blocks in its face"
+        }
+      ]
+    },
+    "slopes-roots": {
+      "w": 320,
+      "h": 160,
+      "pieces": [
+        {
+          "name": "roots-slope-gentle-up",
+          "desc": "an underground bank of thick gnarled tree roots growing through packed dark earth twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope rising from exactly halfway up the left edge to the very top of the right edge, the roots knitting together into one walkable top with a little moss between them, cool violet-navy shadow in the earth between the roots, no sky, its underside flat and level along the bottom, no root arching away on its own that looks like somewhere to stand"
+        },
+        {
+          "name": "roots-slope-gentle-down",
+          "desc": "an underground bank of thick gnarled tree roots growing through packed dark earth twice as wide as it is tall, both ends cut straight and vertical, its walkable top one straight gentle slope falling from the very top of the left edge to exactly halfway up the right edge, the roots knitting together into one walkable top with a little moss between them, its underside flat and level along the bottom, no root arching away on its own that looks like somewhere to stand"
+        },
+        {
+          "name": "roots-slope-steep-up",
+          "h": 240,
+          "desc": "an underground bank of thick gnarled tree roots growing through packed dark earth four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope rising from a third of the way up the left edge to the very top of the right edge, the roots knitting together into one walkable top with a little moss between them, its underside flat and level along the bottom, no root arching away on its own that looks like somewhere to stand"
+        },
+        {
+          "name": "roots-slope-steep-down",
+          "h": 240,
+          "desc": "an underground bank of thick gnarled tree roots growing through packed dark earth four wide by three tall, both ends cut straight and vertical, its walkable top one straight steep slope falling from the very top of the left edge to a third of the way up the right edge, the roots knitting together into one walkable top with a little moss between them, its underside flat and level along the bottom, no root arching away on its own that looks like somewhere to stand"
+        },
+        {
+          "name": "roots-crest",
+          "h": 180,
+          "desc": "an underground bank of thick gnarled tree roots growing through packed dark earth sixteen wide by nine tall, both ends cut straight and vertical, its walkable top flat and level at both ends at two thirds of the height and swelling up to one smooth rounded crest that touches the top edge in the middle, the roots knitting together into one walkable top with a little moss between them, its underside flat and level along the bottom, no root arching away on its own that looks like somewhere to stand"
+        },
+        {
+          "name": "roots-dip",
+          "h": 120,
+          "desc": "an underground bank of thick gnarled tree roots growing through packed dark earth eight wide by three tall, both ends cut straight and vertical, its walkable top flat and level at both ends at the very top edge and sinking to one smooth rounded hollow halfway down in the middle, the roots knitting together into one walkable top with a little moss between them, its underside flat and level along the bottom, no root arching away on its own that looks like somewhere to stand"
+        }
+      ]
     }
   },
   "layer_sizes": {
