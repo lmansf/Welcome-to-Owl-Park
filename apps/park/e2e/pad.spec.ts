@@ -75,7 +75,11 @@ test.describe('the pad (OP-082, OP-114)', () => {
     // In sight: the stick, Jump, the Menu, Say and the feathers. Out of it: the count, Emotes, the bug and Interact at rest.
     for (const sel of ['#hud .stick', '[data-pad-jump]', '[data-menu-btn]', '[data-say-btn]']) await expect(page.locator(sel), sel).toBeVisible();
     for (const sel of ['#hud .bar .pill', '[data-emotes-btn]', '[data-feedback-bug]']) await expect(page.locator(sel), sel).toBeHidden();
-    expect(await page.locator('[data-pad-interact]').evaluate((el) => getComputedStyle(el).opacity)).toBe('0');
+    // Interact rests unseen where there is nothing to do; where the spawn offers something (the gate while
+    // the park is open), it shows wearing that action.
+    const interact = page.locator('[data-pad-interact]');
+    if (await interact.evaluate((el) => el.classList.contains('idle'))) expect(await interact.evaluate((el) => getComputedStyle(el).opacity)).toBe('0');
+    else await expect(interact).toHaveClass(/labelled/);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-park.png` });
 
     // The Menu says how many owls are here, and Send feedback stands by Close, in its accent, on every tab.
