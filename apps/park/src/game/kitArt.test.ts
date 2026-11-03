@@ -16,8 +16,13 @@ describe('the art kit in the park (OP-234)', () => {
   const demo = KIT_DEMOS['l4']!;
   const painted = ROOMS['l4']!;
 
-  it('knows every kit piece as art of its own kind, at its logical size', () => {
-    for (const [key, spec] of Object.entries(KIT_ART)) expect(ART[key], key).toEqual({ w: spec.w, h: spec.h, kind: 'kit' });
+  it('knows every kit piece as art: the published kit’s own entry where it has one (OP-229), else a placeholder at its logical size', () => {
+    for (const [key, spec] of Object.entries(KIT_ART)) {
+      const art = ART[key];
+      expect(art, key).toBeDefined();
+      if (art!.kind === 'kit') expect(art, key).toEqual({ w: spec.w, h: spec.h, kind: 'kit' });
+      else expect(['texture', 'piece', 'layer'], key).toContain(art!.kind);
+    }
   });
 
   it('looks a kit key up like any other art: its shipped files, best first, or none (its placeholder)', () => {

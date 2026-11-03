@@ -1813,3 +1813,64 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestKit(unittest.TestCase):
+    """The art kit (OP-229): healing a texture to tile, and cutting a sheet's cells into pieces."""
+
+    def test_heal_tile_makes_a_painting_wrap(self):
+        from PIL import Image
+        rng = np.random.default_rng(7)
+        # a smooth non-tiling field: a gradient plus low-frequency blobs, strong mismatch at the edges
+        y, x = np.mgrid[0:256, 0:256].astype(np.float32)
+        base = 128 + 90 * np.sin(x / 40) * np.cos(y / 37) + (x - 128) * 0.4
+        arr = np.stack([base, base * 0.8 + 20, base * 0.6 + 40], -1) + rng.normal(0, 3, (256, 256, 3))
+        img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
+        before = postprocess.tile_seam_ratio(img)
+        self.assertGreater(max(before["seam_x"], before["seam_y"]), 3.0)
+        healed = postprocess.heal_tile(img)
+        after = postprocess.tile_seam_ratio(healed)
+        self.assertLess(max(after["seam_x"], after["seam_y"]), 1.6)
+        small = postprocess.resize_tiling(healed, 128)
+        self.assertEqual(small.size, (128, 128))
+        self.assertLess(max(postprocess.tile_seam_ratio(small).values()), 1.6)
+        # a keyed layer healed sideways only: its alpha wraps too, and the up-and-down edges are untouched
+        rgba = img.convert("RGBA")
+        rgba.putalpha(Image.fromarray(np.clip(base, 0, 255).astype(np.uint8), "L"))
+        side = postprocess.heal_tile(rgba, axes=(1,))
+        self.assertEqual(side.mode, "RGBA")
+        self.assertLess(postprocess.tile_seam_ratio(side)["seam_x"], 1.6)
+        # the up-and-down wrap is neither healed nor broken by a sideways pass
+        self.assertAlmostEqual(postprocess.tile_seam_ratio(side)["seam_y"], postprocess.tile_seam_ratio(rgba)["seam_y"], delta=0.6)
+
+    def test_pieces_cuts_six_cells_into_their_keys(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        name, sheet = next(iter(kit["sheets"].items()))
+        key = f"kit-sheet-{name}"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2048, 1152), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            for i in range(6):
+                cx, cy = (i % 3 + 0.5) * 2048 / 3, (i // 3 + 0.5) * 576
+                d.ellipse((cx - 200, cy - 120, cx + 200, cy + 120), fill=(74, 51, 34))
+                d.ellipse((cx - 60, cy - 200, cx + 60, cy - 80), fill=(201, 162, 39))
+            img.save(raw_dir / "aaaaaaaaaaaaaaaa.png")
+            (raw_dir / "aaaaaaaaaaaaaaaa.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "aaaaaaaaaaaaaaaa"}))
+            (raw_dir / "SELECTED").write_text("aaaaaaaaaaaaaaaa")
+            (work / "final").mkdir()
+            rc = postprocess.main(["pieces", key, "--work", str(work)])
+            self.assertEqual(rc, 0)
+            for p in sheet["pieces"]:
+                pkey = f"kit-{p['name']}"
+                one = work / "final" / f"{pkey}.webp"
+                self.assertTrue(one.exists(), pkey)
+                with Image.open(one) as im:
+                    self.assertEqual(im.size, (p.get("w", sheet["w"]), p.get("h", sheet["h"])))
+                    self.assertIn("A", im.getbands())
+                rec = json.loads((work / "final" / f"{pkey}.post.json").read_text())
+                self.assertEqual(rec["sheet"]["key"], key)
+                self.assertEqual(rec["sheet"]["cell"], sheet["pieces"].index(p) + 1)

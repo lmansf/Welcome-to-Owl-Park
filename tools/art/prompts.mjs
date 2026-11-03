@@ -2488,3 +2488,9 @@ JOBS.push(...TREE_L0C_TOP_KEYS.map((key, i) => ({
 })));
 Object.assign(PROMPTS, TREE_L0C_TOP_PROMPTS);
 HELPER_KEYS.push(...TREE_L0C_TOP_KEYS);
+
+// The art kit (OP-229): textures and shape sheets from config/kit.json (kit.mjs).
+import { KIT_AREA_PROMPTS, KIT_AREA_SHEET_KEYS, KIT_SHEET_KEYS, KIT_SHEET_PROMPTS, KIT_TEXTURE_PROMPTS, kitJobs } from './kit.mjs';
+JOBS.push(...kitJobs());
+Object.assign(PROMPTS, KIT_TEXTURE_PROMPTS, KIT_SHEET_PROMPTS, KIT_AREA_PROMPTS);
+HELPER_KEYS.push(...KIT_SHEET_KEYS, ...KIT_AREA_SHEET_KEYS);
