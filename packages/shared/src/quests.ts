@@ -10,17 +10,18 @@
 import { RARITIES, parseVariant, type Rarity } from './collectibles';
 import { KIND_RULES, QUEST_ITEMS, type InteractableKind, type QuestItemKind } from './interactables';
 import { getNpc, placeName } from './npcs';
+import { puzzleGoalText } from './puzzles';
 
-export type QuestType = 'talk' | 'visit' | 'interact' | 'emote' | 'gather' | 'mixed';
+export type QuestType = 'talk' | 'visit' | 'interact' | 'emote' | 'gather' | 'mixed' | 'puzzle';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type QuestLength = 'short' | 'medium' | 'long';
-/** Story quests are done once; daily and weekly ones come back each park day or week. */
-export type Cadence = 'story' | 'daily' | 'weekly';
+/** Story quests are done once; daily, weekly and monthly ones come back each park day, week or month (OP-254). */
+export type Cadence = 'story' | 'daily' | 'weekly' | 'monthly';
 
-export const QUEST_TYPES: readonly QuestType[] = ['talk', 'visit', 'interact', 'emote', 'gather', 'mixed'];
+export const QUEST_TYPES: readonly QuestType[] = ['talk', 'visit', 'interact', 'emote', 'gather', 'mixed', 'puzzle'];
 export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
 export const QUEST_LENGTHS: readonly QuestLength[] = ['short', 'medium', 'long'];
-export const CADENCES: readonly Cadence[] = ['story', 'daily', 'weekly'];
+export const CADENCES: readonly Cadence[] = ['story', 'daily', 'weekly', 'monthly'];
 
 export type Goal =
   | { kind: 'talk'; npc: string }
@@ -30,7 +31,9 @@ export type Goal =
   /** Play an emote, optionally near an NPC or in a room. */
   | { kind: 'emote'; emote: string; npc?: string; room?: string }
   /** Pick up quest items that appear (for this collector only) at hiding spots in a room. */
-  | { kind: 'gather'; item: QuestItemKind; count: number; room: string };
+  | { kind: 'gather'; item: QuestItemKind; count: number; room: string }
+  /** Open every lock of a puzzle (puzzles.ts, OP-255): done when the owl's own list holds them all. */
+  | { kind: 'puzzle'; puzzle: string };
 
 export interface QuestStep {
   goal: Goal;
@@ -69,7 +72,8 @@ export type QuestEvent =
   | { kind: 'visit'; room: string }
   | { kind: 'interact'; what: InteractableKind; id: string; room: string }
   | { kind: 'emote'; emote: string; room: string; near: readonly string[] }
-  | { kind: 'gather'; item: QuestItemKind; room: string };
+  | { kind: 'gather'; item: QuestItemKind; room: string }
+  | { kind: 'puzzle'; puzzle: string };
 
 /** Does an event count toward a goal? (Counting and distinctness are the ledger's job.) */
 export function goalMatches(goal: Goal, ev: QuestEvent): boolean {
@@ -84,6 +88,8 @@ export function goalMatches(goal: Goal, ev: QuestEvent): boolean {
       return ev.kind === 'emote' && ev.emote === goal.emote && (goal.room === undefined || ev.room === goal.room) && (goal.npc === undefined || ev.near.includes(goal.npc));
     case 'gather':
       return ev.kind === 'gather' && ev.item === goal.item && ev.room === goal.room;
+    case 'puzzle':
+      return ev.kind === 'puzzle' && ev.puzzle === goal.puzzle;
   }
 }
 
@@ -114,6 +120,8 @@ export function goalText(goal: Goal): string {
       const it = QUEST_ITEMS[goal.item];
       return `Find ${plural(goal.count, it.noun, it.plural)} at ${placeName(goal.room)}`;
     }
+    case 'puzzle':
+      return puzzleGoalText(goal.puzzle);
   }
 }
 
@@ -136,22 +144,35 @@ export const REWARD_ODDS: Readonly<Record<Difficulty, Readonly<Record<Rarity, nu
 export const WEEKLY_REWARD_ODDS: Readonly<Record<Rarity, number>> = { common: 0, uncommon: 0, rare: 80, epic: 20 };
 /** Within a rarity, a variant the collector does not own yet is this many times as likely. */
 export const REWARD_UNOWNED_BOOST = 4;
-/** How many quests one collector can carry at once. */
-export const MAX_ACTIVE_QUESTS = 4;
+/**
+ * A monthly quest (OP-254) pays three times a weekly one, and a rare-or-better collectible that leans epic:
+ * each tier pays more than the one below (OP-253 rule 1).
+ */
+export const MONTHLY_QUEST_FEATHERS = 450;
+export const MONTHLY_REWARD_ODDS: Readonly<Record<Rarity, number>> = { common: 0, uncommon: 0, rare: 30, epic: 70 };
+/**
+ * How many quests of each tier one collector can carry at once. Each tier has its own slots (OP-253 rule 2):
+ * a full list of daily quests never stops a weekly or monthly one being taken.
+ */
+export const ACTIVE_SLOTS: Readonly<Record<Cadence, number>> = { story: 2, daily: 3, weekly: 3, monthly: 2 };
+/** Every slot of every tier together (the most quests one collector carries). */
+export const MAX_ACTIVE_QUESTS = Object.values(ACTIVE_SLOTS).reduce((a, b) => a + b, 0);
 /** Each park day offers one daily quest of each difficulty; each week one medium and one hard weekly quest. */
 export const DAILY_OFFER_DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
 export const WEEKLY_OFFER_DIFFICULTIES: readonly Difficulty[] = ['medium', 'hard'];
+/** Each week also offers its puzzle quest (OP-255); each month its puzzle quest and one long tour (OP-254). */
+export const MONTHLY_OFFERS = 2;
 export const DAILY_OFFERS = DAILY_OFFER_DIFFICULTIES.length;
 export const WEEKLY_OFFERS = WEEKLY_OFFER_DIFFICULTIES.length;
 
 /** Feathers for a daily or weekly quest (story quests carry their own). */
-export function questFeathers(cadence: 'daily' | 'weekly', difficulty: Difficulty): number {
-  return cadence === 'weekly' ? WEEKLY_QUEST_FEATHERS : DAILY_QUEST_FEATHERS[difficulty];
+export function questFeathers(cadence: 'daily' | 'weekly' | 'monthly', difficulty: Difficulty): number {
+  return cadence === 'monthly' ? MONTHLY_QUEST_FEATHERS : cadence === 'weekly' ? WEEKLY_QUEST_FEATHERS : DAILY_QUEST_FEATHERS[difficulty];
 }
 
 /** The rarity odds of a quest's picked collectible. */
 export function rewardOdds(q: Pick<QuestDef, 'cadence' | 'difficulty'>): Readonly<Record<Rarity, number>> {
-  return q.cadence === 'weekly' ? WEEKLY_REWARD_ODDS : REWARD_ODDS[q.difficulty];
+  return q.cadence === 'monthly' ? MONTHLY_REWARD_ODDS : q.cadence === 'weekly' ? WEEKLY_REWARD_ODDS : REWARD_ODDS[q.difficulty];
 }
 
 function weighted<T>(items: readonly T[], weight: (t: T) => number, rnd: () => number): T | undefined {
@@ -225,9 +246,12 @@ export interface QuestOfferView {
 export interface QuestBoard {
   day: string;
   week: string;
-  /** When the next park day and week begin, ms (server clock). */
+  /** The park month (OP-254). */
+  month: string;
+  /** When the next park day, week and month begin, ms (server clock). */
   nextDay: number;
   nextWeek: number;
+  nextMonth: number;
   active: ActiveQuestView[];
   /** What each NPC offers right now (quests this collector could accept). */
   offers: Record<string, QuestOfferView[]>;

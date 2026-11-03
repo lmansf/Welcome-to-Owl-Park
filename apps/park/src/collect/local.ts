@@ -59,11 +59,15 @@ import {
   type ShopView,
   type TravelState,
   type Vec2,
+  MemoryPuzzleStore,
+  PuzzleBook,
+  acceptPuzzleAware,
+  puzzleStep,
 } from '@owl-park/shared';
 import { LOCAL_COLLECTOR_KEY } from '../identity';
 import type { RoomConnection } from '../net/transport';
 import { COURSES, ROOMS } from '../rooms';
-import type { ActivityLink, ActivityPushes, CollectionService, CourseLink, CourseReply, FurnitureGiftReply, HandInReply, NestEditReply, NestLink, NestPushes, NoteReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
+import type { ActivityLink, ActivityPushes, CollectionService, CourseLink, CourseReply, FurnitureGiftReply, HandInReply, NestEditReply, NestLink, NestPushes, NoteReply, PuzzleReply, QuestLink, QuestPushes, QuestReply, UseReply } from './service';
 
 const STORE_PREFIX = 'owl-park:collection:';
 /** Every nest in this browser, whichever collector's: the street shows the other ones that are open. */
@@ -76,6 +80,15 @@ const ARCADE_KEY = 'owl-park:arcade';
 const CLIMB_KEY = 'owl-park:climb';
 /** Each collector's travel from the map in this browser (OP-130): the places walked into, and the gate. */
 const TRAVEL_PREFIX = 'owl-park:travel:';
+/** Puzzle quests' runs and progress in this browser (OP-255). */
+const PUZZLES_KEY = 'owl-park:puzzles';
+
+/** 128 random bits as hex from the browser's cryptographic source: a run's seed or id (OP-255). */
+function localToken(): string {
+  const c = globalThis.crypto;
+  const bytes = c && typeof c.getRandomValues === 'function' ? c.getRandomValues(new Uint8Array(16)) : Uint8Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 const SPOTS: QuestSpots = Object.fromEntries(Object.values(ROOMS).map((r) => [r.id, r.spots ?? []]));
 
 export interface KeyValueStorage {
@@ -125,6 +138,7 @@ export class LocalCollections implements CollectionService {
   private scoreMemory: MemoryScoreStore | null = null;
   private climbMemory: MemoryClimbStore | null = null;
   private courseMemory: MemoryCourseStore | null = null;
+  private puzzleMemory: MemoryPuzzleStore | null = null;
   /** The climb's night when the page pins one (`?night=`); otherwise the moon's. */
   private readonly night: string | null;
   /** Shared objects used up in this page: id -> when they are back. */
@@ -235,6 +249,25 @@ export class LocalCollections implements CollectionService {
       this.storage?.setItem(CLIMB_KEY, JSON.stringify(store.snapshot()));
     } catch {
       /* storage full or unavailable: the climbs live for this page only */
+    }
+    return out;
+  }
+
+  /** Run against the latest stored puzzle runs and this collector's quests, then store both again (OP-255). */
+  private puzzles<T>(fn: (books: { quests: QuestBook; puzzles: PuzzleBook }) => T): T {
+    let store: MemoryPuzzleStore;
+    try {
+      const raw = this.storage?.getItem(PUZZLES_KEY) ?? null;
+      store = raw ? MemoryPuzzleStore.from(JSON.parse(raw)) : (this.puzzleMemory ?? new MemoryPuzzleStore());
+    } catch {
+      store = this.puzzleMemory ?? new MemoryPuzzleStore();
+    }
+    const out = this.use(({ quests }) => fn({ quests, puzzles: new PuzzleBook(store, SPOTS, { newSeed: localToken, newId: localToken }) }));
+    this.puzzleMemory = store;
+    try {
+      this.storage?.setItem(PUZZLES_KEY, JSON.stringify(store.snapshot()));
+    } catch {
+      /* storage full or unavailable: the runs live for this page only */
     }
     return out;
   }
@@ -444,8 +477,8 @@ export class LocalCollections implements CollectionService {
         const giver = giverHere(quest);
         if (!giver) return refused('unknown');
         if (!near(giver.pos, NPC_TALK_RADIUS)) return refused('far');
-        return this.use(({ quests }) => {
-          const res = quests.accept(cid, quest, this.now(), room);
+        return this.puzzles(({ quests, puzzles }) => {
+          const res = acceptPuzzleAware(quests, puzzles, cid, quest, this.now(), room);
           return { ok: res.ok, ...(res.ok ? {} : { reason: res.reason }), board: res.board, updates: [] };
         });
       },
@@ -505,6 +538,22 @@ export class LocalCollections implements CollectionService {
           return updates.length ? { board: quests.board(cid, now), updates } : null;
         });
         if (moved) pushes.onQuests?.(moved.board, moved.updates);
+      },
+      // Puzzle runs (OP-255): nobody else plays in this browser, so there is never an owl close by to join.
+      puzzle: async (op, quest, args = {}): Promise<PuzzleReply> => {
+        if (op === 'near') return { ok: true, view: null, near: [], updates: [] };
+        if (op === 'join') return { ok: false, reason: 'far', view: null, updates: [] };
+        return this.puzzles(({ quests, puzzles }) => {
+          const res = puzzleStep(quests, puzzles, cid, { op, quest, room, pos: where(), ground: ground(), ...(args.lock !== undefined ? { lock: args.lock } : {}), ...(args.n !== undefined ? { n: args.n } : {}), ...(args.code ? { code: args.code } : {}) }, this.now());
+          return {
+            ok: res.ok,
+            ...(res.reason ? { reason: res.reason } : {}),
+            ...(res.left !== undefined ? { left: res.left } : {}),
+            view: res.view ?? null,
+            ...(res.board ? { board: res.board } : {}),
+            updates: res.updates ?? [],
+          };
+        });
       },
     };
   }

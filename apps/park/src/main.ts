@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -248,6 +248,10 @@ declare global {
       handIn(quest: string): Promise<boolean>;
       /** Walk to a quest item in this room (arriving picks it up). */
       gather(quest: string, n: number): boolean;
+      /** A puzzle quest's run as the page has it (OP-255), a Quests-tab button on it, and a walk to one of its pieces here. */
+      puzzle(quest: string): PuzzleView | null;
+      puzzleAction(op: 'start' | 'near' | 'join' | 'leave', quest: string, owl?: string): Promise<boolean>;
+      walkToPiece(quest: string, lock: string, kind: 'lock' | 'clue' | 'key', n?: number): boolean;
       /** The feather shop as this collector sees it, buying from it, and today's free gift. */
       shop(): Promise<ShopView>;
       buy(variant: string): Promise<BuyResult>;
@@ -612,6 +616,8 @@ hud.attachQuests(quests, {
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   collect: (quest) => roomScene()?.collectQuest(quest) ?? Promise.resolve(false),
   openShop: () => hud.openShop(),
+  puzzle: (op, quest, owl) => roomScene()?.puzzleAction(op, quest, owl) ?? Promise.resolve(false),
+  tryCode: (quest, lock, code) => roomScene()?.tryCode(quest, lock, code) ?? Promise.resolve(false),
 }, tasks);
 // Feedback goes to the park's keepers through the room server (kept in this browser without one).
 hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
@@ -718,6 +724,9 @@ window.owlPark = {
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   gather: (quest, n) => roomScene()?.walkToItem(quest, n) ?? false,
+  puzzle: (quest) => roomScene()?.puzzleView(quest) ?? null,
+  puzzleAction: (op, quest, owl) => roomScene()?.puzzleAction(op, quest, owl) ?? Promise.resolve(false),
+  walkToPiece: (quest, lock, kind, n) => roomScene()?.walkToPiece(quest, lock, kind, n) ?? false,
   shop: () => collection.shop(),
   buy: (variant) => collection.buy(variant),
   gift: () => collection.claimGift(),
