@@ -47,7 +47,7 @@ function areaSheetPrompt(area, sheet) {
 
 function areaLayerPrompt(area, name, desc) {
   const kind = name.split('-')[0];
-  const repeat = 'Its left edge and its right edge continue into each other exactly, so that the painting repeats sideways with no visible seam: every shape, band and line that runs off the right edge comes back in at the same height on the left.';
+  const repeat = 'Its left edge and its right edge continue into each other exactly, so that the painting repeats sideways with no visible seam: every shape, band and line that runs off the right edge comes back in at the same height on the left. Because it repeats, it holds no single large feature: no moon, no sun, no one big building; the moon is drawn separately by the game.';
   if (kind === 'sky') return `Background plate for a side-scrolling 2D game, the farthest layer, which the game scrolls at half speed behind the others: ${desc}. Paint edge to edge with no empty areas, no ground, no trees in front, nothing nearer than the sky and clouds. ${repeat} The light of this area: ${area.light}. ${KIT_STYLE}`;
   if (kind === 'far') return `Far layer for a side-scrolling 2D game, between the sky and the middle distance, which the game scrolls at a little over half speed, isolated on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} background that fills every part of the canvas not covered by the painting, with no gradient, no vignette, no glow and no cast shadows on the magenta: ${desc}, the open sky above it left as flat magenta. ${repeat} The light of this area: ${area.light}. ${KIT_STYLE}`;
   return `Middle-distance layer for a side-scrolling 2D game, the layer between the far distance and the playfield, which the game scrolls at three quarters of the camera's pace, isolated on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} background that fills every part of the canvas not covered by the painting, with no gradient, no vignette, no glow and no cast shadows on the magenta: ${desc}. Paint only middle-distance shapes, quieter and a step darker than a playfield would be, nothing that looks like a ledge to stand on. ${repeat} The light of this area: ${area.light}. ${KIT_STYLE}`;
@@ -98,7 +98,7 @@ export function areaJobs(areaName, seedBase) {
   return jobs;
 }
 
-export const AREA_SEEDS = { entrance: 7400 };
+export const AREA_SEEDS = { entrance: 7400, clearing: 7500 };
 
 export function kitJobs(seedBase = 7000) {
   const textures = KIT_TEXTURE_KEYS.map((key, i) => ({

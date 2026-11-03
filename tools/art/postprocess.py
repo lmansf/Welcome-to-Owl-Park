@@ -705,6 +705,9 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     img = open_raw(raw)
     kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
     rgba, cinfo = key_out(img, chroma_params(a, kc))
+    if a.clear_haze:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
+        note(f"{key}: clear-haze {n} px")
     cols, rows = 3, 2
     alpha = np.asarray(rgba.getchannel("A"))
     blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
@@ -736,7 +739,7 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
         canvas2x, finfo = fit_contain(crop, 2 * W, 2 * H, a.margin, 0.5, 0, a.valign)
         one = downsample(canvas2x, W, H)
         outputs, lines = finish_cutout_webp(ctx, pkey, one, canvas2x)
-        tools = [f"pieces: {key} prop {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}", *lines]
+        tools = [f"pieces: {key} prop {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}", *lines]
         save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
                                       "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo, "sheet": {"key": key, "cell": i + 1, "bbox": [x0, y0, x1, y1]}})
         note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (prop {i + 1}, {x1 - x0}x{y1 - y0} px)")
@@ -2001,6 +2004,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_chroma_flags(sp)
     sp.add_argument("--only", default=None, help="comma-separated piece names (or keys) to cut; default all six")
     sp.add_argument("--grow", type=int, default=3, help="how far (in quarter-size pixels) a prop's parts may be apart and still count as one prop")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze (a glow painted over the key) transparent before cutting")
     sp.add_argument("--min-blob", type=int, default=400, help="px below which a blob is not a prop")
     sp.add_argument("--margin", type=float, default=0.02)
     sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom")

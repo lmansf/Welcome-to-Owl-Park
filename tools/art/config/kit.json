@@ -932,13 +932,159 @@
         }
       },
       "layers": {
-        "sky-a": "the open night sky above the canopy, deep navy to dusk blue at the bottom, a full cream moon high right of centre with soft glow, scattered stars and a few thin high clouds",
+        "sky-a": "the open night sky above the canopy, deep navy to dusk blue at the bottom, bright with scattered stars and a few thin high clouds lit cream from above",
         "sky-b": "the open night sky above the canopy with no moon, deep navy to dusk blue at the bottom, scattered stars and a bank of soft rounded clouds low along the bottom third lit cream from above",
         "far-a": "a sea of rounded leaf tops stretching away below, in dusk blue and navy with cream moonlight on their upper edges, the crowns of other great trees rising among them, filling the lower two thirds and fading at the top",
         "far-b": "far tree crowns and leaf tops below with tiny warm lantern points scattered among them and a thin mist over the lowest band, filling the lower two thirds and fading at the top",
         "mid-a": "the nearer boughs of the canopy with dense leaf clusters in two greens, a few strings of small amber lanterns between them, in the lower half of the frame, the upper half mostly open",
         "mid-b": "the inside wall of a shop carved into a hollow bough: polished inner wood panelling, shelves of small goods lit by warm lantern light, a round window of night sky, filling the whole frame",
         "mid-c": "the far side of a plaza in the canopy: the rounded roofs of small stalls under striped awnings, strings of pennants, a low railing of inner wood along a plank floor, in the lower half, the upper half open"
+      }
+    },
+    "clearing": {
+      "title": "the Treehouse Clearing: its Commons under the lower boughs, and the Updraft Canopy course",
+      "light": "dappled amber light falling through thick leaves overhead, warm and soft, with pools of lantern gold under the huts; the lower boughs of great trees all round, the forest floor of ferns not far below",
+      "textures": {
+        "fern-floor": "a forest floor thick with low ferns, moss and a few fallen amber leaves, seen flat from above",
+        "hollow-wood": "the inside wall of a hollow tree trunk: smooth worn wood with long curving grain and small knotholes, warm brown",
+        "leaf-canopy": "dense overlapping leaves in two greens with small gaps of amber light showing through, seen from below"
+      },
+      "sheets": {
+        "commons-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "idol-pedestal",
+              "w": 240,
+              "h": 200,
+              "desc": "a round pedestal of inner wood with moss on its steps, nothing standing on it"
+            },
+            {
+              "name": "hammock",
+              "w": 320,
+              "h": 160,
+              "desc": "a cloth hammock in cream and leaf green strung between two short posts"
+            },
+            {
+              "name": "hut-small",
+              "w": 320,
+              "h": 320,
+              "desc": "a small round treehouse hut of planks with a leaf-thatched roof, a round door and a lantern by it"
+            },
+            {
+              "name": "rope-swing",
+              "w": 160,
+              "h": 320,
+              "desc": "a plank seat hanging on two ropes from a branch stub above"
+            },
+            {
+              "name": "mushroom-cluster",
+              "w": 160,
+              "h": 120,
+              "desc": "a cluster of three round amber-capped mushrooms with pale stems"
+            },
+            {
+              "name": "fern-clump",
+              "w": 200,
+              "h": 140,
+              "desc": "a clump of tall ferns in two greens"
+            }
+          ]
+        },
+        "course-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "updraft-vent",
+              "w": 240,
+              "h": 160,
+              "desc": "a hollow knot in a bough with a soft column of rising amber leaves and small gold sparks above it, lit only in warm amber and gold, the updraft a visitor rides"
+            },
+            {
+              "name": "trunk-entrance",
+              "w": 320,
+              "h": 400,
+              "desc": "a tall opening into a hollow trunk, its rim of bark, warm light inside"
+            },
+            {
+              "name": "fungus-shelf",
+              "w": 240,
+              "h": 120,
+              "desc": "a wide bracket fungus growing out of bark, flat on top, cream and amber"
+            },
+            {
+              "name": "log-bridge",
+              "w": 400,
+              "h": 120,
+              "desc": "a fallen log lying level as a bridge, moss on top, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "vine-curtain",
+              "w": 240,
+              "h": 320,
+              "desc": "a curtain of hanging vines with small leaves, from a branch above"
+            },
+            {
+              "name": "beehive-lantern",
+              "w": 120,
+              "h": 200,
+              "desc": "a round straw beehive hanging from a hook, glowing warm amber from its door"
+            }
+          ]
+        },
+        "course-b": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "leaf-platform",
+              "w": 320,
+              "h": 100,
+              "desc": "a wide flat cluster of large leaves to stand on, layered, cut straight at both ends"
+            },
+            {
+              "name": "acorn-cap",
+              "w": 160,
+              "h": 160,
+              "desc": "a giant acorn cap lying open side down, a small round platform"
+            },
+            {
+              "name": "bough-end-perch",
+              "w": 240,
+              "h": 200,
+              "desc": "the leafy end of a bough with a flat perch on top"
+            },
+            {
+              "name": "cocoon-bare",
+              "w": 160,
+              "h": 240,
+              "desc": "a pale silk cocoon hanging from a thread, closed, nothing drawn on it"
+            },
+            {
+              "name": "feather-lost",
+              "w": 80,
+              "h": 120,
+              "desc": "a single large cream and brown owl feather standing upright, glowing faintly"
+            },
+            {
+              "name": "finish-shrine",
+              "w": 320,
+              "h": 320,
+              "desc": "a small shrine of inner wood with a round arch, a bare plinth inside and two lanterns, nothing on the plinth"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "a canopy of thick leaves seen from below, filling the frame, amber light breaking through many small gaps and a few shafts of it",
+        "sky-b": "warm late sky in amber and dusk blue over open treetops, soft clouds lit from below, no sun drawn",
+        "far-a": "the lower boughs of great neighbouring trees stretching across, with small treehouse huts and lantern points among them, filling the middle band and fading at the top and the bottom",
+        "far-b": "a forest floor of ferns and moss far below seen from above, a stream of light through it, filling the lower two thirds and fading at the top",
+        "mid-a": "thick lower boughs with leaf clusters in two greens, rope bridges and a hut or two, lantern strings between them, in the lower two thirds, the upper third mostly open",
+        "mid-b": "the inside of a hollow trunk: curved walls of worn wood with knotholes letting amber light in, hanging roots and a few shelf fungi, filling the whole frame",
+        "mid-c": "open treetops in warm light with drifts of amber leaves rising on an updraft, the crowns of trees in the lower half, the upper half mostly open"
       }
     }
   }
