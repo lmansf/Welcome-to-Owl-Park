@@ -32,7 +32,7 @@ def pieces():
     """Every piece key with its logical size, from the art tools' own list (tools/art/kit.mjs)."""
     js = (
         "const k = await import(process.argv[1]);"
-        "console.log(JSON.stringify([...k.KIT_PIECES, ...k.KIT_AREA_PIECES, ...k.KIT_COURSE_PIECES, ...k.KIT_LANDMARK_PIECES].map(p => [p.key, p.w, p.h])));"
+        "console.log(JSON.stringify([...k.KIT_PIECES, ...k.KIT_AREA_PIECES, ...k.KIT_COURSE_PIECES, ...k.KIT_LANDMARK_PIECES, ...k.KIT_RECUT_PIECES].map(p => [p.key, p.w, p.h])));"
     )
     out = subprocess.run(['node', '--input-type=module', '-e', js, (ROOT / 'tools' / 'art' / 'kit.mjs').as_uri()], check=True, capture_output=True, text=True).stdout
     return json.loads(out)

@@ -17,9 +17,9 @@ const SKY_FADE = 220;
 const MID_FADE = 230;
 
 /**
- * Level 4, the sky landing, from the published kit (OP-241): high off the ground (docs/TREE_STYLE.md:
- * clear blue-navy air, crowns below), the high area's sky, far and middle layers behind, the trunk on
- * screen 0 with its stairs taken from the floor (the hatch down on the left, the knothole up into the
+ * Level 4, the sky landing, from the published kit (OP-241) and its recut (OP-251): high off the ground
+ * (docs/TREE_STYLE.md: clear blue-navy air, crowns below), the high area's sky and far layer behind
+ * (no middle layer on screen 0, as the approved target has none), the trunk on screen 0 with its stairs taken from the floor (the hatch down on the left, the knothole up into the
  * trunk on the right, OP-220), and the overlook's perches up the bough on screen 1: a stump, two mist
  * platforms and a stub off the bough. The boardwalk is drawn edge to edge over the air, and a
  * rope barrier closes it at each end of the walk (the barrier rule).
@@ -30,17 +30,18 @@ const L4_KIT: RoomKit = {
     { key: 'kit-high-sky-b', rate: 0.5, screens: [1, 1] },
     { key: 'kit-high-sky-a', rate: 0.5, screens: [0, 0], fade: { right: SKY_FADE } },
     { key: 'kit-high-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
-    { key: 'kit-high-mid-a', rate: 0.75, screens: [0, 0], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-high-mid-b', rate: 0.75, screens: [1, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
+  // The trunk, about 660 wide at this height, centred at x 800 of screen 0 and running off its top: the
+  // recut's rounded trunk column (OP-251), one copy drawn the room's height (its cut top would show as a
+  // ledge where two copies meet).
+  columns: [{ id: 'trunk', x0: 470, x1: 1130, y0: -40, y1: 900, mid: 'kit-cut-trunk-mid' }],
   surfaces: [
-    // The trunk, about 660 wide at this height, centred at x 800 of screen 0 and running off its top.
-    { id: 'trunk', texture: 'kit-tex-high-lichen-bark', rect: { x: 470, y: 0, w: 660, h: TREE_GROUND } },
     // The bough the overlook climbs, rising behind the lookout.
     { id: 'bough', texture: 'kit-tex-bark', rect: { x: ROOM_W + 1150, y: 0, w: 200, h: TREE_GROUND } },
     { id: 'bough-moss', texture: 'kit-tex-moss', rect: { x: ROOM_W + 1150, y: 0, w: 200, h: 60 } },
   ],
-  paths: [{ id: 'boardwalk', x0: 0, x1: 2 * ROOM_W, top: 0, cap: 'kit-plank-mid' }],
+  paths: [{ id: 'boardwalk', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-plank' }],
   ledges: [
     { id: 'stump', x0: ROOM_W + 352, x1: ROOM_W + 520, top: 111, cap: 'kit-ground-tree-stump' },
     { id: 'board', x0: ROOM_W + 584, x1: ROOM_W + 732, top: 233, cap: 'kit-high-mist-platform' },
@@ -113,6 +114,13 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
  * boarded with light behind. A stone balustrade closes it in the east. No room of the park uses it
  * yet: its doorways lead nowhere until the remap builds the plaza, and only the preview tools draw it.
  */
+/**
+ * The plaza's stone middles: the two longer lengths only, for now. The recut's stone row darkens to
+ * the left (its run was painted lit from the right and cut across), so its shortest middle reads as a
+ * darker block among the others until the row is levelled (OP-251).
+ */
+const PLAZA_STONE = ['kit-cut-stone-mid-480', 'kit-cut-stone-mid-640'];
+
 const PLAZA_KIT: RoomKit = {
   ground: TREE_GROUND,
   backdrops: [
@@ -121,7 +129,7 @@ const PLAZA_KIT: RoomKit = {
     { key: 'kit-entrance-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-entrance-mid-c', rate: 0.75, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
-  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, cap: 'kit-trim-stone-edge', mid: 'kit-tex-entrance-plaza-stone' }],
+  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mids: PLAZA_STONE, mid: 'kit-tex-entrance-plaza-stone' }],
   doors: [
     { door: 'stair-down', piece: 'kit-entrance-stair-head' },
     { door: 'realm-ink', piece: 'kit-arch-portal-boarded' },

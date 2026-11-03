@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_DEMOS, KIT_PREVIEWS } from '../rooms/kit';
 import { ROOMS } from '../rooms/index';
-import { KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitTiles, walkedAt, type KitDraw } from './kit';
+import { KIT_MID_STRETCH, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
 import { KIT_ART, KIT_KEY, KIT_PALETTE, drawOps, kitGroup, kitMotifs, kitPlaceholder, periodShifts, shiftOp, type KitOp } from './kitArt';
 import { KIT_CATALOG } from './kitCatalog';
 import { raster } from './raster';
@@ -117,8 +117,8 @@ describe('the l4 demo drawn from the kit (OP-234)', () => {
     for (const p of kit.perches ?? []) expect(plan.some((d) => (d.role === 'ledge' && d.id === p.id) || (d.role === 'stair' && d.id === stairOf.get(p.id))), p.id).toBe(true);
   });
 
-  it('draws its backdrops as the room tiles, with parallax rates and fades like the painted layers (sky, far, middle)', () => {
-    expect(kit.backgrounds?.map((t) => t.rate)).toEqual([0.5, 0.5, 0.6, 0.6, 0.75, 0.75]);
+  it('draws its backdrops as the room tiles, with parallax rates and fades like the painted layers (sky, far, and a middle layer on screen 1 only, as the target has)', () => {
+    expect(kit.backgrounds?.map((t) => t.rate)).toEqual([0.5, 0.5, 0.6, 0.6, 0.75]);
     expect(kit.foregrounds).toBeUndefined();
     expect(kit.background).toBe('kit-high-sky-b');
   });
@@ -205,6 +205,62 @@ describe('the kit draw plan (OP-234)', () => {
 /** Every colour an op draws in. */
 const coloursOf = (ops: readonly KitOp[]) => new Set(ops.map((o) => o.c));
 const PALETTE = new Set<number>(Object.values(KIT_PALETTE));
+
+describe('runs and columns of the recut kit (OP-251)', () => {
+  const ROW = 'kit-cut-plank';
+  const mids = [320, 480, 640].map((l) => `${ROW}-mid-${l}`);
+  const plan = (kit: Partial<RoomKit>) => kitDrawPlan({ kit: { ground: 770, ...kit }, doors: [], size: { w: 2 * ROOM_W, h: 900 } });
+
+  it('spells a row out as its caps and its middles of every length', () => {
+    expect(withRow({ id: 'r', x0: 0, x1: 100, top: 0, row: ROW })).toMatchObject({ left: `${ROW}-cap-left`, right: `${ROW}-cap-right`, mids });
+    expect(withRow({ id: 'r', x0: 0, x1: 100, top: 0, row: ROW, mids: [mids[0]!] }).mids).toEqual([mids[0]]);
+  });
+
+  it('fills a stretch art to art with middles, the same way every time, never one piece twice running where another fits', () => {
+    for (const len of [700, 1280, 2300, 3200 - 320]) {
+      const fill = midFill(mids, 160, 160 + len, `walk-${len}`);
+      expect(fill).toEqual(midFill(mids, 160, 160 + len, `walk-${len}`));
+      expect(fill[0]!.x0).toBe(160);
+      expect(fill[fill.length - 1]!.x1).toBeCloseTo(160 + len, 6);
+      fill.forEach((m, i) => {
+        if (i) expect(m.x0).toBeCloseTo(fill[i - 1]!.x1, 6);
+        if (i) expect(m.key).not.toBe(fill[i - 1]!.key);
+        const k = (m.x1 - m.x0) / KIT_ART[m.key]!.w;
+        expect(k).toBeGreaterThanOrEqual(KIT_MID_STRETCH.min);
+        expect(k).toBeLessThanOrEqual(KIT_MID_STRETCH.max);
+      });
+    }
+  });
+
+  it('draws a row run as its left cap, its middles and its right cap, each top at the walking line', () => {
+    const draws = plan({ paths: [{ id: 'walk', x0: 0, x1: 2 * ROOM_W, top: 0, row: ROW }] }).filter((d) => d.id === 'walk');
+    const keys = draws.map((d) => d.key);
+    expect(keys).toContain(`${ROW}-cap-left`);
+    expect(keys).toContain(`${ROW}-cap-right`);
+    expect(keys.filter((k) => k.includes('-mid-')).length).toBeGreaterThan(3);
+    for (const d of draws) expect(d.y + ((KIT_ART[d.key]!.top ?? 0) + KIT_STAND_SINK) * (d.h / KIT_ART[d.key]!.h)).toBeCloseTo(770, 0);
+  });
+
+  it('sets a join into a run with its art from its x, the middles filling around it', () => {
+    const draws = plan({ paths: [{ id: 'walk', x0: 0, x1: 2000, top: 0, row: ROW, joins: [{ x: 900, piece: 'kit-cut-plank-to-stone' }] }] });
+    const join = draws.find((d) => d.key === 'kit-cut-plank-to-stone')!;
+    const art = KIT_ART['kit-cut-plank-to-stone']!;
+    expect(join.x + (art.left ?? 0)).toBe(900);
+    const before = draws.filter((d) => d.key.includes('-mid-') && d.x < 900);
+    expect(Math.max(...before.map((d) => d.x + d.w))).toBeLessThanOrEqual(901);
+  });
+
+  it('draws a column as its middle scaled to its width and laid down it whole, with no copy squashed', () => {
+    const [mid] = plan({ columns: [{ id: 'trunk', x0: 470, x1: 1130, y0: -40, y1: 900, mid: 'kit-cut-trunk-mid' }] });
+    expect(mid).toMatchObject({ key: 'kit-cut-trunk-mid', tile: 'y', y: -40, h: 940 });
+    const s = KIT_ART['kit-cut-trunk-mid']!;
+    const u = mid!.w / s.w;
+    expect(mid!.x + (s.left ?? 0) * u).toBeCloseTo(470, 0);
+    const cells = kitCells(mid!);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.w).toBe(mid!.w);
+  });
+});
 
 describe('the kit catalogue and its placeholders (OP-234)', () => {
   it('names every piece kit-<group>-<name>', () => {

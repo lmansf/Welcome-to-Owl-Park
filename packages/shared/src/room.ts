@@ -156,6 +156,8 @@ export interface RoomKit {
   ground: number;
   /** Surfaces filled with a seamless texture (bark, earth, planking), drawn behind everything else, in order. */
   surfaces?: KitSurface[];
+  /** Columns drawn from a piece repeated down at the column's width (a trunk, OP-251), after the surfaces. */
+  columns?: KitColumn[];
   /** Walkways drawn along a height: the floor's boardwalk is a path with top 0. */
   paths?: KitRun[];
   /** What an owl stands on over the floor: each is the room's perch of the same id (kitPerches), unless `perch: false`. */
@@ -182,6 +184,22 @@ export interface KitSurface {
 }
 
 /**
+ * A column of the recut kit (OP-251): its middle piece scaled so its art spans x0 to x1 and repeated
+ * down, art to art, from y0 to y1 (room y), with a head piece over its top and a foot piece under it
+ * at the same scale (a trunk's taper and flare).
+ */
+export interface KitColumn {
+  id: string;
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  mid: string;
+  head?: string;
+  foot?: string;
+}
+
+/**
  * Something drawn along a height from x0 to x1 (OP-241): the published kit's run pieces, its left end, its middle repeated across (whole
  * copies, fitted to the run) and its right end, each with its art's top edge at the height an owl stands at; a texture under it `depth`
  * deep; a trim along its front.
@@ -204,6 +222,18 @@ export interface KitRun {
   trim?: string;
   /** How deep the mid is drawn (room px); a path's default runs down to the room's foot, a ledge's is KIT_LEDGE_DEPTH. */
   depth?: number;
+  /**
+   * A row of the recut kit (OP-251, `kit-cut-plank`): its caps stand for `left` and `right` and its
+   * middles of every length for `mids`, where those are not given.
+   */
+  row?: string;
+  /**
+   * Middle pieces of several lengths laid art to art between the ends in place of `cap`: an order fixed
+   * by the run's id, never the same piece twice running where another fits, stretched together to fill.
+   */
+  mids?: string[];
+  /** Pieces set into the run (a transition, a corner), each with its art's left edge at x; the middles fill around them. */
+  joins?: { x: number; piece: string }[];
 }
 
 export interface KitLedge extends KitRun {

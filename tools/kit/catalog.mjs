@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { KIT, KIT_AREA_LAYERS, KIT_AREA_PIECES, KIT_AREA_TEXTURE_KEYS, KIT_COURSE_PIECES, KIT_LANDMARK_PIECES, KIT_PIECES, KIT_TEXTURE_KEYS } from '../art/kit.mjs';
+import { KIT, KIT_AREA_LAYERS, KIT_AREA_PIECES, KIT_AREA_TEXTURE_KEYS, KIT_COURSE_PIECES, KIT_LANDMARK_PIECES, KIT_PIECES, KIT_RECUT_PIECES, KIT_TEXTURE_KEYS } from '../art/kit.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const CATALOG_FILE = path.join(REPO_ROOT, 'packages', 'shared', 'src', 'kitCatalog.ts');
@@ -21,7 +21,7 @@ export function catalogEntries() {
   const t = KIT.texture_size;
   const out = [];
   for (const key of [...KIT_TEXTURE_KEYS, ...KIT_AREA_TEXTURE_KEYS]) out.push({ key, w: t, h: t, kind: 'texture' });
-  for (const p of [...KIT_PIECES, ...KIT_AREA_PIECES, ...KIT_COURSE_PIECES, ...KIT_LANDMARK_PIECES]) {
+  for (const p of [...KIT_PIECES, ...KIT_AREA_PIECES, ...KIT_COURSE_PIECES, ...KIT_LANDMARK_PIECES, ...KIT_RECUT_PIECES]) {
     const s = stand[p.key];
     out.push({ key: p.key, w: p.w, h: p.h, kind: 'piece', ...(s ? { top: s[0], foot: s[1], left: s[2], right: s[3] } : {}) });
   }
