@@ -2043,6 +2043,38 @@ class TestKit(unittest.TestCase):
             self.assertEqual(lines[0]["human_edits"], ["approved by the owner in chat"])
             self.assertEqual(postprocess.prov.problems(lines[0]), [])
 
+    def test_runs_cuts_caps_and_three_middles_from_each_run(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        material = next(iter(kit["recut"]["runs"]))
+        run = kit["recut"]["runs"][material]
+        key = f"kit-sheet-cut-run-{material}"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2720, 1530), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            for i, row in enumerate(run["rows"]):
+                h2 = 2 * row["h"]
+                y = 120 + i * 480
+                d.rectangle((100, y, 2620, y + h2), fill=(74, 51, 34))
+                d.rectangle((100, y, 2620, y + 12), fill=(140, 110, 70))
+            img.save(raw_dir / "eeeeeeeeeeeeeeee.png")
+            (raw_dir / "eeeeeeeeeeeeeeee.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "eeeeeeeeeeeeeeee"}))
+            (raw_dir / "SELECTED").write_text("eeeeeeeeeeeeeeee")
+            (work / "final").mkdir()
+            rc = postprocess.main(["runs", key, "--work", str(work)])
+            self.assertEqual(rc, 0)
+            row = run["rows"][0]
+            for part, w in (("cap-left", kit["recut"]["cap"]), ("cap-right", kit["recut"]["cap"]), *[(f"mid-{n}", n) for n in kit["recut"]["lengths"]]):
+                # a wholly opaque piece is written without an alpha channel, so it opens as RGB
+                one = Image.open(work / "final" / f"kit-cut-{row['name']}-{part}.webp").convert("RGBA")
+                self.assertEqual(one.size, (w, row["h"]), part)
+                a = np.asarray(one)[..., 3]
+                self.assertGreater(a.mean(), 250, f"{part}: a run piece is opaque")
+            self.assertEqual(len(list((work / "final").glob("kit-cut-*.webp"))), 2 * 5 * len(run["rows"]))
+
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw
         kit = postprocess.kit_table()

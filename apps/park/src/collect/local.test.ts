@@ -204,3 +204,43 @@ describe('the stained-glass climb in the local mode', () => {
     expect((await again.page.inventory()).owned).toContain('glass-circlet~0');
   });
 });
+
+describe('puzzle quests in this browser (OP-255)', () => {
+  it('starts a run, picks up a key where it stands, keeps the run in storage and has nobody to join', async () => {
+    const { page, storage } = rig('c_puzzle');
+    const pip = getNpc('pip')!.pos;
+    const stand = { x: pip.x, y: pip.y, top: 0 };
+    const link = page.questLink('hub', null, {}, () => stand, () => stand.top);
+    expect(await link.puzzle('state', 'puzzle-moon-gate')).toMatchObject({ ok: false, reason: 'not-active' });
+    expect((await link.accept('puzzle-moon-gate')).ok).toBe(true);
+    const before = await link.puzzle('state', 'puzzle-moon-gate');
+    expect(before.ok).toBe(true);
+    expect(before.view?.run).toBeNull();
+    const started = await link.puzzle('start', 'puzzle-moon-gate');
+    expect(started.view?.run).toMatchObject({ members: 1, host: true });
+    // The root door's key is hidden in this room: standing at it picks it up.
+    const door = started.view!.locks.find((l) => l.id === 'root-door')!;
+    expect(door.key?.room).toBe('hub');
+    // Well away from the key (its spot is picked per run, so it can fall next to Pip).
+    Object.assign(stand, { x: door.key!.x + 3000, y: door.key!.y, top: 0 });
+    expect((await link.puzzle('take', 'puzzle-moon-gate', { lock: 'root-door' })).reason).toBe('far');
+    Object.assign(stand, { x: door.key!.x, y: door.key!.y, top: door.key!.top ?? 0 });
+    const took = await link.puzzle('take', 'puzzle-moon-gate', { lock: 'root-door' });
+    expect(took.ok).toBe(true);
+    expect(took.view?.locks.find((l) => l.id === 'root-door')?.hasKey).toBe(true);
+    // A code lock checks the code here too; a wrong one says how many tries are left.
+    const dial = took.view!.locks.find((l) => l.id === 'moth-dial')!;
+    Object.assign(stand, { x: dial.post.x, y: dial.post.y, top: dial.post.top ?? 0 });
+    const tried = await link.puzzle('open', 'puzzle-moon-gate', { lock: 'moth-dial', code: ['moon', 'moon', 'moon'] });
+    if (!tried.ok) expect(tried).toMatchObject({ reason: 'wrong', left: 4 });
+    // The run is kept in this browser: a new page picks it back up.
+    expect(storage.data.has('owl-park:puzzles')).toBe(true);
+    const again = new LocalCollections(storage, { collector: 'c_puzzle', tz: 'America/New_York', now: () => at }).questLink('hub', null, {}, () => stand, () => stand.top);
+    const kept = await again.puzzle('state', 'puzzle-moon-gate');
+    expect(kept.view?.run?.id).toBe(started.view!.run!.id);
+    expect(kept.view?.locks.find((l) => l.id === 'root-door')?.hasKey).toBe(true);
+    // Nobody else plays in this browser.
+    expect(await again.puzzle('near', 'puzzle-moon-gate')).toMatchObject({ ok: true, near: [] });
+    expect(await again.puzzle('join', 'puzzle-moon-gate', { with: 'someone' })).toMatchObject({ ok: false, reason: 'far' });
+  });
+});

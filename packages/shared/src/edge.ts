@@ -39,6 +39,7 @@ import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import type { Air } from './flight';
 import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
+import { PUZZLE_SYMBOLS, type PuzzleSymbol, type PuzzleView } from './puzzles';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash), so a stale page reloads. */
@@ -251,7 +252,26 @@ export interface ClientCourse {
 }
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit;
+/**
+ * A puzzle quest's run (OP-255, puzzles.ts), for the puzzle quest `quest` the owl carries: its `state`,
+ * `start` one (or come back to it), list the runs of owls standing `near`, `join` the run of the owl
+ * `with`, `leave` it, read clue `n` of a code lock (`look`), pick up a key lock's key (`take`), or work a
+ * lock (`open`, with the `code` for a code lock). The room checks where the owl stands. Answered with `puzzle`.
+ */
+export type PuzzleOp = 'state' | 'start' | 'near' | 'join' | 'leave' | 'look' | 'take' | 'open';
+export const PUZZLE_OPS: readonly PuzzleOp[] = ['state', 'start', 'near', 'join', 'leave', 'look', 'take', 'open'];
+export interface ClientPuzzle {
+  t: 'puzzle';
+  op: PuzzleOp;
+  quest: string;
+  lock?: string;
+  n?: number;
+  code?: PuzzleSymbol[];
+  with?: string;
+  r: number;
+}
+
+export type ClientFrame = ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -528,7 +548,26 @@ export interface ServerRealms {
   t: 'realms';
   realms: RealmsSettings;
 }
+/**
+ * A puzzle quest's run (OP-255): the answer to a `puzzle` frame (with its `r`), or pushed to a member
+ * when another member of its run moved it. `near` lists the owls next to this one that are in a run of
+ * the quest (`owl` is the room's owl id), for the join buttons. `left` is the tries before a lock jams.
+ */
+export interface ServerPuzzle {
+  t: 'puzzle';
+  r?: number;
+  quest: string;
+  ok: boolean;
+  reason?: string;
+  left?: number;
+  view?: PuzzleView;
+  near?: Array<{ owl: string; members: number; opened: number }>;
+  board?: QuestBoard;
+  updates?: QuestUpdate[];
+}
+
 export type ServerFrame =
+  | ServerPuzzle
   | ServerWelcome
   | ServerEnter
   | ServerMove
@@ -567,6 +606,8 @@ const SPAWN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 /** A keeper's token as the Worker signs it: two base64url parts, short enough for a hello. */
 const KEEPER_TOKEN = /^[A-Za-z0-9_-]{1,200}\.[A-Za-z0-9_-]{43}$/;
 const OBJECT_ID = /^[a-z][a-z0-9-]{0,47}$/;
+/** An owl's id in a room, as the room gave it: a join names the owl next to you (OP-255). */
+const OWL_ID = /^[A-Za-z0-9_-]{1,64}$/;
 /** A pass as the Worker signs it (apps/edge/src/pass.ts): two base64url parts, at most 512 characters. */
 const PASS_TOKEN = /^[A-Za-z0-9_-]{1,466}\.[A-Za-z0-9_-]{43}$/;
 
@@ -653,6 +694,28 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (!isRequest(v['r']) || typeof v['quest'] !== 'string' || !OBJECT_ID.test(v['quest']) || typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 31) return null;
       return { t: 'gather', quest: v['quest'], n, r: v['r'] };
     }
+    case 'puzzle': {
+      const { op, quest, lock, n, code } = v;
+      if (!isRequest(v['r']) || !(PUZZLE_OPS as readonly unknown[]).includes(op) || typeof quest !== 'string' || !OBJECT_ID.test(quest)) return null;
+      const out: ClientPuzzle = { t: 'puzzle', op: op as PuzzleOp, quest, r: v['r'] };
+      if (lock !== undefined) {
+        if (typeof lock !== 'string' || !OBJECT_ID.test(lock)) return null;
+        out.lock = lock;
+      }
+      if (n !== undefined) {
+        if (!isCount(n, 15)) return null;
+        out.n = n;
+      }
+      if (code !== undefined) {
+        if (!Array.isArray(code) || code.length > 8 || !code.every((s) => (PUZZLE_SYMBOLS as readonly unknown[]).includes(s))) return null;
+        out.code = code as PuzzleSymbol[];
+      }
+      if (v['with'] !== undefined) {
+        if (typeof v['with'] !== 'string' || !OWL_ID.test(v['with'])) return null;
+        out.with = v['with'];
+      }
+      return out;
+    }
     case 'act': {
       const a = v['a'];
       if (!isRequest(v['r']) || !(ACT_KINDS as readonly unknown[]).includes(a)) return null;
@@ -685,7 +748,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

@@ -251,6 +251,20 @@ assembler (OP-234) builds screens from the published files, whose format is this
   1024 x 1024 key-colour canvas, the helper key `kit-sheet-landmark-<name>`, cut by
   `art:finish pieces` (which takes a one-piece sheet as one blob) to `kit-landmark-<name>` at its
   logical size, seeded from 9500.
+- **The recut** (OP-251, `kit.recut`): pieces painted from the approved targets as references
+  (`@guide:<target>-ref`, written by `art:finish target <key> --ref`), so their light, colour and
+  edges match. A run (`kit.recut.runs.<material>`, the helper key `kit-sheet-cut-run-<material>`,
+  2720 x 1530 at the model's larger tier) is three continuous runs of one material stacked on the key
+  colour; `art:finish runs <key>` finds each run as a band of mostly-opaque rows (plus the rows of
+  anything attached, a rail's posts), keeps only the paint joined to it (a moon in the box is
+  cleared), scales it to twice its row's logical height and cuts a left cap, a right cap and middle
+  pieces of the recut's lengths from different stretches of it (`kit-cut-<row>-cap-left`,
+  `-cap-right`, `-mid-320`, `-mid-480`, `-mid-640`), so a laid run never repeats one copy. A run
+  painted a little short for the longest middle is squashed in height up to `--max-squash`.
+  `--clear-glow 0.2` clears the washed-out pink halo the model paints along a run, `--clear-mist`
+  the grey mist over the key; `--raw <file> --only <pieces>` takes one row from another candidate. A join sheet (`kit.recut.sheets.<name>`, `kit-sheet-cut-<name>`)
+  holds six props (corners, ground transitions, slope joins, trunk and bough edges) cut by
+  `art:finish pieces` to `kit-cut-<piece>`. The old pieces stay until rooms move off them.
 - **Art targets** (OP-249, `targets.mjs`): three finished screens, `target-l4`, `target-plaza` and
   `target-clearing`, painted as one picture each at 1600 x 900 under one light (the moon, upper right)
   from two references in `work/art/guides/`: `<key>-preview.png` (the screen as the kit draws it today,

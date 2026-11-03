@@ -11,6 +11,7 @@ import { hashSeed, rotationRandom } from './parktime';
 import { questFeathers, type Cadence, type Difficulty, type Goal, type QuestDef, type QuestLength, type QuestStep, type QuestType } from './quests';
 import type { QuestItemKind } from './interactables';
 import { NPCS, getNpc } from './npcs';
+import { getPuzzle } from './puzzles';
 
 const ROOMS = ['hub', 'grove', 'market'] as const;
 type RoomId = (typeof ROOMS)[number];
@@ -144,6 +145,8 @@ interface Template {
 }
 
 const GRAND_TITLES = ['The grand tour', 'A very long night', 'All around the park', 'The full flight', 'Round the whole park', 'One big adventure'];
+/** The monthly tours (OP-254): one title per giver, like the grand quests. */
+const ODYSSEY_TITLES = ['The long moon', 'A month of wonders', 'Every corner of the park', 'The great migration', 'Moon to moon', 'The whole wide park'];
 
 const THANKS = ['Wonderful. You have earned this.', 'Just what I needed. Here, for your trouble.', 'You are quicker than you look. Take this.', 'Thank you, friend. A little something for you.'];
 
@@ -310,6 +313,37 @@ const TEMPLATES: readonly Template[] = [
       };
     },
   },
+  {
+    // The monthly tour (OP-254): seven steps across every room, hard only, one title per giver.
+    id: 'odyssey',
+    givers: NPCS.map((n) => n.id),
+    build: (giver, d, key) => {
+      if (d !== 'hard') return null;
+      const rnd = rotationRandom(key);
+      const pool: Array<() => QuestStep> = [
+        () => talk(pick(key + 'talk', othersElsewhere(giver)).id),
+        () => visit(pick(key + 'visit', ROOMS.filter((r) => r !== roomOf(giver)))),
+        () => flop(4),
+        () => browse(3),
+        () => bask(),
+        () => emote('hoot', { npc: pick(key + 'emote', others(giver)).id }),
+        () => emote('flap', { room: pick(key + 'flap', ROOMS) }),
+        () => gather(pick(key + 'gather', ROOMS), 3),
+      ];
+      const order = pool.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [order[i], order[j]] = [order[j]!, order[i]!];
+      }
+      return {
+        title: ODYSSEY_TITLES[NPCS.findIndex((n) => n.id === giver) % ODYSSEY_TITLES.length]!,
+        type: 'mixed',
+        steps: order.slice(0, 7).map((i) => pool[i]!()),
+        offer: pick(key + 'o', ['This one takes a whole month of wandering, if you like. Every corner of the park.', 'A long road, all around the park. Take your time: you have the whole month.']),
+        thanks: pick(key + 't', ['All of it, in one month? You are a true explorer. This is yours.', ...THANKS]),
+      };
+    },
+  },
 ];
 
 function expand(): QuestDef[] {
@@ -320,7 +354,7 @@ function expand(): QuestDef[] {
         const id = `${t.id}-${giver}-${d}`;
         const b = t.build(giver, d, id);
         if (!b || !b.steps.length) continue;
-        const cadence: Exclude<Cadence, 'story'> = t.id === 'grand' ? 'weekly' : 'daily';
+        const cadence: Exclude<Cadence, 'story'> = t.id === 'grand' ? 'weekly' : t.id === 'odyssey' ? 'monthly' : 'daily';
         out.push({
           id,
           title: b.title,
@@ -341,7 +375,40 @@ function expand(): QuestDef[] {
   return out;
 }
 
-export const QUESTS: readonly QuestDef[] = [...STORY_QUESTS, ...expand()];
+/**
+ * Puzzle quests (OP-255, puzzles.ts): an escape room of locks and keys, one step ("open every lock"),
+ * played alone or in a run with anyone. The weekly one comes back every week, the monthly one every month.
+ */
+export const PUZZLE_QUESTS: readonly QuestDef[] = [
+  {
+    id: 'puzzle-moon-gate',
+    title: 'The moonlit gate',
+    giver: 'pip',
+    type: 'puzzle',
+    difficulty: 'hard',
+    length: 'short',
+    cadence: 'weekly',
+    steps: [{ goal: { kind: 'puzzle', puzzle: 'moon-gate' } }],
+    reward: { feathers: questFeathers('weekly', 'hard'), item: 'pick' },
+    offer: 'There is a gate in the roots that only opens by moonlight. Three locks, and the clues are scattered all over the park. Bring friends if you like!',
+    thanks: 'You opened the moon gate! I knew the clues would not stay hidden from you.',
+  },
+  {
+    id: 'puzzle-lockbox',
+    title: "The tinker's lockbox",
+    giver: 'flicker',
+    type: 'puzzle',
+    difficulty: 'hard',
+    length: 'short',
+    cadence: 'monthly',
+    steps: [{ goal: { kind: 'puzzle', puzzle: 'lockbox' } }],
+    reward: { feathers: questFeathers('monthly', 'hard'), item: 'pick' },
+    offer: 'I built a lockbox with four locks and hid the clues all over the park. Then I forgot them. Work it out alone or with a crew. Every box is different!',
+    thanks: 'Open! Every last lock. You and your crew are cleverer than my box.',
+  },
+];
+
+export const QUESTS: readonly QuestDef[] = [...STORY_QUESTS, ...expand(), ...PUZZLE_QUESTS];
 
 const BY_ID: Readonly<Record<string, QuestDef>> = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
 
@@ -350,4 +417,16 @@ export function getQuest(id: unknown): QuestDef | undefined {
 }
 
 export const DAILY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'daily');
-export const WEEKLY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'weekly');
+export const WEEKLY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'weekly' && q.template === 'grand');
+/** The weekly puzzle quests: one is offered each week beside the two grand quests. */
+export const WEEKLY_PUZZLE_POOL: readonly QuestDef[] = PUZZLE_QUESTS.filter((q) => q.cadence === 'weekly');
+/** The monthly tours (OP-254). */
+export const MONTHLY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'monthly' && q.template === 'odyssey');
+/** The monthly puzzle quests: one is offered each month beside one tour. */
+export const MONTHLY_PUZZLE_POOL: readonly QuestDef[] = PUZZLE_QUESTS.filter((q) => q.cadence === 'monthly');
+
+/** The puzzle a quest plays, if it is a puzzle quest. */
+export function questPuzzle(q: QuestDef): string | null {
+  const g = q.steps[0]?.goal;
+  return q.type === 'puzzle' && g?.kind === 'puzzle' && getPuzzle(g.puzzle) ? g.puzzle : null;
+}

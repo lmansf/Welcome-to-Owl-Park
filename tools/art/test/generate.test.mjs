@@ -1063,6 +1063,28 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
   for (const job of [jobs.get('kit-tex-bark'), jobs.get('kit-sheet-signs-a')]) assert.match(job.prompt, /No text, letters or numbers anywhere/, 'the prompts ask for no text');
 });
 
+test('the recut (OP-251): run images and join sheets carry their target as a reference and derive kit-cut pieces', async () => {
+  const K = await import('../kit.mjs');
+  const art = parseArtTable();
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.equal(K.KIT_RECUT_RUN_KEYS.length, 4);
+  assert.equal(K.KIT_RECUT_SHEET_KEYS.length, 5);
+  for (const key of [...K.KIT_RECUT_RUN_KEYS, ...K.KIT_RECUT_SHEET_KEYS]) {
+    const job = jobs.get(key);
+    assert.ok(P.HELPER_KEYS.includes(key) && job?.kind === 'sheet' && job.key_colour === K.KIT_KEY_COLOUR, `${key} is a helper key with a keyed sheet job`);
+    assert.equal(job.size, K.KIT_RECUT_RUN_KEYS.includes(key) ? K.RUN_SIZE : K.SHEET_SIZE);
+    assert.equal(job.refs.length, 1);
+    assert.match(job.refs[0].ref, /^@guide:target-(l4|plaza|clearing)-ref$/, `${key} is painted from a target`);
+    assert.ok(job.derives.length > 0 && job.derives.every((d) => d.startsWith('kit-cut-')));
+  }
+  for (const p of K.KIT_RECUT_PIECES) {
+    assert.deepEqual(art[p.key], { w: p.w, h: p.h, kind: 'piece' }, `${p.key} in art.ts at its size`);
+    assert.equal(ASSETS.keys[p.key].key_colour, K.KIT_KEY_COLOUR);
+    assert.ok(!jobs.has(p.key), `${p.key} is cut, not generated on its own`);
+  }
+  assert.equal(K.KIT_RECUT_PIECES.length, 90);
+});
+
 test('the art targets (OP-249): three helper keys painted at 1600 x 900 from the preview and the greybox', async () => {
   const T = await import('../targets.mjs');
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
