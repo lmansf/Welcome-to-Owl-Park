@@ -60,8 +60,12 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
     await page.keyboard.up('ArrowRight');
     await standsAt(page, 0);
+    // The jump's own landing, not the floor it took off from: a take-off counted, then the floor.
+    const before = (await state(page)).flown.n;
     await jump(page);
+    await expect.poll(async () => { const s = await state(page); return s.flown.n > before && s.air.s === 0; }, { timeout: 15_000, intervals: [50] }).toBe(true);
     await standsAt(page, 0);
+    await frames(page, 30);
     const s = await state(page);
     expect(s.room).toBe('l1');
     expect(s.doorway).toBe('stair-l2-l1');
