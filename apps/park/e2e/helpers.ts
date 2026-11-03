@@ -4,6 +4,10 @@ export interface ParkState {
   room: string;
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
+  /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
+  dash: { holds: boolean; spent: boolean; dashes: number };
+  /** In a parkour course: the course as the room has it for this owl, and the falls and finishes this page had answered. */
+  course: { course: string; act: number; run: { ms: number; parts: string[]; bench: string | null; practice?: true } | null; feathers: string[]; shortcuts: string[]; cleared: boolean; bestMs: number | null; falls: number; finishes: number } | null;
   pos: { x: number; y: number };
   walking: boolean;
   look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };

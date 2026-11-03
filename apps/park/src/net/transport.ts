@@ -1,5 +1,5 @@
 import type { Air, ClosedView, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
-import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
+import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
@@ -68,6 +68,8 @@ export interface RoomConnection {
   link?: QuestLink;
   /** The room's activities, run by the same server. */
   acts?: ActivityLink;
+  /** The parkour course in one of its acts, checked by the same server (OP-224). */
+  course?: CourseLink;
   /** The nests on the street and in a nest, kept by the same server. */
   nests?: NestLink;
   /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */

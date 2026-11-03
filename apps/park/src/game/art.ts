@@ -292,7 +292,9 @@ export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'c
 for (const [key, { w, h }] of Object.entries(KIT_ART)) ART[key] ??= { w, h, kind: 'kit' };
 
 // The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
+// A room the page draws in plain shapes (`drawn`: the test course, OP-224) has no art files.
 for (const room of Object.values(ROOMS)) {
+  if (room.drawn) continue;
   for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
 }
 

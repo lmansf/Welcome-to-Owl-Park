@@ -57,6 +57,14 @@ import {
   npcsIn,
   parseClientFrame,
   pointInRect,
+  COURSE_REACH,
+  COURSE_START_REACH,
+  courseOfRoom,
+  inPit,
+  pieceIn,
+  shortcutIn,
+  type ClientCourse,
+  type ServerCourse,
   portraitLook,
   cleanRealms,
   climbRef,
@@ -97,6 +105,7 @@ import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from './rooms';
+import { COURSES } from '@owl-park/shared/rooms';
 import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
 import type { Env } from './env';
 
@@ -856,7 +865,8 @@ export class RoomObject extends DurableObject<Env> {
       if (!isNestRoom(att.room)) {
         // A gated realm the keepers have not opened: the page walks the owl back to the hub. A keeper's
         // token (OP-156) lets its owl in, to walk the tree (map 2) while it is dark.
-        if (this.realmClosed(att.room) && !att.keeper) {
+        // The test course's rooms (OP-224) are the keepers' alone: any other owl is walked back to the hub.
+        if ((this.realmClosed(att.room) || roomDef(att.room)?.keeperOnly === true) && !att.keeper) {
           this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a realm the keepers have not opened.', { reason: 'realm' });
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
@@ -893,6 +903,9 @@ export class RoomObject extends DurableObject<Env> {
       case 'rest':
         if (room.rest(att.id, frame.asleep) && frame.asleep) this.logOf(att).info('room.rest', 'afk_sleep', 'An owl fell asleep, its visitor idle.');
         return;
+      case 'dash':
+        // The dash (OP-224): a walk at the dash's pace, checked as a walk and against the owl's flight.
+        return room.dash(att.id, frame);
       case 'air':
         // Flight (OP-084): a state of the owl, counted against its own allowance, never logged.
         return void room.air(att.id, frame.air);
@@ -945,6 +958,73 @@ export class RoomObject extends DurableObject<Env> {
       case 'admit':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.admitPass(ws, att, room, frame));
+      case 'course':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.course(ws, att, room, frame));
+    }
+  }
+
+  // ---------- the parkour courses (OP-224): the room checks where the owl is, the collections object keeps the rest ----------
+
+  private async course(ws: WebSocket, att: Attachment, room: Room, frame: ClientCourse): Promise<void> {
+    const { r, a } = frame;
+    const no = (reason: Extract<ServerCourse, { ok: false }>['reason']) => this.send(ws, { t: 'course', r, a, ok: false, reason });
+    if (!att.cid) return no('unknown');
+    if (room.sessionOf(att.id) !== att.sid) return;
+    const def = roomDef(att.room);
+    const course = courseOfRoom(def, COURSES);
+    if (!def || !course) return no('unknown');
+    const cid = att.cid;
+    const stub = this.collections();
+    // A spectator (OP-191) runs the course as anyone does, but its finish pays nothing.
+    const practice = att.spec === true;
+    const pos = room.positionOf(att.id);
+    try {
+      switch (a) {
+        case 'state': {
+          const res = await stub.courseState(cid, att.room);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view }) : no(res.reason);
+        }
+        case 'start': {
+          const way = def.spawns[course.gate.spawn];
+          if (att.room !== course.acts[0] || !way || !room.near(att.id, way, COURSE_START_REACH)) return no('far');
+          const res = await stub.courseStart(cid, att.room, practice);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view }) : no(res.reason);
+        }
+        case 'bench':
+        case 'part':
+        case 'feather': {
+          const piece = pieceIn(def, a, frame.id ?? '');
+          if (!piece || !room.reaches(att.id, piece.at, COURSE_REACH, piece)) return no('far');
+          const res = await stub.courseReach(cid, att.room, a, piece.id);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, first: res.first }) : no(res.reason);
+        }
+        case 'shortcut': {
+          const cut = shortcutIn(def, frame.id ?? '');
+          const slack = LIMITS.reachSlackPx;
+          const near = cut && pos ? pointInRect(pos, { x: cut.opener.x - slack, y: cut.opener.y - slack, w: cut.opener.w + 2 * slack, h: cut.opener.h + 2 * slack }) : false;
+          if (!cut || !near) return no('far');
+          const res = await stub.courseOpen(cid, att.room, cut.id);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, first: res.first }) : no(res.reason);
+        }
+        case 'fall': {
+          // A fall is the room's to see: the owl stands over one of the act's pits.
+          if (!pos || !inPit(def, pos)) return no('far');
+          const res = await stub.courseFall(cid, att.room);
+          if (!res.ok) return no(res.reason);
+          room.place(att.id, res.at);
+          return this.send(ws, { t: 'course', r, a, ok: true, view: res.view, at: res.at });
+        }
+        case 'finish': {
+          const shrine = def.course?.shrine;
+          if (!shrine || !room.reaches(att.id, shrine.at, COURSE_REACH, shrine)) return no('far');
+          const res = await stub.courseFinish(cid, att.room, visitOf(att), practice);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, paid: res.paid }) : no(res.reason);
+        }
+      }
+    } catch (e) {
+      this.logOf(att).error('room.play', 'write_failed', 'A course step did not reach the collections object: the page is told to try again.', { frame: 'course', error: e });
+      return no('offline');
     }
   }
 

@@ -556,6 +556,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
     // do too: an owl comes out as far along the floor from the spawn as it went in from the doorway's middle.
     expect(keeping.map((e) => `${e.room.id}:${e.door.id}`).sort()).toEqual([
       'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l0:stair-l1-l0', 'l1:stair-l1-l0', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:gate', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
+      // The test course's acts (OP-224, trialCourse.ts): each act's doorway east into the next, and back west.
+      'trail-1:east', 'trail-2:east', 'trail-2:west', 'trail-3:west',
     ]);
   });
 

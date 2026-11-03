@@ -75,7 +75,7 @@ test.describe('Send feedback is the first row of Settings (OP-167)', () => {
     await expect(settings).toBeHidden();
     // Before the park there is no Menu to go back to.
     await expect(feedback.getByRole('button', { name: /Back/ })).toHaveCount(0);
-    const words = `A lantern by the home screen, please (${Date.now()})`;
+    const words = `A lantern by the home screen, please (${Date.now().toString(36)})`;
     await feedback.getByRole('button', { name: 'Idea' }).click();
     await feedback.getByRole('textbox', { name: 'Your note' }).fill(words);
     await feedback.getByRole('button', { name: 'Send' }).click();
@@ -93,7 +93,8 @@ test.describe('Send feedback is the first row of Settings (OP-167)', () => {
     await (await expectFeedbackFirst(settings)).click();
     const feedback = page.getByRole('dialog', { name: 'Feedback' });
     await expect(feedback).toBeVisible();
-    const words = `Send feedback from the home screen (${Date.now()})`;
+    // A marker in letters as well as digits: the Worker takes a run of ten digits or more out of a note as a phone number (OP-236).
+    const words = `Send feedback from the home screen (${Date.now().toString(36)})`;
     await feedback.getByRole('button', { name: 'Praise' }).click();
     await feedback.getByRole('textbox', { name: 'Your note' }).fill(words);
     await feedback.getByRole('button', { name: 'Send' }).click();
@@ -146,7 +147,7 @@ test.describe('The feedback bug, until the full opening (OP-208)', () => {
     const feedback = page.getByRole('dialog', { name: 'Feedback' });
     await expect(feedback).toBeVisible();
     await expect(feedback.getByRole('textbox', { name: 'Your note' })).toBeVisible();
-    const words = `The bug button by the hub (${Date.now()})`;
+    const words = `The bug button by the hub (${Date.now().toString(36)})`;
     await feedback.getByRole('button', { name: 'Bug' }).click();
     await feedback.getByRole('textbox', { name: 'Your note' }).fill(words);
     await feedback.getByRole('button', { name: 'Send' }).click();

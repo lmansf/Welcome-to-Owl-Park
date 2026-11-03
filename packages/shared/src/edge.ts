@@ -21,6 +21,11 @@
  * tasks refuse it with the reason `spectator`; a room it would fill past its spectators' share
  * answers `full` with `spectators`. A ticket bought meanwhile makes it a full visitor in place: the
  * page sends `admit` with its admitted pass, answered with `admitted`.
+ *
+ * v17 adds the parkour courses (OP-224, course.ts, coursebook.ts): `dash` asks for a dash (dash.ts), a
+ * walk at the dash's pace the room checks and tells the others as a `move` that says `dash`; `course`
+ * frames ask the course about the owl's run, its benches, parts, lost feathers, shortcuts, a fall and
+ * the finish shrine, each answered with `course`.
  */
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
@@ -33,10 +38,11 @@ import type { RealmsSettings } from './overflow';
 import type { OwlLook, Vec2 } from './protocol';
 import type { QuestBoard, QuestUpdate } from './quests';
 import type { Air } from './flight';
+import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 16;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 17;
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
 export const BAND_COUNT = 6;
@@ -86,6 +92,8 @@ export interface ServerWalk {
   to: Vec2;
   /** Server ms when the walk started. */
   at: number;
+  /** A dash (OP-224): walked at the dash's pace (walkSpeed). */
+  dash?: true;
 }
 
 export interface OwlSnapshot {
@@ -117,6 +125,12 @@ export interface ClientHello {
 }
 export interface ClientMove {
   t: 'move';
+  to: Vec2;
+  seq: number;
+}
+/** A dash (OP-224, dash.ts): toward `to`, at the dash's pace; the room checks it as walks and flight are checked, and echoes it with `seq` as a move. */
+export interface ClientDash {
+  t: 'dash';
   to: Vec2;
   seq: number;
 }
@@ -221,9 +235,23 @@ export interface ClientStreet {
   t: 'street';
   r: number;
 }
+/**
+ * A parkour course (OP-224): `state` asks how the owl's course stands in this act; `start` starts a run
+ * by the trail gate's way in; `bench`, `part` and `feather` say the owl reached that piece (`id`),
+ * `shortcut` that it reached that shortcut's opener, `fall` that it fell into a pit, and `finish` that it
+ * stands at the shrine. The room checks where the owl is before it asks the course. Answered with `course`.
+ */
+export type CourseAct = 'state' | 'start' | 'bench' | 'part' | 'feather' | 'shortcut' | 'fall' | 'finish';
+export const COURSE_ACTS: readonly CourseAct[] = ['state', 'start', 'bench', 'part', 'feather', 'shortcut', 'fall', 'finish'];
+export interface ClientCourse {
+  t: 'course';
+  a: CourseAct;
+  id?: string;
+  r: number;
+}
 /** In its own nest, the owner changes it: a piece in a spot (null takes it away), or open or closed to visitors. Answered with `nest`. */
 export type ClientNest = { t: 'nest'; r: number } & NestEdit;
-export type ClientFrame = ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit;
+export type ClientFrame = ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -262,6 +290,8 @@ export interface ServerMove {
   at: number;
   /** Present only on the sender's own copy (the echo is the acknowledgement). */
   seq?: number;
+  /** A dash (OP-224): walked at the dash's pace. */
+  dash?: true;
 }
 export interface ServerLook {
   t: 'look';
@@ -484,6 +514,12 @@ export interface ServerAdmitted {
   ok: boolean;
   reason?: 'pass';
 }
+/**
+ * A course's answer (OP-224): the owl's course as it stands, and for `fall` where it is put back (the
+ * room tells the others with a move), for `finish` what the shrine paid. `far`: the owl is not where
+ * the piece is. A spectator's run is practice (coursebook.ts): it is answered as anyone's.
+ */
+export type ServerCourse = { t: 'course'; r: number; a: CourseAct } & ({ ok: true; view: CourseView; first?: boolean; at?: Vec2; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' });
 /** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
 export interface ServerRealms {
   t: 'realms';
@@ -519,7 +555,8 @@ export type ServerFrame =
   | ServerNotice
   | ServerRestart
   | ServerRealms
-  | ServerAdmitted;
+  | ServerAdmitted
+  | ServerCourse;
 
 // ---- validation (server side, strict) ----
 
@@ -565,6 +602,16 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
         out.keeper = v['keeper'];
       }
       return out;
+    }
+    case 'dash': {
+      if (!isVec2(v['to']) || typeof v['seq'] !== 'number' || !Number.isInteger(v['seq']) || v['seq'] < 0 || v['seq'] > 1e9) return null;
+      return { t: 'dash', to: { x: Math.round(v['to'].x), y: Math.round(v['to'].y) }, seq: v['seq'] };
+    }
+    case 'course': {
+      const a = v['a'];
+      if (!isRequest(v['r']) || !(COURSE_ACTS as readonly unknown[]).includes(a)) return null;
+      if (a === 'state' || a === 'start' || a === 'fall' || a === 'finish') return { t: 'course', a: a as CourseAct, r: v['r'] };
+      return typeof v['id'] === 'string' && OBJECT_ID.test(v['id']) ? { t: 'course', a: a as CourseAct, id: v['id'], r: v['r'] } : null;
     }
     case 'move': {
       if (!isVec2(v['to']) || typeof v['seq'] !== 'number' || !Number.isInteger(v['seq']) || v['seq'] < 0 || v['seq'] > 1e9) return null;
@@ -635,7 +682,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted']);
+const SERVER_FRAME_TYPES = new Set(['welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

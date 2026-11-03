@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, type FeedbackDraft } from '@owl-park/shared';
+import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, cleanFeedbackText, redactFeedbackText, type FeedbackDraft } from '@owl-park/shared';
 import type { Env } from '../src/env';
 import { forgetViolations } from '../src/guard';
 import { forgetGate } from '../src/gateSwitch';
@@ -151,12 +151,12 @@ describe('hostile values at every door the Worker has (OP-143)', () => {
     expect(park.reached).toEqual([]);
   });
 
-  it('a feedback note keeps hostile words as plain words (a NUL dropped), and refuses a hostile kind, or words far too long', async () => {
+  it('a feedback note keeps hostile words as plain words (a NUL dropped, personal details taken out), and refuses a hostile kind, or words far too long', async () => {
     const auth = { Authorization: `Bearer ${await passFor()}` };
     for (const words of HOSTILE.filter((v): v is string => typeof v === 'string' && v.length < 1000 && v.length >= 3)) {
       expect((await post(park.env(), '/api/feedback', { kind: 'idea', text: words, room: words, screen: words }, auth)).status).toBe(200);
       const draft = park.reached.at(-1)!.args[1] as FeedbackDraft;
-      expect(draft).toEqual({ kind: 'idea', text: words, room: null, screen: null });
+      expect(draft).toEqual({ kind: 'idea', text: redactFeedbackText(cleanFeedbackText(words)), room: null, screen: null });
     }
     await refusedEach((v) => post(park.env(), '/api/feedback', { kind: v, text: 'a fine note' }, auth));
     for (const v of [{ $ne: null }, 'x'.repeat(10_000), '\u0000']) expect((await post(park.env(), '/api/feedback', { kind: 'bug', text: v }, auth)).status).toBe(400);
