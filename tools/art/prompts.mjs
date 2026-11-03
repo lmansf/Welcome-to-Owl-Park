@@ -2494,3 +2494,10 @@ import { KIT_AREA_PROMPTS, KIT_AREA_SHEET_KEYS, KIT_COURSE_PROMPTS, KIT_COURSE_S
 JOBS.push(...kitJobs());
 Object.assign(PROMPTS, KIT_TEXTURE_PROMPTS, KIT_SHEET_PROMPTS, KIT_AREA_PROMPTS, KIT_COURSE_PROMPTS, KIT_LANDMARK_PROMPTS);
 HELPER_KEYS.push(...KIT_SHEET_KEYS, ...KIT_AREA_SHEET_KEYS, ...KIT_COURSE_SHEET_KEYS, ...KIT_LANDMARK_SHEET_KEYS);
+
+// The art targets (OP-249): three finished screens painted as one picture each, reference art for
+// the kit's recut and the value bands, never shipped (targets.mjs).
+import { TARGET_KEYS, TARGET_PROMPTS, targetJobs } from './targets.mjs';
+JOBS.push(...targetJobs());
+Object.assign(PROMPTS, TARGET_PROMPTS);
+HELPER_KEYS.push(...TARGET_KEYS);
