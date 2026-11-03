@@ -19,6 +19,7 @@ import {
   type PortraitLook,
   type ParkMessage,
   type PlayerState,
+  type PuzzleView,
   type QuestBoard,
   type ServerAct,
   type ServerFrame,
@@ -26,7 +27,7 @@ import {
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
-import type { ActRefusal, ActivityLink, CourseLink, CourseReply, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
+import type { ActRefusal, ActivityLink, CourseLink, CourseReply, HandInReply, NestEditReply, NestLink, PuzzleReply, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { EmoteGate, MoveBudget } from './budget';
@@ -51,7 +52,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' | 'course' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' | 'course' | 'puzzle' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -443,8 +444,11 @@ export class EdgeTransport implements ParkTransport {
       ...b,
       nextDay: b.nextDay - offset,
       nextWeek: b.nextWeek - offset,
+      nextMonth: b.nextMonth - offset,
       active: b.active.map((q) => (q.endsAt ? { ...q, endsAt: q.endsAt - offset } : q)),
     });
+    /** A jammed lock's time is on the server clock too (OP-255). */
+    const puzzleHere = (v: PuzzleView): PuzzleView => ({ ...v, locks: v.locks.map((l) => (l.jammedUntil ? { ...l, jammedUntil: l.jammedUntil - offset } : l)) });
     const toLocalTasks = (t: TaskView): TaskView => ({ ...t, endsAt: t.endsAt - offset });
     const answer = (f: Answer) => {
       const r = f.r;
@@ -624,6 +628,10 @@ export class EdgeTransport implements ParkTransport {
           // An answer to one of our requests, or a push after an arrival or an emote moved a quest.
           if (!answer(f)) handlers.onQuests?.(toLocalBoard(f.board), f.updates);
           break;
+        case 'puzzle':
+          // An answer, or a push after someone else in this owl's run moved it along (OP-255).
+          if (!answer(f) && f.view) handlers.onPuzzle?.(f.quest, puzzleHere(f.view), f.board ? toLocalBoard(f.board) : undefined, f.updates);
+          break;
         case 'handin':
         case 'useResult':
         case 'refused':
@@ -747,6 +755,19 @@ export class EdgeTransport implements ParkTransport {
       },
       // The room counts arrivals and emotes itself.
       note: () => undefined,
+      puzzle: async (op, quest, args = {}): Promise<PuzzleReply> => {
+        const f = await request({ t: 'puzzle', op, quest, ...args });
+        if (f?.t !== 'puzzle') return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline', view: null, updates: [] };
+        return {
+          ok: f.ok,
+          ...(f.reason ? { reason: f.reason } : {}),
+          ...(f.left !== undefined ? { left: f.left } : {}),
+          view: f.view ? puzzleHere(f.view) : null,
+          ...(f.near ? { near: f.near } : {}),
+          ...(f.board ? { board: toLocalBoard(f.board) } : {}),
+          updates: f.updates ?? [],
+        };
+      },
     };
     /** An activity request (with its note, or its game and result), and its answer (an `act` frame, or why there is none). */
     const act = async (a: ActKind, extra: Omit<ClientAct, 't' | 'a' | 'r'> = {}): Promise<ServerAct | { ok: false; reason: ActRefusal }> => {

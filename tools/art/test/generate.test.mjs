@@ -1062,3 +1062,19 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
   }
   for (const job of [jobs.get('kit-tex-bark'), jobs.get('kit-sheet-signs-a')]) assert.match(job.prompt, /No text, letters or numbers anywhere/, 'the prompts ask for no text');
 });
+
+test('the art targets (OP-249): three helper keys painted at 1600 x 900 from the preview and the greybox', async () => {
+  const T = await import('../targets.mjs');
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.deepEqual(T.TARGET_KEYS, ['target-l4', 'target-plaza', 'target-clearing']);
+  for (const key of T.TARGET_KEYS) {
+    assert.ok(P.HELPER_KEYS.includes(key), `${key} is a helper key, never shipped`);
+    assert.ok(!(key in ASSETS.keys), `${key} has no asset of its own`);
+    const job = jobs.get(key);
+    assert.equal(job.kind, 'anchor', `${key}: a reference painting at its own size, not a room shipped at 2x`);
+    assert.equal(job.size, T.TARGET_SIZE);
+    assert.equal(job.variants, 4);
+    assert.deepEqual(job.refs.map((r) => [r.ref, r.optional]), [[`@guide:${key}-preview`, false], [`@guide:${key}-greybox`, false]]);
+    for (const must of ['full moon', 'upper right', 'Value bands', 'No text, letters or numbers', 'No owls']) assert.match(job.prompt, new RegExp(must), `${key}: ${must}`);
+  }
+});

@@ -5,6 +5,7 @@ import { PaintEditor, dragged, drawnMark, find, hitTest, readout, trialPerches, 
 import { notYetLedges, playfieldAt, suggestLedges, type AlphaPicture, type Suggestion } from '../paint/suggest';
 import { TREE_GROUND } from '../rooms';
 import { mountPaintPanel, type PaintPanel, type PaintState } from '../ui/paintPanel';
+import { typingInField } from '../ui/typing';
 
 /**
  * The ledge painter (OP-156, parts 2 and 3; `?paint=1` with a keeper's token, over a room of the
@@ -280,8 +281,7 @@ export class LedgePainter {
   }
 
   private readonly onKey = (e: KeyboardEvent): void => {
-    const t = e.target as HTMLElement | null;
-    if (this.loading || (t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'))) return;
+    if (this.loading || typingInField(e)) return;
     const ed = this.editor;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();

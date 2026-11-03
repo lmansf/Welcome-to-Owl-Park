@@ -271,3 +271,52 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     expect((await state(page)).look).toMatchObject({ species: 'screech', body: '#6B6B6B' });
   });
 });
+
+test.describe('puzzle quests (this device, OP-255)', () => {
+  test('a puzzle run starts from the Quests tab, and its pieces in the room are worked by standing at them', async ({ page }) => {
+    test.slow(); // walks across the hub, drawn with software WebGL on CI runners
+    const quest = 'puzzle-moon-gate';
+    await openPark(page, { collector: 'e2e-puzzle', tz: 'UTC' });
+    expect(await page.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
+    const dialogue = page.locator('.dialogue[data-npc="pip"]');
+    await expect(dialogue).toBeVisible({ timeout: 15_000 });
+    await dialogue.locator(`[data-offer="${quest}"]`).getByRole('button', { name: 'Take it on' }).click();
+    await expect(page.locator('.notice').filter({ hasText: /^New quest:/ })).toBeVisible();
+
+    // The Quests tab shows the puzzle with no run yet; Start a run deals fresh clues and codes.
+    await page.keyboard.press('KeyJ');
+    const card = page.locator(`.journal [data-quest="${quest}"]`);
+    await expect(card.locator('.pbox')).toContainText('0 of 3 locks opened by you');
+    await card.getByRole('button', { name: 'Start a run' }).click();
+    await expect(card.locator('[data-run]')).toContainText('You are in a run on your own');
+    await expect(card.locator('[data-lock]')).toHaveCount(3);
+    await expect(card.locator('[data-lock="moon-gate"]')).toContainText('Opens once the locks before it are open');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-puzzle-journal.png` });
+    await page.keyboard.press('Escape');
+
+    // This room holds the root door's key and the moth dial; a piece up on the bench needs a jump, so walk to those on the floor.
+    const view = await page.evaluate((q) => window.owlPark.puzzle(q), quest);
+    const key = view!.locks.find((l) => l.id === 'root-door')!.key!;
+    const dial = view!.locks.find((l) => l.id === 'moth-dial')!.post;
+    let worked = 0;
+    if (!key.top) {
+      expect(await page.evaluate((q) => window.owlPark.walkToPiece(q, 'root-door', 'key'), quest)).toBe(true);
+      await expect.poll(() => page.evaluate((q) => window.owlPark.puzzle(q)?.locks.find((l) => l.id === 'root-door')?.hasKey ?? false, quest), { timeout: 30_000 }).toBe(true);
+      await expect(page.locator('.toast').filter({ hasText: /You found the key to The root door/ })).toBeVisible();
+      worked++;
+    }
+    if (!dial.top) {
+      expect(await page.evaluate((q) => window.owlPark.walkToPiece(q, 'moth-dial', 'lock'), quest)).toBe(true);
+      const pad = page.locator('.sheet.pad[data-lock="moth-dial"]');
+      await expect(pad).toBeVisible({ timeout: 30_000 });
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-puzzle-pad.png` });
+      for (let i = 0; i < 3; i++) await pad.locator('[data-symbol="moon"]').click();
+      await expect(pad.locator('[data-code]')).toHaveAttribute('data-code', 'moon,moon,moon');
+      await pad.getByRole('button', { name: 'Try' }).click();
+      // The room checks the code: a wrong one says how many tries are left (a lucky guess opens it).
+      await expect.poll(async () => (await pad.locator('.note').textContent()) || (await page.evaluate((q) => window.owlPark.puzzle(q)?.locks.find((l) => l.id === 'moth-dial')?.open ?? false, quest) ? 'open' : ''), { timeout: 10_000 }).toMatch(/tries before it jams|open/);
+      worked++;
+    }
+    expect(worked).toBeGreaterThan(0);
+  });
+});

@@ -3,6 +3,7 @@ import type { HopDir } from '../arcade/hop';
 import type { PreviewRect } from '../game/BuilderScene';
 import { createModal, modalHeader } from './modal';
 import { SPECTATOR_WORDS } from './spectator';
+import { typingInField } from './typing';
 
 /** A game as its screen shows it: its name and colour, how to play, and the owl's best today. */
 export interface ArcadeView {
@@ -264,7 +265,7 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   });
   // The keys: a hop or a flap; for the slingshot, aim higher or lower, more or less power, and let go.
   box.addEventListener('keydown', (e) => {
-    if (!view || over() || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!view || over() || e.ctrlKey || e.metaKey || e.altKey || typingInField(e)) return;
     if ((e.target as Element).closest('button') && (e.key === 'Enter' || e.key === ' ')) return;
     // The how-to card: Space or Enter puts it away, and nothing reaches the game until it is.
     if (howToUp()) {

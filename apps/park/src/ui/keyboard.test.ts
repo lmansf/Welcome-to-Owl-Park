@@ -59,7 +59,12 @@ describe('holdsUp (OP-212)', () => {
 /** Just enough of a window for the listener: events are plain objects handed to the handlers. */
 function fakeWindow() {
   const handlers = new Map<string, (e: unknown) => void>();
-  const doc = { visibilityState: 'visible', addEventListener: () => {}, removeEventListener: () => {} };
+  const docHandlers = new Map<string, (e: unknown) => void>();
+  const doc = {
+    visibilityState: 'visible',
+    addEventListener: (type: string, fn: (e: unknown) => void) => docHandlers.set(type, fn),
+    removeEventListener: (type: string) => docHandlers.delete(type),
+  };
   const win = {
     document: doc,
     addEventListener: (type: string, fn: (e: unknown) => void) => handlers.set(type, fn),
@@ -70,7 +75,12 @@ function fakeWindow() {
     handlers.get(type)?.({ code, key: '', repeat: false, target: null, preventDefault: () => (prevented = true), ...extra });
     return prevented;
   };
-  return { win: win as unknown as Window, key, fire: (type: string) => handlers.get(type)?.({}) };
+  return {
+    win: win as unknown as Window,
+    key,
+    fire: (type: string) => handlers.get(type)?.({}),
+    focus: (target: unknown) => docHandlers.get('focusin')?.({ target }),
+  };
 }
 
 describe('attachKeyboard', () => {
@@ -169,5 +179,34 @@ describe('attachKeyboard', () => {
     key('keydown', 'ArrowDown');
     key('keydown', 'KeyD');
     expect(calls).toEqual(['up', 'up']);
+  });
+  it('types every park key into a text field: no walk, no jump, no action, nothing prevented', () => {
+    const { key, keys, calls } = setup();
+    const field = { tagName: 'TEXTAREA', isContentEditable: false };
+    for (const code of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'Space', 'ShiftLeft', 'KeyE', 'KeyM', 'KeyT', 'KeyQ', 'KeyJ', 'Digit2']) {
+      expect(key('keydown', code, { target: field }), code).toBe(false);
+    }
+    expect(key('keydown', 'KeyD', { target: { tagName: 'DIV', isContentEditable: true } })).toBe(false);
+    expect(keys.direction()).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves a phone keyboard's composing keys alone, wherever they land", () => {
+    const { key, keys, calls } = setup();
+    expect(key('keydown', 'KeyD', { isComposing: true })).toBe(false);
+    expect(key('keydown', '', { keyCode: 229 })).toBe(false);
+    expect(keys.direction()).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('lets go of held keys when a text field takes the focus, and not for a button', () => {
+    const { key, keys, focus, calls } = setup();
+    key('keydown', 'KeyD');
+    key('keydown', 'Space');
+    focus({ tagName: 'BUTTON', isContentEditable: false });
+    expect(keys.direction()).toEqual({ x: 1, y: 0 });
+    focus({ tagName: 'TEXTAREA', isContentEditable: false });
+    expect(keys.direction()).toBeNull();
+    expect(calls).toEqual(['jump', 'jump end']);
   });
 });

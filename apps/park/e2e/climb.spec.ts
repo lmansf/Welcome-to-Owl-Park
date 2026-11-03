@@ -79,6 +79,34 @@ test.describe('the stained-glass climb', () => {
     await page.locator('.climb [data-stop]').click();
   });
 
+  test('the Feedback form opened over the climb types every key, and the owl stays put', async ({ page }) => {
+    test.skip(isEdge(), 'the same in every suite');
+    await atThePortal(page, `e2e-climb-typing-${test.info().project.name}`);
+    await openClimb(page);
+    await startClimb(page);
+    await expect.poll(async () => (await climbState(page))?.grounded ?? false, { timeout: 5_000 }).toBe(true);
+    const foot = (await climbState(page))!;
+    await page.locator('[data-feedback-bug]').click();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    const note = feedback.getByRole('textbox', { name: 'Your note' });
+    await note.click();
+    // Every letter the climb and the park move on: walk, jump, dash (Shift for the capital), interact, the Menu.
+    const words = 'wasd jumps, Dash xk, emtqj 1 2 3';
+    await page.keyboard.type(words);
+    await expect(note).toHaveValue(words);
+    const now = (await climbState(page))!;
+    expect(now.jumpsUsed).toBe(foot.jumpsUsed);
+    expect(Math.abs(now.x - foot.x)).toBeLessThan(1);
+    // Closed, the climb hears its keys again (the focus is back on the bug button, so a walk, not the space bar).
+    await feedback.getByRole('button', { name: 'Close feedback' }).click();
+    await expect(feedback).toBeHidden();
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(async () => (await climbState(page))?.x ?? 0, { timeout: 5_000 }).toBeGreaterThan(foot.x + 20);
+    await page.keyboard.up('ArrowRight');
+    await page.locator('.climb [data-stop]').click();
+  });
+
   test('the clouds: ten feathers over six storeys, the Glass Circlet once, and the run reference', async ({ page }) => {
     test.skip(isEdge(), 'through the room server below');
     const before = await atThePortal(page, `e2e-clouds-${test.info().project.name}`);
