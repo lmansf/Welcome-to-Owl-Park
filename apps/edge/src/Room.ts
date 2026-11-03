@@ -36,6 +36,16 @@ import {
   WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
   CLOSE,
+  DASH_LAND_SLACK_MS,
+  FRESH_DASH,
+  dashRefusal,
+  holdsDash,
+  landDash,
+  roomDashEnd,
+  spendDash,
+  type ClientDash,
+  type DashCharge,
+  type DashRefusal,
   type ClientHello,
   type AirAt,
   type Logger,
@@ -92,6 +102,8 @@ interface Visitor {
   arrangedAt: number;
   /** When its owl fell asleep (OP-126), on the room's clock: unknown for one asleep before the object woke. */
   sleptAt?: number;
+  /** The dash as the room has it (OP-224, dash.ts): spent this jump, and when it last set off. */
+  dash: DashCharge;
 }
 
 export interface RoomOptions {
@@ -109,6 +121,8 @@ export interface RoomOptions {
   log?: Logger;
   /** Told each place or stance a page asked for that the room would not take as asked (OP-149): the room object logs it. */
   rejected?: (id: string, why: PositionRejection) => void;
+  /** Told each dash the room would not take (OP-224), with why: for the tests and the room object. */
+  dashRefused?: (id: string, why: DashRefusal) => void;
 }
 
 /**
@@ -122,9 +136,11 @@ export interface RoomOptions {
  *  - `perch`: standing at a perch's height with no perch of that height under the owl, nor by it on
  *    the rest of its walk: dropped, so the others never see an owl standing in mid-air;
  *  - `arrival`: a hello from a place the room will not have the owl come in at (far from the spawn
- *    and from where it left): it comes in by the spawn.
+ *    and from where it left): it comes in by the spawn;
+ *  - `dash`: a dash the owl could not make (OP-224: no course here, on the ground, spent this jump, too
+ *    soon after the last): the owl walks on as the room had it, and its page is told so.
  */
-export type PositionRejection = 'room' | 'floor' | 'perch' | 'arrival';
+export type PositionRejection = 'room' | 'floor' | 'perch' | 'arrival' | 'dash';
 
 export const LIMITS = {
   moveBurst: MOVE_BURST,
@@ -255,7 +271,7 @@ export class Room {
   /** Where the visitor is right now, finishing any walk that has run its course. */
   private currentPos(v: Visitor): Vec2 {
     if (!v.st.walk) return v.st.pos;
-    const { pos, done } = positionAlongWalk({ from: v.st.walk.from, to: v.st.walk.to, startedAt: v.st.walk.at }, this.now());
+    const { pos, done } = positionAlongWalk({ from: v.st.walk.from, to: v.st.walk.to, startedAt: v.st.walk.at, ...(v.st.walk.dash ? { dash: true as const } : {}) }, this.now());
     if (done) {
       v.st.pos = v.st.walk.to;
       v.st.walk = null;
@@ -371,7 +387,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault, undefined, told);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0 };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -397,7 +413,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0 });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } });
   }
 
   /**
@@ -500,6 +516,79 @@ export class Room {
     const frame: ServerFrame = { t: 'move', id, from, to: target, at };
     this.broadcast(frame, id);
     this.send(v, { ...frame, seq: msg.seq });
+  }
+
+  /**
+   * A dash (OP-224, dash.ts), checked as a walk is (from where the room has the owl, no further than a
+   * dash goes, as far as the floor goes) and as flight is (the owl holds the dash in this room, and is up
+   * in the air as the room reckons its last air state, within DASH_LAND_SLACK_MS of coming down; once a
+   * jump, never sooner than the cooldown). Taken, it is the owl's walk at the dash's pace, told to the
+   * others and echoed with its seq. Refused, the owl walks on as the room had it, and its page is told
+   * that walk (echoed with the seq, so its page puts its owl right), and the room object hears why.
+   */
+  dash(id: string, msg: ClientDash): void {
+    const v = this.visitors.get(id);
+    if (!v) return;
+    if (!this.admitFrame(v)) return void v.peer.close(CLOSE.RATE_LIMITED, 'too many frames');
+    if (msg.seq <= v.seq) return; // stale or replayed
+    v.seq = msg.seq;
+    if (!this.inRoom(msg.to)) {
+      this.opts.rejected?.(id, 'room');
+      if (this.strike(v)) v.peer.close(CLOSE.RATE_LIMITED, 'too many moves');
+      return;
+    }
+    const now = this.now();
+    const from = this.currentPos(v);
+    const why = dashRefusal(v.dash, holdsDash(this.def), this.upAt(v, now - DASH_LAND_SLACK_MS), now);
+    if (why) {
+      this.opts.rejected?.(id, 'dash');
+      this.opts.dashRefused?.(id, why);
+      // The walk under way goes on from here at the walk's pace; the page's dash is put right.
+      const to = v.st.walk && !v.st.walk.dash ? v.st.walk.to : from;
+      v.st.walk = distance(from, to) < LIMITS.minMovePx ? null : { from, to, at: now };
+      v.st.pos = from;
+      v.peer.persist?.(v.st);
+      const frame: ServerFrame = { t: 'move', id, from, to, at: now };
+      this.broadcast(frame, id);
+      this.send(v, { ...frame, seq: msg.seq });
+      return;
+    }
+    const to = roomDashEnd(from, msg.to, this.anyFooting);
+    v.dash = spendDash(v.dash, now);
+    v.st.walk = { from, to, at: now, dash: true };
+    v.st.pos = from;
+    delete v.st.asleep;
+    delete v.sleptAt;
+    v.peer.persist?.(v.st);
+    const frame: ServerFrame = { t: 'move', id, from, to, at: now, dash: true };
+    this.broadcast(frame, id);
+    this.send(v, { ...frame, seq: msg.seq });
+  }
+
+  /**
+   * Put a visitor down at a point, standing (OP-224: a fall in a course, back at its last bench): the
+   * one move of an owl that is not a walk the page asked for. The others are told it as a walk that
+   * starts and ends there, as a halt is; the owl's page put its own owl there already.
+   */
+  place(id: string, at: Vec2): boolean {
+    const v = this.visitors.get(id);
+    if (!v || !isWalkable(at, this.anyFooting)) return false;
+    const now = this.now();
+    const p = { x: Math.round(at.x), y: Math.round(at.y) };
+    v.st.pos = p;
+    v.st.walk = null;
+    delete v.st.air;
+    v.dash = landDash(v.dash);
+    v.peer.persist?.(v.st);
+    this.broadcast({ t: 'move', id, from: p, to: p, at: now }, id);
+    return true;
+  }
+
+  /** Whether the owl is up in the air at `at` (room ms) as the room reckons its last air state (OP-084): off the ground and not yet come down. */
+  private upAt(v: Visitor, at: number): boolean {
+    const a = v.st.air;
+    if (!a || a.s === GROUNDED) return false;
+    return carryOn(a, Math.max(0, at - a.at)).s !== GROUNDED;
   }
 
   /** End a visitor's walk where it stands now, for everyone (the sender's copy carries its seq). */
@@ -615,6 +704,8 @@ export class Room {
     v.airTokens -= 1;
     const air = checkAir(a, this.airTop, this.standing);
     if (!air) return false;
+    // Off the ground from standing (the floor or a perch): it landed since its last dash, which is back (OP-224).
+    if (air.s !== GROUNDED && !this.upAt(v, now)) v.dash = landDash(v.dash);
     // Standing up there only where a perch that high is (OP-149): the others never see an owl standing in mid-air.
     if (air.s === GROUNDED && air.z > 0 && !this.perchFor(v, air.z)) {
       this.opts.rejected?.(id, 'perch');

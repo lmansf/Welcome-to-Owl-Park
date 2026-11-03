@@ -5,6 +5,9 @@ import {
   CLOSE,
   ClimbBook,
   CollectionBook,
+  CourseBook,
+  MemoryCourseStore,
+  AIRBORNE,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
   MemoryClimbStore,
@@ -44,6 +47,7 @@ import type { Env } from '../src/env';
 import { captureLogs, loggerFor } from '../src/logs';
 import { mintEntry, mintKeeper, mintPass, signingSecret } from '../src/pass';
 import { roomDef } from '../src/rooms';
+import { COURSES, ROOMS as PARK_ROOMS } from '@owl-park/shared/rooms';
 import { TravelBook } from '../src/travelBook';
 import { eventsOf, logged } from './logged';
 import { sqlStorage } from './sqlite';
@@ -137,6 +141,35 @@ class FakeCollections {
   readonly arcade = new ArcadeBook(new MemoryScoreStore(), this.book);
   readonly climbStore = new MemoryClimbStore();
   readonly climb = new ClimbBook(this.climbStore, this.book, () => 0x5eed);
+  /** The parkour courses (OP-224): the real course book, and each call the room object made, as `act:room:id`. */
+  readonly courses = new CourseBook(new MemoryCourseStore(), this.book, COURSES, (id) => PARK_ROOMS[id]);
+  readonly courseCalls: string[] = [];
+  courseState(cid: string, room: string) {
+    this.courseCalls.push(`state:${room}`);
+    return this.answer(this.courses.state(cid, room, Date.now()));
+  }
+  courseStart(cid: string, room: string, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'courseStart');
+    this.courseCalls.push(`start:${room}`);
+    return this.answer(this.courses.start(cid, room, Date.now(), practice));
+  }
+  courseReach(cid: string, room: string, kind: 'bench' | 'part' | 'feather', id: string) {
+    this.courseCalls.push(`${kind}:${room}:${id}`);
+    return this.answer(this.courses.reach(cid, room, kind, id, Date.now()));
+  }
+  courseOpen(cid: string, room: string, id: string) {
+    this.courseCalls.push(`shortcut:${room}:${id}`);
+    return this.answer(this.courses.open(cid, room, id, Date.now()));
+  }
+  courseFall(cid: string, room: string) {
+    this.courseCalls.push(`fall:${room}`);
+    return this.answer(this.courses.fall(cid, room, Date.now()));
+  }
+  courseFinish(cid: string, room: string, _visit?: unknown, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'courseFinish');
+    this.courseCalls.push(`finish:${room}`);
+    return this.answer(this.courses.finish(cid, room, Date.now(), practice));
+  }
   /** While set, nest lookups wait for it: the collections object is slow to answer. */
   hold: Promise<void> | null = null;
   down = false;
@@ -1901,5 +1934,91 @@ describe('spectators in the room object (OP-191)', () => {
     const visitor = await join(obj, 'hub', 'v_holder', OWNER);
     await send(obj, visitor, { t: 'admit', pass: await pass({}), r: 1 });
     expect(await answered(visitor, 1)).toEqual({ t: 'admitted', r: 1, ok: true });
+  });
+});
+
+describe('a parkour course in the room object (OP-224)', () => {
+  const KEY = 'keeper-tests-signing-key-0123456789';
+  const keeperJoin = async (obj: Obj, room: string, id: string, cid?: string) => {
+    const ws = connect(room, id, cid);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, keeper: await mintKeeper(KEY, Math.floor(clock / 1000) + 600) });
+    return ws;
+  };
+  const course = (ws: FakeSocket, r: number) => ws.of('course').find((f) => f.r === r);
+  const walkTo = async (obj: Obj, ws: FakeSocket, to: Vec2, seq: number) => {
+    await send(obj, ws, { t: 'move', to, seq });
+    clock += 10_000;
+  };
+
+  it('keeps the test course for the keepers: any other owl is turned away', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    for (const room of ['trail-head', 'trail-1', 'trail-3']) {
+      const guest = await join(obj, room, `v_guest_${room}`);
+      expect(guest.last('closed'), room).toMatchObject({ t: 'closed', room, why: 'realm' });
+      expect(guest.closed?.code, room).toBe(CLOSE.REALM_CLOSED);
+    }
+    const keeper = await keeperJoin(obj, 'trail-1', 'v_keeper', OWNER);
+    expect(keeper.closed).toBeNull();
+    expect(keeper.last('welcome')).toBeDefined();
+  });
+
+  it('checks where the owl stands before it asks the collections object anything', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const ws = await keeperJoin(obj, 'trail-1', 'v_keeper', OWNER);
+    // No collector: unknown, and nothing asked.
+    const nobody = await keeperJoin(obj, 'trail-1', 'v_nobody');
+    await send(obj, nobody, { t: 'course', a: 'start', r: 1 });
+    await settle();
+    expect(course(nobody, 1)).toMatchObject({ ok: false, reason: 'unknown' });
+    // At the trail gate's way in: a run starts.
+    await send(obj, ws, { t: 'course', a: 'start', r: 1 });
+    await settle();
+    expect(course(ws, 1)).toMatchObject({ ok: true, view: { course: 'trail', run: { parts: [], bench: null } } });
+    // The bell from the way in: far, and the collections object never hears of it.
+    await send(obj, ws, { t: 'course', a: 'part', id: 'bell-1', r: 2 });
+    await settle();
+    expect(course(ws, 2)).toMatchObject({ ok: false, reason: 'far' });
+    // A fall where there is no pit: far.
+    await send(obj, ws, { t: 'course', a: 'fall', r: 3 });
+    await settle();
+    expect(course(ws, 3)).toMatchObject({ ok: false, reason: 'far' });
+    // The shrine is not in this act.
+    await send(obj, ws, { t: 'course', a: 'finish', r: 4 });
+    await settle();
+    expect(course(ws, 4)).toMatchObject({ ok: false, reason: 'far' });
+    expect(collections.courseCalls).toEqual(['start:trail-1']);
+    // Walked over to the bench past the pit, then the bell: each counts.
+    await walkTo(obj, ws, { x: 1020, y: 460 }, 1);
+    await send(obj, ws, { t: 'course', a: 'bench', id: 'b2', r: 5 });
+    await walkTo(obj, ws, { x: 1280, y: 470 }, 2);
+    await send(obj, ws, { t: 'course', a: 'part', id: 'bell-1', r: 6 });
+    await settle();
+    expect(course(ws, 5)).toMatchObject({ ok: true, first: true, view: { run: { bench: 'b2' } } });
+    expect(course(ws, 6)).toMatchObject({ ok: true, first: true, view: { run: { parts: ['bell-1'] } } });
+    // Into the pit: a fall, back at the bench, for everyone.
+    await walkTo(obj, ws, { x: 800, y: 600 }, 3);
+    await send(obj, ws, { t: 'course', a: 'fall', r: 7 });
+    await settle();
+    expect(course(ws, 7)).toMatchObject({ ok: true, at: { x: 1020, y: 450 } });
+    expect(collections.courseCalls).toEqual(['start:trail-1', 'bench:trail-1:b2', 'part:trail-1:bell-1', 'fall:trail-1']);
+    // The collections object away: offline.
+    collections.down = true;
+    await send(obj, ws, { t: 'course', a: 'state', r: 8 });
+    await settle();
+    expect(course(ws, 8)).toMatchObject({ ok: false, reason: 'offline' });
+  });
+
+  it('takes a dash only in the air, and tells the others it was one', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const ws = await keeperJoin(obj, 'trail-1', 'v_keeper', OWNER);
+    const other = await keeperJoin(obj, 'trail-1', 'v_other', OTHER);
+    const at = ws.last('welcome')!.you.pos;
+    await send(obj, ws, { t: 'dash', to: { x: at.x + 160, y: at.y }, seq: 1 });
+    expect(ws.last('move')).toMatchObject({ seq: 1 });
+    expect(ws.last('move')?.dash).toBeUndefined();
+    await send(obj, ws, { t: 'air', air: { z: 7.2, vz: 858.3, s: AIRBORNE, f: 1 } });
+    await send(obj, ws, { t: 'dash', to: { x: at.x + 160, y: at.y }, seq: 2 });
+    expect(ws.last('move')).toMatchObject({ seq: 2, dash: true });
+    expect(other.last('move')).toMatchObject({ id: ws.last('welcome')!.id, dash: true });
   });
 });

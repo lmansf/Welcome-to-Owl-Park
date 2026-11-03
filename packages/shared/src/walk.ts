@@ -1,8 +1,14 @@
+import { AIR_DASH_SPEED } from './dash';
 import { distance, lerpVec } from './geometry';
 import type { Vec2, Walk } from './protocol';
 
 /** Owl walking speed in room pixels per second (rooms are 1600 px wide). */
 export const WALK_SPEED = 260;
+
+/** The pace a walk goes at: the walk's, or a dash's (OP-224, dash.ts) for a walk that is one. */
+export function walkSpeed(walk: Pick<Walk, 'dash'>): number {
+  return walk.dash ? AIR_DASH_SPEED : WALK_SPEED;
+}
 
 export function walkDurationMs(from: Vec2, to: Vec2, speed = WALK_SPEED): number {
   return (distance(from, to) / speed) * 1000;
@@ -13,7 +19,7 @@ export function walkDurationMs(from: Vec2, to: Vec2, speed = WALK_SPEED): number
  * Used to place remote owls that were already mid-walk when we joined, and to
  * drive local animation deterministically from wall-clock time.
  */
-export function positionAlongWalk(walk: Walk, now: number, speed = WALK_SPEED): { pos: Vec2; done: boolean } {
+export function positionAlongWalk(walk: Walk, now: number, speed = walkSpeed(walk)): { pos: Vec2; done: boolean } {
   const total = walkDurationMs(walk.from, walk.to, speed);
   if (total <= 0) return { pos: { ...walk.to }, done: true };
   const elapsed = now - walk.startedAt;

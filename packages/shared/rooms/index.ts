@@ -5,6 +5,8 @@ import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, mapOf, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
+import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
+import type { CourseDef } from '../src/course';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 
@@ -1489,7 +1491,12 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'cabinet-sling', rect: { x: 2 * ROOM_W + 505, y: 750, w: 160, h: 40 }, top: 0, marker: { x: 2 * ROOM_W + 585, y: 627 } },
     ],
   },
+  // The test course (OP-224): keepers only, drawn in plain shapes (trialCourse.ts).
+  ...TRIAL_ROOMS,
 };
+
+/** The parkour courses (OP-224, course.ts), by id: today only the keepers' test course. */
+export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE };
 
 /**
  * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer
