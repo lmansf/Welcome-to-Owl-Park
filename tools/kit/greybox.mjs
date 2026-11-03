@@ -7,10 +7,12 @@
 // a small rasterizer (packages/shared/src/raster.ts) and a PNG writer on node:zlib.
 //
 //   node tools/kit/greybox.mjs <room> [--out <file.png>] [--scale <k>] [--placeholders]
+//   node tools/kit/greybox.mjs <room> --plan <file.json|->   (the drawing as data, for tools/kit/preview.py)
 //   pnpm kit:greybox l4 --scale 0.5
 //
 // <room> is a kit room: one of ROOMS with a kit, or a kit room standing in for a painted one
-// (KIT_DEMOS). The PNG goes to work/kit/<room>-greybox.png by default (work/ is not committed).
+// (KIT_DEMOS), or a kit room laid out ahead of its painted one (KIT_PREVIEWS). The PNG goes to
+// work/kit/<room>-greybox.png by default (work/ is not committed).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { register } from 'node:module';
 import path from 'node:path';
@@ -191,9 +193,37 @@ export function renderGreybox(shared, room, { scale = 1, placeholders = false } 
   return out;
 }
 
+/**
+ * A kit room's drawing as data (OP-241), for tools that composite the real art (tools/kit/preview.py):
+ * its backdrop tiles, every image of its draw plan in drawing order, its doorways, perches and spawns.
+ */
+export function planOf(shared, room) {
+  const { kit } = shared;
+  const order = ['back', 'play', 'piece', 'front'];
+  const plan = kit.kitDrawPlan(room);
+  const images = order.flatMap((layer) =>
+    plan
+      .filter((d) => d.layer === layer)
+      .flatMap((d) => kit.kitCells(d).map((c) => ({ key: d.key, layer, role: d.role, id: d.id, ...c, flip: !!d.flip, alpha: d.alpha ?? 1, tile: d.tile }))),
+  );
+  return {
+    id: room.id,
+    size: room.size,
+    ground: room.kit.ground,
+    owlScale: room.owlScale ?? 1,
+    backgrounds: room.backgrounds ?? [],
+    foregrounds: room.foregrounds ?? [],
+    images,
+    doors: room.doors,
+    perches: (room.perches ?? []).map((p) => ({ id: p.id, top: p.top, x0: Math.min(...p.area.map((q) => q.x)), x1: Math.max(...p.area.map((q) => q.x)) })),
+    spawns: room.spawns,
+    problems: kit.kitProblems(room),
+  };
+}
+
 /** The kit rooms the greybox can draw, by id. */
 export function kitRooms(shared) {
-  const out = { ...Object.fromEntries(Object.entries(shared.rooms.ROOMS).filter(([, r]) => r.kit)), ...shared.demos.KIT_DEMOS };
+  const out = { ...Object.fromEntries(Object.entries(shared.rooms.ROOMS).filter(([, r]) => r.kit)), ...shared.demos.KIT_DEMOS, ...(shared.demos.KIT_PREVIEWS ?? {}) };
   return out;
 }
 
@@ -210,16 +240,21 @@ async function main(argv) {
   if (placeholders) args.splice(args.indexOf('--placeholders'), 1);
   const outArg = flag('--out');
   const scale = Number(flag('--scale') ?? '1');
+  const planArg = flag('--plan');
   const id = args[0];
   const shared = await loadShared();
   const rooms = kitRooms(shared);
   if (!id || !rooms[id]) {
-    console.error(`usage: node tools/kit/greybox.mjs <room> [--out <file.png>] [--scale <k>] [--placeholders]\nkit rooms: ${Object.keys(rooms).join(', ') || '(none)'}`);
+    console.error(`usage: node tools/kit/greybox.mjs <room> [--out <file.png>] [--scale <k>] [--placeholders] [--plan <file.json|->]\nkit rooms: ${Object.keys(rooms).join(', ') || '(none)'}`);
     return 2;
   }
   if (!(scale > 0 && scale <= 2)) {
     console.error('--scale is a number from just over 0 to 2');
     return 2;
+  }
+  if (planArg) {
+    writeFileSync(planArg === '-' ? 1 : path.resolve(planArg), JSON.stringify(planOf(shared, rooms[id])));
+    return 0;
   }
   const problems = shared.kit.kitProblems(rooms[id]);
   for (const p of problems) console.warn(`warning: ${p}`);

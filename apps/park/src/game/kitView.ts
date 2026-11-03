@@ -9,8 +9,9 @@ import { TREE_PLAY_TINT } from './treeView';
  * the room's tiles, drawn and scrolled by RoomScene as a painted room's are; this draws the rest:
  * the surfaces' textures, the paths, ledges and stairs, the doorway pieces, barriers, props and decals.
  *
- * - A repeating piece is drawn as one image per repeat (kitCells), each cropped to the box and counted
- *   from the room's origin, so a texture continues across neighbouring surfaces. Images of one texture
+ * - A repeating piece is drawn as one image per repeat (kitCells): a texture's cropped to the box and
+ *   counted from the room's origin, so it continues across neighbouring surfaces; a run's middle piece
+ *   as whole copies laid art to art along the run (OP-241). Images of one texture
  *   batch into one draw on WebGL, so a room costs a few draws, not one per image. Each image is drawn a
  *   pixel bigger along the axes it repeats on, so no hairline shows between repeats at any zoom: the
  *   texture is seamless, so the pixel it overlaps is the next repeat's own first one.
