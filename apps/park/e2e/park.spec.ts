@@ -59,8 +59,8 @@ test.describe('single visitor', () => {
   test('using the HUD never stops the owl from walking afterwards', async ({ page, isMobile }) => {
     await openPark(page);
     const before = await state(page);
-    // A phone's bar has no count to point at (OP-242): its name instead.
-    await page.locator(isMobile ? '#hud .brand' : '#hud .pill').hover();
+    // A phone's bar has no count to point at (OP-242): the Say button up in its corner instead.
+    await page.locator(isMobile ? '[data-say-btn]' : '#hud .pill').hover();
     await page.locator('[data-menu-btn]').click();
     await page.getByRole('button', { name: 'Close the menu' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
