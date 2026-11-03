@@ -4228,6 +4228,225 @@
       "format": "webp",
       "with_2x": false,
       "key_colour": "#FF00FF"
+    },
+    "kit-tex-glass-glass-panes": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-glass-pale-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-glass-lead-lattice": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-glass-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-stone-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-rose-window": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-planter": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-kiosk": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-lift-car": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-lift-rail": {
+      "w": 80,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-window-arch": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-buttress": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-bridge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-finial": {
+      "w": 120,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-door-glass-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-door-glass-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-chandelier": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-weathervane": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-glass-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-glass-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
     }
   },
   "helpers": {

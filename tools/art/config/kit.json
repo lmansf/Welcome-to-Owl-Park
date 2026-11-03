@@ -1086,6 +1086,152 @@
         "mid-b": "the inside of a hollow trunk: curved walls of worn wood with knotholes letting amber light in, hanging roots and a few shelf fungi, filling the whole frame",
         "mid-c": "open treetops in warm light with drifts of amber leaves rising on an updraft, the crowns of trees in the lower half, the upper half mostly open"
       }
+    },
+    "glass": {
+      "title": "the stained-glass realm: its Commons high in cool haze, and the glass tower course",
+      "light": "cool cream moonlight high up in clear blue-navy air with a light mist, the dusk blue #6F9BC8 of the height, and jewel colours only where stained glass is lit from within: gold #C9A227, ruby #A3202F, emerald #1E6B4C, sapphire #1F4A9C and amber #E6A530 in panes between dark navy lead lines",
+      "textures": {
+        "glass-panes": "leaded stained glass seen flat on: small panes of deep lapis, violet, gold, ruby, emerald and sapphire in abstract leaf and feather shapes between dark navy lead lines, a few panes lit brighter",
+        "pale-stone": "fitted pale stone blocks with cool blue shadows in the joints, smooth and even, the stone of a high tower",
+        "lead-lattice": "a dark lead lattice of small diamond panes, most of them pale frosted glass, a few lit mint and lilac"
+      },
+      "sheets": {
+        "commons-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "idol-pedestal",
+              "w": 240,
+              "h": 200,
+              "desc": "a round pedestal of pale stone with a ring of stained glass inlay glowing gold around its top, nothing standing on it"
+            },
+            {
+              "name": "glass-lantern",
+              "w": 120,
+              "h": 200,
+              "desc": "a tall hanging lantern of stained glass panes in gold and ruby on a dark iron chain, glowing from within"
+            },
+            {
+              "name": "stone-bench",
+              "w": 320,
+              "h": 160,
+              "desc": "a pale stone bench with a back panel of lit stained glass in sapphire and emerald"
+            },
+            {
+              "name": "rose-window",
+              "w": 240,
+              "h": 240,
+              "desc": "a round rose window of stained glass in a pale stone frame, lit from within, standing on its own"
+            },
+            {
+              "name": "glass-planter",
+              "w": 160,
+              "h": 200,
+              "desc": "a pale stone planter holding flowers made of coloured glass on thin lead stems"
+            },
+            {
+              "name": "kiosk",
+              "w": 320,
+              "h": 320,
+              "desc": "a small kiosk of pale stone with a stained-glass awning in gold and amber and a bare counter, no writing"
+            }
+          ]
+        },
+        "tower-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "lift-car",
+              "w": 240,
+              "h": 320,
+              "desc": "a glass lift car: a tall cage of dark lead and clear and lapis glass panes with a brass floor, hanging from a cable above"
+            },
+            {
+              "name": "lift-rail",
+              "w": 80,
+              "h": 400,
+              "desc": "a straight vertical rail of dark lead and brass with small lit panes along it, cut straight at both ends so it repeats upward"
+            },
+            {
+              "name": "window-arch",
+              "w": 240,
+              "h": 320,
+              "desc": "a tall pointed arch window of stained glass in a pale stone frame, lit sapphire and gold, standing on its own"
+            },
+            {
+              "name": "buttress",
+              "w": 160,
+              "h": 400,
+              "desc": "a flying buttress of pale stone leaning left, its underside carved, cut straight at the top"
+            },
+            {
+              "name": "glass-bridge",
+              "w": 400,
+              "h": 120,
+              "desc": "a level bridge of thick pale glass slabs on a dark lead frame, flat on top, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "finial",
+              "w": 120,
+              "h": 240,
+              "desc": "a tall spire finial of dark lead and gold glass, pointed, to top a tower"
+            }
+          ]
+        },
+        "markers-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "door-glass-closed",
+              "w": 240,
+              "h": 320,
+              "desc": "a tall pointed door of stained glass in a pale stone frame, shut, dim"
+            },
+            {
+              "name": "door-glass-open",
+              "w": 240,
+              "h": 320,
+              "desc": "the same tall pointed doorway open, warm gold light inside"
+            },
+            {
+              "name": "chandelier",
+              "w": 240,
+              "h": 240,
+              "desc": "a chandelier of hanging stained-glass drops in gold and ruby on a dark iron ring, on a chain from above"
+            },
+            {
+              "name": "feather-lost",
+              "w": 80,
+              "h": 120,
+              "desc": "a single large owl feather made of pale glass, standing upright, glowing faintly cream"
+            },
+            {
+              "name": "finish-shrine",
+              "w": 320,
+              "h": 320,
+              "desc": "a small shrine of pale stone with a pointed arch of stained glass, a bare plinth inside and two glass lanterns, nothing on the plinth"
+            },
+            {
+              "name": "weathervane",
+              "w": 160,
+              "h": 240,
+              "desc": "a dark iron weathervane on a short pale stone cap, its arrow a feather shape, no letters"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "a high clear night sky in blue-navy with many small stars, a light mist along the bottom third, no moon drawn",
+        "sky-b": "a high hazy night sky in dusk blue with thin streaks of pale cloud level with the viewer, stars above them, no moon drawn",
+        "far-a": "the spires and mosaic towers of a glass city far below, their stained glass lit in jewel colours, rising out of a sea of soft cloud, filling the lower two thirds and fading at the top",
+        "far-b": "a sea of soft moonlit cloud far below with a few glass spire tips showing through, filling the lower half and fading at the top",
+        "mid-a": "the wall of a glass tower close by: tall leaded panes of lapis and violet with a few lit gold and rose, pale stone mullions between them, filling the whole frame",
+        "mid-b": "pale stone arches and buttresses of a high tower with stained-glass windows lit from within and glass lanterns hanging between them, in the lower two thirds, the upper third mostly open",
+        "mid-c": "a row of balconies and rose windows along a tower's side, glass lanterns on chains, the mist drifting past below them, in the lower half, the upper half mostly open"
+      }
     }
   }
 }
