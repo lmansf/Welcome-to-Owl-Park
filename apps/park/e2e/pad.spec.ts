@@ -138,7 +138,7 @@ test.describe('the pad (OP-082, OP-114)', () => {
     const shop = (await state(page)).doors.find((d) => d.id === 'shop')!;
     await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: shop.x, y: shop.y });
     await expect(interact).toHaveAttribute('aria-disabled', 'false', { timeout: 15_000 });
-    await expect(interact).toHaveAttribute('aria-label', 'Interact: Gift shop');
+    await expect(interact).toHaveAttribute('aria-label', 'Gift shop');
     // It wears what it does (OP-242), so the row's first button, which says the same, stays away; the
     // button stays clear of the stick.
     await expect(interact).toHaveText('Gift shop');

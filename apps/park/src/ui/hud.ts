@@ -1124,7 +1124,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       // The pad's Interact button does the first of them (as E does), and says which.
       interactBtn.classList.toggle('idle', list.length === 0);
       interactBtn.setAttribute('aria-disabled', String(list.length === 0));
-      interactBtn.setAttribute('aria-label', list[0] ? `Interact: ${list[0].label}` : 'Interact');
+      interactBtn.setAttribute('aria-label', list[0]?.label ?? 'Interact'); // on a phone the row's first button is tucked away, so this one carries its name
       // On a phone it wears what it does (OP-242), in place of the first button of the row.
       interactLabel.textContent = list[0]?.label ?? '';
       interactBtn.classList.toggle('labelled', list.length > 0);
