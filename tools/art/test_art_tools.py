@@ -1843,6 +1843,20 @@ class TestKit(unittest.TestCase):
         # the up-and-down wrap is neither healed nor broken by a sideways pass
         self.assertAlmostEqual(postprocess.tile_seam_ratio(side)["seam_y"], postprocess.tile_seam_ratio(rgba)["seam_y"], delta=0.6)
 
+    def test_trim_key_frame_cuts_a_painted_border_of_the_key_colour(self):
+        from PIL import Image
+        # the model paints its magenta a little off (255, 1, 191): the border is sampled, not assumed
+        img = Image.new("RGB", (400, 200), (255, 1, 191))
+        panel = Image.new("RGB", (300, 120), (30, 40, 90))
+        img.paste(panel, (60, 50))
+        out, trim = postprocess.trim_key_frame(img, "#FF00FF")
+        self.assertEqual(trim, (60, 50, 40, 30))
+        self.assertEqual(out.size, (300, 120))
+        # a painting that reaches its edges is left alone
+        same, none = postprocess.trim_key_frame(panel, "#FF00FF")
+        self.assertEqual(none, (0, 0, 0, 0))
+        self.assertIs(same, panel)
+
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw
         kit = postprocess.kit_table()

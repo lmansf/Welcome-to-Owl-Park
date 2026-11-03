@@ -1239,7 +1239,7 @@
       "textures": {
         "neon-brick": "dark navy brick wall seen flat on, the mortar lines picked out faintly in cyan and pink neon reflection, even and tileable",
         "wet-pavement": "dark wet paving slabs seen from above, reflecting faint pink and cyan streaks and a few gold lantern glints, even and tileable",
-        "corrugated-tin": "sheets of dark corrugated metal roofing seen flat on, their ridges running straight down, rust in the seams, faint cyan highlight on each ridge"
+        "corrugated-tin": "sheets of dark corrugated metal roofing seen flat on, their ridges running straight down, rust in the seams, faint cyan highlight on each ridge, nothing else on them: no signs, no lamps, no windows, no building, no edge of a roof"
       },
       "sheets": {
         "commons-a": {
@@ -1375,8 +1375,8 @@
         "far-a": "a distant skyline of dark tall buildings with scattered lit windows in pink, cyan and gold, a haze of neon glow at their feet, filling the lower two thirds and fading at the top",
         "far-b": "rooftops of a dark city far below, strings of warm gold lanterns and the glow of blank neon signs among them, filling the lower half and fading at the top",
         "mid-a": "the wall of a dark navy street building close by: brick, shuttered windows, pipes, cables and blank neon signs in pink and cyan, a few paper lanterns, filling the whole frame, no letters",
-        "mid-b": "a row of narrow shop fronts along a dark street: awnings, lit doorways, paper lanterns and blank neon sign boards in pink and cyan, in the lower two thirds, the upper third mostly open, no letters",
-        "mid-c": "a row of rooftops close by: parapets, water tanks, antennas and strings of warm paper lanterns, a few blank neon tubes, in the lower half, the upper half mostly open, no letters"
+        "mid-b": "a row of narrow shop fronts along a dark street: awnings, lit doorways, paper lanterns and blank neon sign boards in pink and cyan, filling only the lower two thirds, the shop fronts running off both side edges, the whole upper third left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border, no letters",
+        "mid-c": "a row of rooftops close by: parapets, water tanks, antennas and strings of warm paper lanterns, a few blank neon tubes, filling only the lower half, the rooftops running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border, no letters"
       }
     }
   }

@@ -238,7 +238,10 @@ assembler (OP-234) builds screens from the published files, whose format is this
   `art:finish layer <key>`: a sky as painted, a far or middle layer keyed out of its magenta, each
   healed to repeat sideways (its left and right edges continue into each other, the sideways seam
   ratio in the post record) so the assembler can run one along any number of screens at the tree's
-  rates (sky 0.5, far about 0.6, middle 0.75). No `@2x`.
+  rates (sky 0.5, far about 0.6, middle 0.75). No `@2x`. When the model paints a keyed layer as a
+  panel inside a border of the key colour, `--trim-key` cuts the border away first (with
+  `--trust-key` when the panel fills the frame); the wording that stops it doing so says the open
+  half is "left as flat solid magenta with nothing painted on it, no sky, no frame or border".
 - **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
   clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
   it is published; nothing from the kit is published without that.
