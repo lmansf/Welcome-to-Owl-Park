@@ -531,6 +531,8 @@ def kit_sheet(key: str) -> tuple[dict, str]:
         for area, sheets in kit.get("courses", {}).items():
             if name.startswith(area + "-") and name[len(area) + 1:] in sheets:
                 return sheets[name[len(area) + 1:]], f"kit-{area}-"
+        if name.startswith("cut-") and name[len("cut-"):] in kit.get("recut", {}).get("sheets", {}):
+            return kit["recut"]["sheets"][name[len("cut-"):]], "kit-cut-"
         if name.startswith("landmark-") and name[len("landmark-"):] in kit.get("landmarks", {}):
             # a landmark is one prop on its own square canvas: a one-piece sheet
             piece = kit["landmarks"][name[len("landmark-"):]]
@@ -754,6 +756,82 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
         done += 1
     rvp = write_review(ctx, f"{key}.png", review)
     note(f"sheet {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A recut run image (OP-251): three continuous runs of one material stacked on the key colour.
+    Each run is found as a wide blob, scaled so its height is twice its row's logical height, and
+    cut into a left cap, a right cap and middle pieces of the recut's lengths taken from different
+    stretches of the run (so no two are the same copy), each shipped as kit-cut-<row>-<part> at 1x
+    and 2x with the alpha exact."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    kit = kit_table()
+    material = key.removeprefix("kit-sheet-cut-run-")
+    recut = kit.get("recut", {})
+    if not key.startswith("kit-sheet-cut-run-") or material not in recut.get("runs", {}):
+        raise ArtError(f"{key!r} is not a run key (kit-sheet-cut-run-<material> in config/kit.json)")
+    run = recut["runs"][material]
+    lengths, cap = [int(v) for v in recut.get("lengths", [320, 480, 640])], int(recut.get("cap", 160))
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    if a.clear_haze:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
+        note(f"{key}: clear-haze {n} px")
+    alpha = np.asarray(rgba.getchannel("A"))
+    blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
+    n = len(run["rows"])
+    if len(blobs) < n:
+        raise ArtError(f"{key}: {len(blobs)} run(s) found, not {n}; the image painted fewer runs or two touch; pick another candidate")
+    ordered = sorted(blobs[:n], key=lambda b: b["cy"])
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    only = set(a.only.split(",")) if a.only else None
+    done = 0
+    scale = 4
+    for i, (row, blob) in enumerate(zip(run["rows"], ordered)):
+        x0, y0, x1, y1 = blob["bbox"]
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        own = np.kron(blob["mask"], np.ones((scale, scale), dtype=bool))[:alpha.shape[0], :alpha.shape[1]]
+        crop = rgba.crop((x0, y0, x1, y1))
+        ca = np.asarray(crop.getchannel("A")).astype(np.uint8) * own[y0:y1, x0:x1]
+        crop.putalpha(Image.fromarray(ca, "L"))
+        # the run at 2x: its height is twice the row's logical height
+        H2 = 2 * int(row["h"])
+        k = H2 / crop.height
+        run2 = crop.resize((max(1, int(round(crop.width * k))), H2), Image.Resampling.LANCZOS)
+        parts: list[tuple[str, int, int]] = [("cap-left", 0, 2 * cap), ("cap-right", run2.width - 2 * cap, run2.width)]
+        inner0, inner1 = 2 * cap, run2.width - 2 * cap
+        span = inner1 - inner0
+        for j, L in enumerate(lengths):
+            w2 = 2 * L
+            if w2 > span:
+                raise ArtError(f"{key}: the {row['name']} run is too short for a {L} px middle piece (inner span {span // 2} px at 1x); pick a candidate painted wider")
+            # each length from a different stretch: spread the starts across the inner span
+            start = inner0 + int(round((span - w2) * (j / max(1, len(lengths) - 1))))
+            parts.append((f"mid-{L}", start, start + w2))
+        for part, px0, px1 in parts:
+            pkey = f"kit-cut-{row['name']}-{part}"
+            if only and pkey not in only and part not in only:
+                continue
+            W, Hl = logical_size(pkey, ctx.assets)
+            two = run2.crop((px0, 0, px1, H2))
+            if two.size != (2 * W, 2 * Hl):
+                two = two.resize((2 * W, 2 * Hl), Image.Resampling.LANCZOS)
+            one = downsample(two, W, Hl)
+            outputs, lines = finish_cutout_webp(ctx, pkey, one, two)
+            tools = [f"runs: {key} run {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''} part={part} span2x={px0}-{px1} of {run2.width}", *lines]
+            save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                          "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "run": {"key": key, "row": i + 1, "bbox": [x0, y0, x1, y1], "part": part, "span2x": [px0, px1]}})
+            sx = x0 + px0 / k; ex = x0 + px1 / k
+            drw.rectangle((sx, y0, ex - 1, y1 - 1), outline=(255, 220, 0), width=2)
+            drw.text((sx + 4, max(0, y0 - 14)), part, fill=(255, 255, 255))
+            note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes ({part} of run {i + 1})")
+            done += 1
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"runs {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
     return 0
 
 
@@ -1759,6 +1837,16 @@ def cmd_target(ctx: Ctx, a: argparse.Namespace) -> int:
     W, H = 1600, 900
     if img.size != (W, H):
         img = resize_exact(img, W, H, a.crop, 0)
+    if a.ref:
+        # the kept target as a reference for kit-guided jobs: 1280 x 720, a PNG under the inline reference limit
+        kept = TARGETS_DIR / f"{key}.png"
+        if not kept.exists():
+            raise ArtError(f"{key}: no kept target at {rel_to_repo(kept)} (run `art:finish target {key}` first)")
+        guide = ctx.work / "guides" / f"{key}-ref.png"
+        guide.parent.mkdir(parents=True, exist_ok=True)
+        n = pngmeta.save(Image.open(kept).convert("RGB").resize((1280, 720), Image.Resampling.LANCZOS), guide)
+        note(f"target {key}: reference {rel_to_repo(guide)} ({n} bytes)")
+        return 0
     if a.guide:
         # the round before as the next round's reference: 1280 x 720, a PNG under the inline reference limit
         guide = ctx.work / "guides" / f"{key}-round.png"
@@ -2291,12 +2379,24 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(sp)
     sp.set_defaults(fn=cmd_publish)
 
+    sp = sub.add_parser("runs", help="kit recut run image -> caps and middle pieces of three lengths per run (OP-251)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated parts (cap-left, mid-480) or piece keys to cut; default all")
+    sp.add_argument("--grow", type=int, default=3, help="how far (in quarter-size pixels) a run's parts may be apart and still count as one run")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze transparent before the cut")
+    sp.add_argument("--min-blob", type=int, default=400, help="px below which a blob is not a run")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_runs)
+
     sp = sub.add_parser("target", help="keep an approved art target as reference art under tools/art/targets/ with provenance (OP-249)")
     sp.add_argument("key")
     sp.add_argument("--raw", default=None)
     sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
     sp.add_argument("--targets-dir", default=None, help=argparse.SUPPRESS)
     sp.add_argument("--guide", action="store_true", help="write the selected candidate as work/art/guides/<key>-round.png, the next round's reference, instead of keeping it")
+    sp.add_argument("--ref", action="store_true", help="write the kept target as work/art/guides/<key>-ref.png, the reference kit-guided jobs carry, instead of keeping it")
     add_common(sp)
     sp.set_defaults(fn=cmd_target)
 

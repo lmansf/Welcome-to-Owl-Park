@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "about": "The art kit (OP-229): seamless textures and keyed shape sheets the level assembler (OP-234) builds screens from. Texture keys are kit-tex-<name>, 512 x 512, tileable. A sheet key is kit-sheet-<name>: one 2048 x 1152 painting on the key colour, six props in a grid of three across and two down, cut by `art:finish pieces` into the pieces listed here in reading order, each shipped as kit-<piece> at its logical size (w x h, 1x and 2x) with its alpha. tools/art/README.md describes the format. An area set is kit.areas.<area>: its accent textures (kit-tex-<area>-<name>), its prop sheets (kit-sheet-<area>-<name>, cut to kit-<area>-<piece>) and its seven backdrop layers (kit-<area>-sky-a|b 1600 x 900 opaque, kit-<area>-far-a|b 1600 x 900 keyed, kit-<area>-mid-a|b|c 800 x 450 keyed), every one repeating sideways so the assembler can run it along any screen. Course props are kit.courses.<area>.<sheet>: extra six-prop sheets for a course, keyed and cut like the area's own (kit-sheet-<area>-<name> to kit-<area>-<piece>). Landmarks are kit.landmarks.<name>: one prop each on its own 1024 x 1024 key-colour canvas (kit-sheet-landmark-<name>), cut by art:finish pieces to kit-landmark-<name>.",
+  "about": "The art kit (OP-229): seamless textures and keyed shape sheets the level assembler (OP-234) builds screens from. Texture keys are kit-tex-<name>, 512 x 512, tileable. A sheet key is kit-sheet-<name>: one 2048 x 1152 painting on the key colour, six props in a grid of three across and two down, cut by `art:finish pieces` into the pieces listed here in reading order, each shipped as kit-<piece> at its logical size (w x h, 1x and 2x) with its alpha. tools/art/README.md describes the format. An area set is kit.areas.<area>: its accent textures (kit-tex-<area>-<name>), its prop sheets (kit-sheet-<area>-<name>, cut to kit-<area>-<piece>) and its seven backdrop layers (kit-<area>-sky-a|b 1600 x 900 opaque, kit-<area>-far-a|b 1600 x 900 keyed, kit-<area>-mid-a|b|c 800 x 450 keyed), every one repeating sideways so the assembler can run it along any screen. Course props are kit.courses.<area>.<sheet>: extra six-prop sheets for a course, keyed and cut like the area's own (kit-sheet-<area>-<name> to kit-<area>-<piece>). Landmarks are kit.landmarks.<name>: one prop each on its own 1024 x 1024 key-colour canvas (kit-sheet-landmark-<name>), cut by art:finish pieces to kit-landmark-<name>. The recut (kit.recut) is described in its own about.",
   "palette": "bark #2B1C12 to #4A3322, inner wood #5C4632 to #8F8068, moss #3E5A3A and #6E8B4E, leaf #4F7A3E and #8DAE5A, lantern gold #C9A227 and #FFD36A, cream #F6F1E3, navy #0C1E36 to #07122A, dusk blue #2E4C7A, sky blue #6F9BC8",
   "texture_size": 512,
   "textures": {
@@ -2722,6 +2722,315 @@
       "w": 400,
       "h": 400,
       "desc": "a small open pavilion of dark wood with a tiled upturned roof on four posts, a paper lantern inside, seen from the side"
+    }
+  },
+  "recut": {
+    "about": "The recut (OP-251): pieces painted from the approved targets so their light, colour and edges match. A run (kit.recut.runs.<material>) is one 2720 x 1530 image of three continuous horizontal runs of the material stacked on the key colour, each starting and ending with its proper end, from which art:finish runs cuts a left cap, a right cap and middle pieces of three lengths (kit-cut-<row>-cap-left, -cap-right, -mid-320, -mid-480, -mid-640, each at the row's logical height). A sheet (kit.recut.sheets.<name>) is a six-prop sheet cut like the kit's (kit-sheet-cut-<name> to kit-cut-<piece>). Every job carries its target as a reference.",
+    "light": "the park's one light: a full moon in the upper right, cool cream rim light along every upper-right edge, shadows falling down and to the left, warm lantern gold only close around a lantern",
+    "lengths": [
+      320,
+      480,
+      640
+    ],
+    "cap": 160,
+    "runs": {
+      "plank": {
+        "ref": "target-l4",
+        "rows": [
+          {
+            "name": "plank",
+            "h": 120,
+            "desc": "a level walkway of worn planks laid end to end on two round beams, moss in the joints, a plain closed left end and a plain closed right end, its top flat and clear"
+          },
+          {
+            "name": "plank-thin",
+            "h": 60,
+            "desc": "a thin level walkway of planks half as deep, one beam, a plain closed left end and right end"
+          },
+          {
+            "name": "plank-rail",
+            "h": 200,
+            "desc": "the same plank walkway with a rope rail on dark posts along its back edge, the rail running the whole way, a plain closed left end and right end"
+          }
+        ]
+      },
+      "branch": {
+        "ref": "target-l4",
+        "rows": [
+          {
+            "name": "branch",
+            "h": 120,
+            "desc": "a level bough of bark with moss on its top, running straight, a rounded cut end at the left and a rounded cut end at the right, its top flat and clear"
+          },
+          {
+            "name": "branch-thin",
+            "h": 60,
+            "desc": "a thin straight bough of bark half as thick, a rounded end at each side"
+          },
+          {
+            "name": "branch-mossy",
+            "h": 120,
+            "desc": "a level bough of bark heavy with moss and a few small leaves along its top, a rounded end at each side"
+          }
+        ]
+      },
+      "stone": {
+        "ref": "target-plaza",
+        "rows": [
+          {
+            "name": "stone",
+            "h": 120,
+            "desc": "a level ledge of pale fitted stone blocks with a carved edge along its top, a squared end at the left and at the right, its top flat and clear"
+          },
+          {
+            "name": "stone-thin",
+            "h": 60,
+            "desc": "a thin level ledge of pale stone half as deep, a squared end at each side"
+          },
+          {
+            "name": "stone-mossy",
+            "h": 120,
+            "desc": "a level ledge of pale fitted stone with moss in the joints and a little grass along its top, a squared end at each side"
+          }
+        ]
+      },
+      "earth": {
+        "ref": "target-clearing",
+        "rows": [
+          {
+            "name": "earth",
+            "h": 120,
+            "desc": "a level bank of soft earth with ferns and grass along its top and roots showing at its face, a rounded end at the left and at the right, its top flat and clear"
+          },
+          {
+            "name": "earth-thin",
+            "h": 60,
+            "desc": "a thin level bank of earth half as deep with grass along its top, a rounded end at each side"
+          },
+          {
+            "name": "earth-path",
+            "h": 120,
+            "desc": "a level bank of earth with a worn path of packed earth along its top between tufts of grass, a rounded end at each side"
+          }
+        ]
+      }
+    },
+    "sheets": {
+      "plank-joins": {
+        "ref": "target-l4",
+        "w": 320,
+        "h": 120,
+        "pieces": [
+          {
+            "name": "plank-corner-in",
+            "w": 160,
+            "h": 160,
+            "desc": "an inner corner of plank walkway where a level run meets a run going up at a right angle, seen from the side"
+          },
+          {
+            "name": "plank-corner-out",
+            "w": 160,
+            "h": 160,
+            "desc": "an outer corner where a plank walkway turns down at a right angle at its end, seen from the side"
+          },
+          {
+            "name": "plank-to-earth",
+            "w": 320,
+            "h": 120,
+            "desc": "a level join where a plank walkway on the left ends against a bank of soft earth with grass on the right, their tops level"
+          },
+          {
+            "name": "plank-to-stone",
+            "w": 320,
+            "h": 120,
+            "desc": "a level join where a plank walkway on the left ends against a ledge of pale fitted stone on the right, their tops level"
+          },
+          {
+            "name": "plank-slope-join-up",
+            "w": 320,
+            "h": 200,
+            "desc": "a plank walkway that turns from level on the left into a gentle slope rising to the right"
+          },
+          {
+            "name": "plank-slope-join-down",
+            "w": 320,
+            "h": 200,
+            "desc": "a plank walkway that turns from level on the left into a gentle slope falling to the right"
+          }
+        ]
+      },
+      "branch-joins": {
+        "ref": "target-l4",
+        "w": 320,
+        "h": 120,
+        "pieces": [
+          {
+            "name": "branch-corner-in",
+            "w": 160,
+            "h": 160,
+            "desc": "an inner corner where a level bough meets a bough rising at a right angle, bark and moss, seen from the side"
+          },
+          {
+            "name": "branch-corner-out",
+            "w": 160,
+            "h": 160,
+            "desc": "an outer corner where a level bough bends down at its end, bark and moss"
+          },
+          {
+            "name": "branch-to-plank",
+            "w": 320,
+            "h": 120,
+            "desc": "a level join where a mossy bough on the left meets a plank walkway on the right, their tops level"
+          },
+          {
+            "name": "branch-to-earth",
+            "w": 320,
+            "h": 120,
+            "desc": "a level join where a mossy bough on the left meets a bank of soft earth on the right, their tops level"
+          },
+          {
+            "name": "branch-slope-join-up",
+            "w": 320,
+            "h": 200,
+            "desc": "a bough that turns from level on the left into a gentle rise to the right"
+          },
+          {
+            "name": "branch-slope-join-down",
+            "w": 320,
+            "h": 200,
+            "desc": "a bough that turns from level on the left into a gentle fall to the right"
+          }
+        ]
+      },
+      "stone-earth-joins": {
+        "ref": "target-plaza",
+        "w": 320,
+        "h": 120,
+        "pieces": [
+          {
+            "name": "stone-corner-in",
+            "w": 160,
+            "h": 160,
+            "desc": "an inner corner where a level ledge of pale fitted stone meets a stone wall rising at a right angle"
+          },
+          {
+            "name": "stone-corner-out",
+            "w": 160,
+            "h": 160,
+            "desc": "an outer corner where a pale stone ledge ends and drops at a right angle, its carved edge turning the corner"
+          },
+          {
+            "name": "stone-to-earth",
+            "w": 320,
+            "h": 120,
+            "desc": "a level join where a pale stone ledge on the left ends against a bank of earth with grass on the right, their tops level"
+          },
+          {
+            "name": "earth-corner-in",
+            "w": 160,
+            "h": 160,
+            "desc": "an inner corner where a level bank of earth meets a bank rising at a right angle, roots in the face"
+          },
+          {
+            "name": "earth-corner-out",
+            "w": 160,
+            "h": 160,
+            "desc": "an outer corner where a bank of earth with grass on top ends and drops at a right angle"
+          },
+          {
+            "name": "earth-slope-join",
+            "w": 320,
+            "h": 200,
+            "desc": "a bank of earth that turns from level on the left into a gentle rise to the right, grass on top"
+          }
+        ]
+      },
+      "trunk-a": {
+        "ref": "target-l4",
+        "w": 240,
+        "h": 400,
+        "pieces": [
+          {
+            "name": "trunk-edge-left",
+            "w": 160,
+            "h": 400,
+            "desc": "the left edge of a great tree trunk: bark running straight up with its rounded left silhouette against the air and lichen on it, cut straight at the top and bottom so it repeats upward"
+          },
+          {
+            "name": "trunk-edge-right",
+            "w": 160,
+            "h": 400,
+            "desc": "the right edge of a great tree trunk: bark running straight up with its rounded right silhouette lit by a cream rim light, cut straight at the top and bottom so it repeats upward"
+          },
+          {
+            "name": "trunk-mid",
+            "w": 320,
+            "h": 400,
+            "desc": "a column of the trunk's bark between its edges, running straight up, cut straight at the top and bottom and at both sides so it repeats"
+          },
+          {
+            "name": "trunk-taper",
+            "w": 320,
+            "h": 320,
+            "desc": "the top of a great trunk narrowing as it rises, its bark edges leaning in on both sides, cut straight at the bottom"
+          },
+          {
+            "name": "trunk-flare",
+            "w": 400,
+            "h": 240,
+            "desc": "the base of a great trunk widening into roots at the ground, its bark edges flaring out on both sides, cut straight at the top"
+          },
+          {
+            "name": "trunk-knothole-frame",
+            "w": 240,
+            "h": 320,
+            "desc": "a tall knothole opening in bark with a rounded rim of thick bark around it and darkness inside, standing on its own"
+          }
+        ]
+      },
+      "trunk-b": {
+        "ref": "target-l4",
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "bough-edge-left",
+            "w": 240,
+            "h": 160,
+            "desc": "the left end of a thick bough leaving a trunk: bark widening to the left where it meets the trunk, cut straight at the right"
+          },
+          {
+            "name": "bough-edge-right",
+            "w": 240,
+            "h": 160,
+            "desc": "the right end of a thick bough: bark rounding off to a blunt end on the right, cut straight at the left"
+          },
+          {
+            "name": "bough-mid",
+            "w": 320,
+            "h": 160,
+            "desc": "a length of thick bough bark running level with moss on its top, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "bough-taper",
+            "w": 320,
+            "h": 160,
+            "desc": "a bough narrowing as it runs to the right, from thick at the left to thin at the right, cut straight at the left"
+          },
+          {
+            "name": "bough-flare",
+            "w": 320,
+            "h": 200,
+            "desc": "a bough thickening as it runs to the left into the trunk, its bark flaring at the left, cut straight at the right"
+          },
+          {
+            "name": "bough-fork",
+            "w": 320,
+            "h": 240,
+            "desc": "a bough forking into two thinner boughs, bark and moss, cut straight at the left where it joins"
+          }
+        ]
+      }
     }
   }
 }

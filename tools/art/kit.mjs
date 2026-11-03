@@ -124,6 +124,51 @@ export function landmarkJobs(seedBase = LANDMARK_SEED) {
   }));
 }
 
+/** The recut (OP-251): run images and join sheets painted from the approved targets as references. */
+export const KIT_RECUT = KIT.recut ?? { runs: {}, sheets: {}, lengths: [320, 480, 640], cap: 160 };
+export const RUN_SIZE = '2720x1530';
+export const KIT_RECUT_RUN_KEYS = [];
+export const KIT_RECUT_SHEET_KEYS = [];
+export const KIT_RECUT_PROMPTS = {};
+export const KIT_RECUT_REFS = {};
+export const KIT_RECUT_PIECES = [];
+const recutRef = (target) => ({ ref: `@guide:${target}-ref`, role: 'the approved target screen: paint in its light, colour, brush and scale', optional: false });
+for (const [material, run] of Object.entries(KIT_RECUT.runs ?? {})) {
+  const key = `kit-sheet-cut-run-${material}`;
+  const rows = run.rows.map((r, i) => `${i + 1}) ${r.desc}`);
+  KIT_RECUT_RUN_KEYS.push(key);
+  KIT_RECUT_REFS[key] = [recutRef(run.ref)];
+  KIT_RECUT_PROMPTS[key] = `Three separate, continuous horizontal runs of game platform art stacked one above another on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, each run one long unbroken piece from near the left edge to near the right edge of the frame with clear flat magenta above and below it and between the runs, the runs not touching each other or the frame. From the top down: ${rows.join('; ')}. Every run is seen straight from the side as in a side-scrolling platform game, its top edge level and straight along its whole length, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta. ${KIT_RECUT.light}. ${KIT_STYLE}`;
+  for (const r of run.rows) {
+    for (const part of ['cap-left', 'cap-right', ...KIT_RECUT.lengths.map((l) => `mid-${l}`)]) {
+      const w = part.startsWith('mid-') ? Number(part.slice(4)) : KIT_RECUT.cap;
+      KIT_RECUT_PIECES.push({ key: `kit-cut-${r.name}-${part}`, sheet: key, row: r.name, part, w, h: r.h });
+    }
+  }
+}
+for (const [name, sheet] of Object.entries(KIT_RECUT.sheets ?? {})) {
+  const key = `kit-sheet-cut-${name}`;
+  KIT_RECUT_SHEET_KEYS.push(key);
+  KIT_RECUT_REFS[key] = [recutRef(sheet.ref)];
+  KIT_RECUT_PROMPTS[key] = areaSheetPrompt({ light: KIT_RECUT.light }, sheet);
+  sheet.pieces.forEach((p, i) => KIT_RECUT_PIECES.push({ key: `kit-cut-${p.name}`, sheet: key, cell: i, w: p.w ?? sheet.w, h: p.h ?? sheet.h }));
+}
+export const RECUT_SEED = 9900;
+
+export function recutJobs(seedBase = RECUT_SEED) {
+  const runs = KIT_RECUT_RUN_KEYS.map((key, i) => ({
+    key, kind: 'sheet', realm: 'kit', size: RUN_SIZE, seed: seedBase + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR,
+    derives: KIT_RECUT_PIECES.filter((p) => p.sheet === key).map((p) => p.key), refs: KIT_RECUT_REFS[key],
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_RECUT_PROMPTS[key],
+  }));
+  const sheets = KIT_RECUT_SHEET_KEYS.map((key, i) => ({
+    key, kind: 'sheet', realm: 'kit', size: SHEET_SIZE, seed: seedBase + 100 + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR,
+    derives: KIT_RECUT_PIECES.filter((p) => p.sheet === key).map((p) => p.key), refs: KIT_RECUT_REFS[key],
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_RECUT_PROMPTS[key],
+  }));
+  return [...runs, ...sheets];
+}
+
 /** The jobs of one area set (about 49 images at four variants a sheet and layer, three a texture). */
 export function areaJobs(areaName, seedBase) {
   const area = KIT_AREAS[areaName];
@@ -158,5 +203,5 @@ export function kitJobs(seedBase = 7000) {
     providers: { fal: { output_format: 'png' } }, prompt: KIT_SHEET_PROMPTS[key],
   }));
   const areas = Object.keys(KIT_AREAS).flatMap((a) => areaJobs(a, AREA_SEEDS[a] ?? seedBase + 400));
-  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs()];
+  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs(), ...recutJobs()];
 }
