@@ -14,6 +14,7 @@ import { createDecorateSheet, type DecorateActions, type DecorateSheet, type Dec
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createFeedbackBug } from './feedbackBug';
+import { createTreeMinimap } from './treeMinimap';
 import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
@@ -202,6 +203,12 @@ export interface Hud {
    * between two tree rooms; the next room says again, and the home screen never shows it.
    */
   setSideways(on: boolean): void;
+  /**
+   * The tree's minimap (OP-213, a computer's screen only): the owl in room `room` at `x` (room px),
+   * every frame in a room of the tree; null out of it, which hides the map. It hides too while the
+   * Menu or another panel is open.
+   */
+  setTreeSpot(spot: { room: string; x: number } | null): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
   setActions(actions: HudAction[]): void;
   onAction(cb: (id: string) => void): void;
@@ -452,6 +459,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const bar = $<HTMLElement>('.bar');
   const cards = createActivityCards(root, bar);
   const stick = createJoystick($<HTMLElement>('.bottom'));
+  const treeMap = createTreeMinimap(root);
   let questUi: QuestUi | null = null;
   let questState: QuestState | null = null;
   let taskState: TaskState | null = null;
@@ -1055,6 +1063,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setSideways(on) {
       turnPhone.set(on);
+    },
+    setTreeSpot(spot) {
+      treeMap.set(spot, spot !== null && isBlocking());
     },
     setActions(list) {
       const key = list.map((a) => `${a.id}:${a.label}`).join('|');

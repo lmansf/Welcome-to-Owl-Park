@@ -6,7 +6,7 @@ import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
-import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -143,10 +143,45 @@ describe("the tree's ways into today's park (OP-162)", () => {
     expect(arch.rect.x - back.x).toBeLessThan(120);
   });
 
+  it('every doorway lands in a room that leads straight back to where the owl came from, on both maps (OP-217)', () => {
+    // A doorway that lands an owl somewhere with no way back to where it was reads as a teleport: the
+    // market's arcade door once dropped an owl walking the tree into level 0's cave, whose only way
+    // out is level 0's cavern. Walked from each map's start (the hub; the tree's arrival on level 5).
+    const starts: Record<1 | 2, string> = { 1: 'hub', 2: TREE_ARRIVAL.room };
+    for (const map of [1, 2] as const) {
+      const seen = new Set<string>([starts[map]]);
+      const queue = [starts[map]];
+      while (queue.length) {
+        const room = ROOMS[queue.shift()!]!;
+        for (const door of room.doors) {
+          const to = doorTarget(door, map);
+          if (!to) continue;
+          const there = ROOMS[to.room];
+          expect(there, `map ${map}: ${room.id} ${door.id} leads to a room that exists`).toBeDefined();
+          expect(there!.spawns[to.spawn], `map ${map}: ${room.id} ${door.id} lands at a spawn of ${to.room}`).toBeDefined();
+          const back = there!.doors.some((d) => doorTarget(d, map)?.room === room.id);
+          expect(back, `map ${map}: ${room.id} ${door.id} lands in ${to.room}, which has a way back to ${room.id}`).toBe(true);
+          if (!seen.has(to.room)) {
+            seen.add(to.room);
+            queue.push(to.room);
+          }
+        }
+      }
+      // The tree's own walk reaches every level and the cave, and none of today's park's streets.
+      if (map === 2) {
+        for (const id of ['l0', 'l0-arcade', 'l1', 'l2', 'l3', 'l4', 'l5', 'l5-street']) expect(seen.has(id), id).toBe(true);
+        for (const id of ['hub', 'lobby', STREET_ROOM, 'arcade']) expect(seen.has(id), id).toBe(false);
+      }
+    }
+  });
+
   it("the realms the tree opens into are the market and the rooms it leads to, never today's park's own streets", () => {
-    // Not today's arcade: for an owl of the tree the market's arcade door leads down to level 0's cave (OP-163).
+    // Not today's arcade, and not the cave either: for an owl of the tree the market's arcade door is
+    // shut (OP-217), since the cave is on level 0 and the door would drop the owl a level down.
     expect([...TREE_REALMS].sort()).toEqual(['glass', 'market']);
-    expect(doorTarget(ROOMS['market']!.doors.find((d) => d.id === 'to-arcade')!, 2)).toEqual({ room: 'l0-arcade', spawn: 'from-market' });
+    const arcadeDoor = ROOMS['market']!.doors.find((d) => d.id === 'to-arcade')!;
+    expect(doorTarget(arcadeDoor, 2)).toBeUndefined();
+    expect(doorTarget(arcadeDoor, 1)).toEqual({ room: 'arcade', spawn: 'from-market' });
     for (const id of ['hub', 'lobby', STREET_ROOM]) expect(TREE_REALMS.has(id), id).toBe(false);
   });
 
@@ -843,7 +878,7 @@ describe('the tree (map 2)', () => {
     }
     // The stairwell to OP-115's first lock is closed.
     expect(l0.doors.find((d) => d.id === 'stair-challenge')!.closedSign).toBe('Not Yet Fledged');
-    for (const [room, spawn] of [[l0, 'from-l1'], [l0, 'from-arcade'], [cave, 'from-l0'], [cave, 'from-market'], [l1, 'from-l0']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
+    for (const [room, spawn] of [[l0, 'from-l1'], [l0, 'from-arcade'], [cave, 'from-l0'], [l1, 'from-l0']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
   it('fades the edges of the layers that do not meet their neighbours edge to edge (OP-162)', () => {

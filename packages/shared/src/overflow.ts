@@ -45,22 +45,46 @@ export const RIBBON_MAX_CHARS = 90;
 /**
  * Closed for setup (OP-205): the keepers shut the whole park for a while, to set something up, and open
  * it again with the same switch. While it is on, every owl in a room is sent to the home screen with
- * its words, and Play brings no one back in; an owl on a keeper's token still walks in, to check the
- * park before it opens. No deploy needed, and nothing is lost: owls come back where they would anyway.
+ * its words, and the home screen shows no Play until it opens again (OP-233: it reads the switch from
+ * GET /api/closed); an owl on a keeper's token still walks in, to check the park before it opens. No deploy needed, and nothing is lost: owls come back where they would anyway.
  */
 export interface SetupSettings {
   on: boolean;
   /** The keepers' own words for the closed card; null shows SETUP_WORDS. */
   words: string | null;
+  /**
+   * When the keepers expect to open again (OP-233), in milliseconds since 1970: the closed card shows it
+   * in the visitor's own time zone. Null gives no time. Opening the park clears it, so the next closing
+   * starts with none.
+   */
+  reopenAt: number | null;
 }
 
-export const SETUP_DEFAULTS: SetupSettings = { on: false, words: null };
+export const SETUP_DEFAULTS: SetupSettings = { on: false, words: null, reopenAt: null };
+/** The last reopen time the keepers may give (the start of 2100): a mistyped year is refused, not shown. */
+export const REOPEN_AT_MAX = Date.UTC(2100, 0, 1);
+
+/** A reopen time the setup switch keeps: a whole number of milliseconds after 1970 and before REOPEN_AT_MAX. */
+const isReopenTime = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v < REOPEN_AT_MAX;
 /** The closed card's words unless the keepers write their own (for the owner's approval). */
 export const SETUP_WORDS = 'Owl Park is closed for a little while to set up something new. Come back soon!';
 
-/** The setup switch's settings with the given changes (words as the ribbon's: one plain line), or null when out of bounds. */
+/**
+ * The setup switch's settings with the given changes (words as the ribbon's: one plain line; a reopen
+ * time, or null to clear it), or null when out of bounds. Opened again with no reopen time given, the
+ * old one goes: it has done its job.
+ */
 export function withSetupChanges(base: SetupSettings, v: unknown): SetupSettings | null {
-  return withRibbonChanges(base, v);
+  const next = withRibbonChanges(base, v);
+  if (!next) return null;
+  const given = (v as Record<string, unknown>)['reopenAt'];
+  let reopenAt = base.reopenAt ?? null;
+  if (given === null) reopenAt = null;
+  else if (given !== undefined) {
+    if (!isReopenTime(given)) return null;
+    reopenAt = given;
+  } else if (base.on && !next.on) reopenAt = null;
+  return { on: next.on, words: next.words, reopenAt };
 }
 
 /** A setup value as it arrived (a notice, a stored copy): its shape kept, anything else off. */
@@ -68,12 +92,43 @@ export function cleanSetup(v: unknown): SetupSettings {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return SETUP_DEFAULTS;
   const o = v as Record<string, unknown>;
   const words = typeof o['words'] === 'string' && o['words'] ? o['words'].slice(0, RIBBON_MAX_CHARS) : null;
-  return { on: o['on'] === true, words };
+  return { on: o['on'] === true, words, reopenAt: isReopenTime(o['reopenAt']) ? o['reopenAt'] : null };
 }
 
 /** What the closed card says while the park is closed for setup. */
 export function setupWords(s: SetupSettings): string {
   return s.words ?? SETUP_WORDS;
+}
+
+/**
+ * What anyone may read of the setup switch (GET /api/closed, OP-233), for the home screen: whether the
+ * park is closed, the closed card's words, and when the keepers expect to open (null when they gave no
+ * time, or the time has passed). Nothing else of the keepers' settings.
+ */
+export interface ClosedView {
+  closed: boolean;
+  words: string | null;
+  reopenAt: number | null;
+}
+
+/** The park open: no words, no time. */
+export const OPEN_VIEW: ClosedView = { closed: false, words: null, reopenAt: null };
+
+/** The setup switch as anyone may read it at `now` (absent: open, as deployed). */
+export function closedView(s: SetupSettings | undefined, now: number): ClosedView {
+  if (!s?.on) return OPEN_VIEW;
+  const at = s.reopenAt ?? null;
+  return { closed: true, words: setupWords(s), reopenAt: at !== null && at > now ? at : null };
+}
+
+/** A closed view as the page received it; null when it is not one (the page keeps what it last knew). */
+export function readClosedView(v: unknown): ClosedView | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o['closed'] !== 'boolean') return null;
+  if (!o['closed']) return OPEN_VIEW;
+  const words = typeof o['words'] === 'string' && o['words'].trim() ? o['words'].slice(0, RIBBON_MAX_CHARS) : SETUP_WORDS;
+  return { closed: true, words, reopenAt: isReopenTime(o['reopenAt']) ? o['reopenAt'] : null };
 }
 
 /** A copy of a room beside the room itself (copy 1): taking new owls, or draining (no new owls, then closed). */

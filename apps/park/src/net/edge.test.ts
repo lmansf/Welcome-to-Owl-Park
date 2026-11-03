@@ -90,6 +90,37 @@ function listening(): RoomHandlers & { statuses: string[] } {
   };
 }
 
+describe('whether the park is closed, as the home screen asks (OP-233)', () => {
+  const answering = (answer: () => Response | Promise<Response>) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        asked.push(new URL(url).pathname);
+        expect(init?.cache).toBeUndefined(); // the browser may keep it as long as the Worker says
+        return answer();
+      }),
+    );
+
+  it('reads the park’s answer, open or closed with its words and time', async () => {
+    const park = new EdgeTransport('https://park.example/');
+    answering(() => Response.json({ closed: true, words: 'Back soon', reopenAt: Date.UTC(2026, 10, 3) }));
+    expect(await park.closed()).toEqual({ closed: true, words: 'Back soon', reopenAt: Date.UTC(2026, 10, 3) });
+    answering(() => Response.json({ closed: false, words: null, reopenAt: null }));
+    expect(await park.closed()).toEqual({ closed: false, words: null, reopenAt: null });
+    expect(asked).toEqual(['/api/closed', '/api/closed']);
+  });
+
+  it('is no answer when the park is out of reach, says too many, or sends something else', async () => {
+    const park = new EdgeTransport('https://park.example');
+    answering(() => Response.json({ error: 'too-many' }, { status: 429 }));
+    expect(await park.closed()).toBeNull();
+    answering(() => Promise.reject(new TypeError('offline')));
+    expect(await park.closed()).toBeNull();
+    answering(() => new Response('<html>', { status: 200 }));
+    expect(await park.closed()).toBeNull();
+  });
+});
+
 describe('closed for setup on the page (OP-205)', () => {
   it('goes home with the closed card’s words on the setup code, and does not reconnect', async () => {
     const park = new EdgeTransport('https://park.example');

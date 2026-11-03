@@ -170,6 +170,13 @@ export interface DoorDef {
    */
   toTree?: { room: string; spawn: string };
   /**
+   * Shut to an owl walking the tree (map 2): the doorway leads nowhere there, though today's park
+   * (map 1) still takes it. The market's arcade door is one: the tree's arcade is the cave on level 0,
+   * reached by the lobby's stair down, so the market's door would drop a tree owl into another level
+   * (OP-217).
+   */
+  closedInTree?: boolean;
+  /**
    * In a room seen from the side (the tree), the height over the ground line the doorway stands at:
    * an owl goes through it only standing at that height (within PERCH_SLACK), so one up on a ledge
    * over the doorway walks on past it (OP-162). Without it, height does not matter.

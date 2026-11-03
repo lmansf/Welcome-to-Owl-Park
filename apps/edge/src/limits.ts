@@ -10,8 +10,9 @@
  * too fast keeps meeting the same copy and is stopped, and a flood spread over Cloudflare's machines is
  * Cloudflare's own DDoS protection's to stop.
  *
- * The limits are set well past a busy night: a page polls the line at most every 5 s and the busy
- * ribbon every minute, so an owl makes a few dozen calls a minute at most, and a household, a school
+ * The limits are set well past a busy night: a page polls the line at most every 5 s, the busy
+ * ribbon every minute and, on the home screen, whether the park is closed every 15 s (OP-233), so an
+ * owl makes a few dozen calls a minute at most, and a household, a school
  * or a phone network shares one address. Only the store's webhooks go uncounted (signed, and retried by
  * the store). RATE_LIMITS "off" is for a load test's throwaway copy only (tools/load/throwaway-config.mjs).
  */
@@ -24,7 +25,7 @@ export interface Limit {
 export const API_LIMITS = {
   /** Every call from one address, a socket's opening included. */
   address: { limit: 600, windowMs: 60_000 },
-  /** Calls that need no pass (a page asking for its pass, the ribbon's words, the keepers' calls), by address: a classroom opening the park together shares one. */
+  /** Calls that need no pass (a page asking for its pass, the ribbon's words, the closed state, the keepers' calls), by address: a classroom opening the park together shares one. */
   public: { limit: 300, windowMs: 60_000 },
   /** Calls that need a pass and came with none the Worker takes, by address: a page with its pass never makes many. */
   refused: { limit: 60, windowMs: 60_000 },
@@ -37,14 +38,15 @@ export const API_LIMITS = {
 export type LimitName = keyof typeof API_LIMITS;
 
 /**
- * The calls that need no pass: the page's first (its pass, the ribbon's words), the health and the
+ * The calls that need no pass: the page's first (its pass, the ribbon's words, whether the park is
+ * closed for setup), the health and the
  * counts, the browser's reports, the keepers' (their key or a keeper's token instead: the ledge
  * painter's save, /api/admin/masks/<room>, among them), a tree room's ledge draft read back
  * (/api/masks/<room>, OP-156), the account links (a pass if there is one).
  */
 export function isPublicCall(pathname: string): boolean {
   return (
-    ['/api/pass', '/api/notice', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally'].includes(pathname) ||
+    ['/api/pass', '/api/notice', '/api/closed', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally'].includes(pathname) ||
     pathname.startsWith('/api/admin/') ||
     pathname.startsWith('/api/masks/') ||
     pathname.startsWith('/api/account/')

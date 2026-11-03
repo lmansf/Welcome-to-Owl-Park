@@ -137,7 +137,7 @@ import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } fr
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
 import type { SettingsStore } from '../settings';
-import type { Keys } from '../ui/keyboard';
+import { alongTheFloor, holdsUp, type Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
@@ -151,7 +151,7 @@ import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
 import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
-import { doorwaysOff, roomsAhead, takesDoorway } from './doors';
+import { doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
@@ -265,6 +265,10 @@ const TOUCH_HINT_BOTTOM = 190;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
 const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347', glass: '#9FD0FF' };
+/** The action that goes through the doorway an owl stands in, seen from the side (OP-212). */
+const GO_IN = 'Go in';
+/** The up arrow over that doorway (OP-212): its disc's radius, how far over the doorway's floor (room px, at owl scale 1) and its bob. */
+const UP_HINT = { r: 20, over: 175, bob: 5 } as const;
 /** Fresh walks the held keys may plan without a change of keys (sliding round corners), so a nook never loops. */
 const KEY_TURNS = 8;
 /** Never wait longer than this for the park day to turn (timers past ~24 days overflow). */
@@ -321,6 +325,11 @@ export class RoomScene extends Phaser.Scene {
   private keyDir: Vec2 | null = null;
   /** The walk under way came from the keys, so letting go of them stops it. */
   private keyWalk = false;
+  /** When up was last pressed (the up key or the Go in action, OP-212; 0 for not since): in a side view, through the doorway the owl stands in. */
+  private upAt = 0;
+  /** The up arrow over the doorway the owl stands in (a side view, OP-212), and which doorway it is over now. */
+  private upHint: Phaser.GameObjects.Container | null = null;
+  private upHintDoor: string | null = null;
   private keyTurns = 0;
   /** The hint chips last sent to the HUD, so an unchanged frame touches no DOM. */
   private hintsShown = '';
@@ -501,6 +510,9 @@ export class RoomScene extends Phaser.Scene {
     this.keys = (this.registry.get('keys') as Keys | undefined) ?? null;
     this.keyDir = null;
     this.keyWalk = false;
+    this.upAt = 0;
+    this.upHint = null;
+    this.upHintDoor = null;
     this.keyTurns = 0;
     this.hintsShown = '';
     this.hintsFor = { at: '', doors: null };
@@ -924,6 +936,8 @@ export class RoomScene extends Phaser.Scene {
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
+    // Where in the tree the owl is, on the computer's minimap (OP-213); none out of the tree.
+    this.hud.setTreeSpot(this.sideView() ? { room: this.room.id, x: this.me.pos.x } : null);
     if (!this.leaving) {
       this.steer();
       this.checkDoors(finished);
@@ -1266,16 +1280,25 @@ export class RoomScene extends Phaser.Scene {
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
       // A tap on a perch's top asks for the top, not the floor behind it (OP-084).
-      this.walkTo(tapGoal(this.room, { x: world.x, y: world.y }));
+      const goal = tapGoal(this.room, { x: world.x, y: world.y });
+      // A tap on the doorway the owl already stands in (a side view, OP-212) goes through, as one walked to would.
+      if (!this.walkTo(goal)) this.tapIntoDoorway(goal);
     });
+  }
+
+  /** Where the held keys or the thumbstick walk the owl: seen from the side (the tree), along the floor only, up going through doorways there (OP-212). */
+  private heldWay(): Vec2 | null {
+    const held = this.keys?.direction() ?? null;
+    return this.sideView() ? alongTheFloor(held) : held;
   }
 
   /** WASD and the arrow keys: walk while held (sliding along edges) and stop on letting go. */
   private steer(): void {
     // In the turnstiles the owl goes on through where it stands, not sideways along them (OP-124).
     if (this.passingGate) return;
-    // Decorating, the arrow keys step through the spots and the owl stays where it is.
-    const dir = this.decorating ? null : (this.keys?.direction() ?? null);
+    // Decorating, the arrow keys step through the spots and the owl stays where it is. Seen from the
+    // side (the tree), the keys walk along the floor only: up goes through doorways there (OP-212).
+    const dir = this.decorating ? null : this.heldWay();
     if (!dir) {
       if (this.keyWalk && this.me.walking) this.stop();
       this.keyDir = null;
@@ -1311,7 +1334,8 @@ export class RoomScene extends Phaser.Scene {
   private prefetchNear(now: number): void {
     if (now < this.prefetchAt) return;
     this.prefetchAt = now + 500;
-    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking())) prefetchRoomArt(this, to, this.cfg);
+    const side = this.sideView();
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking(), side)) prefetchRoomArt(this, to, this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */
@@ -1368,7 +1392,9 @@ export class RoomScene extends Phaser.Scene {
     const door = this.room.doors.find((d) => d.id === id);
     if (!this.built || this.leaving || !door) return;
     this.pendingVote = false;
-    this.walkTo({ x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 });
+    const aim = { x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 };
+    // Already standing in it (a side view, OP-212): a tap on it goes through, as one walked to would.
+    if (!this.walkTo(aim)) this.tapIntoDoorway(aim);
   }
 
   /** The Menu's ways out from here: leaving inside the park, going home anywhere but the owl's own nest. */
@@ -1608,6 +1634,89 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * W or the up arrow (OP-212): in a room seen from the side (the tree), through the doorway or up the
+   * stair the owl stands in, at its height; a doorway shut for now says why. A press a moment before
+   * the owl stands in one (landing on a stair's top) still counts (UP_GRACE_MS), and up held (the key,
+   * or the thumbstick pushed up) takes the doorway the owl walks or stands in (checkDoors). Elsewhere up
+   * walks the owl up, as the held keys do, and the press itself does nothing. `at`: when (ms since 1970).
+   *
+   * TODO-DOCS (OP-212): docs/MAP.md (the rules, and level 1 as built): in the tree a doorway or stair is
+   * taken on up (W, the up arrow, the thumbstick pushed up, or the Go in action and E), or by a tap aimed
+   * at it, never by walking into or standing in it; the keys walk only left and right there; the up arrow
+   * drawn over the doorway the owl stands in. docs/ARCHITECTURE.md's client rules: rooms seen from above
+   * keep walking in.
+   */
+  upKey(at = Date.now()): boolean {
+    if (!this.built || this.leaving || !this.sideView()) return false;
+    this.upAt = at;
+    return true;
+  }
+
+  /** Whether the room is seen from the side (the tree, map 2): its doorways open on up, not on walking into them (OP-212). */
+  private sideView(): boolean {
+    return mapOf(this.room) === 2;
+  }
+
+  /**
+   * The doorway the owl stands in that up (or Go in) would take it through, in a side view (OP-212): at
+   * its height, leading somewhere now (an open doorway to another room, or a nest's door on the street).
+   */
+  private doorwayHere(): DoorDef | null {
+    if (!this.sideView() || this.passingGate || this.errand) return null;
+    const street = isStreetRoom(this.room.id);
+    return doorwayUnder(
+      this.room.doors,
+      this.me.pos,
+      (d) => this.atDoorLevel(d),
+      (d) => {
+        const to = this.doorTo(d);
+        return to ? !this.realmClosed(to.room) : street && nestDoorIndex(d.id) !== null;
+      },
+    );
+  }
+
+  /** A tap that walked nowhere: aimed at the doorway the owl stands in (a side view, OP-212), it goes through. */
+  private tapIntoDoorway(goal: Vec2): void {
+    const here = this.doorwayHere();
+    if (here && takesDoorway(here.rect, goal, false, false, true)) this.upAt = Date.now();
+  }
+
+  /**
+   * The up arrow over the doorway the owl stands in (a side view, OP-212), drawn by the game: a dark
+   * disc with a cream arrow (the doorway mark's colours), over the owl's head at the doorway's height,
+   * bobbing unless motion is calm. Hidden when the owl stands in none.
+   */
+  private showUpHint(door: DoorDef | null): void {
+    const id = door?.id ?? null;
+    if (id === this.upHintDoor) return;
+    this.upHintDoor = id;
+    if (!door) {
+      if (this.upHint) this.tweens.killTweensOf(this.upHint);
+      this.upHint?.setVisible(false);
+      return;
+    }
+    if (!this.upHint) {
+      const g = this.add.graphics();
+      g.fillStyle(0x0c1e36, 0.9).fillCircle(0, 0, UP_HINT.r);
+      g.lineStyle(2, 0xf6f1e3, 0.6).strokeCircle(0, 0, UP_HINT.r);
+      g.lineStyle(4, 0xf6f1e3, 1);
+      g.beginPath();
+      g.moveTo(-9, 2);
+      g.lineTo(0, -8);
+      g.lineTo(9, 2);
+      g.moveTo(0, -8);
+      g.lineTo(0, 10);
+      g.strokePath();
+      this.upHint = this.add.container(0, 0, [g]).setDepth(this.room.size.h + 70);
+    }
+    this.tweens.killTweensOf(this.upHint);
+    const x = door.rect.x + door.rect.w / 2;
+    const y = TREE_GROUND - (door.top ?? 0) - UP_HINT.over * (this.room.owlScale ?? 1);
+    this.upHint.setPosition(x, y).setVisible(true);
+    if (!this.calm()) this.tweens.add({ targets: this.upHint, y: y - UP_HINT.bob, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+
   /** E: do the first thing the owl can do where it stands (a spot, an NPC owl, a leaf pile). */
   interact(): boolean {
     if (!this.built || this.leaving) return false;
@@ -1715,6 +1824,8 @@ export class RoomScene extends Phaser.Scene {
     items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
     /** What the owl can do where it stands (the action buttons), in order. */
     actions: string[];
+    /** Seen from the side (the tree, OP-212): the doorway the owl stands in that up would take it through, its up arrow shown over it. */
+    doorway: string | null;
     /** The NPC whose dialogue is open. */
     talkingTo: string | null;
     /** The activities here: lanterns lit, the fishing line, the copy game, the next quiz question. */
@@ -1780,6 +1891,7 @@ export class RoomScene extends Phaser.Scene {
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y, top: m.top })),
       actions: this.actions.map((a) => a.id),
+      doorway: this.upHint?.visible ? this.upHintDoor : null,
       talkingTo: this.talkingTo,
       play: this.play?.debug() ?? null,
       wall: this.arcade?.wall() ?? null,
@@ -2259,7 +2371,7 @@ export class RoomScene extends Phaser.Scene {
    * top, or stopped at the face for an owl that came down before reaching it.
    */
   private reaim(): void {
-    if (this.keys?.direction()) {
+    if (this.heldWay()) {
       this.keyTurns = KEY_TURNS;
       this.reSteer = true;
       return;
@@ -2408,6 +2520,12 @@ export class RoomScene extends Phaser.Scene {
     const onWalk = (p: Vec2) => walk !== null && distance(p, closestPointOnSegment(p, walk.from, walk.to)) < 1;
     const stepFrom = last && onWalk(last.pos) && onWalk(pos) ? last.pos : null;
     this.doorLook = { pos: { x: pos.x, y: pos.y }, walk: this.me.walk };
+    // Seen from the side (the tree), a doorway opens on up, not on walking into it (OP-212).
+    // Up pressed a moment ago (the up key or Go in), or held (the up key, or the thumbstick pushed up).
+    const side = this.sideView();
+    const pressed = side && upCounts(this.upAt, Date.now());
+    if (this.upAt && !pressed) this.upAt = 0;
+    const upNow = pressed || (side && !this.decorating && holdsUp(this.keys?.direction() ?? null));
     const spots: string[] = [];
     const errand = this.errand;
     if (errand && walkFinished) {
@@ -2429,19 +2547,23 @@ export class RoomScene extends Phaser.Scene {
       // A doorway to another room takes the owl from where its step came in, a step across it included.
       const cameIn = (to && stepFrom ? entryPoint(door.rect, stepFrom, pos) : null) ?? (inside ? pos : null);
       if (!cameIn || !this.atDoorLevel(door)) continue;
+      // Up pressed or held standing in it (a side view): through it; a press says a shut one's sign, once (OP-212).
+      const up = upNow && inside && this.errand === null;
+      const said = walkFinished || (up && pressed);
+      if (up) this.upAt = 0;
       const nestDoor = isStreetRoom(this.room.id) ? nestDoorIndex(door.id) : null;
       if (nestDoor !== null) {
-        if (takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null) && this.enterNest(nestDoor, walkFinished)) return;
+        if ((up || takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null, side)) && this.enterNest(nestDoor, said)) return;
         continue;
       }
       if (to) {
         if (this.realmClosed(to.room)) {
           // The arch into a gated realm the keepers have not opened: its blockade's phrase, and no way through.
-          if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
+          if (door.closedSign && said) this.hud.toast(door.closedSign);
           continue;
         }
         // A walk that ended past a doorway it crossed in its last frame goes through only as one that ends there would.
-        if (!takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null)) continue;
+        if (!up && !takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
         if (door.id === 'gate') {
           void this.throughGate(door, cameIn);
           return;
@@ -2452,10 +2574,15 @@ export class RoomScene extends Phaser.Scene {
         return;
       }
       if (this.interactions[door.id]) spots.push(door.id);
-      if (door.closedSign && walkFinished) this.hud.toast(door.closedSign);
+      if (door.closedSign && said) this.hud.toast(door.closedSign);
       if (walkFinished && cabinetAt(this.room.id, door.id)?.live === false) this.hud.toast(CABINET_OFF);
     }
-    this.actions = this.actionsHere(spots);
+    // Standing in a doorway seen from the side: an up arrow over it, and Go in first among the actions
+    // (the pad's Interact and E on a phone or a computer), which presses up (OP-212).
+    const here = side ? this.doorwayHere() : null;
+    if (side) this.showUpHint(here);
+    const goIn: Action[] = here ? [{ id: `door:${here.id}`, label: GO_IN, run: () => void this.upKey() }] : [];
+    this.actions = [...goIn, ...this.actionsHere(spots)];
     this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));
     this.atIdol = spots.includes('idol');
     if (this.atIdol && walkFinished && this.pendingVote) {

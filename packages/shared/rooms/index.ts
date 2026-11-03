@@ -1,5 +1,6 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
+import { doorTarget } from '../src/doorways';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, mapOf, type RoomDef } from '../src/room';
@@ -542,7 +543,7 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, toTree: { room: 'l1', spawn: 'market' }, marker: { x: 70, y: 580 } },
       // The arcade's doorway on the pavement where the street bends away, under its joystick sign.
       // The arcade's door; for an owl walking the tree, the arcade is down in level 0's cave (OP-163).
-      { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, toTree: { room: 'l0-arcade', spawn: 'from-market' }, marker: { x: 3126, y: 640 } },
+      { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, closedInTree: true, marker: { x: 3126, y: 640 } },
       { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
       // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
@@ -1510,7 +1511,10 @@ export const ROOMS: Record<string, RoomDef> = {
       ...['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-back`, x: i * ROOM_W, y: 0 })),
       ...['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
     ],
-    foregrounds: ['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    // No overlay for now (OP-216): the cave's three root overlays covered about a third of the view and
+    // showed a cut band at the floor, so the cave is drawn without them until OP-215 repaints them as
+    // thin roots at the screen's edges. The overlays stay published (tree-l0-c0-fg to c2-fg).
+    foregrounds: [],
     mood: 'arcade',
     // The wet stone floor, from the mouth in the west to the wall of roots that closes the east end.
     walkable: [
@@ -1521,7 +1525,7 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 40, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
-    spawns: { default: { x: 300, y: TREE_GROUND }, 'from-l0': { x: 220, y: TREE_GROUND }, 'from-market': { x: 300, y: TREE_GROUND } },
+    spawns: { default: { x: 300, y: TREE_GROUND }, 'from-l0': { x: 220, y: TREE_GROUND } },
     doors: [
       // The mouth, back out into the cavern.
       { id: 'to-l0', rect: { x: 0, y: 750, w: 80, h: 40 }, to: { room: 'l0', spawn: 'from-arcade' }, top: 0, markAt: { x: 50, y: 600 } },
@@ -1671,7 +1675,7 @@ export const TREE_REALMS: ReadonlySet<string> = (() => {
   const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
   for (let room = next.pop(); room; room = next.pop()) {
     for (const d of room.doors) {
-      const to = roomFor((d.toTree ?? d.to)?.room ?? '');
+      const to = roomFor(doorTarget(d, 2)?.room ?? '');
       if (!to || mapOf(to) === 2 || seen.has(to.id)) continue;
       seen.add(to.id);
       next.push(to);

@@ -64,6 +64,8 @@ export interface ParkState {
   objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
   actions: string[];
+  /** Seen from the side (the tree, OP-212): the doorway the owl stands in that up would take it through, its up arrow shown. */
+  doorway: string | null;
   talkingTo: string | null;
   play: {
     lanterns: string[];

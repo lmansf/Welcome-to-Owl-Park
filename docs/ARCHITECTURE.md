@@ -3,7 +3,7 @@
 - Status: mixed; each section is tagged BUILT or PLANNED (OP-xxx)
 - Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
 - Code: apps/edge/src (the Worker's routes in apps/edge/src/routes), packages/shared/src, packages/shared/rooms, apps/park/src, apps/park/index.html, apps/park/public/_headers, apps/park-log, apps/edge/wrangler.jsonc, .github/workflows
-- Tickets: OP-002, OP-010, OP-022, OP-038, OP-048, OP-051, OP-055, OP-059, OP-065, OP-067, OP-068, OP-071, OP-075, OP-077, OP-082, OP-083, OP-084, OP-098, OP-107, OP-108, OP-111, OP-113, OP-124, OP-126, OP-127, OP-129, OP-130, OP-136, OP-137, OP-138, OP-139, OP-140, OP-141, OP-142, OP-144, OP-148, OP-149, OP-150, OP-153, OP-155, OP-156, OP-162, OP-173, OP-180, OP-191, OP-192, OP-198, OP-201; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-076
+- Tickets: OP-002, OP-010, OP-022, OP-038, OP-048, OP-051, OP-055, OP-059, OP-065, OP-067, OP-068, OP-071, OP-075, OP-077, OP-082, OP-083, OP-084, OP-098, OP-107, OP-108, OP-111, OP-113, OP-124, OP-126, OP-127, OP-129, OP-130, OP-136, OP-137, OP-138, OP-139, OP-140, OP-141, OP-142, OP-144, OP-148, OP-149, OP-150, OP-153, OP-155, OP-156, OP-162, OP-173, OP-180, OP-191, OP-192, OP-198, OP-201, OP-211; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-076
 - Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/PLAYBOOK.md, docs/GLOSSARY.md
 
 How to read this file: headings carry [BUILT] or [PLANNED (OP-xxx)]; inside a section, `PLANNED (OP-xxx)` marks
@@ -569,6 +569,42 @@ What it means:
   (`/api/line`; close 4012 sends a page to it), the busy ribbon (`/api/notice`, and the `notice`
   frame), and copies of a room (item 3). A full room still answers `full`, and the page walks the owl
   back where it came from. How each works and when to use it: `docs/CAPACITY.md`.
+
+### Measured again (OP-211, 2026-11-02)
+
+On 2026-11-02 two Load test runs of a branch showed 80 busy owls in the hub at an echo p95 of about
+230 ms, three times the 71 ms above. Run again the same evening with the same settings (one object
+per room, steps 3 and 5, 60 seconds each), the code from main on 2026-10-23 (67ca3ab), today's main
+(503b9bf) and that branch's commit (d8857a8) each gave both fast and slow runs. The commit was not
+what decided it: which GitHub runner, in which region, the bots ran from was.
+
+| Code | Runner | 80 in the hub, busy: p50 / p95 / p99 (ms) | Unanswered | 240 in four rooms: p50 / p95 / p99 (ms) | Unanswered |
+| --- | --- | --- | --- | --- | --- |
+| main on 2026-10-23 (67ca3ab) | northcentralus | 59 / 116 / 152 | 274 of 4,891 | 60 / 110 / 148 | 403 of 14,890 |
+| main on 2026-10-23 (67ca3ab) | northcentralus | 56 / 83 / 108 | 287 of 4,931 | 55 / 93 / 122 | 438 of 14,850 |
+| main (503b9bf) | eastus | 46 / 74 / 102 | 624 of 5,004 | 42 / 84 / 124 | 400 of 15,032 |
+| main (503b9bf) | westus3 | 52 / 115 / 164 | 372 of 4,977 | 42 / 104 / 153 | 637 of 14,928 |
+| the 2026-11-02 branch (d8857a8) | westus3 | 59 / 283 / 297 | 354 of 4,273 | 68 / 287 / 296 | 374 of 14,675 |
+| the 2026-11-02 branch (d8857a8) | centralus | 57 / 71 / 90 | 501 of 5,030 | 57 / 69 / 81 | 478 of 15,072 |
+| the 2026-11-02 branch (d8857a8), the first two runs (41507562487, 41508326416) | centralus | 65 / 236 / 276 (the second run only) | 345 of 5,159 | 54 to 55 / 227 to 239 / 252 to 302 | 368 to 447 of about 15,100 |
+
+What it means:
+
+- No run overloaded: no socket was closed with 1013, at most one owl in a run was not welcomed, and
+  about 3 to 12 in every 100 moves went unanswered, as on 2026-10-23. Two runs saw a few sockets
+  dropped (1006, 4 and 13 to 17 of them), the network's doing. A room still holds 80 busy owls, and four rooms
+  at their caps still hold with one object per room.
+- The echo is the runner's network as much as the server: the same code gave a p95 of 71 ms and of
+  283 ms. Read one run's p95 as a range, roughly 70 to 300 ms for 80 busy owls in one room, and the
+  p50 as 40 to 70 ms (it was 20 to 31 ms on 2026-10-23). Compare code only with runs from the same
+  runner region (the job's "Set up job" step names it), or several runs of each.
+- The room's own work per move grew a little with flight, perches and the position checks (OP-084,
+  OP-149): about 60 µs a move for 80 owls on a development machine, against about 49 µs on
+  2026-10-23, a millisecond of an object's second at 80 moves a second. That is not where the echo
+  goes.
+- Since OP-209 the throwaway copy needs a signing key of its own, or it answers every pass 503 and
+  the Load test stops at "Wait for the copy to answer". The main rows above ran with that change
+  (PR 62: the copy's keys go up as secrets).
 
 ## 7. The Realm Vote [BUILT; opens with tickets]
 

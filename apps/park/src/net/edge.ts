@@ -5,10 +5,12 @@ import {
   HEARTBEAT_INTERVAL_MS,
   parseServerFrame,
   positionAlongWalk,
+  readClosedView,
   type ActKind,
   type ClientAct,
   type ClientFrame,
   type CourseAct,
+  type ClosedView,
   type FeedbackDraft,
   type LineStatus,
   type OwlAccount,
@@ -164,6 +166,19 @@ export class EdgeTransport implements ParkTransport {
       }
     },
   };
+
+  /**
+   * Whether the park is closed for setup (OP-233): asked with the browser's cache, which the Worker lets
+   * keep the answer a few seconds; null when the park did not answer with one.
+   */
+  async closed(): Promise<ClosedView | null> {
+    try {
+      const res = await fetch(`${this.base}/api/closed`);
+      return res.ok ? readClosedView(await res.json()) : null;
+    } catch {
+      return null;
+    }
+  }
 
   private async lineAnswer(res: Response): Promise<LineStatus> {
     if (!res.ok) throw new Error(`the line answered ${res.status}`);

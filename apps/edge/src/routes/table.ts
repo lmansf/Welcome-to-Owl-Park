@@ -13,7 +13,7 @@ import { account } from './account';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
 import { collection, nest, nestGift } from './collection';
 import { adminFeedback, feedback } from './feedback';
-import { line, notice } from './line';
+import { closed, line, notice } from './line';
 import { adminMasks, masks } from './masks';
 import { counts, healthRoute, socket } from './rooms';
 import type { Route } from './router';
@@ -53,9 +53,10 @@ export const ROUTES: readonly Route[] = [
   { prefix: '/api/account/', handle: account },
   { path: '/api/feedback', handle: feedback },
 
-  // ---- Busy nights (OP-075) ----
+  // ---- Busy nights (OP-075), and closed for setup (OP-233) ----
   { path: '/api/line', handle: line },
   { path: '/api/notice', handle: notice },
+  { path: '/api/closed', handle: closed },
 
   // ---- The store's webhooks and tickets (C35) ----
   { path: '/api/store/webhook', handle: storeWebhookRoute },
