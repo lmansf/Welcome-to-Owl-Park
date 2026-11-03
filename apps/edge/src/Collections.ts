@@ -19,6 +19,7 @@ import {
   ArcadeBook,
   ClimbBook,
   CollectionBook,
+  CourseBook,
   LEAF_FEATHERS_PER_DAY,
   NestBook,
   QuestBook,
@@ -31,6 +32,12 @@ import {
   type ClimbFlags,
   type ClimbLookup,
   type ClimbStart,
+  type CourseAnswer,
+  type CourseBoardRow,
+  type FallAnswer,
+  type FinishAnswer,
+  type PieceKind,
+  type ReachAnswer,
   type GameWall,
   type OwnBests,
   type PortraitLook,
@@ -71,8 +78,10 @@ import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleTy
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { randomDeviceId } from './pass';
-import { ROOMS } from './rooms';
+import { ROOMS, roomDef } from './rooms';
+import { COURSES } from '@owl-park/shared/rooms';
 import { SqlClimbStore } from './sqlClimbStore';
+import { SqlCourseStore } from './sqlCourseStore';
 import { SqlNestStore } from './sqlNestStore';
 import { SqlScoreStore } from './sqlScoreStore';
 import { SqlCollectionStore } from './sqlStore';
@@ -105,6 +114,7 @@ export class Collections extends DurableObject<Env> {
   private readonly nests: NestBook;
   private readonly arcade: ArcadeBook;
   private readonly climb: ClimbBook;
+  private readonly course: CourseBook;
   private readonly feedbackBox: FeedbackBox;
   private readonly accounts: AccountBook;
   private readonly travel: TravelBook;
@@ -125,6 +135,7 @@ export class Collections extends DurableObject<Env> {
     this.nests = new NestBook(nestStore, this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
     this.arcade = new ArcadeBook(new SqlScoreStore(sql), this.book);
     this.climb = new ClimbBook(new SqlClimbStore(sql), this.book, () => crypto.getRandomValues(new Uint32Array(1))[0]!);
+    this.course = new CourseBook(new SqlCourseStore(sql), this.book, COURSES, roomDef);
     this.feedbackBox = new FeedbackBox(sql);
     this.accounts = new AccountBook(sql, randomBytes);
     this.travel = new TravelBook(sql);
@@ -332,6 +343,43 @@ export class Collections extends DurableObject<Env> {
       // A refused band is logged by the room object, with the run's reference (OP-134).
       return this.climb.band(cid, seed, band, Date.now(), practice);
     });
+  }
+
+  // ---------- the parkour courses (OP-224, coursebook.ts): where the owl stands is the room object's to check first ----------
+
+  /** The owl's course as it stands, in the course this room is an act of. */
+  async courseState(cid: string, room: string): Promise<CourseAnswer> {
+    return this.course.state(cid, room, Date.now());
+  }
+
+  /** A run starts by the trail gate's way in (`practice`: a spectator's, OP-191). */
+  async courseStart(cid: string, room: string, practice = false): Promise<CourseAnswer> {
+    return this.course.start(cid, room, Date.now(), practice);
+  }
+
+  /** A bench, a part or a lost feather reached. */
+  async courseReach(cid: string, room: string, kind: PieceKind, id: string): Promise<ReachAnswer> {
+    return this.course.reach(cid, room, kind, id, Date.now());
+  }
+
+  /** A shortcut opened from its far side, for good. */
+  async courseOpen(cid: string, room: string, id: string): Promise<ReachAnswer> {
+    return this.course.open(cid, room, id, Date.now());
+  }
+
+  /** A fall: where the owl goes back to. */
+  async courseFall(cid: string, room: string): Promise<FallAnswer> {
+    return this.course.fall(cid, room, Date.now());
+  }
+
+  /** The finish shrine: what it pays, on the visit it came in (its items go to the collection log). */
+  async courseFinish(cid: string, room: string, visit?: Visit, practice = false): Promise<FinishAnswer> {
+    return this.during(visit, () => this.course.finish(cid, room, Date.now(), practice));
+  }
+
+  /** The course board for one owl (for a Commons to show): cleared, best time and the rewards left, per course. */
+  async courseBoard(cid: string): Promise<CourseBoardRow[]> {
+    return this.course.board(cid, Date.now());
   }
 
   /** A run by the reference a visitor quotes, for the keepers. */

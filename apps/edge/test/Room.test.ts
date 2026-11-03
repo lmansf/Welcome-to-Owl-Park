@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -813,5 +813,122 @@ describe('Room: the street and the nests', () => {
     expect(r.count).toBe(3);
     expect(owner.last('welcome')!.room).toBe('nest-k3x9q2ab');
     expect(peers[1]!.last('enter')!.owl.id).toBe('owner');
+  });
+});
+
+describe('Room: the dash, in a parkour course (OP-224)', () => {
+  let now = 1_000_000;
+  const refused: string[] = [];
+  const rejected: PositionRejection[] = [];
+  const make = (d: RoomDef) => new Room(d, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why), dashRefused: (_id, why) => refused.push(why) });
+  const jump: Air = { z: 7.2, vz: 858.3, s: AIRBORNE, f: 1 };
+  let seq = 0;
+  beforeEach(() => {
+    now = 1_000_000;
+    refused.length = 0;
+    rejected.length = 0;
+    seq = 0;
+  });
+  const dash = (room: Room, to: Vec2) => room.dash('a', { t: 'dash', to, seq: ++seq });
+
+  it('is the dash’s numbers: 900 px/s, 162 px, once a jump, 350 ms apart', () => {
+    expect([AIR_DASH_SPEED, AIR_DASH_DISTANCE, AIR_DASH_COOLDOWN_MS]).toEqual([900, 162, 350]);
+  });
+
+  it('is refused outside a course, and the owl walks on as the room had it', () => {
+    const room = make(def);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    room.air('a', jump);
+    const at = room.positionOf('a')!;
+    dash(room, { x: at.x + 160, y: at.y });
+    expect(refused).toEqual(['not-held']);
+    expect(rejected).toEqual(['dash']);
+    expect(a.last('move')).toMatchObject({ from: at, to: at, seq: 1 });
+    expect(a.last('move')?.dash).toBeUndefined();
+  });
+
+  it('is refused on the ground, even in a course', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const at = room.positionOf('a')!;
+    dash(room, { x: at.x + 160, y: at.y });
+    expect(refused).toEqual(['grounded']);
+  });
+
+  it('is taken in the air in a course: a walk at the dash’s pace, told to the others, and no further than a dash goes', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const at = room.positionOf('a')!;
+    room.air('a', jump);
+    now += 50;
+    dash(room, { x: at.x + 1000, y: at.y });
+    expect(refused).toEqual([]);
+    const told = b.last('move')!;
+    expect(told).toMatchObject({ id: 'a', from: at, dash: true });
+    expect(distance(told.from, told.to)).toBeLessThanOrEqual(AIR_DASH_DISTANCE + DASH_SLACK_PX);
+    expect(told.to.x).toBeGreaterThan(at.x + AIR_DASH_DISTANCE - 1);
+    expect(a.last('move')).toMatchObject({ seq: 1, dash: true });
+    // Over in about AIR_DASH_MS (a little more for the slack): where the room has the owl then is the dash's end.
+    now += AIR_DASH_MS + 50;
+    expect(room.positionOf('a')).toEqual(told.to);
+  });
+
+  it('goes once a jump: a second dash in the same jump is refused, and the landing brings it back', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const at = room.positionOf('a')!;
+    room.air('a', jump);
+    dash(room, { x: at.x + 100, y: at.y });
+    now += AIR_DASH_COOLDOWN_MS + 10;
+    // A flap, still up: the dash stays spent.
+    room.air('a', { z: 80, vz: 500, s: AIRBORNE, f: 0 });
+    dash(room, { x: at.x + 300, y: at.y });
+    expect(refused).toEqual(['spent']);
+    // Down (well after the jump), up again: the dash is back.
+    now += 3000;
+    room.air('a', jump);
+    dash(room, { x: at.x + 400, y: at.y });
+    expect(refused).toEqual(['spent']);
+    expect(a.last('move')?.dash).toBe(true);
+  });
+
+  it('waits out the cooldown, however quick the landing and the next jump', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const at = room.positionOf('a')!;
+    room.air('a', jump);
+    dash(room, { x: at.x + 100, y: at.y });
+    now += 100;
+    room.air('a', ON_GROUND);
+    now += 50;
+    room.air('a', jump);
+    dash(room, { x: at.x, y: at.y + 100 });
+    expect(refused).toEqual(['cooldown']);
+  });
+
+  it('puts an owl down where a fall takes it, standing, with its dash back', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    room.air('a', jump);
+    const at = room.positionOf('a')!;
+    dash(room, { x: at.x + 100, y: at.y });
+    expect(room.place('a', { x: 340, y: 450 })).toBe(true);
+    expect(room.positionOf('a')).toEqual({ x: 340, y: 450 });
+    expect(b.last('move')).toMatchObject({ id: 'a', from: { x: 340, y: 450 }, to: { x: 340, y: 450 } });
+    expect(room.place('a', { x: 10, y: 10 })).toBe(false);
+    now += AIR_DASH_COOLDOWN_MS;
+    room.air('a', jump);
+    dash(room, { x: 500, y: 450 });
+    expect(refused).toEqual([]);
   });
 });
