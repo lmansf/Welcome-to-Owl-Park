@@ -1128,6 +1128,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       // On a phone it wears what it does (OP-242), in place of the first button of the row.
       interactLabel.textContent = list[0]?.label ?? '';
       interactBtn.classList.toggle('labelled', list.length > 0);
+      if (list[0]) interactBtn.dataset['act'] = list[0].id;
+      else delete interactBtn.dataset['act'];
       actionsEl.innerHTML = '';
       list.forEach((a, i) => {
         const b = document.createElement('button');

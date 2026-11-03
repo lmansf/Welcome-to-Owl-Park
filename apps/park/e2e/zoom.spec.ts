@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openGround, openPark, settleCamera, state, toScreen, waitForArrival, walkToDoor } from './helpers';
+import { openGround, openPark, settleCamera, state, toScreen, waitForArrival, walkToDoor, actionButton } from './helpers';
 
 /**
  * A touch never zooms the page (OP-104): a double tap zoomed the park on an iPhone, and nothing took
@@ -143,7 +143,7 @@ test.describe('a touch never zooms the page (OP-104)', () => {
     await expect.poll(async () => (await state(page)).street?.[0]?.kind ?? null, { timeout: 20_000 }).toBe('own');
     await walkToDoor(page, 'nest-door-0');
     await expect.poll(async () => (await state(page)).nest?.mine ?? false, { timeout: 20_000 }).toBe(true);
-    await page.locator('[data-action="decorate"]').tap();
+    await actionButton(page, 'decorate').tap();
     const sheet = page.locator('section.decorate');
     await expect(sheet).toBeVisible();
     await expect(sheet.locator('[data-where]')).toHaveText(/^1 \/ 12/);

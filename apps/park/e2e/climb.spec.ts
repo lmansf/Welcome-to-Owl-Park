@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { autoClimbTo, climbRun, climbState, openClimb, startClimb, tapKey, toPortal } from './climbPlay';
-import { E2E_ADMIN_KEY, openPark, state } from './helpers';
+import { E2E_ADMIN_KEY, openPark, state, actionButton } from './helpers';
 
 /**
  * The stained-glass climb (designs/the-stained-glass-climb.md). On this device (the local mode, the
@@ -153,7 +153,7 @@ test.describe('the stained-glass climb through the room server', () => {
     await expect
       .poll(() => page.evaluate(() => (window.owlPark.game.scene.getScene('room') as unknown as { realms: { portal: boolean } }).realms.portal), { timeout: 10_000 })
       .toBe(false);
-    await page.locator('[data-action="portal"]').click();
+    await actionButton(page, 'portal').click();
     await expect(page.locator('[data-toasts]')).toContainText('Pardon Our Feathers');
     await expect(page.locator('.climb-layer')).toBeHidden();
   });

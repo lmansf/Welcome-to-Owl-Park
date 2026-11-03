@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor, type ParkState } from './helpers';
+import { openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor, actionButton, type ParkState } from './helpers';
 
 /** The nest this page's owl is in, once the nest has said how it stands. */
 async function nestOf(page: Page): Promise<NonNullable<ParkState['nest']>> {
@@ -48,10 +48,10 @@ test.describe('the nests (this device)', () => {
     // Their pictures load as the nest puts them out, not before the room opens (OP-129); then each is drawn.
     await expect.poll(async () => (await state(page)).nest?.drawn).toEqual(nest.layout);
     expect(nest.gift).toEqual({ taken: false });
-    await expect(page.locator('[data-action="decorate"]')).toBeVisible();
+    await expect(actionButton(page, 'decorate')).toBeVisible();
 
     // Decorate: the sheet opens on spot 1, where the lamp stands.
-    await page.locator('[data-action="decorate"]').click();
+    await actionButton(page, 'decorate').click();
     await expect(sheet(page)).toBeVisible();
     await expect.poll(async () => (await state(page)).nest?.decorating).toBe(true);
     await expect(sheet(page).locator('[data-where]')).toHaveText('1 / 12 · On the floor');
@@ -170,7 +170,7 @@ test.describe('the nests (this device)', () => {
     await expect.poll(async () => (await state(page)).peers.map((p) => p.id)).toContain('guest');
 
     // The host moves the lamp: the guest sees it move.
-    await page.locator('[data-action="decorate"]').click();
+    await actionButton(page, 'decorate').click();
     await sheet(page).getByRole('button', { name: 'Next spot' }).click();
     await sheet(page).locator('[data-piece="lamp"]').click();
     await expect.poll(async () => (await state(guest)).nest?.layout['f2']).toBe('lamp');
@@ -192,7 +192,7 @@ test.describe('decorating on a phone', () => {
     await walkToDoor(page, 'nest-door-0');
     await inRoom(page, `nest-${own.kind === 'own' ? own.nestId : ''}`);
     await nestOf(page);
-    await page.locator('[data-action="decorate"]').click();
+    await actionButton(page, 'decorate').click();
     await expect(sheet(page)).toBeVisible();
     for (const [n, x, y] of [
       [1, 480, 694],

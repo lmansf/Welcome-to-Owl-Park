@@ -1,7 +1,7 @@
 import { devices, type Browser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty, actionButton } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -821,7 +821,7 @@ test.describe('room server', () => {
 
     // The host moves the lamp and takes today's furniture gift; the guest sees the lamp move.
     const sheet = host.locator('section.decorate');
-    await host.locator('[data-action="decorate"]').click();
+    await actionButton(host, 'decorate').click();
     await sheet.getByRole('button', { name: 'Next spot' }).click();
     await sheet.locator('[data-piece="lamp"]').click();
     await expect.poll(async () => (await state(guest)).nest?.layout['f2'], { timeout: 10_000 }).toBe('lamp');
