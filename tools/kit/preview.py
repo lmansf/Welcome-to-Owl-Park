@@ -6,9 +6,11 @@ and composites the kit's 1x webps from apps/park/public/art: the backdrops at th
 for a camera resting on each screen, then the room's pieces, with a plain owl marker on each spawn
 for scale. One PNG per screen, and one of the whole room at rest.
 
-  python3 tools/kit/preview.py l4 [--out <dir>] [--scale 0.5] [--marks]
+  python3 tools/kit/preview.py l4 [--out <dir>] [--scale 0.5] [--marks] [--target]
 
 --marks draws where an owl stands (white), the doorways' triggers (gold) and the ground line (blue).
+--target also writes the room's target screen (OP-249, tools/art/targets/) beside the screen it was
+painted for, <room>-vs-target.png, for holding a screen to its target before it ships (OP-252).
 Needs Pillow with webp. The PNGs go to work/kit/preview/ by default (work/ is not committed).
 """
 import json
@@ -22,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[2]
 ART = ROOT / 'apps' / 'park' / 'public' / 'art'
 ROOM_W, ROOM_H = 1600, 900
 TILE_GROW = 0.2
+TARGETS = ROOT / 'tools' / 'art' / 'targets'
+# The approved target for a kit room (OP-249): its key and the screen it was painted for.
+ROOM_TARGETS = {'l4': ('target-l4', 0), 'plaza': ('target-plaza', 0)}
 _cache = {}
 
 
@@ -153,6 +158,15 @@ def draw_cell(out, c, cam_x, k):
         paste(out, im, c['x'] - cam_x, c['y'], c['w'], c['h'], k, c['flip'], c['alpha'])
 
 
+def beside(screen, target, gap=8):
+    """The screen as the kit draws it (left) and its target (right), at the screen's size, on one sheet."""
+    t = target.convert('RGB').resize(screen.size, Image.LANCZOS)
+    sheet = Image.new('RGB', (screen.width * 2 + gap, screen.height), (20, 20, 28))
+    sheet.paste(screen.convert('RGB'), (0, 0))
+    sheet.paste(t, (screen.width + gap, 0))
+    return sheet
+
+
 def main(argv):
     args = argv[1:]
     def flag(name, default=None):
@@ -165,6 +179,9 @@ def main(argv):
     marks = '--marks' in args
     if marks:
         args.remove('--marks')
+    with_target = '--target' in args
+    if with_target:
+        args.remove('--target')
     out_dir = Path(flag('--out', str(ROOT / 'work' / 'kit' / 'preview')))
     k = float(flag('--scale', '0.5'))
     if not args:
@@ -180,6 +197,15 @@ def main(argv):
         im = render(p, s * ROOM_W, ROOM_W, k, marks)
         f = out_dir / f"{p['id']}-screen{s}{tag}.png"
         im.convert('RGB').save(f)
+        print(f'wrote {f}')
+    if with_target:
+        if p['id'] not in ROOM_TARGETS:
+            print(f"no target screen for {p['id']} (targets: {', '.join(ROOM_TARGETS)})", file=sys.stderr)
+            return 2
+        key, s = ROOM_TARGETS[p['id']]
+        sheet = beside(render(p, s * ROOM_W, ROOM_W, k, marks), Image.open(TARGETS / f'{key}.png'))
+        f = out_dir / f"{p['id']}-vs-target{tag}.png"
+        sheet.save(f)
         print(f'wrote {f}')
     whole = render(p, 0, p['size']['w'], k, marks)
     f = out_dir / f"{p['id']}-whole{tag}.png"
