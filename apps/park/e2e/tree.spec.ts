@@ -54,7 +54,12 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
   test('the spiral stair is taken from the floor at its foot: a jump there comes back down to the floor (OP-220)', async ({ page }) => {
     await openPark(page, { room: 'l1' });
     // The stair's treads and its balcony are no ledges: an owl goes up by the doorway at the foot, on up.
-    await walkAndStop(page, LOBBY + 1042, GROUND);
+    // In on the keys, which never take a doorway (OP-212); a walk aimed into it would go on up to level 2.
+    await walkAndStop(page, LOBBY + 880, GROUND);
+    await page.keyboard.down('ArrowRight');
+    await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
+    await page.keyboard.up('ArrowRight');
+    await standsAt(page, 0);
     await jump(page);
     await standsAt(page, 0);
     const s = await state(page);
@@ -193,8 +198,9 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     test.slow(); // a walk across the roof run, drawn with software WebGL
     await openPark(page, { room: 'l1', spawn: 'east' });
     const RUN = 3 * 1600;
-    // Where the crates' first step was, and under the high roof: neither holds an owl now.
-    for (const x of [200, 1300]) {
+    // Where the crates' first step was, and under the high roof: neither holds an owl now. (Short of the
+    // archway into the market at 1300, which a walk aimed at it would take.)
+    for (const x of [200, 1200]) {
       await walkAndStop(page, RUN + x, GROUND);
       await jump(page);
       await standsAt(page, 0);
