@@ -45,6 +45,7 @@ sidecar supplies the key colour, the owl region colours, the seed and the provid
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import shutil
@@ -1743,6 +1744,41 @@ def write_sprites(ctx: Ctx, path: Path) -> None:
     note(f"sprites: {rel_to_repo(path)} written ({len(manifest['sprites'])} sprites)")
 
 
+TARGETS_DIR = TOOLS_ART_DIR / "targets"
+
+
+def cmd_target(ctx: Ctx, a: argparse.Namespace) -> int:
+    """An art target (OP-249): the approved candidate of a target key kept as reference art under
+    tools/art/targets/<key>.png (committed, never shipped to players), at its logical 1600 x 900, with a
+    provenance line of its own in tools/art/targets/provenance.jsonl, in the published art's format."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    if not key.startswith("target-"):
+        raise ArtError(f"{key!r} is not a target key (target-<name> in targets.mjs)")
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw).convert("RGB")
+    W, H = 1600, 900
+    if img.size != (W, H):
+        img = resize_exact(img, W, H, a.crop, 0)
+    out_dir = Path(a.targets_dir) if a.targets_dir else TARGETS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"{key}.png"
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    data = buf.getvalue()
+    line = prov.sanitize(prov.build_line(asset=dest.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None,
+                                         budget_relaxed=False, sidecar=sidecar_subset(sc), published_at=ctx.now, tools=[f"target: {key} kept as reference art at {W}x{H}"],
+                                         human_edits=list(ctx.notes)))
+    probs = prov.problems(line)
+    if probs:
+        raise ArtError(f"{dest.name}: nothing kept, its provenance line would be refused: " + "; ".join(probs))
+    dest.write_bytes(data)
+    prov_path = out_dir / "provenance.jsonl"
+    with prov_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line, separators=(",", ":")) + "\n")
+    note(f"target {key}: {rel_to_repo(dest)} ({len(data)} bytes); provenance appended to {rel_to_repo(prov_path)}")
+    return 0
+
+
 def cmd_sprites(ctx: Ctx, a: argparse.Namespace) -> int:
     """The sprite manifest from the published art: rewritten, or with --check only compared."""
     path = Path(a.manifest) if a.manifest else SPRITES_PATH
@@ -2247,6 +2283,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
     add_common(sp)
     sp.set_defaults(fn=cmd_publish)
+
+    sp = sub.add_parser("target", help="keep an approved art target as reference art under tools/art/targets/ with provenance (OP-249)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
+    sp.add_argument("--targets-dir", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_target)
 
     sp = sub.add_parser("sprites", help="the sprite manifest: every published sprite's drawn area (packages/shared/src/sprites.json; publish rewrites it)")
     sp.add_argument("--manifest", default=None, help=argparse.SUPPRESS)

@@ -1906,6 +1906,27 @@ class TestKit(unittest.TestCase):
             self.assertEqual((one.mode, one.size), ("RGBA", (piece["w"], piece["h"])))
             self.assertTrue((work / "final" / f"kit-landmark-{name}@2x.webp").exists())
 
+    def test_a_target_is_kept_as_reference_art_with_its_own_provenance(self):
+        from PIL import Image
+        key = "target-l4"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            Image.new("RGB", (1600, 900), (44, 76, 122)).save(raw_dir / "dddddddddddddddd.png")
+            (raw_dir / "dddddddddddddddd.json").write_text(json.dumps({"schema": 1, "key": key, "hash16": "dddddddddddddddd", "provider": "fal", "seed": 9800, "size": "1600x900"}))
+            (raw_dir / "SELECTED").write_text("dddddddddddddddd")
+            (work / "final").mkdir()
+            out = Path(td) / "targets"
+            rc = postprocess.main(["target", key, "--work", str(work), "--targets-dir", str(out), "--note", "approved by the owner in chat"])
+            self.assertEqual(rc, 0)
+            kept = Image.open(out / f"{key}.png")
+            self.assertEqual(kept.size, (1600, 900))
+            lines = [json.loads(l) for l in (out / "provenance.jsonl").read_text().splitlines()]
+            self.assertEqual((len(lines), lines[0]["key"], lines[0]["asset"], lines[0]["raw_hash16"], lines[0]["seed"]), (1, key, f"{key}.png", "dddddddddddddddd", 9800))
+            self.assertEqual(lines[0]["human_edits"], ["approved by the owner in chat"])
+            self.assertEqual(postprocess.prov.problems(lines[0]), [])
+
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw
         kit = postprocess.kit_table()
