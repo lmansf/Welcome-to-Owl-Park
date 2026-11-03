@@ -69,7 +69,7 @@ from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WOR
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, SPRITES_PATH, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
                     TINTED_LAYERS, TOOLS_ART_DIR, WING_LAYERS, WING_MASTER, ArtError, flight_layers, flight_master, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size,
                     now_iso, owl_layer_base, owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
-from artlib import bands, forbidden, pngmeta, prov, sprites, webpmeta  # noqa: E402
+from artlib import bands, forbidden, level, pngmeta, prov, sprites, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib.fields import GAMES as FIELD_GAMES, render_field_guide  # noqa: E402
@@ -2142,6 +2142,118 @@ def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_level(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The recut's run rows levelled (OP-251): each row's pieces, 1x and 2x, brought to the row's one
+    colour across their width (``artlib.level``), re-encoded in place under the same budget with the
+    alpha exact, and a provenance line appended per file; ``--dry-run`` only prints what it would do."""
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    if a.layer:
+        return level_layer(ctx, a, prov_path)
+    recut = kit_table().get("recut", {})
+    parts = ["cap-left", *[f"mid-{n}" for n in recut.get("lengths", [320, 480, 640])], "cap-right"]
+    all_rows = [r["name"] for run in recut.get("runs", {}).values() for r in run.get("rows", [])]
+    rows = all_rows if a.all or not a.rows else a.rows
+    unknown = [r for r in rows if r not in all_rows]
+    if unknown:
+        raise ArtError(f"not a recut row: {', '.join(unknown)} (rows: {', '.join(all_rows)})")
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    done = 0
+    for row in rows:
+        keys = [f"kit-cut-{row}-{p}" for p in parts]
+        files = {(k, s): ctx.public / (f"{k}.webp" if s == "1x" else f"{k}@2x.webp") for k in keys for s in ("1x", "2x")}
+        missing = [f.name for f in files.values() if not f.exists()]
+        if missing:
+            raise ArtError(f"{row}: no published {', '.join(missing)}")
+        imgs: dict = {}
+        for (k, scale), f in files.items():
+            data0 = f.read_bytes()
+            line = latest.get(f.name)
+            if not line or line.get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{f.name}: not the file its latest provenance line describes (see `pnpm art:finish check {k}`)")
+            img = Image.open(io.BytesIO(data0))
+            img.load()
+            imgs[(k, scale)] = (img.convert("RGBA"), data0, line)
+        if any(str(t).startswith("level:") for (_, _, line) in imgs.values() for t in line.get("tools") or []) and not a.force:
+            note(f"{row}: already levelled; --force levels it again from the published files")
+            continue
+        target = level.row_target([imgs[(k, "1x")][0] for k in keys])
+        note(f"{row}: row colour L {target[0]:.1f} a {target[1]:.1f} b {target[2]:.1f}")
+        for (k, scale), (img, data0, line) in imgs.items():
+            out, params = level.level_piece(img, target)
+            data, info = webpmeta.encode_under_budget(out, ctx.budget)
+            if not webpmeta.same_alpha(data, out):
+                raise ArtError(f"{files[(k, scale)].name}: the encoder changed the alpha; a cut-out's edge must stay exact")
+            tools_line = level.tools_line(params)
+            note(f"  {files[(k, scale)].name}: L {params['L_before']} to {params['L_after']}, gain {params['gain_min']} to {params['gain_max']} ({len(data)} bytes q{info['quality']})")
+            if a.dry_run:
+                continue
+            path = files[(k, scale)]
+            W, H = logical_size(k, ctx.assets)
+            size = (W, H) if scale == "1x" else (2 * W, 2 * H)
+            new_line = prov.sanitize(prov.build_line(asset=path.name, key=k, logical=scale, sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                                     sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
+                                                     tools=list(line.get("tools") or []) + [tools_line, budget_line(info) if scale == "1x" else "budget@2x: " + budget_line(info)[8:]],
+                                                     human_edits=list(line.get("human_edits") or []) + ctx.notes))
+            line_probs = prov.problems(new_line)
+            if line_probs:
+                raise ArtError(f"{path.name}: nothing written, its provenance line would be refused: " + "; ".join(line_probs))
+            path.write_bytes(data)
+            v = verify_final(path, size, ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            prov.append(prov_path, new_line)
+            latest[path.name] = new_line
+            done += 1
+    note(f"level: {done} file(s) levelled in place{' (dry run, nothing written)' if a.dry_run else ''}")
+    return 0
+
+
+def level_layer(ctx: Ctx, a: argparse.Namespace, prov_path: Path) -> int:
+    """A backdrop layer levelled across (OP-251, OP-252): a light shaft or a bright stretch taken out by
+    bringing each column's smoothed colour to one (``--L``, else the layer's own mean lightness, and its
+    own mean a and b), in place with provenance; ``art:finish bands --force`` then softens it as usual."""
+    key = validate_key(a.layer, allow_helpers=False, assets=ctx.assets)
+    if ctx.assets.get(key, {}).get("kind") != "layer":
+        raise ArtError(f"{key!r} is not a backdrop layer key (kit-<area>-sky|far|mid-<x> in config/kit.json)")
+    path = ctx.public / f"{key}.webp"
+    data0 = path.read_bytes()
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    line = latest.get(path.name)
+    if not line or line.get("sha256") != sha256_bytes(data0):
+        raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+    img = Image.open(io.BytesIO(data0))
+    img.load()
+    mode = img.mode
+    own = level.row_target([img.convert("RGBA")])
+    target = (a.L if a.L is not None else own[0], own[1], own[2])
+    smooth = a.smooth if a.smooth is not None else 0.12
+    out, params = level.level_piece(img.convert("RGBA"), target, smooth)
+    if "A" not in mode:
+        out = out.convert("RGB")
+    data, info = webpmeta.encode_under_budget(out, ctx.budget)
+    if "A" in out.getbands() and not webpmeta.same_alpha(data, out):
+        raise ArtError(f"{path.name}: the encoder changed the alpha; a layer's edge must stay exact")
+    tools_line = level.tools_line(params, smooth)
+    note(f"{key}: L {params['L_before']} to {params['L_after']}, gain {params['gain_min']} to {params['gain_max']} ({len(data)} bytes q{info['quality']})")
+    if a.dry_run:
+        return 0
+    new_line = prov.sanitize(prov.build_line(asset=path.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                             sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
+                                             tools=list(line.get("tools") or []) + [tools_line, budget_line(info)],
+                                             human_edits=list(line.get("human_edits") or []) + ctx.notes))
+    line_probs = prov.problems(new_line)
+    if line_probs:
+        raise ArtError(f"{path.name}: nothing written, its provenance line would be refused: " + "; ".join(line_probs))
+    path.write_bytes(data)
+    v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+    if not v["ok"]:
+        path.write_bytes(data0)
+        raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+    prov.append(prov_path, new_line)
+    return 0
+
+
 def cmd_sprites(ctx: Ctx, a: argparse.Namespace) -> int:
     """The sprite manifest from the published art: rewritten, or with --check only compared."""
     path = Path(a.manifest) if a.manifest else SPRITES_PATH
@@ -2682,6 +2794,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--provenance", help="provenance file (default tools/art/provenance.jsonl)")
     add_common(sp)
     sp.set_defaults(fn=cmd_bands)
+
+    sp = sub.add_parser("level", help="level the recut's run rows: one colour across each row's caps and middles, 1x and 2x, in place, with provenance (OP-251)")
+    sp.add_argument("rows", nargs="*", help="recut rows (plank, stone-thin, earth-path ...); none means every row")
+    sp.add_argument("--all", action="store_true", help="every recut row")
+    sp.add_argument("--dry-run", action="store_true", help="print what each piece would become; write nothing")
+    sp.add_argument("--force", action="store_true", help="level a row again although its provenance says level: already")
+    sp.add_argument("--layer", help="level one backdrop layer across instead (a light shaft, a bright stretch); follow with `bands --force`")
+    sp.add_argument("--L", type=float, help="with --layer: the lightness to bring each column to (default the layer's own mean)")
+    sp.add_argument("--smooth", type=float, help="with --layer: the column smoothing as a fraction of the height (default 0.12)")
+    sp.add_argument("--provenance", help="provenance file (default tools/art/provenance.jsonl)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_level)
 
     sp = sub.add_parser("sprites", help="the sprite manifest: every published sprite's drawn area (packages/shared/src/sprites.json; publish rewrites it)")
     sp.add_argument("--manifest", default=None, help=argparse.SUPPRESS)

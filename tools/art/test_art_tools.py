@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw, ImageOps, PngImagePlugin  # noqa: E402
 
 from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, FLIGHT_LAYERS, OWL_SPECIES, ArtError, flight_layers, flight_master, load_assets,  # noqa: E402
                     owl_layer_base, owl_master_of, parse_hex, species_layers)
-from artlib import bands, forbidden, pngmeta, prov, webpmeta  # noqa: E402
+from artlib import bands, forbidden, level, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib import fields  # noqa: E402
@@ -1813,6 +1813,48 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLevel(unittest.TestCase):
+    """Levelling the recut's run rows (OP-251): one colour across a row, the alpha and the detail kept."""
+
+    PUBLIC = HERE.parent.parent / "apps" / "park" / "public" / "art"
+
+    @staticmethod
+    def ramp(w=320, h=60, lo=110, hi=200, tint=(1.0, 0.9, 0.8)):
+        x = np.linspace(lo, hi, w)[None, :, None] * np.array(tint)[None, None, :]
+        rgb = np.repeat(x, h, axis=0)
+        rgb[::8] *= 0.85  # a joint every 8 rows: detail that must stay
+        alpha = np.full((h, w, 1), 255.0)
+        alpha[: h // 6] = 0
+        return Image.fromarray(np.clip(np.concatenate([rgb, alpha], axis=2), 0, 255).astype(np.uint8), "RGBA")
+
+    def test_a_ramp_comes_out_level_with_its_alpha_and_its_joints(self):
+        img = self.ramp()
+        target = level.row_target([img])
+        out, params = level.level_piece(img, target)
+        prof = level.column_profiles(out)[0]
+        mid = prof[20:-20]
+        self.assertLess(float(mid.max() - mid.min()), 3.0, "the left-to-right drift is gone")
+        self.assertAlmostEqual(params["L_after"], target[0], delta=1.5)
+        self.assertTrue(np.array_equal(np.asarray(out)[..., 3], np.asarray(img)[..., 3]), "the alpha is untouched")
+        L = np.asarray(out.convert("L"), dtype=float)
+        self.assertGreater(float(L[16:, 160].std()), 3.0, "the joints inside the piece stay")
+
+    def test_the_same_input_gives_the_same_output(self):
+        img = self.ramp()
+        t = level.row_target([img])
+        self.assertEqual(level.level_piece(img, t)[0].tobytes(), level.level_piece(img, t)[0].tobytes())
+
+    def test_every_published_recut_row_reads_as_one_colour_across(self):
+        rows = ["plank", "plank-thin", "plank-rail", "branch", "branch-thin", "branch-mossy", "stone", "stone-thin", "stone-mossy", "earth", "earth-thin", "earth-path"]
+        parts = ["cap-left", "mid-320", "mid-480", "mid-640", "cap-right"]
+        for row in rows:
+            files = [self.PUBLIC / f"kit-cut-{row}-{p}.webp" for p in parts]
+            if not all(f.exists() for f in files):
+                self.skipTest(f"the {row} row is not in this checkout")
+            means = [level.mean_L(Image.open(f)) for f in files]
+            self.assertLess(max(means) - min(means), 4.0, f"{row}: its pieces differ in lightness ({', '.join(f'{m:.1f}' for m in means)})")
 
 
 class TestBands(unittest.TestCase):
