@@ -1834,6 +1834,14 @@ class TestKit(unittest.TestCase):
         small = postprocess.resize_tiling(healed, 128)
         self.assertEqual(small.size, (128, 128))
         self.assertLess(max(postprocess.tile_seam_ratio(small).values()), 1.6)
+        # a keyed layer healed sideways only: its alpha wraps too, and the up-and-down edges are untouched
+        rgba = img.convert("RGBA")
+        rgba.putalpha(Image.fromarray(np.clip(base, 0, 255).astype(np.uint8), "L"))
+        side = postprocess.heal_tile(rgba, axes=(1,))
+        self.assertEqual(side.mode, "RGBA")
+        self.assertLess(postprocess.tile_seam_ratio(side)["seam_x"], 1.6)
+        # the up-and-down wrap is neither healed nor broken by a sideways pass
+        self.assertAlmostEqual(postprocess.tile_seam_ratio(side)["seam_y"], postprocess.tile_seam_ratio(rgba)["seam_y"], delta=0.6)
 
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw

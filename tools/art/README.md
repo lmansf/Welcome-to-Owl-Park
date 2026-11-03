@@ -231,6 +231,14 @@ assembler (OP-234) builds screens from the published files, whose format is this
 - **Sizes**: a sheet gives its pieces one logical size (`w`, `h` in `kit.json`); a piece may set its
   own. The same sizes sit in `apps/park/src/game/art.ts` (kind `texture` or `piece`) and
   `config/assets.json`, which the tests hold in step with `kit.json`.
+- **Area sets** live under `kit.areas.<area>` and follow the same two formats with the area's name in
+  the key: accent textures `kit-tex-<area>-<name>`, prop sheets `kit-sheet-<area>-<name>` cut to
+  `kit-<area>-<piece>`, and seven **backdrop layers** `kit-<area>-sky-a|b` (1600 x 900, opaque),
+  `kit-<area>-far-a|b` (1600 x 900, keyed) and `kit-<area>-mid-a|b|c` (800 x 450, keyed), finished by
+  `art:finish layer <key>`: a sky as painted, a far or middle layer keyed out of its magenta, each
+  healed to repeat sideways (its left and right edges continue into each other, the sideways seam
+  ratio in the post record) so the assembler can run one along any number of screens at the tree's
+  rates (sky 0.5, far about 0.6, middle 0.75). No `@2x`.
 - **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
   clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
   it is published; nothing from the kit is published without that.

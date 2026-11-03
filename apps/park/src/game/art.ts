@@ -28,7 +28,7 @@ export const WING_H = 120;
  * the screen), and never given a placeholder: the arcade draws its neon stand-in for anything missing.
  * `climb`: the stained-glass climb's tower pieces, the same way; the climb draws glass of its own until they come.
  */
-export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb' | 'texture';
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb' | 'texture' | 'layer';
 
 export interface ArtSpec {
   w: number;
@@ -397,6 +397,35 @@ export const ART: Record<string, ArtSpec> = {
   'kit-turnstile': { w: 240, h: 300, kind: 'piece' },
   'kit-stall-roof': { w: 480, h: 200, kind: 'piece' },
   'kit-cart': { w: 480, h: 400, kind: 'piece' },
+  // The kit's area sets (OP-229): accent textures, props cut from their sheets, and backdrop layers that repeat sideways.
+  'kit-tex-entrance-shop-wood': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-entrance-plaza-stone': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-entrance-awning-cloth': { w: 512, h: 512, kind: 'texture' },
+  'kit-entrance-shop-shelf-hats': { w: 240, h: 300, kind: 'piece' },
+  'kit-entrance-shop-counter-glass': { w: 320, h: 200, kind: 'piece' },
+  'kit-entrance-shop-stand': { w: 160, h: 300, kind: 'piece' },
+  'kit-entrance-shop-gift-stack': { w: 160, h: 160, kind: 'piece' },
+  'kit-entrance-shop-banner-bare': { w: 240, h: 160, kind: 'piece' },
+  'kit-entrance-shop-lantern-cluster': { w: 160, h: 240, kind: 'piece' },
+  'kit-entrance-ticket-window': { w: 320, h: 300, kind: 'piece' },
+  'kit-entrance-turnstile-brass': { w: 240, h: 300, kind: 'piece' },
+  'kit-entrance-queue-posts': { w: 320, h: 160, kind: 'piece' },
+  'kit-entrance-welcome-mat': { w: 240, h: 80, kind: 'piece' },
+  'kit-entrance-easel-blank': { w: 160, h: 300, kind: 'piece' },
+  'kit-entrance-planter-tree': { w: 160, h: 300, kind: 'piece' },
+  'kit-entrance-plaza-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-entrance-bird-bath': { w: 200, h: 240, kind: 'piece' },
+  'kit-entrance-pennant-pole': { w: 120, h: 420, kind: 'piece' },
+  'kit-entrance-lantern-garland': { w: 480, h: 160, kind: 'piece' },
+  'kit-entrance-map-board': { w: 240, h: 300, kind: 'piece' },
+  'kit-entrance-stair-head': { w: 320, h: 240, kind: 'piece' },
+  'kit-entrance-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-entrance-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-entrance-mid-c': { w: 800, h: 450, kind: 'layer' },
 };
 
 export { FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS };

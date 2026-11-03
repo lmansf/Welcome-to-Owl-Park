@@ -1013,5 +1013,25 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
     }
   }
   assert.equal(names.size, 108);
+  // The area sets: accent textures, prop sheets and seven sideways-repeating backdrop layers each.
+  for (const [areaName, area] of Object.entries(K.KIT_AREAS)) {
+    assert.deepEqual(Object.keys(area.layers), ['sky-a', 'sky-b', 'far-a', 'far-b', 'mid-a', 'mid-b', 'mid-c'], `${areaName}: seven layers`);
+    assert.equal(Object.keys(area.textures).length, 3); assert.equal(Object.keys(area.sheets).length, 3);
+    for (const name of Object.keys(area.layers)) {
+      const key = `kit-${areaName}-${name}`;
+      const [w, h] = K.LAYER_SIZES[name.split('-')[0]];
+      assert.deepEqual(art[key], { w, h, kind: 'layer' }, `${key} in art.ts`);
+      const job = jobs.get(key);
+      assert.ok(job && job.kind === 'layer', `${key} has a layer job`);
+      assert.equal(Boolean(job.key_colour), !name.startsWith('sky'), `${key}: far and middle layers are keyed, skies are not`);
+      assert.equal(Boolean(ASSETS.keys[key].key_colour), !name.startsWith('sky'));
+      assert.match(job.prompt, /repeats sideways/);
+    }
+    for (const [name, sheet] of Object.entries(area.sheets)) {
+      const key = `kit-sheet-${areaName}-${name}`;
+      assert.ok(P.HELPER_KEYS.includes(key) && jobs.get(key)?.kind === 'sheet', `${key} is a helper key with a sheet job`);
+      for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
+    }
+  }
   for (const job of [jobs.get('kit-tex-bark'), jobs.get('kit-sheet-signs-a')]) assert.match(job.prompt, /No text, letters or numbers anywhere/, 'the prompts ask for no text');
 });
