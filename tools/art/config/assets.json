@@ -4666,6 +4666,1101 @@
       "format": "webp",
       "with_2x": false,
       "key_colour": "#FF00FF"
+    },
+    "kit-tex-canopy-woven-wicker": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-canopy-leaf-tops": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-canopy-twig-thatch": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-canopy-door-nest-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-door-nest-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-nest-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-nest-window": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-woven-rail-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-sign-board": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-twig-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-leaf-perch": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-leaf-cluster": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-barrier-nest": {
+      "w": 320,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-nest-roof": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-planter-wicker": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-rail-post": {
+      "w": 80,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-lantern-string": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-bough-tip": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-rope-coil": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-hanging-basket": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-woven-bridge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-canopy-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-canopy-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-high-lichen-bark": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-high-cloud-bank": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-high-silvered-planks": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-high-bough-mid": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-bough-end": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-rail-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-rail-post": {
+      "w": 80,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-hook-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-mist-platform": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-knothole-door-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-knothole-door-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-barrier": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-lantern-pole": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-cloud-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-ladder": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-lantern-string": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-hanging-moss": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-leaf-cluster": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-wind-chime": {
+      "w": 120,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-cloud-tuft": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-high-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-high-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-low-bough-bark": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-low-walkway-planks": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-low-lichen-moss": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-low-walkway-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-walkway-cap-left": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-walkway-cap-right": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-rail-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-rail-post": {
+      "w": 80,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-branch-lantern": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-bark-ledge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-bark-ledge-end": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-knothole-door-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-knothole-door-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-bough-stub": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-leaf-clump": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-ladder": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-barrier": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-log-bench": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-signpost-blank": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-pulley-bucket": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-hanging-basket": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-low-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-low-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-ground-forest-floor": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ground-cobble-path": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ground-fern-fronds": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ground-gate-post": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-lantern-post": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-gate-arch": {
+      "w": 400,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-stone-step": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-rope-barrier": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-market-stall": {
+      "w": 400,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-lantern-garland": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-crate-stack": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-hand-cart": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-water-barrel": {
+      "w": 120,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-fallen-branch": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-fern-clump": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-mossy-boulder": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-stepping-stones": {
+      "w": 400,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-tree-stump": {
+      "w": 200,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-roof-ridge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ground-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ground-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-under-packed-earth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-under-root-mat": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-under-cave-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-under-lantern-post": {
+      "w": 120,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-arch": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stair-root-right": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stair-root-left": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-ledge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-boulder-flat": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-hang": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stone-pile": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-knot": {
+      "w": 200,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-sign-root": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-barrier-roots": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-lantern-hang": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-buttress-left": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-buttress-right": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-mushroom-cluster": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stone-pillar": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stalactites": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-earth-mound": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-under-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-under-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
     }
   },
   "helpers": {
