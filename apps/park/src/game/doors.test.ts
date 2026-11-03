@@ -59,12 +59,14 @@ describe('doorwayUnder (OP-212)', () => {
   const leads = (d: DoorDef) => !!d.to;
 
   it('is the doorway the owl stands in at its height, leading somewhere', () => {
+    // Both of the lobby's stairs are on the floor (OP-220): down at the west, up at the east.
     expect(doorwayUnder(l1.doors, middle(stairDown), level(0), leads)?.id).toBe('stair-l1-l0');
-    expect(doorwayUnder(l1.doors, middle(stairUp), level(286), leads)?.id).toBe('stair-l2-l1');
+    expect(doorwayUnder(l1.doors, middle(stairUp), level(0), leads)?.id).toBe('stair-l2-l1');
   });
 
-  it('is none under the stair up’s landing on the floor, beside a doorway, or at one that leads nowhere now', () => {
-    expect(doorwayUnder(l1.doors, middle(stairUp), level(0), leads)).toBeNull();
+  it('is none for an owl up on a ledge over a doorway, beside a doorway, or at one that leads nowhere now', () => {
+    // The lintel over the way down is 196 up: an owl standing on it walks on past the doorway under it.
+    expect(doorwayUnder(l1.doors, middle(stairDown), level(196), leads)).toBeNull();
     expect(doorwayUnder(l1.doors, { x: stairDown.rect.x - 20, y: 770 }, level(0), leads)).toBeNull();
     expect(doorwayUnder(l1.doors, middle(stairDown), level(0), () => false)).toBeNull();
   });

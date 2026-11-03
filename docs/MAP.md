@@ -3,7 +3,7 @@
 - Status: the grid and the style sheet are the contract (OP-155 final 2026-10-31, OP-157 approved 2026-10-31); levels 1 to 5 BUILT as rooms (`l1` to `l4`, and level 5 as `l5-street` and `l5`, the street's nest doors and the front gate's ticket sale wired; still to wire: levels 1 to 3's idols, guardians and games); level 0 BUILT as `l0` and the arcade cave `l0-arcade` (OP-163); the entries setting, the turn-your-phone card and the spot placer BUILT (OP-156)
 - Verified against: main 1ae8200 (2026-11-01, level 1's fronts OP-173 and the nightly restart OP-181 merged) with branch claude/tree-tools (the entries setting, the turn-your-phone card and the spot placer, OP-156); the Ticket Board as read 2026-11-01
 - Code: packages/shared/src/room.ts (`map`, `owlScale`, `RoomTile.rate` and `fade`, `fronts`, `shades`, a door's `top` and `markAt`), packages/shared/rooms/index.ts (`l1`, `TREE_GROUND`, `TREE_REALMS`), packages/shared/src/perches.ts, packages/shared/src/masks.ts, packages/shared/src/treeSpots.ts (`TREE_SPOTS`), packages/shared/src/overflow.ts (`treeShare`, `entryMap`, `realmShut`); apps/park/src/game/treeView.ts, game/ledgePainter.ts, game/walkingMap.ts, paint/, ui/turnPhone.ts; apps/edge/src/capacityPage.ts; tools/masks/pull.mjs; tools/art/prompts.mjs (`TREE_STYLE`, `treeScreen`)
-- Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173
+- Tickets: OP-128, OP-152, OP-155, OP-156, OP-157, OP-158 to OP-163, OP-165, OP-173, OP-212, OP-220
 - Related: docs/ARCHITECTURE.md (rooms, the room server), docs/ART-PIPELINE.md (how art is made), docs/ACTIVITIES.md (the arcade, the climb), docs/NESTS.md
 
 The tree is a second park, map 2: one side-scrolling world around a colossal living tree, built
@@ -37,6 +37,44 @@ reaches it (section 9).
   is. QA's device matrix (OP-095) adds landscape on every device.
 - **Every realm's branch has one shape** (OP-152): its common area and its game at the base, near the
   trunk; its adventure out toward the tip; its payoff at the tip, reachable with single jumps (Tier 1).
+- **Directions: down on the left, up on the right** (OP-220, the owner's rule of 2026-11-02). On every
+  level the stair down is the westmost stair and the stair up the eastmost, with no other doorway between
+  them, and both are taken from the floor (`top: 0`) with the up key (OP-212): going up is as easy as
+  going down, and no stair is climbed tread by tread, so a stair's painted treads are not ledges. An owl
+  that comes in by one stair lands between the two, on the side of its stair that faces the other, so a
+  walk through the tree never passes over another doorway. Each stair says which way it goes (a door's
+  `way`), and its mark shows it: a chevron up or down in the arch. From the canopy (`l5`), the way into
+  the tree is its one stair, and it goes down. Where a stair has to stand where the painting shows no
+  stair, the game draws a stairhead going down through the boardwalk (`landings`).
+- **Barriers: show nothing explorable that is not** (OP-220, the owner's rule of 2026-11-02). Parkour or
+  anything that reads as a way on is either real or shut. A way not open yet may be teased, but behind a
+  barrier that reads as shut at a glance and as shut for now, not for ever: the game draws it (`barriers`,
+  never painted) as a locked gate, a rope across, a fallen branch or boards over an arch, its sign one of
+  the approved phrases (`CLOSED_SIGNS`), with a warm glow behind it. Every closed doorway has one in it,
+  under the doorway's own id. A painted route that leads nowhere has its ledges taken out of the room data
+  and a barrier at its foot; where the barrier ends the floor, nothing stands past it, and no ledge ever
+  stands over one. Today's park's blockade art is not drawn in the tree.
+
+### The stairs and barriers as built [BUILT: OP-220]
+
+Where each level's stairs stand (all on the floor), what shuts the ways not open yet, and where the game
+draws a stairhead because the painting has none. Positions are room px.
+
+| Room | Stair down (west) | Stair up (east) | Barriers | Stairheads |
+| --- | --- | --- | --- | --- |
+| `l5` | `stair-l5-l4`, 1230 to 1330, the railed stair behind the arch, its mark pointing down | none (the top of the tree) | `bough-7`, a fallen branch at the pier's end | none |
+| `l5-street` | none | none (the front gate leads on) | `closed-beyond`, a fallen branch at bough 6's foot; `spare-nest`, boards | none |
+| `l4` | `stair-l4-l3`, 640 to 740, behind the railing west of the trunk | `stair-l5-l4`, 880 to 980, the spiral stair's foot | none | none |
+| `l3` | `stair-l3-l2`, 170 to 270, the boardwalk's west end | `stair-l4-l3`, 500 to 610, the painted stair's foot | `reach`, a rope from the railing post across the branch | `stair-l3-l2` |
+| `l2` | `stair-l2-l1`, 3380 to 3480, west of the trunk | `stair-l3-l2`, 3740 to 3850, the painted stair's foot | `trunk-east`, a rope before the steps behind the trunk | `stair-l2-l1` |
+| `l1` | `stair-l1-l0`, 2210 to 2300, the way down under the lintel | `stair-l2-l1`, 2560 to 2670, the spiral stair's foot | `closed-west`, a locked gate; `roof-run`, a rope at the crates' foot | none |
+| `l0` | `stair-challenge`, 600 to 760, closed (OP-115) | `stair-l1-l0`, 2560 to 2660, the stair's foot | `stair-challenge`, boards | none |
+
+Taken out of the room data with OP-220: every stair's treads and landings (levels 0 to 4, with level 4's
+balcony, reached only from its treads), bough 6 (`l5-street`), bough 7 (`l5`), level 3's reach up to its
+`tip`, and level 1's roof run up to `tower-balcony`. The painted steps behind level 2's trunk and the
+railed stairwell east of level 3's lead nowhere now: the first is roped off with the floor ending at
+the rope, the second reads as a railing.
 
 ## 2. The grid [PLANNED except level 1]
 
@@ -45,12 +83,12 @@ is PLANNED by its level's ticket. Spawns are named in the room data when the lev
 
 | Level | Index | Screen | What it holds | Doorways | Spawns | Room |
 | --- | --- | --- | --- | --- | --- | --- |
-| 5 Canopy | +3 | Treetop parkour, bough 7 | Tier 1 ledge stair, Tier 2 gap, Tier 3 glide crossing, a bench at the end, a find at the Tier 3 spot | west to +2 | from +2 | `l5` |
+| 5 Canopy | +3 | Treetop parkour, bough 7 | Tier 1 ledge stair, Tier 2 gap, Tier 3 glide crossing, a bench at the end, a find at the Tier 3 spot; shut behind a fallen branch at the pier's end until it leads somewhere (OP-220) | west to +2 | from +2 | `l5` |
 | 5 Canopy | +2 | Lounge and gift shop | Lounge seats, the gift shop's counter (OP-014), the parkour's start east | east to +3, west to +1 | from +1, from +3 | `l5` |
 | 5 Canopy | +1 | Park entrance | The entrance arch, the stair down to level 4, the front gate where OP-130's gate-crossed flag is set | west to 0, east to +2, stair down | stair landing, from 0, from +2 | `l5` |
 | 5 Canopy | 0 | Trunk, canopy | The trunk's crown, the street's east end, the ticket booth (see section 11) | east to +1, west to -1 | from +1, from -1 | `l5` |
 | 5 Canopy | -1 | Nests street, west half | Nest doors 1 to 4 in the canopy, the mirror's street side (OP-077) | east to 0, west to -2, each door to its nest | new owls (they wake in their nest and come out here, OP-105), from 0, from -2 | `l5` |
-| 5 Canopy | -2 | Nests street, far west, and bough 6 | Nest doors 5 to 8, the second parkour bough, Tiers 1 to 3 | east to -1, doors to nests | from -1 | `l5` |
+| 5 Canopy | -2 | Nests street, far west, and bough 6 | Nest doors 5 to 8, the second parkour bough, Tiers 1 to 3; shut behind a fallen branch at its foot, with the closed way beyond Owl Park (OP-220) | east to -1, doors to nests | from -1 | `l5` |
 | 4 Sky landing | 0 | Stair landing | The spiral stair around the trunk, up to level 5 and down to level 3 | stair up, stair down, east to +1 | from either stair | `l4` |
 | 4 Sky landing | +1 | Overlook | A quiet perch over the park, nothing to use, the view; one find | west to 0 | from 0 | `l4` |
 | 3 High branch | 0 | Trunk, stair | The stairs up to level 4 and down to level 2, the branch's start east | stairs, east to +1 | from either stair | `l3` |
@@ -109,7 +147,7 @@ room. The quest givers join the list when their level is built. Level 1 has no `
 | `booth-lobby` | Booth window | 1, 0 | The same booth, ground side |
 | `shop-gift` | Shop | 5, +2 | The rotating gift shop (OP-014) |
 | `gate-entrance` | Gate | 5, +1 | The tree's front gate: OP-130's gate-crossed flag is set here |
-| `stair-l5-l4`, `stair-l4-l3`, `stair-l3-l2`, `stair-l2-l1`, `stair-l1-l0` | Stair | The trunk's screens (`stair-l5-l4` at +1 on level 5) | One doorway pair each |
+| `stair-l5-l4`, `stair-l4-l3`, `stair-l3-l2`, `stair-l2-l1`, `stair-l1-l0` | Stair | The trunk's screens (`stair-l5-l4` at +1 on level 5) | One doorway pair each: on its lower level the stair up, at the east; on its upper level the stair down, at the west (OP-220) |
 | `stair-challenge` | Stair | 0, -1 | Closed until OP-115 |
 | `nest-door-1` to `nest-door-8` | Door | 5, -1 and -2 | The count matches today's street |
 | `mirror-street` | Mirror | 5, -1 | OP-077 |
@@ -211,7 +249,16 @@ the game applies it over its four layers (section 7).
 - **The doorway mark** (a door's `markAt`): over each way through to another room, a dark pill with a
   cream arch and a gold dot, in the colours of the '!' over an owl to talk to (OP-114).
 - **A doorway's height** (a door's `top`): an owl goes through only standing at that height (within
-  `PERCH_SLACK`), so one on a ledge over the doorway walks on past it.
+  `PERCH_SLACK`), so one on a ledge over the doorway walks on past it. Every doorway of the tree is on
+  the floor, `top: 0` (OP-220).
+- **A stair's way** (a door's `way`, OP-220): its mark has a chevron, up or down, in place of the dot.
+- **Barriers** (`RoomDef.barriers`, OP-220): each `{ id, kind, x, w, sign }`, drawn on the floor from `x`
+  to `x + w` over the playfield and under the owls: `gate` (two low leaves, a chain and a padlock),
+  `rope` (two posts and a sagging rope), `branch` (a fallen branch on a stump, a few leaves) or `boards`
+  (planks nailed across), its sign on a cream board over it and a warm glow behind that breathes slowly
+  (still with calm motion). The rooms test holds the rules of section 1.
+- **Stairheads** (`RoomDef.landings`, OP-220): `{ id, x, w }` under a stair's doorway, a dark opening in the
+  boardwalk with its first treads going down, a post each side and a rail.
 
 ## 8. Level 1 as built [BUILT: OP-162, OP-173]
 
@@ -222,13 +269,18 @@ the market's common square (`e1`, +1) and its roof run (`e2`, +2). Each screen h
 
 - **Spawns:** `default` in the lobby's middle, `west` at the west end, `east` at the roof run's end,
   `market` just short of the archway, for an owl coming back from the market.
-- **Doors:** `closed-west`, the closed gate's barrier (its sign 'Not Yet Fledged', one of
-  `CLOSED_SIGNS`); `to-market`, the archway at the roof run's east end into the market's own screens,
-  taken from the ground only (`top: 0`). The market's way out leads an owl walking the tree back to the
-  archway (`toTree`; `TREE_REALMS` lists the rooms of today's park the tree opens into); every other
-  owl still goes to the hub.
-- **Ledges:** 25, from the west path's boulder (110 up) to the roof run's tower balcony (530 up), each
-  a `treeLedge` with the screen it is on. The lobby's spiral stair is three steps a jump apart.
+- **Doors:** `closed-west`, the closed gate, a locked gate drawn where the floor ends (its sign 'Not Yet
+  Fledged', one of `CLOSED_SIGNS`); the lobby's two stairs, the way down to level 0 under the lintel
+  (west) and the spiral stair up to level 2 taken at its foot (east), both on the floor (OP-220);
+  `to-market`, the archway at the roof run's east end into the market's own screens, taken from the
+  ground only (`top: 0`). The market's way out leads an owl walking the tree back to the archway
+  (`toTree`; `TREE_REALMS` lists the rooms of today's park the tree opens into); every other owl still
+  goes to the hub.
+- **Ledges:** 14, from the west path's boulder (110 up) to the market square's stall roofs (350 up),
+  each a `treeLedge` with the screen it is on. Since OP-220 the spiral stair's treads and balcony are not
+  ledges (the stair is taken at its foot), and the roof run's crates, roofs and tower balcony are not
+  either: they lead nowhere until the market's adventure is built, so a rope across the foot of the
+  crates (`roof-run`, 'Hatching Soon') shuts the climb while the boardwalk runs on under it.
 - **Fronts:** the west path's two lamp posts and their lanterns, the post in front of the square's
   stall, the lobby stair's banister (raised) and the balcony's railing, cut rail by rail from the
   paintings.
@@ -312,9 +364,10 @@ The recipe for OP-158 to OP-161 and OP-163, as level 1 was built:
   street's do, and the seventh painted door, westmost, is closed ('Hatching Soon', `spare-nest`). The
   front gate does what the lobby's turnstiles do (OP-180's sale, OP-190's walk in, OP-198's ask), and
   an owl it turns back steps back west along the floor. Leave the park, and Play back from checkout,
-  put an owl of the tree before this gate. The trunk's painted doorway on screen 0 leads nowhere yet. The street's far west end, on bough 6's highest perch, has a closed doorway
-  (`closed-beyond`, 'Hatching Soon') for places beyond Owl Park; no destination yet (the owner's
-  steer, 2026-11-02). QUESTION FOR LATER: what lies beyond Owl Park, and how it connects.
+  put an owl of the tree before this gate. The trunk's painted doorway on screen 0 leads nowhere yet. The street's west end, at the foot of bough 6, has a closed doorway
+  (`closed-beyond`, 'Hatching Soon') for places beyond Owl Park, behind a fallen branch where the floor
+  ends; no destination yet (the owner's steer, 2026-11-02). It stood on bough 6's highest perch until
+  OP-220 shut the bough. QUESTION FOR LATER: what lies beyond Owl Park, and how it connects.
 - OPEN QUESTION: the grid puts a ticket booth on level 5 (`booth-canopy`) and its window in the lobby
   ring (`booth-lobby`); OP-180 sells tickets at the turnstiles and drops today's booth. Whether the tree
   keeps a booth is the owner's.

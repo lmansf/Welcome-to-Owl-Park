@@ -8,7 +8,7 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { ROOMS, TREE_GROUND, roomFor } from '../rooms';
@@ -451,7 +451,8 @@ export function blockadeKey(phrase: string): string {
 /** Art that belongs to one room (released when it closes; roomOpeningArt is what loads as it opens). */
 export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(roomId)): string[] {
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
-  for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
+  // The tree draws its barriers (OP-220): only today's park's closed arches load the blockade art.
+  if (room && mapOf(room) !== 2) for (const door of room.doors) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');
   if (roomId === 'market') keys.push('robot-owl');
   if (roomId === 'glass') keys.push('glass-idol');
