@@ -326,6 +326,11 @@ export class RoomScene extends Phaser.Scene {
   private keyDir: Vec2 | null = null;
   /** The walk under way came from the keys, so letting go of them stops it. */
   private keyWalk = false;
+  /**
+   * The keys' kind of walk with no key held (walkAsKeys, for the browser tests): it goes on to its end
+   * instead of stopping, and still takes no doorway, until a key or a tap walks the owl again.
+   */
+  private coasting = false;
   /** When up was last pressed (the up key or the Go in action, OP-212; 0 for not since): in a side view, through the doorway the owl stands in. */
   private upAt = 0;
   /** The up arrow over the doorway the owl stands in (a side view, OP-212), and which doorway it is over now. */
@@ -1310,11 +1315,13 @@ export class RoomScene extends Phaser.Scene {
     // side (the tree), the keys walk along the floor only: up goes through doorways there (OP-212).
     const dir = this.decorating ? null : this.heldWay();
     if (!dir) {
+      if (this.coasting) return;
       if (this.keyWalk && this.me.walking) this.stop();
       this.keyDir = null;
       this.keyWalk = false;
       return;
     }
+    this.coasting = false;
     const same = this.keyDir !== null && this.keyDir.x === dir.x && this.keyDir.y === dir.y;
     const afresh = this.reSteer;
     this.reSteer = false;
@@ -2496,10 +2503,22 @@ export class RoomScene extends Phaser.Scene {
     if (distance(to, this.me.pos) < 3) return false;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
     this.keyWalk = fromKeys;
+    if (!fromKeys) this.coasting = false;
     this.me.startWalk(walk);
     this.conn?.send({ t: 'move', id: this.playerId, walk });
     this.conn?.track(this.snapshot());
     return true;
+  }
+
+  /**
+   * For the browser tests (OP-212): walk to `target` as the held keys walk, never through a doorway by
+   * itself, and on to where it ends with no key held, so a test can stand the owl inside a doorway
+   * however slow its runner's frames are.
+   */
+  walkAsKeys(target: Vec2): boolean {
+    const walked = this.walkTo(target, true);
+    this.coasting = walked;
+    return walked;
   }
 
   /** On round a bend to where a tap asked (OP-148), from where the last leg ended: false when the owl can go no further. */

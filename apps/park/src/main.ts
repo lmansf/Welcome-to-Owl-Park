@@ -691,7 +691,7 @@ window.owlPark = {
   playerId,
   transport: transport.kind,
   state: () => roomScene()?.debugState() ?? null,
-  walkTo: (x, y, asKeys) => roomScene()?.walkTo({ x, y }, asKeys === true),
+  walkTo: (x, y, asKeys) => (asKeys ? roomScene()?.walkAsKeys({ x, y }) : roomScene()?.walkTo({ x, y })),
   camera: () => {
     const s = roomScene();
     if (!s) return null;
