@@ -12,7 +12,7 @@ const gap = (a: Box, b: Box) => Math.hypot(centre(a).x - centre(b).x, centre(a).
 const npc = async (page: Page, id: string) => (await state(page)).npcs.find((n) => n.id === id)!;
 
 test.describe('the pad (OP-082, OP-114)', () => {
-  test('a phone has three buttons on the left: Interact nearer the middle, the Menu outside, Jump below them; Emotes and Say above', async ({ page, isMobile }) => {
+  test('a phone has three buttons on the left: Interact nearer the middle, the Menu outside, Jump below them; Say above (the emotes inside it, OP-242)', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page);
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
@@ -20,12 +20,13 @@ test.describe('the pad (OP-082, OP-114)', () => {
     const interact = await box('[data-pad-interact]');
     const menu = await box('[data-menu-btn]');
     const jump = await box('[data-pad-jump]');
-    const emotes = await box('[data-emotes-btn]');
     const say = await box('[data-say-btn]');
+    // One button for Say and the emotes on a phone (OP-242).
+    await expect(page.locator('[data-emotes-btn]')).toBeHidden();
     const width = page.viewportSize()!.width;
     // The stick keeps the bottom-right corner; the pad keeps to the left.
     expect(stick.x + stick.width).toBeGreaterThan(width - 40);
-    for (const b of [interact, menu, jump, emotes, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
+    for (const b of [interact, menu, jump, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
     // Three of a handheld's face buttons (Logan, 2026-10-27): the Menu and Interact either side, Jump below between them.
     const [i, m, j] = [interact, menu, jump].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>];
     expect(Math.abs(m.y - i.y)).toBeLessThan(1);
@@ -35,12 +36,10 @@ test.describe('the pad (OP-082, OP-114)', () => {
     // One size, and Jump 8 px from each.
     for (const b of [menu, jump]) expect(b.width).toBeCloseTo(interact.width, 0);
     for (const [a, b] of [[menu, jump], [jump, interact]] as const) expect(gap(a, b)).toBeCloseTo(8, 0);
-    // Emotes and Say above, over the Menu and Interact.
-    expect(centre(emotes).x).toBeLessThan(centre(say).x);
-    expect(centre(emotes).y).toBeLessThan(m.y);
+    // Say above, over Interact.
     expect(centre(say).y).toBeLessThan(i.y);
     // Thumb-sized and apart: each button at least 44 px; round ones measured as circles, none over another or the stick.
-    const live = [interact, menu, jump, emotes, say];
+    const live = [interact, menu, jump, say];
     for (const b of live) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
     for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) expect(gap(live[a]!, live[b]!), `${a} and ${b}`).toBeGreaterThan(7.5);
     for (const b of live) expect(overlaps(b, stick)).toBe(false);
@@ -60,6 +59,69 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test("a phone's screen keeps what the thumbs need: the count, Feedback and the emotes are the Menu's and Say's, and the ribbon never sits on the guest's badge (OP-242)", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "the phone's screen");
+    await openPark(page);
+    const hud = page.locator('#hud');
+    // In sight: the stick, Jump, the Menu, Say and the feathers. Out of it: the count, Emotes, the bug and Interact at rest.
+    for (const sel of ['#hud .stick', '[data-pad-jump]', '[data-menu-btn]', '[data-say-btn]']) await expect(page.locator(sel), sel).toBeVisible();
+    for (const sel of ['#hud .bar .pill', '[data-emotes-btn]', '[data-feedback-bug]']) await expect(page.locator(sel), sel).toBeHidden();
+    expect(await page.locator('[data-pad-interact]').evaluate((el) => getComputedStyle(el).opacity)).toBe('0');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-park.png` });
+
+    // The Menu says how many owls are here, and Send feedback stands by Close, in its accent, on every tab.
+    await page.locator('[data-menu-btn]').tap();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu.locator('[data-menu-sub]')).toHaveText(/owls? here/);
+    const send = menu.locator('[data-menu-feedback]');
+    await expect(send).toBeVisible();
+    await expect(send).toHaveText('Send feedback');
+    const head = (await menu.locator('.mhead').boundingBox())!;
+    const sendBox = (await send.boundingBox())!;
+    expect(sendBox.y).toBeGreaterThanOrEqual(head.y - 1);
+    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(head.y + head.height + 1);
+    expect(sendBox.x + sendBox.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    for (const tab of ['collection', 'map', 'settings'] as const) {
+      await menu.locator(`[data-tab="${tab}"]`).tap();
+      await expect(send).toBeVisible();
+    }
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-menu.png` });
+    await send.tap();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    await feedback.getByRole('button', { name: 'Back to the menu' }).tap();
+    await expect(menu).toBeVisible();
+    await menu.getByRole('button', { name: 'Close the menu' }).tap();
+    await expect(menu).toBeHidden();
+
+    // A guest with the keepers' ribbon up, wandering alone, as in Logan's screenshot of Nov 3: the ribbon
+    // shows and the badge waits; hidden, the badge comes back under the bar; the bar keeps a small mark.
+    await page.evaluate(() => {
+      const reg = window.owlPark.game.registry;
+      (reg.get('hud') as { setSpectator(on: boolean): void; setStatus(s: string, k: string): void; toast(m: string, ms?: number): void }).setSpectator(true);
+      (reg.get('ribbon') as { set(w: string | null): void }).set('Welcome to the Owl Park Preview');
+      const h = reg.get('hud') as { setStatus(s: string, k: string): void; toast(m: string, ms?: number): void };
+      h.setStatus('offline', 'edge');
+      h.toast('You are wandering alone for now: the park could not connect.', 4000);
+    });
+    const ribbon = page.locator('[data-ribbon]');
+    const badge = page.locator('[data-spectator]');
+    await expect(ribbon).toBeVisible();
+    await expect(badge).toHaveClass(/show/);
+    await expect(badge).toBeHidden();
+    await expect(hud.locator('.bar .pill .alone')).toBeVisible();
+    await expect(hud.locator('.bar .pill [data-count]')).toBeHidden();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-guest-ribbon.png` });
+    await ribbon.getByRole('button', { name: 'Hide this note' }).tap();
+    await expect(ribbon).toBeHidden();
+    await expect(badge).toBeVisible();
+    const bar = (await hud.locator('.bar').boundingBox())!;
+    const b = (await badge.boundingBox())!;
+    expect(b.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+    expect(b.x + b.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-guest.png` });
+  });
+
   test('Interact does what the owl stands at, as E does, and rests where there is nothing', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     // The market, by its gift shop (the lobby's ticket booth, which this used, went with OP-180).
@@ -69,15 +131,24 @@ test.describe('the pad (OP-082, OP-114)', () => {
     // owl and the far stalls, clear of every stall, door and owl to talk to).
     await page.evaluate(() => window.owlPark.walkTo(1900, 860));
     await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
-    // Nothing to do here: it rests, dimmed.
+    // Nothing to do here: it rests, out of sight (OP-242).
     await expect(interact).toHaveAttribute('aria-disabled', 'true');
     await expect(interact).toHaveClass(/idle/);
+    expect(await interact.evaluate((el) => getComputedStyle(el).opacity)).toBe('0');
     const shop = (await state(page)).doors.find((d) => d.id === 'shop')!;
     await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: shop.x, y: shop.y });
     await expect(interact).toHaveAttribute('aria-disabled', 'false', { timeout: 15_000 });
     await expect(interact).toHaveAttribute('aria-label', 'Interact: Gift shop');
-    // The first action, which Interact and E do, wears the same '!'.
-    await expect(page.locator('[data-action="shop"] .bang svg')).toBeVisible();
+    // It wears what it does (OP-242), so the row's first button, which says the same, stays away; the
+    // button stays clear of the stick.
+    await expect(interact).toHaveText('Gift shop');
+    await expect(interact).toHaveClass(/labelled/);
+    await expect(page.locator('[data-action="shop"]')).toBeHidden();
+    await expect(page.locator('[data-action="shop"] .bang svg')).toHaveCount(1);
+    const pill = (await interact.boundingBox())!;
+    const stick = (await page.locator('#hud .stick').boundingBox())!;
+    expect(overlaps(pill, stick)).toBe(false);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-action.png` });
     // Tapped, it does what E does there: with no store's page on this transport, the shop says it opens soon
     // (storecard.spec.ts has the card before the store, on the room server).
     await interact.tap();

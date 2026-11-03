@@ -119,7 +119,9 @@ test.describe('a touch never zooms the page (OP-104)', () => {
     await expect(say.locator('[data-group="cheers"]')).toHaveAttribute('aria-pressed', 'false');
     await page.keyboard.press('Escape');
     await expect(say).toBeHidden();
-    await page.locator('[data-emotes-btn]').tap();
+    // A phone's emotes are inside Say (OP-242).
+    await page.locator('[data-say-btn]').tap();
+    await say.locator('[data-swap="emotes"]').tap();
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
     await expect(wheel).toBeVisible();
     expect(await zoomable(page), 'the emote wheel').toEqual([]);

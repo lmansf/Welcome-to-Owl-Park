@@ -178,18 +178,32 @@ test.describe('single visitor', () => {
     test.slow(); // the emotes, Say, the Menu's five tabs and Feedback open and close in turn
     await openPark(page);
     await expect(page.locator('#hud .bottom .left button')).toHaveCount(3);
-    // Emotes and Say are one tap away.
-    await page.locator('[data-emotes-btn]').click();
+    // Emotes and Say are one tap away: on a computer each has its button; a phone has Say's alone, and
+    // the emotes are a tap inside it (OP-242). Each wheel leads to the other.
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
+    const say = page.getByRole('dialog', { name: 'Say' });
+    if (isMobile) {
+      await expect(page.locator('[data-emotes-btn]')).toBeHidden();
+      await page.locator('[data-say-btn]').click();
+      await expect(say).toBeVisible();
+      await say.locator('[data-swap="emotes"]').click();
+      await expect(say).toBeHidden();
+    } else await page.locator('[data-emotes-btn]').click();
     await expect(wheel).toBeVisible();
     await wheel.getByRole('button', { name: 'Close emotes' }).click();
     await expect(wheel).toBeHidden();
     await page.locator('[data-say-btn]').click();
-    const say = page.getByRole('dialog', { name: 'Say' });
     await expect(say).toBeVisible();
     await say.getByRole('button', { name: 'Close Say' }).click();
     await expect(say).toBeHidden();
     await expect(page.locator('[data-say-btn]')).toBeFocused();
+    await page.locator('[data-say-btn]').click();
+    await say.locator('[data-swap="emotes"]').click();
+    await expect(wheel).toBeVisible();
+    await wheel.locator('[data-swap="say"]').click();
+    await expect(say).toBeVisible();
+    await say.getByRole('button', { name: 'Close Say' }).click();
+    await expect(say).toBeHidden();
 
     // The Menu: five tabs, each with its word, on the quests first.
     await page.locator('[data-menu-btn]').click();
