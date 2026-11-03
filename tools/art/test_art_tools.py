@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw, ImageOps, PngImagePlugin  # noqa: E402
 
 from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, FLIGHT_LAYERS, OWL_SPECIES, ArtError, flight_layers, flight_master, load_assets,  # noqa: E402
                     owl_layer_base, owl_master_of, parse_hex, species_layers)
-from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
+from artlib import bands, forbidden, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib import fields  # noqa: E402
@@ -1813,6 +1813,122 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBands(unittest.TestCase):
+    """The value bands (OP-250): the targets set them, the grade reaches them, every published layer keeps them."""
+
+    TARGETS = HERE / "targets"
+    PUBLIC = HERE.parent.parent / "apps" / "park" / "public" / "art"
+
+    def test_the_targets_measure_inside_the_bands_they_set(self):
+        from PIL import Image
+        for key, bands_of in (("l4", {}), ("plaza", {}), ("clearing", {})):
+            f = self.TARGETS / f"target-{key}.png"
+            if not f.exists():
+                self.skipTest(f"{f.name} is not in this checkout")
+            m = bands.measure_target(Image.open(f))
+            self.assertEqual(bands.problems(m["sky"], "sky"), [], f"{key}: the sky band is the sky layer's band")
+            self.assertEqual(bands.problems(m["backdrop"], "mid"), [], f"{key}: the backdrop band is the middle layer's band")
+            self.assertEqual(bands.problems(m["floor"], "walk"), [], f"{key}: the floor band is the walkable layer's band")
+            self.assertGreaterEqual(m["floor"]["contrast"], 7.5, f"{key}: the floor carries the most contrast")
+            self.assertGreater(m["floor"]["L_mean"], m["backdrop"]["L_mean"], f"{key}: the floor is lighter than the backdrop")
+            self.assertGreater(m["backdrop"]["L_mean"], m["sky"]["L_mean"], f"{key}: the backdrop is lighter than the sky")
+
+    def test_every_published_backdrop_layer_is_inside_its_band(self):
+        from PIL import Image
+        assets = load_assets()
+        keys = sorted(k for k, v in assets.items() if v.get("kind") == "layer" and (self.PUBLIC / f"{k}.webp").exists())
+        if not keys:
+            self.skipTest("no published backdrop layer in this checkout")
+        failures = []
+        for key in keys:
+            band, limits = bands.band_of(key)
+            with Image.open(self.PUBLIC / f"{key}.webp") as im:
+                probs = bands.problems(bands.stats(im), limits)
+            if probs:
+                failures.append(f"{key} [{band}]: {'; '.join(probs)}")
+        self.assertEqual(failures, [], "outside their value bands (docs/TREE_STYLE.md 2b; `pnpm art:finish bands --all`):\n" + "\n".join(failures))
+
+    def _loud_layer(self, w: int, h: int, keyed: bool) -> "Image.Image":
+        """A bright, hard, saturated layer: a checker of lantern gold and navy with a soft top (keyed) edge."""
+        from PIL import Image
+        y, x = np.mgrid[0:h, 0:w]
+        checker = ((x // 24 + y // 24) % 2).astype(np.float64)
+        rgb = np.stack([30 + checker * 225, 40 + checker * 170, 120 - checker * 90], -1)
+        rgb += 20 * np.sin(x / 50.0)[..., None]
+        arr = np.clip(rgb, 0, 255).astype(np.uint8)
+        if not keyed:
+            return Image.fromarray(arr, "RGB")
+        alpha = np.clip((y - h * 0.3) / (h * 0.1), 0, 1) * 255
+        alpha[(x // 64 + y // 64) % 7 == 0] = 0
+        return Image.fromarray(np.dstack([arr, np.round(alpha).astype(np.uint8)]), "RGBA")
+
+    def test_the_grade_reaches_the_band_keeps_the_alpha_and_repeats_itself(self):
+        for band, w, h, keyed in (("sky", 400, 225, False), ("far", 400, 225, True), ("mid", 200, 112, True)):
+            img = self._loud_layer(w, h, keyed)
+            before = bands.stats(img)
+            self.assertTrue(bands.problems(before, band), f"{band}: the synthetic layer starts outside its band")
+            out, params = bands.grade_to_band(img, band, (40, 60, 100))
+            self.assertEqual(out.mode, img.mode)
+            self.assertEqual(bands.problems(bands.stats(out), band), [], f"{band}: {params}")
+            if keyed:
+                self.assertEqual(out.getchannel("A").tobytes(), img.getchannel("A").tobytes(), "the alpha is untouched")
+                self.assertIn("haze", params)
+                self.assertIn("blur", params)
+            else:
+                self.assertNotIn("haze", params)
+            again, _ = bands.grade_to_band(img, band, (40, 60, 100))
+            self.assertEqual(again.tobytes(), out.tobytes(), "deterministic")
+            self.assertTrue(bands.tools_line(params).startswith(f"bands: {band}"))
+        # a layer already inside its band is left as it is apart from the soft pass it is entitled to
+        from PIL import Image
+        calm = Image.new("RGB", (400, 225), (28, 36, 60))
+        out, params = bands.grade_to_band(calm, "sky")
+        self.assertEqual(out.tobytes(), calm.tobytes())
+        self.assertEqual(sorted(params), ["after", "band", "before"])
+
+    def test_the_bands_command_grades_in_place_with_provenance_and_a_dry_run_writes_nothing(self):
+        from PIL import Image
+        area = next(iter(postprocess.kit_table()["areas"]))
+        sky_key, far_key, mid_key = f"kit-{area}-sky-a", f"kit-{area}-far-a", f"kit-{area}-mid-b"
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td) / "art"
+            public.mkdir()
+            prov_path = Path(td) / "provenance.jsonl"
+            for key, w, h, keyed in ((sky_key, 1600, 900, False), (far_key, 1600, 900, True), (mid_key, 800, 450, True)):
+                data, _ = webpmeta.encode_under_budget(self._loud_layer(w, h, keyed), BUDGET_BYTES)
+                (public / f"{key}.webp").write_bytes(data)
+                prov.append(prov_path, prov.build_line(asset=f"{key}.webp", key=key, logical="1x", sha256=postprocess.sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                                       sidecar={"hash16": "ab" * 8, "provider": "mock", "seed": 5}, published_at="2026-11-03T00:00:00Z", tools=["layer: heal band=0.2"], human_edits=["picked"]))
+            before = {f.name: f.read_bytes() for f in public.iterdir()}
+            common = ["--public", str(public), "--provenance", str(prov_path), "--work", str(Path(td) / "work"), "--now", "2026-11-03T01:00:00Z"]
+            self.assertEqual(postprocess.main(["bands", "--all", "--dry-run", *common]), 0)
+            self.assertEqual({f.name: f.read_bytes() for f in public.iterdir()}, before, "a dry run writes nothing")
+            self.assertEqual(len(prov.read_lines(prov_path)), 3)
+            self.assertEqual(postprocess.main(["bands", "--all", "--note", "graded into the bands", *common]), 0)
+            lines = prov.read_lines(prov_path)
+            self.assertEqual(len(lines), 6)
+            for key in (sky_key, far_key, mid_key):
+                data = (public / f"{key}.webp").read_bytes()
+                self.assertNotEqual(data, before[f"{key}.webp"])
+                line = [l for l in lines if l["asset"] == f"{key}.webp"][-1]
+                self.assertEqual((line["sha256"], line["bytes"], line["raw_hash16"], line["seed"]), (postprocess.sha256_bytes(data), len(data), "ab" * 8, 5))
+                self.assertEqual(line["tools"][0], "layer: heal band=0.2")
+                self.assertTrue(any(t.startswith("bands: ") for t in line["tools"]), line["tools"])
+                self.assertEqual(line["human_edits"], ["picked", "graded into the bands"])
+                self.assertEqual(prov.problems(line), [])
+                with Image.open(public / f"{key}.webp") as im:
+                    self.assertEqual(bands.problems(bands.stats(im), bands.band_of(key)[1]), [], key)
+                    if key != sky_key:
+                        with Image.open(io.BytesIO(before[f"{key}.webp"])) as was:
+                            self.assertEqual(im.getchannel("A").tobytes(), was.getchannel("A").tobytes(), "the alpha is untouched")
+            self.assertTrue((Path(td) / "work" / "review" / f"bands-{area}.png").exists())
+            # a second run skips what is graded already
+            after = {f.name: f.read_bytes() for f in public.iterdir()}
+            self.assertEqual(postprocess.main(["bands", "--all", *common]), 0)
+            self.assertEqual({f.name: f.read_bytes() for f in public.iterdir()}, after)
+            self.assertEqual(len(prov.read_lines(prov_path)), 6)
 
 
 class TestKit(unittest.TestCase):

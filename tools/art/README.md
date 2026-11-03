@@ -260,6 +260,21 @@ assembler (OP-234) builds screens from the published files, whose format is this
   line in `tools/art/targets/provenance.jsonl`. A revision round (`ART_TARGET_ROUND=2`) repaints the
   round before from `work/art/guides/<key>-round.png` (`art:finish target <key> --guide`) with the
   target's revision notes. The kit's recut (OP-251) and the value bands (OP-250) are taken from them.
+- **Value bands** (OP-250, `docs/TREE_STYLE.md` section 2b, `artlib/bands.py`): every published backdrop
+  layer sits inside its layer's band of lightness (Lab L mean and p95), local contrast and saturation,
+  measured over its opaque pixels, so the backdrop stays darker and softer than the walkable floor.
+  `art:finish bands <key>...` (or `--all`; no generation, no cost) reads a published layer from
+  `apps/park/public/art`, measures it, and pulls it into its band: a linear remap of L toward the band's
+  mean and ceiling, a blend toward a blurred copy and a gain under 1 for contrast, a chroma scale for
+  saturation, and for far and middle layers a little blur and a haze toward the area's sky colour
+  (sampled from the lower half of its `sky-a` plate as published, so skies are graded first). The WebP is
+  re-encoded in place under the same budget with the alpha untouched, a provenance line is appended whose
+  `tools` keep the layer's finish and add `bands: <band> ...` with the parameters and the statistics
+  before and after, and `work/art/review/bands-<area>.png` shows each layer before and after over its sky.
+  Deterministic; a layer whose latest line already says `bands:` is skipped unless `--force`. `--dry-run`
+  prints the statistics and writes nothing; `--measure <png>...` prints a 1600 x 900 screen's sky, backdrop
+  and floor bands (or any image's statistics); `--haze` and `--blur` override the far and middle defaults.
+  A layer the grade cannot bring into its band is reported (exit 1) and is one to regenerate.
 - **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
   clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
   it is published; nothing from the kit is published without that.

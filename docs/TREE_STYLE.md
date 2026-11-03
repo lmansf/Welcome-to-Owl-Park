@@ -41,6 +41,62 @@ The game backs this up in code (OP-214): a colour grade per height, a card with 
 arrival, a soft fade through the next height's colour on the stairs, and on a computer the minimap
 (OP-213).
 
+## 2b. Value bands (OP-250)
+
+The owner saw the kit's backdrop layers compete with the walkable floor when the level assembler first
+drew rooms from them (PR 86). The three approved target screens (`tools/art/targets/`, OP-249: level 4's
+stair screen, the plaza's west end and the Treehouse Clearing's Commons) are painted as one picture under
+one light, with the backdrop darker and softer than the floor. The bands below are measured on them, and
+every published backdrop layer is held to its band in code: `pnpm art:finish bands --all` pulls a layer
+into its band (`tools/art/README.md`), and `tools/art/test_art_tools.py` (`TestBands`) fails any layer
+outside it.
+
+**How the numbers are taken** (`tools/art/artlib/bands.py`; `pnpm art:finish bands --measure <png>` prints
+them for any screen). Lightness is CIE Lab L (0 to 100), over a layer's opaque pixels (alpha 128 or more):
+its mean, and its 95th percentile, which is the brightest rim light that is more than a speck. Local
+contrast is the standard deviation of L inside each 32 px block of the screen grid (16 px in a half-size
+middle layer, so a block covers the same patch of screen), averaged over the blocks that are at least half
+opaque: how hard the layer's edges and texture read at a glance. Saturation is the mean HSV S (0 to 1). On
+a target the sky band is the top 30 % of the screen, the backdrop band 30 % to 70 % down, and the floor
+band y 740 to 900 (the walkway and what stands on it):
+
+| Target | Sky band | Backdrop band | Floor band |
+| --- | --- | --- | --- |
+| level 4's stair | L 11.5, p95 44, contrast 4.1, sat 0.65 | L 21.3, p95 48, contrast 4.7, sat 0.62 | L 33.4, p95 82, contrast 10.2, sat 0.45 |
+| the plaza | L 16.3, p95 53, contrast 7.1, sat 0.58 | L 29.2, p95 60, contrast 6.5, sat 0.49 | L 64.7, p95 96, contrast 9.6, sat 0.23 |
+| the Clearing | L 16.5, p95 42, contrast 7.1, sat 0.44 | L 28.0, p95 77, contrast 11.0, sat 0.48 | L 33.5, p95 68, contrast 8.0, sat 0.52 |
+
+**The bands.** A layer is inside its band when its L mean is in the range and the other three are under
+their ceilings:
+
+| Layer | L mean | L p95 at most | Local contrast at most | Saturation at most |
+| --- | --- | --- | --- | --- |
+| Sky plate (`kit-<area>-sky-*`) | 8 to 20 | 55 | 7.5 | 0.66 |
+| Far layer (`kit-<area>-far-*`) | 12 to 26 | 60 | 8 | 0.60 |
+| Middle layer (`kit-<area>-mid-*`) | 12 to 32 | 78 | 11 | 0.63 |
+| The walkable layer (floor, platforms, the props on them) | 33 to 65 | 96 | 14, and at least 7.5 | 0.70 |
+| The front overlay | 6 to 30 | 70 | 10 | 0.60 |
+
+Where each band comes from: the sky band is the targets' sky band (L mean 11.5 to 16.5, p95 42 to 53,
+contrast 4 to 7, saturation 0.44 to 0.65) with a little room either side. The middle layer takes the
+targets' backdrop band as measured (L mean 21 to 29, p95 48 to 77, contrast 5 to 11), and the far layer,
+which sits between the middle and the sky, a step under it toward the sky's numbers. The walkable layer
+is the targets' floor band (L mean 33 to 65, p95 68 to 96, contrast 8 to 10): it alone may pass p95 78,
+its contrast never drops under 7.5, so it always carries the most, and its ceiling of 14 leaves room for
+props and rim light. No target carries a front overlay, so its band is set by the rule, not measured: a
+hanging thing at the frame's edge is in front of the light, no lighter than the middle layer and no
+harder than it. The lower bounds of the backdrop bands exist so a layer never vanishes into the night;
+being darker than the floor is never the fault.
+
+**The rules the bands encode.** The far and middle layers are darker, lower in contrast and softer than
+the walkable layer: a little blur (1.6 px far, 1 px middle, at screen scale) and a haze toward the area's
+sky colour (14 % far, 7 % middle, the colour sampled from the lower half of the area's `sky-a` plate).
+The walkable layer holds the most contrast and the brightest rim light. The ink-wash realm is the one
+exception to the direction, not the order: it is washed onto paper cream, so its distance fades toward the
+paper rather than the night, and its bands read upward from its floor (sky L mean 75 to 96, far 60 to 85,
+middle 40 to 70, the p95 ceilings 99 and 97, the contrast ceilings the same as the park's, saturation at
+most 0.2, 0.2 and 0.3); the haze toward its sky is a haze toward the paper.
+
 ## 3. Edges and seams
 
 - **Within a level:** every join between two screens is painted as one edit across the join (the seam
