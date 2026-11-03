@@ -25,6 +25,7 @@ Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
   grade <in> <out>     the palette grade hook on its own
   ref <in> <out>       prepare a committed anchor reference (<= 1024 px, no metadata, under budget)
   sheet <key>          contact sheet of a key's raw candidates for picking the winner
+  bands <key...>|--all pull published backdrop layers into their value bands in place (OP-250); --measure <png> measures
   publish <key...>     move finals into apps/park/public/art, append tools/art/provenance.jsonl
   check [--all|keys]   verify what is published against the loader contract
   demo                 run the whole chain on synthetic (or mock) input in a temp dir and assert it
@@ -68,7 +69,7 @@ from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WOR
                     PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, SPRITES_PATH, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
                     TINTED_LAYERS, TOOLS_ART_DIR, WING_LAYERS, WING_MASTER, ArtError, flight_layers, flight_master, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size,
                     now_iso, owl_layer_base, owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
-from artlib import forbidden, pngmeta, prov, sprites, webpmeta  # noqa: E402
+from artlib import bands, forbidden, pngmeta, prov, sprites, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib.fields import GAMES as FIELD_GAMES, render_field_guide  # noqa: E402
@@ -1987,6 +1988,160 @@ def cmd_target(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+LAYER_ORDER = {"sky": 0, "far": 1, "mid": 2}
+
+
+def layer_keys(ctx: Ctx) -> list[str]:
+    """Every backdrop layer key, by area, skies first (a far or middle layer hazes toward its area's sky as graded)."""
+    keys = [k for k, v in ctx.assets.items() if v.get("kind") == "layer"]
+    return sorted(keys, key=lambda k: (bands.layer_area(k), LAYER_ORDER[bands.layer_band(k)], k))
+
+
+def _stats_text(st: dict) -> str:
+    return f"L {st['L_mean']:.1f} p95 {st['L_p95']:.1f} contrast {st['contrast']:.1f} sat {st['sat']:.2f}"
+
+
+def bands_review(ctx: Ctx, area: str, rows: list[tuple[str, Image.Image, Image.Image, dict, dict]], skies: tuple[Image.Image | None, Image.Image | None], suffix: str = "") -> Path:
+    """work/art/review/bands-<area>.png: each layer before (left) and after (right), a keyed layer over
+    the area's sky-a as it was and as it is, with its statistics under each."""
+    cw, ch, pad, text_h = 800, 450, 8, 22
+    board = Image.new("RGB", (2 * cw + 3 * pad, len(rows) * (ch + text_h + pad) + pad), (24, 24, 30))
+    draw = ImageDraw.Draw(board)
+    for i, (key, before, after, st_b, st_a) in enumerate(rows):
+        y = pad + i * (ch + text_h + pad)
+        for j, (img, sky, st) in enumerate(((before, skies[0], st_b), (after, skies[1], st_a))):
+            x = pad + j * (cw + pad)
+            cell = Image.new("RGBA", (cw, ch), (40, 40, 48, 255))
+            if "A" in img.getbands() and sky is not None:
+                cell.alpha_composite(sky.convert("RGBA").resize((cw, ch), Image.Resampling.LANCZOS))
+            cell.alpha_composite(img.convert("RGBA").resize((cw, ch), Image.Resampling.LANCZOS))
+            board.paste(cell.convert("RGB"), (x, y))
+            draw.text((x + 4, y + ch + 4), f"{key} {'before' if j == 0 else 'after'}: {_stats_text(st)}", fill=(230, 226, 210))
+    return write_review(ctx, f"bands-{area}{suffix}.png", board)
+
+
+def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The value bands (OP-250): a published backdrop layer measured over its opaque pixels and pulled
+    into its layer's band (``artlib.bands``), re-encoded in place under the same budget with its alpha
+    untouched, and a provenance line appended with the parameters; ``--dry-run`` only prints the
+    statistics; ``--measure <png>`` prints a target screen's three bands (or any image's statistics)."""
+    if a.measure:
+        for f in a.measure:
+            img = Image.open(f)
+            img.load()
+            if img.size == (ROOM_W, ROOM_H) and "A" not in img.getbands():
+                parts = [f"{name}: {_stats_text(st)}" for name, st in bands.measure_target(img).items()]
+                note(f"{Path(f).name}  " + " | ".join(parts))
+            else:
+                note(f"{Path(f).name}  {_stats_text(bands.stats(img))}")
+        return 0
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    src_dir = ctx.out if a.finals else ctx.public
+    keys = [k for k in layer_keys(ctx) if (src_dir / f"{k}.webp").exists()] if a.all else [validate_key(k, allow_helpers=False, assets=ctx.assets) for k in a.keys]
+    if not keys:
+        raise ArtError("name the layer keys to grade (kit-<area>-sky|far|mid-<x>) or pass --all")
+    for key in keys:
+        if ctx.assets.get(key, {}).get("kind") != "layer":
+            raise ArtError(f"{key!r} is not a backdrop layer key (kit-<area>-sky|far|mid-<x> in config/kit.json)")
+    keys = sorted(set(keys), key=lambda k: (bands.layer_area(k), LAYER_ORDER[bands.layer_band(k)], k))
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    per_area: dict[str, list] = {}
+    sky_before: dict[str, Image.Image] = {}
+    failed: list[str] = []
+    graded = 0
+    for key in keys:
+        band, limits = bands.band_of(key)
+        area = bands.layer_area(key)
+        path = src_dir / f"{key}.webp"
+        if not path.exists():
+            raise ArtError(f"no {'finished' if a.finals else 'published'} {path.name} (the bands are graded on {'finished layers in ' + rel_to_repo(ctx.out) if a.finals else 'published layers; finish and publish it first'})")
+        data0 = path.read_bytes()
+        if a.finals:
+            # An unpublished final: its finish record stands in for the provenance line and takes the bands line,
+            # so publish carries it into tools/art/provenance.jsonl.
+            rec = load_post_record(ctx, key)
+            if not rec or rec.get("outputs", {}).get("1x", {}).get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{path.name}: not the file its finish record describes (run `pnpm art:finish layer {key}` first)")
+            line = {"tools": rec.get("tools") or [], "human_edits": rec.get("human_edits") or []}
+        else:
+            line = latest.get(path.name)
+            if not line or line.get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+        img = Image.open(io.BytesIO(data0))
+        img.load()
+        if band == "sky":
+            sky_before.setdefault(area, img)
+        if any(str(t).startswith("bands:") for t in line.get("tools") or []) and not a.force:
+            st = bands.stats(img)
+            note(f"{key}: already graded ({_stats_text(st)}); --force grades it again from the published file")
+            continue
+        sky_rgb = None
+        if band != "sky":
+            sky_path = next((d / f"kit-{area}-sky-a.webp" for d in (src_dir, ctx.public) if (d / f"kit-{area}-sky-a.webp").exists()), src_dir / f"kit-{area}-sky-a.webp")
+            if sky_path.exists():
+                with Image.open(sky_path) as sky:
+                    sky_rgb = bands.sky_colour(sky)
+            else:
+                warn(f"{key}: no {sky_path.name} to sample the haze colour from; no haze applied")
+        out, params = bands.grade_to_band(img, band, sky_rgb, a.haze, a.blur, limits)
+        keyed = "A" in out.getbands()
+        data, info = webpmeta.encode_under_budget(out, ctx.budget)
+        if keyed and not webpmeta.same_alpha(data, out):
+            raise ArtError(f"{path.name}: the encoder changed the alpha; a layer's edge must stay exact")
+        back = Image.open(io.BytesIO(data))
+        back.load()
+        encoded = bands.stats(back)
+        probs = bands.problems(encoded, limits)
+        tools_line = bands.tools_line(params)
+        note(f"{key} [{band}] before: {_stats_text(params['before'])}")
+        note(f"{' ' * len(key)}        after:  {_stats_text(encoded)}  ({len(data)} bytes q{info['quality']})  {tools_line.split(' L ')[0]}")
+        if probs:
+            failed.append(f"{key}: {'; '.join(probs)}")
+            warn(f"{key}: still outside its {band} band after the grade: {'; '.join(probs)}")
+        if not a.dry_run and a.finals:
+            path.write_bytes(data)
+            v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            rec["outputs"]["1x"].update({"bytes": len(data), "sha256": sha256_bytes(data), "quality": info["quality"]})
+            rec["tools"] = list(rec.get("tools") or []) + [tools_line, budget_line(info)]
+            rec["bands"] = {k: v for k, v in params.items() if k not in ("before", "after")} | {"before": params["before"], "after": encoded}
+            save_post_record(ctx, key, {k: v for k, v in rec.items() if k not in ("finished_at", "human_edits")}, earlier_edits=list(rec.get("human_edits") or []))
+            graded += 1
+            per_area.setdefault(area, []).append((key, img, back, params["before"], encoded))
+        elif not a.dry_run:
+            new_line = prov.sanitize(prov.build_line(asset=path.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                                     sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
+                                                     tools=list(line.get("tools") or []) + [tools_line, budget_line(info)],
+                                                     human_edits=list(line.get("human_edits") or []) + ctx.notes))
+            line_probs = prov.problems(new_line)
+            if line_probs:
+                raise ArtError(f"{path.name}: nothing written, its provenance line would be refused: " + "; ".join(line_probs))
+            path.write_bytes(data)
+            v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            prov.append(prov_path, new_line)
+            latest[path.name] = new_line
+            graded += 1
+            per_area.setdefault(area, []).append((key, img, back, params["before"], encoded))
+    if not a.dry_run:
+        for area, rows in per_area.items():
+            sky_after = None
+            sky_path = next((d / f"kit-{area}-sky-a.webp" for d in (src_dir, ctx.public) if (d / f"kit-{area}-sky-a.webp").exists()), None)
+            if sky_path is not None:
+                sky_after = Image.open(sky_path)
+                sky_after.load()
+            rv = bands_review(ctx, area, rows, (sky_before.get(area, sky_after), sky_after), suffix="-finals" if a.finals else "")
+            note(f"review: {rel_to_repo(rv)}")
+    note(f"bands: {graded} layer(s) graded in place{' (dry run, nothing written)' if a.dry_run else ''}{' in ' + rel_to_repo(ctx.out) if a.finals else ''}, {len(failed)} still outside their band")
+    for f in failed:
+        print(f"FAIL: {f}")
+    return 1 if failed else 0
+
+
 def cmd_sprites(ctx: Ctx, a: argparse.Namespace) -> int:
     """The sprite manifest from the published art: rewritten, or with --check only compared."""
     path = Path(a.manifest) if a.manifest else SPRITES_PATH
@@ -2514,6 +2669,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--ref", action="store_true", help="write the kept target as work/art/guides/<key>-ref.png, the reference kit-guided jobs carry, instead of keeping it")
     add_common(sp)
     sp.set_defaults(fn=cmd_target)
+
+    sp = sub.add_parser("bands", help="pull published backdrop layers into their value bands in place, with provenance (OP-250)")
+    sp.add_argument("keys", nargs="*", help="layer keys (kit-<area>-sky|far|mid-<x>)")
+    sp.add_argument("--all", action="store_true", help="every published backdrop layer")
+    sp.add_argument("--dry-run", action="store_true", help="print the statistics before and after; write nothing")
+    sp.add_argument("--force", action="store_true", help="grade a layer again although its provenance says bands: already")
+    sp.add_argument("--finals", action="store_true", help="grade finished, unpublished layers in work/art/final instead; the finish record takes the bands line and publish carries it")
+    sp.add_argument("--measure", nargs="+", metavar="PNG", help="measure a target screen's three bands (or any image) and stop")
+    sp.add_argument("--haze", type=float, help="the haze toward the sky colour for far and middle layers (default 0.14 far, 0.07 mid)")
+    sp.add_argument("--blur", type=float, help="the blur in screen px for far and middle layers (default 1.6 far, 1.0 mid)")
+    sp.add_argument("--provenance", help="provenance file (default tools/art/provenance.jsonl)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_bands)
 
     sp = sub.add_parser("sprites", help="the sprite manifest: every published sprite's drawn area (packages/shared/src/sprites.json; publish rewrites it)")
     sp.add_argument("--manifest", default=None, help=argparse.SUPPRESS)

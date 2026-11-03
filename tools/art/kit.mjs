@@ -35,6 +35,8 @@ export const KIT_PIECES = Object.entries(KIT.sheets).flatMap(([name, sheet]) => 
 /** The area sets: accent textures, prop sheets and backdrop layers, each repeating sideways. */
 export const KIT_AREAS = KIT.areas ?? {};
 export const LAYER_SIZES = KIT.layer_sizes ?? { sky: [1600, 900], far: [1600, 900], mid: [800, 450] };
+/** Reference images a layer is painted from (OP-250): `layer_refs.<key>` in kit.json, in the generator's ref form (`@guide:<name>` is `work/art/guides/<name>.png`). */
+export const KIT_LAYER_REFS = KIT.layer_refs ?? {};
 
 function areaTexturePrompt(area, desc) {
   return `A seamless, tileable texture of ${desc}, filling the whole square evenly from edge to edge so that it repeats with no visible seam: the pattern continues across the left and right edges and across the top and bottom edges, even lighting with no vignette, no hot spot, no large single feature, no border, no frame, no shadow, the same scale of detail everywhere, seen flat on. The light of this area: ${area.light}. ${KIT_STYLE}`;
@@ -185,7 +187,7 @@ export function areaJobs(areaName, seedBase) {
   for (const name of Object.keys(area.layers)) {
     const key = `kit-${areaName}-${name}`;
     const keyed = !name.startsWith('sky');
-    jobs.push({ key, kind: 'layer', realm: 'kit', size: name.startsWith('mid') ? '2048x1152' : '2048x1152', seed: seedBase + (n += 4), variants: 4, ...(keyed ? { key_colour: KIT_KEY_COLOUR } : {}), providers: { fal: { output_format: 'png' } }, prompt: KIT_AREA_PROMPTS[key] });
+    jobs.push({ key, kind: 'layer', realm: 'kit', size: name.startsWith('mid') ? '2048x1152' : '2048x1152', seed: seedBase + (n += 4), variants: 4, ...(keyed ? { key_colour: KIT_KEY_COLOUR } : {}), ...(KIT_LAYER_REFS[key] ? { refs: KIT_LAYER_REFS[key] } : {}), providers: { fal: { output_format: 'png' } }, prompt: KIT_AREA_PROMPTS[key] });
   }
   return jobs;
 }
