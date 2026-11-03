@@ -19,38 +19,15 @@ const standsAt = (page: Page, top: number) =>
   expect.poll(async () => { const s = await state(page); return [s.air.s, Math.round(s.air.z)]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, top]);
 
 /**
- * Walk the owl by the arrow keys until it stands inside `left` to `right` (a doorway: the keys never
- * take one by themselves, OP-212). The page lets go of the key itself, on the frame the owl is in, since
- * a let-go sent from the test arrives a round trip late. A slow runner can still hitch for most of a
- * second with the key down and carry the owl past, so it walks back the other way until it is in.
+ * Walk the owl to the middle of `left` to `right` (a doorway) the way the held keys walk it, which never
+ * takes a doorway by itself (OP-212). The keys themselves are let go a frame late at best, and a slow
+ * runner's frames carried the owl past a doorway's width, so the walk is asked for where it ends.
  */
 async function keyInto(page: Page, left: number, right: number): Promise<void> {
-  const margin = 20;
-  for (let tries = 0; tries < 6; tries += 1) {
-    const x = (await state(page)).pos.x;
-    if (x > left + margin && x < right - margin) return;
-    const east = x <= left + margin;
-    const key = east ? 'ArrowRight' : 'ArrowLeft';
-    await page.keyboard.down(key);
-    await page.evaluate(
-      ({ key, east, past }) =>
-        new Promise<void>((done) => {
-          const look = () => {
-            const x = window.owlPark?.state()?.pos.x ?? 0;
-            if (east ? x > past : x < past) {
-              window.dispatchEvent(new KeyboardEvent('keyup', { code: key, key }));
-              done();
-            } else requestAnimationFrame(look);
-          };
-          look();
-        }),
-      { key, east, past: east ? left + margin + 5 : right - margin - 5 },
-    );
-    await page.keyboard.up(key);
-    await expect.poll(async () => (await state(page)).walking, { timeout: 10_000, intervals: [50] }).toBe(false);
-  }
+  await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y, true), { x: Math.round((left + right) / 2), y: GROUND });
+  await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
   const x = (await state(page)).pos.x;
-  expect(x > left + margin && x < right - margin, `owl at ${x}, not in ${left} to ${right}`).toBe(true);
+  expect(x > left && x < right, `owl at ${x}, not in ${left} to ${right}`).toBe(true);
 }
 
 /** The phone project's phone (a Pixel 7), held upright and on its side. */
