@@ -527,6 +527,13 @@ def kit_sheet(key: str) -> tuple[dict, str]:
         for area, spec in kit.get("areas", {}).items():
             if name.startswith(area + "-") and name[len(area) + 1:] in spec["sheets"]:
                 return spec["sheets"][name[len(area) + 1:]], f"kit-{area}-"
+        for area, sheets in kit.get("courses", {}).items():
+            if name.startswith(area + "-") and name[len(area) + 1:] in sheets:
+                return sheets[name[len(area) + 1:]], f"kit-{area}-"
+        if name.startswith("landmark-") and name[len("landmark-"):] in kit.get("landmarks", {}):
+            # a landmark is one prop on its own square canvas: a one-piece sheet
+            piece = kit["landmarks"][name[len("landmark-"):]]
+            return {"w": piece["w"], "h": piece["h"], "pieces": [{"name": name[len("landmark-"):], **piece}]}, "kit-landmark-"
     raise ArtError(f"{key!r} is not a sheet key (kit-sheet-<name> or kit-sheet-<area>-<name> in config/kit.json)")
 
 
@@ -708,7 +715,7 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     if a.clear_haze:
         rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
         note(f"{key}: clear-haze {n} px")
-    cols, rows = 3, 2
+    cols, rows = (1, 1) if len(sheet["pieces"]) == 1 else (3, 2)
     alpha = np.asarray(rgba.getchannel("A"))
     blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
     n = cols * rows
@@ -716,7 +723,7 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
         raise ArtError(f"{key}: {len(blobs)} prop(s) found, not {n}; the sheet painted fewer props or two touch (try --grow 1); pick another candidate")
     extra = blobs[n:]
     if extra:
-        note(f"warning: {key}: {len(extra)} small blob(s) past the six props dropped (largest {extra[0]['area']} px); a lantern on a thread or a leaf may be lost")
+        note(f"warning: {key}: {len(extra)} small blob(s) past the {n} prop(s) dropped (largest {extra[0]['area']} px); a lantern on a thread or a leaf may be lost")
     ordered = order_blobs(blobs, cols, rows)
     only = set(a.only.split(",")) if a.only else None
     review = rgba.convert("RGB")

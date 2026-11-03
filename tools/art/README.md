@@ -244,6 +244,13 @@ assembler (OP-234) builds screens from the published files, whose format is this
   half is "left as flat solid magenta with nothing painted on it, no sky, no frame or border". A
   far layer whose fade into the key went violet and was cleared to a hard top edge gets
   `--fade-top <px>`, which ramps its alpha in below that edge.
+- **Course props** live under `kit.courses.<area>.<sheet>`: extra six-prop sheets for a realm's
+  course, keyed, cut and named like the area's own sheets (`kit-sheet-<area>-<name>` to
+  `kit-<area>-<piece>`), seeded from 9000.
+- **Landmarks** live under `kit.landmarks.<name>` (`area`, `w`, `h`, `desc`): one prop each on its own
+  1024 x 1024 key-colour canvas, the helper key `kit-sheet-landmark-<name>`, cut by
+  `art:finish pieces` (which takes a one-piece sheet as one blob) to `kit-landmark-<name>` at its
+  logical size, seeded from 9500.
 - **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
   clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
   it is published; nothing from the kit is published without that.
