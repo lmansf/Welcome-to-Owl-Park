@@ -214,7 +214,8 @@ declare global {
       playerId: string;
       transport: string;
       state(): ReturnType<RoomScene['debugState']> | null;
-      walkTo(x: number, y: number): void;
+      /** `asKeys`: walk there as the held keys walk, which never take a doorway by themselves (OP-212). */
+      walkTo(x: number, y: number, asKeys?: boolean): void;
       /** The room camera: what of the room it shows, and where on the canvas it draws it (`port`, game pixels). */
       camera(): { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number; port: { x: number; y: number; w: number; h: number } } | null;
       /** Texture resolution actually loaded for an art key (tests check per-device rasterization). */
@@ -690,7 +691,7 @@ window.owlPark = {
   playerId,
   transport: transport.kind,
   state: () => roomScene()?.debugState() ?? null,
-  walkTo: (x, y) => roomScene()?.walkTo({ x, y }),
+  walkTo: (x, y, asKeys) => (asKeys ? roomScene()?.walkAsKeys({ x, y }) : roomScene()?.walkTo({ x, y })),
   camera: () => {
     const s = roomScene();
     if (!s) return null;

@@ -78,6 +78,9 @@ jobs:
       # The ledge painter's pull script (OP-156): it reads the rooms and the draft's check from
       # packages/shared, so a change there that it cannot load, or prints wrong, fails here.
       - run: pnpm masks:test
+      # The kit room greybox (OP-234): it draws the kit rooms from packages/shared's room data and kit
+      # rules, so a change there that it cannot load or draw fails here.
+      - run: pnpm kit:test
       - name: Cancel the rest of the run
         if: failure()
         run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}

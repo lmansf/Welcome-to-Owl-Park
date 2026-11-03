@@ -132,7 +132,8 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom, roomFor } from '../rooms';
+import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
 import type { Hud } from '../ui/hud';
@@ -325,6 +326,11 @@ export class RoomScene extends Phaser.Scene {
   private keyDir: Vec2 | null = null;
   /** The walk under way came from the keys, so letting go of them stops it. */
   private keyWalk = false;
+  /**
+   * The keys' kind of walk with no key held (walkAsKeys, for the browser tests): it goes on to its end
+   * instead of stopping, and still takes no doorway, until a key or a tap walks the owl again.
+   */
+  private coasting = false;
   /** When up was last pressed (the up key or the Go in action, OP-212; 0 for not since): in a side view, through the doorway the owl stands in. */
   private upAt = 0;
   /** The up arrow over the doorway the owl stands in (a side view, OP-212), and which doorway it is over now. */
@@ -597,7 +603,10 @@ export class RoomScene extends Phaser.Scene {
   private async open(): Promise<void> {
     const gen = this.gen;
     const previous = this.registry.get('loadedRoom') as string | undefined;
-    if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous));
+    // A room drawn from the art kit (OP-234) loads and releases its kit's pieces instead of paintings.
+    const drawn = drawnRoom(this.room, this.cfg);
+    const was = previous ? roomFor(previous) : undefined;
+    if (previous && previous !== this.room.id) releaseArt(this, roomArtKeys(previous, was && drawnRoom(was, this.cfg)));
     const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
     screen?.show('Opening…');
     const spawn = arrivalPoint(this.room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
@@ -606,14 +615,14 @@ export class RoomScene extends Phaser.Scene {
     const leaveEarly = () => void joining.conn.then((conn) => conn.leave());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, leaveEarly);
     this.openPosOverlay();
-    const cap = roomArtCap(this.room, this.cfg);
+    const cap = roomArtCap(drawn, this.cfg);
     this.artCap = cap;
     // On a dense screen, the paintings whose sharp copies the browser does not have yet open at 1x,
     // a third of the bytes, and sharpen once those come.
-    const soft = await opensSoft(this.room, this.cfg);
+    const soft = await opensSoft(drawn, this.cfg);
     await loadArt(
       this,
-      roomOpeningArt(this.room.id),
+      roomOpeningArt(this.room.id, drawn),
       this.cfg.pixelRatio,
       cap,
       (done, total) => {
@@ -773,6 +782,8 @@ export class RoomScene extends Phaser.Scene {
   /** The room's art, pieces and residents, with the own owl at `spawn`, where the room was told it comes in. */
   private build(spawn: Vec2): void {
     const { room } = this;
+    // What is drawn: the room's paintings, or the art kit's pieces (OP-234), the same layout either way.
+    const art = drawnRoom(room, this.cfg);
     ensureFxTextures(this);
 
     // Each tile is one screen of art at its offset. Tiles overlap their neighbours by a pixel so no
@@ -780,13 +791,15 @@ export class RoomScene extends Phaser.Scene {
     const playTiles: Phaser.GameObjects.Image[] = [];
     // A room with no art (the test course, OP-224) is drawn in plain shapes.
     if (room.drawn) drawPlaceholderRoom(this, room);
-    for (const t of room.drawn ? [] : backgroundTiles(room)) {
+    for (const t of room.drawn ? [] : backgroundTiles(art)) {
       for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) {
         this.placeTile(t, img);
         if (t.plain) img.setData('plain', true);
         if ((t.rate ?? 1) === 1) playTiles.push(img);
       }
     }
+    // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
+    if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
     this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
@@ -844,16 +857,18 @@ export class RoomScene extends Phaser.Scene {
       this.decor = new NestDecor(this, (keys) => loadArt(this, keys, this.cfg.pixelRatio, this.artCap));
       this.mirror = new NestMirror(this, NEST_MIRROR);
     }
-    for (const t of foregroundTiles(room)) {
+    for (const t of foregroundTiles(art)) {
       if (this.textures.exists(t.key)) for (const img of this.tileImages(t, room.size.h + 100, ROOM_W, ROOM_H)) this.placeTile(t, img);
     }
     // A room of the tree reads at a glance (OP-173): its ledges' edges and the shades over the playfield
     // under the owls, the shapes painted in front of the path over them, under the overlay.
     if (mapOf(room) === 2) {
-      this.treeDress = dressTreeRoom(this, room, playTiles, {
+      this.treeDress = dressTreeRoom(this, art, playTiles, {
         ground: TREE_GROUND,
+        // A kit room's ledges carry their own edge, the cap.
+        lips: !art.kit,
         // A raised front lies between the owls on ledges (drawn TREE_RAISED_BAND back) and those on the floor.
-        depths: { shade: -0.9, lip: -0.8, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
+        depths: { shade: -0.9, lip: -0.8, barrier: -0.7, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
         open: (door) => !this.realmClosed(this.doorTo(door)?.room),
         calm: this.calm(),
         onMarkTap: (door) => this.walkToDoorway(door.id),
@@ -1300,11 +1315,13 @@ export class RoomScene extends Phaser.Scene {
     // side (the tree), the keys walk along the floor only: up goes through doorways there (OP-212).
     const dir = this.decorating ? null : this.heldWay();
     if (!dir) {
+      if (this.coasting) return;
       if (this.keyWalk && this.me.walking) this.stop();
       this.keyDir = null;
       this.keyWalk = false;
       return;
     }
+    this.coasting = false;
     const same = this.keyDir !== null && this.keyDir.x === dir.x && this.keyDir.y === dir.y;
     const afresh = this.reSteer;
     this.reSteer = false;
@@ -1335,7 +1352,7 @@ export class RoomScene extends Phaser.Scene {
     if (now < this.prefetchAt) return;
     this.prefetchAt = now + 500;
     const side = this.sideView();
-    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking(), side)) prefetchRoomArt(this, to, this.cfg);
+    for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking(), side)) prefetchRoomArt(this, drawnRoom(to, this.cfg), this.cfg);
   }
 
   /** Stand still where the owl is and tell the room. */
@@ -1884,7 +1901,7 @@ export class RoomScene extends Phaser.Scene {
         .filter(({ img }) => (img.getData('fade') ?? 'middle') === 'middle')
         .map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight, fade: tileFade(t) })),
       owlScale: this.me.scaleX / (OWL_SCALE * speciesOf(this.look).size),
-      tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, behind: this.me.depth < this.treeDress.raisedDepth },
+      tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, barriers: this.treeDress.barriers, landings: this.treeDress.landings, behind: this.me.depth < this.treeDress.raisedDepth },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.spectator ? null : this.quests.markFor(n.id), approach: n.approaching })),
@@ -2486,10 +2503,22 @@ export class RoomScene extends Phaser.Scene {
     if (distance(to, this.me.pos) < 3) return false;
     const walk: Walk = { from: { ...this.me.pos }, to, startedAt: Date.now() };
     this.keyWalk = fromKeys;
+    if (!fromKeys) this.coasting = false;
     this.me.startWalk(walk);
     this.conn?.send({ t: 'move', id: this.playerId, walk });
     this.conn?.track(this.snapshot());
     return true;
+  }
+
+  /**
+   * For the browser tests (OP-212): walk to `target` as the held keys walk, never through a doorway by
+   * itself, and on to where it ends with no key held, so a test can stand the owl inside a doorway
+   * however slow its runner's frames are.
+   */
+  walkAsKeys(target: Vec2): boolean {
+    const walked = this.walkTo(target, true);
+    this.coasting = walked;
+    return walked;
   }
 
   /** On round a bend to where a tap asked (OP-148), from where the last leg ended: false when the owl can go no further. */

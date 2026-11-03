@@ -35,9 +35,9 @@ test.describe('the tree, level 2 (OP-161)', () => {
     ]);
   });
 
-  test('reads at a glance: its painted ledges with no line drawn over them, the stairs up and down marked (OP-173)', async ({ page }) => {
+  test('reads at a glance: its painted ledges with no line drawn over them, the stairs up and down marked, the stairhead down and the rope east of the trunk drawn (OP-173, OP-220)', async ({ page }) => {
     await openPark(page, { room: 'l2' });
-    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 2, behind: false });
+    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 2, barriers: 1, landings: 1, behind: false });
   });
 
   for (const [spawn, screen] of [['west', 0], ['default', 2]] as const) {

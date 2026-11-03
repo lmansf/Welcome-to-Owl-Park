@@ -768,12 +768,48 @@ def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
         cinfo = {}
         img = img.convert("RGB")
     img = crop_to_aspect(img, W, H, a.crop, 0)
-    before = tile_seam_ratio(img)
-    healed = heal_tile(img, a.band, axes=(1,)) if not a.no_heal else img
-    one = healed.resize((W, H), Image.Resampling.LANCZOS)
+    one = img.resize((W, H), Image.Resampling.LANCZOS)
+    # Clears come before the heal, in the un-healed final's pixels (finish with --no-heal to measure them):
+    # the heal rolls the painting by half its width and blends its middle, which would ghost a feature.
+    if (a.clear_box or a.clear_tone) and not keyed:
+        raise ArtError(f"{key}: --clear-box and --clear-tone clear to transparent, which a sky plate has no alpha for; pick a candidate without the feature")
+    for box in a.clear_box or []:
+        x0, y0, x1, y1 = parse_ints(box, 4, "--clear-box")
+        one, n = clear_polygon(one.convert("RGBA"), f"{x0},{y0},{x1},{y0},{x1},{y1},{x0},{y1}", 1)
+        tools.append(f"layer: clear-box {box} {n} px")
+    for spec in a.clear_tone or []:
+        # a feature behind painted shapes (a moon behind treetops): inside the box, only the pixels near
+        # the feature's colour are cleared, the shapes in front of it kept
+        parts = spec.split(",")
+        if len(parts) not in (6, 7) or (len(parts) == 7 and parts[6] != "fill"):
+            raise ArtError(f"--clear-tone takes x0,y0,x1,y1,#RRGGBB,tolerance[,fill], not {spec!r}")
+        x0, y0, x1, y1 = (int(v) for v in parts[:4]); tone = np.array(parse_hex(parts[4])[:3], dtype=np.float32); tol = float(parts[5])
+        arr = np.array(one.convert("RGBA"))
+        sub = arr[y0:y1, x0:x1].astype(np.float32)
+        dist = np.sqrt(((sub[..., :3] - tone) ** 2).sum(-1))
+        keep = np.clip((dist - tol) / 24.0, 0, 1)
+        if len(parts) == 7:
+            # fill: the matching pixels take the median colour of the box's other opaque pixels (a moon
+            # painted into a layer's own sky, which the layer must keep opaque), the alpha untouched
+            others = sub[(keep >= 1) & (sub[..., 3] > 200)]
+            if not len(others):
+                raise ArtError(f"--clear-tone {spec}: nothing in the box to fill from")
+            fill = np.median(others[:, :3], axis=0)
+            sub[..., :3] = sub[..., :3] * keep[..., None] + fill * (1 - keep[..., None])
+            n = int((keep < 1).sum())
+        else:
+            was = sub[..., 3].copy()
+            sub[..., 3] = np.round(sub[..., 3] * keep)
+            n = int((sub[..., 3] < was).sum())
+        arr[y0:y1, x0:x1] = np.clip(np.round(sub), 0, 255).astype(np.uint8)
+        one = Image.fromarray(arr, "RGBA")
+        tools.append(f"layer: clear-tone {spec} {n} px")
+    before = tile_seam_ratio(one)
+    if not a.no_heal:
+        one = heal_tile(one, a.band, axes=(1,))
     after = tile_seam_ratio(one)
     tools.append(f"layer: heal band={a.band if not a.no_heal else 'none'} sideways seam before x{before['seam_x']} after x{after['seam_x']}")
-    if after["seam_x"] > a.max_seam:
+    if after["seam_x"] > a.max_seam and not a.no_heal:
         raise ArtError(f"{key}: the layer's sideways seam is {after['seam_x']}x its inner detail (limit {a.max_seam}); pick another candidate or widen --band")
     if keyed:
         outputs, lines = finish_cutout_webp(ctx, key, one, None)
@@ -1954,6 +1990,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--band", type=float, default=0.2, help="width of the sideways healing band as a fraction of the width")
     sp.add_argument("--no-heal", action="store_true")
     sp.add_argument("--max-seam", type=float, default=1.6)
+    sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the final's pixels made transparent (a moon painted into a keyed layer, which must not repeat); repeatable, keyed layers only")
+    sp.add_argument("--clear-tone", action="append", default=None, help="x0,y0,x1,y1,#RRGGBB,tolerance[,fill]: inside the box, pixels within the tolerance of the colour are made transparent (a moon behind painted treetops), or with fill painted over in the box's own colour (a moon in a layer's painted sky); repeatable, keyed layers only")
     add_common(sp)
     sp.set_defaults(fn=cmd_layer)
 
