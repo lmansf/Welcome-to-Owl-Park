@@ -30,7 +30,10 @@ export type SymbolName =
   | 'fallen'
   | 'acorn'
   | 'gear'
-  | 'gem';
+  | 'gem'
+  | 'mushroom'
+  | 'keyhole'
+  | 'key';
 
 const S = 32;
 const TAU = Math.PI * 2;
@@ -232,6 +235,35 @@ function draw(ctx: CanvasRenderingContext2D, name: SymbolName): void {
       ctx.globalCompositeOperation = 'destination-out';
       ctx.fillRect(4, 14, 24, 1.6);
       ctx.globalCompositeOperation = 'source-over';
+      break;
+    case 'mushroom':
+      // A round cap over a short stem (a puzzle clue's symbol, OP-255).
+      ctx.ellipse(c, 14, 13, 9, 0, Math.PI, TAU);
+      ctx.fill();
+      ctx.fillRect(3, 13, 26, 2.5);
+      ctx.fillRect(c - 4, 15, 8, 12);
+      break;
+    case 'keyhole':
+      // A lock: its body, its shackle, and the keyhole cut out (OP-255).
+      ctx.fillRect(7, 14, 18, 15);
+      ctx.lineWidth = 3.2;
+      ctx.arc(c, 14, 6.5, Math.PI, TAU);
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(c, 20, 2.6, 0, TAU);
+      ctx.fill();
+      ctx.fillRect(c - 1.2, 20, 2.4, 6);
+      ctx.globalCompositeOperation = 'source-over';
+      break;
+    case 'key':
+      // A key: its round bow and its bit (OP-255).
+      ctx.lineWidth = 3.2;
+      ctx.arc(10, c, 6, 0, TAU);
+      ctx.stroke();
+      ctx.fillRect(15, c - 1.6, 14, 3.2);
+      ctx.fillRect(23, c, 3, 6);
+      ctx.fillRect(27, c, 2.5, 4);
       break;
     case 'gear':
       ctx.arc(c, c, 10, 0, TAU);

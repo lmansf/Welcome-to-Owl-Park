@@ -79,6 +79,7 @@ import {
   type ClientFrame,
   type ClientHello,
   type ClientNest,
+  type ClientPuzzle,
   type LanternState,
   type LogFields,
   type Logger,
@@ -945,6 +946,7 @@ export class RoomObject extends DurableObject<Env> {
       case 'handin':
       case 'use':
       case 'gather':
+      case 'puzzle':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.quest(ws, att, room, frame));
       case 'act':
@@ -1368,10 +1370,69 @@ export class RoomObject extends DurableObject<Env> {
           if (res.ok) return this.sendBoard(ws, res.board, res.updates, { r, ok: true });
           return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
         }
+        case 'puzzle':
+          return await this.puzzle(ws, att, room, frame);
       }
     } catch (e) {
       this.logOf(att).error('room.play', 'write_failed', 'A quest step did not reach the collections object: the page is told to try again.', { frame: frame.t, error: e });
       return refuse('offline');
+    }
+  }
+
+  /**
+   * A puzzle quest's run (OP-255). The room gives where the owl stands (and, for a join or the near
+   * list, which owls stand next to it, ticket holders only); the collections object checks the rest.
+   * After a step that moved the run, the other members' pages in this room object are sent their view.
+   * Puzzle quests are described in docs/QUESTS.md (OP-255).
+   */
+  private async puzzle(ws: WebSocket, att: Attachment, room: Room, frame: ClientPuzzle): Promise<void> {
+    const { r, quest } = frame;
+    const cid = att.cid!;
+    const stub = this.collections();
+    const answer = (extra: Omit<Extract<ServerFrame, { t: 'puzzle' }>, 't' | 'r' | 'quest'>) => this.send(ws, { t: 'puzzle', r, quest, ...extra });
+    // Owls next to this one with a collector and a ticket (a spectator never plays a puzzle, OP-191).
+    const neighbours = () => {
+      const out: Array<{ owl: string; cid: string }> = [];
+      for (const other of this.ctx.getWebSockets(`room:${att.room}`)) {
+        const o = other.deserializeAttachment() as Attachment | null;
+        if (!o?.cid || o.spec || o.id === att.id || o.cid === cid || !o.state) continue;
+        const p = room.positionOf(o.id);
+        if (p && room.near(att.id, p, NPC_TALK_RADIUS * 2)) out.push({ owl: o.id, cid: o.cid });
+      }
+      return out;
+    };
+    if (frame.op === 'near') {
+      const near = neighbours();
+      const runs = near.length ? await stub.puzzleRuns(near.map((n) => n.cid), quest) : {};
+      return answer({ ok: true, near: near.flatMap((n) => (runs[n.cid] ? [{ owl: n.owl, ...runs[n.cid]! }] : [])) });
+    }
+    let other: string | undefined;
+    if (frame.op === 'join') {
+      other = neighbours().find((n) => n.owl === frame.with)?.cid;
+      if (!other) return answer({ ok: false, reason: 'far' });
+    }
+    const pos = room.positionOf(att.id);
+    const res = await stub.puzzle(cid, {
+      op: frame.op,
+      quest,
+      room: att.room,
+      ...(frame.lock ? { lock: frame.lock } : {}),
+      ...(frame.n !== undefined ? { n: frame.n } : {}),
+      ...(frame.code ? { code: frame.code } : {}),
+      ...(other ? { other } : {}),
+      ...(pos ? { pos, ground: room.groundOf(att.id) } : {}),
+    });
+    const { members, credited, ...shown } = res;
+    answer(shown);
+    if (!res.ok || frame.op === 'state' || frame.op === 'start') return;
+    // The rest of the run sees the clue, the key or the open lock (those in this room object; others on their next look).
+    for (const m of members ?? []) {
+      if (m === cid) continue;
+      const sockets = this.ctx.getWebSockets(`cid:${m}`);
+      if (!sockets.length) continue;
+      const theirs = await stub.puzzle(m, { op: 'state', quest, room: att.room });
+      const board = credited?.includes(m) ? await stub.board(m) : undefined;
+      for (const s of sockets) this.send(s, { t: 'puzzle', quest, ok: true, ...(theirs.view ? { view: theirs.view } : {}), ...(board ? { board } : {}) });
     }
   }
 

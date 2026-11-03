@@ -18,6 +18,9 @@ import type {
   OwlLook,
   OwnBests,
   PieceKind,
+  PuzzleStep,
+  PuzzleSymbol,
+  PuzzleView,
   QuestBoard,
   QuestEvent,
   QuestUpdate,
@@ -59,6 +62,36 @@ export interface UseReply {
   practice?: true;
 }
 
+/** An owl standing close by that is in a run of the same puzzle quest (one it could join). */
+export interface PuzzleNeighbour {
+  owl: string;
+  members: number;
+  opened: number;
+}
+
+/** The answer to a puzzle quest step (OP-255): the run as it now stands, and the board if a quest moved. */
+export interface PuzzleReply {
+  ok: boolean;
+  /** Why not: 'offline', 'far', 'not-active', 'no-run', 'full', 'locked', 'no-key', 'jammed', 'wrong', ... */
+  reason?: string;
+  /** Tries left before the lock jams, after a wrong code. */
+  left?: number;
+  view: PuzzleView | null;
+  /** For 'near': owls close by in a run of this puzzle. */
+  near?: PuzzleNeighbour[];
+  board?: QuestBoard;
+  updates: QuestUpdate[];
+}
+
+/** What a puzzle step carries besides its quest. */
+export interface PuzzleArgs {
+  lock?: string;
+  n?: number;
+  code?: PuzzleSymbol[];
+  /** For a join: the owl (room id) to join. */
+  with?: string;
+}
+
 /**
  * Quests in one room. The room server answers these over the room's WebSocket (it checks where
  * the owl stands, and counts arrivals and emotes by itself); the local mode answers them in this
@@ -78,12 +111,16 @@ export interface QuestLink {
   gather(quest: string, n: number): Promise<QuestReply>;
   /** An arrival or an emote, for quests that ask for one (the room server notices these itself). */
   note(ev: QuestEvent): void;
+  /** A puzzle quest's run (OP-255): its state, start, the owls close by, join, leave, read a clue, take a key, work a lock. */
+  puzzle(op: PuzzleStep | 'near', quest: string, args?: PuzzleArgs): Promise<PuzzleReply>;
 }
 
 /** What the room pushes without being asked. */
 export interface QuestPushes {
   /** The board after an arrival or an emote moved a quest along. */
   onQuests?(board: QuestBoard, updates: QuestUpdate[]): void;
+  /** Someone else in this owl's run moved it along (OP-255): the run as it now stands, and the board if this owl's quest moved. */
+  onPuzzle?(quest: string, view: PuzzleView, board?: QuestBoard, updates?: QuestUpdate[]): void;
   /** Every shared object used up right now: id -> when it is back (this device's clock). */
   onObjects?(until: Record<string, number>): void;
   /** Someone used a shared object (`by` is null for this visitor); it is back at `until` (this device's clock). */

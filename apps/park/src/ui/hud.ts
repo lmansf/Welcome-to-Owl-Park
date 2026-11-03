@@ -1,4 +1,4 @@
-import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -104,6 +104,11 @@ export interface Hud {
   closeDialogue(): void;
   /** The NPC whose dialogue is open, if any. */
   dialogueNpc(): string | null;
+  /** A code lock's pad, when the owl walks up to it (OP-255), and how a try went. */
+  openLock(quest: string, lock: LockView): void;
+  closeLock(): void;
+  lockShowing(): { quest: string; lock: string } | null;
+  lockNote(text: string): void;
   /** The Menu button: open or close the Menu (closing the other screens). */
   toggleMenu(): void;
   /** M: open the Menu on its map (OP-130), or close it there. */
@@ -680,6 +685,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   /** The big sheets (dialogue, shop, Decorate) share the bottom of the screen: one at a time. */
   const closeSheets = () => {
     questUi?.closeDialogue();
+    questUi?.closeLock();
     shop?.close();
     // Decorating ends with the sheet: the room puts its camera back.
     if (decorate?.isOpen()) decorateActions?.done();
@@ -1014,6 +1020,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       questUi?.closeDialogue();
     },
     dialogueNpc: () => questUi?.dialogueNpc() ?? null,
+    openLock: (quest, lock) => questUi?.openLock(quest, lock),
+    closeLock: () => questUi?.closeLock(),
+    lockShowing: () => questUi?.lockShowing() ?? null,
+    lockNote: (text) => questUi?.lockNote(text),
     toggleMenu: () => toggle('menu', () => menu.isOpen()),
     toggleMap: () => toggle('map', () => menu.isOpen() && menu.tab() === 'map'),
     toggleEmotes: () => toggle('emotes', () => !!wheel?.isOpen()),

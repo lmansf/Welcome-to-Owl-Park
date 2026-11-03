@@ -12,12 +12,14 @@ import {
   LEFT_PARK_SPAWN,
   LOBBY_ROOM,
   KIND_RULES,
+  ACTIVE_SLOTS,
   MAX_ACTIVE_QUESTS,
   NEST_SPOTS,
   NEST_WORDS,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
   PICKUP_CLIENT_RADIUS,
+  PUZZLE_REACH,
   PROTOCOL_VERSION,
   REACH_SLACK,
   ROOM_H,
@@ -119,9 +121,13 @@ import {
   PERCH_SLACK,
   doorTarget,
   SETUP_WORDS,
+  type LockView,
+  type PuzzleStep,
+  type PuzzleSymbol,
+  type PuzzleView,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
-import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, QuestLink, QuestPushes, QuestReply } from '../collect/service';
+import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
 import type { CollectionState } from '../collect/state';
 import type { TaskState } from '../collect/tasks';
 import type { ParkConfig } from '../config';
@@ -167,6 +173,7 @@ import { firstGlint, firstNestWelcome, streetDoors, streetSpawnBack, type Street
 import { NpcOwl } from './Npc';
 import { OWL_SCALE, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
+import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 
 export interface RoomStart {
@@ -373,6 +380,14 @@ export class RoomScene extends Phaser.Scene {
   private readonly items = new Map<string, QuestItemMarker>();
   /** Pickups in flight (by item key), and when a failed one may be retried. */
   private readonly gathering = new Map<string, number>();
+  /** Puzzle quests' pieces in this room (OP-255): lock posts, clues and keys, by mark key. */
+  private readonly puzzleMarks = new Map<string, PuzzleMarker>();
+  /** Puzzle pieces being worked, by mark key, and when a failed try may be retried. */
+  private readonly puzzleBusy = new Map<string, number>();
+  /** Puzzle quests whose run this room has asked for. */
+  private readonly puzzlesAsked = new Set<string>();
+  /** The lock the owl last walked up to: its pad (or its key line) shows once per approach. */
+  private atLock: string | null = null;
   /** Set when the visitor tapped an NPC or an interactable from afar: do it on arrival. */
   private errand: Errand | null = null;
   /** A talk or a use is on its way to the room (one at a time). */
@@ -561,6 +576,10 @@ export class RoomScene extends Phaser.Scene {
     this.glows.clear();
     this.items.clear();
     this.gathering.clear();
+    this.puzzleMarks.clear();
+    this.puzzleBusy.clear();
+    this.puzzlesAsked.clear();
+    this.atLock = null;
     this.errand = null;
     this.busy = false;
     this.talkingTo = null;
@@ -957,6 +976,7 @@ export class RoomScene extends Phaser.Scene {
       this.steer();
       this.checkDoors(finished);
       this.checkItems(now);
+      this.checkPuzzles(now);
       this.course?.tick(now);
       this.updateHints();
       this.rest(now);
@@ -1000,6 +1020,13 @@ export class RoomScene extends Phaser.Scene {
         if (!live()) return;
         this.applyBoard(board);
         this.showUpdates(updates);
+      },
+      // Someone else in the owl's run moved it along (OP-255).
+      onPuzzle: (quest, view, board, updates) => {
+        if (!live()) return;
+        this.quests.setPuzzle(quest, view);
+        if (board) this.applyBoard(board);
+        if (updates) this.showUpdates(updates);
       },
       onObjects: (until) => {
         if (!live()) return;
@@ -2068,6 +2095,195 @@ export class RoomScene extends Phaser.Scene {
       this.items.delete(key);
     }
     for (const [key, it] of wanted) if (!this.items.has(key)) this.items.set(key, new QuestItemMarker(this, it.quest, it.n, it.kind, { x: it.x, y: it.y }, it.top ?? 0));
+    this.askPuzzles();
+    this.drawPuzzles();
+  }
+
+  // ---------- puzzle quests (OP-255): runs of locks, clues and keys ----------
+
+  /** Ask for the run of each puzzle quest carried that this room has not asked about yet. */
+  private askPuzzles(): void {
+    if (this.spectator || !this.link) return;
+    for (const q of this.quests.puzzleQuests) {
+      if (q.ready || this.puzzlesAsked.has(q.id)) continue;
+      this.puzzlesAsked.add(q.id);
+      void this.puzzleStep('state', q.id);
+    }
+  }
+
+  /** Draw this room's pieces of every run the owl is in: lock posts, clues to read, keys to pick up. */
+  private drawPuzzles(): void {
+    const room = this.room.id;
+    const wanted = new Map<string, { quest: string; lock: string; kind: PuzzleMarkKind; n: number; x: number; y: number; top: number; look: PuzzleMarkLook }>();
+    const add = (quest: string, lock: string, kind: PuzzleMarkKind, n: number, at: { x: number; y: number; top?: number }, look: PuzzleMarkLook) =>
+      wanted.set(markKey(quest, lock, kind, n), { quest, lock, kind, n, x: at.x, y: at.y, top: at.top ?? 0, look });
+    for (const [quest, view] of this.spectator ? [] : this.quests.puzzles) {
+      if (!view.run) continue;
+      for (const l of view.locks) {
+        if (l.post.room === room) add(quest, l.id, 'lock', 0, l.post, { kind: 'lock', state: l.open ? 'open' : l.available ? 'ready' : 'waiting' });
+        if (l.open || !l.available) continue;
+        for (const c of l.clues) if (c.room === room) add(quest, l.id, 'clue', c.n, c, { kind: 'clue', symbol: c.symbol });
+        if (l.key && !l.hasKey && l.key.room === room) add(quest, l.id, 'key', 0, l.key, { kind: 'key' });
+      }
+    }
+    for (const [key, m] of this.puzzleMarks) {
+      if (wanted.has(key)) continue;
+      m.destroy();
+      this.puzzleMarks.delete(key);
+    }
+    for (const [key, w] of wanted) {
+      const m = this.puzzleMarks.get(key);
+      if (m) m.setLook(w.look);
+      else this.puzzleMarks.set(key, new PuzzleMarker(this, w.quest, w.lock, w.kind, w.n, { x: w.x, y: w.y }, w.top, w.look));
+    }
+  }
+
+  private lockView(quest: string, lock: string): LockView | undefined {
+    return this.quests.puzzles.get(quest)?.locks.find((l) => l.id === lock);
+  }
+
+  /** Standing at a piece works it: a clue is read, a key picked up, a key lock opened, a code lock's pad shown. */
+  private checkPuzzles(now: number): void {
+    if (this.spectator) return;
+    const reach = PUZZLE_REACH - 12;
+    let at: string | null = null;
+    for (const [key, m] of this.puzzleMarks) {
+      const d = distance(this.me.pos, m.pos);
+      if (d > reach || !this.atLevel(m)) continue;
+      const l = this.lockView(m.quest, m.lock);
+      if (!l) continue;
+      if (m.kind === 'lock') {
+        if (l.open) continue;
+        at = key;
+        if (this.atLock === key) continue;
+        this.atLock = key;
+        if (!l.available) this.hud.toast(`${l.name} will not budge until the locks before it are open.`, 3200);
+        else if (l.kind === 'code') this.hud.openLock(m.quest, l);
+        else if (!l.hasKey) this.hud.toast(`${l.name} needs its key. ${l.hint}`, 3600);
+        continue;
+      }
+      const retryAt = this.puzzleBusy.get(key);
+      if (retryAt !== undefined && now < retryAt) continue;
+      if (this.me.walking && d > reach / 2) continue;
+      if (m.kind === 'clue' && this.cluePending(l, m.n)) void this.workPiece(m, 'look');
+      else if (m.kind === 'key') void this.workPiece(m, 'take');
+    }
+    // A key lock opens as soon as the owl stands at it with its key.
+    if (at) {
+      const m = this.puzzleMarks.get(at);
+      const l = m && this.lockView(m.quest, m.lock);
+      if (m && l && l.kind === 'key' && l.hasKey && l.available && !this.puzzleBusy.has(at)) void this.workPiece(m, 'open');
+    }
+    if (!at && this.atLock) {
+      const showing = this.hud.lockShowing();
+      if (showing && this.atLock.startsWith(`${showing.quest}|${showing.lock}|`)) this.hud.closeLock();
+      this.atLock = null;
+    }
+  }
+
+  private cluePending(l: LockView, n: number): boolean {
+    return !l.clues.find((c) => c.n === n)?.symbol;
+  }
+
+  /** Read a clue, take a key or open a key lock, as the owl stands at it. */
+  private async workPiece(m: PuzzleMarker, op: 'look' | 'take' | 'open'): Promise<void> {
+    this.puzzleBusy.set(m.key, Number.POSITIVE_INFINITY);
+    const res = await this.puzzleStep(op, m.quest, op === 'look' ? { lock: m.lock, n: m.n } : { lock: m.lock });
+    if (!res) return void this.puzzleBusy.set(m.key, Date.now() + PICKUP_RETRY_MS * 3);
+    if (!res.ok) {
+      this.puzzleBusy.set(m.key, Date.now() + (res.reason === 'far' ? PICKUP_RETRY_MS : PICKUP_RETRY_MS * 4));
+      if (res.reason === 'spectator') this.offerDayTicket(SPECTATOR_WORDS.locked);
+      return;
+    }
+    this.puzzleBusy.delete(m.key);
+    m.pulse();
+    const l = this.lockView(m.quest, m.lock);
+    if (!l) return;
+    if (op === 'look') {
+      const symbol = l.clues.find((c) => c.n === m.n)?.symbol;
+      if (symbol) this.hud.toast(`A clue for ${l.name}: symbol ${m.n + 1} of ${l.length} is the ${symbol}.`, 4200, '#9FE8FF');
+    } else if (op === 'take') this.hud.toast(`You found the key to ${l.name}. Take it to ${l.place}.`, 4200, '#FFD36A');
+    else this.hud.toast(`${l.name} is open!`, 3600, '#8FE3A8');
+  }
+
+  /** One step of a puzzle quest's run; the run and the board follow the answer. Null when nothing was asked. */
+  private async puzzleStep(op: PuzzleStep | 'near', quest: string, args: PuzzleArgs = {}): Promise<PuzzleReply | null> {
+    const link = this.link;
+    if (!link || this.spectator) return null;
+    const gen = this.gen;
+    const res = await link.puzzle(op, quest, args);
+    if (gen !== this.gen) return null;
+    if (res.view) this.quests.setPuzzle(quest, res.view);
+    if (res.near) this.quests.setNear(quest, res.near);
+    if (res.board) this.applyBoard(res.board);
+    this.showUpdates(res.updates);
+    return res;
+  }
+
+  /** The Quests tab's buttons on a puzzle quest: start a run, look for owls close by, join one, leave. */
+  async puzzleAction(op: 'start' | 'near' | 'join' | 'leave', quest: string, owl?: string): Promise<boolean> {
+    if (this.spectator) {
+      this.offerDayTicket(SPECTATOR_WORDS.locked);
+      return false;
+    }
+    const res = await this.puzzleStep(op, quest, owl ? { with: owl } : {});
+    if (!res) {
+      this.hud.toast('The park did not catch that. Try again in a moment.', 3000);
+      return false;
+    }
+    if (res.ok) {
+      if (op === 'start') this.hud.toast(res.view?.run && res.view.mine ? 'Back to it! Your own opened locks came with you.' : 'A new run: fresh clues and fresh codes. Good luck!', 3600);
+      else if (op === 'join') this.hud.toast(`You joined a run of ${res.view?.run?.members ?? 2} owls. Locks open from here on count for you too.`, 3800);
+      else if (op === 'leave') this.hud.toast('You left the run. The locks you opened stay yours.', 3200);
+      else if (op === 'near' && !res.near?.length) this.hud.toast('No owl close by is on this puzzle. Stand next to a friend who started a run.', 3600);
+      return true;
+    }
+    const words: Record<string, string> = {
+      far: 'Stand right next to that owl to join its run.',
+      full: 'That run is full: four owls at most.',
+      'no-run': 'That owl is not in a run of this puzzle.',
+      'not-active': 'Take the quest on first.',
+      self: 'That is your own run.',
+    };
+    this.hud.toast(words[res.reason ?? ''] ?? 'The park did not catch that. Try again in a moment.', 3200);
+    return false;
+  }
+
+  /** The code pad's Try: the room checks the code. */
+  async tryCode(quest: string, lock: string, code: PuzzleSymbol[]): Promise<boolean> {
+    const res = await this.puzzleStep('open', quest, { lock, code });
+    if (!res) {
+      this.hud.lockNote('The park did not catch that. Try again.');
+      return false;
+    }
+    if (res.ok) {
+      const l = this.lockView(quest, lock);
+      this.hud.closeLock();
+      this.hud.toast(`${l?.name ?? 'The lock'} is open!`, 3600, '#8FE3A8');
+      for (const m of this.puzzleMarks.values()) if (m.quest === quest && m.lock === lock && m.kind === 'lock') m.pulse();
+      return true;
+    }
+    const words: Record<string, string> = {
+      wrong: res.left ? `Not quite. ${res.left} ${res.left === 1 ? 'try' : 'tries'} before it jams.` : 'Not quite, and now it is jammed. Wait a moment.',
+      jammed: 'The lock is jammed. Wait a moment.',
+      far: 'Step right up to the lock first.',
+      locked: 'The locks before this one are not open yet.',
+    };
+    this.hud.lockNote(words[res.reason ?? ''] ?? 'The park did not catch that. Try again.');
+    return false;
+  }
+
+  /** The run of a puzzle quest as the page has it (the test hooks). */
+  puzzleView(quest: string): PuzzleView | null {
+    return this.quests.puzzles.get(quest) ?? null;
+  }
+
+  /** Walk to a piece of a run in this room (the test hooks): `kind` a lock, a clue (`n`) or a key. */
+  walkToPiece(quest: string, lock: string, kind: PuzzleMarkKind, n = 0): boolean {
+    const m = this.puzzleMarks.get(markKey(quest, lock, kind, n));
+    if (!m) return false;
+    this.walkTo(m.pos);
+    return true;
   }
 
   /**
@@ -2195,7 +2411,13 @@ export class RoomScene extends Phaser.Scene {
     this.applyReply(res);
     const title = getQuest(quest)?.title ?? 'Quest';
     if (res.ok) this.hud.questNews('new', title);
-    else if (res.reason === 'full') this.hud.toast(`You can carry ${MAX_ACTIVE_QUESTS} quests at once. Finish or drop one first.`, 3800);
+    else if (res.reason === 'full') {
+      // Each tier has its own room (OP-254).
+      const cadence = getQuest(quest)?.cadence;
+      const tier = cadence === 'daily' ? 'daily' : cadence === 'weekly' ? 'weekly' : cadence === 'monthly' ? 'monthly' : 'story';
+      const slots = cadence ? ACTIVE_SLOTS[cadence] : MAX_ACTIVE_QUESTS;
+      this.hud.toast(`You can carry ${slots} ${tier} quests at once. Finish or drop one first.`, 3800);
+    }
     else if (res.reason === 'far') this.hud.toast('Walk a little closer first.', 2600);
     else if (res.reason === 'done') this.hud.toast('You have done that one already.', 2600);
     else this.hud.toast('That quest is not on offer right now.', 3000);
@@ -2975,6 +3197,9 @@ export class RoomScene extends Phaser.Scene {
     this.boardTimer = null;
     for (const m of this.items.values()) m.destroy();
     this.items.clear();
+    for (const m of this.puzzleMarks.values()) m.destroy();
+    this.puzzleMarks.clear();
+    this.hud.closeLock();
     for (const npc of this.npcs.values()) npc.destroy();
     this.npcs.clear();
     for (const pile of this.piles.values()) pile.destroy();

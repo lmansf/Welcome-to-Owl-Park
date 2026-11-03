@@ -226,6 +226,17 @@ class FakeCollections {
   feathers(cid: string) {
     return this.answer(this.book.feathers(cid, Date.now()));
   }
+  /** Puzzle runs (OP-255): the calls asked, and the collectors this fake says are in a run. */
+  readonly puzzleCalls: Array<{ cid: string; op: string; other?: string; pos?: unknown }> = [];
+  readonly inRuns = new Set<string>();
+  puzzle(cid: string, req: { op: string; other?: string; pos?: unknown }) {
+    this.noAward(cid, 'puzzle');
+    this.puzzleCalls.push({ cid, op: req.op, ...(req.other ? { other: req.other } : {}), ...(req.pos ? { pos: req.pos } : {}) });
+    return this.answer({ ok: true, view: { puzzle: 'lockbox', title: 't', run: null, locks: [], mine: 0, total: 4, complete: false }, credited: [], members: [...this.inRuns] });
+  }
+  puzzleRuns(cids: string[]) {
+    return this.answer(Object.fromEntries(cids.filter((c) => this.inRuns.has(c)).map((c) => [c, { members: 1, opened: 2 }])));
+  }
   /** The quests' own calls: none is ever asked for a spectator; a ticket holder's are not played in this fake. */
   board(cid: string) {
     this.noAward(cid, 'board');
@@ -1749,6 +1760,16 @@ describe('spectators in the room object (OP-191)', () => {
     expect(c.last('welcome')).toBeDefined();
   });
 
+  it('never lists a spectator next to a ticket holder as an owl to join (OP-255)', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    await spectator(obj, 'hub');
+    collections.inRuns.add(OWNER);
+    await send(obj, a, { t: 'puzzle', op: 'near', quest: 'puzzle-lockbox', r: 1 });
+    await settle();
+    expect(a.last('puzzle')).toEqual({ t: 'puzzle', r: 1, quest: 'puzzle-lockbox', ok: true, near: [] });
+  });
+
   it('refuses it the quests, the NPC owls, the quest items and today’s tasks, and tells it once', async () => {
     const obj = roomObject();
     const ws = await spectator(obj, 'hub');
@@ -1760,8 +1781,11 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, ws, { t: 'act', a: 'tasks', r: 6 });
     // A use of something the room does not have is unknown, as anyone's (OP-243: uses are open to it).
     await send(obj, ws, { t: 'use', target: 'lamp', r: 7 });
+    // Nor can it start or join a puzzle quest's run (OP-255).
+    await send(obj, ws, { t: 'puzzle', op: 'start', quest: 'puzzle-lockbox', r: 8 });
+    await send(obj, ws, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_a', r: 9 });
     await settle();
-    expect(ws.of('refused')).toEqual([...[1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })), { t: 'refused', r: 7, reason: 'unknown' }]);
+    expect(ws.of('refused')).toEqual([...[1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })), { t: 'refused', r: 7, reason: 'unknown' }, ...[8, 9].map((r) => ({ t: 'refused', r, reason: 'spectator' }))]);
     expect(act(ws, 6)).toEqual({ t: 'act', r: 6, a: 'tasks', ok: false, reason: 'spectator' });
     logged(cap.lines, 'spectator_refused', { component: 'room.play', room: 'hub', frame: 'quests' });
     expect(eventsOf(cap.lines).filter((e) => e === 'spectator_refused')).toHaveLength(1);
@@ -2073,5 +2097,51 @@ describe('a parkour course in the room object (OP-224)', () => {
     await send(obj, ws, { t: 'dash', to: { x: at.x + 160, y: at.y }, seq: 2 });
     expect(ws.last('move')).toMatchObject({ seq: 2, dash: true });
     expect(other.last('move')).toMatchObject({ id: ws.last('welcome')!.id, dash: true });
+  });
+});
+
+describe('puzzle quests in the room object (OP-255)', () => {
+  it('lists the owls next to you that are in a run, joins one by its owl id, and refuses an owl not next to you', async () => {
+    const obj = roomObject();
+    // Both on the spawn, side by side: a plain join scatters them, sometimes too far apart to be next to each other.
+    const a = connect('hub', 'v_a', OWNER);
+    await send(obj, a, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 2400, y: 730 } });
+    const b = connect('hub', 'v_b', GUEST);
+    await send(obj, b, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 2440, y: 730 } });
+    collections.inRuns.add(GUEST);
+    await send(obj, a, { t: 'puzzle', op: 'near', quest: 'puzzle-lockbox', r: 1 });
+    await settle();
+    expect(a.last('puzzle')).toEqual({ t: 'puzzle', r: 1, quest: 'puzzle-lockbox', ok: true, near: [{ owl: 'v_b', members: 1, opened: 2 }] });
+    await send(obj, a, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_b', r: 2 });
+    await send(obj, a, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_nobody', r: 3 });
+    await settle();
+    expect(collections.puzzleCalls.filter((c) => c.op === 'join')).toEqual([expect.objectContaining({ cid: OWNER, other: GUEST })]);
+    expect(a.of('puzzle').find((f) => (f as { r?: number }).r === 3)).toEqual({ t: 'puzzle', r: 3, quest: 'puzzle-lockbox', ok: false, reason: 'far' });
+    // The page is never sent the run's member list.
+    expect(JSON.stringify(a.of('puzzle'))).not.toContain(GUEST);
+  });
+
+  it('gives the collections object where the owl stands, and refreshes the other members’ pages after a step', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b', GUEST);
+    collections.inRuns.add(OWNER).add(GUEST);
+    await send(obj, a, { t: 'puzzle', op: 'look', quest: 'puzzle-lockbox', lock: 'bark-latch', n: 0, r: 1 });
+    await settle();
+    expect(collections.puzzleCalls[0]).toMatchObject({ cid: OWNER, op: 'look', pos: expect.objectContaining({ x: expect.any(Number) }) });
+    expect(collections.puzzleCalls.map((c) => `${c.op}:${c.cid}`)).toEqual([`look:${OWNER}`, `state:${GUEST}`]);
+    expect(b.last('puzzle')).toMatchObject({ t: 'puzzle', quest: 'puzzle-lockbox', ok: true, view: { puzzle: 'lockbox' } });
+  });
+
+  it('turns away a frame that is not a puzzle step', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    for (const bad of [
+      { t: 'puzzle', op: 'smash', quest: 'puzzle-lockbox', r: 1 },
+      { t: 'puzzle', op: 'open', quest: 'puzzle-lockbox', code: ['moon', 'cheese'], r: 2 },
+      { t: 'puzzle', op: 'look', quest: 'puzzle-lockbox', n: 99, r: 3 },
+    ]) await send(obj, a, bad);
+    await settle();
+    expect(collections.puzzleCalls).toEqual([]);
   });
 });

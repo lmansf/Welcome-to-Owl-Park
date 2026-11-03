@@ -22,7 +22,13 @@ import {
   CourseBook,
   LEAF_FEATHERS_PER_DAY,
   NestBook,
+  PuzzleBook,
   QuestBook,
+  acceptPuzzleAware,
+  puzzleRunsOf,
+  puzzleStep,
+  type PuzzleRequest,
+  type PuzzleResult,
   leafFeathers,
   secureNestId,
   type AbandonResult,
@@ -83,6 +89,7 @@ import { COURSES } from '@owl-park/shared/rooms';
 import { SqlClimbStore } from './sqlClimbStore';
 import { SqlCourseStore } from './sqlCourseStore';
 import { SqlNestStore } from './sqlNestStore';
+import { SqlPuzzleStore } from './sqlPuzzleStore';
 import { SqlScoreStore } from './sqlScoreStore';
 import { SqlCollectionStore } from './sqlStore';
 import type { Env } from './env';
@@ -90,6 +97,11 @@ import type { Env } from './env';
 /** A uniform [0, 1) from the platform's cryptographic source. */
 function secureRandom(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296;
+}
+
+/** 128 random bits as hex: a puzzle run's seed or id (OP-255). */
+function secureToken(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Random bytes from the platform's cryptographic source. */
@@ -103,6 +115,8 @@ export interface EventResult {
   board?: QuestBoard;
 }
 
+export type { PuzzleRequest, PuzzleResult } from '@owl-park/shared';
+
 export interface FlopResult extends EventResult {
   feathers: number;
   total: number;
@@ -111,6 +125,7 @@ export interface FlopResult extends EventResult {
 export class Collections extends DurableObject<Env> {
   private readonly book: CollectionBook;
   private readonly quests: QuestBook;
+  private readonly puzzles: PuzzleBook;
   private readonly nests: NestBook;
   private readonly arcade: ArcadeBook;
   private readonly climb: ClimbBook;
@@ -131,6 +146,7 @@ export class Collections extends DurableObject<Env> {
     const store = new SqlCollectionStore(sql, (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at));
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
+    this.puzzles = new PuzzleBook(new SqlPuzzleStore(sql), SPOTS, { newSeed: secureToken, newId: secureToken });
     const nestStore = new SqlNestStore(sql, (cid, item, source, at) => this.acquired(cid, furnitureId(item), collectibleType(item, source), at));
     this.nests = new NestBook(nestStore, this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
     this.arcade = new ArcadeBook(new SqlScoreStore(sql), this.book);
@@ -260,8 +276,22 @@ export class Collections extends DurableObject<Env> {
   }
 
   async accept(cid: string, quest: string, here: string): Promise<AcceptResult> {
-    return this.quests.accept(cid, quest, Date.now(), here);
+    // A puzzle whose every lock this owl already opened this period is ready at once (OP-255).
+    return acceptPuzzleAware(this.quests, this.puzzles, cid, quest, Date.now(), here);
   }
+
+  // ---------- puzzle quests (OP-255, puzzles.ts): where the owl stands is the room object's to give ----------
+
+  /** A puzzle quest's run: start, join, leave, read a clue, take a key, work a lock, or just its state. */
+  async puzzle(cid: string, req: PuzzleRequest): Promise<PuzzleResult> {
+    return puzzleStep(this.quests, this.puzzles, cid, req, Date.now());
+  }
+
+  /** Which of these collectors are in a run of this puzzle quest, and how far it is (the room's join list). */
+  async puzzleRuns(cids: readonly string[], quest: string): Promise<Record<string, { members: number; opened: number }>> {
+    return puzzleRunsOf(this.puzzles, cids, quest, Date.now());
+  }
+
 
   async abandon(cid: string, quest: string): Promise<AbandonResult> {
     return this.quests.abandon(cid, quest, Date.now());
