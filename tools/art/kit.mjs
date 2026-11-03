@@ -77,6 +77,53 @@ for (const [areaName, area] of Object.entries(KIT_AREAS)) {
   }
 }
 
+/** Course props: extra six-prop sheets for a realm's course, keyed and cut like the area's own. */
+export const KIT_COURSES = KIT.courses ?? {};
+export const KIT_COURSE_SHEET_KEYS = [];
+export const KIT_COURSE_PROMPTS = {};
+export const KIT_COURSE_PIECES = [];
+for (const [areaName, sheets] of Object.entries(KIT_COURSES)) {
+  const area = KIT_AREAS[areaName];
+  for (const [name, sheet] of Object.entries(sheets)) {
+    const key = `kit-sheet-${areaName}-${name}`;
+    KIT_COURSE_SHEET_KEYS.push(key); KIT_COURSE_PROMPTS[key] = areaSheetPrompt(area, sheet);
+    sheet.pieces.forEach((p, i) => KIT_COURSE_PIECES.push({ key: `kit-${areaName}-${p.name}`, sheet: key, cell: i, w: p.w ?? sheet.w, h: p.h ?? sheet.h }));
+  }
+}
+
+/** Landmarks: one prop each on its own square key-colour canvas, cut to kit-landmark-<name>. */
+export const LANDMARK_SIZE = '1024x1024';
+export const KIT_LANDMARKS = KIT.landmarks ?? {};
+export const KIT_LANDMARK_SHEET_KEYS = [];
+export const KIT_LANDMARK_PROMPTS = {};
+export const KIT_LANDMARK_PIECES = [];
+for (const [name, piece] of Object.entries(KIT_LANDMARKS)) {
+  const key = `kit-sheet-landmark-${name}`;
+  const area = KIT_AREAS[piece.area];
+  KIT_LANDMARK_SHEET_KEYS.push(key);
+  KIT_LANDMARK_PROMPTS[key] = `One game prop, whole and centred, on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop with clear flat magenta all round it and nothing touching the edge of the frame: ${piece.desc}. It is seen straight from the side as in a side-scrolling platform game, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta. The light of its area: ${area.light}. ${KIT_STYLE}`;
+  KIT_LANDMARK_PIECES.push({ key: `kit-landmark-${name}`, sheet: key, cell: 0, w: piece.w, h: piece.h });
+}
+
+export const COURSE_SEED = 9000;
+export const LANDMARK_SEED = 9500;
+
+export function courseJobs(seedBase = COURSE_SEED) {
+  return KIT_COURSE_SHEET_KEYS.map((key, i) => ({
+    key, kind: 'sheet', realm: 'kit', size: SHEET_SIZE, seed: seedBase + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR,
+    derives: KIT_COURSE_PIECES.filter((p) => p.sheet === key).map((p) => p.key),
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_COURSE_PROMPTS[key],
+  }));
+}
+
+export function landmarkJobs(seedBase = LANDMARK_SEED) {
+  return KIT_LANDMARK_SHEET_KEYS.map((key, i) => ({
+    key, kind: 'sheet', realm: 'kit', size: LANDMARK_SIZE, seed: seedBase + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR,
+    derives: KIT_LANDMARK_PIECES.filter((p) => p.sheet === key).map((p) => p.key),
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_LANDMARK_PROMPTS[key],
+  }));
+}
+
 /** The jobs of one area set (about 49 images at four variants a sheet and layer, three a texture). */
 export function areaJobs(areaName, seedBase) {
   const area = KIT_AREAS[areaName];
@@ -111,5 +158,5 @@ export function kitJobs(seedBase = 7000) {
     providers: { fal: { output_format: 'png' } }, prompt: KIT_SHEET_PROMPTS[key],
   }));
   const areas = Object.keys(KIT_AREAS).flatMap((a) => areaJobs(a, AREA_SEEDS[a] ?? seedBase + 400));
-  return [...textures, ...sheets, ...areas];
+  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs()];
 }

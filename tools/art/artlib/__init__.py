@@ -122,7 +122,9 @@ def _kit_sheet_keys() -> tuple[str, ...]:
     kit = json.load(open(Path(__file__).resolve().parent.parent / "config" / "kit.json", encoding="utf-8"))
     core = [f"kit-sheet-{n}" for n in kit["sheets"]]
     areas = [f"kit-sheet-{a}-{n}" for a, area in kit.get("areas", {}).items() for n in area["sheets"]]
-    return tuple(core + areas)
+    courses = [f"kit-sheet-{a}-{n}" for a, sheets in kit.get("courses", {}).items() for n in sheets]
+    landmarks = [f"kit-sheet-landmark-{n}" for n in kit.get("landmarks", {})]
+    return tuple(core + areas + courses + landmarks)
 
 
 HELPER_KEYS = _kit_sheet_keys() + ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master", "owl-wing-right",

@@ -1880,6 +1880,32 @@ class TestKit(unittest.TestCase):
             self.assertGreater(out[top + 95].mean(), 200, "the ramp reaches opaque about --fade-top px down")
             self.assertEqual(out[-1].min(), 255, "the bottom stays opaque")
 
+    def test_a_landmark_is_a_one_piece_sheet_on_its_own_canvas(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        name = next(iter(kit["landmarks"]))
+        key = f"kit-sheet-landmark-{name}"
+        sheet, prefix = postprocess.kit_sheet(key)
+        self.assertEqual((prefix, len(sheet["pieces"]), sheet["pieces"][0]["name"]), ("kit-landmark-", 1, name))
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (1024, 1024), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            d.ellipse((312, 212, 712, 812), fill=(74, 51, 34))
+            d.ellipse((452, 100, 572, 240), fill=(201, 162, 39))
+            img.save(raw_dir / "cccccccccccccccc.png")
+            (raw_dir / "cccccccccccccccc.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "cccccccccccccccc"}))
+            (raw_dir / "SELECTED").write_text("cccccccccccccccc")
+            (work / "final").mkdir()
+            rc = postprocess.main(["pieces", key, "--work", str(work), "--grow", "2"])
+            self.assertEqual(rc, 0)
+            piece = kit["landmarks"][name]
+            one = Image.open(work / "final" / f"kit-landmark-{name}.webp")
+            self.assertEqual((one.mode, one.size), ("RGBA", (piece["w"], piece["h"])))
+            self.assertTrue((work / "final" / f"kit-landmark-{name}@2x.webp").exists())
+
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw
         kit = postprocess.kit_table()

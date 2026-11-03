@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "about": "The art kit (OP-229): seamless textures and keyed shape sheets the level assembler (OP-234) builds screens from. Texture keys are kit-tex-<name>, 512 x 512, tileable. A sheet key is kit-sheet-<name>: one 2048 x 1152 painting on the key colour, six props in a grid of three across and two down, cut by `art:finish pieces` into the pieces listed here in reading order, each shipped as kit-<piece> at its logical size (w x h, 1x and 2x) with its alpha. tools/art/README.md describes the format. An area set is kit.areas.<area>: its accent textures (kit-tex-<area>-<name>), its prop sheets (kit-sheet-<area>-<name>, cut to kit-<area>-<piece>) and its seven backdrop layers (kit-<area>-sky-a|b 1600 x 900 opaque, kit-<area>-far-a|b 1600 x 900 keyed, kit-<area>-mid-a|b|c 800 x 450 keyed), every one repeating sideways so the assembler can run it along any screen.",
+  "about": "The art kit (OP-229): seamless textures and keyed shape sheets the level assembler (OP-234) builds screens from. Texture keys are kit-tex-<name>, 512 x 512, tileable. A sheet key is kit-sheet-<name>: one 2048 x 1152 painting on the key colour, six props in a grid of three across and two down, cut by `art:finish pieces` into the pieces listed here in reading order, each shipped as kit-<piece> at its logical size (w x h, 1x and 2x) with its alpha. tools/art/README.md describes the format. An area set is kit.areas.<area>: its accent textures (kit-tex-<area>-<name>), its prop sheets (kit-sheet-<area>-<name>, cut to kit-<area>-<piece>) and its seven backdrop layers (kit-<area>-sky-a|b 1600 x 900 opaque, kit-<area>-far-a|b 1600 x 900 keyed, kit-<area>-mid-a|b|c 800 x 450 keyed), every one repeating sideways so the assembler can run it along any screen. Course props are kit.courses.<area>.<sheet>: extra six-prop sheets for a course, keyed and cut like the area's own (kit-sheet-<area>-<name> to kit-<area>-<piece>). Landmarks are kit.landmarks.<name>: one prop each on its own 1024 x 1024 key-colour canvas (kit-sheet-landmark-<name>), cut by art:finish pieces to kit-landmark-<name>.",
   "palette": "bark #2B1C12 to #4A3322, inner wood #5C4632 to #8F8068, moss #3E5A3A and #6E8B4E, leaf #4F7A3E and #8DAE5A, lantern gold #C9A227 and #FFD36A, cream #F6F1E3, navy #0C1E36 to #07122A, dusk blue #2E4C7A, sky blue #6F9BC8",
   "texture_size": 512,
   "textures": {
@@ -2254,6 +2254,474 @@
         "mid-b": "a stand of brushstroke bamboo and pines along a riverbank close by, a low garden wall of grey ink-washed stone running behind them, warm gold paper lanterns hanging among the stems, in the lower two thirds, the upper third mostly open",
         "mid-c": "temple eaves and river rocks close by: upturned corners of dark tiled roofs and grey rock pillars in ink wash standing in thin mist, warm gold paper lanterns under the eaves, filling only the lower half, the roofs and rocks running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds, no mist above the roofs, no mountains, no moon, no frame or border"
       }
+    }
+  },
+  "courses": {
+    "clearing": {
+      "course-c": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "thorn-roots",
+            "w": 400,
+            "h": 120,
+            "desc": "a low bed of dark thorny roots lying flat, a hazard an owl must not touch, level, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "bramble-patch",
+            "w": 320,
+            "h": 160,
+            "desc": "a tangle of bramble with a few dark berries, a hazard, sitting on nothing"
+          },
+          {
+            "name": "vine-shortcut",
+            "w": 120,
+            "h": 400,
+            "desc": "a single thick hanging vine with a knotted loop near its bottom, cut straight at the top"
+          },
+          {
+            "name": "log-shortcut",
+            "w": 400,
+            "h": 200,
+            "desc": "a fallen hollow log lying level, open at both ends so an owl could walk through it, moss on top"
+          },
+          {
+            "name": "bough-perch",
+            "w": 320,
+            "h": 120,
+            "desc": "a short mossy bough with a flat top to stand on, its cut end on the left and leaves on the right"
+          },
+          {
+            "name": "gust-leaves",
+            "w": 240,
+            "h": 320,
+            "desc": "a soft upward puff of pale rising leaves and a few gold sparks, the look of an updraft, nothing solid in it"
+          }
+        ]
+      },
+      "course-d": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "checkpoint-bench",
+            "w": 320,
+            "h": 160,
+            "desc": "a mossy log bench with a small amber lantern hung at one end, a course checkpoint"
+          },
+          {
+            "name": "hut-door-closed",
+            "w": 240,
+            "h": 320,
+            "desc": "a round plank door in a bark frame, shut, a small dark window in it"
+          },
+          {
+            "name": "hut-door-open",
+            "w": 240,
+            "h": 320,
+            "desc": "the same round plank door open, warm gold light inside"
+          },
+          {
+            "name": "deck-rail",
+            "w": 400,
+            "h": 120,
+            "desc": "a wooden deck rail of rough branches, level, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "fern-tall",
+            "w": 160,
+            "h": 240,
+            "desc": "one tall fern standing upright, its fronds spread"
+          },
+          {
+            "name": "root-shelf",
+            "w": 320,
+            "h": 120,
+            "desc": "a flat shelf of woven roots to stand on, cut straight at both ends"
+          }
+        ]
+      }
+    },
+    "neon": {
+      "course-c": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "neon-tube-hazard",
+            "w": 80,
+            "h": 240,
+            "desc": "a tall broken neon tube flickering pink, a hazard, standing upright"
+          },
+          {
+            "name": "rooftop-door-closed",
+            "w": 240,
+            "h": 320,
+            "desc": "a dark metal rooftop door in a brick frame, shut, a cyan lamp above it"
+          },
+          {
+            "name": "rooftop-door-open",
+            "w": 240,
+            "h": 320,
+            "desc": "the same rooftop door open, warm gold light inside"
+          },
+          {
+            "name": "checkpoint-bench",
+            "w": 320,
+            "h": 160,
+            "desc": "a dark metal rooftop bench with a paper lantern hung at one end, a course checkpoint"
+          },
+          {
+            "name": "cable-span",
+            "w": 400,
+            "h": 80,
+            "desc": "a sagging bundle of dark cables with a few small lamps on it, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "rooftop-garden",
+            "w": 320,
+            "h": 160,
+            "desc": "a row of dark planter boxes with small green plants and one pink neon tube among them"
+          }
+        ]
+      },
+      "course-d": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "tank-ladder",
+            "w": 120,
+            "h": 400,
+            "desc": "a dark iron ladder running straight up, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "sign-hazard",
+            "w": 240,
+            "h": 160,
+            "desc": "a cracked blank neon sign board sparking cyan, a hazard, no letters"
+          },
+          {
+            "name": "pigeon-coop",
+            "w": 240,
+            "h": 200,
+            "desc": "a small wooden rooftop coop with wire mesh, empty, a paper lantern on its corner"
+          },
+          {
+            "name": "rooftop-tent",
+            "w": 320,
+            "h": 240,
+            "desc": "a dark canvas rooftop tent with a warm glow inside, its flap closed"
+          },
+          {
+            "name": "sky-bridge-mid",
+            "w": 400,
+            "h": 120,
+            "desc": "a level metal walkway with railings strung with small lamps, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "rooftop-stair",
+            "w": 240,
+            "h": 320,
+            "desc": "a short dark iron stair rising to the right onto a higher roof, cut straight at both ends"
+          }
+        ]
+      }
+    },
+    "glass": {
+      "tower-b": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "glass-rung",
+            "w": 160,
+            "h": 80,
+            "desc": "a single rung of thick pale glass in a dark lead bracket, level, to stand on"
+          },
+          {
+            "name": "frail-glass-mid",
+            "w": 400,
+            "h": 80,
+            "desc": "a thin cracked pane of pale glass lying level, a platform that will not hold long, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "thorn-bed",
+            "w": 400,
+            "h": 120,
+            "desc": "a low bed of dark glass thorns lying flat, a hazard, level, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "moth-lantern",
+            "w": 160,
+            "h": 240,
+            "desc": "a hanging glass lantern of amber panes on a chain, the kind moths circle, glowing from within"
+          },
+          {
+            "name": "band-ledge",
+            "w": 400,
+            "h": 120,
+            "desc": "a level ledge of pale stone with a thin band of lit sapphire glass along its face, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "cloud-ledge",
+            "w": 320,
+            "h": 120,
+            "desc": "a flat shelf of dense pale cloud to stand on, lit cream from above"
+          }
+        ]
+      },
+      "tower-c": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "door-pane-closed",
+            "w": 240,
+            "h": 320,
+            "desc": "a tall pointed doorway of frosted glass in a pale stone frame, shut, dim"
+          },
+          {
+            "name": "door-pane-open",
+            "w": 240,
+            "h": 320,
+            "desc": "the same tall pointed doorway open, warm gold light inside"
+          },
+          {
+            "name": "checkpoint-bench",
+            "w": 320,
+            "h": 160,
+            "desc": "a pale stone bench with a small glass lantern glowing gold at one end, a course checkpoint"
+          },
+          {
+            "name": "thorn-ceiling",
+            "w": 400,
+            "h": 120,
+            "desc": "a row of dark glass thorns pointing straight down from a pale stone beam, a hazard, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "act-arch",
+            "w": 320,
+            "h": 400,
+            "desc": "a tall pointed arch of pale stone with a stained-glass fanlight lit gold above an open way, standing on its own"
+          },
+          {
+            "name": "strand-rail",
+            "w": 120,
+            "h": 400,
+            "desc": "a slim vertical strand of pale stone with glass lanterns hung down it, cut straight at both ends so it repeats upward"
+          }
+        ]
+      }
+    },
+    "ink": {
+      "course-c": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "bridge-stroke",
+            "w": 400,
+            "h": 80,
+            "desc": "one thick level brushstroke of black ink, a painted bridge to stand on, its ends cut straight so it repeats"
+          },
+          {
+            "name": "tread-stroke",
+            "w": 160,
+            "h": 60,
+            "desc": "one short level dab of black ink, a painted step to stand on"
+          },
+          {
+            "name": "seal-red",
+            "w": 120,
+            "h": 120,
+            "desc": "a round red seal stamp mark with a plain square pattern inside, no readable writing"
+          },
+          {
+            "name": "bamboo-tall",
+            "w": 120,
+            "h": 400,
+            "desc": "a single tall stalk of ink-brushed bamboo with a few leaves, cut straight at the bottom"
+          },
+          {
+            "name": "eave-shelter",
+            "w": 400,
+            "h": 160,
+            "desc": "a tiled roof eave with upturned ends seen from the side, level, a shelter from rain, cut straight at both ends so it repeats"
+          },
+          {
+            "name": "waterfall-curtain",
+            "w": 240,
+            "h": 400,
+            "desc": "a tall narrow curtain of falling water painted in pale ink washes, something could hide behind it, cut straight at the top"
+          }
+        ]
+      },
+      "course-d": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "door-paper-closed",
+            "w": 240,
+            "h": 320,
+            "desc": "a sliding paper screen door in a dark wooden frame, shut, dim"
+          },
+          {
+            "name": "door-paper-open",
+            "w": 240,
+            "h": 320,
+            "desc": "the same paper screen door slid open, warm gold light inside"
+          },
+          {
+            "name": "checkpoint-bench",
+            "w": 320,
+            "h": 160,
+            "desc": "a low dark wooden bench with a paper lantern glowing at one end, a course checkpoint"
+          },
+          {
+            "name": "lotus-pads",
+            "w": 320,
+            "h": 120,
+            "desc": "three flat lotus pads floating side by side on still water, to stand on"
+          },
+          {
+            "name": "crane-perch",
+            "w": 120,
+            "h": 400,
+            "desc": "a tall thin ink-brushed post with a flat top, a perch, cut straight at the bottom"
+          },
+          {
+            "name": "pond-edge",
+            "w": 400,
+            "h": 120,
+            "desc": "the mossy stone edge of a pond with still grey water in front of it, level, cut straight at both ends so it repeats"
+          }
+        ]
+      }
+    }
+  },
+  "landmarks": {
+    "idol-owl-wood": {
+      "area": "clearing",
+      "w": 320,
+      "h": 400,
+      "desc": "a carved wooden owl idol standing tall and still, its wings folded, leaves and moss on its shoulders, soft amber light on its face"
+    },
+    "hut-lookout": {
+      "area": "clearing",
+      "w": 400,
+      "h": 400,
+      "desc": "a small round lookout hut of planks and leaves with a lit window and a telescope poking from an upper hatch, seen from the side"
+    },
+    "door-root-tiny": {
+      "area": "clearing",
+      "w": 160,
+      "h": 240,
+      "desc": "a tiny arched door under a root, half hidden by a fern, warm light in its crack"
+    },
+    "cabinet-miniature": {
+      "area": "clearing",
+      "w": 160,
+      "h": 240,
+      "desc": "a small wooden arcade cabinet with a dark blank screen and two bare buttons, no writing"
+    },
+    "bell-hanging": {
+      "area": "clearing",
+      "w": 120,
+      "h": 160,
+      "desc": "a small bronze bell hanging from a leafy hook on a short cord"
+    },
+    "telescope-brass": {
+      "area": "clearing",
+      "w": 160,
+      "h": 200,
+      "desc": "a brass telescope on a three-legged wooden stand, tilted up to the right"
+    },
+    "idol-owl-glass": {
+      "area": "glass",
+      "w": 320,
+      "h": 400,
+      "desc": "an owl idol made of stained glass in a lead frame standing tall and still, its wings folded, lit from within in jewel colours"
+    },
+    "lamp-moth": {
+      "area": "glass",
+      "w": 120,
+      "h": 120,
+      "desc": "a small moth of pale glass whose body is a tiny glowing lamp, wings spread, hovering"
+    },
+    "pane-cracked": {
+      "area": "glass",
+      "w": 240,
+      "h": 320,
+      "desc": "a tall cracked window pane in a pale stone frame swung half open like a door, misty grey ink mountains showing through it"
+    },
+    "lever-brass": {
+      "area": "glass",
+      "w": 120,
+      "h": 160,
+      "desc": "a brass lever on a pale stone block, its handle up"
+    },
+    "switch-lift": {
+      "area": "glass",
+      "w": 120,
+      "h": 160,
+      "desc": "a dark iron switch box on a short pale stone post with one big round glass button glowing cyan"
+    },
+    "idol-owl-neon": {
+      "area": "neon",
+      "w": 320,
+      "h": 400,
+      "desc": "an owl idol of dark chrome standing tall and still, its wings folded, outlined in pink and cyan neon tubes"
+    },
+    "robot-owl": {
+      "area": "neon",
+      "w": 320,
+      "h": 400,
+      "desc": "a giant friendly robot owl of dark riveted metal standing on a plinth, round glowing cyan eyes, a small speaker grille on its chest, no writing"
+    },
+    "arcade-door": {
+      "area": "neon",
+      "w": 240,
+      "h": 320,
+      "desc": "a dark doorway framed in bright cyan neon tubes with a blank pink sign board above it, no letters"
+    },
+    "copy-stage": {
+      "area": "neon",
+      "w": 240,
+      "h": 120,
+      "desc": "a low round stage of dark metal with a ring of cyan neon around its edge, empty"
+    },
+    "idol-owl-ink": {
+      "area": "ink",
+      "w": 320,
+      "h": 400,
+      "desc": "an owl idol of grey stone brushed in ink washes standing tall and still, its wings folded, a small red seal mark on its chest"
+    },
+    "crane-paper": {
+      "area": "ink",
+      "w": 240,
+      "h": 320,
+      "desc": "a tall elegant crane standing on one leg, painted in black ink strokes with a red crown, its wings folded"
+    },
+    "heron-ink": {
+      "area": "ink",
+      "w": 200,
+      "h": 280,
+      "desc": "a grey heron standing in shallow water, painted in soft ink washes, its neck curved"
+    },
+    "scroll-tower": {
+      "area": "ink",
+      "w": 240,
+      "h": 400,
+      "desc": "a hanging scroll of cream paper on a dark rod showing a tall slender tower in black ink with faint coloured panes, no writing"
+    },
+    "pavilion-summit": {
+      "area": "ink",
+      "w": 400,
+      "h": 400,
+      "desc": "a small open pavilion of dark wood with a tiled upturned roof on four posts, a paper lantern inside, seen from the side"
     }
   }
 }

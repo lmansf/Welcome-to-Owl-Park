@@ -1038,5 +1038,27 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
       for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
     }
   }
+  // Course props: extra six-prop sheets under kit.courses.<area>, keyed and cut like the area's own.
+  for (const [areaName, sheets] of Object.entries(K.KIT_COURSES)) {
+    assert.ok(K.KIT_AREAS[areaName], `${areaName}: a course belongs to an area set`);
+    for (const [name, sheet] of Object.entries(sheets)) {
+      const key = `kit-sheet-${areaName}-${name}`;
+      assert.equal(sheet.pieces.length, 6, `${key}: six pieces`);
+      assert.ok(!(name in K.KIT_AREAS[areaName].sheets), `${key}: not also an area sheet`);
+      assert.ok(P.HELPER_KEYS.includes(key) && jobs.get(key)?.kind === 'sheet' && jobs.get(key).size === K.SHEET_SIZE, `${key} is a helper key with a sheet job`);
+      for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
+    }
+  }
+  // Landmarks: one prop each on a square canvas of its own, cut to kit-landmark-<name>.
+  assert.equal(Object.keys(K.KIT_LANDMARKS).length, 20);
+  for (const [name, piece] of Object.entries(K.KIT_LANDMARKS)) {
+    const key = `kit-sheet-landmark-${name}`;
+    assert.ok(K.KIT_AREAS[piece.area], `${key}: lit as its area`);
+    const job = jobs.get(key);
+    assert.ok(P.HELPER_KEYS.includes(key) && job?.kind === 'sheet' && job.size === K.LANDMARK_SIZE && job.key_colour === K.KIT_KEY_COLOUR, `${key} is a helper key with a one-prop job`);
+    assert.match(job.prompt, /One game prop, whole and centred/);
+    assert.deepEqual(job.derives, [`kit-landmark-${name}`]);
+    assert.deepEqual(art[`kit-landmark-${name}`], { w: piece.w, h: piece.h, kind: 'piece' }, `${key} in art.ts`);
+  }
   for (const job of [jobs.get('kit-tex-bark'), jobs.get('kit-sheet-signs-a')]) assert.match(job.prompt, /No text, letters or numbers anywhere/, 'the prompts ask for no text');
 });
