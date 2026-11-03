@@ -18,6 +18,29 @@ const jump = (page: Page, ms = 400) => page.evaluate((ms) => window.owlPark.jump
 const standsAt = (page: Page, top: number) =>
   expect.poll(async () => { const s = await state(page); return [s.air.s, Math.round(s.air.z)]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, top]);
 
+/**
+ * Hold the right arrow until the owl is past `x`, and let it go in the page itself on the frame it is:
+ * a let-go sent from the test arrives a round trip late, which on a slow runner carried the owl right
+ * across a doorway and on to the screen's end.
+ */
+async function keyRightPast(page: Page, x: number): Promise<void> {
+  await page.keyboard.down('ArrowRight');
+  await page.evaluate(
+    (x) =>
+      new Promise<void>((done) => {
+        const look = () => {
+          if ((window.owlPark?.state()?.pos.x ?? 0) > x) {
+            window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' }));
+            done();
+          } else requestAnimationFrame(look);
+        };
+        look();
+      }),
+    x,
+  );
+  await page.keyboard.up('ArrowRight');
+}
+
 /** The phone project's phone (a Pixel 7), held upright and on its side. */
 const UPRIGHT = { width: 412, height: 839 };
 const ON_ITS_SIDE = { width: 839, height: 412 };
@@ -56,9 +79,7 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     // The stair's treads and its balcony are no ledges: an owl goes up by the doorway at the foot, on up.
     // In on the keys, which never take a doorway (OP-212); a walk aimed into it would go on up to level 2.
     await walkAndStop(page, LOBBY + 880, GROUND);
-    await page.keyboard.down('ArrowRight');
-    await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
-    await page.keyboard.up('ArrowRight');
+    await keyRightPast(page, LOBBY + 985);
     await standsAt(page, 0);
     // The jump's own landing, not the floor it took off from: a take-off counted, then the floor.
     const before = (await state(page)).flown.n;
@@ -244,9 +265,7 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
     // by themselves. The page itself watches for the owl inside, frame by frame, so the keys let go
     // well before it could walk out the far side (960 to 1070) on a slow runner.
     await walkAndStop(page, LOBBY + 880, GROUND);
-    await page.keyboard.down('ArrowRight');
-    await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
-    await page.keyboard.up('ArrowRight');
+    await keyRightPast(page, LOBBY + 985);
     await standsAt(page, 0);
     await frames(page, 30);
     const s = await state(page);
@@ -382,9 +401,7 @@ test.describe('the tree’s minimap on a computer (OP-213)', () => {
     await expect(level(page)).toHaveText('Ground level');
     // Into the stair up's doorway (960 to 1070) by the keys, which never take it by themselves, then up.
     await walkAndStop(page, LOBBY + 880, GROUND);
-    await page.keyboard.down('ArrowRight');
-    await page.waitForFunction((x) => (window.owlPark?.state()?.pos.x ?? 0) > x, LOBBY + 985, { polling: 'raf', timeout: 15_000 });
-    await page.keyboard.up('ArrowRight');
+    await keyRightPast(page, LOBBY + 985);
     await standsAt(page, 0);
     await page.keyboard.press('ArrowUp');
     await expect.poll(() => roomOf(page), { timeout: 15_000 }).toBe('l2');
