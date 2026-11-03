@@ -22,8 +22,8 @@ describe('protocol v10, the climb', () => {
 });
 
 describe('protocol v9, the arcade', () => {
-  it('is version 16 (closed for setup, OP-205), and a page speaking the version before is refused at its hello (so it reloads)', () => {
-    expect(V).toBe(16);
+  it('is version 17 (the courses and the dash, OP-224), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(17);
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
     expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
@@ -202,5 +202,28 @@ describe('protocol v15, spectators (OP-191)', () => {
   it('reads the room’s answer to an admit, a spectator’s welcome and the full room it is turned from', () => {
     expect(parseServerFrame(JSON.stringify({ t: 'admitted', r: 3, ok: false, reason: 'pass' }))).toEqual({ t: 'admitted', r: 3, ok: false, reason: 'pass' });
     expect(parseServerFrame(JSON.stringify({ t: 'full', room: 'hub', cap: 80, spectators: true }))).toEqual({ t: 'full', room: 'hub', cap: 80, spectators: true });
+  });
+});
+
+describe('the dash and the courses on the wire (OP-224)', () => {
+  it('reads a dash as a move is read: where to, numbered, in whole pixels', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'dash', to: { x: 10.4, y: 20.6 }, seq: 3 }))).toEqual({ t: 'dash', to: { x: 10, y: 21 }, seq: 3 });
+    for (const bad of [{ to: { x: 1 }, seq: 1 }, { to: { x: 1, y: 2 }, seq: -1 }, { to: { x: 1, y: 2 }, seq: 1.5 }, { to: { x: 1, y: 2 } }]) expect(parseClientFrame(JSON.stringify({ t: 'dash', ...bad })), JSON.stringify(bad)).toBeNull();
+  });
+
+  it('reads a course step: the piece named for a bench, a part, a feather or a shortcut, none for the rest', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'state', r: 1 }))).toEqual({ t: 'course', a: 'state', r: 1 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'finish', id: 'ignored', r: 2 }))).toEqual({ t: 'course', a: 'finish', r: 2 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'part', id: 'bell-1', r: 3 }))).toEqual({ t: 'course', a: 'part', id: 'bell-1', r: 3 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'shortcut', id: 'bridge', r: 4 }))).toEqual({ t: 'course', a: 'shortcut', id: 'bridge', r: 4 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'part', r: 5 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'feather', id: 'Not An Id', r: 6 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'warp', r: 7 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'state' }))).toBeNull();
+  });
+
+  it('hands a course answer to the page', () => {
+    const f = { t: 'course', r: 1, a: 'fall', ok: true, view: { course: 'trail', run: null, feathers: [], shortcuts: [], cleared: false, bestMs: null }, at: { x: 1, y: 2 } };
+    expect(parseServerFrame(JSON.stringify(f))).toEqual(f);
   });
 });

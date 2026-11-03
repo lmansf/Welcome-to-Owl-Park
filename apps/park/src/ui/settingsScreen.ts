@@ -32,6 +32,7 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W'], 'In the tree: through the doorway or up the stair you stand in (or the up arrow)'],
   [['E'], 'Do what you are standing at'],
   [['Space'], 'Jump; again in the air to flap, held on the way down to glide'],
+  [['Shift'], 'Dash, in a parkour course: once a jump, in the air'],
   [['M'], 'Map, in the Menu'],
   [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],

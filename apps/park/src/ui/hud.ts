@@ -219,6 +219,10 @@ export interface Hud {
    * lifts (each with when), so a tap jumps, a second tap flaps and a hold glides, as the space bar does.
    */
   onJump(press: (at?: number) => void, release: (at?: number) => void): void;
+  /** The pad's Dash button (touch screens, OP-224): above Jump, shown only while the owl holds the dash (in a parkour course); `press` as the thumb goes down. */
+  onDash(press: (at?: number) => void): void;
+  /** Whether the owl holds the dash: shows or hides the pad's Dash. */
+  setDash(on: boolean): void;
   /**
    * Quest news (OP-083): a new quest taken on, or one ready to hand in. A short line at the top of
    * the screen, and a dot on the Menu button and its Quests tile until the quests screen is opened.
@@ -326,6 +330,8 @@ const CSS = `
   #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .pad-btn.jump{left:53.25px;bottom:0}
+  /* Dash (OP-224), in a parkour course only: above Jump, 8 px from the Menu and Interact as Jump is. */
+  #hud .pad-btn.dash{left:53.25px;bottom:90.5px}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
   #hud .menu-btn{position:absolute;left:8px;bottom:45.25px;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .menu-btn i{width:20px;height:14px}
@@ -337,7 +343,7 @@ const CSS = `
   /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
   #hud.arcade-pad .pad{visibility:visible;z-index:25}
   #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
-  #hud.arcade-pad .pad-btn.jump{display:none}
+  #hud.arcade-pad .pad-btn.jump,#hud.arcade-pad .pad-btn.dash{display:none}
   /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
   #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
   /* The line on how to play keeps to the left of the stick or the Interact the game is played with. */
@@ -387,6 +393,9 @@ const KEY_TAP_MS = 150;
 const SPARKLE_MS = 4000;
 
 /** The pad's Jump button: up from a little arc. */
+const DASH_ICON =
+  '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 11h9M2 16h11M4 21h9" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round"/><path d="M15 9l11 7-11 7z" fill="#FFD36A" stroke="#FFD36A" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
 const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -414,6 +423,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       <div class="pad">
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}</button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>
+        <button class="pad-btn dash" data-pad-dash aria-label="Dash" aria-keyshortcuts="Shift" hidden>${DASH_ICON}</button>
       </div>
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
@@ -433,6 +443,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
+  const dashBtn = $<HTMLButtonElement>('[data-pad-dash]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
   const notices = $<HTMLElement>('[data-notices]');
   const actionsEl = $<HTMLElement>('[data-actions]');
@@ -535,6 +546,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   /** While a game plays on the pad (OP-137): what the pad's Interact does in it (Moon Flap: a flap). */
   let arcadeTap: (() => void) | null = null;
   let jumpCbs: { press: (at?: number) => void; release: (at?: number) => void } | null = null;
+  let dashCb: ((at?: number) => void) | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
   /** The gated realms the keepers have opened (the realms switch), for the Menu map. */
@@ -788,8 +800,17 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(release, KEY_TAP_MS);
   });
   jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is a glide, not the browser's menu
+  // Dash goes as the thumb goes down: a dash cannot wait for the lift. A click from a keyboard is one too.
+  dashBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    dashCb?.(eventTime(e));
+  });
+  dashBtn.addEventListener('click', (e) => {
+    if (e.detail === 0) dashCb?.();
+  });
+  dashBtn.addEventListener('contextmenu', (e) => e.preventDefault());
   // A pressed look while the thumb is down (touch screens do not all show :active).
-  for (const b of [interactBtn, jumpBtn]) {
+  for (const b of [interactBtn, jumpBtn, dashBtn]) {
     b.addEventListener('pointerdown', () => b.classList.add('on'));
     for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) b.addEventListener(t, () => b.classList.remove('on'));
   }
@@ -1083,6 +1104,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     onJump(press, release) {
       jumpCbs = { press, release };
+    },
+    onDash(press) {
+      dashCb = press;
+    },
+    setDash(on) {
+      dashBtn.hidden = !on;
     },
     setOpenRealms(open) {
       openRealms = [...open];

@@ -9,6 +9,7 @@ import {
   type ActKind,
   type ClientAct,
   type ClientFrame,
+  type CourseAct,
   type ClosedView,
   type FeedbackDraft,
   type LineStatus,
@@ -25,7 +26,7 @@ import {
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
-import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
+import type { ActRefusal, ActivityLink, CourseLink, CourseReply, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { EmoteGate, MoveBudget } from './budget';
@@ -50,7 +51,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' | 'course' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -434,7 +435,7 @@ export class EdgeTransport implements ParkTransport {
     let lastR = 0;
     const readyWaiters: Array<(ok: boolean) => void> = [];
 
-    const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS });
+    const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number; dash?: true }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS, ...(w.dash ? { dash: true as const } : {}) });
     /** A time on the room's clock as remote owls are drawn on this page's (an air state's, OP-084). */
     const toLocalAt = (at: number): number => at - offset + RENDER_DELAY_MS;
     /** Board times are on the server clock; the HUD counts down on this device's. */
@@ -472,6 +473,19 @@ export class EdgeTransport implements ParkTransport {
       queued = null;
       if (queueTimer) clearTimeout(queueTimer);
       queueTimer = null;
+    };
+    /**
+     * A dash (OP-224) goes at once, ahead of any walk waiting: it is over in a fifth of a second. The
+     * room echoes it as a move with its number, or puts it right with the walk it keeps.
+     */
+    const sendDash = (to: Vec2) => {
+      clearQueue();
+      clearPending();
+      budget.take(Date.now());
+      seq += 1;
+      const mine = seq;
+      pending.set(mine, { to, timer: setTimeout(() => pending.delete(mine), ECHO_TIMEOUT_MS), resent: true });
+      sendFrame({ t: 'dash', to, seq: mine });
     };
     /** Send the waiting move as soon as the budget allows. */
     const flushMove = () => {
@@ -574,7 +588,7 @@ export class EdgeTransport implements ParkTransport {
               // Only the newest move may correct our walk: the echo of a superseded one is stale.
               const newest = f.seq === seq && !queued;
               const differs = !predicted || Math.hypot(predicted.x - f.to.x, predicted.y - f.to.y) > 2;
-              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now() });
+              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now(), ...(f.dash ? { dash: true as const } : {}) });
             }
             break;
           }
@@ -616,6 +630,7 @@ export class EdgeTransport implements ParkTransport {
         case 'act':
         case 'street':
         case 'admitted':
+        case 'course':
           answer(f);
           break;
         case 'nest':
@@ -831,6 +846,23 @@ export class EdgeTransport implements ParkTransport {
       // The room forgets the owl when it leaves.
       close: () => undefined,
     };
+    /** A course step (OP-224) and its answer, or why there is none. */
+    const courseAsk = async (a: CourseAct, id?: string): Promise<CourseReply> => {
+      const f = await request({ t: 'course', a, ...(id !== undefined ? { id } : {}) });
+      if (f?.t !== 'course') return { ok: false, reason: 'offline' };
+      if (!f.ok) return { ok: false, reason: f.reason };
+      return { ok: true, view: f.view, ...(f.first !== undefined ? { first: f.first } : {}), ...(f.at ? { at: f.at } : {}), ...(f.paid ? { paid: f.paid } : {}) };
+    };
+    const course: CourseLink = {
+      state: () => courseAsk('state'),
+      start: () => courseAsk('start'),
+      reach: (kind, id) => courseAsk(kind, id),
+      open: (id) => courseAsk('shortcut', id),
+      fall: () => courseAsk('fall'),
+      finish: () => courseAsk('finish'),
+      // The room forgets the run's page when it leaves; the run itself is kept.
+      close: () => undefined,
+    };
     const failWaiters = () => {
       for (const w of waiters.values()) {
         clearTimeout(w.timer);
@@ -970,6 +1002,10 @@ export class EdgeTransport implements ParkTransport {
       send(msg: ParkMessage) {
         switch (msg.t) {
           case 'move':
+            if (msg.walk.dash) {
+              sendDash({ x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) });
+              break;
+            }
             queued = { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) };
             flushMove();
             break;
@@ -1010,6 +1046,7 @@ export class EdgeTransport implements ParkTransport {
       link,
       acts,
       nests,
+      course,
       track(state: PlayerState) {
         current = state;
         spawn = undefined;
@@ -1051,6 +1088,6 @@ export class EdgeTransport implements ParkTransport {
   }
 }
 
-function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number }) => Walk, toLocalAt: (at: number) => number): PlayerState {
+function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number; dash?: true }) => Walk, toLocalAt: (at: number) => number): PlayerState {
   return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, ...(o.asleep ? { asleep: true } : {}), ...(o.air ? { air: { ...o.air, at: toLocalAt(o.air.at) } } : {}), v: 1 };
 }
