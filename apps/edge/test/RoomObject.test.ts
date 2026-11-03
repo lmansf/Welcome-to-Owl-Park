@@ -1755,15 +1755,68 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, ws, { t: 'quests', r: 1 });
     await send(obj, ws, { t: 'talk', npc: 'elder', r: 2 });
     await send(obj, ws, { t: 'accept', quest: 'q1', r: 3 });
-    await send(obj, ws, { t: 'use', target: 'lamp', r: 4 });
+    await send(obj, ws, { t: 'handin', quest: 'q1', r: 4 });
     await send(obj, ws, { t: 'gather', quest: 'q1', n: 0, r: 5 });
     await send(obj, ws, { t: 'act', a: 'tasks', r: 6 });
+    // A use of something the room does not have is unknown, as anyone's (OP-243: uses are open to it).
+    await send(obj, ws, { t: 'use', target: 'lamp', r: 7 });
     await settle();
-    expect(ws.of('refused')).toEqual([1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })));
+    expect(ws.of('refused')).toEqual([...[1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })), { t: 'refused', r: 7, reason: 'unknown' }]);
     expect(act(ws, 6)).toEqual({ t: 'act', r: 6, a: 'tasks', ok: false, reason: 'spectator' });
     logged(cap.lines, 'spectator_refused', { component: 'room.play', room: 'hub', frame: 'quests' });
     expect(eventsOf(cap.lines).filter((e) => e === 'spectator_refused')).toHaveLength(1);
     expect(collections.questCalls).toEqual([]);
+  });
+
+  it('lets it flop into a leaf pile for everyone to see, for no feathers, no quest and no task (OP-243)', async () => {
+    const obj = roomObject();
+    const holder = await join(obj, 'hub', 'v_holder', OWNER);
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    await walk(obj, ws, floor(ws), { x: 1930, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 1 });
+    await settle();
+    expect(ws.of('useResult')).toEqual([{ t: 'useResult', r: 1, ok: true, feathers: 0, total: -1, updates: [], practice: true }]);
+    // The pile is gone for everyone, the ticket holder included, as after anyone's flop.
+    expect(holder.last('used')).toMatchObject({ t: 'used', id: 'hub-leaves-1', by: SPEC_ID });
+    expect(ws.last('used')).toMatchObject({ id: 'hub-leaves-1', by: SPEC_ID });
+    // Gone means gone for the guest too, and nothing was asked of its collection.
+    clock += 2_000;
+    await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 2 });
+    await settle();
+    expect(ws.of('useResult').find((f) => f.r === 2)).toMatchObject({ ok: false, reason: 'gone', feathers: 0 });
+    expect(collections.book.feathers(SPEC, clock)).toBe(0);
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+    expect(ws.of('tasks')).toEqual([]);
+    expect(eventsOf(cap.lines)).not.toContain('spectator_refused');
+  });
+
+  it('lets it bask in the moonbeam as anyone does, counting for nothing (OP-243)', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    await walk(obj, ws, floor(ws), { x: 2400, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 1 });
+    await settle();
+    expect(ws.of('useResult')).toEqual([{ t: 'useResult', r: 1, ok: true, feathers: 0, total: -1, updates: [], practice: true }]);
+    expect(ws.of('used')).toEqual([]);
+    expect(collections.questCalls).toEqual([]);
+  });
+
+  it('still keeps its uses to reach and the cooldown, as anyone’s (OP-243)', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    await walk(obj, ws, floor(ws), { x: 400, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 1 });
+    await settle();
+    expect(ws.of('refused')).toEqual([{ t: 'refused', r: 1, reason: 'far' }]);
+    await walk(obj, ws, { x: 2400, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 2 });
+    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 3 });
+    await settle();
+    expect(ws.of('useResult').map((f) => f.r)).toEqual([2]);
+    expect(ws.of('refused').find((f) => f.r === 3)).toEqual({ t: 'refused', r: 3, reason: 'busy' });
   });
 
   it('keeps it a spectator through the object’s sleep', async () => {

@@ -339,10 +339,17 @@ and plays every game, and earns nothing:
   stands and `practice: true`, keep nothing on the wall or in the owl's bests, and pay nothing; a
   practice climb's bands answer `added: 0`, keep no band rows and grant no item. A run started as a
   spectator stays practice after a ticket. A ticket holder's climb start drops an open practice run.
-- The quests, the NPC owls, the leaf piles, the stalls, the quest items and today's tasks answer
-  `refused` (or `act` with `ok: false`) with reason `spectator`. A spectator's arrivals and emotes
-  count for no quest.
-- A spectator's look shows no Realm Vote pledge.
+- The quests, the NPC owls, the quest items and today's tasks answer `refused` (or `act` with
+  `ok: false`) with reason `spectator`. A spectator's arrivals and emotes count for no quest.
+- The leaf piles, the stalls and the moonbeam are open to a spectator, checked for reach and the
+  cooldown as anyone's (OP-243): a pile it flops is gone for everyone (`used`), as after anyone's
+  flop, and the answer is `useResult` with 0 feathers, `total: -1` and `practice: true`. The
+  collections object is never asked, so no feather, quest step or task comes of it.
+- A spectator's look shows no Realm Vote pledge, and is otherwise drawn as anyone's: nothing marks
+  an owl as a spectator to the others (OP-243). Every collector holds `STARTER_PACK`
+  (`packages/shared/src/collectibles.ts`): the Hoot and Flap emotes, Sparkle, and a Beanie, Round
+  Glasses and Knit Scarf in their original colours; a collector made before a piece was added gets it
+  the next time its collection is read (`CollectionBook`), as with the presents.
 - A room lets a spectator in while it holds fewer owls than its cap times `SPECTATOR_SHARE`
   (`spectatorLimit` in `apps/edge/src/rooms.ts`); past that a spectator gets `full` with
   `spectators: true`. Ticket holders come in up to the full cap.
@@ -357,8 +364,10 @@ The page's half (`apps/park/src/ui/spectator.ts`, its words and choices, unit-te
 Get a Day Ticket button. Every Get a Day Ticket opens the turnstiles' own sale (`sellDayTicket`, the
 card before the store then checkout, OP-180) with a line above it. Locked on the page as well as on
 the server: no NPC marks or quest items are drawn, talking to an NPC owl (the feather shop's keeper
-and the gift included), a leaf pile or a stall, the gift shop's door and the Quests tab sell a Day
-Ticket instead, and the idol says the vote line, then the card. A `refused` with reason `spectator`
+and the gift included), the gift shop's door and the Quests tab sell a Day Ticket instead, and the
+idol says the vote line, then the card. Leaf piles, stalls and the moonbeam play as anyone's
+(OP-243); a `practice` flop turns up nothing, and the first one on the page toasts once that a Day
+Ticket turns up feathers (`createOnceHint`), with no card. A `refused` with reason `spectator`
 opens the card too. The arcade's and the climb's result cards for a practice run say what the run
 would have earned (worked out on the page with `runFeathers` and `BAND_FEATHERS`, without the
 day's-best or brisk bonus) over Get a Day Ticket and Play again; fishing, the copy game, the quiz

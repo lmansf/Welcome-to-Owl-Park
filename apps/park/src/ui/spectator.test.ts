@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BAND_COUNT, BAND_FEATHERS, runFeathers } from '@owl-park/shared';
 import type { Entry, ScanReply } from '../net';
-import { FULL_OFFER_EVERY_MS, SPECTATOR_WORDS, arcadeWouldEarn, badgeView, climbWouldEarn, createOfferPacer, createSpectatorBadge, endOfGameLine, turnstileWay, wouldHaveEarned } from './spectator';
+import { FULL_OFFER_EVERY_MS, SPECTATOR_WORDS, arcadeWouldEarn, badgeView, climbWouldEarn, createOfferPacer, createOnceHint, createSpectatorBadge, endOfGameLine, turnstileWay, wouldHaveEarned } from './spectator';
 import { gateRefusal } from './tickets';
 
 /** Just enough of a page for the badge to be drawn without a browser. */
@@ -135,5 +135,14 @@ describe('the "Just looking" badge (OP-191)', () => {
     badge.set(false);
     expect(el.classList.contains('show')).toBe(false);
     expect(badge.shown()).toBe(false);
+  });
+});
+
+describe('a free guest’s word on leaf piles (OP-243)', () => {
+  it('says that a Day Ticket turns up feathers the first time only, with no sale in it', () => {
+    const hint = createOnceHint(SPECTATOR_WORDS.leaves);
+    expect(hint.say()).toBe('With a Day Ticket, leaf piles can turn up feathers.');
+    expect(hint.say()).toBeNull();
+    expect(hint.say()).toBeNull();
   });
 });

@@ -1,7 +1,8 @@
 /**
  * Spectators, the page's half (OP-191). With the park's SPECTATORS switch on, an owl without a ticket
- * that works walks on past the turnstiles as a spectator: it goes everywhere, emotes, says phrases and
- * plays every game, but earns nothing, and the quests, the Realm Vote and the stores stay locked to it
+ * that works walks on past the turnstiles as a spectator: it goes everywhere, emotes, says phrases,
+ * plays every game and flops into leaf piles (OP-243), but earns nothing, and the quests, the Realm
+ * Vote and the stores stay locked to it
  * (the room server enforces all of that; the server half, docs/ARCHITECTURE.md section 4). This file
  * holds what the page says to a spectator (and the turnstiles' question's words, OP-198), the turnstiles' choice, the end-of-game offer's words and
  * how often the full offer may come up, and the HUD's "Just looking" badge. Every way it offers a Day
@@ -33,8 +34,10 @@ export const SPECTATOR_WORDS = {
   get: 'Get a Day Ticket',
   /** The arcade's and the climb's second button on a spectator's result card. */
   again: 'Play again',
-  /** The quests, the NPC owls, the leaf piles, the stores: shown above the card before the store. */
+  /** The quests, the NPC owls, the stores: shown above the card before the store. */
   locked: 'Quests and the shops are for ticket holders.',
+  /** A guest's first flop into a leaf pile on this page (OP-243): said once, with no card. */
+  leaves: 'With a Day Ticket, leaf piles can turn up feathers.',
   /** At a realm's idol (the Realm Vote). */
   idol: 'Ticket holders vote here, one vote a day.',
   /** Once a bought ticket has made the spectator a full visitor in place. */
@@ -86,6 +89,21 @@ export function turnstileWay(scan: ScanReply, entry: Entry): TurnstileWay {
   const refusal = gateRefusal(scan.reason, scan.kind);
   if (scan.reason === 'offline' || !entry.spectators) return { go: 'back', line: refusal.line, sale: refusal.buy };
   return refusal.buy ? { go: 'spectate', line: SPECTATOR_WORDS.turnstile, sale: true } : { go: 'spectate', line: refusal.line, sale: false };
+}
+
+/**
+ * A free guest's gentle word that tickets turn up rewards (OP-243): said the first time only, for the
+ * whole page, never as the card before the store. `say()` answers the line once, then null.
+ */
+export function createOnceHint(line: string): { say(): string | null } {
+  let said = false;
+  return {
+    say() {
+      if (said) return null;
+      said = true;
+      return line;
+    },
+  };
 }
 
 /** The full offer after a game comes up at most this often (the toast says it every time). */

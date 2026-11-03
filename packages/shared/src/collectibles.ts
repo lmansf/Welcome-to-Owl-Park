@@ -55,8 +55,13 @@ export const DUPLICATE_FEATHERS: Record<Rarity, number> = { common: 5, uncommon:
 export const PICKUP_RADIUS = 56;
 /** The client asks for a pickup a little closer than the server's radius (latency headroom). */
 export const PICKUP_CLIENT_RADIUS = 40;
-/** Every new collector starts with these. */
-export const STARTER_PACK = ['hoot', 'flap', 'sparkle~0'] as const;
+/**
+ * Every collector holds these, free guests included (OP-243): two emotes, an effect and one plain
+ * wearable for each slot, in their original colours, so an owl without a ticket still has a look of its
+ * own that everyone sees. None is a quest's reward or on sale; rarer items and other colourways are
+ * earned. A collector made before a piece was added gets it the next time its collection is read.
+ */
+export const STARTER_PACK = ['hoot', 'flap', 'sparkle~0', 'beanie~0', 'round-glasses~0', 'knit-scarf~0'] as const;
 
 /** A present from the park: every collector holds it, and the page says so once. */
 export interface Present {
