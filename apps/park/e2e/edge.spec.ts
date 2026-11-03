@@ -75,7 +75,7 @@ test.describe('room server', () => {
     const s = await state(a);
     expect(s.room).toBe('hub');
     expect(s.pos.y).toBeGreaterThan(560); // scattered onto the walkable floor
-    await expect(a.getByText('1 owl here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('1 owl here');
     await a.context().close();
   });
 
@@ -135,7 +135,7 @@ test.describe('room server', () => {
       { timeout: 30_000 },
     );
     expect(await first.jsonValue()).toEqual({ connected: true, peers: 1 });
-    await expect(a.getByText('2 owls here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('2 owls here');
     await a.context().close();
     await b.context().close();
   });
@@ -189,7 +189,7 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     expect((await state(b)).peers[0]!.look.body).toBe('#8B5A2B');
-    await expect(a.getByText('2 owls here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('2 owls here');
 
     const target = { x: 2200, y: 760 };
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);

@@ -25,7 +25,7 @@ test.describe('single visitor', () => {
     const s = await state(page);
     expect(s.room).toBe('hub');
     expect(s.peers).toHaveLength(0);
-    await expect(page.getByText('1 owl here')).toBeVisible();
+    await expect(page.locator('[data-count]')).toHaveText('1 owl here');
     // The park's name in the bar (the home screen's heading, hidden in the park, has it too).
     await expect(page.locator('#hud .brand')).toHaveText('Owl Park');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-hub.png` });
@@ -56,10 +56,11 @@ test.describe('single visitor', () => {
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
   });
 
-  test('using the HUD never stops the owl from walking afterwards', async ({ page }) => {
+  test('using the HUD never stops the owl from walking afterwards', async ({ page, isMobile }) => {
     await openPark(page);
     const before = await state(page);
-    await page.locator('#hud .pill').hover();
+    // A phone's bar has no count to point at (OP-242): its name instead.
+    await page.locator(isMobile ? '#hud .brand' : '#hud .pill').hover();
     await page.locator('[data-menu-btn]').click();
     await page.getByRole('button', { name: 'Close the menu' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
@@ -455,7 +456,7 @@ test.describe('two visitors on one device', () => {
 
     await expect.poll(async () => (await state(a)).peers.map((p) => p.id)).toEqual(['owl-b']);
     await expect.poll(async () => (await state(b)).peers.map((p) => p.id)).toEqual(['owl-a']);
-    await expect(a.getByText('2 owls here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('2 owls here');
     expect((await state(b)).peers[0]?.look.body).toBe('#8B5A2B');
 
     // A walks; B's copy of A follows the same path and ends at the same spot.
@@ -469,6 +470,6 @@ test.describe('two visitors on one device', () => {
     await walkToDoor(a, 'to-grove');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('grove');
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(0);
-    await expect(b.getByText('1 owl here')).toBeVisible();
+    await expect(b.locator('[data-count]')).toHaveText('1 owl here');
   });
 });

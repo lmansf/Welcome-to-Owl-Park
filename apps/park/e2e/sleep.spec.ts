@@ -81,7 +81,7 @@ test.describe('idle owls sleep (this device)', () => {
     // No answer: the owl has left, and the other owl is alone in the room.
     await expect.poll(() => away(a), { timeout: 30_000 }).toBe('gone');
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(0);
-    await expect(b.getByText('1 owl here')).toBeVisible();
+    await expect(b.locator('[data-count]')).toHaveText('1 owl here');
     const card = a.getByRole('dialog', { name: 'Still here?' });
     await expect(card).toContainText('Your owl dozed off and went home to its nest.');
     const back = card.locator('[data-away="back"]');
