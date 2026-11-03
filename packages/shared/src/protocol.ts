@@ -38,6 +38,8 @@ export interface Walk {
   to: Vec2;
   /** Unix epoch milliseconds on the sender's clock. */
   startedAt: number;
+  /** A dash (OP-224, dash.ts): walked at AIR_DASH_SPEED, not the walk's pace. */
+  dash?: true;
 }
 
 export interface PlayerState {
