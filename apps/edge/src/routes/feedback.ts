@@ -1,9 +1,24 @@
 /** Feedback: visitors send it with their pass; the keepers read it with the admin key. */
-import { parseFeedback } from '@owl-park/shared';
+import { hashForLog, parseFeedback } from '@owl-park/shared';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from '../feedbackBox';
-import { CORS, FEEDBACK_BODY_MAX, isAdmin, json, passFrom, readJson, visitOf } from './http';
+import { Counter, limitsOn } from '../limits';
+import { CORS, FEEDBACK_BODY_MAX, clientIp, isAdmin, json, passFrom, readJson, visitOf } from './http';
 import { collections } from './park';
 import type { RouteCtx } from './router';
+
+/**
+ * Notes from one address an hour (OP-236), on top of each owl's own limits (feedbackBox.ts): a script
+ * that mints fresh owls cannot fill the park's daily share alone. A household or a classroom shares an
+ * address, so it is set well past what a few owls send. Counted in this copy of the Worker's memory,
+ * like every other rate limit here (limits.ts).
+ */
+export const FEEDBACK_PER_ADDRESS = { limit: 20, windowMs: 60 * 60_000 } as const;
+let byAddress = new Counter(FEEDBACK_PER_ADDRESS);
+
+/** For tests: every address's count forgotten. */
+export function forgetFeedbackAddresses(): void {
+  byAddress = new Counter(FEEDBACK_PER_ADDRESS);
+}
 
 // ---- Feedback: visitors send it with their pass; the keepers read it with the admin key ----
 export async function feedback(c: RouteCtx): Promise<Response> {
@@ -15,8 +30,17 @@ export async function feedback(c: RouteCtx): Promise<Response> {
   if (!pass.cid) return json({ error: 'no-collector' }, 401);
   // A few lines of words: refuse anything far larger before reading it.
   if (Number(request.headers.get('Content-Length') ?? 0) > FEEDBACK_BODY_MAX) return json({ error: 'too large' }, 413);
+  // The words come back with any email, phone number, link, handle or street address taken out (OP-236).
   const draft = parseFeedback(await readJson(request));
   if (!draft) return json({ error: 'bad request' }, 400);
+  if (limitsOn(env)) {
+    const over = byAddress.take(clientIp(request, env), Date.now());
+    if (over) {
+      // TODO-DOCS (OP-236): docs/LOGGING.md: rate_limited gains the limit feedback-address (notes from one address an hour, FEEDBACK_PER_ADDRESS), with collector_hash.
+      if (over.first) log.warn('worker.guard', 'rate_limited', 'Feedback came too often from one address: refused until the hour is out.', { route: '/api/feedback', limit: 'feedback-address', retry_after_s: over.wait, collector_hash: hashForLog(pass.cid) });
+      return json({ ok: false, reason: 'full' }, 429);
+    }
+  }
   const ua = request.headers.get('User-Agent')?.slice(0, 300) || null;
   const r = await collections(env).addFeedback(pass.cid, draft, ua, visitOf(pass, request));
   return json(r, r.ok ? 200 : 429);
