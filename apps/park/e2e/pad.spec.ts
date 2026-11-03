@@ -12,7 +12,7 @@ const gap = (a: Box, b: Box) => Math.hypot(centre(a).x - centre(b).x, centre(a).
 const npc = async (page: Page, id: string) => (await state(page)).npcs.find((n) => n.id === id)!;
 
 test.describe('the pad (OP-082, OP-114)', () => {
-  test('a phone has three buttons on the left: Interact nearer the middle, the Menu outside, Jump below them; Say above (the emotes inside it, OP-242)', async ({ page, isMobile }) => {
+  test('a phone is laid out like a controller: the stick bottom left, Jump the big button bottom right with Interact up and to its left, the Menu and Say small in the top corner (OP-242)', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page);
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
@@ -23,26 +23,35 @@ test.describe('the pad (OP-082, OP-114)', () => {
     const say = await box('[data-say-btn]');
     // One button for Say and the emotes on a phone (OP-242).
     await expect(page.locator('[data-emotes-btn]')).toBeHidden();
-    const width = page.viewportSize()!.width;
-    // The stick keeps the bottom-right corner; the pad keeps to the left.
-    expect(stick.x + stick.width).toBeGreaterThan(width - 40);
-    for (const b of [interact, menu, jump, say]) expect(b.x + b.width).toBeLessThan(width / 2 + 20);
-    // Three of a handheld's face buttons (Logan, 2026-10-27): the Menu and Interact either side, Jump below between them.
-    const [i, m, j] = [interact, menu, jump].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>, ReturnType<typeof centre>];
-    expect(Math.abs(m.y - i.y)).toBeLessThan(1);
-    expect(m.x).toBeLessThan(i.x);
-    expect(j.y).toBeGreaterThan(i.y);
-    expect(Math.abs(j.x - (m.x + i.x) / 2)).toBeLessThan(1);
-    // One size, and Jump 8 px from each.
-    for (const b of [menu, jump]) expect(b.width).toBeCloseTo(interact.width, 0);
-    for (const [a, b] of [[menu, jump], [jump, interact]] as const) expect(gap(a, b)).toBeCloseTo(8, 0);
-    // Say above, over Interact.
-    expect(centre(say).y).toBeLessThan(i.y);
+    const { width, height } = page.viewportSize()!;
+    // The stick keeps the bottom-left corner; the face buttons the bottom-right (Logan, 2026-11-03).
+    expect(stick.x).toBeLessThan(40);
+    expect(stick.y + stick.height).toBeGreaterThan(height - 60);
+    expect(jump.x + jump.width).toBeGreaterThan(width - 40);
+    expect(jump.y + jump.height).toBeGreaterThan(height - 60);
+    // Jump is the big one; Interact sits up and to its left.
+    expect(jump.width).toBeGreaterThan(interact.width + 8);
+    const [i, j] = [interact, jump].map(centre) as [ReturnType<typeof centre>, ReturnType<typeof centre>];
+    expect(i.x).toBeLessThan(j.x);
+    expect(i.y).toBeLessThan(j.y);
+    expect(interact.x).toBeGreaterThan(width / 2);
+    // The Menu and Say are small and up in the top-right corner, off the thumbs.
+    for (const b of [menu, say]) {
+      expect(b.y).toBeLessThan(80);
+      expect(b.x).toBeGreaterThan(width / 2);
+      expect(b.width).toBeLessThan(48);
+    }
+    expect(menu.x).toBeGreaterThan(say.x);
     // Thumb-sized and apart: each button at least 44 px; round ones measured as circles, none over another or the stick.
     const live = [interact, menu, jump, say];
     for (const b of live) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
-    for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) expect(gap(live[a]!, live[b]!), `${a} and ${b}`).toBeGreaterThan(7.5);
+    for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) expect(gap(live[a]!, live[b]!), `${a} and ${b}`).toBeGreaterThan(6.5);
     for (const b of live) expect(overlaps(b, stick)).toBe(false);
+    // The top buttons keep off the bar's brand and feathers.
+    for (const sel of ['#hud .brand', '[data-feathers]']) {
+      const el = page.locator(sel);
+      if (await el.isVisible()) for (const b of [menu, say]) expect(overlaps(b, (await el.boundingBox())!), sel).toBe(false);
+    }
     // Going home and the Map are the Menu's: no Nest and no Map on the pad, and no place kept empty.
     await expect(page.locator('[data-pad-nest], [data-pad-map], [data-pad-slot]')).toHaveCount(0);
     await expect(page.locator('[data-pad-jump]')).toHaveAttribute('aria-label', 'Jump');

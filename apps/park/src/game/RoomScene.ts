@@ -261,7 +261,7 @@ function heldBack<T extends object>(handlers: T, waiting: () => Array<() => void
 }
 /** How far hint chips keep from the screen's edges, in CSS pixels (clear of the HUD's top and bottom bars). */
 const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
-/** On touch screens the thumbstick and the buttons above it fill the bottom-right corner: hints keep above them. */
+/** On touch screens the thumbstick and the face buttons fill the bottom corners: hints keep above them. */
 const TOUCH_HINT_BOTTOM = 190;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */

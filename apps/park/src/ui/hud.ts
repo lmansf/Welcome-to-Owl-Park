@@ -311,34 +311,38 @@ const CSS = `
 #hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 54px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
- * Touch screens: a pad like a handheld's (OP-082, OP-114). The thumbstick stays in the bottom-right
- * corner; on the left three of a handheld's face buttons (Logan, 2026-10-27): Interact on the right
- * (nearer the middle), the Menu outside (darker, a handheld's Start) and, below between them, Jump
- * (OP-084: a tap jumps, a tap in the air flaps, held on the way down it glides). Going home and the
- * Map are the Menu's. Three 56 px buttons whose centres sit 45.25 px from the cluster's middle
- * (81.25 px in, 73.25 px up), so Jump is 8 px from each; Emotes and Say, 44 px, sit above the Menu
- * and Interact, 9 px clear of them. All see-through, like the stick.
+ * Touch screens: a pad laid out like a game controller's (OP-082, OP-114; Logan, 2026-11-03, OP-242).
+ * The thumbstick keeps the bottom-left corner; the face buttons keep the bottom-right: Jump the big one
+ * in the corner, where a controller's main button sits (OP-084: a tap jumps, a tap in the air flaps,
+ * held on the way down it glides), Interact up and to its left, and Dash, in a parkour course only,
+ * straight above Jump. Jump is 68 px and the others 56 px; each sits 7 px or more clear of the next.
+ * The Menu and Say are small (44 px) and up in the top-right corner, away from the thumbs. All
+ * see-through, like the stick.
  */
 @media (pointer:coarse){
-  #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}
-  #hud .pad{display:block;position:absolute;left:0;bottom:0;width:161px;height:153px}
+  #hud .bar{min-height:44px;padding-right:100px}
+  #hud .bottom .left{position:fixed;left:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;flex-direction:row-reverse;gap:8px;width:auto;height:auto;max-width:none}
+  #hud .pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
   #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
   #hud .pad-btn .i2{fill:#FFD36A}
-  #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
+  #hud .pad-btn.interact{right:64px;bottom:50px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
-  #hud .pad-btn.jump{left:53.25px;bottom:0}
-  /* Dash (OP-224), in a parkour course only: above Jump, 8 px from the Menu and Interact as Jump is. */
-  #hud .pad-btn.dash{left:53.25px;bottom:90.5px}
+  #hud .pad-btn.jump{right:0;bottom:0;width:68px;height:68px}
+  #hud .pad-btn.jump svg{width:36px;height:36px}
+  /* Dash (OP-224), in a parkour course only: straight above Jump. */
+  #hud .pad-btn.dash{right:6px;bottom:76px}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
-  #hud .menu-btn{position:absolute;left:8px;bottom:45.25px;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
-  #hud .menu-btn i{width:20px;height:14px}
-  #hud .emote-btn{position:absolute;left:1.5px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
+  #hud .menu-btn{position:relative;width:44px;height:44px;min-height:44px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .menu-btn i{width:18px;height:13px}
+  #hud .emote-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .emote-btn svg{width:28px;height:28px}
-  #hud .say-btn{position:absolute;left:117px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .say-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .say-btn svg{width:24px;height:24px}
+  /* The row of further actions keeps above the face buttons, stick or no stick. */
+  #hud .bottom .actions,#hud.no-stick .bottom .actions{position:absolute;right:0;bottom:146px;flex-direction:column;align-items:flex-end}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
   /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
   #hud.arcade-pad .pad{visibility:visible;z-index:25}
@@ -346,8 +350,9 @@ const CSS = `
   #hud.arcade-pad .pad-btn.jump,#hud.arcade-pad .pad-btn.dash{display:none}
   /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
   #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
-  /* The line on how to play keeps to the left of the stick or the Interact the game is played with. */
-  #hud.arcade-stick .arcade .a-hint,#hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
+  /* The line on how to play keeps clear of the stick (on the left) or the Interact (on the right) the game is played with. */
+  #hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
+  #hud.arcade-stick .arcade .a-hint{left:auto;right:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:right}
 }
 /* The '!' that stands for Interact, before the first action (what E and the pad's Interact do). */
 #hud .actions .bang{display:inline-flex;width:18px;height:18px;margin:0 6px 0 -4px;vertical-align:-3px}
@@ -388,7 +393,7 @@ const CSS = `
   #hud .emote-btn{display:none}
   #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
   #hud .pad-btn.interact .lbl{display:none}
-  #hud .pad-btn.interact.labelled{width:auto;min-width:56px;max-width:min(240px,calc(100vw - 262px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled{width:auto;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
   #hud .pad-btn.interact.labelled svg{flex:none}
   #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
   /* The first action is Interact's own, so its button in the row would say it twice. */

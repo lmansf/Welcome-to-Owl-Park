@@ -90,11 +90,11 @@ test.describe('single visitor', () => {
       return;
     }
     await expect(stick).toBeVisible();
-    // The buttons keep clear of it: to its left, or above it.
+    // The buttons keep clear of it: to its right, or above it (OP-242: the stick keeps the bottom-left corner).
     const s = (await stick.boundingBox())!;
     for (const b of await page.locator('#hud .bottom .left > button, #hud .bottom .left > div > button, #hud [data-action]').all()) {
       const r = await b.boundingBox();
-      if (r) expect(r.x + r.width <= s.x + 1 || r.y + r.height <= s.y + 1).toBe(true);
+      if (r) expect(r.x >= s.x + s.width - 1 || r.y + r.height <= s.y + 1).toBe(true);
     }
     const start = (await state(page)).pos;
     const toward = start.x < 2400 ? 1 : -1; // toward the middle of the hub, where there is floor
