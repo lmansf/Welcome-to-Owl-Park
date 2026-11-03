@@ -68,7 +68,7 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     await frames(page, 30);
     const s = await state(page);
     expect(s.room).toBe('l1');
-    expect(s.doorway).toBe('stair-l2-l1');
+    expect(s.doorway, JSON.stringify({ pos: s.pos, air: s.air, walking: s.walking, actions: s.actions })).toBe('stair-l2-l1');
   });
 
   test('a jump and a flap up onto the lintel over the way down, and a jump on up to the shelf fungus', async ({ page }) => {
@@ -251,7 +251,7 @@ test.describe('the tree’s doorways open on up (OP-212)', () => {
     await frames(page, 30);
     const s = await state(page);
     expect(s.room).toBe('l1');
-    expect(s.doorway).toBe('stair-l2-l1');
+    expect(s.doorway, JSON.stringify({ pos: s.pos, air: s.air, walking: s.walking, actions: s.actions })).toBe('stair-l2-l1');
     expect(s.actions[0]).toBe('door:stair-l2-l1');
     await expect(page.locator('[data-action="door:stair-l2-l1"]')).toHaveText(/Go in/);
     // A phone goes in with the action (the pad's Interact does the same); a computer with the up arrow.
