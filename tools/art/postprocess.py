@@ -844,6 +844,20 @@ def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
         arr[y0:y1, x0:x1] = np.clip(np.round(sub), 0, 255).astype(np.uint8)
         one = Image.fromarray(arr, "RGBA")
         tools.append(f"layer: clear-tone {spec} {n} px")
+    if a.fade_top:
+        # a keyed layer cleared to a hard top edge (a far layer whose fade into the key went violet):
+        # its alpha ramps in over --fade-top px below the first opaque row, so the edge melts upward
+        if not keyed:
+            raise ArtError(f"{key}: --fade-top needs a keyed layer")
+        arr = np.array(one.convert("RGBA"))
+        alpha = arr[..., 3].astype(np.float32)
+        rows = np.nonzero((alpha > 0).any(axis=1))[0]
+        if len(rows):
+            y0 = int(rows[0])
+            ramp = np.clip((np.arange(H) - y0) / float(a.fade_top), 0, 1)
+            arr[..., 3] = np.round(alpha * ramp[:, None]).astype(np.uint8)
+            one = Image.fromarray(arr, "RGBA")
+            tools.append(f"layer: fade-top {a.fade_top} px from row {y0}")
     before = tile_seam_ratio(one)
     if not a.no_heal:
         one = heal_tile(one, a.band, axes=(1,))
@@ -2029,6 +2043,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
     sp.add_argument("--band", type=float, default=0.2, help="width of the sideways healing band as a fraction of the width")
     sp.add_argument("--trim-key", action="store_true", help="cut away a border of the key colour the painting put round itself before keying")
+    sp.add_argument("--fade-top", type=int, default=0, help="ramp a keyed layer's alpha in over this many px below its first opaque row")
     sp.add_argument("--no-heal", action="store_true")
     sp.add_argument("--max-seam", type=float, default=1.6)
     sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the final's pixels made transparent (a moon painted into a keyed layer, which must not repeat); repeatable, keyed layers only")
