@@ -402,10 +402,18 @@ export async function jumpFlapGlide(page: Page, ms: number, { jumpMs = 500, spar
   );
 }
 
+/**
+ * The button that does action `id` where the owl stands: its button in the row, or on a phone, for the
+ * first action, the pad's Interact, which wears its name in place of the row's button (OP-242).
+ */
+export function actionButton(page: Page, id: string) {
+  return page.locator(`[data-action="${id}"], [data-pad-interact][data-act="${id}"]`).filter({ visible: true });
+}
+
 /** Wait for an action button where the owl stands, then press it. */
 export async function doAction(page: Page, id: string): Promise<void> {
   await expect.poll(async () => (await state(page)).actions, { timeout: 10_000, intervals: [50] }).toContain(id);
-  await page.locator(`[data-action="${id}"]`).click();
+  await actionButton(page, id).click();
 }
 
 /** From the grove's clearing along the lawn to the pond, and out to the end of the jetty (owls walk in straight lines). */

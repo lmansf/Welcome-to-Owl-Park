@@ -49,6 +49,10 @@ export interface MenuShell {
   onClose(cb: () => void): void;
   /** The theme it wears now (tests and the preview). */
   theme(): MenuThemeId;
+  /** A short line under the title (the owls here, OP-242); empty hides it. */
+  subtitle(text: string): void;
+  /** A button in the header beside Close, on every tab (Feedback, OP-242). */
+  headButton(button: HTMLButtonElement): void;
 }
 
 /** Two-tone tab icons (main and accent tones from the theme): feather, egg, branch, moon, gear. */
@@ -72,7 +76,12 @@ const CSS = `
 #hud .menu-shell .branch{flex:none;height:18px;background:var(--m-branch) repeat-x center top/400px 18px;pointer-events:none}
 #hud .menu-shell .grab{display:none}
 #hud .menu-shell .mhead{flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 18px;min-height:var(--m-target)}
-#hud .menu-shell .mhead h2{margin:0;flex:1;font-size:var(--m-heading);letter-spacing:.01em}
+#hud .menu-shell .mhead h2{margin:0;font-size:var(--m-heading);letter-spacing:.01em}
+#hud .menu-shell .mtitle{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:4px 0}
+#hud .menu-shell .msub{font-size:13px;font-weight:600;color:var(--m-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hud .menu-shell .msub:empty{display:none}
+#hud .menu-shell .mhead .mfeedback{display:flex;align-items:center;gap:8px;min-height:var(--m-target);padding:8px 16px 8px 12px;border-radius:999px;background:var(--m-accent);color:var(--m-on-accent);border:0;font-weight:800;white-space:nowrap;box-shadow:0 2px 0 color-mix(in srgb,var(--m-frame) 60%,transparent)}
+#hud .menu-shell .mhead .mfeedback svg{flex:none;width:22px;height:22px}
 #hud .menu-shell button{font:inherit;font-size:var(--m-body);color:var(--m-text);box-shadow:none;text-shadow:none}
 #hud .menu-shell .x{min-height:var(--m-target);min-width:var(--m-target);padding:8px 16px;border-radius:999px;background:transparent;border:2px solid var(--m-frame);font-weight:700}
 #hud .menu-shell .mtabs{flex:none;display:flex;gap:2px;padding:0 6px;border-bottom:2px solid color-mix(in srgb,var(--m-frame) 45%,transparent)}
@@ -237,11 +246,12 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-modal', 'true');
   box.setAttribute('aria-label', 'Menu');
-  box.innerHTML = '<div class="branch" aria-hidden="true"></div><div class="grab" aria-hidden="true"></div><header class="mhead"><h2>Menu</h2></header><nav class="mtabs" role="tablist" aria-label="Menu"></nav><div class="mpanel" role="tabpanel" id="menu-panel" tabindex="-1"></div>';
+  box.innerHTML = '<div class="branch" aria-hidden="true"></div><div class="grab" aria-hidden="true"></div><header class="mhead"><div class="mtitle"><h2>Menu</h2><span class="msub" data-menu-sub></span></div></header><nav class="mtabs" role="tablist" aria-label="Menu"></nav><div class="mpanel" role="tabpanel" id="menu-panel" tabindex="-1"></div>';
   layer.append(scrim, box);
   root.appendChild(layer);
 
   const head = box.querySelector<HTMLElement>('.mhead')!;
+  const sub = box.querySelector<HTMLElement>('[data-menu-sub]')!;
   const nav = box.querySelector<HTMLElement>('.mtabs')!;
   const panel = box.querySelector<HTMLElement>('.mpanel')!;
   const x = document.createElement('button');
@@ -448,5 +458,11 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
       closers.push(cb);
     },
     theme: () => themeId,
+    subtitle(text) {
+      sub.textContent = text;
+    },
+    headButton(button) {
+      head.insertBefore(button, x);
+    },
   };
 }

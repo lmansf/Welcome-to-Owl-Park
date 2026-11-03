@@ -13,7 +13,7 @@ import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbRe
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
-import { createFeedbackBug } from './feedbackBug';
+import { bugIcon, createFeedbackBug } from './feedbackBug';
 import { createTreeMinimap } from './treeMinimap';
 import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
@@ -311,34 +311,38 @@ const CSS = `
 #hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 54px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
- * Touch screens: a pad like a handheld's (OP-082, OP-114). The thumbstick stays in the bottom-right
- * corner; on the left three of a handheld's face buttons (Logan, 2026-10-27): Interact on the right
- * (nearer the middle), the Menu outside (darker, a handheld's Start) and, below between them, Jump
- * (OP-084: a tap jumps, a tap in the air flaps, held on the way down it glides). Going home and the
- * Map are the Menu's. Three 56 px buttons whose centres sit 45.25 px from the cluster's middle
- * (81.25 px in, 73.25 px up), so Jump is 8 px from each; Emotes and Say, 44 px, sit above the Menu
- * and Interact, 9 px clear of them. All see-through, like the stick.
+ * Touch screens: a pad laid out like a game controller's (OP-082, OP-114; Logan, 2026-11-03, OP-242).
+ * The thumbstick keeps the bottom-left corner; the face buttons keep the bottom-right: Jump the big one
+ * in the corner, where a controller's main button sits (OP-084: a tap jumps, a tap in the air flaps,
+ * held on the way down it glides), Interact up and to its left, and Dash, in a parkour course only,
+ * straight above Jump. Jump is 68 px and the others 56 px; each sits 7 px or more clear of the next.
+ * The Menu and Say are small (44 px) and up in the top-right corner, away from the thumbs. All
+ * see-through, like the stick.
  */
 @media (pointer:coarse){
-  #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}
-  #hud .pad{display:block;position:absolute;left:0;bottom:0;width:161px;height:153px}
+  #hud .bar{min-height:44px;padding-right:100px}
+  #hud .bottom .left{position:fixed;left:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;flex-direction:row-reverse;gap:8px;width:auto;height:auto;max-width:none}
+  #hud .pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
   #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
   #hud .pad-btn .i2{fill:#FFD36A}
-  #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
+  #hud .pad-btn.interact{right:64px;bottom:50px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
-  #hud .pad-btn.jump{left:53.25px;bottom:0}
-  /* Dash (OP-224), in a parkour course only: above Jump, 8 px from the Menu and Interact as Jump is. */
-  #hud .pad-btn.dash{left:53.25px;bottom:90.5px}
+  #hud .pad-btn.jump{right:0;bottom:0;width:68px;height:68px}
+  #hud .pad-btn.jump svg{width:36px;height:36px}
+  /* Dash (OP-224), in a parkour course only: straight above Jump. */
+  #hud .pad-btn.dash{right:6px;bottom:76px}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
-  #hud .menu-btn{position:absolute;left:8px;bottom:45.25px;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
-  #hud .menu-btn i{width:20px;height:14px}
-  #hud .emote-btn{position:absolute;left:1.5px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
+  #hud .menu-btn{position:relative;width:44px;height:44px;min-height:44px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .menu-btn i{width:18px;height:13px}
+  #hud .emote-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .emote-btn svg{width:28px;height:28px}
-  #hud .say-btn{position:absolute;left:117px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .say-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .say-btn svg{width:24px;height:24px}
+  /* The row of further actions keeps above the face buttons, stick or no stick. */
+  #hud .bottom .actions,#hud.no-stick .bottom .actions{position:absolute;right:0;bottom:146px;flex-direction:column;align-items:flex-end}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
   /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
   #hud.arcade-pad .pad{visibility:visible;z-index:25}
@@ -346,8 +350,9 @@ const CSS = `
   #hud.arcade-pad .pad-btn.jump,#hud.arcade-pad .pad-btn.dash{display:none}
   /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
   #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
-  /* The line on how to play keeps to the left of the stick or the Interact the game is played with. */
-  #hud.arcade-stick .arcade .a-hint,#hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
+  /* The line on how to play keeps clear of the stick (on the left) or the Interact (on the right) the game is played with. */
+  #hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
+  #hud.arcade-stick .arcade .a-hint{left:auto;right:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:right}
 }
 /* The '!' that stands for Interact, before the first action (what E and the pad's Interact do). */
 #hud .actions .bang{display:inline-flex;width:18px;height:18px;margin:0 6px 0 -4px;vertical-align:-3px}
@@ -368,6 +373,32 @@ const CSS = `
 #hud .nest-welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
 #hud .nest-welcome i{position:absolute;top:6px;right:11px;font-style:normal;font-size:16px;line-height:1;opacity:.7}
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
+#hud .pill .alone{display:none;align-items:center}
+#hud .pill .alone svg{width:18px;height:18px}
+/*
+ * The phone's screen, decluttered (OP-242, Logan, 2026-11-03): in sight are the stick, Jump, the Menu,
+ * one Say button (Emotes are a tap away inside it), the feathers and, only where the owl can do
+ * something, Interact wearing what it does. The owl count is the Menu's (under its title), and so is
+ * Feedback (its own button by Close); the connection line shows for a few seconds as before and then
+ * leaves only a small mark in the bar while the owl wanders alone.
+ */
+@media (pointer:coarse){
+  #hud .brand{font-size:16px}
+  #hud .feathers{padding:5px 11px;font-size:13px;gap:6px}
+  #hud .feathers svg{width:15px;height:15px}
+  #hud .bar .pill{display:none}
+  #hud.net-off .bar .pill{display:flex;padding:6px 9px;gap:6px}
+  #hud.net-off .bar .pill [data-count]{display:none}
+  #hud.net-off .bar .pill .alone{display:inline-flex}
+  #hud .emote-btn{display:none}
+  #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
+  #hud .pad-btn.interact .lbl{display:none}
+  #hud .pad-btn.interact.labelled{width:auto;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled svg{flex:none}
+  #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
+  /* The first action is Interact's own, so its button in the row would say it twice. */
+  #hud .actions button:first-child{display:none}
+}
 `;
 
 /** The Say button's face: a speech bubble with two lines of words, like the wheel of phrases it opens. */
@@ -385,6 +416,10 @@ const EMOTES_ICON =
  */
 const INTERACT_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path class="i1" d="M16 5.5v13.5" stroke-width="4.6" stroke-linecap="round" fill="none"/><circle class="i2" cx="16" cy="25.6" r="2.9"/></svg>';
+
+/** The bar's mark while the owl wanders alone (OP-242): a cloud crossed out. */
+const ALONE_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="#F6F1E3" stroke-width="1.8" stroke-linejoin="round" opacity=".8"/><path d="M4 4l16 16" stroke="#FF6B81" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
 /** A keyboard's click on the pad's Jump is a tap this long: a jump, not a glide. */
 const KEY_TAP_MS = 150;
@@ -413,7 +448,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="bar">
       <div class="brand" aria-label="Owl Park"><i aria-hidden="true"></i>Owl Park</div>
       <div class="feathers" role="status" aria-label="Feathers" data-feathers><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 28C6 16 15 6 28 3C27 15 18 24 7 27Z" fill="#FFD36A"/><path d="M4 30Q15 18 28 3" stroke="#0C1E36" stroke-width="1.6" fill="none"/></svg><span data-feathers-text>0</span></div>
-      <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
+      <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span><span class="alone" data-alone title="Wandering alone: the park could not connect">${ALONE_ICON}</span></div>
     </div>
     <button class="nest-welcome" data-nest-welcome><b></b><span></span><i aria-hidden="true">×</i></button>
     <div class="hints" data-hints></div>
@@ -421,7 +456,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom">
       <div class="pad">
-        <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}</button>
+        <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}<span class="lbl" data-pad-interact-label aria-hidden="true"></span></button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>
         <button class="pad-btn dash" data-pad-dash aria-label="Dash" aria-keyshortcuts="Shift" hidden>${DASH_ICON}</button>
       </div>
@@ -442,6 +477,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
+  const interactLabel = $<HTMLElement>('[data-pad-interact-label]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
   const dashBtn = $<HTMLButtonElement>('[data-pad-dash]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
@@ -557,6 +593,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const renderCount = () => {
     const base = here === 1 ? '1 owl here' : `${here} owls here`;
     count.textContent = park !== null && park > here ? `${base} · ${park} in the park` : base;
+    // The Menu says it too, under its title: a phone's bar leaves the count out (OP-242).
+    menu.subtitle(count.textContent);
   };
 
   // Settings: what the screen shows.
@@ -568,7 +606,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
 
   // ---- the Menu and its screens: one open at a time ----
   let sayCb: ((n: number) => boolean) | null = null;
-  const sayWheel = createSayWheel(root, (n) => sayCb?.(n) ?? false);
+  // One button for both on a phone (OP-242): Say opens with a way to the emotes, and the emotes with a way back.
+  const sayWheel = createSayWheel(root, (n) => sayCb?.(n) ?? false, { label: 'Emotes', go: () => openScreen('emotes') });
   // The Menu (OP-108): its tabs, each drawn as it is shown.
   const menu = createMenuShell(
     root,
@@ -636,6 +675,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   // A tree room on a phone held upright (OP-156): a card over the game asking to turn the phone.
   const turnPhone = createTurnPhone(root);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
+  menu.subtitle(count.textContent ?? '');
 
   /** The big sheets (dialogue, shop, Decorate) share the bottom of the screen: one at a time. */
   const closeSheets = () => {
@@ -747,8 +787,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       menu.open(id === 'menu' ? undefined : id, menuBtn);
       menuBtn.setAttribute('aria-expanded', 'true');
     } else if (id === 'emotes' && wheel) {
-      wheel.open(emotesBtn);
-      emotesBtn.setAttribute('aria-expanded', 'true');
+      // A phone has no Emotes button (OP-242): the emotes came from Say's, which takes the focus back.
+      const opener = emotesBtn.offsetParent ? emotesBtn : sayBtn;
+      wheel.open(opener);
+      opener.setAttribute('aria-expanded', 'true');
     } else if (id === 'say') {
       sayWheel.open(sayBtn);
       sayBtn.setAttribute('aria-expanded', 'true');
@@ -870,13 +912,18 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       dot.className = `dot ${s === 'online' ? '' : s}`.trim();
       dot.title = s === 'online' ? (kind === 'local' ? 'Connected (this device only)' : 'Connected') : s === 'connecting' ? 'Connecting…' : 'Offline';
       dot.dataset['status'] = s;
+      // A phone's bar keeps only a small mark for it (OP-242).
+      root.classList.toggle('net-off', s === 'offline');
     },
     toast,
     attachCollection(state, actions) {
       collectionState = state;
       collectionActions = actions;
-      wheel = createEmoteWheel(root, state, (e) => actions.emote(e));
-      wheel.onClose(() => emotesBtn.setAttribute('aria-expanded', 'false'));
+      wheel = createEmoteWheel(root, state, (e) => actions.emote(e), { label: 'Say', go: () => openScreen('say') });
+      wheel.onClose(() => {
+        emotesBtn.setAttribute('aria-expanded', 'false');
+        if (!sayWheel.isOpen()) sayBtn.setAttribute('aria-expanded', 'false');
+      });
       builder = createOwlBuilder(
         root,
         state,
@@ -910,6 +957,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         toast,
         () => openScreen('menu'),
       );
+      // Feedback by the Menu's Close, on every tab (Logan, 2026-11-03: prominent in the Menu, OP-242).
+      const menuFeedback = document.createElement('button');
+      menuFeedback.type = 'button';
+      menuFeedback.className = 'mfeedback';
+      menuFeedback.dataset['menuFeedback'] = '';
+      menuFeedback.innerHTML = `${bugIcon('currentColor', 'rgba(255,255,255,.55)')}<span>Send feedback</span>`;
+      menuFeedback.addEventListener('click', () => openScreen('feedback', true));
+      menu.headButton(menuFeedback);
       // The feedback bug (OP-208): on screen everywhere until the full opening. Over a game or a
       // covering screen the form opens on top and leaves it as it was; anywhere else it opens as Settings' does.
       createFeedbackBug(root, (button) => {
@@ -1074,7 +1129,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       // The pad's Interact button does the first of them (as E does), and says which.
       interactBtn.classList.toggle('idle', list.length === 0);
       interactBtn.setAttribute('aria-disabled', String(list.length === 0));
-      interactBtn.setAttribute('aria-label', list[0] ? `Interact: ${list[0].label}` : 'Interact');
+      interactBtn.setAttribute('aria-label', list[0]?.label ?? 'Interact'); // on a phone the row's first button is tucked away, so this one carries its name
+      // On a phone it wears what it does (OP-242), in place of the first button of the row.
+      interactLabel.textContent = list[0]?.label ?? '';
+      interactBtn.classList.toggle('labelled', list.length > 0);
+      if (list[0]) interactBtn.dataset['act'] = list[0].id;
+      else delete interactBtn.dataset['act'];
       actionsEl.innerHTML = '';
       list.forEach((a, i) => {
         const b = document.createElement('button');

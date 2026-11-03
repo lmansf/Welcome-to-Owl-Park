@@ -138,6 +138,16 @@ const CSS = `
 #hud .spectator.show{display:flex}
 #hud .spectator button{min-height:36px;padding:6px 12px;font-size:13px}
 #hud.covered .spectator,#hud.at-home .spectator{display:none}
+/*
+ * On a phone (OP-242) the badge is one slim line in the flow under the bar, so it never sits on the
+ * keepers' ribbon; while the ribbon shows, the badge waits (the Menu and the shop still sell a ticket),
+ * and it comes back once the ribbon is hidden or gone.
+ */
+@media (pointer:coarse){
+  #hud .spectator{position:relative;left:auto;top:auto;margin-top:8px;width:max-content;max-width:calc(100vw - 24px);padding:3px 3px 3px 11px;font-size:12px;gap:6px}
+  #hud .spectator button{min-height:34px;padding:5px 12px}
+  #hud.ribbon-on .spectator.show{display:none}
+}
 #hud .toast .offer-get{display:block;margin:8px auto 0;min-height:40px}
 `;
 

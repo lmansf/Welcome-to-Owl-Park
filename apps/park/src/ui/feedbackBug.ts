@@ -6,7 +6,8 @@ import { FULL_OPENING_MS } from './preview';
  * and the owl builder) and opens the one Feedback form. It pins to the left edge, halfway down, clear
  * of the top bar, the screens' close buttons and the movement controls along the bottom (on the home
  * screen, whose buttons fill its left side, to the right edge). It switches
- * itself off at the full opening with no deploy; FEEDBACK_BUG_ON turns it off sooner.
+ * itself off at the full opening with no deploy; FEEDBACK_BUG_ON turns it off sooner. On a phone's park
+ * view it gives way to the Menu's own Feedback button (OP-242), one tap away.
  */
 
 /** One switch: false takes the bug away everywhere, whatever the date. */
@@ -25,7 +26,11 @@ export function feedbackBugShown(now: number = Date.now(), on: boolean = FEEDBAC
 /** How often a page left open checks the date, so the bug goes at the opening without a reload. */
 const CHECK_EVERY_MS = 60_000;
 
-const BUG_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="#FFD36A" stroke-width="1.8" stroke-linecap="round"><path d="M8 6.5 6 4.5M16 6.5l2-2M5 11H2.5M21.5 11H19M5.5 16 3 17.5M18.5 16l2.5 1.5"/></g><ellipse cx="12" cy="13" rx="6" ry="7" fill="#FFD36A"/><path d="M12 7v13" stroke="#0C1E36" stroke-width="1.6"/><circle cx="12" cy="6.5" r="3" fill="#FFD36A" stroke="#0C1E36" stroke-width="1.2"/></svg>`;
+/** The bug, drawn in `body` with its middle line and head ring in `ink` (the Menu's Feedback button wears it too, OP-242). */
+export const bugIcon = (body: string, ink: string) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="${body}" stroke-width="1.8" stroke-linecap="round"><path d="M8 6.5 6 4.5M16 6.5l2-2M5 11H2.5M21.5 11H19M5.5 16 3 17.5M18.5 16l2.5 1.5"/></g><ellipse cx="12" cy="13" rx="6" ry="7" fill="${body}"/><path d="M12 7v13" stroke="${ink}" stroke-width="1.6"/><circle cx="12" cy="6.5" r="3" fill="${body}" stroke="${ink}" stroke-width="1.2"/></svg>`;
+
+const BUG_ICON = bugIcon('#FFD36A', '#0C1E36');
 
 const CSS = `
 #hud .fb-bug{position:fixed;z-index:21;left:max(6px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.55);box-shadow:0 2px 10px rgba(0,0,0,.4);opacity:.85;touch-action:manipulation}
@@ -35,6 +40,8 @@ const CSS = `
 /* The home screen's buttons fill its left side, so there the bug keeps to the right edge (under a covering screen, the left again). */
 #hud.at-home:not(.covered) .fb-bug{left:auto;right:max(6px,env(safe-area-inset-right))}
 #hud .fb-bug[hidden]{display:none}
+/* A phone's park view keeps it in the Menu, by Close (OP-242); on the home screen and over a covering screen it stays. */
+@media (pointer:coarse){#hud:not(.at-home):not(.covered) .fb-bug{display:none}}
 `;
 
 export interface FeedbackBug {
