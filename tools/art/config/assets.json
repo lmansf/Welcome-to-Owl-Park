@@ -5761,6 +5761,225 @@
       "format": "webp",
       "with_2x": false,
       "key_colour": "#FF00FF"
+    },
+    "kit-tex-ink-paper-grain": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ink-ink-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ink-woven-reed": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ink-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-paper-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-tea-stall": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-scroll-stand": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-ink-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-stone-lantern": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-brush-stone": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-paper-cliff": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-reed-tuft": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-bamboo-span": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-temple-eave": {
+      "w": 400,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-rock-pillar": {
+      "w": 160,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-moon-gate": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-easel-blank": {
+      "w": 200,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-ferry-raft": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-pine-bough": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ink-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ink-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
     }
   },
   "helpers": {

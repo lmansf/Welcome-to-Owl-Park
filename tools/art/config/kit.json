@@ -2108,6 +2108,152 @@
         "mid-b": "a row of round woven nest houses along a street at the top of the canopy, their round windows lit warm gold, thatched twig roofs, lanterns on hooks and leaf clusters between them, no doors, in the lower two thirds, the upper third mostly open",
         "mid-c": "the nearer leaf tops of the canopy, dense leaf clusters in two greens lit cream from above with a woven rail of pale twigs running along them and a few small amber lanterns, in the lower half, the upper half mostly open"
       }
+    },
+    "ink": {
+      "title": "the ink-wash realm: its Commons in a paper garden, and the Brushstroke Bridges course",
+      "light": "the soft grey daylight of an ink painting: sumi-ink blacks and greys washed onto warm paper cream #F6F1E3, the paper's grain showing through the thin washes, mist everywhere, no hard shadows, lantern gold #C9A227 and #FFD36A only where a paper lantern is named, and one accent, the vermilion #C8322B of a red seal, used only as small stamp marks and tassels, never as a sun, never as a disc; every scroll, sign and seal is blank, no calligraphy, no brush-written characters, no letters anywhere",
+      "textures": {
+        "paper-grain": "warm cream handmade paper seen flat on, its fine fibres and faint grain evenly spread, the thinnest even grey ink wash over it, no marks, no strokes, no stains",
+        "ink-stone": "fitted grey stone blocks shaded in grey ink wash, the joints a darker brushed line, smooth and even, the stone of a riverbank wall or a paper cliff",
+        "woven-reed": "a mat of woven reed strips seen flat on, pale straw over warm grey, the weave even and regular, each strip with a faint ink-wash edge"
+      },
+      "sheets": {
+        "commons-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "idol-pedestal",
+              "w": 240,
+              "h": 200,
+              "desc": "a round pedestal of grey ink-washed stone with a ring of small vermilion seal marks around its top edge, nothing standing on it"
+            },
+            {
+              "name": "paper-lantern",
+              "w": 120,
+              "h": 200,
+              "desc": "a round warm gold paper lantern on a dark iron hook, a short vermilion tassel hanging from it, glowing from within"
+            },
+            {
+              "name": "tea-stall",
+              "w": 320,
+              "h": 320,
+              "desc": "a small tea stall of dark wood with a paper awning washed pale grey, a bare counter, a steaming kettle and a blank hanging banner, no writing"
+            },
+            {
+              "name": "scroll-stand",
+              "w": 160,
+              "h": 280,
+              "desc": "a tall blank hanging scroll of cream paper on a dark wooden stand, its roller ends dark, nothing painted on the scroll"
+            },
+            {
+              "name": "ink-bench",
+              "w": 320,
+              "h": 160,
+              "desc": "a low bench of dark wood with a cream cushion and a small ink stone and brush resting at one end"
+            },
+            {
+              "name": "stone-lantern",
+              "w": 160,
+              "h": 240,
+              "desc": "a stone garden lantern of grey ink-washed stone with a wide cap, warm gold light in its window"
+            }
+          ]
+        },
+        "course-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "brush-stone",
+              "w": 160,
+              "h": 120,
+              "desc": "a flat grey stepping stone with a round pool of wet black ink on its top and a large calligraphy brush resting across it, flat on top"
+            },
+            {
+              "name": "paper-cliff",
+              "w": 320,
+              "h": 400,
+              "desc": "a tall cliff of layered cream paper with grey ink-wash shading in broad strokes, flat on top, cut straight at the bottom"
+            },
+            {
+              "name": "reed-tuft",
+              "w": 120,
+              "h": 200,
+              "desc": "a tuft of tall reeds in black ink strokes with a few pale seed heads, standing upright"
+            },
+            {
+              "name": "bamboo-span",
+              "w": 400,
+              "h": 120,
+              "desc": "a level bridge of bamboo poles lashed together with dark cord, flat on top, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "temple-eave",
+              "w": 400,
+              "h": 200,
+              "desc": "the upturned corner of a temple roof: dark grey tiles in ink wash, a dark wooden bracket beneath, a warm gold paper lantern hanging under the eave, flat on top"
+            },
+            {
+              "name": "rock-pillar",
+              "w": 160,
+              "h": 320,
+              "desc": "a tall river rock pillar in grey ink wash with a flat top and a little moss on its ledges, cut straight at the bottom"
+            }
+          ]
+        },
+        "course-b": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "moon-gate",
+              "w": 320,
+              "h": 320,
+              "desc": "a round moon gate in a wall of pale ink-washed stone, the opening open and empty, dark grey tiles capping the wall"
+            },
+            {
+              "name": "easel-blank",
+              "w": 200,
+              "h": 280,
+              "desc": "a dark wooden easel holding a blank sheet of cream paper, nothing painted on it"
+            },
+            {
+              "name": "ferry-raft",
+              "w": 400,
+              "h": 160,
+              "desc": "a flat ferry raft of lashed dark logs with a bamboo pole standing in a ring at one end and a vermilion tassel on the pole, level"
+            },
+            {
+              "name": "pine-bough",
+              "w": 240,
+              "h": 200,
+              "desc": "a pine bough in black ink strokes with clusters of needles, a flat perch along its top"
+            },
+            {
+              "name": "feather-lost",
+              "w": 80,
+              "h": 120,
+              "desc": "a single large owl feather painted in grey ink wash, standing upright, glowing faintly cream"
+            },
+            {
+              "name": "finish-shrine",
+              "w": 320,
+              "h": 320,
+              "desc": "a small summit pavilion of dark wood with an upturned grey tiled roof, a bare plinth inside and two warm gold paper lanterns, nothing on the plinth, no writing"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "a washed paper sky: warm cream paper with a thin even grey ink wash that deepens softly toward the bottom third and faint paper grain throughout, nothing else, no moon drawn, no sun, no red disc of any kind, no mountains, no trees, no birds, no horizon of peaks",
+        "sky-b": "a rainy washed paper sky: cool grey ink wash on cream paper with soft darker bands of wet cloud across it and fine pale rain streaks falling straight down, no moon drawn, no sun, no red disc of any kind, no mountains, no trees, no birds",
+        "far-a": "a range of misty mountains painted in soft grey ink wash, the nearer ridges darker and the farther ones paler, white mist filling the valleys between them, a few brushstroke pines on the nearest crest, filling the lower two thirds and fading at the top, no sun, no red disc",
+        "far-b": "a wide river valley in the rain painted in pale grey ink wash: far banks of reeds, brushstroke pines and a few small temple roofs along the water, mist lying on the river, filling the lower half and fading at the top, no sun, no red disc",
+        "mid-a": "a cliff face of ink-washed paper close by: tall layered grey rock in broad brushstrokes, wisps of white mist drifting across it, a few pines clinging to its ledges and a warm gold paper lantern on a hook, filling the whole frame",
+        "mid-b": "a stand of brushstroke bamboo and pines along a riverbank close by, a low garden wall of grey ink-washed stone running behind them, warm gold paper lanterns hanging among the stems, in the lower two thirds, the upper third mostly open",
+        "mid-c": "temple eaves and river rocks close by: upturned corners of dark tiled roofs and grey rock pillars in ink wash standing in thin mist, warm gold paper lanterns under the eaves, filling only the lower half, the roofs and rocks running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds, no mist above the roofs, no mountains, no moon, no frame or border"
+      }
     }
   }
 }
