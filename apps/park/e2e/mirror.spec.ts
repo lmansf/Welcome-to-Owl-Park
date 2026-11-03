@@ -54,7 +54,7 @@ test.describe('the mirror in the nest (OP-077)', () => {
     if (isMobile) {
       // On a phone, the pad's Interact does it.
       const interact = page.locator('[data-pad-interact]');
-      await expect(interact).toHaveAttribute('aria-label', 'Interact: Look in the mirror');
+      await expect(interact).toHaveAttribute('aria-label', 'Look in the mirror');
       await interact.tap();
     } else await page.keyboard.press('KeyE');
     await openAtMirror(page);

@@ -25,7 +25,7 @@ test.describe('single visitor', () => {
     const s = await state(page);
     expect(s.room).toBe('hub');
     expect(s.peers).toHaveLength(0);
-    await expect(page.getByText('1 owl here')).toBeVisible();
+    await expect(page.locator('[data-count]')).toHaveText('1 owl here');
     // The park's name in the bar (the home screen's heading, hidden in the park, has it too).
     await expect(page.locator('#hud .brand')).toHaveText('Owl Park');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-hub.png` });
@@ -56,10 +56,11 @@ test.describe('single visitor', () => {
     await waitForArrival(page, target.x, target.y); // a short walk can finish between two polls, so arrival is the check
   });
 
-  test('using the HUD never stops the owl from walking afterwards', async ({ page }) => {
+  test('using the HUD never stops the owl from walking afterwards', async ({ page, isMobile }) => {
     await openPark(page);
     const before = await state(page);
-    await page.locator('#hud .pill').hover();
+    // A phone's bar has no count to point at (OP-242): the Say button up in its corner instead.
+    await page.locator(isMobile ? '[data-say-btn]' : '#hud .pill').hover();
     await page.locator('[data-menu-btn]').click();
     await page.getByRole('button', { name: 'Close the menu' }).click();
     expect((await state(page)).pos).toEqual(before.pos); // HUD clicks never move the owl
@@ -89,11 +90,11 @@ test.describe('single visitor', () => {
       return;
     }
     await expect(stick).toBeVisible();
-    // The buttons keep clear of it: to its left, or above it.
+    // The buttons keep clear of it: to its right, or above it (OP-242: the stick keeps the bottom-left corner).
     const s = (await stick.boundingBox())!;
     for (const b of await page.locator('#hud .bottom .left > button, #hud .bottom .left > div > button, #hud [data-action]').all()) {
       const r = await b.boundingBox();
-      if (r) expect(r.x + r.width <= s.x + 1 || r.y + r.height <= s.y + 1).toBe(true);
+      if (r) expect(r.x >= s.x + s.width - 1 || r.y + r.height <= s.y + 1).toBe(true);
     }
     const start = (await state(page)).pos;
     const toward = start.x < 2400 ? 1 : -1; // toward the middle of the hub, where there is floor
@@ -178,18 +179,32 @@ test.describe('single visitor', () => {
     test.slow(); // the emotes, Say, the Menu's five tabs and Feedback open and close in turn
     await openPark(page);
     await expect(page.locator('#hud .bottom .left button')).toHaveCount(3);
-    // Emotes and Say are one tap away.
-    await page.locator('[data-emotes-btn]').click();
+    // Emotes and Say are one tap away: on a computer each has its button; a phone has Say's alone, and
+    // the emotes are a tap inside it (OP-242). Each wheel leads to the other.
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
+    const say = page.getByRole('dialog', { name: 'Say' });
+    if (isMobile) {
+      await expect(page.locator('[data-emotes-btn]')).toBeHidden();
+      await page.locator('[data-say-btn]').click();
+      await expect(say).toBeVisible();
+      await say.locator('[data-swap="emotes"]').click();
+      await expect(say).toBeHidden();
+    } else await page.locator('[data-emotes-btn]').click();
     await expect(wheel).toBeVisible();
     await wheel.getByRole('button', { name: 'Close emotes' }).click();
     await expect(wheel).toBeHidden();
     await page.locator('[data-say-btn]').click();
-    const say = page.getByRole('dialog', { name: 'Say' });
     await expect(say).toBeVisible();
     await say.getByRole('button', { name: 'Close Say' }).click();
     await expect(say).toBeHidden();
     await expect(page.locator('[data-say-btn]')).toBeFocused();
+    await page.locator('[data-say-btn]').click();
+    await say.locator('[data-swap="emotes"]').click();
+    await expect(wheel).toBeVisible();
+    await wheel.locator('[data-swap="say"]').click();
+    await expect(say).toBeVisible();
+    await say.getByRole('button', { name: 'Close Say' }).click();
+    await expect(say).toBeHidden();
 
     // The Menu: five tabs, each with its word, on the quests first.
     await page.locator('[data-menu-btn]').click();
@@ -441,7 +456,7 @@ test.describe('two visitors on one device', () => {
 
     await expect.poll(async () => (await state(a)).peers.map((p) => p.id)).toEqual(['owl-b']);
     await expect.poll(async () => (await state(b)).peers.map((p) => p.id)).toEqual(['owl-a']);
-    await expect(a.getByText('2 owls here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('2 owls here');
     expect((await state(b)).peers[0]?.look.body).toBe('#8B5A2B');
 
     // A walks; B's copy of A follows the same path and ends at the same spot.
@@ -455,6 +470,6 @@ test.describe('two visitors on one device', () => {
     await walkToDoor(a, 'to-grove');
     await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('grove');
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(0);
-    await expect(b.getByText('1 owl here')).toBeVisible();
+    await expect(b.locator('[data-count]')).toHaveText('1 owl here');
   });
 });

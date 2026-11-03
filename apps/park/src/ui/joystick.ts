@@ -1,7 +1,7 @@
 import type { Vec2 } from '@owl-park/shared';
 
 /**
- * The thumbstick on touch screens: a see-through stick in the bottom-right corner that walks the
+ * The thumbstick on touch screens: a see-through stick in the bottom-left corner that walks the
  * owl while held, the way WASD does on a keyboard, so a thumb never has to tap the floor between the
  * buttons. It points one of eight ways, like the keys. In a game played by flicks (Hoot & Hop,
  * OP-137) it points one of four, and each push into a way is one flick; in a game played by a pull
@@ -73,14 +73,12 @@ const css = (prefix: string) => `
   #hud .${classOf(prefix)}{display:block}
 }
 `;
-/** The HUD's own stick sits in the bottom bar's corner and makes room for the buttons beside it. */
+/** The HUD's own stick sits in the bottom bar's left corner; the HUD lays out the buttons round it (ui/hud.ts). */
 const HUD_CSS = `
 @media (pointer:coarse){
-  #hud .bottom .left{max-width:calc(100% - 140px)}
-  #hud .bottom .actions{position:absolute;right:0;bottom:140px;flex-direction:column;align-items:flex-end}
+  #hud .bottom .stick{left:0;right:auto}
 }
 `;
-
 /**
  * Put a thumbstick in `parent` (it shows on touch screens only): the HUD's bottom bar, or the climb
  * screen's own corner. `prefix` scopes its class (`stick` for the HUD, `climb-stick`) so each screen styles its own.

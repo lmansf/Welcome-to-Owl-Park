@@ -128,7 +128,7 @@ async function expectClear(bug: Locator, selectors: string[]): Promise<void> {
 test.describe('The feedback bug, until the full opening (OP-208)', () => {
   test.skip(Date.now() >= FULL_OPENING_MS, 'the bug goes away at the full opening');
 
-  test('on the home screen and in the park: on screen, clear of the controls, and it opens the Feedback form', async ({ page }) => {
+  test('on the home screen and in the park: on screen, clear of the controls, and it opens the Feedback form', async ({ page, isMobile }) => {
     test.skip(isEdge(), 'the room server suite sends from the home screen above');
     await page.goto('/?transport=local');
     await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
@@ -138,12 +138,22 @@ test.describe('The feedback bug, until the full opening (OP-208)', () => {
     await expectClear(bug, ['[data-home-btn]']);
 
     await openPark(page);
-    await expect(bug).toBeVisible();
-    await expect(bug).toBeInViewport();
-    // Clear of the movement controls along the bottom and the bar along the top.
-    await expectClear(bug, ['[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]', '[data-pad-jump]', '[data-pad-interact]', '#hud .stick', '#hud .bar']);
-
-    await bug.click();
+    // On a phone's park view it gives way to the Menu's own Send feedback, by Close (OP-242).
+    const opener = isMobile ? page.locator('[data-menu-btn]') : bug;
+    if (isMobile) {
+      await expect(bug).toBeHidden();
+      await page.locator('[data-menu-btn]').click();
+      const menu = page.getByRole('dialog', { name: 'Menu' });
+      await expect(menu.locator('[data-menu-feedback]')).toBeVisible();
+      await expect(menu.locator('[data-menu-feedback]')).toBeInViewport();
+      await menu.locator('[data-menu-feedback]').click();
+    } else {
+      await expect(bug).toBeVisible();
+      await expect(bug).toBeInViewport();
+      // Clear of the movement controls along the bottom and the bar along the top.
+      await expectClear(bug, ['[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]', '[data-pad-jump]', '[data-pad-interact]', '#hud .stick', '#hud .bar']);
+      await bug.click();
+    }
     const feedback = page.getByRole('dialog', { name: 'Feedback' });
     await expect(feedback).toBeVisible();
     await expect(feedback.getByRole('textbox', { name: 'Your note' })).toBeVisible();
@@ -155,8 +165,9 @@ test.describe('The feedback bug, until the full opening (OP-208)', () => {
     await expect(feedback).toBeHidden();
     const kept = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]') as Array<{ kind: string; text: string; room: string | null }>, KEPT_FEEDBACK_KEY);
     expect(kept.at(-1)).toMatchObject({ kind: 'bug', text: words, room: 'hub' });
-    // The form closed gives the focus back to the bug.
-    await expect(bug).toBeFocused();
+    // The form closed gives the focus back to the bug (on a phone, the form came from the Menu, which closed with it).
+    if (!isMobile) await expect(bug).toBeFocused();
+    else await expect(opener).toBeVisible();
   });
 
   test('over a covering screen: the form opens on top, and closing it leaves the screen as it was', async ({ page }) => {
