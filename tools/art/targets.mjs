@@ -36,8 +36,9 @@ export const TARGETS = {
 export const TARGET_KEYS = Object.keys(TARGETS);
 
 /** Round 1 paints from the kit's preview and the greybox; a later round (ART_TARGET_ROUND=2, 3)
- * repaints the round before (its SELECTED candidate) with the target's revision notes, so the
- * picture is refined rather than started again. */
+ * repaints the round before (its SELECTED candidate, written to work/art/guides/<key>-round.png by
+ * `art:finish target <key> --guide`, under the inline reference limit) with the target's revision
+ * notes, so the picture is refined rather than started again. */
 export const TARGET_ROUND = Math.max(1, Number.parseInt(process.env.ART_TARGET_ROUND ?? '1', 10) || 1);
 const REVISE = (key) => `This is a revision of the first reference, a painting of this very screen: keep its composition, light, colour and every element where it is, and change only this: ${TARGETS[key].revise}.`;
 export const TARGET_PROMPTS = Object.fromEntries(TARGET_KEYS.map((key) => [key,
@@ -48,7 +49,7 @@ export function targetJobs(seedBase = TARGET_SEED) {
     key, kind: 'anchor', realm: 'kit', size: TARGET_SIZE, seed: seedBase + i * 4 + (TARGET_ROUND - 1) * 100, variants: 4,
     refs: TARGET_ROUND > 1
       ? [
-        { ref: `@raw:${key}`, role: 'the round before, the painting this one revises', optional: false },
+        { ref: `@guide:${key}-round`, role: 'the round before, the painting this one revises', optional: false },
         { ref: `@guide:${key}-greybox`, role: 'the layout in greys: floor, doorways, where a visitor stands', optional: false },
       ]
       : [

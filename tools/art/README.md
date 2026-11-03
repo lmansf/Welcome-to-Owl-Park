@@ -257,8 +257,9 @@ assembler (OP-234) builds screens from the published files, whose format is this
   `pnpm kit:preview <room> --scale 1` on PR 86's branch, or a composite for the clearing) and
   `<key>-greybox.png` (`pnpm kit:greybox <room>`, the first screen). They are helper keys, never shipped:
   `art:finish target <key>` keeps the approved candidate under `tools/art/targets/` with a provenance
-  line in `tools/art/targets/provenance.jsonl`. The kit's recut (OP-251) and the value bands (OP-250)
-  are taken from them.
+  line in `tools/art/targets/provenance.jsonl`. A revision round (`ART_TARGET_ROUND=2`) repaints the
+  round before from `work/art/guides/<key>-round.png` (`art:finish target <key> --guide`) with the
+  target's revision notes. The kit's recut (OP-251) and the value bands (OP-250) are taken from them.
 - **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
   clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
   it is published; nothing from the kit is published without that.

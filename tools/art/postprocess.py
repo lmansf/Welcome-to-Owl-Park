@@ -1759,6 +1759,13 @@ def cmd_target(ctx: Ctx, a: argparse.Namespace) -> int:
     W, H = 1600, 900
     if img.size != (W, H):
         img = resize_exact(img, W, H, a.crop, 0)
+    if a.guide:
+        # the round before as the next round's reference: 1280 x 720, a PNG under the inline reference limit
+        guide = ctx.work / "guides" / f"{key}-round.png"
+        guide.parent.mkdir(parents=True, exist_ok=True)
+        n = pngmeta.save(img.resize((1280, 720), Image.Resampling.LANCZOS), guide)
+        note(f"target {key}: round guide {rel_to_repo(guide)} ({n} bytes)")
+        return 0
     out_dir = Path(a.targets_dir) if a.targets_dir else TARGETS_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / f"{key}.png"
@@ -2289,6 +2296,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--raw", default=None)
     sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
     sp.add_argument("--targets-dir", default=None, help=argparse.SUPPRESS)
+    sp.add_argument("--guide", action="store_true", help="write the selected candidate as work/art/guides/<key>-round.png, the next round's reference, instead of keeping it")
     add_common(sp)
     sp.set_defaults(fn=cmd_target)
 
