@@ -47,8 +47,11 @@ test.describe('the parkour courses (OP-224)', () => {
     expect((await state(page)).dash.dashes).toBe(0);
     // Up in the air: a dash the way the owl faces (east, the way it walked), and one only.
     const from = (await state(page)).pos;
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
     await jumpAndDash(page, isMobile);
-    await expect.poll(async () => (await state(page)).dash.dashes, { timeout: 2_000 }).toBe(1);
+    const seen = async () => { const s = await state(page); return JSON.stringify({ pos: s.pos, air: s.air, dash: s.dash, walking: s.walking, errors }); };
+    await expect.poll(async () => (await state(page)).dash.dashes, { timeout: 2_000, message: `no dash: ${await seen()}` }).toBe(1);
     // Spent until it lands. A slow phone runner can step past the landing before this read, and
     // landing gives the dash back, so the read only holds the owl to "spent" while it is still up
     // (the exact rule, once a jump, is pinned frame by frame in dash.test.ts).
