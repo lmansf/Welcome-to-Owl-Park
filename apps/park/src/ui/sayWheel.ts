@@ -1,6 +1,7 @@
 import { PHRASE_GROUPS, SAY_EVERY_MS, phrasesIn, type PhraseGroup } from '@owl-park/shared';
 import { wheelSpot, wireSwap, type WheelSwap } from './emoteWheel';
 import { createModal, type Modal } from './modal';
+import { typingInField } from './typing';
 
 export interface SayWheel {
   open(opener?: HTMLElement | null): void;
@@ -121,7 +122,7 @@ export function createSayWheel(root: HTMLElement, say: (n: number) => boolean, s
   wireSwap($<HTMLButtonElement>('[data-swap]'), swap);
   // The arrows turn round the groups. (1 to 4 and Escape are the HUD's, from the keyboard module.)
   window.addEventListener('keydown', (e) => {
-    if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey || typingInField(e)) return;
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
       group = turnGroup(group, e.code === 'ArrowLeft' ? -1 : 1);

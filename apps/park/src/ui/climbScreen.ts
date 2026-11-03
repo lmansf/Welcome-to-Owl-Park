@@ -3,6 +3,7 @@ import type { PreviewRect } from '../game/BuilderScene';
 import { createJoystick, type Joystick } from './joystick';
 import { createModal } from './modal';
 import { SPECTATOR_WORDS } from './spectator';
+import { releaseOnTyping, typingInField } from './typing';
 
 /**
  * The climb screen (designs/the-stained-glass-climb.md): the whole screen over the room while a
@@ -216,8 +217,10 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
     if (document.visibilityState !== 'visible') release();
   };
   // The keys, taken ahead of the park's own listeners while the screen is up (the room is blocked anyway).
+  // A key typed into a text field (the Feedback form opened by its bug over the climb, OP-208) is the
+  // field's: these listeners hear it first, so they must leave it alone or the letter never types.
   const onKeyDown = (e: KeyboardEvent) => {
-    if (!modal.isOpen() || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!modal.isOpen() || e.ctrlKey || e.metaKey || e.altKey || typingInField(e)) return;
     const code = e.code;
     if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW') {
       if ((e.target as Element | null)?.closest?.('button')) return;
@@ -244,17 +247,22 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
     if (e.key === 'Meta') held.clear();
   };
   const onBlur = () => release();
+  let stopTyping: (() => void) | null = null;
   const listen = () => {
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
     window.addEventListener('blur', onBlur);
     document.addEventListener('visibilitychange', onHide);
+    // A text field taking the focus lets go of held keys and buttons: the owl stops while the visitor types.
+    stopTyping ??= releaseOnTyping(document, release);
   };
   const unlisten = () => {
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
     window.removeEventListener('blur', onBlur);
     document.removeEventListener('visibilitychange', onHide);
+    stopTyping?.();
+    stopTyping = null;
   };
 
   jumpBtn.addEventListener('pointerdown', (e) => {

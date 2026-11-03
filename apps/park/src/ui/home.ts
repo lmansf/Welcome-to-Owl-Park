@@ -12,6 +12,7 @@ import type { Entry, WalletEntry } from '../net';
 import { ACCOUNT_WORDS } from './account';
 import type { PreviewFrame } from './owlBuilder';
 import { KIND_LABEL, bestTicket, timeLeft } from './tickets';
+import { typingInField } from './typing';
 
 /** Every word the home screen shows (for the owner's approval). */
 export const HOME_WORDS = {
@@ -293,7 +294,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   }).observe(stage);
   // On a computer, Enter plays; a focused button takes Enter itself.
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || shut || actions.blocked()) return;
+    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || shut || actions.blocked() || typingInField(e)) return;
     const t = e.target;
     if (t instanceof HTMLElement && t !== document.body && (!el.contains(t) || t instanceof HTMLButtonElement)) return;
     e.preventDefault();

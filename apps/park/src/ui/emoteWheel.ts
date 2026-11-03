@@ -2,6 +2,7 @@ import { CATALOGUE, EMOTE_IDS, type ItemDef } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { variantIcon } from './itemIcon';
 import { createModal, type Modal } from './modal';
+import { typingInField } from './typing';
 
 /** Emotes on one turn of the wheel; more turn the page. */
 export const WHEEL_SLOTS = 8;
@@ -173,7 +174,7 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
   wireSwap($<HTMLButtonElement>('[data-swap]'), swap);
   // The arrows turn the page. (1 to 8 and Escape are the HUD's, from the keyboard module.)
   window.addEventListener('keydown', (e) => {
-    if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey || typingInField(e)) return;
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
       page += e.code === 'ArrowLeft' ? -1 : 1;

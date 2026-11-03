@@ -1,5 +1,6 @@
 import { NEST_SPOTS, NEST_WORDS, getNestSpot, type NestLayout, type NestSpotId } from '@owl-park/shared';
 import { piecesFor, spotNumber, stepSpot } from '../game/nestPlan';
+import { typingInField } from './typing';
 
 /** The owner's nest as the Decorate sheet shows it. */
 export interface DecorateView {
@@ -185,7 +186,7 @@ export function createDecorateSheet(root: HTMLElement, actions: DecorateActions,
 
   // The arrow keys step through the spots while the sheet is open (the owl stays put meanwhile).
   const onKey = (e: KeyboardEvent) => {
-    if (!panel.classList.contains('open') || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!panel.classList.contains('open') || e.altKey || e.ctrlKey || e.metaKey || typingInField(e)) return;
     if (e.key === 'Escape') actions.done();
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
