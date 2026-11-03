@@ -23,11 +23,27 @@ async function dash(page: Page, phone: boolean): Promise<void> {
   else await page.keyboard.press('Shift');
 }
 
-/** Jump, and once the owl is up, dash. */
+/**
+ * Jump, and once the owl is up, dash: pressed in the page itself on the first frame the owl is off the
+ * ground (Shift on a computer, the pad's Dash on a phone), since a press sent from the test comes a
+ * round trip late and on a slow runner can land after the owl does.
+ */
 async function jumpAndDash(page: Page, phone: boolean): Promise<void> {
   expect(await page.evaluate(() => window.owlPark.jump(400))).toBe(true);
-  await expect.poll(async () => (await state(page)).air.s, { timeout: 5_000, intervals: [20] }).not.toBe(0);
-  await dash(page, phone);
+  await page.evaluate(
+    (phone) =>
+      new Promise<void>((done) => {
+        const look = () => {
+          if ((window.owlPark?.state()?.air.s ?? 0) === 0) return void requestAnimationFrame(look);
+          if (phone) document.querySelector('[data-pad-dash]')?.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, pointerType: 'touch', isPrimary: true, bubbles: true }));
+          else window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft', key: 'Shift' }));
+          done();
+        };
+        look();
+      }),
+    phone,
+  );
+  if (!phone) await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft', key: 'Shift' })));
 }
 
 /** Down on the ground again. */
