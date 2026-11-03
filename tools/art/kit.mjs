@@ -98,7 +98,7 @@ export function areaJobs(areaName, seedBase) {
   return jobs;
 }
 
-export const AREA_SEEDS = { entrance: 7400, clearing: 7500 };
+export const AREA_SEEDS = { entrance: 7400, clearing: 7500, glass: 7600, neon: 7700 };
 
 export function kitJobs(seedBase = 7000) {
   const textures = KIT_TEXTURE_KEYS.map((key, i) => ({

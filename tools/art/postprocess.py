@@ -749,6 +749,37 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def trim_key_frame(img: Image.Image, key_colour: str, tol: float = 60.0, share: float = 0.98) -> tuple[Image.Image, tuple[int, int, int, int]]:
+    """Cut away the rows and columns at the edges that are almost wholly the key colour (a painted
+    panel's border); returns the cropped image and how much went from each side."""
+    arr = np.asarray(img.convert("RGB")).astype(np.float32)
+    kc = np.array(parse_hex(key_colour)[:3], dtype=np.float32)
+    # The painting's own border colour stands in for the nominal key when it is near it (the model
+    # paints its magenta a little off), the same way the keying samples the backdrop.
+    ring = np.concatenate([arr[:4].reshape(-1, 3), arr[-4:].reshape(-1, 3), arr[:, :4].reshape(-1, 3), arr[:, -4:].reshape(-1, 3)])
+    painted = np.median(ring, axis=0)
+    if np.sqrt(((painted - kc) ** 2).sum()) < 2 * tol:
+        kc = painted
+    near = np.sqrt(((arr - kc) ** 2).sum(-1)) < tol
+    rows, cols = near.mean(axis=1), near.mean(axis=0)
+    h, w = near.shape
+    top = 0
+    while top < h - 1 and rows[top] >= share:
+        top += 1
+    bottom = 0
+    while bottom < h - 1 - top and rows[h - 1 - bottom] >= share:
+        bottom += 1
+    left = 0
+    while left < w - 1 and cols[left] >= share:
+        left += 1
+    right = 0
+    while right < w - 1 - left and cols[w - 1 - right] >= share:
+        right += 1
+    if (left, top, right, bottom) == (0, 0, 0, 0):
+        return img, (0, 0, 0, 0)
+    return img.crop((left, top, w - right, h - bottom)), (left, top, right, bottom)
+
+
 def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
     """A kit backdrop layer (OP-229): a sky plate as painted, or a far or middle layer keyed out of its
     backdrop; cropped to its aspect, healed to repeat sideways, resized to its logical size and shipped
@@ -765,6 +796,12 @@ def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
     tools = []
     if keyed:
         kc = key_colour_for(ctx, key, a.key_colour, sc)
+        if a.trim_key:
+            # The model sometimes paints the layer as a panel inside a border of the key colour; the border
+            # would become a transparent margin that no sideways heal can fill, so the key-only rows and
+            # columns at the edges are cut away first and the panel itself is the layer.
+            img, trim = trim_key_frame(img, kc)
+            tools.append(f"layer: trim-key left={trim[0]} top={trim[1]} right={trim[2]} bottom={trim[3]}")
         img, cinfo = key_out(img, chroma_params(a, kc))
         tools.append(f"layer: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}")
     else:
@@ -807,6 +844,20 @@ def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
         arr[y0:y1, x0:x1] = np.clip(np.round(sub), 0, 255).astype(np.uint8)
         one = Image.fromarray(arr, "RGBA")
         tools.append(f"layer: clear-tone {spec} {n} px")
+    if a.fade_top:
+        # a keyed layer cleared to a hard top edge (a far layer whose fade into the key went violet):
+        # its alpha ramps in over --fade-top px below the first opaque row, so the edge melts upward
+        if not keyed:
+            raise ArtError(f"{key}: --fade-top needs a keyed layer")
+        arr = np.array(one.convert("RGBA"))
+        alpha = arr[..., 3].astype(np.float32)
+        rows = np.nonzero((alpha > 0).any(axis=1))[0]
+        if len(rows):
+            y0 = int(rows[0])
+            ramp = np.clip((np.arange(H) - y0) / float(a.fade_top), 0, 1)
+            arr[..., 3] = np.round(alpha * ramp[:, None]).astype(np.uint8)
+            one = Image.fromarray(arr, "RGBA")
+            tools.append(f"layer: fade-top {a.fade_top} px from row {y0}")
     before = tile_seam_ratio(one)
     if not a.no_heal:
         one = heal_tile(one, a.band, axes=(1,))
@@ -1991,6 +2042,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_chroma_flags(sp)
     sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
     sp.add_argument("--band", type=float, default=0.2, help="width of the sideways healing band as a fraction of the width")
+    sp.add_argument("--trim-key", action="store_true", help="cut away a border of the key colour the painting put round itself before keying")
+    sp.add_argument("--fade-top", type=int, default=0, help="ramp a keyed layer's alpha in over this many px below its first opaque row")
     sp.add_argument("--no-heal", action="store_true")
     sp.add_argument("--max-seam", type=float, default=1.6)
     sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the final's pixels made transparent (a moon painted into a keyed layer, which must not repeat); repeatable, keyed layers only")

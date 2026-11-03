@@ -1843,6 +1843,43 @@ class TestKit(unittest.TestCase):
         # the up-and-down wrap is neither healed nor broken by a sideways pass
         self.assertAlmostEqual(postprocess.tile_seam_ratio(side)["seam_y"], postprocess.tile_seam_ratio(rgba)["seam_y"], delta=0.6)
 
+    def test_trim_key_frame_cuts_a_painted_border_of_the_key_colour(self):
+        from PIL import Image
+        # the model paints its magenta a little off (255, 1, 191): the border is sampled, not assumed
+        img = Image.new("RGB", (400, 200), (255, 1, 191))
+        panel = Image.new("RGB", (300, 120), (30, 40, 90))
+        img.paste(panel, (60, 50))
+        out, trim = postprocess.trim_key_frame(img, "#FF00FF")
+        self.assertEqual(trim, (60, 50, 40, 30))
+        self.assertEqual(out.size, (300, 120))
+        # a painting that reaches its edges is left alone
+        same, none = postprocess.trim_key_frame(panel, "#FF00FF")
+        self.assertEqual(none, (0, 0, 0, 0))
+        self.assertIs(same, panel)
+
+    def test_layer_fade_top_ramps_the_alpha_in_below_the_first_opaque_row(self):
+        from PIL import Image
+        kit = postprocess.kit_table()
+        area = next(iter(kit["areas"]))
+        key = f"kit-{area}-far-a"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2048, 1152), (255, 0, 255))
+            img.paste(Image.new("RGB", (2048, 600), (40, 60, 90)), (0, 552))
+            img.save(raw_dir / "bbbbbbbbbbbbbbbb.png")
+            (raw_dir / "bbbbbbbbbbbbbbbb.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "bbbbbbbbbbbbbbbb"}))
+            (raw_dir / "SELECTED").write_text("bbbbbbbbbbbbbbbb")
+            (work / "final").mkdir()
+            rc = postprocess.main(["layer", key, "--work", str(work), "--no-heal", "--fade-top", "100"])
+            self.assertEqual(rc, 0)
+            out = np.asarray(Image.open(work / "final" / f"{key}.webp").convert("RGBA"))[..., 3]
+            top = int(np.nonzero((out > 0).any(axis=1))[0][0])
+            self.assertLess(out[top + 10].mean(), 60, "the first rows below the edge are nearly clear")
+            self.assertGreater(out[top + 95].mean(), 200, "the ramp reaches opaque about --fade-top px down")
+            self.assertEqual(out[-1].min(), 255, "the bottom stays opaque")
+
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw
         kit = postprocess.kit_table()
