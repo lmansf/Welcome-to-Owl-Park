@@ -17,7 +17,9 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await openPark(page);
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
     const stick = await box('#hud .stick');
-    const interact = await box('[data-pad-interact]');
+    // Interact may wear an action at the spawn (a pill grown leftward); its round end keeps the round button's place.
+    const pill = await box('[data-pad-interact]');
+    const interact = { x: pill.x + pill.width - pill.height, y: pill.y, width: pill.height, height: pill.height };
     const menu = await box('[data-menu-btn]');
     const jump = await box('[data-pad-jump]');
     const say = await box('[data-say-btn]');
@@ -46,7 +48,7 @@ test.describe('the pad (OP-082, OP-114)', () => {
     const live = [interact, menu, jump, say];
     for (const b of live) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
     for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) expect(gap(live[a]!, live[b]!), `${a} and ${b}`).toBeGreaterThan(6.5);
-    for (const b of live) expect(overlaps(b, stick)).toBe(false);
+    for (const b of [...live, pill]) expect(overlaps(b, stick)).toBe(false);
     // The top buttons keep off the bar's brand and feathers.
     for (const sel of ['#hud .brand', '[data-feathers]']) {
       const el = page.locator(sel);
