@@ -1378,6 +1378,736 @@
         "mid-b": "a row of narrow shop fronts along a dark street: awnings, lit doorways, paper lanterns and blank neon sign boards in pink and cyan, filling only the lower two thirds, the shop fronts running off both side edges, the whole upper third left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border, no letters",
         "mid-c": "a row of rooftops close by: parapets, water tanks, antennas and strings of warm paper lanterns, a few blank neon tubes, filling only the lower half, the rooftops running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border, no letters"
       }
+    },
+    "under": {
+      "title": "the underground height: the stair foot, the challenge stair and the cave off the neon street's end, deep under the great tree among its roots",
+      "light": "no moonlight at all: pools of warm lantern gold on cool violet-navy #1B1A30, deep packed earth and the great tree's roots overhead and all round, never any sky, the earth in bark brown #2B1C12 to #4A3322 with navy #07122A in the shadows, moss #3E5A3A where it is damp, cave stone in cool grey-blue, every sign blank, no letters anywhere",
+      "textures": {
+        "packed-earth": "a wall of packed dark earth seen flat on, small stones and fine root hairs set in it, violet-navy in the shadows, even and tileable",
+        "root-mat": "a dense mat of fine tree roots crossing over dark earth, seen flat on, all of one thickness with no single thick root, even and tileable",
+        "cave-stone": "rough fitted cave stone blocks seen flat on, damp, with cool violet-navy shadows in the joints and a little moss in the cracks, even and tileable"
+      },
+      "sheets": {
+        "stair-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "lantern-post",
+              "w": 120,
+              "h": 320,
+              "desc": "a dark iron post driven into packed earth with a round amber paper lantern on its hook, lit warm gold"
+            },
+            {
+              "name": "root-arch",
+              "w": 320,
+              "h": 320,
+              "desc": "an archway of thick twisted tree roots over an opening, open inside, moss along its top, standing on its own"
+            },
+            {
+              "name": "stair-root-right",
+              "w": 240,
+              "h": 240,
+              "desc": "a flight of four steps cut into packed earth and held at their edges by roots, rising from the lower left to the upper right"
+            },
+            {
+              "name": "stair-root-left",
+              "w": 240,
+              "h": 240,
+              "desc": "a flight of four steps cut into packed earth and held at their edges by roots, rising from the lower right to the upper left"
+            },
+            {
+              "name": "root-ledge-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a level ledge of one thick root running sideways with packed earth on top, flat on top, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "boulder-flat",
+              "w": 240,
+              "h": 160,
+              "desc": "a flat-topped cave boulder of cool grey-blue stone with a little moss on it"
+            }
+          ]
+        },
+        "clutter-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "root-hang",
+              "w": 160,
+              "h": 400,
+              "desc": "a bundle of roots hanging down from above with loose tips, cut straight at the top so it hangs from the earth overhead"
+            },
+            {
+              "name": "stone-pile",
+              "w": 240,
+              "h": 160,
+              "desc": "a low pile of cave stones of different sizes, cool grey-blue, a little moss between them"
+            },
+            {
+              "name": "root-knot",
+              "w": 200,
+              "h": 200,
+              "desc": "a knot of thick twisted roots lying on its own, dark bark with a little moss"
+            },
+            {
+              "name": "sign-root",
+              "w": 240,
+              "h": 200,
+              "desc": "a blank wooden sign board lashed with rope to a short root stump, no writing"
+            },
+            {
+              "name": "barrier-roots",
+              "w": 320,
+              "h": 320,
+              "desc": "an arched opening grown over with thick roots like bars, warm lantern light showing between the roots"
+            },
+            {
+              "name": "lantern-hang",
+              "w": 120,
+              "h": 200,
+              "desc": "a round amber paper lantern hanging on a dark iron chain from a root above, lit warm gold, the chain cut straight at the top"
+            }
+          ]
+        },
+        "cave-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "root-buttress-left",
+              "w": 320,
+              "h": 400,
+              "desc": "a great root of the tree's base curving down from the upper right to the lower left and into the ground, dark bark with moss, cut straight at its top"
+            },
+            {
+              "name": "root-buttress-right",
+              "w": 320,
+              "h": 400,
+              "desc": "a great root of the tree's base curving down from the upper left to the lower right and into the ground, dark bark with moss, cut straight at its top"
+            },
+            {
+              "name": "mushroom-cluster",
+              "w": 160,
+              "h": 120,
+              "desc": "a cluster of pale cream mushrooms growing from a clump of dark earth, faintly lit"
+            },
+            {
+              "name": "stone-pillar",
+              "w": 120,
+              "h": 400,
+              "desc": "a rough standing pillar of cave stone, cool grey-blue, cut straight at both ends so it repeats upward"
+            },
+            {
+              "name": "stalactites",
+              "w": 240,
+              "h": 200,
+              "desc": "a cluster of stone stalactites hanging from above, cool grey-blue with a drip of water, cut straight at the top"
+            },
+            {
+              "name": "earth-mound",
+              "w": 320,
+              "h": 160,
+              "desc": "a low mound of packed dark earth with a few small stones and root tips showing, flat on top"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "the earth overhead in a deep cave seen from below: packed dark earth and thick tree roots crossing it and hanging down, violet-navy in the shadows with faint warm lantern light catching the roots' undersides from below, earth and roots filling the frame edge to edge, no sky, no moon drawn, no stars, no buildings, no opening",
+        "sky-b": "a wall of deep earth and layered dark stone close behind everything, root tips threading through it and small stones set in it, violet-navy shadow with a faint warm lantern glow low along the bottom third, earth filling the frame edge to edge, no sky, no moon drawn, no stars, no buildings, no opening",
+        "far-a": "the deep earth walls and root columns of a wide cavern far behind, a few distant pools of lantern gold on its floor among them, filling the lower two thirds and fading at the top",
+        "far-b": "distant root columns reaching down into deep earth with a thin mist of cool violet along the cavern floor and small lantern points in it, filling the lower half and fading at the top",
+        "mid-a": "the wall of a root cave close by: packed dark earth with thick roots winding across it, small stones set in it and a few round amber paper lanterns hanging from the roots, filling the whole frame",
+        "mid-b": "thick root buttresses of the great tree's base curving down into the earth, moss on their tops, a round amber paper lantern on a hook between them and blocks of cave stone at their feet, in the lower two thirds, the upper third mostly open",
+        "mid-c": "a line of low root humps, cave stones and dark iron lantern posts along a cavern floor, their warm gold light pooling on the packed earth, filling only the lower half down to the bottom edge, the floor and the humps running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no cave wall behind, no sky, no clouds, no frame or border"
+      }
+    },
+    "ground": {
+      "title": "the ground level: the west gate, the lobby ring, the market square and the roof run at the foot of the great tree",
+      "light": "warm late dusk at the foot of the great tree: a soft cream light coming in low from the left, gold lanterns #C9A227 and #FFD36A pooling warm light on grass, ferns, stones and a path, dusk blue #2E4C7A in the air between the great trunks, the sky above fading from a warm gold band up through dusk blue to navy #0C1E36, no moon painted, every sign blank, no letters anywhere",
+      "textures": {
+        "forest-floor": "a carpet of short grass and fallen leaves seen flat from above, small fern tips, moss and pebbles scattered evenly in late dusk green and warm brown",
+        "cobble-path": "worn rounded cobblestones set in packed earth seen flat from above, grass tufts in the gaps, grey stone warmed a little by lantern gold, even and tileable",
+        "fern-fronds": "overlapping fern fronds seen flat on, layered in two greens with darker shadow between them, every frond the same size, in late dusk light"
+      },
+      "sheets": {
+        "gate-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "gate-post",
+              "w": 160,
+              "h": 400,
+              "desc": "a tall square gate post of dark oak on a grey stone footing, an iron ring on its side and a round amber paper lantern on a dark iron hook near its top, lit warm gold"
+            },
+            {
+              "name": "lantern-post",
+              "w": 120,
+              "h": 400,
+              "desc": "a tall thin dark iron lantern post on a small stone base with a round amber paper lantern on its hook at the top, lit warm gold"
+            },
+            {
+              "name": "gate-arch",
+              "w": 400,
+              "h": 320,
+              "desc": "a wide open gateway of two dark oak posts joined by a curved timber beam across the top with a blank wooden sign board hanging from the beam, nothing between the posts, no writing"
+            },
+            {
+              "name": "stone-step",
+              "w": 240,
+              "h": 120,
+              "desc": "a single wide step of fitted grey stone with moss along its lower edge, flat on top, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "bench",
+              "w": 320,
+              "h": 160,
+              "desc": "a plain bench of dark oak planks on two grey stone legs, nothing on it"
+            },
+            {
+              "name": "rope-barrier",
+              "w": 320,
+              "h": 200,
+              "desc": "a barrier of thick hemp rope slung between two short dark oak posts, a round amber paper lantern hanging lit from the middle of the rope"
+            }
+          ]
+        },
+        "market-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "market-stall",
+              "w": 400,
+              "h": 320,
+              "desc": "a small market stall of dark oak with a striped cloth awning in cream and moss green, a bare counter and a blank hanging sign board, nothing for sale, no writing"
+            },
+            {
+              "name": "sign-board",
+              "w": 160,
+              "h": 240,
+              "desc": "a blank wooden sign board on a short dark oak post, its face bare, no writing"
+            },
+            {
+              "name": "lantern-garland",
+              "w": 400,
+              "h": 120,
+              "desc": "a row of round amber paper lanterns hanging lit from a dark rope, level, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "crate-stack",
+              "w": 160,
+              "h": 200,
+              "desc": "a stack of three wooden crates of pale planks, the top one open and empty"
+            },
+            {
+              "name": "hand-cart",
+              "w": 240,
+              "h": 200,
+              "desc": "a small wooden hand cart with two spoked wheels, its bed empty, its handles resting low"
+            },
+            {
+              "name": "water-barrel",
+              "w": 120,
+              "h": 160,
+              "desc": "a round oak barrel with dark iron hoops, a wooden lid on top"
+            }
+          ]
+        },
+        "floor-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "fallen-branch",
+              "w": 400,
+              "h": 160,
+              "desc": "a thick fallen branch with mossy bark lying level across the way as a barrier, a round amber paper lantern on a short dark iron hook standing lit just behind its middle"
+            },
+            {
+              "name": "fern-clump",
+              "w": 160,
+              "h": 120,
+              "desc": "a clump of ferns in two greens, the fronds spreading out from the centre, standing on its own"
+            },
+            {
+              "name": "mossy-boulder",
+              "w": 240,
+              "h": 160,
+              "desc": "a rounded grey boulder with moss on its top and a few small ferns at its foot"
+            },
+            {
+              "name": "stepping-stones",
+              "w": 400,
+              "h": 80,
+              "desc": "a row of flat grey stepping stones set in short grass, level, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "tree-stump",
+              "w": 200,
+              "h": 160,
+              "desc": "a broad tree stump of dark bark with pale rings on its flat top and moss at its base"
+            },
+            {
+              "name": "roof-ridge",
+              "w": 400,
+              "h": 120,
+              "desc": "a stretch of mossy wooden shingle roof with a straight level ridge along its top, cut straight at both ends so it repeats"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "a warm late dusk sky over a forest, a band of soft gold and rose along the bottom third fading up through dusk blue to navy with a few faint early stars at the top and nothing else, no moon drawn, no sun, no trees, no treetops crossing the frame, no buildings, no hills",
+        "sky-b": "a late dusk sky of dusk blue fading up to navy, a few thin level bands of soft cloud lit faintly gold from below and a few early stars above them, no moon drawn, no sun, no trees, no buildings, no skyline",
+        "far-a": "a far line of other great trunks standing on the forest floor, dusk blue mist between them and their tops lost in it, the ground a carpet of grass and ferns dotted with the warm gold of distant lanterns, filling the lower two thirds and fading at the top",
+        "far-b": "a gentle forest floor running away into dusk blue haze, low ferns, stones and a winding path, the warm gold of a few distant lanterns among far trunks, filling the lower half and fading at the top",
+        "mid-a": "a dense stand of great trunks close by, their mossy bark side by side rising out of the top of the frame with no gaps between them, ferns and undergrowth at their feet, round amber paper lanterns on dark iron hooks on the bark, filling the whole frame",
+        "mid-b": "the forest floor close by, filling only the lower two thirds: grass, fern clumps, mossy stones, a cobbled path, a low wooden fence and a few lantern posts lit warm gold, the path, fence and grass running off both side edges, no tree trunks, the whole upper third left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border",
+        "mid-c": "the forest floor underfoot close by, filling only the lower half: short grass, ferns, fallen leaves and stones, a few pale mushrooms and a low mossy root, the grass and leaves running off both side edges, no tree trunks, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border"
+      }
+    },
+    "low": {
+      "title": "the low height: the great tree's own lower boughs and bough walkways, low off the ground",
+      "light": "amber light dappled through thick leaves overhead, warm and soft, in small moving patches on bark #2B1C12 to #4A3322 and inner wood #5C4632 to #8F8068, moss #3E5A3A and #6E8B4E in the furrows, leaf greens #4F7A3E and #8DAE5A all round, lantern gold #C9A227 and #FFD36A on hooks along the boughs; the forest floor still near, ten to twenty metres below through the gaps",
+      "textures": {
+        "bough-bark": "the bark of a great tree's lower bough seen flat on: deep furrowed brown bark with moss in the furrows and small soft patches of amber light dappled over it, even and tileable",
+        "walkway-planks": "weathered planks of a bough walkway seen flat from above, laid side by side and pegged with wooden dowels, a few knots in the grain, amber light dappled across them, even and tileable",
+        "lichen-moss": "the upper side of a thick bough carpeted in moss and pale lichen in two greens and cream, small and even, seen flat on, no sky, no edge of the bough"
+      },
+      "sheets": {
+        "walkway-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "walkway-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a level stretch of bough walkway: planks laid across the top of a thick mossy bough, flat on top, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "walkway-cap-left",
+              "w": 240,
+              "h": 120,
+              "desc": "the left end of a bough walkway: the planks stopping over the bough's rounded leafy tip on the left, cut straight at the right end"
+            },
+            {
+              "name": "walkway-cap-right",
+              "w": 240,
+              "h": 120,
+              "desc": "the right end of a bough walkway: the planks stopping over the bough's rounded leafy tip on the right, cut straight at the left end"
+            },
+            {
+              "name": "rope-rail-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a level run of rope rail: one thick rope in a shallow swag between two short wooden posts, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "rope-rail-post",
+              "w": 80,
+              "h": 160,
+              "desc": "a single short wooden rail post standing upright with a rope knotted round its top, the rope's ends hanging short"
+            },
+            {
+              "name": "branch-lantern",
+              "w": 160,
+              "h": 240,
+              "desc": "a round amber paper lantern on a dark iron hook fixed to a short stub of branch, glowing warm gold from within"
+            }
+          ]
+        },
+        "bough-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "bark-ledge-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a level ledge of thick bark jutting from a trunk, flat on top with a strip of moss, its underside shadowed, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "bark-ledge-end",
+              "w": 240,
+              "h": 120,
+              "desc": "the rounded right end of a thick bark ledge, moss on top, cut straight at the left end"
+            },
+            {
+              "name": "knothole-door-closed",
+              "w": 240,
+              "h": 320,
+              "desc": "a round knothole door of planks set in a rim of bark, shut, a small dark iron ring for a handle, dim"
+            },
+            {
+              "name": "knothole-door-open",
+              "w": 240,
+              "h": 320,
+              "desc": "the same round knothole doorway open, warm gold light inside"
+            },
+            {
+              "name": "bough-stub",
+              "w": 160,
+              "h": 200,
+              "desc": "a short sawn-off branch stub jutting out from a patch of bark, its growth rings showing at the cut end, moss on its top"
+            },
+            {
+              "name": "leaf-clump",
+              "w": 240,
+              "h": 200,
+              "desc": "a thick clump of leaves in two greens on a short forked twig, hanging downward, amber light on its upper leaves"
+            }
+          ]
+        },
+        "fittings-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "rope-ladder",
+              "w": 120,
+              "h": 400,
+              "desc": "a rope ladder with wooden rungs hanging straight down, cut straight at both ends so it repeats upward"
+            },
+            {
+              "name": "rope-barrier",
+              "w": 240,
+              "h": 160,
+              "desc": "a thick rope slung between two short wooden posts with a small blank wooden tag hanging from it, a barrier across a way, no writing"
+            },
+            {
+              "name": "log-bench",
+              "w": 240,
+              "h": 160,
+              "desc": "a bench made of a half log laid flat side up on two short stumps, moss on its ends"
+            },
+            {
+              "name": "signpost-blank",
+              "w": 160,
+              "h": 240,
+              "desc": "a blank wooden sign board on a short post with a small lantern hook at its top, nothing on the board, no writing"
+            },
+            {
+              "name": "pulley-bucket",
+              "w": 160,
+              "h": 280,
+              "desc": "a wooden pulley wheel on a dark iron bracket with a rope running through it and a small wooden bucket hanging below"
+            },
+            {
+              "name": "hanging-basket",
+              "w": 120,
+              "h": 200,
+              "desc": "a woven basket hanging on a rope from above, holding a few ferns and a fallen amber leaf"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "the leaf canopy directly overhead seen from below, thick overlapping leaves in two greens filling the frame edge to edge with amber light breaking through many small gaps in soft dappled patches, no sky showing, no moon drawn, no sun, no branches in front, no ground",
+        "sky-b": "an amber dusk sky seen through leaves: a soft gradient from warm amber low down to dusk blue above with a few soft clouds lit gold, small leaves and thin twigs scattered in dark silhouette across it, no moon drawn, no sun, no trunks, no ground, no buildings",
+        "far-a": "the lower boughs of great neighbouring trees stretching across, thick and mossy with leaf clusters in two greens and a few lantern points along them, no huts, filling the lower two thirds and fading at the top",
+        "far-b": "the forest floor seen from above, ten to twenty metres below: ferns, moss and stones between the roots of great trunks and a narrow path winding through, filling only the lower half, the floor running off both side edges and the bottom edge, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds, no frame or border",
+        "mid-a": "the great tree's own bark close by: a wall of deep furrowed bark with moss in the furrows, amber light dappled across it, a few bough stubs and dark knotholes, filling the whole frame",
+        "mid-b": "thick boughs with plank walkways and rope rails along them, lanterns on hooks, leaf clusters in two greens, in the lower two thirds, the upper third mostly open",
+        "mid-c": "the tips of lower boughs with thick leaf clusters and hanging vines, a rope ladder and a hanging basket among them, in the lower half, the upper half mostly open"
+      }
+    },
+    "high": {
+      "title": "high off the ground: the great tree's high boughs and walkways in cloud, levels 3 and 4",
+      "light": "cool cream moonlight high up in clear blue-navy air with a light mist, the dusk blue #2E4C7A and sky blue #6F9BC8 of the height, neighbouring tree crowns well below and clouds level with the viewer, warm lantern gold #C9A227 and #FFD36A only where a lantern is named, no ground anywhere in sight",
+      "textures": {
+        "lichen-bark": "the great tree's bark high up, seen flat on: dark bark with long vertical furrows, patches of pale silver-green lichen and a thin cool mist caught in the grooves, even and tileable",
+        "cloud-bank": "a bank of soft moonlit cloud seen flat on: small rounded tufts of cool cream with dusk blue shadow between them, the same size of tuft everywhere, no sky showing through, even and tileable",
+        "silvered-planks": "walkway planks bleached silver-grey by wind and height, seen flat on, the grain running straight across each plank, a faint damp sheen of mist, thin cool shadows in the gaps, even and tileable"
+      },
+      "sheets": {
+        "walkway-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "bough-mid",
+              "w": 400,
+              "h": 160,
+              "desc": "a level stretch of thick bough of dark bark with a plank walkway laid along its top, flat on top, a thin mist under it, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "bough-end",
+              "w": 240,
+              "h": 160,
+              "desc": "the right-hand end of a thick bough with a plank walkway on top, tapering to a leafy tip on the right, cut straight at the left"
+            },
+            {
+              "name": "rope-rail-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a rope railing: two taut ropes running level between dark wooden posts, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "rope-rail-post",
+              "w": 80,
+              "h": 160,
+              "desc": "a single dark wooden railing post with two rope ends knotted round it, standing upright on its own"
+            },
+            {
+              "name": "hook-lantern",
+              "w": 120,
+              "h": 200,
+              "desc": "a round amber paper lantern hanging from a dark iron hook, glowing warm gold, with a wisp of cool mist drifting past it"
+            },
+            {
+              "name": "mist-platform",
+              "w": 400,
+              "h": 160,
+              "desc": "a round plank platform resting on the fork of a bough, flat on top, a band of thin cool mist wrapped round its underside"
+            }
+          ]
+        },
+        "landing-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "knothole-door-closed",
+              "w": 240,
+              "h": 320,
+              "desc": "a round knothole doorway in dark bark with a plank door shut across it and a dark iron ring, dim"
+            },
+            {
+              "name": "knothole-door-open",
+              "w": 240,
+              "h": 320,
+              "desc": "the same round knothole doorway open, warm gold light inside"
+            },
+            {
+              "name": "sign-board",
+              "w": 160,
+              "h": 240,
+              "desc": "a bare board of weathered wood on a short dark post, nothing written on it, a wisp of mist at its foot"
+            },
+            {
+              "name": "rope-barrier",
+              "w": 320,
+              "h": 200,
+              "desc": "a barrier across the way: a thick rope slung between two dark wooden posts, a warm gold lantern glow behind it, shut for now"
+            },
+            {
+              "name": "lantern-pole",
+              "w": 120,
+              "h": 400,
+              "desc": "a tall dark wooden pole with a round amber paper lantern hanging from an iron hook at its top, glowing warm gold, cut straight at the bottom"
+            },
+            {
+              "name": "cloud-bench",
+              "w": 320,
+              "h": 160,
+              "desc": "a bench of pale weathered planks on dark wooden legs, a thin band of cool mist about its feet"
+            }
+          ]
+        },
+        "boughs-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "rope-ladder",
+              "w": 120,
+              "h": 400,
+              "desc": "a rope ladder with dark wooden rungs hanging straight down, cut straight at both ends so it repeats upward"
+            },
+            {
+              "name": "lantern-string",
+              "w": 400,
+              "h": 120,
+              "desc": "a string of round amber paper lanterns glowing warm gold on a dark rope, level, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "hanging-moss",
+              "w": 160,
+              "h": 240,
+              "desc": "a hank of pale silver-green lichen and moss hanging from a short stub of dark bough, drawn whole"
+            },
+            {
+              "name": "leaf-cluster",
+              "w": 240,
+              "h": 240,
+              "desc": "a cluster of leaves on a short dark twig, lit cool cream from above with navy shadow beneath, drawn whole on its own"
+            },
+            {
+              "name": "wind-chime",
+              "w": 120,
+              "h": 240,
+              "desc": "a wind chime of hollow wooden tubes on thin cords hanging from a dark iron hook, drawn whole"
+            },
+            {
+              "name": "cloud-tuft",
+              "w": 240,
+              "h": 120,
+              "desc": "a small tuft of soft moonlit cloud, cool cream with dusk blue shadow, drawn whole on its own with a clean edge"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "a high clear night sky in blue-navy with many small stars and nothing else, only a light featureless mist along the bottom third, no moon drawn, no buildings, no trees crossing the frame, no horizon, no one big cloud",
+        "sky-b": "a high night sky in dusk blue with thin level bands of pale cloud at the viewer's height and a light mist below them, stars above, no moon drawn, no buildings, no trees crossing the frame, no one big cloud",
+        "far-a": "the rounded crowns of neighbouring great trees well below the walkway, their leaf tops in dark leaf green and navy shadow with cool cream moonlight on top, rising out of a sea of soft cloud, filling the lower two thirds and fading at the top",
+        "far-b": "a sea of soft moonlit cloud far below with a few dark treetops showing through it, filling the lower half and fading at the top",
+        "mid-a": "the great tree's high boughs close by: thick limbs of dark bark crossing the frame, pale lichen, hanging moss, bunches of leaves and a few round amber lanterns on iron hooks, thin cloud drifting between the limbs, filling the whole frame",
+        "mid-b": "the undersides of great boughs and bunches of leaves close by, lit cool cream from above with navy shadow below, lanterns on hooks here and there and thin cloud drifting between them, in the lower two thirds, the upper third mostly open",
+        "mid-c": "a bank of thin cloud drifting past close by with a few leafy twig tips and a string of amber lanterns showing through it, filling only the lower half, the cloud bank running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds in the upper half, no frame or border"
+      }
+    },
+    "canopy": {
+      "title": "the top of the canopy: the nests street and the canopy walk, the highest height of the great tree",
+      "light": "the brightest light in the park: full cool cream moonlight from high overhead, the open night sky in navy and dusk blue edge to edge with many small stars, a sea of rounded leaf tops below the walkway in two greens with cream light on their top edges, and warm lantern gold only in the nests' round doors and windows and in the lanterns",
+      "textures": {
+        "woven-wicker": "tightly woven wicker of thin pale twigs in an even over-under weave, warm straw and inner-wood browns, the wall of a nest house seen flat on",
+        "leaf-tops": "a dense sea of small rounded leaf tops seen from straight above, in two greens with cream moonlight on each top edge, no gaps, even all over",
+        "twig-thatch": "nothing but roof thatch seen flat on and close up: thin dark twigs packed side by side in level overlapping rows from edge to edge, bark brown with a little moss in the gaps, each twig lit cream along its upper edge, the same twigs everywhere, no sky, no leaves, no trees, no houses, no lanterns, no scene, no horizon"
+      },
+      "sheets": {
+        "street-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "door-nest-closed",
+              "w": 240,
+              "h": 320,
+              "desc": "a round woven wicker door in a ring frame of pale twigs, shut, dim, standing on its own"
+            },
+            {
+              "name": "door-nest-open",
+              "w": 240,
+              "h": 320,
+              "desc": "the same round woven doorway open, warm lantern gold light inside"
+            },
+            {
+              "name": "nest-lantern",
+              "w": 120,
+              "h": 200,
+              "desc": "a round amber paper lantern hanging from a dark iron hook arm, glowing warm gold from within, the park's one lantern design"
+            },
+            {
+              "name": "nest-window",
+              "w": 160,
+              "h": 160,
+              "desc": "a small round window ringed with woven twigs, lit warm gold from inside, standing on its own"
+            },
+            {
+              "name": "woven-rail-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a low woven wicker railing of pale twigs between short twig posts, level, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "sign-board",
+              "w": 240,
+              "h": 200,
+              "desc": "a bare sign board of inner wood hanging from a short twig bracket, nothing written on it"
+            }
+          ]
+        },
+        "street-b": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "twig-bench",
+              "w": 320,
+              "h": 160,
+              "desc": "a bench of pale twigs lashed with rope, a flat plank seat and a low twig back, seen from the side"
+            },
+            {
+              "name": "leaf-perch",
+              "w": 320,
+              "h": 160,
+              "desc": "a leaf-top perch: a round clump of dense leaf tops in two greens with a flat level top to stand on, cream moonlight along its top edge"
+            },
+            {
+              "name": "leaf-cluster",
+              "w": 240,
+              "h": 240,
+              "desc": "a cluster of large rounded leaves in two greens on a short twig, lit cream from above, standing on its own"
+            },
+            {
+              "name": "barrier-nest",
+              "w": 320,
+              "h": 280,
+              "desc": "a round woven doorway shut for now with lashed twigs across it, warm lantern light showing in the gaps between the twigs, nothing written on it"
+            },
+            {
+              "name": "nest-roof",
+              "w": 320,
+              "h": 200,
+              "desc": "a domed roof cap of thatched twigs to top a nest house, its base flat and straight, seen from the side"
+            },
+            {
+              "name": "planter-wicker",
+              "w": 160,
+              "h": 200,
+              "desc": "a woven wicker planter holding a small bushy fern, lit cream from above"
+            }
+          ]
+        },
+        "canopy-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "rail-post",
+              "w": 80,
+              "h": 160,
+              "desc": "a single short post of a pale twig with a rounded top, to end a woven railing, standing on its own"
+            },
+            {
+              "name": "lantern-string",
+              "w": 400,
+              "h": 120,
+              "desc": "a string of small round amber paper lanterns on a dark cord, level, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "bough-tip",
+              "w": 320,
+              "h": 200,
+              "desc": "the leafy tip of a bough reaching in from the left, rounded leaves in two greens lit cream from above, cut straight at its left end"
+            },
+            {
+              "name": "rope-coil",
+              "w": 160,
+              "h": 120,
+              "desc": "a coil of hemp rope lying flat, its strands clear, seen from the side"
+            },
+            {
+              "name": "hanging-basket",
+              "w": 160,
+              "h": 240,
+              "desc": "a woven wicker basket hanging by a short rope from a dark iron hook, holding a small fern"
+            },
+            {
+              "name": "woven-bridge-mid",
+              "w": 400,
+              "h": 120,
+              "desc": "a level bridge of woven twigs lashed with rope, flat on top, cut straight at both ends so it repeats"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "the open night sky at the very top of the canopy, deep navy above to dusk blue along the bottom, bright with many small stars edge to edge and nothing else, no moon drawn, no sun, no bright round shape of any size anywhere, no clouds, no buildings, no trees crossing the frame, no horizon, no big feature",
+        "sky-b": "the open night sky at the top of the canopy, deep navy to dusk blue, many small stars and a few thin high clouds lit cream from above drifting level across the middle, no moon drawn, no sun, no bright round shape of any size anywhere, no buildings, no trees crossing the frame, no big feature",
+        "far-a": "a sea of rounded leaf tops stretching away far below, in dusk blue and navy with cream moonlight on each top edge, a few distant great tree crowns among them, filling the lower two thirds and fading at the top, no moon",
+        "far-b": "the leaf tops of the canopy far below under a thin band of mist, tiny warm lantern points of distant nests scattered among them, filling the lower half and fading at the top, no moon",
+        "mid-a": "the wall of a great nest house at the top of the canopy close by: woven wicker and bark with round windows ringed in twigs lit warm gold, the edge of a thatched twig roof, leaf clusters and a lantern on a hook, filling the whole frame",
+        "mid-b": "a row of round woven nest houses along a street at the top of the canopy, their round windows lit warm gold, thatched twig roofs, lanterns on hooks and leaf clusters between them, no doors, in the lower two thirds, the upper third mostly open",
+        "mid-c": "the nearer leaf tops of the canopy, dense leaf clusters in two greens lit cream from above with a woven rail of pale twigs running along them and a few small amber lanterns, in the lower half, the upper half mostly open"
+      }
     }
   }
 }
