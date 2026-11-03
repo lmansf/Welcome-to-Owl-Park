@@ -72,6 +72,7 @@ test.describe('the pad (OP-082, OP-114)', () => {
 
   test("a phone's screen keeps what the thumbs need: the count, Feedback and the emotes are the Menu's and Say's, and the ribbon never sits on the guest's badge (OP-242)", async ({ page, isMobile }) => {
     test.skip(!isMobile, "the phone's screen");
+    test.slow(); // the Menu's every tab, the feedback screen and the guest's ribbon: more than one look's worth of time
     await openPark(page);
     const hud = page.locator('#hud');
     // In sight: the stick, Jump, the Menu, Say and the feathers. Out of it: the count, Emotes, the bug and Interact at rest.
