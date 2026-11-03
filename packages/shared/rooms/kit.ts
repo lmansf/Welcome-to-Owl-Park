@@ -114,13 +114,6 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
  * boarded with light behind. A stone balustrade closes it in the east. No room of the park uses it
  * yet: its doorways lead nowhere until the remap builds the plaza, and only the preview tools draw it.
  */
-/**
- * The plaza's stone middles: the two longer lengths only, for now. The recut's stone row darkens to
- * the left (its run was painted lit from the right and cut across), so its shortest middle reads as a
- * darker block among the others until the row is levelled (OP-251).
- */
-const PLAZA_STONE = ['kit-cut-stone-mid-480', 'kit-cut-stone-mid-640'];
-
 const PLAZA_KIT: RoomKit = {
   ground: TREE_GROUND,
   backdrops: [
@@ -129,7 +122,7 @@ const PLAZA_KIT: RoomKit = {
     { key: 'kit-entrance-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-entrance-mid-c', rate: 0.75, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
-  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mids: PLAZA_STONE, mid: 'kit-tex-entrance-plaza-stone' }],
+  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-entrance-plaza-stone' }],
   doors: [
     { door: 'stair-down', piece: 'kit-entrance-stair-head' },
     { door: 'realm-ink', piece: 'kit-arch-portal-boarded' },
