@@ -782,6 +782,22 @@
       ]
     }
   },
+  "layer_refs": {
+    "kit-high-mid-a": [
+      {
+        "ref": "@guide:target-l4-ref",
+        "role": "the approved target screen for this height: its light, colour and value bands",
+        "optional": false
+      }
+    ],
+    "kit-high-mid-b": [
+      {
+        "ref": "@guide:target-l4-ref",
+        "role": "the approved target screen for this height: its light, colour and value bands",
+        "optional": false
+      }
+    ]
+  },
   "layer_sizes": {
     "sky": [
       1600,
@@ -1958,8 +1974,8 @@
         "sky-b": "a high night sky in dusk blue with thin level bands of pale cloud at the viewer's height and a light mist below them, stars above, no moon drawn, no buildings, no trees crossing the frame, no one big cloud",
         "far-a": "the rounded crowns of neighbouring great trees well below the walkway, their leaf tops in dark leaf green and navy shadow with cool cream moonlight on top, rising out of a sea of soft cloud, filling the lower two thirds and fading at the top",
         "far-b": "a sea of soft moonlit cloud far below with a few dark treetops showing through it, filling the lower half and fading at the top",
-        "mid-a": "the great tree's high boughs close by: thick limbs of dark bark crossing the frame, pale lichen, hanging moss, bunches of leaves and a few round amber lanterns on iron hooks, thin cloud drifting between the limbs, filling the whole frame",
-        "mid-b": "the undersides of great boughs and bunches of leaves close by, lit cool cream from above with navy shadow below, lanterns on hooks here and there and thin cloud drifting between them, in the lower two thirds, the upper third mostly open",
+        "mid-a": "the great tree's high boughs well behind the walkway: soft rounded limbs of dark bark receding into thin cloud, pale lichen, hanging moss and bunches of leaves on their undersides, a few round amber lanterns on iron hooks, the limbs' tops lost in the cloud so that nothing has a flat top or an edge to stand on, filling the whole frame",
+        "mid-b": "the soft undersides of great boughs and bunches of leaves well behind the walkway, lit cool cream from above with navy shadow below, lanterns on hooks here and there and thin cloud drifting between them, every bough rounded and half lost in the cloud with no flat top and no ledge to stand on, in the lower two thirds, the upper third mostly open",
         "mid-c": "a bank of thin cloud drifting past close by with a few leafy twig tips and a string of amber lanterns showing through it, filling only the lower half, the cloud bank running off both side edges, the whole upper half left as flat solid magenta with nothing painted on it, no sky, no clouds in the upper half, no frame or border"
       }
     },

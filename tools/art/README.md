@@ -274,7 +274,11 @@ assembler (OP-234) builds screens from the published files, whose format is this
   Deterministic; a layer whose latest line already says `bands:` is skipped unless `--force`. `--dry-run`
   prints the statistics and writes nothing; `--measure <png>...` prints a 1600 x 900 screen's sky, backdrop
   and floor bands (or any image's statistics); `--haze` and `--blur` override the far and middle defaults.
-  A layer the grade cannot bring into its band is reported (exit 1) and is one to regenerate.
+  A layer the grade cannot bring into its band is reported (exit 1) and is one to regenerate. `--finals`
+  grades finished, unpublished layers in `work/art/final` instead: the finish record takes the `bands:`
+  line, so `publish` carries it. A regenerated layer may be painted from a reference: `kit.layer_refs.<key>`
+  in `kit.json` lists the job's refs in the generator's form (`@guide:target-l4-ref` is
+  `work/art/guides/target-l4-ref.png`, the level 4 target at 1280 x 720, under the inline reference limit).
 - **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
   clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
   it is published; nothing from the kit is published without that.

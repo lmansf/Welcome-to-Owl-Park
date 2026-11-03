@@ -1800,7 +1800,7 @@ def _stats_text(st: dict) -> str:
     return f"L {st['L_mean']:.1f} p95 {st['L_p95']:.1f} contrast {st['contrast']:.1f} sat {st['sat']:.2f}"
 
 
-def bands_review(ctx: Ctx, area: str, rows: list[tuple[str, Image.Image, Image.Image, dict, dict]], skies: tuple[Image.Image | None, Image.Image | None]) -> Path:
+def bands_review(ctx: Ctx, area: str, rows: list[tuple[str, Image.Image, Image.Image, dict, dict]], skies: tuple[Image.Image | None, Image.Image | None], suffix: str = "") -> Path:
     """work/art/review/bands-<area>.png: each layer before (left) and after (right), a keyed layer over
     the area's sky-a as it was and as it is, with its statistics under each."""
     cw, ch, pad, text_h = 800, 450, 8, 22
@@ -1816,7 +1816,7 @@ def bands_review(ctx: Ctx, area: str, rows: list[tuple[str, Image.Image, Image.I
             cell.alpha_composite(img.convert("RGBA").resize((cw, ch), Image.Resampling.LANCZOS))
             board.paste(cell.convert("RGB"), (x, y))
             draw.text((x + 4, y + ch + 4), f"{key} {'before' if j == 0 else 'after'}: {_stats_text(st)}", fill=(230, 226, 210))
-    return write_review(ctx, f"bands-{area}.png", board)
+    return write_review(ctx, f"bands-{area}{suffix}.png", board)
 
 
 def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
@@ -1835,7 +1835,8 @@ def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
                 note(f"{Path(f).name}  {_stats_text(bands.stats(img))}")
         return 0
     prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
-    keys = [k for k in layer_keys(ctx) if (ctx.public / f"{k}.webp").exists()] if a.all else [validate_key(k, allow_helpers=False, assets=ctx.assets) for k in a.keys]
+    src_dir = ctx.out if a.finals else ctx.public
+    keys = [k for k in layer_keys(ctx) if (src_dir / f"{k}.webp").exists()] if a.all else [validate_key(k, allow_helpers=False, assets=ctx.assets) for k in a.keys]
     if not keys:
         raise ArtError("name the layer keys to grade (kit-<area>-sky|far|mid-<x>) or pass --all")
     for key in keys:
@@ -1850,13 +1851,21 @@ def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
     for key in keys:
         band, limits = bands.band_of(key)
         area = bands.layer_area(key)
-        path = ctx.public / f"{key}.webp"
+        path = src_dir / f"{key}.webp"
         if not path.exists():
-            raise ArtError(f"no published {path.name} (the bands are graded on published layers; finish and publish it first)")
+            raise ArtError(f"no {'finished' if a.finals else 'published'} {path.name} (the bands are graded on {'finished layers in ' + rel_to_repo(ctx.out) if a.finals else 'published layers; finish and publish it first'})")
         data0 = path.read_bytes()
-        line = latest.get(path.name)
-        if not line or line.get("sha256") != sha256_bytes(data0):
-            raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+        if a.finals:
+            # An unpublished final: its finish record stands in for the provenance line and takes the bands line,
+            # so publish carries it into tools/art/provenance.jsonl.
+            rec = load_post_record(ctx, key)
+            if not rec or rec.get("outputs", {}).get("1x", {}).get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{path.name}: not the file its finish record describes (run `pnpm art:finish layer {key}` first)")
+            line = {"tools": rec.get("tools") or [], "human_edits": rec.get("human_edits") or []}
+        else:
+            line = latest.get(path.name)
+            if not line or line.get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
         img = Image.open(io.BytesIO(data0))
         img.load()
         if band == "sky":
@@ -1867,7 +1876,7 @@ def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
             continue
         sky_rgb = None
         if band != "sky":
-            sky_path = ctx.public / f"kit-{area}-sky-a.webp"
+            sky_path = next((d / f"kit-{area}-sky-a.webp" for d in (src_dir, ctx.public) if (d / f"kit-{area}-sky-a.webp").exists()), src_dir / f"kit-{area}-sky-a.webp")
             if sky_path.exists():
                 with Image.open(sky_path) as sky:
                     sky_rgb = bands.sky_colour(sky)
@@ -1888,7 +1897,19 @@ def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
         if probs:
             failed.append(f"{key}: {'; '.join(probs)}")
             warn(f"{key}: still outside its {band} band after the grade: {'; '.join(probs)}")
-        if not a.dry_run:
+        if not a.dry_run and a.finals:
+            path.write_bytes(data)
+            v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            rec["outputs"]["1x"].update({"bytes": len(data), "sha256": sha256_bytes(data), "quality": info["quality"]})
+            rec["tools"] = list(rec.get("tools") or []) + [tools_line, budget_line(info)]
+            rec["bands"] = {k: v for k, v in params.items() if k not in ("before", "after")} | {"before": params["before"], "after": encoded}
+            save_post_record(ctx, key, {k: v for k, v in rec.items() if k not in ("finished_at", "human_edits")}, earlier_edits=list(rec.get("human_edits") or []))
+            graded += 1
+            per_area.setdefault(area, []).append((key, img, back, params["before"], encoded))
+        elif not a.dry_run:
             new_line = prov.sanitize(prov.build_line(asset=path.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
                                                      sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
                                                      tools=list(line.get("tools") or []) + [tools_line, budget_line(info)],
@@ -1908,13 +1929,13 @@ def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
     if not a.dry_run:
         for area, rows in per_area.items():
             sky_after = None
-            sky_path = ctx.public / f"kit-{area}-sky-a.webp"
-            if sky_path.exists():
+            sky_path = next((d / f"kit-{area}-sky-a.webp" for d in (src_dir, ctx.public) if (d / f"kit-{area}-sky-a.webp").exists()), None)
+            if sky_path is not None:
                 sky_after = Image.open(sky_path)
                 sky_after.load()
-            rv = bands_review(ctx, area, rows, (sky_before.get(area, sky_after), sky_after))
+            rv = bands_review(ctx, area, rows, (sky_before.get(area, sky_after), sky_after), suffix="-finals" if a.finals else "")
             note(f"review: {rel_to_repo(rv)}")
-    note(f"bands: {graded} layer(s) graded in place{' (dry run, nothing written)' if a.dry_run else ''}, {len(failed)} still outside their band")
+    note(f"bands: {graded} layer(s) graded in place{' (dry run, nothing written)' if a.dry_run else ''}{' in ' + rel_to_repo(ctx.out) if a.finals else ''}, {len(failed)} still outside their band")
     for f in failed:
         print(f"FAIL: {f}")
     return 1 if failed else 0
@@ -2439,6 +2460,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true", help="every published backdrop layer")
     sp.add_argument("--dry-run", action="store_true", help="print the statistics before and after; write nothing")
     sp.add_argument("--force", action="store_true", help="grade a layer again although its provenance says bands: already")
+    sp.add_argument("--finals", action="store_true", help="grade finished, unpublished layers in work/art/final instead; the finish record takes the bands line and publish carries it")
     sp.add_argument("--measure", nargs="+", metavar="PNG", help="measure a target screen's three bands (or any image) and stop")
     sp.add_argument("--haze", type=float, help="the haze toward the sky colour for far and middle layers (default 0.14 far, 0.07 mid)")
     sp.add_argument("--blur", type=float, help="the blur in screen px for far and middle layers (default 1.6 far, 1.0 mid)")
