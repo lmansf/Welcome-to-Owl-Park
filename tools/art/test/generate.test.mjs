@@ -742,7 +742,12 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'l0', 'l0-arcade', 'l1', 'l2', 'l3', 'l4', 'l5', 'l5-street', 'lobby', 'market', 'nest']);
+  // Every room the shared data declares, whatever rooms the park has grown since: the export is the live data.
+  const roomsDir = path.join(G.REPO_ROOT, 'packages/shared/rooms');
+  const declared = fs.readdirSync(roomsDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+    .flatMap((f) => [...fs.readFileSync(path.join(roomsDir, f), 'utf8').matchAll(/^ {2,4}id:\s*'([a-z0-9-]+)'/gm)].map((m) => m[1])); // rooms (and the nest's own RoomDef) sit at one indent or two; ledges and props deeper
+  for (const id of ['hub', 'grove', 'market', 'l1', 'l5']) assert.ok(declared.includes(id), `${id} is declared`);
+  assert.deepEqual(Object.keys(g.rooms).sort(), [...new Set(declared)].sort());
   // The tree's level 1 (map 2, OP-156, OP-162): four screens, each a sky plate, a middle distance and an
   // overlay scrolling at rates of their own over its playfield, the fading tiles with their fades.
   const l1 = g.rooms.l1;
