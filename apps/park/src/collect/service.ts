@@ -55,6 +55,8 @@ export interface UseReply {
   updates: QuestUpdate[];
   /** The board after progress, when the answer carries it (the room server pushes it separately). */
   board?: QuestBoard;
+  /** A free guest's use (OP-243): it played, but turned up nothing and counted for nothing. */
+  practice?: true;
 }
 
 /**

@@ -486,8 +486,9 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   /**
-   * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a leaf pile
-   * or a stall, a quest item, today's tasks. Told once per socket, with the first frame refused.
+   * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a quest
+   * item, today's tasks (leaf piles, stalls and the moonbeam are open to it, OP-243). Told once per
+   * socket, with the first frame refused.
    *
    * TODO-DOCS (OP-191): docs/LOGGING.md: spectator_refused (room.play, info): frame (the first refused
    * frame, or `admit` with its reason for a pass that did not admit, told each time).
@@ -1299,8 +1300,9 @@ export class RoomObject extends DurableObject<Env> {
     const refuse = (reason: 'far' | 'unknown' | 'busy' | 'offline' | 'spectator') => this.send(ws, { t: 'refused', r, reason });
     if (!att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
-    // The quests, the NPC owls, the leaf piles, the stalls and the quest items are ticket holders' (OP-191).
-    if (att.spec) {
+    // The quests, the NPC owls and the quest items are ticket holders' (OP-191). A free guest may still
+    // flop into a leaf pile, browse a stall and bask in the moonbeam, for nothing (OP-243).
+    if (att.spec && frame.t !== 'use') {
       this.spectatorRefused(att, frame.t);
       return refuse('spectator');
     }
@@ -1341,6 +1343,7 @@ export class RoomObject extends DurableObject<Env> {
           const rules = KIND_RULES[it.kind];
           if (!room.reaches(att.id, it.pos, rules.reach, it)) return refuse('far');
           if (!room.takeUse(att.id)) return refuse('busy');
+          if (att.spec) return this.practiceUse(ws, room, att, it.id, rules.shared, r);
           const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
           // Leaf piles and stalls count toward today's tasks too.
           const task = it.kind === 'leaf-pile' ? 'flop' : it.kind === 'stall' ? 'browse' : null;
@@ -1370,6 +1373,19 @@ export class RoomObject extends DurableObject<Env> {
       this.logOf(att).error('room.play', 'write_failed', 'A quest step did not reach the collections object: the page is told to try again.', { frame: frame.t, error: e });
       return refuse('offline');
     }
+  }
+
+  /**
+   * A free guest's use of an interactable (OP-243): a leaf pile poofs for everyone as anyone's flop does,
+   * a stall or the moonbeam answers as for anyone; but it turns up no feathers, moves no quest and counts
+   * for no task, and the collections object is never asked. `practice` tells the page so.
+   */
+  private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): void {
+    if (shared) {
+      if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+      this.saveObjects();
+    }
+    this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: -1, updates: [], practice: true });
   }
 
   // ---------- activities: lanterns, fishing, the copy game, the stage quiz ----------

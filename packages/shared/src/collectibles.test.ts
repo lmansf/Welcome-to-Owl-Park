@@ -18,6 +18,7 @@ import {
   variantsByRarity,
 } from './collectibles';
 import { DEFAULT_LOOK, sanitizeLook } from './look';
+import { QUESTS } from './questCatalog';
 import { isLook, isParkMessage } from './validate';
 
 const seedOf = (k: number): Uint8Array => {
@@ -72,8 +73,23 @@ describe('catalogue', () => {
     expect(variantName('flip')).toBe('Backflip');
   });
 
-  it('starts every collector with two emotes and an effect, all real variants', () => {
+  it('starts every collector with two emotes, an effect and a plain wearable for each slot, all real variants', () => {
     for (const v of STARTER_PACK) expect(parseVariant(v)).not.toBeNull();
+    const kinds = STARTER_PACK.map((v) => parseVariant(v)!);
+    expect(kinds.filter((x) => x.item.kind === 'emote')).toHaveLength(2);
+    expect(kinds.filter((x) => x.item.kind === 'fx')).toHaveLength(1);
+    // The free starter look (OP-243): one common wearable per slot, in its original colours.
+    const wear = kinds.filter((x) => x.item.kind === 'wear');
+    expect(wear.map((x) => x.item.slot).sort()).toEqual(['face', 'head', 'neck']);
+    for (const x of wear) {
+      expect(x.rarity).toBe('common');
+      expect(x.colour?.n).toBe(0);
+    }
+  });
+
+  it('keeps the starter pieces out of every quest reward, so none is ever given as a prize (OP-243)', () => {
+    const rewards = new Set(QUESTS.map((q) => q.reward.item));
+    for (const v of STARTER_PACK) expect(rewards.has(v)).toBe(false);
   });
 
   it("gives the park's presents as real variants, each with a note for the visitor", () => {

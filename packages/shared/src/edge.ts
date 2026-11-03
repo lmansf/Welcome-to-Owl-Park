@@ -374,8 +374,11 @@ export interface ServerUseResult {
   ok: boolean;
   reason?: 'far' | 'gone' | 'busy' | 'unknown';
   feathers: number;
+  /** The new balance, or -1 when it is not said (a pile already gone, a free guest's use). */
   total: number;
   updates: QuestUpdate[];
+  /** A free guest's use (OP-243): it played as anyone's but turned up nothing and counted for nothing. */
+  practice?: true;
 }
 /** A request refused before it reached the ledger (unknown target, too far, too fast). */
 export interface ServerRefused {

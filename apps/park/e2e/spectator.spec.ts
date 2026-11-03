@@ -8,8 +8,9 @@ import { E2E_ADMIN_KEY, E2E_STORE, GATE_ASK, GATE_ASK_LINE, STORE_CARD, doAction
  * Spectators (OP-191), the page's half, through the room server with SPECTATORS on (as every browser
  * test's room server has it, playwright.config.ts) and the gate taking tickets. An owl without a ticket
  * that works walks on past the turnstiles as a spectator, with one line and the Day Ticket on a button;
- * in the park a "Just looking" badge offers it too. The quests, the NPC owls, the stalls, the Realm
- * Vote and the gift shop's door sell a Day Ticket instead; the games play and earn nothing, and the
+ * in the park a "Just looking" badge offers it too. The quests, the NPC owls, the Realm Vote and the
+ * gift shop's door sell a Day Ticket instead; the leaf piles and the stalls play as anyone's and turn
+ * up nothing (OP-243); the games play and earn nothing, and the
  * arcade's result card offers the Day Ticket before Play again. A Day Ticket bought from inside makes
  * the owl a full visitor where it stands, with no reload. Every test hands the gate back to the
  * deployed setting (open) when it ends.
@@ -24,6 +25,8 @@ const LOCKED = 'Quests and the shops are for ticket holders. You can get a Day T
 const IDOL = 'Ticket holders vote here, one vote a day.';
 const KEEP = 'A Day Ticket lets you keep what you win. You can get a Day Ticket right here.';
 const ADMITTED = 'Your Day Ticket is in. Have fun!';
+const LEAVES = 'With a Day Ticket, leaf piles can turn up feathers.';
+const STALL_LINES = /Neon trinkets|A tray of buttons|Paper lanterns/;
 
 let made = 0;
 /** A new order number: the room server keeps its ticket book from one test run to the next. */
@@ -143,7 +146,7 @@ test.describe('spectators (OP-191)', () => {
     await a.context().close();
   });
 
-  test('in the market: Nova, a stall, the gift shop’s door and the idol sell a Day Ticket instead', async ({ browser, request }) => {
+  test('in the market: Nova, the gift shop’s door and the idol sell a Day Ticket instead; a stall is browsed for nothing', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     await openPark(page, { transport: 'edge', room: 'market' });
@@ -158,10 +161,12 @@ test.describe('spectators (OP-191)', () => {
     await expect(page.locator('.dialogue[data-npc="nova"]')).toBeHidden();
     await notNow(page);
 
-    // A stall counts for quests: locked too.
+    // A stall is browsed as by anyone (OP-243): its line, no card, no feathers.
+    const feathers = await page.evaluate(() => window.owlPark.collection()?.feathers ?? 0);
     expect(await page.evaluate(() => window.owlPark.use('market-stall-1'))).toBe(true);
-    await sale(page, LOCKED);
-    await notNow(page);
+    await expect(page.locator('.toast').filter({ hasText: STALL_LINES })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(STORE_CARD)).toBeHidden();
+    expect(await page.evaluate(() => window.owlPark.collection()?.feathers ?? 0)).toBe(feathers);
 
     // The gift shop's door sells the Day Ticket rather than opening the store.
     await walkToDoor(page, 'shop');
@@ -176,6 +181,22 @@ test.describe('spectators (OP-191)', () => {
     await sale(page, IDOL);
     await page.screenshot({ path: 'e2e-screenshots/spectator-idol.png' });
     await notNow(page);
+    await page.context().close();
+  });
+
+  test('a spectator flops into a leaf pile: gone for it as for anyone, nothing turns up, and it is told once (OP-243)', async ({ browser, request }) => {
+    await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    await openPark(page, { transport: 'edge', room: 'grove' });
+    await spectating(page, 'grove');
+    const feathers = await page.evaluate(() => window.owlPark.collection()?.feathers ?? 0);
+    const pile = (await state(page)).objects.find((o) => o.kind === 'leaf-pile' && o.here)!;
+    expect(await page.evaluate((id) => window.owlPark.use(id), pile.id)).toBe(true);
+    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === pile.id)?.here, { timeout: 20_000 }).toBe(false);
+    await expect(page.locator('.toast').filter({ hasText: LEAVES })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(STORE_CARD)).toBeHidden();
+    expect(await page.evaluate(() => window.owlPark.collection()?.feathers ?? 0)).toBe(feathers);
+    await page.screenshot({ path: 'e2e-screenshots/spectator-leaves.png' });
     await page.context().close();
   });
 

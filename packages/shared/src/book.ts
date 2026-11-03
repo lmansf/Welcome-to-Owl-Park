@@ -116,12 +116,15 @@ export class CollectionBook {
     return this.store.getCollector(cid) ?? row;
   }
 
-  /** What the collector owns, with any present from the park it does not hold yet added first. */
+  /**
+   * What the collector owns, with any starter piece (OP-243) or present from the park it does not hold
+   * yet added first.
+   */
   private ownedWithPresents(cid: string, now: number): string[] {
     const owned = this.store.owned(cid);
-    const missing = PRESENTS.filter((p) => !owned.includes(p.variant));
+    const missing = [...STARTER_PACK, ...PRESENTS.map((p) => p.variant)].filter((v) => !owned.includes(v));
     if (!missing.length) return owned;
-    for (const p of missing) this.store.addOwned(cid, p.variant, 'granted', now);
+    for (const v of missing) this.store.addOwned(cid, v, 'granted', now);
     return this.store.owned(cid);
   }
 

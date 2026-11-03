@@ -742,7 +742,7 @@ export class EdgeTransport implements ParkTransport {
       },
       use: async (target): Promise<UseReply> => {
         const f = await request({ t: 'use', target });
-        if (f?.t === 'useResult') return { ok: f.ok, ...(f.reason ? { reason: f.reason } : {}), feathers: f.feathers, total: f.total, updates: f.updates };
+        if (f?.t === 'useResult') return { ok: f.ok, ...(f.reason ? { reason: f.reason } : {}), feathers: f.feathers, total: f.total, updates: f.updates, ...(f.practice ? { practice: true as const } : {}) };
         return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline', feathers: 0, total: -1, updates: [] };
       },
       // The room counts arrivals and emotes itself.

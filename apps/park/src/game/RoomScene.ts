@@ -142,7 +142,7 @@ import { alongTheFloor, holdsUp, type Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
-import { SPECTATOR_WORDS, createOfferPacer, turnstileWay, type OfferPacer } from '../ui/spectator';
+import { SPECTATOR_WORDS, createOfferPacer, createOnceHint, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
@@ -2108,8 +2108,7 @@ export class RoomScene extends Phaser.Scene {
   private async use(id: string): Promise<void> {
     const def = getInteractable(id);
     if (!def || this.busy || !this.link) return;
-    // Leaf piles, stalls and the moonbeam count for quests and tasks: ticket holders' (OP-191).
-    if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
+    // A free guest flops, browses and basks too (OP-243): the room server makes it count for nothing.
     const gen = this.gen;
     this.busy = true;
     try {
@@ -2123,6 +2122,9 @@ export class RoomScene extends Phaser.Scene {
         return;
       }
       if (def.kind === 'leaf-pile') {
+        // A free guest's flop (OP-243): the leaves fly for everyone, nothing turns up, and it is told why once.
+        const hint = res.practice ? this.leafHint().say() : null;
+        if (hint) this.time.delayedCall(FLOP_LAND_MS + 150, () => gen === this.gen && this.hud.toast(hint, 3600));
         if (res.feathers > 0) {
           const n = res.feathers;
           this.time.delayedCall(FLOP_LAND_MS + 150, () => {
@@ -2136,7 +2138,7 @@ export class RoomScene extends Phaser.Scene {
         const lines = USE_LINES[def.kind] ?? [];
         const line = lines[Math.floor(Math.random() * lines.length)];
         if (line) this.hud.toast(line, 2800);
-        this.collection.setFeathers(res.total);
+        if (!res.practice) this.collection.setFeathers(res.total);
       }
       this.showUpdates(res.updates);
       // The room server pushes the board after progress; the local mode answers with it.
@@ -2723,6 +2725,16 @@ export class RoomScene extends Phaser.Scene {
       this.admitting = false;
       this.hud.toast(SPECTATOR_WORDS.admitted, 4500);
     }
+  }
+
+  /** The free guest's once-a-page word on leaf piles (OP-243), kept for the whole page across rooms. */
+  private leafHint(): { say(): string | null } {
+    let hint = this.registry.get('leafHint') as { say(): string | null } | undefined;
+    if (!hint) {
+      hint = createOnceHint(SPECTATOR_WORDS.leaves);
+      this.registry.set('leafHint', hint);
+    }
+    return hint;
   }
 
   /** A spectator's Get a Day Ticket (OP-191): the turnstiles' own sale, with `line` above the card before the store. */

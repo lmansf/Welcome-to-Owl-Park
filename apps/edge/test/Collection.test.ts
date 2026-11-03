@@ -53,6 +53,21 @@ describe('SqlCollectionStore', () => {
     expect(book.award(CID, presents[0]!, 'quest', MON + 3)).toMatchObject({ dup: true, feathers: DUPLICATE_FEATHERS[parseVariant(presents[0])!.rarity] });
   });
 
+  it('gives a collector made before the starter wearables those pieces when its collection is read (OP-243)', () => {
+    const { store, book } = rig();
+    store.insertCollector({ cid: CID, tz: 'UTC', tzSetAt: MON, feathers: 0, equipped: undefined, createdAt: MON });
+    // The starter pack as it was before OP-243, and the presents.
+    for (const v of ['hoot', 'flap', 'sparkle~0', ...PRESENTS.map((p) => p.variant)]) store.addOwned(CID, v, 'granted', MON);
+    const wear = ['beanie~0', 'round-glasses~0', 'knit-scarf~0'];
+    expect(STARTER_PACK).toEqual(expect.arrayContaining(wear));
+    expect(store.owned(CID)).not.toEqual(expect.arrayContaining(wear));
+    expect(book.inventory(CID, undefined, MON + 1).owned).toEqual(expect.arrayContaining(wear));
+    expect(book.owned(CID, undefined, MON + 2).filter((v) => wear.includes(v)).sort()).toEqual([...wear].sort());
+    // Worn by an owl with no ticket and no feathers: what it may wear is what it holds.
+    expect(book.setEquipped(CID, undefined, { head: 'beanie~0', face: 'round-glasses~0', neck: 'knit-scarf~0' }, MON + 3)).toEqual({ head: 'beanie~0', face: 'round-glasses~0', neck: 'knit-scarf~0' });
+    expect(book.setEquipped(CID, undefined, { head: 'beanie~1', neck: 'cape~2' }, MON + 4)).toBeUndefined();
+  });
+
   it('pays a duplicate in feathers and sells from the shop once', () => {
     const { store, book } = rig();
     expect(book.award(CID, 'cape~2', 'quest', MON)).toEqual({ variant: 'cape~2', dup: false, feathers: 0 });
