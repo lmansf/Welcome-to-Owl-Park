@@ -6887,7 +6887,7 @@
     },
     "kit-cut-earth-cap-left": {
       "w": 160,
-      "h": 120,
+      "h": 200,
       "kind": "piece",
       "key_colour": "#FF00FF",
       "format": "webp",
@@ -6895,7 +6895,7 @@
     },
     "kit-cut-earth-cap-right": {
       "w": 160,
-      "h": 120,
+      "h": 200,
       "kind": "piece",
       "key_colour": "#FF00FF",
       "format": "webp",
@@ -6903,7 +6903,7 @@
     },
     "kit-cut-earth-mid-320": {
       "w": 320,
-      "h": 120,
+      "h": 200,
       "kind": "piece",
       "key_colour": "#FF00FF",
       "format": "webp",
@@ -6911,7 +6911,7 @@
     },
     "kit-cut-earth-mid-480": {
       "w": 480,
-      "h": 120,
+      "h": 200,
       "kind": "piece",
       "key_colour": "#FF00FF",
       "format": "webp",
@@ -6919,7 +6919,7 @@
     },
     "kit-cut-earth-mid-640": {
       "w": 640,
-      "h": 120,
+      "h": 200,
       "kind": "piece",
       "key_colour": "#FF00FF",
       "format": "webp",

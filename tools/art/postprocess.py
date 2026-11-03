@@ -759,9 +759,102 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def run_bands(alpha: np.ndarray, share: float = 0.2, solid: int = 128, attach_share: float = 0.02) -> list[tuple[int, int, int, int]]:
+    """The continuous runs on a keyed run image as boxes (x0, y0, x1, y1): the rows where at least
+    ``share`` of the width is solid (alpha over ``solid``) make a run; the run then takes in the
+    rows above and below it, while they hold a little solid paint inside its columns (a rail's
+    posts, roots under a bank), and its columns are where those rows are solid. A moon, a lantern
+    or a glow beside a run is narrow or faint, so it never makes a band and a faint glow never
+    joins one; a moon straight above a run joins it only across solid rows."""
+    on = alpha > solid
+    h, w = on.shape
+    counts = on.sum(axis=1)
+    rows = counts >= share * w
+    bands: list[tuple[int, int, int, int]] = []
+    y = 0
+    while y < h:
+        if not rows[y]:
+            y += 1
+            continue
+        y0 = y
+        while y < h and rows[y]:
+            y += 1
+        y1 = y
+        core0, core1 = y0, y1
+        cols = np.nonzero(on[y0:y1].any(axis=0))[0]
+        if len(cols) == 0:
+            continue
+        x0, x1 = int(cols.min()), int(cols.max()) + 1
+        need = attach_share * (x1 - x0)
+        while y0 > 0 and on[y0 - 1, x0:x1].sum() >= need:
+            y0 -= 1
+        while y1 < h and on[y1, x0:x1].sum() >= need:
+            y1 += 1
+        cols = np.nonzero(on[y0:y1].any(axis=0))[0]
+        bands.append((int(cols.min()), y0, int(cols.max()) + 1, y1, core0, core1))
+        y = max(y, y1)
+    return bands
+
+
+def own_run_alpha(crop: Image.Image, core: tuple[int, int], pad: int = 2) -> tuple[Image.Image, int]:
+    """``crop`` with only the run's own paint: the solid blobs that reach the run's core rows
+    (``core``, in the crop's coordinates), grown by ``pad`` quarter-size pixels so their soft
+    edges stay; a moon or a glow that sits in the box but never touches the run is cleared."""
+    alpha = np.asarray(crop.getchannel("A"))
+    solid = np.where(alpha > 128, alpha, 0).astype(np.uint8)
+    blobs = sheet_blobs(solid, scale=4, grow=0, min_px=16)
+    keep = None
+    for b in blobs:
+        if b["bbox"][1] < core[1] and b["bbox"][3] > core[0]:
+            keep = b["mask"] if keep is None else (keep | b["mask"])
+    if keep is None:
+        return crop, 0
+    for _ in range(pad):
+        g = keep.copy()
+        g[1:] |= keep[:-1]; g[:-1] |= keep[1:]; g[:, 1:] |= keep[:, :-1]; g[:, :-1] |= keep[:, 1:]
+        keep = g
+    own = np.kron(keep, np.ones((4, 4), dtype=bool))
+    full = np.zeros(alpha.shape, dtype=bool)
+    full[:own.shape[0], :own.shape[1]] = own[:alpha.shape[0], :alpha.shape[1]]
+    cleared = int(((alpha > 0) & ~full).sum())
+    out = crop.copy()
+    out.putalpha(Image.fromarray((alpha * full).astype(np.uint8), "L"))
+    return out, cleared
+
+
+def _grow(m: np.ndarray, n: int) -> np.ndarray:
+    for _ in range(n):
+        g = m.copy()
+        g[1:] |= m[:-1]; g[:-1] |= m[1:]; g[:, 1:] |= m[:, :-1]; g[:, :-1] |= m[:, 1:]
+        m = g
+    return m
+
+
+def _shrink(m: np.ndarray, n: int) -> np.ndarray:
+    for _ in range(n):
+        g = m.copy()
+        g[1:] &= m[:-1]; g[:-1] &= m[1:]; g[:, 1:] &= m[:, :-1]; g[:, :-1] &= m[:, 1:]
+        m = g
+    return m
+
+
+def clear_mist(img: Image.Image, max_sat: float = 0.3, min_val: float = 0.55, keep_near: int = 4, speck: int = 2) -> tuple[Image.Image, int]:
+    """Make the pale mist painted over the key transparent: bright, grey pixels that are not
+    within ``keep_near`` px of the subject's opaque body (its opaque paint shrunk by ``speck`` px,
+    so the mist's own opaque specks do not count as subject and a bright edge keeps its fringe)."""
+    arr = np.array(img if img.mode == "RGBA" else img.convert("RGBA"))
+    hsv = np.asarray(Image.fromarray(arr[..., :3], "RGB").convert("HSV")).astype(np.float32) / 255.0
+    a = arr[..., 3]
+    mist = (a > 0) & (hsv[..., 1] < max_sat) & (hsv[..., 2] > min_val)
+    near = _grow(_shrink(a >= 250, speck), keep_near + speck)
+    mist &= ~near
+    arr[mist, 3] = 0
+    return Image.fromarray(arr, "RGBA"), int(mist.sum())
+
+
 def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
     """A recut run image (OP-251): three continuous runs of one material stacked on the key colour.
-    Each run is found as a wide blob, scaled so its height is twice its row's logical height, and
+    Each run is found as a band of rows mostly opaque, scaled so its height is twice its row's logical height, and
     cut into a left cap, a right cap and middle pieces of the recut's lengths taken from different
     stretches of the run (so no two are the same copy), each shipped as kit-cut-<row>-<part> at 1x
     and 2x with the alpha exact."""
@@ -780,27 +873,47 @@ def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
     if a.clear_haze:
         rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
         note(f"{key}: clear-haze {n} px")
+    if a.clear_glow:
+        # the pale glow painted along a run on the key: pink-white, in the key's hue but washed out
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"], min_sat=a.clear_glow, min_val=0.6)
+        note(f"{key}: clear-glow {n} px")
+    if a.clear_mist:
+        rgba, n = clear_mist(rgba)
+        note(f"{key}: clear-mist {n} px")
     alpha = np.asarray(rgba.getchannel("A"))
-    blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
     n = len(run["rows"])
-    if len(blobs) < n:
-        raise ArtError(f"{key}: {len(blobs)} run(s) found, not {n}; the image painted fewer runs or two touch; pick another candidate")
-    ordered = sorted(blobs[:n], key=lambda b: b["cy"])
+    bands = run_bands(alpha, a.band_share)
+    if len(bands) < n:
+        raise ArtError(f"{key}: {len(bands)} run(s) found, not {n}; the image painted fewer runs or two touch; pick another candidate")
+    ordered = sorted(sorted(bands, key=lambda b: -(b[5] - b[4]) * (b[2] - b[0]))[:n], key=lambda b: b[1])
     review = rgba.convert("RGB")
     drw = ImageDraw.Draw(review)
     only = set(a.only.split(",")) if a.only else None
     done = 0
-    scale = 4
-    for i, (row, blob) in enumerate(zip(run["rows"], ordered)):
-        x0, y0, x1, y1 = blob["bbox"]
+    need = 2 * cap + max(lengths)
+    for i, (row, (x0, y0, x1, y1, c0, c1)) in enumerate(zip(run["rows"], ordered)):
+        if only and not any(f"kit-cut-{row['name']}-{part}" in only or part in only for part in ("cap-left", "cap-right", *[f"mid-{L}" for L in lengths])):
+            continue
         drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
-        own = np.kron(blob["mask"], np.ones((scale, scale), dtype=bool))[:alpha.shape[0], :alpha.shape[1]]
-        crop = rgba.crop((x0, y0, x1, y1))
-        ca = np.asarray(crop.getchannel("A")).astype(np.uint8) * own[y0:y1, x0:x1]
-        crop.putalpha(Image.fromarray(ca, "L"))
-        # the run at 2x: its height is twice the row's logical height
+        crop, stray = own_run_alpha(rgba.crop((x0, y0, x1, y1)), (c0 - y0, c1 - y0))
+        if stray:
+            note(f"{key}: the {row['name']} run's box held {stray} px not its own (a moon, a glow), cleared")
+        # the box shrinks to the run's own paint
+        bb = crop.getbbox()
+        if bb and bb != (0, 0, crop.width, crop.height):
+            crop = crop.crop(bb); x0, y0, x1, y1 = x0 + bb[0], y0 + bb[1], x0 + bb[2], y0 + bb[3]
+        # the run at 2x: its height is twice the row's logical height; a run painted a little short
+        # for the longest middle is scaled by its width instead and squashed to the row's height
         H2 = 2 * int(row["h"])
         k = H2 / crop.height
+        squash = 1.0
+        if crop.width * k < 2 * need:
+            kw = 2 * need / crop.width
+            squash = kw / k
+            if squash > 1 + a.max_squash:
+                raise ArtError(f"{key}: the {row['name']} run is too short for a {max(lengths)} px middle piece ({int(crop.width * k / 2)} px at 1x between caps; squashing it {squash:.2f}x is over --max-squash {a.max_squash}); pick a candidate painted longer")
+            k = kw
+            note(f"{key}: the {row['name']} run squashed {squash:.3f}x to fit a {max(lengths)} px middle")
         run2 = crop.resize((max(1, int(round(crop.width * k))), H2), Image.Resampling.LANCZOS)
         parts: list[tuple[str, int, int]] = [("cap-left", 0, 2 * cap), ("cap-right", run2.width - 2 * cap, run2.width)]
         inner0, inner1 = 2 * cap, run2.width - 2 * cap
@@ -822,7 +935,7 @@ def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
                 two = two.resize((2 * W, 2 * Hl), Image.Resampling.LANCZOS)
             one = downsample(two, W, Hl)
             outputs, lines = finish_cutout_webp(ctx, pkey, one, two)
-            tools = [f"runs: {key} run {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''} part={part} span2x={px0}-{px1} of {run2.width}", *lines]
+            tools = [f"runs: {key} run {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''}{f' clear-glow={a.clear_glow}' if a.clear_glow else ''}{' clear-mist' if a.clear_mist else ''}{f' squash={squash:.3f}' if squash != 1.0 else ''} part={part} span2x={px0}-{px1} of {run2.width}", *lines]
             save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
                                           "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "run": {"key": key, "row": i + 1, "bbox": [x0, y0, x1, y1], "part": part, "span2x": [px0, px1]}})
             sx = x0 + px0 / k; ex = x0 + px1 / k
@@ -2384,9 +2497,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--raw", default=None)
     add_chroma_flags(sp)
     sp.add_argument("--only", default=None, help="comma-separated parts (cap-left, mid-480) or piece keys to cut; default all")
-    sp.add_argument("--grow", type=int, default=3, help="how far (in quarter-size pixels) a run's parts may be apart and still count as one run")
+    sp.add_argument("--band-share", type=float, default=0.2, help="share of the width a row must cover to belong to a run (a moon or lantern beside a run covers less)")
     sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze transparent before the cut")
-    sp.add_argument("--min-blob", type=int, default=400, help="px below which a blob is not a run")
+    sp.add_argument("--clear-glow", type=float, default=None, help="also clear the washed-out glow in the key's hue down to this saturation (0.2 clears a pink-white halo)")
+    sp.add_argument("--clear-mist", action="store_true", help="clear the pale grey mist painted over the key (bright, grey, part-transparent paint away from the run's opaque edge)")
+    sp.add_argument("--max-squash", type=float, default=0.15, help="how much a run painted short may be squashed in height to fit the longest middle piece")
     add_common(sp)
     sp.set_defaults(fn=cmd_runs)
 
