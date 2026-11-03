@@ -1,4 +1,5 @@
 import type { Vec2 } from '@owl-park/shared';
+import { releaseOnTyping, typingInField } from './typing';
 
 /**
  * Keyboard controls: WASD and the arrow keys walk the owl while held (in a room seen from the side,
@@ -95,9 +96,7 @@ export interface Keys {
 
 /** A key press that belongs to a text field or a browser shortcut, not to the park. */
 function ignored(e: KeyboardEvent): boolean {
-  if (e.ctrlKey || e.metaKey || e.altKey) return true;
-  const t = e.target as HTMLElement | null;
-  return !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+  return e.ctrlKey || e.metaKey || e.altKey || typingInField(e);
 }
 
 /**
@@ -162,6 +161,8 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
   win.addEventListener('keyup', onUp);
   win.addEventListener('blur', release);
   win.document.addEventListener('visibilitychange', onVisibility);
+  // A text field taking the focus lets go of held keys: their key-ups go to the field.
+  const stopTyping = releaseOnTyping(win.document, release);
   return {
     direction: () => heldDirection(held),
     detach() {
@@ -169,6 +170,7 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
       win.removeEventListener('keyup', onUp);
       win.removeEventListener('blur', release);
       win.document.removeEventListener('visibilitychange', onVisibility);
+      stopTyping();
       held.clear();
     },
   };
