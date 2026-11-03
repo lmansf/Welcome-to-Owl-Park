@@ -219,15 +219,15 @@ assembler (OP-234) builds screens from the published files, whose format is this
   after. No `@2x`: the assembler scales the tile.
 - **Shape sheets** are the helper keys `kit-sheet-<name>` (eighteen of them): one 2048 x 1152
   painting on magenta `#FF00FF` with six props in a grid of three across and two down, listed in
-  `kit.json` in reading order. `art:finish pieces <key>` keys the sheet out, cuts each cell, trims
-  the prop and fits it (contain, bottom-aligned, 2 % margin) into the piece's logical canvas, and
+  `kit.json` in reading order. `art:finish pieces <key>` keys the sheet out, finds the six props as blobs (the painter's grid
+  is never exact) and takes them in reading order, trims each to its own pixels and fits it (contain, bottom-aligned, 2 % margin) into the piece's logical canvas, and
   ships it as the public key `kit-<piece>`: `kit-<piece>.webp` (1x, w x h from the table) and
   `kit-<piece>@2x.webp`, RGBA with the alpha exact, each with its own post record naming the sheet
   and cell. Pieces that repeat (`*-mid`) are cut straight at both ends; caps (`*-cap-left`,
   `*-cap-right`) end a run; slopes rise left to right (`*-slope-up`) or fall (`*-slope-down`).
   `packages/shared/src/sprites.json` records each piece's drawn box, centre and solid box, as for
-  any cut-out, which is what the assembler should place by. A cell whose prop reaches the cell's
-  edge is cut as it is and warned about; an empty cell refuses the candidate.
+  any cut-out, which is what the assembler should place by. Fewer than six props refuses the candidate; a small extra blob
+  (a leaf, a lantern on a thread) is dropped with a warning.
 - **Sizes**: a sheet gives its pieces one logical size (`w`, `h` in `kit.json`); a piece may set its
   own. The same sizes sit in `apps/park/src/game/art.ts` (kind `texture` or `piece`) and
   `config/assets.json`, which the tests hold in step with `kit.json`.

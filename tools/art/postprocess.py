@@ -595,10 +595,89 @@ def cmd_texture(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def sheet_blobs(alpha: np.ndarray, scale: int = 4, grow: int = 3, min_px: int = 400) -> list[dict]:
+    """The props on a keyed sheet as blobs: the alpha pooled down by ``scale``, grown by ``grow``
+    pooled pixels (so a lantern on its thread stays with its hook), labelled into connected
+    components; each blob's full-size bbox, area and centroid, largest first."""
+    h, w = alpha.shape
+    H, W = h // scale, w // scale
+    m = (alpha[:H * scale, :W * scale].reshape(H, scale, W, scale).max(axis=(1, 3)) > 8)
+    for _ in range(grow):
+        g = m.copy()
+        g[1:] |= m[:-1]; g[:-1] |= m[1:]; g[:, 1:] |= m[:, :-1]; g[:, :-1] |= m[:, 1:]
+        m = g
+    labels = np.zeros((H, W), dtype=np.int32)
+    parent: list[int] = [0]
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]; x = parent[x]
+        return x
+
+    nxt = 1
+    for y in range(H):
+        row = m[y]
+        for x in range(W):
+            if not row[x]:
+                continue
+            up = labels[y - 1, x] if y else 0
+            left = labels[y, x - 1] if x else 0
+            if up and left:
+                a, b = find(up), find(left)
+                labels[y, x] = a
+                if a != b:
+                    parent[b] = a
+            elif up or left:
+                labels[y, x] = up or left
+            else:
+                parent.append(nxt); labels[y, x] = nxt; nxt += 1
+    flat = np.array([find(i) for i in range(nxt)], dtype=np.int32)
+    labels = flat[labels]
+    out = []
+    for lab in np.unique(labels):
+        if lab == 0:
+            continue
+        ys, xs = np.nonzero(labels == lab)
+        # the blob's own pixels at full size (not the grown ones): the alpha inside its grown box
+        x0, y0 = int(max(0, (xs.min() - grow) * scale)), int(max(0, (ys.min() - grow) * scale))
+        x1, y1 = int(min(w, (xs.max() + 1 + grow) * scale)), int(min(h, (ys.max() + 1 + grow) * scale))
+        sub = alpha[y0:y1, x0:x1] > 8
+        if not sub.any():
+            continue
+        sy, sx = np.nonzero(sub)
+        area = int(sub.sum())
+        if area < min_px:
+            continue
+        out.append({"bbox": [int(x0 + sx.min()), int(y0 + sy.min()), int(x0 + sx.max() + 1), int(y0 + sy.max() + 1)], "area": area,
+                    "cx": x0 + float(sx.mean()), "cy": y0 + float(sy.mean()), "mask": (labels == lab)})
+    out.sort(key=lambda b: -b["area"])
+    return out
+
+
+def order_blobs(blobs: list[dict], cols: int, rows: int) -> list[dict]:
+    """The sheet's ``cols * rows`` largest blobs in reading order: split into rows at the widest gap
+    between centroid heights, each row left to right."""
+    keep = sorted(blobs[: cols * rows], key=lambda b: b["cy"])
+    if rows > 1 and len(keep) > rows:
+        gaps = [keep[i + 1]["cy"] - keep[i]["cy"] for i in range(len(keep) - 1)]
+        cuts = sorted(sorted(range(len(gaps)), key=lambda i: -gaps[i])[: rows - 1])
+        groups, start = [], 0
+        for c in cuts:
+            groups.append(keep[start:c + 1]); start = c + 1
+        groups.append(keep[start:])
+    else:
+        groups = [keep]
+    out = []
+    for g in groups:
+        out.extend(sorted(g, key=lambda b: b["cx"]))
+    return out
+
+
 def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
-    """A kit shape sheet (OP-229): the candidate keyed out, its grid of three by two cells cut,
-    each cell's prop trimmed and fitted into its piece's logical canvas at 2x, shipped as the
-    piece's WebP cut-outs (1x and 2x) with the alpha exact, one post record per piece."""
+    """A kit shape sheet (OP-229): the candidate keyed out, its props found as blobs (the painter's
+    grid is never exact, so the six are taken in reading order of where they sit), each trimmed to
+    its own pixels and fitted into its piece's logical canvas at 2x, shipped as the piece's WebP
+    cut-outs (1x and 2x) with the alpha exact, one post record per piece."""
     key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
     kit = kit_table()
     name = key.removeprefix("kit-sheet-")
@@ -610,43 +689,41 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
     rgba, cinfo = key_out(img, chroma_params(a, kc))
     cols, rows = 3, 2
-    cw, ch = rgba.width / cols, rgba.height / rows
     alpha = np.asarray(rgba.getchannel("A"))
+    blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
+    n = cols * rows
+    if len(blobs) < n:
+        raise ArtError(f"{key}: {len(blobs)} prop(s) found, not {n}; the sheet painted fewer props or two touch (try --grow 1); pick another candidate")
+    extra = blobs[n:]
+    if extra:
+        note(f"warning: {key}: {len(extra)} small blob(s) past the six props dropped (largest {extra[0]['area']} px); a lantern on a thread or a leaf may be lost")
+    ordered = order_blobs(blobs, cols, rows)
     only = set(a.only.split(",")) if a.only else None
     review = rgba.convert("RGB")
     drw = ImageDraw.Draw(review)
     done = 0
-    for i, piece in enumerate(sheet["pieces"]):
+    scale = 4
+    for i, (piece, blob) in enumerate(zip(sheet["pieces"], ordered)):
         pkey = f"kit-{piece['name']}"
+        x0, y0, x1, y1 = blob["bbox"]
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        drw.text((x0 + 6, max(0, y0 - 16)), f"{i + 1} {pkey}", fill=(255, 255, 255))
         if only and pkey not in only and piece["name"] not in only:
             continue
-        x0, y0 = int(round((i % cols) * cw)), int(round((i // cols) * ch))
-        x1, y1 = int(round((i % cols + 1) * cw)), int(round((i // cols + 1) * ch))
-        cell = alpha[y0:y1, x0:x1] > 8
-        ys, xs = np.nonzero(cell)
-        if not len(ys):
-            raise ArtError(f"{key}: cell {i + 1} ({pkey}) is empty; the sheet painted fewer than six props or they strayed; pick another candidate")
-        bx0, by0, bx1, by1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
-        touches = bx0 == 0 or by0 == 0 or bx1 == x1 - x0 or by1 == y1 - y0
-        if touches:
-            note(f"warning: {key}: cell {i + 1} ({pkey}) reaches its cell's edge; the prop may be cut or joined to a neighbour")
-        pad = 4
-        crop = rgba.crop((max(x0, x0 + bx0 - pad), max(y0, y0 + by0 - pad), min(x1, x0 + bx1 + pad), min(y1, y0 + by1 + pad)))
+        # the blob's own pixels only: another prop's overhang into this box is cleared
+        own = np.kron(blob["mask"], np.ones((scale, scale), dtype=bool))[:alpha.shape[0], :alpha.shape[1]]
+        crop = rgba.crop((x0, y0, x1, y1))
+        ca = np.asarray(crop.getchannel("A")).astype(np.uint8) * own[y0:y1, x0:x1]
+        crop.putalpha(Image.fromarray(ca, "L"))
         W, H = logical_size(pkey, ctx.assets)
         canvas2x, finfo = fit_contain(crop, 2 * W, 2 * H, a.margin, 0.5, 0, a.valign)
         one = downsample(canvas2x, W, H)
         outputs, lines = finish_cutout_webp(ctx, pkey, one, canvas2x)
-        tools = [f"sheet: {key} cell {i + 1} of {cols}x{rows} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}" + (" edge-touching" if touches else ""), *lines]
+        tools = [f"pieces: {key} prop {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}", *lines]
         save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
-                                      "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo, "sheet": {"key": key, "cell": i + 1, "bbox": [x0 + bx0, y0 + by0, x0 + bx1, y0 + by1]}})
-        drw.rectangle((x0 + bx0, y0 + by0, x0 + bx1 - 1, y0 + by1 - 1), outline=(0, 255, 0) if not touches else (255, 64, 64), width=3)
-        drw.text((x0 + 8, y0 + 8), f"{i + 1} {pkey}", fill=(255, 255, 255))
-        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (cell {i + 1}, {bx1 - bx0}x{by1 - by0} px)")
+                                      "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo, "sheet": {"key": key, "cell": i + 1, "bbox": [x0, y0, x1, y1]}})
+        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (prop {i + 1}, {x1 - x0}x{y1 - y0} px)")
         done += 1
-    for cx in range(1, cols):
-        drw.line((cx * cw, 0, cx * cw, rgba.height), fill=(255, 255, 0), width=2)
-    for ry in range(1, rows):
-        drw.line((0, ry * ch, rgba.width, ry * ch), fill=(255, 255, 0), width=2)
     rvp = write_review(ctx, f"{key}.png", review)
     note(f"sheet {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
     return 0
@@ -1807,6 +1884,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--raw", default=None)
     add_chroma_flags(sp)
     sp.add_argument("--only", default=None, help="comma-separated piece names (or keys) to cut; default all six")
+    sp.add_argument("--grow", type=int, default=3, help="how far (in quarter-size pixels) a prop's parts may be apart and still count as one prop")
+    sp.add_argument("--min-blob", type=int, default=400, help="px below which a blob is not a prop")
     sp.add_argument("--margin", type=float, default=0.02)
     sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom")
     add_common(sp)
