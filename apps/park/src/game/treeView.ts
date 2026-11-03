@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
+import type { Barrier, DoorDef, Polygon, RoomDef } from '@owl-park/shared';
 
 /**
  * What makes a room of the tree (map 2) read at a glance (OP-173): what an owl can stand on, what is in
@@ -18,7 +18,13 @@ import type { DoorDef, Polygon, RoomDef } from '@owl-park/shared';
  * - Painted glows that do nothing yet (`shades`) are shaded darker, so they do not read as things to use:
  *   each shade follows the painted shape and fades in over its edge, so it reads as shadow, not a box.
  * - A doorway to another room has a mark over its arch (`markAt`): the bright, simple sign of a way
- *   through, in the colours of the '!' over an owl to talk to (OP-114).
+ *   through, in the colours of the '!' over an owl to talk to (OP-114). A stair's mark points the way it
+ *   goes, up or down (`way`, OP-220).
+ * - What shuts a way not open yet (`barriers`, OP-220) is drawn by the game, never painted: a locked gate,
+ *   a rope across, a fallen branch or boards over an arch, each with its sign (an approved phrase) and a
+ *   warm glow behind it that says shut for now, not for good.
+ * - Where a stair's doorway stands and the painting shows no stair (`landings`, OP-220), the game draws
+ *   a stairhead going down through the boardwalk.
  *
  * TODO-DOCS (OP-173): docs/MAP.md (the tree's style sheet): the one look for ledges (the bright edge,
  * drawn by the game), fronts and shades in the room data and what each is for, the doorway mark, and the
@@ -51,6 +57,8 @@ export interface TreeDepths {
   /** Over the playfield, under the owls. */
   shade: number;
   lip: number;
+  /** A barrier and a stairhead, over the playfield and its glows, under the owls (OP-220). */
+  barrier: number;
   /** Over the owls, under the overlay. */
   front: number;
   /** Over the owls on ledges (drawn a band back), under the owls on the floor. */
@@ -66,6 +74,10 @@ export interface TreeDress {
   shades: number;
   lips: number;
   marks: number;
+  /** The barriers drawn over closed doorways and the ways that lead nowhere yet (OP-220). */
+  barriers: number;
+  /** The stairheads drawn where a stair's doorway has no painted stair (OP-220). */
+  landings: number;
 }
 
 /** The dressing of a room, and how to cut its fronts again when a tile's picture is swapped for a sharper one. */
@@ -154,7 +166,16 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
     pill.arc(0, -3, 8, Math.PI, 0, false);
     pill.lineTo(8, 13);
     pill.strokePath();
-    pill.fillStyle(MARK.gold, 1).fillCircle(0, 4, 3.4);
+    if (door.way) {
+      // A stair's mark points the way it goes (OP-220): a chevron in the arch, up or down.
+      const d = door.way === 'up' ? -1 : 1;
+      pill.lineStyle(3, MARK.gold, 1);
+      pill.beginPath();
+      pill.moveTo(-4.5, 4 - d * 2.5);
+      pill.lineTo(0, 4 + d * 2.5);
+      pill.lineTo(4.5, 4 - d * 2.5);
+      pill.strokePath();
+    } else pill.fillStyle(MARK.gold, 1).fillCircle(0, 4, 3.4);
     const mark = scene.add.container(door.markAt.x, door.markAt.y, [pill]).setDepth(opts.depths.mark);
     if (opts.onMarkTap) {
       const tap = opts.onMarkTap;
@@ -165,6 +186,20 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
     marks++;
   }
 
+  const shut = scene.add.graphics().setDepth(opts.depths.barrier);
+  for (const l of room.landings ?? []) drawLanding(shut, l.x, l.w, opts.ground);
+  for (const b of room.barriers ?? []) {
+    const glow = scene.add.image(b.x + b.w / 2, opts.ground - 70, 'fx-glow').setTint(BARRIER.glow).setAlpha(BARRIER.glowAlpha).setScale(Math.max(0.9, b.w / 150), 1);
+    glow.setDepth(opts.depths.barrier - 0.01).setBlendMode(Phaser.BlendModes.ADD);
+    if (!opts.calm) scene.tweens.add({ targets: glow, alpha: BARRIER.glowAlpha * 1.6, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    drawBarrier(shut, b, opts.ground);
+    const sign = scene.add
+      .text(b.x + b.w / 2, opts.ground - BARRIER.signY, b.sign, { fontFamily: 'system-ui, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#2B1C12', backgroundColor: '#F6F1E3', padding: { x: 9, y: 5 } })
+      .setOrigin(0.5)
+      .setDepth(opts.depths.barrier + 0.01);
+    sign.setName(`barrier-sign:${b.id}`);
+  }
+
   return {
     fronts: cuts.length,
     raised: cuts.filter((c) => c.raised).length,
@@ -172,6 +207,8 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
     shades,
     lips: perches.length,
     marks,
+    barriers: room.barriers?.length ?? 0,
+    landings: room.landings?.length ?? 0,
     // A tile sharpened (sharpenArt swaps its texture): its fronts are cut again from the sharper picture.
     recut(key: string) {
       for (const c of cuts) {
@@ -253,4 +290,79 @@ function cutFront(scene: Phaser.Scene, tile: Phaser.GameObjects.Image, id: strin
   const x0 = Math.floor(Math.min(...poly.map((p) => p.x)));
   const y0 = Math.floor(Math.min(...poly.map((p) => p.y)));
   return scene.add.image(x0, y0, tex.key).setOrigin(0).setDisplaySize(tex.w, tex.h);
+}
+
+/** A barrier's look (OP-220): wood, cream rope, gold lock, and the warm glow behind that says not for ever. */
+const BARRIER = { wood: 0x5c4632, dark: 0x2b1c12, rope: 0xf6f1e3, gold: 0xc9a227, leaf: 0x3e5a3a, glow: 0xffd36a, glowAlpha: 0.22, signY: 140 } as const;
+
+/** Draws barrier `b` standing on the floor at `ground` (room px), its sign drawn apart. */
+function drawBarrier(g: Phaser.GameObjects.Graphics, b: Barrier, ground: number): void {
+  const x0 = b.x;
+  const x1 = b.x + b.w;
+  const post = (x: number, h: number) => {
+    g.fillStyle(BARRIER.dark, 1).fillRect(x - 6, ground - h, 12, h);
+    g.fillStyle(BARRIER.wood, 1).fillRect(x - 4, ground - h + 2, 8, h - 2);
+    g.fillStyle(BARRIER.gold, 1).fillCircle(x, ground - h, 5);
+  };
+  switch (b.kind) {
+    case 'gate': {
+      // Two low gate leaves between posts, a chain across and a padlock at the middle.
+      post(x0, 110);
+      post(x1, 110);
+      g.lineStyle(5, BARRIER.wood, 1);
+      for (let x = x0 + 12; x < x1 - 6; x += 12) g.lineBetween(x, ground - 96, x, ground - 4);
+      g.lineStyle(6, BARRIER.dark, 1).lineBetween(x0, ground - 92, x1, ground - 92).lineBetween(x0, ground - 20, x1, ground - 20);
+      g.lineStyle(3, BARRIER.gold, 1).lineBetween(x0, ground - 60, x1, ground - 56);
+      const mx = (x0 + x1) / 2;
+      g.fillStyle(BARRIER.gold, 1).fillRoundedRect(mx - 9, ground - 62, 18, 16, 3);
+      g.lineStyle(3, BARRIER.gold, 1).strokeCircle(mx, ground - 64, 6);
+      break;
+    }
+    case 'rope': {
+      // A rope slung between two posts, sagging, a second one under it.
+      post(x0, 96);
+      post(x1, 96);
+      for (const [y, sag] of [[86, 18], [50, 12]] as const) {
+        const curve = new Phaser.Curves.QuadraticBezier(new Phaser.Math.Vector2(x0, ground - y), new Phaser.Math.Vector2((x0 + x1) / 2, ground - y + sag * 2), new Phaser.Math.Vector2(x1, ground - y));
+        g.lineStyle(5, BARRIER.rope, 0.95);
+        curve.draw(g, 24);
+      }
+      break;
+    }
+    case 'branch': {
+      // A fallen branch lying across the way, propped on a stump, a twig and a few leaves up from it.
+      g.fillStyle(BARRIER.dark, 1).fillRect(x0 + 6, ground - 34, 18, 34);
+      g.fillStyle(BARRIER.dark, 1).fillTriangle(x0 - 10, ground - 36, x1 + 12, ground - 70, x1 + 12, ground - 52);
+      g.fillStyle(BARRIER.dark, 1).fillTriangle(x0 - 10, ground - 36, x1 + 12, ground - 52, x0 - 6, ground - 22);
+      g.lineStyle(10, BARRIER.wood, 1).lineBetween(x0 - 8, ground - 30, x1 + 10, ground - 62);
+      g.lineStyle(5, BARRIER.wood, 1).lineBetween((x0 + x1) / 2, ground - 46, (x0 + x1) / 2 + 14, ground - 104);
+      const mx = (x0 + x1) / 2;
+      g.fillStyle(BARRIER.leaf, 1);
+      for (const [lx, ly] of [[mx + 14, 104], [mx + 22, 96], [mx + 6, 96], [x0 - 10, 40], [x1 + 8, 74]] as const) g.fillEllipse(lx, ground - ly, 16, 10);
+      break;
+    }
+    case 'boards': {
+      // Planks nailed across the arch, crossing, with gaps the glow shows through.
+      const h = 150;
+      g.fillStyle(BARRIER.dark, 0.55).fillRect(x0, ground - h, b.w, h);
+      for (const [y, tilt] of [[h - 22, -10], [h - 62, 8], [h - 104, -6], [32, 6]] as const) {
+        g.fillStyle(BARRIER.dark, 1).fillPoints([{ x: x0 - 6, y: ground - y - 9 + tilt }, { x: x1 + 6, y: ground - y - 9 - tilt }, { x: x1 + 6, y: ground - y + 9 - tilt }, { x: x0 - 6, y: ground - y + 9 + tilt }], true);
+        g.fillStyle(BARRIER.wood, 1).fillPoints([{ x: x0 - 4, y: ground - y - 7 + tilt }, { x: x1 + 4, y: ground - y - 7 - tilt }, { x: x1 + 4, y: ground - y + 7 - tilt }, { x: x0 - 4, y: ground - y + 7 + tilt }], true);
+        g.fillStyle(BARRIER.gold, 1).fillCircle(x0 + 6, ground - y + tilt, 2.5).fillCircle(x1 - 6, ground - y - tilt, 2.5);
+      }
+      break;
+    }
+  }
+}
+
+/** A stairhead going down through the boardwalk from x to x + w (OP-220): the opening, its first treads, a post each side and a rail. */
+function drawLanding(g: Phaser.GameObjects.Graphics, x: number, w: number, ground: number): void {
+  g.fillStyle(0x07122a, 0.92).fillRect(x + 8, ground - 2, w - 16, 64);
+  g.fillStyle(BARRIER.wood, 1);
+  for (let i = 0; i < 4; i++) g.fillRect(x + 12 + i * 12, ground + 6 + i * 14, w - 24 - i * 24, 6);
+  for (const px of [x + 4, x + w - 4]) {
+    g.fillStyle(BARRIER.dark, 1).fillRect(px - 5, ground - 64, 10, 64);
+    g.fillStyle(BARRIER.gold, 1).fillCircle(px, ground - 66, 5);
+  }
+  g.lineStyle(5, BARRIER.wood, 1).lineBetween(x + 4, ground - 58, x + w - 4, ground - 58);
 }

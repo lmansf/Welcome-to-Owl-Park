@@ -834,7 +834,7 @@ export class RoomScene extends Phaser.Scene {
         // A kit room's ledges carry their own edge, the cap.
         lips: !art.kit,
         // A raised front lies between the owls on ledges (drawn TREE_RAISED_BAND back) and those on the floor.
-        depths: { shade: -0.9, lip: -0.8, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
+        depths: { shade: -0.9, lip: -0.8, barrier: -0.7, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
         open: (door) => !this.realmClosed(this.doorTo(door)?.room),
         calm: this.calm(),
         onMarkTap: (door) => this.walkToDoorway(door.id),
@@ -1854,7 +1854,7 @@ export class RoomScene extends Phaser.Scene {
         .filter(({ img }) => (img.getData('fade') ?? 'middle') === 'middle')
         .map(({ t, img }) => ({ key: t.key, rate: img.scrollFactorX, x: img.x, y: img.y, w: img.displayWidth, h: img.displayHeight, fade: tileFade(t) })),
       owlScale: this.me.scaleX / (OWL_SCALE * speciesOf(this.look).size),
-      tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, behind: this.me.depth < this.treeDress.raisedDepth },
+      tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, barriers: this.treeDress.barriers, landings: this.treeDress.landings, behind: this.me.depth < this.treeDress.raisedDepth },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.spectator ? null : this.quests.markFor(n.id), approach: n.approaching })),

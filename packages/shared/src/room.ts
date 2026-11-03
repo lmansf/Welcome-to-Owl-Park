@@ -100,6 +100,21 @@ export interface RoomDef {
   /** How big owls are drawn here against today's park (the tree's owl stands a sixth of the screen's height: 1.25). */
   owlScale?: number;
   /**
+   * In a room seen from the side (the tree, OP-220): what shuts a way that is not open yet, drawn by the
+   * game over the playfield, never painted. Each stands on the floor from `x` to `x + w` with its sign
+   * (one of `CLOSED_SIGNS`): one in every closed doorway, under that doorway's own id, and one at the foot
+   * of every way that looks like it leads on and does not (a bough's parkour, a roof run): there the
+   * floor ends at the barrier or runs on past it, and no ledge stands over it or beyond it. A warm glow
+   * behind each says it is shut for now, not for good.
+   */
+  barriers?: Barrier[];
+  /**
+   * In a room seen from the side (OP-220): a stairhead the game draws where a stair's doorway stands and
+   * the painting shows no stair (a flight going down through the boardwalk), under that doorway's id,
+   * on the floor from `x` to `x + w`.
+   */
+  landings?: Array<{ id: string; x: number; w: number }>;
+  /**
    * A room built from the art kit (OP-234) instead of painted screens: seamless textures over its
    * surfaces, shape pieces along its ledges, stairs, doorways and barriers, decals, and backdrop layers
    * per stretch of screens (RoomKit). The kit's backdrops are the room's `backgrounds` and `foregrounds`
@@ -230,6 +245,21 @@ export interface KitBackdrop {
   front?: boolean;
 }
 
+/** What a barrier looks like (OP-220): a locked gate, a rope across, a fallen branch, or boards nailed over an arch. */
+export type BarrierKind = 'gate' | 'rope' | 'branch' | 'boards';
+
+/** A code-drawn barrier in a room seen from the side (`RoomDef.barriers`). */
+export interface Barrier {
+  /** The closed doorway's own id where it stands in one, else a name for the way it shuts. */
+  id: string;
+  kind: BarrierKind;
+  /** Where it stands on the floor, from x to x + w (room px). */
+  x: number;
+  w: number;
+  /** The words on its sign: one of the approved phrases (`CLOSED_SIGNS`). */
+  sign: string;
+}
+
 /** One ROOM_W x ROOM_H piece of a room's art, at its top-left corner in room pixels. */
 export interface RoomTile {
   key: string;
@@ -295,6 +325,12 @@ export interface DoorDef {
   top?: number;
   /** In a room seen from the side (OP-173): where the doorway's mark (the bright, simple sign of a way through) stands, over its arch. */
   markAt?: Vec2;
+  /**
+   * A stair of the tree (OP-220): whether it leads up a level or down one. Every level's stair down is
+   * at its west (left) end and its stair up at its east (right) end, both taken from the floor, and the
+   * doorway's mark shows the way.
+   */
+  way?: 'up' | 'down';
   /** Public sign wording for closed realms (approved phrases only). */
   closedSign?: string;
   /** Where to place a visual hint (sign, glow) for the door. */

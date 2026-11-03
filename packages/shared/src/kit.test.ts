@@ -155,8 +155,8 @@ describe('the kit draw plan (OP-234)', () => {
   it('stands a doorway piece on its doorway, at its height', () => {
     const l4 = KIT_DEMOS['l4']!;
     const up = kitDrawPlan(l4).find((d) => d.role === 'door' && d.id === 'stair-l5-l4')!;
-    expect(up.x + up.w / 2).toBe(1064);
-    expect(up.y + up.h).toBe(GROUND - 239);
+    expect(up.x + up.w / 2).toBe(930);
+    expect(up.y + up.h).toBe(GROUND);
   });
 
   it('is empty for a painted room', () => {
