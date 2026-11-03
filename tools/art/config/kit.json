@@ -1232,6 +1232,152 @@
         "mid-b": "pale stone arches and buttresses of a high tower with stained-glass windows lit from within and glass lanterns hanging between them, in the lower two thirds, the upper third mostly open",
         "mid-c": "a row of balconies and rose windows along a tower's side, glass lanterns on chains, the mist drifting past below them, in the lower half, the upper half mostly open"
       }
+    },
+    "neon": {
+      "title": "Neon Street: its Commons along the street at dusk, and the rooftop course above it",
+      "light": "dusk on a narrow street of dark navy buildings, the night sky a deep violet-navy, paper lanterns in warm gold and neon tubes in pink #FF4FA3 and cyan #3FE0E6 lighting wet dark paving, every sign blank, no letters anywhere",
+      "textures": {
+        "neon-brick": "dark navy brick wall seen flat on, the mortar lines picked out faintly in cyan and pink neon reflection, even and tileable",
+        "wet-pavement": "dark wet paving slabs seen from above, reflecting faint pink and cyan streaks and a few gold lantern glints, even and tileable",
+        "corrugated-tin": "sheets of dark corrugated metal roofing seen flat on, their ridges running straight down, rust in the seams, faint cyan highlight on each ridge"
+      },
+      "sheets": {
+        "commons-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "idol-pedestal",
+              "w": 240,
+              "h": 200,
+              "desc": "a round pedestal of dark metal with a ring of pink neon tube glowing around its top, nothing standing on it"
+            },
+            {
+              "name": "noodle-stall",
+              "w": 320,
+              "h": 320,
+              "desc": "a small street food stall with a dark awning, a steaming pot on its counter, paper lanterns under the awning and a blank hanging sign, no writing"
+            },
+            {
+              "name": "paper-lantern-string",
+              "w": 400,
+              "h": 120,
+              "desc": "a string of round warm gold paper lanterns on a dark cord, level, cut straight at both ends so it repeats"
+            },
+            {
+              "name": "vending-machine",
+              "w": 160,
+              "h": 280,
+              "desc": "a tall vending machine glowing cyan from its front, dark navy body, no writing on it"
+            },
+            {
+              "name": "neon-arrow-sign",
+              "w": 240,
+              "h": 160,
+              "desc": "a dark sign board on a short pole with a pink neon arrow on it and nothing else, no letters"
+            },
+            {
+              "name": "robot-plinth",
+              "w": 320,
+              "h": 160,
+              "desc": "a low wide plinth of dark riveted metal with a cyan neon ring around its base, nothing standing on it"
+            }
+          ]
+        },
+        "course-a": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "sign-platform",
+              "w": 400,
+              "h": 120,
+              "desc": "a long blank neon sign board lying flat, its top edge straight and level, cyan tubes along its face, no letters, seen from the side as a platform"
+            },
+            {
+              "name": "water-tank",
+              "w": 240,
+              "h": 320,
+              "desc": "a round rooftop water tank on a dark wooden stand, a pink neon glow on one side"
+            },
+            {
+              "name": "air-unit",
+              "w": 240,
+              "h": 160,
+              "desc": "a boxy rooftop air unit of dark metal with a round fan grille glowing faint cyan, flat on top"
+            },
+            {
+              "name": "antenna-mast",
+              "w": 120,
+              "h": 400,
+              "desc": "a thin dark antenna mast with a red lamp at its top and crossbars, cut straight at the bottom"
+            },
+            {
+              "name": "fire-escape",
+              "w": 240,
+              "h": 400,
+              "desc": "a dark iron fire escape: one straight flight of stairs rising to the right with a landing at its top, cut straight at both ends"
+            },
+            {
+              "name": "rooftop-ledge",
+              "w": 400,
+              "h": 120,
+              "desc": "a flat rooftop parapet ledge of dark brick with a tin cap, level, cut straight at both ends so it repeats"
+            }
+          ]
+        },
+        "course-b": {
+          "w": 240,
+          "h": 240,
+          "pieces": [
+            {
+              "name": "billboard-blank",
+              "w": 400,
+              "h": 240,
+              "desc": "a large blank billboard on two dark posts, its face glowing soft pink from lamps along its top, no letters or picture"
+            },
+            {
+              "name": "satellite-dish",
+              "w": 160,
+              "h": 160,
+              "desc": "a dark rooftop satellite dish on a short arm, tilted up, a cyan glint on its rim"
+            },
+            {
+              "name": "chimney-stack",
+              "w": 160,
+              "h": 280,
+              "desc": "a dark brick chimney stack with a tin cap, a thin wisp of steam, cut straight at the bottom"
+            },
+            {
+              "name": "skylight",
+              "w": 240,
+              "h": 120,
+              "desc": "a low pitched rooftop skylight of dark glass glowing warm gold from below"
+            },
+            {
+              "name": "feather-lost",
+              "w": 80,
+              "h": 120,
+              "desc": "a single large owl feather glowing pink like a neon tube, standing upright"
+            },
+            {
+              "name": "finish-shrine",
+              "w": 320,
+              "h": 320,
+              "desc": "a small shrine of dark metal with a pointed roof, outlined in cyan and pink neon tubes, a bare plinth inside and two paper lanterns, nothing on the plinth, no letters"
+            }
+          ]
+        }
+      },
+      "layers": {
+        "sky-a": "a dusk night sky over a city, deep violet-navy with a few faint stars and nothing else, only a soft pink and cyan haze along the bottom third, no moon drawn, no buildings, no towers, no rooftops, no skyline",
+        "sky-b": "a night sky of deep navy with low ragged clouds lit pink and cyan from below, a few stars above them, no moon drawn, no buildings",
+        "far-a": "a distant skyline of dark tall buildings with scattered lit windows in pink, cyan and gold, a haze of neon glow at their feet, filling the lower two thirds and fading at the top",
+        "far-b": "rooftops of a dark city far below, strings of warm gold lanterns and the glow of blank neon signs among them, filling the lower half and fading at the top",
+        "mid-a": "the wall of a dark navy street building close by: brick, shuttered windows, pipes, cables and blank neon signs in pink and cyan, a few paper lanterns, filling the whole frame, no letters",
+        "mid-b": "a row of narrow shop fronts along a dark street: awnings, lit doorways, paper lanterns and blank neon sign boards in pink and cyan, in the lower two thirds, the upper third mostly open, no letters",
+        "mid-c": "a row of rooftops close by: parapets, water tanks, antennas and strings of warm paper lanterns, a few blank neon tubes, in the lower half, the upper half mostly open, no letters"
+      }
     }
   }
 }

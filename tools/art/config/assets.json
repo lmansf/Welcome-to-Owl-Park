@@ -4447,6 +4447,225 @@
       "format": "webp",
       "with_2x": false,
       "key_colour": "#FF00FF"
+    },
+    "kit-tex-neon-neon-brick": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-neon-wet-pavement": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-neon-corrugated-tin": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-neon-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-noodle-stall": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-paper-lantern-string": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-vending-machine": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-neon-arrow-sign": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-robot-plinth": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sign-platform": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-water-tank": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-air-unit": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-antenna-mast": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-fire-escape": {
+      "w": 240,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-ledge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-billboard-blank": {
+      "w": 400,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-satellite-dish": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-chimney-stack": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-skylight": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-neon-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-neon-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
     }
   },
   "helpers": {
