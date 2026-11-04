@@ -29,10 +29,17 @@ function json<T>(text: string | null, fallback: T): T {
 /** Told of each variant the moment a collector first owns it (the collection log, OP-107). */
 export type OnOwned = (cid: string, variant: string, source: Source, at: number) => void;
 
+/** What a quest row was and is, for the quest progress log (OP-266). */
+export type QuestRowState = Pick<QuestRow, 'cid' | 'quest' | 'period' | 'step' | 'acceptedAt' | 'doneAt'>;
+
+/** Told of each change to a quest row: what it was before (null: none) and after (null: dropped) (OP-266). */
+export type OnQuest = (before: QuestRowState | null, after: QuestRowState | null) => void;
+
 export class SqlCollectionStore implements CollectionStore {
   constructor(
     private readonly sql: SqlStorage,
     private readonly onOwned?: OnOwned,
+    private readonly onQuest?: OnQuest,
   ) {
     sql.exec(`CREATE TABLE IF NOT EXISTS collectors (cid TEXT PRIMARY KEY, tz TEXT NOT NULL, tz_set_at INTEGER NOT NULL, feathers INTEGER NOT NULL DEFAULT 0, equipped TEXT, created_at INTEGER NOT NULL)`);
     sql.exec(`CREATE TABLE IF NOT EXISTS owned (cid TEXT NOT NULL, variant TEXT NOT NULL, source TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (cid, variant))`);
@@ -118,7 +125,15 @@ export class SqlCollectionStore implements CollectionStore {
         doneAt: r.done_at,
       }));
   }
+  /** A quest row as the progress log looks at it, before a change (only read when someone is told). */
+  private questState(cid: string, quest: string, period: string): QuestRowState | null {
+    const r = this.sql
+      .exec<{ step: number; accepted_at: number; done_at: number | null }>(`SELECT step, accepted_at, done_at FROM quests WHERE cid = ? AND quest = ? AND period = ?`, cid, quest, period)
+      .toArray()[0];
+    return r ? { cid, quest, period, step: r.step, acceptedAt: r.accepted_at, doneAt: r.done_at } : null;
+  }
   putQuest(row: QuestRow) {
+    const before = this.onQuest ? this.questState(row.cid, row.quest, row.period) : null;
     this.sql.exec(
       `INSERT OR REPLACE INTO quests (cid, quest, period, step, count, seen, items, accepted_at, done_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       row.cid,
@@ -131,8 +146,11 @@ export class SqlCollectionStore implements CollectionStore {
       row.acceptedAt,
       row.doneAt,
     );
+    this.onQuest?.(before, { cid: row.cid, quest: row.quest, period: row.period, step: row.step, acceptedAt: row.acceptedAt, doneAt: row.doneAt });
   }
   dropQuest(cid: string, quest: string, period: string) {
+    const before = this.onQuest ? this.questState(cid, quest, period) : null;
     this.sql.exec(`DELETE FROM quests WHERE cid = ? AND quest = ? AND period = ?`, cid, quest, period);
+    if (before) this.onQuest?.(before, null);
   }
 }

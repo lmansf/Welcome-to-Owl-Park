@@ -187,6 +187,10 @@ retired: the shop replaces it.
 - **HTTP**: `GET /api/shop`, `POST /api/shop/buy {variant}` and `POST /api/shop/gift` with the
   pass; `GET /api/collection` as before. `POST /api/collection/craft` and `/api/collection/tz` are
   gone. Who took today's gift is kept in the `earned` table.
+- **Analytics** (OP-266): while the collection log is on, the SQL store tells `src/questLog.ts` of
+  every change to a quest row, and each step's start and end (done, abandoned, expired, retired)
+  goes to the owner's `game.quest_progress`, with the quests and their steps as reference tables
+  (`apps/park-log/README.md`). Anonymous like every log row; never a puzzle's code or key.
 
 ### Socket frames (protocol v4)
 
