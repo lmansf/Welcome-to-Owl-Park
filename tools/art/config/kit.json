@@ -3034,6 +3034,7 @@
             "name": "trunk-edge-left",
             "w": 160,
             "h": 400,
+            "tile": true,
             "desc": "the left edge of a great tree trunk: deep-ridged bark running straight up the whole height of the frame, its left side the trunk's rounded silhouette against the air (dark, in shadow, with lichen), its right side cut straight"
           },
           {
@@ -3047,6 +3048,7 @@
             "name": "trunk-edge-right",
             "w": 160,
             "h": 400,
+            "tile": true,
             "desc": "the right edge of a great tree trunk: deep-ridged bark running straight up the whole height of the frame, its right side the trunk's rounded silhouette lit by a cream rim light from the moon, its left side cut straight"
           }
         ]

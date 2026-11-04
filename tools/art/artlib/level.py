@@ -79,17 +79,20 @@ def column_profiles(img: Image.Image, smooth: float = SMOOTH) -> np.ndarray:
     return np.stack(out)
 
 
-def level_piece(img: Image.Image, target: tuple[float, float, float], smooth: float = SMOOTH) -> tuple[Image.Image, dict]:
+def level_piece(img: Image.Image, target: tuple[float, float, float], smooth: float = SMOOTH, chroma: bool = True) -> tuple[Image.Image, dict]:
     """The piece with each column brought to the row's colour ``target`` (L, a, b): its light scaled so
     its smoothed mean L is the row's, then its smoothed mean a and b shifted to the row's, so a cap cut
-    from the cooler end of a run takes the same stone colour as the middles. Returns (image, parameters)."""
+    from the cooler end of a run takes the same stone colour as the middles. With ``chroma`` off only
+    the light is levelled: for a row whose caps carry much green (an earth bank's ferns), where the
+    column's mean colour is not the face's and the shift would redden it. Returns (image, parameters)."""
     rgb, alpha, mask = _split(img)
     prof = column_profiles(img, smooth)
     gain = np.clip(_Y_of_L(target[0]) / np.maximum(_Y_of_L(prof[0]), 1e-6), *GAIN)
     lin = np.clip(_to_linear(rgb) * gain[None, :, None], 0.0, 1.0)
     lab = srgb_to_lab(_to_srgb(lin))
-    lab[..., 1] += (target[1] - prof[1])[None, :]
-    lab[..., 2] += (target[2] - prof[2])[None, :]
+    if chroma:
+        lab[..., 1] += (target[1] - prof[1])[None, :]
+        lab[..., 2] += (target[2] - prof[2])[None, :]
     out = np.round(np.clip(lab_to_srgb(lab), 0.0, 1.0) * 255.0).astype(np.uint8)
     res = Image.fromarray(np.dstack([out, alpha]), "RGBA")
     before = float(srgb_to_lab(rgb)[..., 0][mask].mean()) if mask.any() else 0.0
@@ -97,7 +100,8 @@ def level_piece(img: Image.Image, target: tuple[float, float, float], smooth: fl
         "target_L": round(float(target[0]), 2),
         "gain_min": round(float(gain.min()), 3),
         "gain_max": round(float(gain.max()), 3),
-        "ab_shift": round(float(np.abs(np.stack([target[1] - prof[1], target[2] - prof[2]])).max()), 2),
+        "ab_shift": round(float(np.abs(np.stack([target[1] - prof[1], target[2] - prof[2]])).max()), 2) if chroma else 0.0,
+        "chroma": chroma,
         "L_before": round(before, 2),
         "L_after": round(mean_L(res), 2),
     }
@@ -116,4 +120,4 @@ def row_target(pieces: list[Image.Image]) -> tuple[float, float, float]:
 
 
 def tools_line(params: dict, smooth: float = SMOOTH) -> str:
-    return f"level: row L {params['target_L']} (from {params['L_before']} to {params['L_after']}), column gain {params['gain_min']} to {params['gain_max']}, a/b shift up to {params['ab_shift']}, smooth {smooth} x height (OP-251)"
+    return f"level: row L {params['target_L']} (from {params['L_before']} to {params['L_after']}), column gain {params['gain_min']} to {params['gain_max']}, {'a/b shift up to ' + str(params['ab_shift']) if params.get('chroma', True) else 'light only, no a/b shift'}, smooth {smooth} x height (OP-251)"

@@ -881,6 +881,12 @@ def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
     if a.clear_mist:
         rgba, n = clear_mist(rgba)
         note(f"{key}: clear-mist {n} px")
+    for box in a.clear_box or []:
+        x0, y0, x1, y1 = parse_ints(box, 4, "--clear-box")
+        arr = np.array(rgba)
+        arr[y0:y1, x0:x1, 3] = 0
+        rgba = Image.fromarray(arr, "RGBA")
+        note(f"{key}: clear-box {box}")
     alpha = np.asarray(rgba.getchannel("A"))
     n = len(run["rows"])
     bands = run_bands(alpha, a.band_share)
@@ -936,7 +942,7 @@ def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
                 two = two.resize((2 * W, 2 * Hl), Image.Resampling.LANCZOS)
             one = downsample(two, W, Hl)
             outputs, lines = finish_cutout_webp(ctx, pkey, one, two)
-            tools = [f"runs: {key} run {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''}{f' clear-glow={a.clear_glow}' if a.clear_glow else ''}{' clear-mist' if a.clear_mist else ''}{f' squash={squash:.3f}' if squash != 1.0 else ''} part={part} span2x={px0}-{px1} of {run2.width}", *lines]
+            tools = [f"runs: {key} run {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''}{f' clear-glow={a.clear_glow}' if a.clear_glow else ''}{' clear-mist' if a.clear_mist else ''}{''.join(f' clear-box={b}' for b in (a.clear_box or []))}{f' squash={squash:.3f}' if squash != 1.0 else ''} part={part} span2x={px0}-{px1} of {run2.width}", *lines]
             save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
                                           "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "run": {"key": key, "row": i + 1, "bbox": [x0, y0, x1, y1], "part": part, "span2x": [px0, px1]}})
             sx = x0 + px0 / k; ex = x0 + px1 / k
@@ -1004,6 +1010,8 @@ def cmd_columns(ctx: Ctx, a: argparse.Namespace) -> int:
         bb = crop.getbbox()
         if bb and bb != (0, 0, crop.width, crop.height):
             crop = crop.crop(bb)
+        # the keyed fringe along the column's sides (a cut side's last part-magenta pixels) goes
+        crop = crop.crop((a.trim, 0, crop.width - a.trim, crop.height))
         W, H = logical_size(pkey, ctx.assets)
         k = 2 * W / crop.width
         col2 = crop.resize((2 * W, max(1, int(round(crop.height * k)))), Image.Resampling.LANCZOS)
@@ -2258,7 +2266,7 @@ def cmd_level(ctx: Ctx, a: argparse.Namespace) -> int:
         target = level.row_target([imgs[(k, "1x")][0] for k in keys])
         note(f"{row}: row colour L {target[0]:.1f} a {target[1]:.1f} b {target[2]:.1f}")
         for (k, scale), (img, data0, line) in imgs.items():
-            out, params = level.level_piece(img, target)
+            out, params = level.level_piece(img, target, chroma=not a.no_chroma)
             data, info = webpmeta.encode_under_budget(out, ctx.budget)
             if not webpmeta.same_alpha(data, out):
                 raise ArtError(f"{files[(k, scale)].name}: the encoder changed the alpha; a cut-out's edge must stay exact")
@@ -2848,6 +2856,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--clear-glow", type=float, default=None, help="also clear the washed-out glow in the key's hue down to this saturation (0.2 clears a pink-white halo)")
     sp.add_argument("--clear-mist", action="store_true", help="clear the pale grey mist painted over the key (bright, grey, part-transparent paint away from the run's opaque edge)")
     sp.add_argument("--max-squash", type=float, default=0.15, help="how much a run painted short may be squashed in height to fit the longest middle piece")
+    sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the raw made transparent before the cut (a moon painted over a run's end); repeatable")
     add_common(sp)
     sp.set_defaults(fn=cmd_runs)
 
@@ -2861,6 +2870,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--clear-glow", type=float, default=None, help="also clear the washed-out glow in the key's hue down to this saturation")
     sp.add_argument("--clear-mist", action="store_true", help="clear the pale grey mist painted over the key")
     sp.add_argument("--band", type=float, default=0.25, help="the heal band for a tile piece, as a fraction of its height")
+    sp.add_argument("--trim", type=int, default=3, help="px cut off each side of a column before scaling (the keyed fringe of a straight cut)")
     add_common(sp)
     sp.set_defaults(fn=cmd_columns)
 
@@ -2892,6 +2902,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true", help="every recut row")
     sp.add_argument("--dry-run", action="store_true", help="print what each piece would become; write nothing")
     sp.add_argument("--force", action="store_true", help="level a row again although its provenance says level: already")
+    sp.add_argument("--no-chroma", action="store_true", help="level the light only, no a/b shift (a row whose caps carry much green, where the shift would redden the earth)")
     sp.add_argument("--layer", help="level one backdrop layer across instead (a light shaft, a bright stretch); follow with `bands --force`")
     sp.add_argument("--L", type=float, help="with --layer: the lightness to bring each column to (default the layer's own mean)")
     sp.add_argument("--smooth", type=float, help="with --layer: the column smoothing as a fraction of the height (default 0.12)")
