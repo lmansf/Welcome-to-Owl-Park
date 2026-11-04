@@ -282,7 +282,8 @@ function stretched(key: string, x0: number, x1: number): { x: number; w: number 
 /** A column's pieces (OP-251): its head, its middle repeated down at the column's width, its foot. */
 function columnDraws(c: KitColumn, out: KitDraw[]): void {
   const m = sizeOf(c.mid);
-  const u = (c.x1 - c.x0) / artSpan(m).w;
+  const edgeW = (key?: string) => (key ? artSpan(sizeOf(key)).w : 0);
+  const u = (c.x1 - c.x0) / (edgeW(c.left) + artSpan(m).w + edgeW(c.right));
   const box = (key: string) => {
     const s = sizeOf(key);
     const span = artSpan(s);
@@ -304,8 +305,24 @@ function columnDraws(c: KitColumn, out: KitDraw[]): void {
     ends.push({ key: c.foot, x: b.x, y, w: b.w, h: b.h, tile: 'none', layer: 'back', role: 'surface', id: c.id });
     y1 = Math.round(y + artBand(b.s).top * u);
   }
-  const b = box(c.mid);
-  if (y1 > y0) out.push({ key: c.mid, x: b.x, y: y0, w: b.w, h: y1 - y0, tile: 'y', layer: 'back', role: 'surface', id: c.id });
+  if (y1 > y0) {
+    if (c.left || c.right) {
+      // Left edge, middle, right edge, art to art across, at one scale (OP-259): each repeated down in the same courses.
+      let at = c.x0;
+      const keys = [c.left, c.mid, c.right].filter((k): k is string => !!k);
+      for (const [i, key] of keys.entries()) {
+        const s = sizeOf(key);
+        const span = artSpan(s);
+        // A pixel wider than the next piece's start, so no hairline of sky shows where two rounded boxes meet.
+        const w = Math.round(s.w * u) + (i < keys.length - 1 ? 1 : 0);
+        out.push({ key, x: Math.round(at - span.left * u), y: y0, w, h: y1 - y0, tile: 'y', layer: 'back', role: 'surface', id: c.id });
+        at += span.w * u;
+      }
+    } else {
+      const b = box(c.mid);
+      out.push({ key: c.mid, x: b.x, y: y0, w: b.w, h: y1 - y0, tile: 'y', layer: 'back', role: 'surface', id: c.id });
+    }
+  }
   out.push(...ends);
 }
 

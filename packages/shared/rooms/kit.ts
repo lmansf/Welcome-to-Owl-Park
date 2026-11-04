@@ -33,9 +33,9 @@ const L4_KIT: RoomKit = {
     { key: 'kit-high-mid-b', rate: 0.75, screens: [1, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
   // The trunk, about 660 wide at this height, centred at x 800 of screen 0 and running off its top: the
-  // recut's rounded trunk column (OP-251), one copy drawn the room's height (its cut top would show as a
-  // ledge where two copies meet).
-  columns: [{ id: 'trunk', x0: 470, x1: 1130, y0: -40, y1: 900, mid: 'kit-cut-trunk-mid' }],
+  // regenerated column (OP-259), its bark edges either side of its middle (the right one in the moon's
+  // rim light), stacked in courses that meet with no seam.
+  columns: [{ id: 'trunk', x0: 470, x1: 1130, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
   surfaces: [
     // The bough the overlook climbs, rising behind the lookout.
     { id: 'bough', texture: 'kit-tex-bark', rect: { x: ROOM_W + 1150, y: 0, w: 200, h: TREE_GROUND } },

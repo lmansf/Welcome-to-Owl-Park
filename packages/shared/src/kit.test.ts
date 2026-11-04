@@ -322,6 +322,28 @@ describe('runs and columns of the recut kit (OP-251)', () => {
     expect(cells).toHaveLength(1);
     expect(cells[0]!.w).toBe(mid!.w);
   });
+
+  it('draws a column with bark edges as edge, middle, edge, art to art across its width, in the same courses down (OP-259)', () => {
+    const keys = ['kit-cut-trunk-edge-left', 'kit-cut-trunk-mid', 'kit-cut-trunk-edge-right'] as const;
+    const draws = plan({ columns: [{ id: 'trunk', x0: 470, x1: 1130, y0: -40, y1: 900, left: keys[0], mid: keys[1], right: keys[2] }] });
+    expect(draws.map((d) => d.key)).toEqual([...keys]);
+    const art = (d: KitDraw) => {
+      const s = KIT_ART[d.key]!;
+      const u = d.w / s.w;
+      return [d.x + (s.left ?? 0) * u, d.x + (s.right ?? s.w) * u] as const;
+    };
+    const spans = draws.map(art);
+    // Within the pixel each box is rounded to.
+    const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1.5);
+    near(spans[0]![0], 470);
+    near(spans[2]![1], 1130);
+    near(spans[1]![0], spans[0]![1]);
+    near(spans[2]![0], spans[1]![1]);
+    const courses = draws.map((d) => kitCells(d).map((c) => [Math.round(c.y), Math.round(c.h)]));
+    expect(courses[0]!.length).toBeGreaterThan(1);
+    expect(courses[1]).toEqual(courses[0]);
+    expect(courses[2]).toEqual(courses[0]);
+  });
 });
 
 describe('the kit catalogue and its placeholders (OP-234)', () => {
