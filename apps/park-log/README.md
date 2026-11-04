@@ -83,9 +83,12 @@ Room stays (OP-265, `sql/room_stays.sql`), live where `game.fact_realm_visit` wa
   continues the stay. One open row per visit: an owl with two tabs open is two visits.
 - `game.v_room_occupancy_now`: owls in each room now, by park.
 - `game.roll_up_room_stays()`, daily at 10:30 UTC by pg_cron: closes a stay left open over a day (a
-  lost event) as a timeout, then rolls whole days older than 90 days into `game.room_stay_daily`
-  (per day, park and room: stays, owls, minutes, exits by reason, nothing about any one owl) and
-  deletes their rows.
+  lost event) as a timeout, then counts every whole hour (America/New_York) older than 90 days into
+  `game.room_stay_hourly` (`sql/room_stays_hourly.sql`, kept for good, for traffic models) and
+  deletes the stays that ended before then. Per hour, park and room: owls present and owl-minutes (a
+  stay crossing hours split between them), stays started and owls arrived, exits by reason; nothing
+  about any one owl. Each hour is counted once, from every stay that touches it, so its distinct
+  owls are exact. It replaced `game.room_stay_daily`, which never held a row.
 
 A visit is one page load: it begins at the owl's first hello in a room, the room object's minute
 heartbeat and each socket's close say it is still going, and it ends when it was last seen, once it
@@ -164,6 +167,8 @@ outward to the buyer, never the buyer into a `game` table.
    OP-265 adds `sql/room_stays.sql` as `game_room_stays` (it turns on pg_cron and schedules the daily
    rollup). Order: the migration, then the function deployed again, then the Worker: a function from
    before it refuses `room_stay` as a kind it does not know, and the Worker drops a refused batch for good.
+   Then `sql/room_stays_hourly.sql` as `game_room_stays_hourly`: the hourly rollup in place of the
+   daily one (it stops if the daily table ever held a row). Database only: no function or Worker change.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,
