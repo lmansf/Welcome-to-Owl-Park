@@ -58,11 +58,25 @@ const L4_KIT: RoomKit = {
     { id: 'overlook-rope', x0: ROOM_W + 1310, x1: ROOM_W + 1572, top: 0, piece: 'kit-high-rope-barrier' },
   ],
   props: [
-    // Each screen's lantern pole, in front of the owls; a bench on the overlook; the sign by the way down.
+    // The way down: a lantern on the walk to the trunk, the sign beside the hatch it names.
     { id: 'pole-0', piece: 'kit-high-lantern-pole', x: 330, top: 0, front: true },
-    { id: 'pole-1', piece: 'kit-high-lantern-pole', x: ROOM_W + 220, top: 0, front: true },
-    { id: 'bench', piece: 'kit-high-cloud-bench', x: ROOM_W + 120, top: 0 },
     { id: 'sign-down', piece: 'kit-high-sign-board', x: 545, top: 0, scale: 0.8 },
+    // The rest stop at the foot of the climb: a bench under its lantern, facing out over the crowns.
+    { id: 'bench', piece: 'kit-high-cloud-bench', x: ROOM_W + 120, top: 0 },
+    { id: 'pole-1', piece: 'kit-high-lantern-pole', x: ROOM_W + 220, top: 0, front: true },
+  ],
+  scenes: [
+    {
+      id: 'way-down',
+      story: 'A lantern lights the boardwalk to the trunk, and a sign stands by the hatch it names: the way down.',
+      props: ['pole-0', 'sign-down'],
+      about: ['stair-l4-l3'],
+    },
+    {
+      id: 'rest-stop',
+      story: 'Where the walk leaves the trunk, a bench under a lantern looks out over the crowns, at the foot of the climb.',
+      props: ['bench', 'pole-1'],
+    },
   ],
   decals: [
     { piece: 'kit-high-hanging-moss', x: 560, y: 120 },
@@ -114,13 +128,6 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
  * boarded with light behind. A stone balustrade closes it in the east. No room of the park uses it
  * yet: its doorways lead nowhere until the remap builds the plaza, and only the preview tools draw it.
  */
-/**
- * The plaza's stone middles: the two longer lengths only, for now. The recut's stone row darkens to
- * the left (its run was painted lit from the right and cut across), so its shortest middle reads as a
- * darker block among the others until the row is levelled (OP-251).
- */
-const PLAZA_STONE = ['kit-cut-stone-mid-480', 'kit-cut-stone-mid-640'];
-
 const PLAZA_KIT: RoomKit = {
   ground: TREE_GROUND,
   backdrops: [
@@ -129,7 +136,7 @@ const PLAZA_KIT: RoomKit = {
     { key: 'kit-entrance-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-entrance-mid-c', rate: 0.75, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
-  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mids: PLAZA_STONE, mid: 'kit-tex-entrance-plaza-stone' }],
+  paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-entrance-plaza-stone' }],
   doors: [
     { door: 'stair-down', piece: 'kit-entrance-stair-head' },
     { door: 'realm-ink', piece: 'kit-arch-portal-boarded' },
@@ -137,13 +144,38 @@ const PLAZA_KIT: RoomKit = {
     { door: 'realm-neon', piece: 'kit-arch-portal-boarded' },
     { door: 'realm-glass', piece: 'kit-arch-portal-open' },
   ],
-  barriers: [{ id: 'balustrade', x0: ROOM_W + 1340, x1: ROOM_W + 1640, top: 0, piece: 'kit-wall-low-stone' }],
+  barriers: [{ id: 'balustrade', x0: ROOM_W + 1380, x1: ROOM_W + 1680, top: 0, piece: 'kit-wall-low-stone' }],
+  // Three little scenes, not a row (docs/TREE_STYLE.md section 8), each with room around it.
   props: [
-    { id: 'planter-west', piece: 'kit-entrance-planter-tree', x: 560, top: 0 },
-    { id: 'map', piece: 'kit-entrance-map-board', x: 730, top: 0 },
-    { id: 'bench', piece: 'kit-entrance-plaza-bench', x: 930, top: 0 },
-    { id: 'bath', piece: 'kit-entrance-bird-bath', x: 1120, top: 0 },
-    { id: 'pole-a', piece: 'kit-entrance-pennant-pole', x: 1575, top: 0 },
+    // The crossroads at the gate: the map where an owl first stands, a lantern at the head of the stair.
+    { id: 'map', piece: 'kit-entrance-map-board', x: 140, top: 0 },
+    { id: 'stair-lantern', piece: 'kit-post-lantern', x: 555, top: 0 },
+    // A rest under the little tree: the birdbath in its shade, the bench beside it.
+    { id: 'planter', piece: 'kit-entrance-planter-tree', x: 735, top: 0 },
+    { id: 'bath', piece: 'kit-entrance-bird-bath', x: 860, top: 0 },
+    { id: 'bench', piece: 'kit-entrance-plaza-bench', x: 1060, top: 0 },
+    // The one open arch, its lanterns hung toward it; the boarded ones wait dark.
+    { id: 'glass-lantern-west', piece: 'kit-post-lantern', x: ROOM_W + 910, top: 0, flip: true },
+    { id: 'glass-lantern-east', piece: 'kit-post-lantern', x: ROOM_W + 1310, top: 0 },
+  ],
+  scenes: [
+    {
+      id: 'crossroads',
+      story: 'Just through the gate, the map shows where every arch leads, and a lantern marks the stair down into the tree.',
+      props: ['map', 'stair-lantern'],
+      about: ['stair-down'],
+    },
+    {
+      id: 'rest',
+      story: 'A bench beside a little potted tree, with the birdbath in its shade, for a rest before choosing an arch.',
+      props: ['planter', 'bath', 'bench'],
+    },
+    {
+      id: 'open-arch',
+      story: 'Only the glass realm is open: lanterns burn either side of its arch while the boarded arches wait dark.',
+      props: ['glass-lantern-west', 'glass-lantern-east'],
+      about: ['realm-glass'],
+    },
   ],
 };
 
@@ -185,10 +217,10 @@ export const KIT_PREVIEWS: Readonly<Record<string, RoomDef>> = {
     doors: [
       { id: 'to-gate', rect: { x: 0, y: TREE_GROUND - 60, w: 60, h: 120 }, top: 0 },
       { id: 'stair-down', rect: { x: 330, y: TREE_GROUND - 20, w: 120, h: 40 }, top: 0, way: 'down', markAt: { x: 390, y: TREE_GROUND - 260 } },
-      arch('realm-ink', 1350, false),
-      arch('realm-clearing', ROOM_W + 200, false),
-      arch('realm-neon', ROOM_W + 650, false),
-      arch('realm-glass', ROOM_W + 1100, true),
+      arch('realm-ink', 1390, false),
+      arch('realm-clearing', ROOM_W + 230, false),
+      arch('realm-neon', ROOM_W + 670, false),
+      arch('realm-glass', ROOM_W + 1110, true),
     ],
     kit: PLAZA_KIT,
   }),

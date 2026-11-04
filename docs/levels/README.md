@@ -24,6 +24,11 @@ scripted times, which are MEASURED with the climb's pilot.
 - Down is always left and up is always right.
 - Nothing looks explorable unless it is, and a way that is not open yet has a clear "maybe later"
   barrier (signed only with the phrases in `CLOSED_SIGNS`).
+- Every placement tells a story (the owner, 2026-11-03: "Otherwise they're just clutter"). Each
+  prop on a course belongs to a little scene with a reason, a bench by a checkpoint's view, a lantern
+  at a hard jump, a lost feather's nest under the branch it fell from, grouped with room around it.
+  Nothing is placed only to fill space. Each plan names its scenes, one line each, beside its
+  screens (`docs/TREE_STYLE.md`, section 8).
 - The dash works only in courses: Shift on a computer, a button on a phone.
 - Three acts of three or four screens each, about ten in all, joined by doors.
 - About seven minutes for a first clear, about two and a half with shortcuts, a gold time under two.

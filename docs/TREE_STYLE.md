@@ -170,3 +170,31 @@ screen. Every piece is in this palette:
 A texture must tile with no visible edge. A sheet is keyed so the pipeline can cut it into pieces. Every
 run's cost is logged, and generation stops at $87. Every piece is shown to the owner before it is
 published, and nothing is published without his approval.
+
+## 8. Every placement tells a story (the owner's rule, 2026-11-03)
+
+The owner, looking at the level 4 and plaza previews: "the placement of the items should always tell a
+story. Otherwise they're just clutter." This holds for every screen, painted or built from the kit.
+
+- **Every prop belongs to a little scene with a reason.** A bench faces the view with a lantern beside it.
+  A notice board stands by the gate it talks about. A birdbath sits under the tree where birds would be.
+  A lantern burns where an owl needs to see: a stair, a door, the one open arch.
+- **Props come in small groups with room around them.** A group reads as one thing from across the screen.
+  Never set props out in an even row along the walk, one after another, like a catalogue.
+- **Nothing is placed only to fill space.** A prop with no story is left out. An empty stretch of floor is
+  fine: it is where the owls walk and the eye rests.
+- **Each scene is readable at a glance**: what happens in this corner, and why it is here, is clear without
+  being told.
+
+In a kit room each scene is data (`RoomKit.scenes`, `packages/shared/src/room.ts`): an id, its one-line
+story, the props it groups and the doorways, barriers or ledges it is about. `kitSceneProblems`
+(`packages/shared/src/kit.ts`) holds every kit room to the rule, and `kit.test.ts` runs it on each one:
+
+- every prop is in exactly one scene, and each story is one line;
+- a scene's group, its props and what it is about, runs at most `KIT_SCENE_SPAN` (720 px) along the room;
+- there are at least `KIT_SCENE_GAP` (40 px) between two scenes' groups.
+
+**Before a screen ships** (OP-252), `python3 tools/kit/preview.py <room> --target` prints the story of each
+scene under the screen and its target, and marks each scene's group on the whole room. The review answers,
+for every screen: what story does this corner tell? A screen whose props tell none is reworked, not
+shipped, and the tool fails while any prop belongs to no scene.

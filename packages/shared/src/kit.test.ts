@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_DEMOS, KIT_PREVIEWS } from '../rooms/kit';
 import { ROOMS } from '../rooms/index';
-import { KIT_MID_STRETCH, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
+import { KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
 import { KIT_ART, KIT_KEY, KIT_PALETTE, drawOps, kitGroup, kitMotifs, kitPlaceholder, periodShifts, shiftOp, type KitOp } from './kitArt';
 import { KIT_CATALOG } from './kitCatalog';
 import { raster } from './raster';
@@ -91,6 +91,68 @@ describe('the barrier rule (OP-234)', () => {
     const r = room({});
     expect(walkedAt(r, GROUND, 0, 0, ROOM_W)).toEqual([[100, 1500]]);
     expect(walkedAt(r, GROUND, 50, 0, ROOM_W)).toEqual([]);
+  });
+});
+
+describe('the story rule (the owner, 2026-11-03; docs/TREE_STYLE.md section 8)', () => {
+  const bench = { id: 'bench', piece: 'kit-high-cloud-bench', x: 400, top: 0 };
+  const pole = { id: 'pole', piece: 'kit-high-lantern-pole', x: 520, top: 0 };
+  const sign = { id: 'sign', piece: 'kit-high-sign-board', x: 1300, top: 0 };
+
+  it('runs over every kit room: every prop is in one scene with a one-line story, each group close and apart', () => {
+    for (const r of KIT_ROOMS) {
+      expect(kitSceneProblems(r), r.id).toEqual([]);
+      const grouped = (r.kit?.scenes ?? []).flatMap((sc) => sc.props).sort();
+      expect(grouped, r.id).toEqual((r.kit?.props ?? []).map((p) => p.id).sort());
+      for (const sc of r.kit?.scenes ?? []) expect(sc.story.length, `${r.id} ${sc.id}`).toBeGreaterThan(20);
+    }
+  });
+
+  it('asks what story a prop tells when it belongs to no scene', () => {
+    expect(kitSceneProblems(room({ props: [bench] }))).toEqual(['prop bench belongs to no scene: what story does it tell?']);
+  });
+
+  it('refuses a scene spread along the walk like a catalogue row', () => {
+    const row = room({ props: [bench, pole, sign], scenes: [{ id: 'row', story: 'A bench, a lantern and a sign along the walk.', props: ['bench', 'pole', 'sign'] }] });
+    const [span] = kitSceneSpans(row);
+    expect(span!.x1 - span!.x0).toBeGreaterThan(KIT_SCENE_SPAN);
+    expect(kitSceneProblems(row)).toEqual([expect.stringMatching(/^scene row runs \d+ px, more than 720: a row, not a scene$/)]);
+  });
+
+  it('passes small groups with room around them, and refuses two that run into each other', () => {
+    const apart = room({
+      props: [bench, pole, sign],
+      scenes: [
+        { id: 'rest', story: 'A bench under a lantern, looking out over the crowns.', props: ['bench', 'pole'] },
+        { id: 'notice', story: 'A sign where the walk ends, saying it ends.', props: ['sign'] },
+      ],
+    });
+    expect(kitSceneProblems(apart)).toEqual([]);
+    const close = room({
+      props: [bench, { ...sign, x: 600 }],
+      scenes: [
+        { id: 'rest', story: 'A bench under a lantern, looking out over the crowns.', props: ['bench'] },
+        { id: 'notice', story: 'A sign where the walk ends, saying it ends.', props: ['sign'] },
+      ],
+    });
+    expect(kitSceneProblems(close)).toEqual([expect.stringMatching(/^scenes rest and notice run into each other/)]);
+  });
+
+  it('keeps a story to one line, and a prop to one scene', () => {
+    const r = room({
+      props: [bench],
+      scenes: [
+        { id: 'a', story: 'A bench.\nAnd more.', props: ['bench'] },
+        { id: 'b', story: 'The same bench again, in a second scene.', props: ['bench', 'stool'], about: ['gate'] },
+      ],
+    });
+    expect(kitSceneProblems(r)).toEqual([
+      "scene a's story is not one line of at most 140 characters",
+      'prop bench is in two scenes, a and b',
+      'scene b groups stool, which is no prop of the room',
+      'scene b is about gate, which is no doorway, barrier or ledge of the room',
+      expect.stringMatching(/^scenes a and b run into each other/),
+    ]);
   });
 });
 

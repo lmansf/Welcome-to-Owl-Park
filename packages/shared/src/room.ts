@@ -174,6 +174,24 @@ export interface RoomKit {
   decals?: KitDecal[];
   /** Backdrop layers, each one key drawn on a stretch of screens at its scroll rate (the sky, the middle distance, the overlay). */
   backdrops?: KitBackdrop[];
+  /** The little scenes its props make (the owner's rule, docs/TREE_STYLE.md section 8): every prop belongs to one. */
+  scenes?: KitScene[];
+}
+
+/**
+ * A little scene of a kit room (the owner's rule, 2026-11-03: "the placement of the items should always
+ * tell a story. Otherwise they're just clutter."): props placed together for one reason, close together,
+ * with room around the group, so a glance says what happens in that corner. `story` is that reason in
+ * one line, which the side-by-side prints under the screen before it ships (OP-252).
+ */
+export interface KitScene {
+  id: string;
+  /** What this corner tells, in one line: "A lantern lights the stair down, by the map that shows every arch." */
+  story: string;
+  /** The ids of the props it groups. */
+  props: string[];
+  /** The doorways, barriers or ledges it is built around (a sign by the gate it talks about), by id. */
+  about?: string[];
 }
 
 /** A rectangle of the room filled with a seamless texture, repeated from the room's origin so neighbours line up. */
