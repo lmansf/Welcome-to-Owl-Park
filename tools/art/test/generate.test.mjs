@@ -744,7 +744,9 @@ test('geometry exports the live room data with the assets table', () => {
   const g = JSON.parse(r.stdout);
   // Every room the shared data declares, whatever rooms the park has grown since: the export is the live data.
   const roomsDir = path.join(G.REPO_ROOT, 'packages/shared/rooms');
-  const declared = fs.readdirSync(roomsDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+  // rooms/kit.ts is left out: its rooms are the kit's stand-ins for rooms declared elsewhere and the
+  // rooms laid out ahead of the park (the plaza, OP-241), which the export does not carry.
+  const declared = fs.readdirSync(roomsDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'kit.ts')
     .flatMap((f) => [...fs.readFileSync(path.join(roomsDir, f), 'utf8').matchAll(/^ {2,4}id:\s*'([a-z0-9-]+)'/gm)].map((m) => m[1])); // rooms (and the nest's own RoomDef) sit at one indent or two; ledges and props deeper
   for (const id of ['hub', 'grove', 'market', 'l1', 'l5']) assert.ok(declared.includes(id), `${id} is declared`);
   assert.deepEqual(Object.keys(g.rooms).sort(), [...new Set(declared)].sort());

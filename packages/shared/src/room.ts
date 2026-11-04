@@ -204,7 +204,8 @@ export interface KitSurface {
 /**
  * A column of the recut kit (OP-251): its middle piece scaled so its art spans x0 to x1 and repeated
  * down, art to art, from y0 to y1 (room y), with a head piece over its top and a foot piece under it
- * at the same scale (a trunk's taper and flare).
+ * at the same scale (a trunk's taper and flare). With edge pieces (OP-259), the left edge, the middle
+ * and the right edge together span x0 to x1 at one scale, each repeated down in the same courses.
  */
 export interface KitColumn {
   id: string;
@@ -213,6 +214,9 @@ export interface KitColumn {
   y0: number;
   y1: number;
   mid: string;
+  /** Its bark edges (OP-259): drawn down the column's sides at the middle's scale, the middle between them. */
+  left?: string;
+  right?: string;
   head?: string;
   foot?: string;
 }
