@@ -2117,6 +2117,40 @@ class TestKit(unittest.TestCase):
                 self.assertGreater(a.mean(), 250, f"{part}: a run piece is opaque")
             self.assertEqual(len(list((work / "final").glob("kit-cut-*.webp"))), 2 * 5 * len(run["rows"]))
 
+    def test_columns_cuts_full_height_pieces_and_heals_the_tile(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        name, col = next((n, c) for n, c in kit["recut"]["columns"].items() if n != "about")
+        key = f"kit-sheet-cut-col-{name}"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            W, H = [int(v) for v in col["size"].split("x")]
+            img = Image.new("RGB", (W, H), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            xs = [(120, 560), (700, 1500), (1640, 2000)]
+            for (x0, x1) in xs:
+                d.rectangle((x0, 0, x1, H), fill=(74, 51, 34))
+                for y in range(0, H, 40):
+                    d.rectangle((x0, y, x1, y + 6), fill=(50, 34, 22))
+            img.save(raw_dir / "ffffffffffffffff.png")
+            (raw_dir / "ffffffffffffffff.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "ffffffffffffffff"}))
+            (raw_dir / "SELECTED").write_text("ffffffffffffffff")
+            (work / "final").mkdir()
+            rc = postprocess.main(["columns", key, "--work", str(work)])
+            self.assertEqual(rc, 0)
+            for p in col["pieces"]:
+                one = Image.open(work / "final" / f"kit-cut-{p['name']}.webp").convert("RGBA")
+                self.assertEqual(one.size, (p["w"], p["h"]), p["name"])
+                a = np.asarray(one)[..., 3]
+                self.assertGreater(a.mean(), 250, f"{p['name']}: a column piece is opaque")
+                self.assertGreater(a[0].mean(), 250, f"{p['name']}: cut straight at the top")
+                self.assertGreater(a[-1].mean(), 250, f"{p['name']}: cut straight at the bottom")
+            tile = next(p for p in col["pieces"] if p.get("tile"))
+            two = np.asarray(Image.open(work / "final" / f"kit-cut-{tile['name']}@2x.webp").convert("RGB")).astype(float)
+            self.assertLess(float(np.abs(two[0] - two[-1]).mean()), 12.0, "the tile's top and bottom rows meet")
+
     def test_pieces_cuts_six_cells_into_their_keys(self):
         from PIL import Image, ImageDraw
         kit = postprocess.kit_table()

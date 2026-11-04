@@ -262,7 +262,12 @@ assembler (OP-234) builds screens from the published files, whose format is this
   `-cap-right`, `-mid-320`, `-mid-480`, `-mid-640`), so a laid run never repeats one copy. A run
   painted a little short for the longest middle is squashed in height up to `--max-squash`.
   `--clear-glow 0.2` clears the washed-out pink halo the model paints along a run, `--clear-mist`
-  the grey mist over the key; `--raw <file> --only <pieces>` takes one row from another candidate. A join sheet (`kit.recut.sheets.<name>`, `kit-sheet-cut-<name>`)
+  the grey mist over the key; `--raw <file> --only <pieces>` takes one row from another candidate.
+  A column sheet (`kit.recut.columns.<name>`, `kit-sheet-cut-col-<name>`, OP-259) is tall columns
+  painted side by side, each running off the top and the bottom of the frame; `art:finish columns
+  <key>` finds each as the run finder does on the image turned on its side, scales it by its width
+  to the piece and keeps its middle to the piece's height, so top and bottom are straight cuts; a
+  piece marked `tile` is healed up and down so stacked copies meet with no seam (the trunk's middle). A join sheet (`kit.recut.sheets.<name>`, `kit-sheet-cut-<name>`)
   holds six props (corners, ground transitions, slope joins, trunk and bough edges) cut by
   `art:finish pieces` to `kit-cut-<piece>`. The old pieces stay until rooms move off them.
 - **Art targets** (OP-249, `targets.mjs`): three finished screens, `target-l4`, `target-plaza` and

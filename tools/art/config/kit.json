@@ -2809,7 +2809,7 @@
           {
             "name": "earth",
             "h": 200,
-            "desc": "a level bank of soft earth with ferns and grass along its top and roots showing at its face, a rounded end at the left and at the right, its top flat and clear"
+            "desc": "a level bank of soft dark earth with ferns and grass along its top and roots showing at its face, each end a rounded bluff of packed earth with the grass folding over its brow (not a log, no cut wood, no rings), its top flat and clear"
           },
           {
             "name": "earth-thin",
@@ -2960,24 +2960,6 @@
         "h": 400,
         "pieces": [
           {
-            "name": "trunk-edge-left",
-            "w": 160,
-            "h": 400,
-            "desc": "the left edge of a great tree trunk: bark running straight up with its rounded left silhouette against the air and lichen on it, cut straight at the top and bottom so it repeats upward"
-          },
-          {
-            "name": "trunk-edge-right",
-            "w": 160,
-            "h": 400,
-            "desc": "the right edge of a great tree trunk: bark running straight up with its rounded right silhouette lit by a cream rim light, cut straight at the top and bottom so it repeats upward"
-          },
-          {
-            "name": "trunk-mid",
-            "w": 320,
-            "h": 400,
-            "desc": "a column of the trunk's bark between its edges, running straight up, cut straight at the top and bottom and at both sides so it repeats"
-          },
-          {
             "name": "trunk-taper",
             "w": 320,
             "h": 320,
@@ -2995,7 +2977,8 @@
             "h": 320,
             "desc": "a tall knothole opening in bark with a rounded rim of thick bark around it and darkness inside, standing on its own"
           }
-        ]
+        ],
+        "about": "the trunk's taper, flare and knothole frame; its edges and middle moved to the trunk column sheet (OP-259)"
       },
       "trunk-b": {
         "ref": "target-l4",
@@ -3037,6 +3020,34 @@
             "w": 320,
             "h": 240,
             "desc": "a bough forking into two thinner boughs, bark and moss, cut straight at the left where it joins"
+          }
+        ]
+      }
+    },
+    "columns": {
+      "about": "OP-259: tall columns painted on the key, each running off the top and the bottom of the frame, cut by art:finish columns: scaled by width to the piece, the middle of the column kept so top and bottom are straight cuts through bark; a piece marked tile is healed so two stacked copies meet with no seam",
+      "trunk": {
+        "ref": "target-l4",
+        "size": "2048x2048",
+        "pieces": [
+          {
+            "name": "trunk-edge-left",
+            "w": 160,
+            "h": 400,
+            "desc": "the left edge of a great tree trunk: deep-ridged bark running straight up the whole height of the frame, its left side the trunk's rounded silhouette against the air (dark, in shadow, with lichen), its right side cut straight"
+          },
+          {
+            "name": "trunk-mid",
+            "w": 320,
+            "h": 400,
+            "tile": true,
+            "desc": "a wide column of the trunk's bark between its edges, deep ridges and furrows running straight up the whole height of the frame, both sides cut straight, even in colour from top to bottom with no rim light"
+          },
+          {
+            "name": "trunk-edge-right",
+            "w": 160,
+            "h": 400,
+            "desc": "the right edge of a great tree trunk: deep-ridged bark running straight up the whole height of the frame, its right side the trunk's rounded silhouette lit by a cream rim light from the moon, its left side cut straight"
           }
         ]
       }

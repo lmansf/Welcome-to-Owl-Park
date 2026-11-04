@@ -949,6 +949,85 @@ def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_columns(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A recut column sheet (OP-259): tall columns of one material painted side by side on the key,
+    each running off the top and the bottom of the frame. Each column is found as a band of
+    mostly-opaque columns (the run finder on the image turned on its side), only its own paint
+    kept, scaled by its width to the piece's width at 2x and its middle kept to the piece's height,
+    so the top and the bottom are straight cuts through the material; a piece marked ``tile`` is
+    healed up and down so two stacked copies meet with no seam. Shipped as kit-cut-<piece> at 1x
+    and 2x with the alpha exact."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    kit = kit_table()
+    name = key.removeprefix("kit-sheet-cut-col-")
+    columns = kit.get("recut", {}).get("columns", {})
+    if not key.startswith("kit-sheet-cut-col-") or name not in columns:
+        raise ArtError(f"{key!r} is not a column sheet key (kit-sheet-cut-col-<name> in config/kit.json)")
+    col = columns[name]
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    if a.clear_haze:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
+        note(f"{key}: clear-haze {n} px")
+    if a.clear_glow:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"], min_sat=a.clear_glow, min_val=0.6)
+        note(f"{key}: clear-glow {n} px")
+    if a.clear_mist:
+        rgba, n = clear_mist(rgba)
+        note(f"{key}: clear-mist {n} px")
+    # on its side, a column is a run
+    side = rgba.transpose(Image.Transpose.TRANSPOSE)
+    alpha = np.asarray(side.getchannel("A"))
+    n = len(col["pieces"])
+    bands = run_bands(alpha, a.band_share)
+    if len(bands) < n:
+        raise ArtError(f"{key}: {len(bands)} column(s) found, not {n}; the image painted fewer columns or two touch; pick another candidate")
+    ordered = sorted(sorted(bands, key=lambda b: -(b[5] - b[4]) * (b[2] - b[0]))[:n], key=lambda b: b[1])
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    only = set(a.only.split(",")) if a.only else None
+    done = 0
+    for i, (piece, (sx0, sy0, sx1, sy1, c0, c1)) in enumerate(zip(col["pieces"], ordered)):
+        pkey = f"kit-cut-{piece['name']}"
+        # back upright: the band's rows are the column's x, its columns the column's y
+        x0, y0, x1, y1 = sy0, sx0, sy1, sx1
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        drw.text((x0 + 6, max(0, y0 - 16)), f"{i + 1} {pkey}", fill=(255, 255, 255))
+        if only and pkey not in only and piece["name"] not in only:
+            continue
+        crop_side, stray = own_run_alpha(side.crop((sx0, sy0, sx1, sy1)), (c0 - sy0, c1 - sy0))
+        if stray:
+            note(f"{key}: the {piece['name']} column's box held {stray} px not its own, cleared")
+        crop = crop_side.transpose(Image.Transpose.TRANSPOSE)
+        bb = crop.getbbox()
+        if bb and bb != (0, 0, crop.width, crop.height):
+            crop = crop.crop(bb)
+        W, H = logical_size(pkey, ctx.assets)
+        k = 2 * W / crop.width
+        col2 = crop.resize((2 * W, max(1, int(round(crop.height * k)))), Image.Resampling.LANCZOS)
+        if col2.height < 2 * H:
+            raise ArtError(f"{key}: the {piece['name']} column is too short for its piece ({col2.height // 2} px tall at 1x for {H}); pick a candidate painted taller or narrower")
+        top = (col2.height - 2 * H) // 2
+        two = col2.crop((0, top, 2 * W, top + 2 * H))
+        healed = bool(piece.get("tile"))
+        if healed:
+            two = heal_tile(two, band=a.band, axes=(0,))
+        one = downsample(two, W, H)
+        outputs, lines = finish_cutout_webp(ctx, pkey, one, two)
+        tools = [f"columns: {key} column {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''}{f' clear-glow={a.clear_glow}' if a.clear_glow else ''}{' clear-mist' if a.clear_mist else ''} scale={k:.3f} kept2x={top}-{top + 2 * H} of {col2.height}{f' healed-y band={a.band}' if healed else ''}", *lines]
+        save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                      "chroma": {k2: v for k2, v in cinfo.items() if k2 != "params"}, "column": {"key": key, "cell": i + 1, "bbox": [x0, y0, x1, y1], "kept2x": [top, top + 2 * H], "healed": healed}})
+        ky = y0 + top / k; ky1 = y0 + (top + 2 * H) / k
+        drw.rectangle((x0, ky, x1 - 1, ky1 - 1), outline=(255, 220, 0), width=2)
+        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (column {i + 1}, {x1 - x0}x{y1 - y0} px, kept rows {int(ky)}-{int(ky1)})")
+        done += 1
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"columns {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
 def trim_key_frame(img: Image.Image, key_colour: str, tol: float = 60.0, share: float = 0.98) -> tuple[Image.Image, tuple[int, int, int, int]]:
     """Cut away the rows and columns at the edges that are almost wholly the key colour (a painted
     panel's border); returns the cropped image and how much went from each side."""
@@ -2771,6 +2850,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-squash", type=float, default=0.15, help="how much a run painted short may be squashed in height to fit the longest middle piece")
     add_common(sp)
     sp.set_defaults(fn=cmd_runs)
+
+    sp = sub.add_parser("columns", help="kit recut column sheet -> full-height pieces cut straight top and bottom, a tile piece healed to stack (OP-259)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated piece names or keys to cut; default all")
+    sp.add_argument("--band-share", type=float, default=0.2, help="share of the height a column must cover to count (anything beside a column covers less)")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze transparent before the cut")
+    sp.add_argument("--clear-glow", type=float, default=None, help="also clear the washed-out glow in the key's hue down to this saturation")
+    sp.add_argument("--clear-mist", action="store_true", help="clear the pale grey mist painted over the key")
+    sp.add_argument("--band", type=float, default=0.25, help="the heal band for a tile piece, as a fraction of its height")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_columns)
 
     sp = sub.add_parser("target", help="keep an approved art target as reference art under tools/art/targets/ with provenance (OP-249)")
     sp.add_argument("key")
