@@ -155,6 +155,16 @@ for (const [name, sheet] of Object.entries(KIT_RECUT.sheets ?? {})) {
   KIT_RECUT_PROMPTS[key] = areaSheetPrompt({ light: KIT_RECUT.light }, sheet);
   sheet.pieces.forEach((p, i) => KIT_RECUT_PIECES.push({ key: `kit-cut-${p.name}`, sheet: key, cell: i, w: p.w ?? sheet.w, h: p.h ?? sheet.h }));
 }
+export const KIT_RECUT_COLUMN_KEYS = [];
+for (const [name, col] of Object.entries(KIT_RECUT.columns ?? {})) {
+  if (name === 'about') continue;
+  const key = `kit-sheet-cut-col-${name}`;
+  const items = col.pieces.map((p, i) => `${i + 1}) ${p.desc}`);
+  KIT_RECUT_COLUMN_KEYS.push(key);
+  KIT_RECUT_REFS[key] = [recutRef(col.ref)];
+  KIT_RECUT_PROMPTS[key] = `${col.pieces.length === 3 ? 'Three' : String(col.pieces.length)} separate tall vertical columns of game art standing side by side on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, each column one unbroken piece running from the very top edge of the frame to the very bottom edge so the frame cuts it off above and below, with clear flat magenta between the columns, the columns not touching each other, each about the same height and standing straight. From left to right: ${items.join('; ')}. Every column is seen straight from the side as in a side-scrolling platform game, with no ground, no cast shadow and no glow painted on the magenta. ${KIT_RECUT.light}. ${KIT_STYLE}`;
+  col.pieces.forEach((p, i) => KIT_RECUT_PIECES.push({ key: `kit-cut-${p.name}`, sheet: key, cell: i, w: p.w, h: p.h, column: true }));
+}
 export const RECUT_SEED = 9900;
 
 export function recutJobs(seedBase = RECUT_SEED) {
@@ -168,7 +178,12 @@ export function recutJobs(seedBase = RECUT_SEED) {
     derives: KIT_RECUT_PIECES.filter((p) => p.sheet === key).map((p) => p.key), refs: KIT_RECUT_REFS[key],
     providers: { fal: { output_format: 'png' } }, prompt: KIT_RECUT_PROMPTS[key],
   }));
-  return [...runs, ...sheets];
+  const columns = KIT_RECUT_COLUMN_KEYS.map((key, i) => ({
+    key, kind: 'sheet', realm: 'kit', size: KIT_RECUT.columns[key.slice('kit-sheet-cut-col-'.length)].size ?? SHEET_SIZE, seed: seedBase + 200 + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR,
+    derives: KIT_RECUT_PIECES.filter((p) => p.sheet === key).map((p) => p.key), refs: KIT_RECUT_REFS[key],
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_RECUT_PROMPTS[key],
+  }));
+  return [...runs, ...sheets, ...columns];
 }
 
 /** The jobs of one area set (about 49 images at four variants a sheet and layer, three a texture). */
