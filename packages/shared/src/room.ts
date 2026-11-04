@@ -162,6 +162,8 @@ export interface RoomKit {
   paths?: KitRun[];
   /** What an owl stands on over the floor: each is the room's perch of the same id (kitPerches), unless `perch: false`. */
   ledges?: KitLedge[];
+  /** Rolling ground (OP-238): slopes, crests and dips laid on a profile, each the room's sloped perch of the same id (kitPerches). */
+  hills?: KitHill[];
   /** Stairs: ledges drawn as treads on posts instead of as platforms. */
   stairs?: KitStair[];
   /** The piece drawn at each doorway of the room's `doors` (an arch, a stairwell, a portal). */
@@ -263,6 +265,28 @@ export interface KitLedge extends KitRun {
   perch?: false;
   /** The perch is solid (a wall to an owl below its top). */
   solid?: boolean;
+}
+
+/** A piece of rolling ground (OP-238): `kit-<material>-<step>`, its art laid on the hill's profile. */
+export type KitHillStep = 'slope-gentle-up' | 'slope-gentle-down' | 'slope-steep-up' | 'slope-steep-down' | 'crest' | 'dip';
+
+/**
+ * Rolling ground (OP-238): a hill of one material's slope, crest and dip pieces laid left to right
+ * from x0 at height top0, each piece KIT_HILL_STEP (320) along, its rise the slope's (gentle 80, one
+ * in four; steep 160, one in two; a crest or dip a gentle rise and fall of 40). Its ends meet the floor or a path or ledge
+ * at their height. Stood on as the room's sloped perch of the same id (kitPerches).
+ */
+export interface KitHill {
+  id: string;
+  /** branch, earth, stone or roots: the published slope pieces' material (OP-240). */
+  material: string;
+  x0: number;
+  top0: number;
+  steps: KitHillStep[];
+  /** A wall to an owl below it (a hill of earth); a bough's slope is jumped up through. */
+  solid?: boolean;
+  /** A texture drawn under the pieces, down to the room's foot (a hill's body of earth). */
+  mid?: string;
 }
 
 export interface KitStair {

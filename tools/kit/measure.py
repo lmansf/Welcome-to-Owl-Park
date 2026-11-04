@@ -11,12 +11,18 @@ writes four numbers to tools/kit/stand.json, in the piece's logical pixels:
 - left, right: its first opaque column and the one after its last, so copies of a run's middle meet
   art to art and a platform spans its run with its art, not its box.
 
+A rolling-ground piece (OP-238: kit-<m>-slope-gentle|steep-up|down, kit-<m>-crest, kit-<m>-dip)
+gets three more: where its upper edge is at its art's left end, middle and right end (the median of
+the first opaque row in a few columns there, an eighth of its art in from each end), so the
+assembler can lay its walkable top on a hill's profile and check its angle.
+
   python3 tools/kit/measure.py            # rewrites tools/kit/stand.json
   python3 tools/kit/measure.py --check    # exits 1 if stand.json is out of date
 
 Needs Pillow with webp. tools/kit/catalog.mjs folds stand.json into the shared catalogue.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -68,12 +74,36 @@ def measure(path, w, h):
     return [top, foot, left, right]
 
 
+SURFACE = re.compile(r'^kit-[a-z]+-(slope-(gentle|steep)-(up|down)|crest|dip)$')
+
+
+def surface(path, w, h, left, right):
+    """The upper edge's row at the art's left end, middle and right end (a few columns each, an eighth in)."""
+    im = Image.open(path).convert('RGBA')
+    a = im.getchannel('A').resize((w, h))
+    px = a.load()
+    span = right - left
+
+    def edge(at):
+        rows = []
+        for x in range(max(0, at - 3), min(w, at + 4)):
+            for y in range(h):
+                if px[x, y] > 128:
+                    rows.append(y)
+                    break
+        rows.sort()
+        return rows[len(rows) // 2] if rows else 0
+
+    return [edge(left + span // 8), edge(left + span // 2), edge(right - 1 - span // 8)]
+
+
 def main(argv):
     table = {}
     for key, w, h in pieces():
         f = ART / f'{key}.webp'
         if f.exists():
-            table[key] = measure(f, w, h)
+            m = measure(f, w, h)
+            table[key] = m + surface(f, w, h, m[2], m[3]) if SURFACE.match(key) else m
     text = '{\n' + ',\n'.join(f'  "{k}": [{", ".join(str(n) for n in v)}]' for k, v in sorted(table.items())) + '\n}\n'
     if '--check' in argv:
         if not OUT.exists() or OUT.read_text() != text:

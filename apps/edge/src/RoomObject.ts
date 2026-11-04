@@ -929,7 +929,11 @@ export class RoomObject extends DurableObject<Env> {
         else this.rememberEquipped(att, look.wear);
         return;
       }
-      case 'bye':
+      case 'bye': {
+        // A goodbye from the page (it walked on, or closed): the visit was here until now, and for the
+        // owl's live stay here a log off (OP-265). Said here, as the close that follows finds no state.
+        const s = sightingOf(att);
+        if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: 'bye' }]));
         if (room.sessionOf(att.id) === att.sid) this.logLeave(att, room, { reason: 'user' });
         this.flushThrottled(att);
         room.leave(att.id, att.sid);
@@ -940,6 +944,7 @@ export class RoomObject extends DurableObject<Env> {
         this.forget(att.room);
         this.emitCounts();
         return;
+      }
       case 'emote':
         if (!room.admit(att.id)) return;
         return this.emote(ws, att, room, frame.e);
@@ -1839,7 +1844,11 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
+    // As a close that dropped: the visit was here until now, and its line was lost (OP-265).
+    const att = ws.deserializeAttachment() as Attachment | null;
+    const s = att?.state ? sightingOf(att) : null;
     this.drop(ws, { reason: 'dropped', detail: 'error' });
+    if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: 'drop' }]));
   }
 
   /** A socket is gone or sent away: its owl leaves its room (when this socket still holds it), logged once with why (OP-134). */
