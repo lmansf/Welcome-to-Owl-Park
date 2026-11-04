@@ -407,6 +407,9 @@ export class EdgeTransport implements ParkTransport {
     let spawn = requestedSpawn && SPAWN_NAME.test(requestedSpawn) ? requestedSpawn : undefined;
     /** Come by travel from the map (OP-130): said in the hello until the room has let the owl in. */
     let via = (self as PlayerState & { via?: string }).via === 'travel' ? ('travel' as const) : undefined;
+    /** The park the owl walks (OP-265), said in every hello: the room logs a shared room's stay in it. */
+    const walkMap = (self as PlayerState & { map?: number }).map;
+    const map = walkMap === 1 || walkMap === 2 ? walkMap : undefined;
     let backoff = BACKOFF_MIN_MS;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -929,6 +932,7 @@ export class EdgeTransport implements ParkTransport {
         if (spawn) hello.spawn = spawn;
         if (via) hello.via = via;
         if (keeper) hello.keeper = keeper;
+        if (map) hello.map = map;
         const pos = handlers.here?.() ?? currentPos();
         hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));

@@ -126,6 +126,12 @@ export interface ClientHello {
   via?: 'travel';
   /** A keeper's token (OP-156): the room lets its owl into a gated room the keepers keep closed (the tree, map 2, while it is dark). */
   keeper?: string;
+  /**
+   * The park the page has its owl walking (OP-265): which park a room both parks share (a nest, a realm
+   * the tree opens into) is in, for the room-stay log only. A room of one park alone is in that park,
+   * whatever this says.
+   */
+  map?: 1 | 2;
 }
 export interface ClientMove {
   t: 'move';
@@ -647,6 +653,10 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       if (v['keeper'] !== undefined) {
         if (typeof v['keeper'] !== 'string' || !KEEPER_TOKEN.test(v['keeper'])) return null;
         out.keeper = v['keeper'];
+      }
+      if (v['map'] !== undefined) {
+        if (v['map'] !== 1 && v['map'] !== 2) return null;
+        out.map = v['map'];
       }
       return out;
     }

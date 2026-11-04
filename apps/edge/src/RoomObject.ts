@@ -1101,7 +1101,7 @@ export class RoomObject extends DurableObject<Env> {
       ws.serializeAttachment(kept);
     }
     this.emitCounts();
-    this.statsSeen(att, look, true, hello.via === 'travel');
+    this.statsSeen(att, look, true, hello.via === 'travel', hello.map);
     this.travelNote(att, hello.spawn);
     this.accountLook(att, look);
     this.checkDevice(ws, att);
@@ -1717,10 +1717,10 @@ export class RoomObject extends DurableObject<Env> {
    * An owl in a room, for the player stats (OP-111): its visit goes on, and its kind and colour as it
    * shows them. At its hello (`entered`) its time in the room begins (OP-113), in its own nest or not.
    */
-  private statsSeen(att: Attachment, look: OwlLook, entered = false, travel = false): void {
+  private statsSeen(att: Attachment, look: OwlLook, entered = false, travel = false, map?: 1 | 2): void {
     const s = sightingOf(att);
     if (!this.statsOn || !s) return;
-    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}), ...(travel ? { travel: true } : {}) } : s;
+    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}), ...(travel ? { travel: true } : {}), ...(map ? { map } : {}) } : s;
     this.ctx.waitUntil(
       this.collections()
         .seen(sighting, { body: look.body, ...(look.species ? { species: look.species } : {}) })
