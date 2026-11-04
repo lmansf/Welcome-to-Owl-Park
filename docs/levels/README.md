@@ -143,3 +143,26 @@ tree courses are built on that.
   sections 4.9, 5 and 6).
 - **The secret characters' and the shrines' words stay drafts.** The owner approves them when each
   course is built.
+
+## Rolling ground (OP-238)
+
+A tree room's floor or bough may roll: a kit room's `hills` (`room.ts`, `KitHill`) lay the published
+slope, crest and dip pieces (OP-240) of one material left to right, and the hill is stood on as a
+sloped perch (`kitPerches`), whose `profile` is its height along x (`perches.ts`).
+
+| What | Value | From |
+| --- | --- | --- |
+| A step | 320 px along | `KIT_HILL_STEP` |
+| Gentle | one up for 4 along: 80 a step, about 14 degrees | `SLOPE_GENTLE` |
+| Steep | one up for 2 along: 160 a step, about 27 degrees; nothing steeper is walked | `SLOPE_STEEP` |
+| Crest, dip | a gentle rise and fall of 40, level ends | `kitHillProfile` |
+| Walking | at the walk's pace up and down, standing all the way, never sliding; no stamina, no damage | `stepFlier`, `SLOPE_CATCH` 12 |
+| The room server | believes an owl standing anywhere along a slope where it is, and nowhere off it | `standingRanges`, `Room.perchFor` |
+| A doorway on a slope | stands at the slope's height there | `slopeDoorProblems` |
+
+The assembler holds every hill to its rules (`kitHillProblems`): each piece's art is stretched up or
+down to lie on its angle by no more than `KIT_HILL_STRETCH` (0.65 to 1.45; past it the piece is the
+wrong one for the angle), a crest's or dip's ends are level, the room's perch stands on the profile,
+and a raised end meets a path or ledge at its height, or a barrier. Down is still left and up is
+still right on each level, and the commons stay mostly level. The level plans get slopes where they
+fall naturally when they are built.

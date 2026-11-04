@@ -19,7 +19,10 @@ import {
   highestTop,
   onSomeFooting,
   sameLevel,
-  standingHeights,
+  standingRanges,
+  topAt,
+  SLOPE_STEEP,
+  type Standing,
   USE_COOLDOWN_MS,
   REACH_SLACK,
   SAY_EVERY_MS,
@@ -195,14 +198,14 @@ export class Room {
   private readonly objects = new Map<string, number>();
   /** The highest an owl can be here, the heights it can stand at, and where it can be at some height (OP-084, perches.ts). */
   private readonly airTop: number;
-  private readonly standing: number[];
+  private readonly standing: Standing[];
   private readonly anyFooting: Polygon[];
 
   constructor(def: RoomDef, opts: RoomOptions) {
     this.def = def;
     this.opts = opts;
     this.airTop = highestTop(def) + LIMITS.maxRise;
-    this.standing = standingHeights(def);
+    this.standing = standingRanges(def);
     this.anyFooting = footing(def, Number.POSITIVE_INFINITY).walkable;
   }
 
@@ -291,14 +294,18 @@ export class Room {
    * of the room on a walk, and after a welcome the room's copy walks over to where its page has it.
    */
   private perchFor(v: Visitor, z: number): boolean {
-    const perches = (this.def.perches ?? []).filter((p) => Math.abs(p.top - z) <= 0.5);
+    // A flat perch that high, or a sloped one (OP-238) whose range holds the height: on the slope, the
+    // height must be its height where the owl is, give or take the slope over the reach.
+    const slack = 0.5 + LIMITS.perchReachPx / SLOPE_STEEP;
+    const perches = (this.def.perches ?? []).filter((p) => (p.profile ? z >= Math.min(...p.profile.map((q) => q.top)) - slack && z <= p.top + slack : Math.abs(p.top - z) <= 0.5));
     if (perches.length === 0) return false;
     const here = this.currentPos(v);
     const end = v.st.walk?.to ?? here;
     const steps = Math.max(1, Math.ceil(distance(here, end) / (LIMITS.perchReachPx / 2)));
+    const atHeight = (perch: (typeof perches)[number], p: Vec2) => !perch.profile || Math.abs(topAt(perch, p.x) - z) <= slack;
     for (let i = 0; i <= steps; i++) {
       const p = { x: here.x + ((end.x - here.x) * i) / steps, y: here.y + ((end.y - here.y) * i) / steps };
-      if (perches.some((perch) => pointInPolygon(p, perch.area) || distance(p, closestPointOnPolygon(p, perch.area)) <= LIMITS.perchReachPx)) return true;
+      if (perches.some((perch) => atHeight(perch, p) && (pointInPolygon(p, perch.area) || distance(p, closestPointOnPolygon(p, perch.area)) <= LIMITS.perchReachPx))) return true;
     }
     return false;
   }

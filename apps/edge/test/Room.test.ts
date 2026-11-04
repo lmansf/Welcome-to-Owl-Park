@@ -601,6 +601,33 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(dropped).toBe(LIMITS.framesPerWindow + 1);
   });
 
+  it('believes an owl standing anywhere along a slope where it is, and refuses one off the slope (OP-238)', () => {
+    // The fixture room with a hill across the middle of its floor: up gently 80 over 320, down again.
+    const hilly: RoomDef = {
+      ...def,
+      perches: [
+        {
+          id: 'hill',
+          area: [{ x: 300, y: 700 }, { x: 940, y: 700 }, { x: 940, y: 900 }, { x: 300, y: 900 }],
+          top: 80,
+          solid: true,
+          profile: [{ x: 300, top: 0 }, { x: 620, top: 80 }, { x: 940, top: 0 }],
+        },
+      ],
+    };
+    const r = new Room(hilly, { now: () => now, random: () => 0.5, cap: 3 });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    r.join(a, 'a', hello({ pos: { x: 460, y: 800 } }), 's0');
+    r.join(b, 'b', hello());
+    // Half way up the slope, standing at its height there: believed, and told.
+    expect(r.air('a', { z: 40, vz: 0, s: GROUNDED, f: 0 })).toBe(true);
+    expect(b.last('air')!.air).toEqual({ z: 40, vz: 0, s: GROUNDED, f: 0 });
+    // Standing at a height along the hill's range but not its height here, or above all of it: refused.
+    expect(r.air('a', { z: 78, vz: 0, s: GROUNDED, f: 0 })).toBe(false);
+    expect(r.air('a', { z: 120, vz: 0, s: GROUNDED, f: 0 })).toBe(false);
+  });
+
   it('keeps an owl standing on a perch up there, lets it walk and come back there, and believes its air to a jump above the highest (OP-084)', () => {
     // The fixture room with a bench along its back wall (its front face over the floor's back edge) and a beam above it.
     const withPerches: RoomDef = {

@@ -20,8 +20,8 @@
  */
 import { pointInPolygon } from './geometry';
 import { KIT_ART, kitGroup, type KitArtSpec, type KitTile } from './kitArt';
-import type { Perch } from './perches';
-import { ROOM_W, type KitBackdrop, type KitColumn, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
+import { SLOPE_GENTLE, SLOPE_STEEP, profileProblems, type Perch, type ProfilePoint } from './perches';
+import { ROOM_W, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
 import { perchTiers } from './routes';
 
 /** How deep a ledge's mid is drawn when the ledge does not say (room px). */
@@ -58,7 +58,7 @@ export interface KitDraw {
   flip?: boolean;
   alpha?: number;
   /** What it is drawn for, and that thing's id (the greybox shades by it, the tests count by it). */
-  role: 'surface' | 'path' | 'ledge' | 'stair' | 'door' | 'barrier' | 'prop' | 'decal';
+  role: 'surface' | 'path' | 'ledge' | 'hill' | 'stair' | 'door' | 'barrier' | 'prop' | 'decal';
   id: string;
 }
 
@@ -71,21 +71,142 @@ export interface KitCell {
   crop: { x: number; y: number; w: number; h: number };
 }
 
-/** The ledges of a kit room as perches: each one stood on, a strip of the floor plan along the ground line. */
+/** The ledges of a kit room as perches: each one stood on, a strip of the floor plan along the ground line; and its hills (OP-238) as sloped perches. */
 export function kitPerches(kit: RoomKit): Perch[] {
-  return (kit.ledges ?? [])
+  const strip = (x0: number, x1: number) => [
+    { x: x0, y: kit.ground - KIT_STRIP },
+    { x: x1, y: kit.ground - KIT_STRIP },
+    { x: x1, y: kit.ground + KIT_STRIP },
+    { x: x0, y: kit.ground + KIT_STRIP },
+  ];
+  const ledges = (kit.ledges ?? [])
     .filter((l) => l.perch !== false)
-    .map((l) => ({
-      id: l.id,
-      top: l.top,
-      area: [
-        { x: l.x0, y: kit.ground - KIT_STRIP },
-        { x: l.x1, y: kit.ground - KIT_STRIP },
-        { x: l.x1, y: kit.ground + KIT_STRIP },
-        { x: l.x0, y: kit.ground + KIT_STRIP },
-      ],
-      ...(l.solid ? { solid: true } : {}),
-    }));
+    .map((l): Perch => ({ id: l.id, top: l.top, area: strip(l.x0, l.x1), ...(l.solid ? { solid: true } : {}) }));
+  const hills = (kit.hills ?? []).map((h): Perch => {
+    const profile = kitHillProfile(h);
+    return { id: h.id, top: Math.max(...profile.map((p) => p.top)), area: strip(profile[0]!.x, profile.at(-1)!.x), profile, ...(h.solid ? { solid: true } : {}) };
+  });
+  return [...ledges, ...hills];
+}
+
+/** How far a hill piece's art may be stretched up or down to lie on its slope (OP-238): past this it is the wrong piece for the angle. */
+export const KIT_HILL_STRETCH: readonly [number, number] = [0.65, 1.45];
+
+/**
+ * How far along a hill piece lies (room px, OP-238): every slope, crest and dip piece's art is laid
+ * this wide, so a gentle step rises 80, a steep one 160 and a crest or dip 40, and hills meet the
+ * ledges and paths of the kit's heights.
+ */
+export const KIT_HILL_STEP = 320;
+
+/** A hill piece's own numbers: its art's width, and its upper edge's row at the art's two ends and middle (its own px). */
+function hillArt(key: string): { w: number; left: number; l: number; m: number; r: number } | null {
+  const s = KIT_ART[key];
+  if (!s?.surface) return null;
+  const span = artSpan(s);
+  const [l, m, r] = s.surface;
+  // Measured an eighth in from each end (tools/kit/measure.py): a slope's line carried on to its ends.
+  const slope = /-slope-/.test(key) ? (l - r) / 6 : 0;
+  return { w: span.w, left: span.left, l: l + slope, m, r: r - slope };
+}
+
+/** A hill step's rise over its art's width: up (positive) or down, and for a crest or dip its middle's. */
+function hillRise(step: KitHillStep, w: number): { end: number; mid?: number } {
+  // Whole px, so a hill's ends meet a path or ledge at a whole height; within the slope rules' slack.
+  if (step === 'crest') return { end: 0, mid: Math.round(w / 2 / SLOPE_GENTLE) };
+  if (step === 'dip') return { end: 0, mid: -Math.round(w / 2 / SLOPE_GENTLE) };
+  const r = Math.round(w / (step.startsWith('slope-gentle') ? SLOPE_GENTLE : SLOPE_STEEP));
+  return { end: step.endsWith('-up') ? r : -r };
+}
+
+/** A hill's profile (OP-238): its height at each piece's ends, and at a crest's or dip's middle, left to right. */
+export function kitHillProfile(hill: KitHill): ProfilePoint[] {
+  const out: ProfilePoint[] = [{ x: hill.x0, top: hill.top0 }];
+  let x = hill.x0;
+  let top = hill.top0;
+  for (const step of hill.steps) {
+    const w = KIT_HILL_STEP;
+    const rise = hillRise(step, w);
+    if (rise.mid !== undefined) out.push({ x: x + w / 2, top: top + rise.mid });
+    x += w;
+    top += rise.end;
+    out.push({ x, top });
+  }
+  return out;
+}
+
+/** How much a hill piece's art is stretched up or down to lie on its step (1 for art that already does); null for a piece with no measured edge. */
+export function kitHillStretch(key: string, step: KitHillStep): number | null {
+  const a = hillArt(key);
+  if (!a) return null;
+  const rise = hillRise(step, KIT_HILL_STEP);
+  const drawn = rise.mid !== undefined ? Math.abs((a.l + a.r) / 2 - a.m) : Math.abs(a.l - a.r);
+  const want = Math.abs(rise.mid ?? rise.end);
+  return drawn > 0 ? want / drawn : null;
+}
+
+/**
+ * What is wrong with a kit room's hill (OP-238), as sentences: a piece with no measured art, art that
+ * must be stretched past KIT_HILL_STRETCH to lie on its angle (the angle is not one of the two, or the
+ * piece is the wrong one), a crest or dip whose ends are not level, a profile that breaks the slope
+ * rules, the room's perch not standing on it, and an end in mid-air: a raised end meets a path or
+ * ledge at its height, or a barrier.
+ */
+export function kitHillProblems(room: Pick<RoomDef, 'kit' | 'perches'>, hill: KitHill): string[] {
+  const out: string[] = [];
+  for (const step of hill.steps) {
+    const key = `kit-${hill.material}-${step}`;
+    const k = kitHillStretch(key, step);
+    if (k === null) {
+      out.push(`hill ${hill.id}'s ${key} has no measured edge (tools/kit/measure.py)`);
+      continue;
+    }
+    if (k < KIT_HILL_STRETCH[0] || k > KIT_HILL_STRETCH[1]) out.push(`hill ${hill.id}'s ${key} would be stretched ${k.toFixed(2)} to lie on its slope: not a ${step} piece`);
+    const a = hillArt(key)!;
+    if ((step === 'crest' || step === 'dip') && Math.abs(a.l - a.r) > 8) out.push(`hill ${hill.id}'s ${key} has ends ${Math.abs(a.l - a.r)} px apart: a ${step} joins level`);
+  }
+  const profile = kitHillProfile(hill);
+  const perch = (room.perches ?? []).find((p) => p.id === hill.id);
+  if (!perch?.profile) out.push(`hill ${hill.id} has no sloped perch ${hill.id} (kitPerches)`);
+  else {
+    out.push(...profileProblems(perch));
+    const off = profile.some((p, i) => !perch.profile![i] || Math.abs(perch.profile![i]!.x - p.x) > 0.5 || Math.abs(perch.profile![i]!.top - p.top) > 0.5);
+    if (off || perch.profile.length !== profile.length) out.push(`hill ${hill.id}'s perch is not on its profile`);
+  }
+  const kit = room.kit;
+  const meets = (x: number, top: number) =>
+    Math.abs(top) <= 0.5 ||
+    [...(kit?.paths ?? []), ...(kit?.ledges ?? [])].some((r) => Math.abs(r.top - top) <= 0.5 && r.x0 - KIT_PATH_SLACK <= x && x <= r.x1 + KIT_PATH_SLACK) ||
+    (kit?.barriers ?? []).some((b) => Math.abs(b.top - top) <= 0.5 && b.x0 - KIT_BARRIER_REACH <= x && x <= b.x1 + KIT_BARRIER_REACH);
+  const first = profile[0]!;
+  const last = profile.at(-1)!;
+  if (!meets(first.x, first.top)) out.push(`hill ${hill.id} begins in mid-air at x ${first.x}, ${first.top} high: no path, ledge or barrier there`);
+  if (!meets(last.x, last.top)) out.push(`hill ${hill.id} ends in mid-air at x ${Math.round(last.x)}, ${Math.round(last.top)} high: no path, ledge or barrier there`);
+  return out;
+}
+
+/** A hill's pieces: each KIT_HILL_STEP along, stretched up or down so its upper edge lies on the profile, its feet KIT_STAND_SINK into it; its mid texture under it. */
+function hillDraws(hill: KitHill, ground: number, roomH: number, out: KitDraw[]): void {
+  const profile = kitHillProfile(hill);
+  if (hill.mid) {
+    const low = Math.min(...profile.map((p) => p.top));
+    const x0 = profile[0]!.x;
+    const x1 = profile.at(-1)!.x;
+    out.push({ key: hill.mid, x: x0, y: ground - low + KIT_STAND_SINK, w: x1 - x0, h: roomH - (ground - low), tile: sizeOf(hill.mid).tile, layer: 'play', role: 'hill', id: hill.id });
+  }
+  let x = hill.x0;
+  let top = hill.top0;
+  for (const step of hill.steps) {
+    const key = `kit-${hill.material}-${step}`;
+    const s = sizeOf(key);
+    const a = hillArt(key);
+    const k = kitHillStretch(key, step) ?? 1;
+    // Its art spans the step, stretched across to it, and up or down to lie on its slope.
+    const kx = KIT_HILL_STEP / (a?.w ?? KIT_HILL_STEP);
+    out.push({ key, x: Math.round(x - (a?.left ?? 0) * kx), y: Math.round(ground - top - ((a?.l ?? 0) + KIT_STAND_SINK) * k), w: Math.round(s.w * kx), h: Math.round(s.h * k), tile: 'none', layer: 'play', role: 'hill', id: hill.id });
+    x += KIT_HILL_STEP;
+    top += hillRise(step, KIT_HILL_STEP).end;
+  }
 }
 
 /** A kit's backdrops as the room's tiles: one per screen each, those behind the owls and those in front. */
@@ -343,6 +464,7 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
   for (const s of kit.surfaces ?? []) out.push({ key: s.texture, ...s.rect, tile: sizeOf(s.texture).tile, layer: 'back', role: 'surface', id: s.id });
   for (const c of kit.columns ?? []) columnDraws(c, out);
   for (const p of kit.paths ?? []) runDraws(p, g, p.depth ?? room.size.h - (g - p.top), 'path', out);
+  for (const h of kit.hills ?? []) hillDraws(h, g, room.size.h, out);
   const treads = new Map<string, { stair: string; tread: string | undefined; post: string | undefined }>();
   for (const st of kit.stairs ?? []) for (const id of st.treads) treads.set(id, { stair: st.id, tread: st.tread, post: st.post });
   for (const l of kit.ledges ?? []) {
@@ -592,6 +714,9 @@ export function kitProblems(room: RoomDef): string[] {
       if (p.x1 - b > KIT_PATH_SLACK && !closed(b, p.top)) out.push(`path ${p.id} leads nowhere east of x ${b}: no barrier or doorway at the end of the walk`);
     }
   }
+
+  // Rolling ground (OP-238): each hill stood on as its profile, its pieces fit for their angles, its ends met.
+  for (const h of kit.hills ?? []) out.push(...kitHillProblems(room, h));
 
   // The floor an owl walks is drawn.
   const floorPaths = (kit.paths ?? []).filter((p) => p.top === 0);

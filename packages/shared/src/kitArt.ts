@@ -54,6 +54,8 @@ export interface KitArtSpec {
   /** Where the piece's art begins and ends across its box (room px from its left), where measured. */
   left?: number;
   right?: number;
+  /** A rolling-ground piece (OP-238): its upper edge's row at its art's left end, middle and right end, where measured. */
+  surface?: readonly [number, number, number];
 }
 
 /**
