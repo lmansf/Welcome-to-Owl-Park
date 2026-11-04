@@ -25,6 +25,10 @@
  * - `kind: "contact"` (OP-192): a paid order's buyer (email and the store's customer id), into the
  *   owner's `contacts` schema, never the `game` one: the only rows here that name a person. The
  *   Worker sends them straight from the store; one order sent again lands once.
+ * - `kind: "room_stay"` (OP-265): live stays, one event as an owl comes into a room (`enter`) and
+ *   one as its stay ends (`leave`, with why), applied in order by `game.apply_room_stays`: an enter
+ *   closes the visit's open stay and opens its own in the same transaction. A batch sent twice
+ *   changes nothing the second time.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * Every other row is anonymous by construction, and checked again here before anything is kept: the
@@ -52,6 +56,10 @@ export const CHANGE_REASONS = ['first', 'chosen', 'quest', 'seasonal'] as const;
 /** A room's kind of place, and how an owl came into it (OP-113). */
 export const REALM_KINDS = ['realm', 'hub', 'nest'] as const;
 export const ENTRY_SOURCES = ['walked', 'spawn', 'deep_link', 'reconnect', 'travel'] as const;
+/** How a live stay began (OP-265): never a reconnect, which continues the stay it came back to. */
+export const STAY_ENTRIES = ['walked', 'spawn', 'deep_link', 'travel'] as const;
+/** Why a live stay ended (OP-265). */
+export const EXIT_REASONS = ['moved', 'logoff', 'timeout', 'server_restart'] as const;
 /** What a visit was past the turnstiles (OP-192): a full visitor's or a spectator's (OP-191). */
 export const VISITOR_KINDS = ['visitor', 'spectator'] as const;
 /** What happened to a ticket order, or to a ticket at the gate (OP-192). */
@@ -136,6 +144,21 @@ export interface RealmVisitRow {
   collectibles_gained: number;
 }
 
+/** A live stay's event, for `game.room_stay` (OP-265). */
+export type RoomStayRow =
+  | {
+      event: 'enter';
+      stay_id: string;
+      session_id: string;
+      collector_id: string;
+      at: string;
+      realm: string;
+      realm_kind: (typeof REALM_KINDS)[number];
+      map_id: 1 | 2;
+      entry_source: (typeof STAY_ENTRIES)[number];
+    }
+  | { event: 'leave'; stay_id: string; at: string; exit_reason: (typeof EXIT_REASONS)[number] };
+
 export const FEEDBACK_KINDS = ['bug', 'idea', 'praise', 'other'] as const;
 /** The park's own limits on a note's words (packages/shared feedback.ts). */
 export const FEEDBACK_MIN_CHARS = 3;
@@ -177,6 +200,8 @@ export interface Tables {
   addSessions(rows: SessionRow[]): Promise<number>;
   /** Keeps the times in rooms not there yet whose visit is; returns how many those were. */
   addRealmVisits(rows: RealmVisitRow[]): Promise<number>;
+  /** Applies live stays' events in order (OP-265); returns how many changed a row. */
+  addRoomStays(rows: RoomStayRow[]): Promise<number>;
   /** Keeps the notes not there yet; returns how many those were. */
   addFeedback(rows: FeedbackRow[]): Promise<number>;
   /** Keeps the ticket events not there yet; returns how many those were. */
@@ -202,6 +227,8 @@ const COLLECTIBLE = /^(furniture:)?[a-z0-9][a-z0-9-]{0,47}(~[0-9]{1,2})?$/;
 const WORD = /^[a-z]{1,20}$/;
 /** A room the park's log names: a word, or a level of the tree (`l0` to `l5`, OP-128), so a letter then letters or digits. */
 const ROOM_WORD = /^[a-z][a-z0-9]{0,19}$/;
+/** A room a live stay names (OP-265): as ROOM_WORD, with the hyphen the park's room ids use (`l5-street`, `trail-1`). */
+const STAY_ROOM = /^[a-z][a-z0-9-]{0,19}$/;
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -417,6 +444,37 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
   };
 }
 
+/** A live stay's event as the table takes it (OP-265), or the reason it is left out. */
+export function checkRoomStay(v: unknown): RoomStayRow | string {
+  const r = obj(v);
+  if (typeof r['stay_id'] !== 'string' || !UUID.test(r['stay_id'])) return 'stay_id';
+  const at = iso(r['at']);
+  if (!at) return 'at';
+  if (r['event'] === 'leave') {
+    if (!EXIT_REASONS.includes(r['exit_reason'] as (typeof EXIT_REASONS)[number])) return 'exit_reason';
+    return { event: 'leave', stay_id: r['stay_id'], at, exit_reason: r['exit_reason'] as (typeof EXIT_REASONS)[number] };
+  }
+  if (r['event'] !== 'enter') return 'event';
+  if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  if (typeof r['realm'] !== 'string' || !STAY_ROOM.test(r['realm'])) return 'realm';
+  if (!REALM_KINDS.includes(r['realm_kind'] as (typeof REALM_KINDS)[number])) return 'realm_kind';
+  const map = r['map_id'] ?? 1;
+  if (map !== 1 && map !== 2) return 'map_id';
+  if (!STAY_ENTRIES.includes(r['entry_source'] as (typeof STAY_ENTRIES)[number])) return 'entry_source';
+  return {
+    event: 'enter',
+    stay_id: r['stay_id'],
+    session_id: r['session_id'],
+    collector_id: r['collector_id'],
+    at,
+    realm: r['realm'],
+    realm_kind: r['realm_kind'] as (typeof REALM_KINDS)[number],
+    map_id: map,
+    entry_source: r['entry_source'] as (typeof STAY_ENTRIES)[number],
+  };
+}
+
 /** A note as the table takes it, or the reason it is left out. The words are checked for size and control characters only: they are the visitor's. */
 export function checkFeedback(v: unknown): FeedbackRow | string {
   const r = obj(v);
@@ -513,8 +571,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json({ ok: true, dry_run: true, tables });
   }
   const kind = body['kind'];
-  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback' && kind !== 'purchase' && kind !== 'contact') {
-    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit, feedback, purchase or contact' }, 400);
+  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback' && kind !== 'purchase' && kind !== 'contact' && kind !== 'room_stay') {
+    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit, feedback, purchase, contact or room_stay' }, 400);
   }
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
   const tables = deps.tables;
@@ -535,6 +593,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkPurchase, (rows) => tables.addPurchases(rows));
       case 'contact':
         return await keepRows(kind, body, checkContact, (rows) => tables.addContacts(rows));
+      case 'room_stay':
+        return await keepRows(kind, body, checkRoomStay, (rows) => tables.addRoomStays(rows));
       case 'catalogue':
         return await catalogue(body, tables);
     }
@@ -647,6 +707,12 @@ export function gameTables(db: Db): Tables {
     async addContacts(rows) {
       // The database keeps each buyer by email and each order once (sql/profiles.sql): the rows go as the one JSON parameter.
       const res = await db.unsafe(`select ${CONTACTS_SCHEMA}.add_contacts($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
+      const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
+      return Number.isFinite(kept) ? kept : 0;
+    },
+    async addRoomStays(rows) {
+      // In order, in one call and so one transaction (sql/room_stays.sql): an enter closes the visit's open stay and opens its own.
+      const res = await db.unsafe(`select ${SCHEMA}.apply_room_stays($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
       const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
       return Number.isFinite(kept) ? kept : 0;
     },

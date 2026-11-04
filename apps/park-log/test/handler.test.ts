@@ -7,6 +7,7 @@ import {
   checkPurchase,
   checkPlayer,
   checkRealmVisit,
+  checkRoomStay,
   checkRow,
   checkSession,
   gameTables,
@@ -19,6 +20,7 @@ import {
   type PlayerRow,
   type PurchaseRow,
   type RealmVisitRow,
+  type RoomStayRow,
   type SessionRow,
   type Tables,
 } from '../src/handler.ts';
@@ -52,6 +54,7 @@ function memoryTables(): Tables & {
   feedback: FeedbackRow[];
   purchases: PurchaseRow[];
   contacts: ContactRow[];
+  roomStays: Array<{ stay_id: string; session_id: string; realm: string; entered_at: string; left_at: string | null; exit_reason: string | null }>;
 } {
   const rows: LogRow[] = [];
   const purchases: PurchaseRow[] = [];
@@ -61,7 +64,25 @@ function memoryTables(): Tables & {
   const sessions: SessionRow[] = [];
   const realmVisits: RealmVisitRow[] = [];
   const feedback: FeedbackRow[] = [];
+  const roomStays: Array<{ stay_id: string; session_id: string; realm: string; entered_at: string; left_at: string | null; exit_reason: string | null }> = [];
   return {
+    roomStays,
+    // As game.apply_room_stays does it (sql/room_stays.sql), in order.
+    async addRoomStays(batch: RoomStayRow[]) {
+      let changed = 0;
+      for (const e of batch) {
+        if (e.event === 'enter') {
+          if (roomStays.some((x) => x.stay_id === e.stay_id)) continue;
+          for (const x of roomStays) if (x.session_id === e.session_id && x.left_at === null) Object.assign(x, { left_at: e.at, exit_reason: 'moved' });
+          roomStays.push({ stay_id: e.stay_id, session_id: e.session_id, realm: e.realm, entered_at: e.at, left_at: null, exit_reason: null });
+          changed++;
+        } else {
+          const x = roomStays.find((y) => y.stay_id === e.stay_id && y.left_at === null);
+          if (x && Object.assign(x, { left_at: e.at, exit_reason: e.exit_reason })) changed++;
+        }
+      }
+      return changed;
+    },
     rows,
     catalogue,
     players,
@@ -439,12 +460,66 @@ describe('tickets and buyers (OP-192)', () => {
   });
 });
 
+describe('room stays, live (OP-265)', () => {
+  const enter = (i: number, extra: Record<string, unknown> = {}) => ({
+    event: 'enter',
+    stay_id: uuid(i),
+    session_id: uuid(900),
+    collector_id: A,
+    at: `2026-11-03T16:0${i}:00.000Z`,
+    realm: 'grove',
+    realm_kind: 'realm',
+    map_id: 1,
+    entry_source: 'walked',
+    ...extra,
+  });
+  const leave = (i: number, at: string, reason: string) => ({ event: 'leave', stay_id: uuid(i), at, exit_reason: reason });
+
+  it('opens a stay as the owl comes in, closes it as moved when the next opens, and changes nothing when sent again', async () => {
+    const tables = memoryTables();
+    const batch = { kind: 'room_stay', rows: [enter(1, { entry_source: 'spawn', realm: 'lobby', realm_kind: 'hub' }), enter(2, { realm: 'l5-street', realm_kind: 'hub' }), leave(2, '2026-11-03T16:05:00.000Z', 'logoff')] };
+    expect(await (await post(batch, { tables })).json()).toEqual({ ok: true, kept: 3, duplicates: 0, skipped: 0 });
+    expect(await (await post(batch, { tables })).json()).toEqual({ ok: true, kept: 0, duplicates: 3, skipped: 0 });
+    expect(tables.roomStays.map((r) => [r.realm, r.left_at, r.exit_reason])).toEqual([
+      ['lobby', '2026-11-03T16:02:00.000Z', 'moved'],
+      ['l5-street', '2026-11-03T16:05:00.000Z', 'logoff'],
+    ]);
+  });
+
+  it('takes an exit reason and an entry only from their lists, the owl and the visit only as hashes, and no other field', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(checkRoomStay(enter(1))).toEqual(enter(1));
+    expect(checkRoomStay(enter(1, { map_id: undefined }))).toEqual(enter(1));
+    expect(checkRoomStay(leave(1, '2026-11-03T16:05:00Z', 'server_restart'))).toEqual(leave(1, '2026-11-03T16:05:00.000Z', 'server_restart'));
+    expect(checkRoomStay(leave(1, '2026-11-03T16:05:00Z', 'kicked'))).toBe('exit_reason');
+    expect(checkRoomStay(enter(1, { entry_source: 'reconnect' }))).toBe('entry_source');
+    expect(checkRoomStay(enter(1, { event: 'teleport' }))).toBe('event');
+    expect(checkRoomStay(enter(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkRoomStay(enter(1, { session_id: 'v_visitAAAA1' }))).toBe('session_id');
+    expect(checkRoomStay(enter(1, { realm: 'Grove!' }))).toBe('realm');
+    expect(checkRoomStay(enter(1, { map_id: 3 }))).toBe('map_id');
+    expect(checkRoomStay(enter(1, { at: 'now' }))).toBe('at');
+    expect(checkRoomStay({ ...enter(1), stay_id: 'x' })).toBe('stay_id');
+    // A position, a name or an address is never taken, even when sent.
+    expect(Object.keys(checkRoomStay({ ...enter(1), x: 120, y: 300, name: 'Hoot', ip: '1.2.3.4' }) as object)).toEqual(Object.keys(enter(1)));
+    expect(Object.keys(checkRoomStay({ ...leave(1, '2026-11-03T16:05:00Z', 'moved'), x: 1 }) as object)).toEqual(['event', 'stay_id', 'at', 'exit_reason']);
+  });
+
+});
+
 describe("the game schema's tables", () => {
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
     return { calls, unsafe: async (query, params) => (calls.push({ query, params }), answer) };
   }
 
+  it('applies live room stays (OP-265) through the database function, the events only in its JSON parameter', async () => {
+    const db = recorder([{ kept: 2 }]);
+    const rows = [checkRoomStay({ event: 'enter', stay_id: uuid(1), session_id: uuid(900), collector_id: A, at: '2026-11-03T16:00:00Z', realm: 'grove', realm_kind: 'realm', map_id: 1, entry_source: 'walked' }), checkRoomStay({ event: 'leave', stay_id: uuid(1), at: '2026-11-03T16:05:00Z', exit_reason: 'timeout' })] as RoomStayRow[];
+    expect(await gameTables(db).addRoomStays(rows)).toBe(2);
+    expect(db.calls[0]!.query).toBe('select game.apply_room_stays($1::text::jsonb) as kept');
+    expect(db.calls[0]!.params).toEqual([JSON.stringify(rows)]);
+  });
   it('sends a batch as one JSON parameter, skipping rows already there, and counts what the database kept', async () => {
     const db = recorder([{ event_id: uuid(1) }]);
     const r = checkRow(row(1)) as LogRow;

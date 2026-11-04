@@ -16,6 +16,7 @@ them in the project's `game` schema, beside the park's orders (`apps/score-endpo
 | `realm_visit`: each room a visit went into, sent right after the visit's own row | `game.fact_realm_visit`, under its session; one whose visit is not there is left out |
 | `feedback` (OP-166): each note a visitor sent from the Feedback form, as the room server keeps it | `game.feedback`, for the owner's morning feedback run; one already there is skipped |
 | `purchase` (OP-192): ticket events from the Worker: an order paid, its tickets put on an owl (claim link or the gate's checkout), refunded, cancelled, and a ticket's first scan | `game.fact_purchase`; one already there (by its event id) is skipped |
+| `room_stay` (OP-265): live, as it happens: an owl came into a room (`enter`), or its stay there ended (`leave`, with why) | `game.room_stay`, one row per stay; `game.apply_room_stays` applies them in order, an enter closing the visit's open stay and opening its own in one transaction |
 | `contact` (OP-192): a paid order's buyer, read from the store by the Worker and sent straight on | `contacts.contact` and `contacts.contact_order`, the owner's own schema, never a `game` table; each order once |
 
 Two views read them (`sql/collect.sql`):
@@ -72,6 +73,20 @@ logs above with the ticket events:
   last seen longer ago than `keep` (90 days by default, never under 30): their visits, rooms,
   collections and versions; their notes stay. Not scheduled: the owner runs it, or schedules it.
 
+Room stays (OP-265, `sql/room_stays.sql`), live where `game.fact_realm_visit` waits for the visit's end:
+
+- `game.room_stay`, one row per owl's stay in one room: `entered_at`, `left_at` (null while the owl is
+  there, so the open row is its room now), `entry_source` (walked, spawn, deep_link, travel) and
+  `exit_reason`: `moved` (another room), `logoff` (the page closed the connection and the owl did not
+  come back within the three-minute grace), `timeout` (the line dropped or went quiet and did not come
+  back), `server_restart` (the nightly restart). A line that drops and comes back into the same room
+  continues the stay. One open row per visit: an owl with two tabs open is two visits.
+- `game.v_room_occupancy_now`: owls in each room now, by park.
+- `game.roll_up_room_stays()`, daily at 10:30 UTC by pg_cron: closes a stay left open over a day (a
+  lost event) as a timeout, then rolls whole days older than 90 days into `game.room_stay_daily`
+  (per day, park and room: stays, owls, minutes, exits by reason, nothing about any one owl) and
+  deletes their rows.
+
 A visit is one page load: it begins at the owl's first hello in a room, the room object's minute
 heartbeat and each socket's close say it is still going, and it ends when it was last seen, once it
 has been quiet for three minutes (moving between rooms keeps it going). Its `session_id` is the one
@@ -109,6 +124,9 @@ kind, a count of tickets, cents (what the order came to, or what a refund sent b
 the pass offered after a ticket, whether it was held, how a claim came (claim or checkout), and when a
 scanned ticket runs out.
 
+A room stay holds its own id, the visit's `session_id`, the `collector_id`, the room's neutral id and
+its kind, the park, its times, how the owl came in and why it left: never where in the room it stood.
+
 Never a name, email, order number, ticket id, pass, IP address or browser description in a `game`
 table: the park sends none, and the function takes only these fields and checks each one, leaving
 out a row that fails (its log says which field, never what was in it). These rows are under-13 play
@@ -143,6 +161,9 @@ outward to the buyer, never the buyer into a `game` table.
    so the function goes first; it takes a visit without `visitor_kind` as before (null). A function
    deployed before the migration fails every visit (no `visitor_kind` column), and the Worker sends
    them again later, so the migration goes first of all.
+   OP-265 adds `sql/room_stays.sql` as `game_room_stays` (it turns on pg_cron and schedules the daily
+   rollup). Order: the migration, then the function deployed again, then the Worker: a function from
+   before it refuses `room_stay` as a kind it does not know, and the Worker drops a refused batch for good.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,

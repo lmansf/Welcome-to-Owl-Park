@@ -680,6 +680,15 @@ export class RoomObject extends DurableObject<Env> {
     this.closingAt = null;
     await this.ctx.storage.delete(RESTART_KEY);
     if (now - due > RESTART_STALE_MS) return;
+    // Every owl's live stay here ends with the restart (OP-265), told before its socket closes.
+    const leaving = this.ctx
+      .getWebSockets()
+      .map((ws) => ws.deserializeAttachment() as Attachment | null)
+      .filter((att): att is Attachment => Boolean(att?.state))
+      .map(sightingOf)
+      .filter((s): s is Sighting => s !== null)
+      .map((s): Sighting => ({ ...s, left: 'restart' }));
+    if (leaving.length) this.ctx.waitUntil(this.statsAlive(leaving));
     for (const ws of this.ctx.getWebSockets()) {
       closeSocket(ws, CLOSE.RESTART, 'park restart');
       this.drop(ws, { reason: 'kick', detail: 'restart' });
@@ -1823,8 +1832,10 @@ export class RoomObject extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment | null;
     const s = att?.state ? sightingOf(att) : null;
     // Closed by the page (1000, or 1001 as it goes away), or a connection that dropped.
-    this.drop(ws, code === 1000 || code === 1001 ? { reason: 'user' } : { reason: 'dropped', ...(code ? { detail: `code ${code}` } : {}) });
-    if (s) this.ctx.waitUntil(this.statsAlive([s]));
+    const bye = code === 1000 || code === 1001;
+    this.drop(ws, bye ? { reason: 'user' } : { reason: 'dropped', ...(code ? { detail: `code ${code}` } : {}) });
+    // How it ended goes with it, for the owl's live stay here (OP-265): a goodbye, or a lost line.
+    if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: bye ? 'bye' : 'drop' }]));
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
