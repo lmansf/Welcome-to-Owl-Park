@@ -128,7 +128,8 @@ def _kit_sheet_keys() -> tuple[str, ...]:
     runs = [f"kit-sheet-cut-run-{m}" for m in recut.get("runs", {})]
     cuts = [f"kit-sheet-cut-{n}" for n in recut.get("sheets", {})]
     cols = [f"kit-sheet-cut-col-{n}" for n in recut.get("columns", {}) if n != "about"]
-    return tuple(core + areas + courses + landmarks + runs + cuts + cols)
+    puzzle = [f"kit-sheet-puzzle-{n}" for n in kit.get("puzzle", {}).get("sheets", {})]
+    return tuple(core + areas + courses + landmarks + runs + cuts + cols + puzzle)
 
 
 # The art targets (OP-249, targets.mjs): reference paintings kept under tools/art/targets/, never shipped.
