@@ -1110,6 +1110,29 @@ describe('the player stats from the room object (OP-111)', () => {
     expect(collections.aliveCalls).toEqual([[me], [{ ...me, left: 'drop' }]]);
   });
 
+  it("tells the collections object of a goodbye from the page, which the close after it can't (OP-265)", async () => {
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    const ws = await join(obj, 'hub', PASS, OWNER);
+    await settle();
+    const me = { cid: OWNER, pass: PASS, device: null, room: 'hub', spec: false };
+    // The page says bye (it walked on, or closed): a log off for its stay here, said once.
+    await send(obj, ws, { t: 'bye' });
+    await obj.webSocketClose(ws as unknown as WebSocket, 1000);
+    await settle();
+    expect(collections.aliveCalls).toEqual([[{ ...me, left: 'bye' }]]);
+  });
+
+  it('tells the collections object of a socket that errored, as a lost line (OP-265)', async () => {
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    const ws = await join(obj, 'hub', PASS, OWNER);
+    await settle();
+    await obj.webSocketError(ws as unknown as WebSocket);
+    await settle();
+    expect(collections.aliveCalls).toEqual([[{ cid: OWNER, pass: PASS, device: null, room: 'hub', spec: false, left: 'drop' }]]);
+  });
+
   it("says an owl coming into its own nest is home, and one coming into another's is not (OP-113)", async () => {
     const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
     const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
