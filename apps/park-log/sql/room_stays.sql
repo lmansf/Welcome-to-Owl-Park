@@ -55,7 +55,7 @@ alter table game.room_stay enable row level security;
 revoke all on game.room_stay from public, anon, authenticated;
 
 -- What stays after 90 days: counts per day (Eastern), park and room, and nothing about any one owl.
--- Replaced by game.room_stay_hourly (sql/room_stays_hourly.sql, migration game_room_stays_hourly).
+-- Replaced by game.room_stay_hourly (sql/room_stays_hourly.sql), itself dropped by sql/room_stays_retention.sql.
 create table game.room_stay_daily (
   day date not null,
   map_id smallint not null check (map_id in (1, 2)),

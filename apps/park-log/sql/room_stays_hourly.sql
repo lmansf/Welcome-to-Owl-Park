@@ -1,3 +1,6 @@
+-- Replaced by sql/room_stays_retention.sql (migration game_room_stays_retention): no rollup, stays
+-- deleted 90 days after they end.
+--
 -- Room stays by the hour (OP-265, Logan Nov 4: "Make it hourly"): what stays of game.room_stay after
 -- 90 days is counts per hour, park and room, for long-term traffic models (the daily curve, weekends,
 -- holidays). Applied once as the migration `game_room_stays_hourly`, after `game_room_stays`
