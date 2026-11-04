@@ -29,6 +29,13 @@
  *   one as its stay ends (`leave`, with why), applied in order by `game.apply_room_stays`: an enter
  *   closes the visit's open stay and opens its own in the same transaction. A batch sent twice
  *   changes nothing the second time.
+ * - `kind: "quest_progress"` (OP-266): each step of each quest an owl takes, one event as it begins
+ *   (`start`) and one as it ends (`end`, with how: done, abandoned, expired, retired), applied in
+ *   order by `game.apply_quest_progress`, so `game.quest_progress` holds an open row for every owl's
+ *   current step. A batch sent twice changes nothing the second time. Never a puzzle's code or key.
+ * - `kind: "quest_catalogue"` (OP-266): every quest and every step of each (handing in included),
+ *   into `game.dim_quest` and `game.dim_quest_step` by `game.set_quest_catalogue`; one no longer
+ *   listed stays, marked out of the catalogue.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * Every other row is anonymous by construction, and checked again here before anything is kept: the
@@ -64,6 +71,17 @@ export const EXIT_REASONS = ['moved', 'logoff', 'timeout', 'server_restart'] as 
 export const VISITOR_KINDS = ['visitor', 'spectator'] as const;
 /** What happened to a ticket order, or to a ticket at the gate (OP-192). */
 export const PURCHASE_EVENTS = ['paid', 'claimed', 'refunded', 'cancelled', 'scanned'] as const;
+/** How a quest step ended (OP-266). */
+export const QUEST_OUTCOMES = ['done', 'abandoned', 'expired', 'retired'] as const;
+/** What a quest step asks (OP-266): the quest book's goals, and handing the quest in. */
+export const GOAL_KINDS = ['talk', 'visit', 'interact', 'emote', 'gather', 'puzzle', 'hand_in'] as const;
+export const QUEST_TYPES = ['talk', 'visit', 'interact', 'emote', 'gather', 'mixed', 'puzzle'] as const;
+export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+export const QUEST_LENGTHS = ['short', 'medium', 'long'] as const;
+export const CADENCES = ['story', 'daily', 'weekly', 'monthly'] as const;
+/** The most quests, and steps, one quest catalogue holds. */
+export const MAX_QUESTS = 2000;
+export const MAX_QUEST_STEPS = 20_000;
 /** The park's ticket kinds: a fixed list, never free text. */
 export const TICKET_KINDS = ['day', 'night', 'annual', 'event', 'opening-night'] as const;
 
@@ -159,6 +177,55 @@ export type RoomStayRow =
     }
   | { event: 'leave'; stay_id: string; at: string; exit_reason: (typeof EXIT_REASONS)[number] };
 
+/** A quest step's event, for `game.quest_progress` (OP-266). */
+export type QuestProgressRow =
+  | {
+      event: 'start';
+      progress_id: string;
+      run_id: string;
+      collector_id: string;
+      session_id: string | null;
+      quest_id: string;
+      period: string;
+      step_no: number;
+      at: string;
+      realm: string | null;
+      expires_at: string | null;
+    }
+  | { event: 'end'; progress_id: string; at: string; session_id: string | null; realm: string | null; outcome: (typeof QUEST_OUTCOMES)[number] };
+
+/** A quest, for `game.dim_quest` (OP-266). */
+export interface QuestRefRow {
+  quest_id: string;
+  title: string;
+  giver_npc: string;
+  giver_room: string | null;
+  quest_type: (typeof QUEST_TYPES)[number];
+  difficulty: (typeof DIFFICULTIES)[number];
+  length: (typeof QUEST_LENGTHS)[number];
+  cadence: (typeof CADENCES)[number];
+  template: string | null;
+  step_count: number;
+  reward_feathers: number;
+  reward_item: string | null;
+  requires: string[];
+  puzzle_id: string | null;
+}
+
+/** A step of a quest, for `game.dim_quest_step` (OP-266). */
+export interface QuestStepRefRow {
+  quest_id: string;
+  step_no: number;
+  goal_kind: (typeof GOAL_KINDS)[number];
+  target_room: string | null;
+  target_realm_kind: (typeof REALM_KINDS)[number] | null;
+  target_npc: string | null;
+  target_thing: string | null;
+  need_count: number;
+  distinct_only: boolean;
+  step_text: string;
+}
+
 export const FEEDBACK_KINDS = ['bug', 'idea', 'praise', 'other'] as const;
 /** The park's own limits on a note's words (packages/shared feedback.ts). */
 export const FEEDBACK_MIN_CHARS = 3;
@@ -202,6 +269,10 @@ export interface Tables {
   addRealmVisits(rows: RealmVisitRow[]): Promise<number>;
   /** Applies live stays' events in order (OP-265); returns how many changed a row. */
   addRoomStays(rows: RoomStayRow[]): Promise<number>;
+  /** Applies quest steps' events in order (OP-266); returns how many changed a row. */
+  addQuestProgress(rows: QuestProgressRow[]): Promise<number>;
+  /** Makes the quest reference tables these lists (OP-266): each in them, and every other one marked out of the catalogue. */
+  setQuestCatalogue(quests: QuestRefRow[], steps: QuestStepRefRow[]): Promise<void>;
   /** Keeps the notes not there yet; returns how many those were. */
   addFeedback(rows: FeedbackRow[]): Promise<number>;
   /** Keeps the ticket events not there yet; returns how many those were. */
@@ -475,6 +546,129 @@ export function checkRoomStay(v: unknown): RoomStayRow | string {
   };
 }
 
+/** A quest's id, an NPC's, a template's or a puzzle's: lower-case words joined by hyphens (`story-welcome`, `leaves-bramble-easy`). */
+const QUEST_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A quest's period: '' for a story quest, else its park day, week or month (`2026-11-04`, `W2026-11-02`, `M2026-11`). */
+const PERIOD = /^$|^[WM]?[0-9]{4}-[0-9]{2}(-[0-9]{2})?$/;
+/** Words shown to visitors (a quest's title, a step's): no control characters, and short. */
+const SHOWN = /^[^\u0000-\u001f\u007f]{1,200}$/;
+
+function idOrNull(v: unknown): string | null | undefined {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' && QUEST_ID.test(v) ? v : undefined;
+}
+
+/** A room a quest names, as a live stay's (`STAY_ROOM`), or none; undefined when it is neither. */
+function stayRoomOrNull(v: unknown): string | null | undefined {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' && STAY_ROOM.test(v) ? v : undefined;
+}
+
+/** A quest step's event as the table takes it (OP-266), or the reason it is left out. */
+export function checkQuestProgress(v: unknown): QuestProgressRow | string {
+  const r = obj(v);
+  if (typeof r['progress_id'] !== 'string' || !UUID.test(r['progress_id'])) return 'progress_id';
+  const at = iso(r['at']);
+  if (!at) return 'at';
+  const session = r['session_id'] ?? null;
+  if (session !== null && (typeof session !== 'string' || !UUID.test(session))) return 'session_id';
+  const realm = stayRoomOrNull(r['realm']);
+  if (realm === undefined) return 'realm';
+  if (r['event'] === 'end') {
+    if (!QUEST_OUTCOMES.includes(r['outcome'] as (typeof QUEST_OUTCOMES)[number])) return 'outcome';
+    return { event: 'end', progress_id: r['progress_id'], at, session_id: session as string | null, realm, outcome: r['outcome'] as (typeof QUEST_OUTCOMES)[number] };
+  }
+  if (r['event'] !== 'start') return 'event';
+  if (typeof r['run_id'] !== 'string' || !UUID.test(r['run_id'])) return 'run_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  if (typeof r['quest_id'] !== 'string' || !QUEST_ID.test(r['quest_id'])) return 'quest_id';
+  if (typeof r['period'] !== 'string' || !PERIOD.test(r['period'])) return 'period';
+  const step = r['step_no'];
+  if (typeof step !== 'number' || !Number.isInteger(step) || step < 1 || step > 100) return 'step_no';
+  const expires = r['expires_at'] === null || r['expires_at'] === undefined ? null : iso(r['expires_at']);
+  if (expires === null && r['expires_at'] !== null && r['expires_at'] !== undefined) return 'expires_at';
+  return {
+    event: 'start',
+    progress_id: r['progress_id'],
+    run_id: r['run_id'],
+    collector_id: r['collector_id'],
+    session_id: session as string | null,
+    quest_id: r['quest_id'],
+    period: r['period'],
+    step_no: step,
+    at,
+    realm,
+    expires_at: expires,
+  };
+}
+
+const smallCount = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+
+/** A quest as `game.dim_quest` takes it (OP-266), or null to refuse the catalogue. */
+export function checkQuestRef(v: unknown): QuestRefRow | null {
+  const q = obj(v);
+  if (typeof q['quest_id'] !== 'string' || !QUEST_ID.test(q['quest_id'])) return null;
+  if (typeof q['title'] !== 'string' || !SHOWN.test(q['title'])) return null;
+  if (typeof q['giver_npc'] !== 'string' || !QUEST_ID.test(q['giver_npc'])) return null;
+  const giverRoom = stayRoomOrNull(q['giver_room']);
+  const template = idOrNull(q['template']);
+  const puzzle = idOrNull(q['puzzle_id']);
+  if (giverRoom === undefined || template === undefined || puzzle === undefined) return null;
+  if (!QUEST_TYPES.includes(q['quest_type'] as QuestRefRow['quest_type'])) return null;
+  if (!DIFFICULTIES.includes(q['difficulty'] as QuestRefRow['difficulty'])) return null;
+  if (!QUEST_LENGTHS.includes(q['length'] as QuestRefRow['length'])) return null;
+  if (!CADENCES.includes(q['cadence'] as QuestRefRow['cadence'])) return null;
+  if (!smallCount(q['step_count'], 1, 99) || !smallCount(q['reward_feathers'], 0, 100_000)) return null;
+  const item = q['reward_item'] ?? null;
+  if (item !== null && (typeof item !== 'string' || !(item === 'pick' || COLLECTIBLE.test(item)))) return null;
+  const requires = q['requires'] ?? [];
+  if (!Array.isArray(requires) || requires.length > 20 || !requires.every((x) => typeof x === 'string' && QUEST_ID.test(x))) return null;
+  return {
+    quest_id: q['quest_id'],
+    title: q['title'],
+    giver_npc: q['giver_npc'],
+    giver_room: giverRoom,
+    quest_type: q['quest_type'] as QuestRefRow['quest_type'],
+    difficulty: q['difficulty'] as QuestRefRow['difficulty'],
+    length: q['length'] as QuestRefRow['length'],
+    cadence: q['cadence'] as QuestRefRow['cadence'],
+    template,
+    step_count: q['step_count'],
+    reward_feathers: q['reward_feathers'],
+    reward_item: item as string | null,
+    requires: requires as string[],
+    puzzle_id: puzzle,
+  };
+}
+
+/** A quest's step as `game.dim_quest_step` takes it (OP-266), or null to refuse the catalogue. */
+export function checkQuestStepRef(v: unknown): QuestStepRefRow | null {
+  const s = obj(v);
+  if (typeof s['quest_id'] !== 'string' || !QUEST_ID.test(s['quest_id'])) return null;
+  if (!smallCount(s['step_no'], 1, 100)) return null;
+  if (!GOAL_KINDS.includes(s['goal_kind'] as QuestStepRefRow['goal_kind'])) return null;
+  const room = stayRoomOrNull(s['target_room']);
+  const npc = idOrNull(s['target_npc']);
+  const thing = idOrNull(s['target_thing']);
+  if (room === undefined || npc === undefined || thing === undefined) return null;
+  const kind = s['target_realm_kind'] ?? null;
+  if (kind !== null && !REALM_KINDS.includes(kind as (typeof REALM_KINDS)[number])) return null;
+  if (!smallCount(s['need_count'], 1, 1000) || typeof s['distinct_only'] !== 'boolean') return null;
+  if (typeof s['step_text'] !== 'string' || !SHOWN.test(s['step_text'])) return null;
+  return {
+    quest_id: s['quest_id'],
+    step_no: s['step_no'],
+    goal_kind: s['goal_kind'] as QuestStepRefRow['goal_kind'],
+    target_room: room,
+    target_realm_kind: kind as QuestStepRefRow['target_realm_kind'],
+    target_npc: npc,
+    target_thing: thing,
+    need_count: s['need_count'],
+    distinct_only: s['distinct_only'],
+    step_text: s['step_text'],
+  };
+}
+
 /** A note as the table takes it, or the reason it is left out. The words are checked for size and control characters only: they are the visitor's. */
 export function checkFeedback(v: unknown): FeedbackRow | string {
   const r = obj(v);
@@ -551,6 +745,28 @@ async function catalogue(body: Record<string, unknown>, tables: Tables): Promise
   return json({ ok: true, items: items.length });
 }
 
+async function questCatalogue(body: Record<string, unknown>, tables: Tables): Promise<Response> {
+  const sentQuests = Array.isArray(body['quests']) ? body['quests'] : null;
+  const sentSteps = Array.isArray(body['steps']) ? body['steps'] : null;
+  if (!sentQuests || !sentQuests.length || !sentSteps || !sentSteps.length) return json({ error: 'quests and steps must be lists' }, 400);
+  if (sentQuests.length > MAX_QUESTS || sentSteps.length > MAX_QUEST_STEPS) return json({ error: `at most ${MAX_QUESTS} quests and ${MAX_QUEST_STEPS} steps` }, 413);
+  const quests = sentQuests.map(checkQuestRef);
+  const steps = sentSteps.map(checkQuestStepRef);
+  // All or nothing, as the collectibles' catalogue: a part of it would mark the rest out.
+  if (quests.some((q) => q === null)) return json({ error: 'a quest is not one' }, 400);
+  if (steps.some((s) => s === null)) return json({ error: 'a step is not one' }, 400);
+  const ids = new Set((quests as QuestRefRow[]).map((q) => q.quest_id));
+  if (ids.size !== quests.length) return json({ error: 'a quest is listed twice' }, 400);
+  if ((steps as QuestStepRefRow[]).some((s) => !ids.has(s.quest_id))) return json({ error: 'a step names a quest not listed' }, 400);
+  await tables.setQuestCatalogue(quests as QuestRefRow[], steps as QuestStepRefRow[]);
+  return json({ ok: true, quests: quests.length, steps: steps.length });
+}
+
+/** The kinds of request the park sends. */
+export const KINDS = ['collect', 'catalogue', 'player', 'session', 'realm_visit', 'feedback', 'purchase', 'contact', 'room_stay', 'quest_progress', 'quest_catalogue'] as const;
+
+const isKind = (v: unknown): v is (typeof KINDS)[number] => KINDS.includes(v as (typeof KINDS)[number]);
+
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   const key = deps.key?.trim() ?? '';
   if (key.length < MIN_KEY) return json({ error: 'not set up' }, 503);
@@ -571,8 +787,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json({ ok: true, dry_run: true, tables });
   }
   const kind = body['kind'];
-  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback' && kind !== 'purchase' && kind !== 'contact' && kind !== 'room_stay') {
-    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit, feedback, purchase, contact or room_stay' }, 400);
+  if (!isKind(kind)) {
+    return json({ error: `kind must be ${KINDS.slice(0, -1).join(', ')} or ${KINDS.at(-1)}` }, 400);
   }
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
   const tables = deps.tables;
@@ -595,8 +811,12 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkContact, (rows) => tables.addContacts(rows));
       case 'room_stay':
         return await keepRows(kind, body, checkRoomStay, (rows) => tables.addRoomStays(rows));
+      case 'quest_progress':
+        return await keepRows(kind, body, checkQuestProgress, (rows) => tables.addQuestProgress(rows));
       case 'catalogue':
         return await catalogue(body, tables);
+      case 'quest_catalogue':
+        return await questCatalogue(body, tables);
     }
   } catch (e) {
     console.error(`[owl-park-log] the ${String(body['kind'])} was not kept:`, message(e));
@@ -715,6 +935,16 @@ export function gameTables(db: Db): Tables {
       const res = await db.unsafe(`select ${SCHEMA}.apply_room_stays($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
       const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
       return Number.isFinite(kept) ? kept : 0;
+    },
+    async addQuestProgress(rows) {
+      // In order, in one call and so one transaction (sql/quest_progress.sql): a step's start closes the run's open step before it.
+      const res = await db.unsafe(`select ${SCHEMA}.apply_quest_progress($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
+      const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
+      return Number.isFinite(kept) ? kept : 0;
+    },
+    async setQuestCatalogue(quests, steps) {
+      // One call, so one transaction: every quest and step in, and any not among them marked out.
+      await db.unsafe(`select ${SCHEMA}.set_quest_catalogue($1::text::jsonb, $2::text::jsonb)`, [JSON.stringify(quests), JSON.stringify(steps)]);
     },
     async addFeedback(rows) {
       // The words go in the batch's one JSON parameter like every other field: never part of the query.

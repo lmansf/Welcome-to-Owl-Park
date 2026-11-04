@@ -23,8 +23,27 @@
  * cancelled, and a ticket's first scan, so the owner can count free owls beside paid ones. The order,
  * the owl and the ticket leave as salted hashes; the buyer's email never comes here (the Worker sends
  * it to the owner's contacts on its own, buyerLog.ts).
+ *
+ * Quest progress (OP-266, questLog.ts) goes the same way: each step of each quest an owl takes, as it
+ * begins and as it ends, and the catalogue of quests and their steps whenever a deploy changes it.
  */
-import { FURNITURE, PRESENTS, STARTER_PACK, allVariants, parseVariant, type FeedbackKind, type FurnitureSource, type Source, type SpeciesId } from '@owl-park/shared';
+import {
+  FURNITURE,
+  PRESENTS,
+  QUESTS,
+  STARTER_PACK,
+  allVariants,
+  getNpc,
+  goalCount,
+  goalText,
+  parseVariant,
+  questPuzzle,
+  type FeedbackKind,
+  type FurnitureSource,
+  type Goal,
+  type Source,
+  type SpeciesId,
+} from '@owl-park/shared';
 import { moduleLog } from './logs';
 import { ROOMS } from './rooms';
 import type { TicketKind } from './tickets';
@@ -420,6 +439,179 @@ async function roomStayRow(salt: string, d: RoomStayData): Promise<RoomStayRow> 
   };
 }
 
+// ---------- quest progress (OP-266) ----------
+
+/** How a quest step ended (OP-266): done, the quest given up, its day, week or month over, or the quest taken out of the catalogue. */
+export type QuestOutcome = 'done' | 'abandoned' | 'expired' | 'retired';
+
+/**
+ * A quest step's event, as the outbox keeps it (OP-266): a step begun or ended, for one run of a quest
+ * (one acceptance: `accepted` tells a quest given up and taken again apart). `step` counts from 0, and
+ * the step after the last is handing the quest in. Never anything of a puzzle's run: no code, key or guess.
+ */
+export type QuestProgressData =
+  | { event: 'start'; cid: string; quest: string; period: string; accepted: number; step: number; at: number; pass: string | null; room: string | null; expires: number | null }
+  | { event: 'end'; cid: string; quest: string; period: string; accepted: number; step: number; at: number; pass: string | null; room: string | null; outcome: QuestOutcome };
+
+/** A quest step's event as the log takes it: the owl and the visit as salted hashes, the room by its neutral id, the step from 1. */
+export type QuestProgressRow =
+  | {
+      event: 'start';
+      progress_id: string;
+      run_id: string;
+      collector_id: string;
+      session_id: string | null;
+      quest_id: string;
+      period: string;
+      step_no: number;
+      at: string;
+      realm: string | null;
+      expires_at: string | null;
+    }
+  | { event: 'end'; progress_id: string; at: string; session_id: string | null; realm: string | null; outcome: QuestOutcome };
+
+async function questProgressRow(salt: string, d: QuestProgressData): Promise<QuestProgressRow> {
+  const run = `${d.cid}|${d.quest}|${d.period}|${d.accepted}`;
+  const progress_id = await saltedUuid(salt, 'quest-step', `${run}|${d.step}`);
+  const session_id = d.pass ? await saltedUuid(salt, 'session', d.pass) : null;
+  // Already the log's name for the room (`logRoom`, or a live stay's), as the caller keeps it.
+  const realm = d.room;
+  if (d.event === 'end') return { event: 'end', progress_id, at: iso(d.at), session_id, realm, outcome: d.outcome };
+  return {
+    event: 'start',
+    progress_id,
+    run_id: await saltedUuid(salt, 'quest-run', run),
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    session_id,
+    quest_id: d.quest,
+    period: d.period,
+    step_no: d.step + 1,
+    at: iso(d.at),
+    realm,
+    expires_at: d.expires === null ? null : iso(d.expires),
+  };
+}
+
+/** A quest as the reference table `game.dim_quest` takes it (OP-266). */
+export interface QuestCatalogueQuest {
+  quest_id: string;
+  title: string;
+  giver_npc: string;
+  giver_room: string | null;
+  quest_type: string;
+  difficulty: string;
+  length: string;
+  cadence: string;
+  template: string | null;
+  /** Its work steps; handing it in is one more (`hand_in`) in the steps table. */
+  step_count: number;
+  reward_feathers: number;
+  reward_item: string | null;
+  requires: string[];
+  puzzle_id: string | null;
+}
+
+/** A step of a quest as `game.dim_quest_step` takes it (OP-266): where it happens, and what it asks. */
+export interface QuestCatalogueStep {
+  quest_id: string;
+  step_no: number;
+  goal_kind: Goal['kind'] | 'hand_in';
+  /** The room it happens in (a talk's or a hand-in's is the NPC's), or null where any room will do. */
+  target_room: string | null;
+  target_realm_kind: RealmKind | null;
+  target_npc: string | null;
+  /** What it asks for: a kind of thing to use, an item to find, an emote, a puzzle. */
+  target_thing: string | null;
+  need_count: number;
+  distinct_only: boolean;
+  step_text: string;
+}
+
+const npcRoom = (npc: string | undefined): string | null => (npc ? logRoom(getNpc(npc)?.room) : null);
+
+function goalStep(questId: string, stepNo: number, goal: Goal): QuestCatalogueStep {
+  let room: string | null = null;
+  let npc: string | null = null;
+  let thing: string | null = null;
+  switch (goal.kind) {
+    case 'talk':
+      npc = goal.npc;
+      room = npcRoom(goal.npc);
+      break;
+    case 'visit':
+      room = logRoom(goal.room);
+      break;
+    case 'interact':
+      room = logRoom(goal.room);
+      thing = goal.what;
+      break;
+    case 'emote':
+      npc = goal.npc ?? null;
+      room = goal.room ? logRoom(goal.room) : npcRoom(goal.npc);
+      thing = goal.emote;
+      break;
+    case 'gather':
+      room = logRoom(goal.room);
+      thing = goal.item;
+      break;
+    case 'puzzle':
+      // Its locks sit in several rooms: the step names the puzzle only (OP-266 question 1).
+      thing = goal.puzzle;
+      break;
+  }
+  return {
+    quest_id: questId,
+    step_no: stepNo,
+    goal_kind: goal.kind,
+    target_room: room,
+    target_realm_kind: room ? realmKind(room) : null,
+    target_npc: npc,
+    target_thing: thing,
+    need_count: goalCount(goal),
+    distinct_only: goal.kind === 'interact' && goal.distinct === true,
+    step_text: goalText(goal),
+  };
+}
+
+/** Every quest and every step of each, handing in included, for the log's reference tables (OP-266). */
+export function questCatalogue(): { quests: QuestCatalogueQuest[]; steps: QuestCatalogueStep[] } {
+  const quests: QuestCatalogueQuest[] = [];
+  const steps: QuestCatalogueStep[] = [];
+  for (const q of QUESTS) {
+    const giverRoom = npcRoom(q.giver);
+    quests.push({
+      quest_id: q.id,
+      title: q.title,
+      giver_npc: q.giver,
+      giver_room: giverRoom,
+      quest_type: q.type,
+      difficulty: q.difficulty,
+      length: q.length,
+      cadence: q.cadence,
+      template: q.template ?? null,
+      step_count: q.steps.length,
+      reward_feathers: q.reward.feathers,
+      reward_item: q.reward.item,
+      requires: [...(q.requires ?? [])],
+      puzzle_id: questPuzzle(q),
+    });
+    q.steps.forEach((s, i) => steps.push(goalStep(q.id, i + 1, s.goal)));
+    steps.push({
+      quest_id: q.id,
+      step_no: q.steps.length + 1,
+      goal_kind: 'hand_in',
+      target_room: giverRoom,
+      target_realm_kind: giverRoom ? realmKind(giverRoom) : null,
+      target_npc: q.giver,
+      target_thing: null,
+      need_count: 1,
+      distinct_only: false,
+      step_text: `Hand it in to ${getNpc(q.giver)?.name ?? 'its giver'}`,
+    });
+  }
+  return { quests, steps };
+}
+
 // ---------- visitors' feedback (OP-166) ----------
 
 /** A note a visitor sent, as the outbox keeps it: raw, in this object only, until it is hashed on its way out. */
@@ -551,6 +743,7 @@ const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   session: sessionRow,
   realm_visit: realmVisitRow,
   room_stay: roomStayRow,
+  quest_progress: questProgressRow,
   feedback: feedbackRow,
   purchase: purchaseRow,
 };
@@ -560,6 +753,7 @@ export class CollectLog {
   private again = false;
   private failures = 0;
   private catalogue: { version: string; items: CatalogueItem[] } | null = null;
+  private questList: { version: string; quests: QuestCatalogueQuest[]; steps: QuestCatalogueStep[] } | null = null;
   private fullSince = 0;
 
   constructor(
@@ -627,6 +821,11 @@ export class CollectLog {
   /** Keep a live stay's event to send (OP-265): an owl came into a room, or its stay there ended. */
   roomStay(d: RoomStayData): void {
     if (this.config) this.keep('room_stay', d);
+  }
+
+  /** Keep a quest step's event to send (OP-266): a step begun, or ended and how. */
+  questProgress(d: QuestProgressData): void {
+    if (this.config) this.keep('quest_progress', d);
   }
 
   /** Keep a ticket event to send (OP-192): the order, the owl and the ticket hashed on their way out. */
@@ -721,14 +920,29 @@ export class CollectLog {
     }
     // The catalogue, whenever it has changed since the log last took it (a deploy with a new drop).
     const catalogue = await this.currentCatalogue();
-    const taken = this.sql.exec<{ v: string }>(`SELECT v FROM log_meta WHERE k = 'catalogue'`).toArray()[0]?.v;
-    if (taken === catalogue.version) return;
-    const sent = await this.post(config, { kind: 'catalogue', version: catalogue.version, items: catalogue.items });
-    if (sent === 'retry') return this.retryLater();
+    if (!(await this.sendCatalogue(config, 'catalogue', catalogue.version, { items: catalogue.items }, catalogue.items.length))) return;
+    // The quests and their steps (OP-266), the same way: whenever a deploy changes them.
+    const quests = await this.currentQuests();
+    await this.sendCatalogue(config, 'quest_catalogue', quests.version, { quests: quests.quests, steps: quests.steps }, quests.quests.length);
+  }
+
+  /**
+   * Send a catalogue of this kind unless the log already took this version of it. False when the log
+   * could not be reached (the round stops, and its alarm tries again).
+   */
+  private async sendCatalogue(config: LogConfig, kind: string, version: string, body: object, rows: number): Promise<boolean> {
+    const taken = this.sql.exec<{ v: string }>(`SELECT v FROM log_meta WHERE k = ?`, kind).toArray()[0]?.v;
+    if (taken === version) return true;
+    const sent = await this.post(config, { kind, version, ...body });
+    if (sent === 'retry') {
+      this.retryLater();
+      return false;
+    }
     if (sent === 'ok') {
-      this.sql.exec(`INSERT OR REPLACE INTO log_meta (k, v) VALUES ('catalogue', ?)`, catalogue.version);
-      moduleLog.info('collections.log', 'collect_logged', 'The collection log took the catalogue.', { kind: 'catalogue', rows: catalogue.items.length });
-    } else moduleLog.error('collections.log', 'collect_log_dropped', 'The collection log refused the catalogue: it is sent again with the next change to it.', { kind: 'catalogue' });
+      this.sql.exec(`INSERT OR REPLACE INTO log_meta (k, v) VALUES (?, ?)`, kind, version);
+      moduleLog.info('collections.log', 'collect_logged', 'The collection log took a catalogue.', { kind, rows });
+    } else moduleLog.error('collections.log', 'collect_log_dropped', 'The collection log refused a catalogue: it is sent again with the next round.', { kind });
+    return true;
   }
 
   private retryLater(): void {
@@ -743,6 +957,14 @@ export class CollectLog {
       this.catalogue = { version: (await sha256(JSON.stringify(items))).slice(0, 16), items };
     }
     return this.catalogue;
+  }
+
+  private async currentQuests(): Promise<{ version: string; quests: QuestCatalogueQuest[]; steps: QuestCatalogueStep[] }> {
+    if (!this.questList) {
+      const c = questCatalogue();
+      this.questList = { version: (await sha256(JSON.stringify(c))).slice(0, 16), ...c };
+    }
+    return this.questList;
   }
 
   private async post(config: LogConfig, body: unknown): Promise<Sent> {

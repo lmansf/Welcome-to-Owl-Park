@@ -108,6 +108,15 @@ export class ParkStats {
     );
   }
 
+  /**
+   * The visit and room an owl is in now, by its open live stay (OP-266): the one it came into last,
+   * should it have two tabs open. Null when it is in no room (or the log is off).
+   */
+  liveOf(cid: string): { pass: string; room: string } | null {
+    const r = this.sql.exec<{ pass: string; room: string }>(`SELECT pass, room FROM stats_live WHERE cid = ? AND open = 1 ORDER BY entered DESC LIMIT 1`, cid).toArray()[0];
+    return r ? { pass: r.pass, room: r.room } : null;
+  }
+
   /** An owl in a room (its hello, or a new look): its visit goes on, and a changed kind or colour is a new version. */
   seen(s: Sighting, look: StatsLook, now: number): void {
     if (!this.log.on) return;

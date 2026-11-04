@@ -80,7 +80,7 @@ import {
 } from '@owl-park/shared';
 import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
 import { TravelBook } from './travelBook';
-import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type PurchaseData, type Visit } from './collectLog';
+import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, type CollectibleType, type PurchaseData, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { randomDeviceId } from './pass';
@@ -91,7 +91,8 @@ import { SqlCourseStore } from './sqlCourseStore';
 import { SqlNestStore } from './sqlNestStore';
 import { SqlPuzzleStore } from './sqlPuzzleStore';
 import { SqlScoreStore } from './sqlScoreStore';
-import { SqlCollectionStore } from './sqlStore';
+import { SqlCollectionStore, type QuestRowState } from './sqlStore';
+import { questProgressEvents } from './questLog';
 import type { Env } from './env';
 
 /** A uniform [0, 1) from the platform's cryptographic source. */
@@ -143,7 +144,11 @@ export class Collections extends DurableObject<Env> {
     const sql = ctx.storage.sql;
     this.log = new CollectLog(sql, logConfig(env), { fetch: (url, init) => fetch(url, init), now: () => Date.now(), wake: (at) => this.wake(at) });
     this.stats = new ParkStats(sql, this.log);
-    const store = new SqlCollectionStore(sql, (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at));
+    const store = new SqlCollectionStore(
+      sql,
+      (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at),
+      (before, after) => this.questChanged(before, after),
+    );
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
     this.puzzles = new PuzzleBook(new SqlPuzzleStore(sql), SPOTS, { newSeed: secureToken, newId: secureToken });
@@ -164,6 +169,23 @@ export class Collections extends DurableObject<Env> {
     if (!this.log.on) return;
     this.log.record({ cid, collectible, type, at, visit: this.visit });
     this.stats.gained(this.visit?.pass);
+    this.ctx.waitUntil(this.log.flush());
+  }
+
+  /**
+   * A quest row changed (OP-266): its steps' events into the log's outbox in this same step, with the
+   * visit and room the owl is in (the call's own visit when it came with one, else its live stay), and
+   * sent as soon as the step is done.
+   */
+  private questChanged(before: QuestRowState | null, after: QuestRowState | null): void {
+    if (!this.log.on) return;
+    const cid = (after ?? before)!.cid;
+    const live = this.stats.liveOf(cid);
+    const visit = cleanVisit(this.visit);
+    const place = { pass: visit.pass ?? live?.pass ?? null, room: visit.room ?? live?.room ?? null };
+    const events = questProgressEvents(before, after, Date.now(), place);
+    if (!events.length) return;
+    for (const e of events) this.log.questProgress(e);
     this.ctx.waitUntil(this.log.flush());
   }
 
