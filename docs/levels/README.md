@@ -151,7 +151,15 @@ tree courses are built on that.
   trunk still closed, by 7 px, and moved 20 px nearer (360 to 340 px) for room. Two optional dash
   skips no longer work (the Canopy's past updraft U12 and Brushstroke's past the bridge from `k8`),
   so those mechanics are now always needed. Every gap that must stay shut even with the dash holds
-  at +130.
+  at +130. (Superseded for the tree by the triple jump, next.)
+- **The second flap (OP-239) let an owl skip almost every mechanic** in both tree plans: every
+  updraft, the bridges, both dash gaps. Fix: height first. The ledge a mechanic leads to now stands
+  370 to 420 px over the one before it, past a jump and both flaps, and hanging thorn curtains or
+  cloud banks hold an owl that passes under them to a single jump's lift. Only the dash gaps were
+  widened: the Canopy's to 380 px at a rise of 320, Brushstroke's to 650 px at a rise of 200. Each
+  plan's section 9 has the old-versus-new table. One reach stays open: lost feather 4 in the Canopy
+  can also be reached by a long glide back from `u2`. The "in the air" rows (a hop made under a
+  hanging hazard) need the flight stepped through, not this file's hop formula.
 - **The tower was short:** about 4.6 minutes for a first clear. Fix (Claude Duet's call; the owner can change it): bands 7 and 8,
   measured with the pilot; about 6.5 minutes now, and about 7 with the hidden pane room.
 
