@@ -383,6 +383,43 @@ async function realmVisitRow(salt: string, d: RealmVisitData): Promise<RealmVisi
   };
 }
 
+// ---------- room stays, live (OP-265) ----------
+
+/** Why an owl's stay in a room ended (OP-265): another room, the page closed, the line dropped or went quiet, or the nightly restart. */
+export type ExitReason = 'moved' | 'logoff' | 'timeout' | 'server_restart';
+
+/** How a live stay began: as `EntrySource`, but never a reconnect, which continues the stay it came back to. */
+export type StayEntry = Exclude<EntrySource, 'reconnect'>;
+
+/**
+ * A live stay's event, as the outbox keeps it (OP-265): sent as it happens, not with its visit. `seq`
+ * numbers the visit's stays, so the stay's id is the same whenever its events are sent.
+ */
+export type RoomStayData =
+  | { event: 'enter'; cid: string; pass: string; seq: number; at: number; room: string; map: 1 | 2; source: StayEntry }
+  | { event: 'leave'; cid: string; pass: string; seq: number; at: number; reason: ExitReason };
+
+/** A live stay's event as the log takes it: the owl and the visit as salted hashes, the room by its neutral id. */
+export type RoomStayRow =
+  | { event: 'enter'; stay_id: string; session_id: string; collector_id: string; at: string; realm: string; realm_kind: RealmKind; map_id: 1 | 2; entry_source: StayEntry }
+  | { event: 'leave'; stay_id: string; at: string; exit_reason: ExitReason };
+
+async function roomStayRow(salt: string, d: RoomStayData): Promise<RoomStayRow> {
+  const stay_id = await saltedUuid(salt, 'room-stay', `${d.pass}|${d.seq}`);
+  if (d.event === 'leave') return { event: 'leave', stay_id, at: iso(d.at), exit_reason: d.reason };
+  return {
+    event: 'enter',
+    stay_id,
+    session_id: await saltedUuid(salt, 'session', d.pass),
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    at: iso(d.at),
+    realm: d.room,
+    realm_kind: realmKind(d.room),
+    map_id: d.map === 2 ? 2 : 1,
+    entry_source: d.source,
+  };
+}
+
 // ---------- visitors' feedback (OP-166) ----------
 
 /** A note a visitor sent, as the outbox keeps it: raw, in this object only, until it is hashed on its way out. */
@@ -513,6 +550,7 @@ const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   player: playerRow,
   session: sessionRow,
   realm_visit: realmVisitRow,
+  room_stay: roomStayRow,
   feedback: feedbackRow,
   purchase: purchaseRow,
 };
@@ -584,6 +622,11 @@ export class CollectLog {
   /** Keep a time in one room to send (OP-113): after its visit's own row, which the log keeps first. */
   realmVisit(d: RealmVisitData): void {
     if (this.config) this.keep('realm_visit', d);
+  }
+
+  /** Keep a live stay's event to send (OP-265): an owl came into a room, or its stay there ended. */
+  roomStay(d: RoomStayData): void {
+    if (this.config) this.keep('room_stay', d);
   }
 
   /** Keep a ticket event to send (OP-192): the order, the owl and the ticket hashed on their way out. */

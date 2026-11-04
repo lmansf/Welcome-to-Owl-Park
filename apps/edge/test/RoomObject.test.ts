@@ -1104,10 +1104,10 @@ describe('the player stats from the room object (OP-111)', () => {
     // The minute heartbeat: every owl still here, at once.
     await obj.alarm();
     expect(collections.aliveCalls).toEqual([[me]]);
-    // Its socket closes: the visit was here until now.
+    // Its socket closes: the visit was here until now, and the line was lost (no close code from the page, OP-265).
     await obj.webSocketClose(ws as unknown as WebSocket);
     await settle();
-    expect(collections.aliveCalls).toEqual([[me], [me]]);
+    expect(collections.aliveCalls).toEqual([[me], [{ ...me, left: 'drop' }]]);
   });
 
   it("says an owl coming into its own nest is home, and one coming into another's is not (OP-113)", async () => {
@@ -1627,6 +1627,24 @@ describe('the park’s nightly restart (OP-181)', () => {
     clock += 60_000;
     await obj.alarm();
     expect(later.closed).toBeNull();
+  });
+
+  it("tells the player stats that every owl's stay here ends with the restart, at its moment (OP-265)", async () => {
+    const LOGGED = { PARK_LOG_URL: 'https://log.example/functions/v1/owl-park-log', FRAUD_SCORE_KEY: 'k'.repeat(32), FRAUD_HASH_SALT: 's'.repeat(24) };
+    const obj = roomObject(undefined, LOGGED);
+    await join(obj, 'hub', 'v_a', OWNER);
+    await join(obj, 'grove', 'v_b', GUEST);
+    await settle();
+    await restart(obj);
+    await settle();
+    const restarts = () => (collections.aliveCalls as Array<Array<{ left?: string }>>).filter((call) => call.some((s) => s.left === 'restart'));
+    expect(restarts()).toEqual([]); // the notice ends nothing
+    clock += RESTART_CLOSE_MS;
+    await obj.alarm();
+    await settle();
+    expect(restarts()).toEqual([
+      [expect.objectContaining({ cid: OWNER, pass: 'v_a', room: 'hub', left: 'restart' }), expect.objectContaining({ cid: GUEST, pass: 'v_b', room: 'grove', left: 'restart' })],
+    ]);
   });
 
   it('closes them though the object slept between the notice and its alarm', async () => {
