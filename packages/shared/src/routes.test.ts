@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS } from '../rooms';
-import { JUMP_RISE } from './flight';
+import { FLAP_RISE, JUMP_RISE } from './flight';
 import type { Polygon } from './geometry';
 import type { Perch } from './perches';
-import { ROUTE_MARGIN, gapBetween, hopTier, perchTiers } from './routes';
+import { ROUTE_MARGIN, gapBetween, hopFlaps, hopTier, perchTiers, roomFlaps } from './routes';
 
 const box = (x: number, y: number, w: number, h: number): Polygon => [
   { x, y },
@@ -30,6 +30,28 @@ describe('route tiers (OP-084)', () => {
     // Down and across reaches farther than across: the fall takes longer.
     expect(hopTier(0, 160)).toBe(2);
     expect(hopTier(-150, 160)).toBe(1);
+  });
+
+  it("gives the tree's hops both flaps (OP-239): higher and farther than today's park, and says when a hop takes the second", () => {
+    expect(roomFlaps({})).toBe(1);
+    expect(roomFlaps({ map: 2 })).toBe(2);
+    // Straight up: past a jump and a flap, the second flap still reaches; past both, nothing.
+    expect(hopTier(264, 0)).toBeNull();
+    expect(hopTier(264, 0, 2)).toBe(2);
+    expect(hopTier(JUMP_RISE + 2 * FLAP_RISE - ROUTE_MARGIN, 0, 2)).toBe(2);
+    expect(hopTier(JUMP_RISE + 2 * FLAP_RISE - ROUTE_MARGIN + 1, 0, 2)).toBeNull();
+    // Across: the second flap keeps the owl up longer, so it crosses more before a glide is needed.
+    expect(hopTier(0, 300)).toBe(3);
+    expect(hopTier(0, 300, 2)).toBe(2);
+    // Which of the two a tier 2 hop takes: one flap where one reaches, two where only both do.
+    expect(hopFlaps(184, 0)).toBe(1);
+    expect(hopFlaps(300, 0)).toBe(2);
+    expect(hopFlaps(0, 300)).toBe(2);
+    expect(hopFlaps(80, 0)).toBeNull(); // a jump alone
+    // A room of the tree reckons its perches with both flaps.
+    const high = { id: 'high', area: box(500, 450, 50, 50), top: 330 };
+    expect(perchTiers(room(high))).toEqual({ high: null });
+    expect(perchTiers({ ...room(high), map: 2 as const })).toEqual({ high: 2 });
   });
 
   it('measures the gap between two areas on the plan: none when they meet, overlap or cross', () => {

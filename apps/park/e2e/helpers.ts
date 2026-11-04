@@ -32,7 +32,7 @@ export interface ParkState {
   /** How high this visitor's owl is drawn above the floor (OP-084), in room pixels; `pos` stays on the floor. */
   height: number;
   /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1) or gliding (2), and flaps left. */
-  air: { z: number; vz: number; s: 0 | 1 | 2; f: 0 | 1 };
+  air: { z: number; vz: number; s: 0 | 1 | 2; f: 0 | 1 | 2 };
   /** Its take-offs as the flight steps them: how many on this page, and the last one's top (room px), whether it glided and how long it was up (ms, once down). */
   flown: { n: number; peak: number; glided: boolean; ms: number };
   /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */

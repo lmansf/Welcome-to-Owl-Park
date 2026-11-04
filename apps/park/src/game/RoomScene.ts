@@ -94,7 +94,7 @@ import {
   type Wear,
   REALMS_DEFAULTS,
   type RealmsSettings,
-  ALL_FLIGHT,
+  flightFor,
   ON_GROUND,
   airChanged,
   fall,
@@ -402,8 +402,10 @@ export class RoomScene extends Phaser.Scene {
   private saidAt = Number.NEGATIVE_INFINITY;
   /** The visitor's own flight (OP-084), stepped from Jump at the flight's step on this page's clock (Date.now). */
   private flier: Flier = newFlier();
-  /** What the owl can do in the air: all three until the lock-and-key game (OP-115) has them earned. */
-  private readonly abilities: Readonly<FlightAbilities> = ALL_FLIGHT;
+  /** What the owl can do in the air: all of it until the lock-and-key game (OP-115) has them earned; both flaps in the tree (OP-239). */
+  private get abilities(): Readonly<FlightAbilities> {
+    return flightFor(mapOf(this.room));
+  }
   /** When the flight last stepped (ms; 0 before the first step in this room). */
   private flightClock = 0;
   /**

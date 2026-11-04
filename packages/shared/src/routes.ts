@@ -8,12 +8,15 @@
  *
  * Over the plan an owl in the air moves as it walks, at WALK_SPEED; a jump rises JUMP_RISE (about
  * 149 px) and a flap at its top 111 px more; a glide falls one px for GLIDE_SLOPE along.
+ *
+ * Tier 2 is the flaps the room's park gives (flightFor): one in today's park (260 px in all), two in
+ * the tree (OP-239, the triple jump: 371 px in all). hopFlaps says which of the two a tier 2 hop takes.
  */
-import { GLIDE_SINK, JUMP_RISE } from './flight';
+import { FLAP_RISE, GLIDE_SINK, JUMP_RISE, flapsOf, flightFor } from './flight';
 import { closestPointOnPolygon, distance, pointInPolygon, type Polygon } from './geometry';
 import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_IMPULSE } from './jump';
 import type { Vec2 } from './protocol';
-import type { RoomDef } from './room';
+import { mapOf, type RoomDef } from './room';
 import { WALK_SPEED } from './walk';
 
 export type RouteTier = 1 | 2 | 3;
@@ -23,25 +26,48 @@ export const ROUTE_MARGIN = 10;
 /** The share of what a flight could cover over the plan that a hop may ask for. */
 export const ROUTE_REACH = 0.8;
 
-const FLAP_RISE = (DOUBLE_JUMP_IMPULSE * DOUBLE_JUMP_IMPULSE) / (2 * GRAVITY);
 const UP_S = JUMP_IMPULSE / GRAVITY;
 const FLAP_UP_S = DOUBLE_JUMP_IMPULSE / GRAVITY;
 const fallS = (drop: number) => Math.sqrt((2 * Math.max(0, drop)) / GRAVITY);
 
+/** Flaps an owl may use on a hop: one (today's park) or two (the tree's triple jump). */
+export type RouteFlaps = 1 | 2;
+
+/** Whether a jump and `n` flaps, with no glide, reach a top `rise` px higher and `gap` px away. */
+function flapsReach(rise: number, gap: number, n: RouteFlaps): boolean {
+  const top = JUMP_RISE + n * FLAP_RISE;
+  return rise <= top - ROUTE_MARGIN && gap <= ROUTE_REACH * WALK_SPEED * (UP_S + n * FLAP_UP_S + fallS(top - rise));
+}
+
 /**
  * What a hop takes from a top to one `rise` px higher (lower, when negative) and `gap` px away over
- * the plan: a jump (1), the jump and the flap (2), or the jump, the flap and a glide (3); null when
- * nothing reaches it. A tier's crossing is as far as the owl walks while it is up there.
+ * the plan, with up to `flaps` flaps: a jump (1), the jump and its flaps (2), or the jump, the flaps
+ * and a glide (3); null when nothing reaches it. A tier's crossing is as far as the owl walks while
+ * it is up there.
  */
-export function hopTier(rise: number, gap: number): RouteTier | null {
+export function hopTier(rise: number, gap: number, flaps: RouteFlaps = 1): RouteTier | null {
   const top1 = JUMP_RISE;
-  const top2 = JUMP_RISE + FLAP_RISE;
+  const top2 = JUMP_RISE + flaps * FLAP_RISE;
   if (rise <= top1 - ROUTE_MARGIN && gap <= ROUTE_REACH * WALK_SPEED * (UP_S + fallS(top1 - rise))) return 1;
   if (rise > top2 - ROUTE_MARGIN) return null;
-  const up = UP_S + FLAP_UP_S;
+  const up = UP_S + flaps * FLAP_UP_S;
   if (gap <= ROUTE_REACH * WALK_SPEED * (up + fallS(top2 - rise))) return 2;
   if (gap <= ROUTE_REACH * WALK_SPEED * (up + (top2 - rise) / GLIDE_SINK)) return 3;
   return null;
+}
+
+/**
+ * How many flaps a tier 2 hop takes at the least (1 or 2, with up to `flaps` of them); null for a hop
+ * that is not tier 2. The level plans' "two flaps" hops (docs/levels) are the 2s.
+ */
+export function hopFlaps(rise: number, gap: number, flaps: RouteFlaps = 2): RouteFlaps | null {
+  if (hopTier(rise, gap, flaps) !== 2) return null;
+  return flapsReach(rise, gap, 1) ? 1 : 2;
+}
+
+/** The flaps an owl has on a hop in a room: the room's park's (flightFor). */
+export function roomFlaps(room: Pick<RoomDef, 'map'>): RouteFlaps {
+  return flapsOf(flightFor(mapOf(room))) === 2 ? 2 : 1;
 }
 
 /** Whether two segments cross. */
@@ -64,14 +90,15 @@ export function gapBetween(a: Polygon, b: Polygon): number {
 /**
  * What reaching each of a room's perches from the floor takes, by its id: the easiest route's
  * hardest hop (a route of single jumps is tier 1 even if a flap would cut it short); null for a
- * perch nothing reaches.
+ * perch nothing reaches. With the flaps of the room's park (roomFlaps).
  */
-export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches'>): Record<string, RouteTier | null> {
+export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map'>): Record<string, RouteTier | null> {
   const perches = room.perches ?? [];
+  const flaps = roomFlaps(room);
   const tier = new Map<string, number>(perches.map((p) => [p.id, Number.POSITIVE_INFINITY]));
   for (const p of perches) {
     const gap = Math.min(...room.walkable.map((floor) => gapBetween(floor, p.area)));
-    tier.set(p.id, hopTier(p.top, gap) ?? Number.POSITIVE_INFINITY);
+    tier.set(p.id, hopTier(p.top, gap, flaps) ?? Number.POSITIVE_INFINITY);
   }
   // Relax until nothing gets easier: a perch is as easy as the easiest perch it is a hop from, or the hop.
   for (let changed = true; changed; ) {
@@ -81,7 +108,7 @@ export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches'>): Record<
       if (!Number.isFinite(at)) continue;
       for (const to of perches) {
         if (to === from) continue;
-        const hop = hopTier(to.top - from.top, gapBetween(from.area, to.area));
+        const hop = hopTier(to.top - from.top, gapBetween(from.area, to.area), flaps);
         if (hop === null) continue;
         const via = Math.max(at, hop);
         if (via < tier.get(to.id)!) {
