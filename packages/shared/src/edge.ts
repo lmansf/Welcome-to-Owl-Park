@@ -26,6 +26,9 @@
  * walk at the dash's pace the room checks and tells the others as a `move` that says `dash`; `course`
  * frames ask the course about the owl's run, its benches, parts, lost feathers, shortcuts, a fall and
  * the finish shrine, each answered with `course`.
+ *
+ * v18 adds the triple jump (OP-239, flight.ts): in the tree an air state's flaps left (`f`) count 2,
+ * 1, 0, and an owl may be a jump and both flaps above the room's highest perch.
  */
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
@@ -42,8 +45,8 @@ import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
 import { PUZZLE_SYMBOLS, type PuzzleSymbol, type PuzzleView } from './puzzles';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
-/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash), so a stale page reloads. */
-export const EDGE_PROTOCOL_VERSION = 17;
+/** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash, 18: the triple jump), so a stale page reloads. */
+export const EDGE_PROTOCOL_VERSION = 18;
 export const MAX_FRAME_BYTES = 1024;
 /** The stained-glass climb's height bands; the sixth is the clouds (climb.ts). Defined here so climb.ts need not be imported. */
 export const BAND_COUNT = 6;

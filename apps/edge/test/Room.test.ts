@@ -601,6 +601,30 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(dropped).toBe(LIMITS.framesPerWindow + 1);
   });
 
+  it('takes the triple jump: two flaps left after the jump, then one, then none, as high as both flaps go and never a fourth (OP-239)', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    // The allowance covers a jump and both flaps above the room's highest top (the floor here).
+    expect(LIMITS.maxRise).toBeGreaterThan(371);
+    for (const air of [
+      { z: 7.2, vz: 858.3, s: AIRBORNE, f: 2 },
+      { z: 149, vz: 760, s: AIRBORNE, f: 1 },
+      { z: 260, vz: 760, s: AIRBORNE, f: 0 },
+      { z: 370, vz: -10, s: AIRBORNE, f: 0 },
+    ] as Air[]) {
+      expect(room.air('a', air), JSON.stringify(air)).toBe(true);
+      now += 100;
+    }
+    expect(b.count('air')).toBe(4);
+    expect(b.last('air')!.air).toEqual({ z: 370, vz: -10, s: AIRBORNE, f: 0 });
+    // A fourth take-off's worth of flaps, and a height past every flap, are dropped.
+    expect(room.air('a', { z: 30, vz: 100, s: AIRBORNE, f: 3 } as unknown as Air)).toBe(false);
+    expect(room.air('a', { z: LIMITS.maxRise + 1, vz: -10, s: AIRBORNE, f: 0 })).toBe(false);
+    expect(b.count('air')).toBe(4);
+  });
+
   it('believes an owl standing anywhere along a slope where it is, and refuses one off the slope (OP-238)', () => {
     // The fixture room with a hill across the middle of its floor: up gently 80 over 320, down again.
     const hilly: RoomDef = {

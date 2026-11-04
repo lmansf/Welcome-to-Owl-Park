@@ -1,10 +1,11 @@
 /**
- * Flight (OP-084): the park's jump, its second flap and the glide, for every owl in every room. The
+ * Flight (OP-084): the park's jump, its flaps and the glide, for every owl in every room. The
  * physics is the climb's (climb.ts), not a second one: its gravity, its jump and double-jump
  * impulses, its cut and its fall cap, its coyote and buffer windows and its 120 Hz step, taken in
  * room pixels, where the climb's jump lifts a park owl about one and a quarter times its height. The
  * park adds the glide: Jump held on the way down holds the fall to the walk's pace over GLIDE_SLOPE
- * (one down for three along).
+ * (one down for three along). In the tree (map 2) an owl has a second flap after the first (OP-239,
+ * the triple jump), at the first's strength; today's park keeps the one.
  *
  * Movement is state, not events (Logan, 2026-10-26). An owl's air state ({@link Air}) goes to the
  * room only when it changes (off the ground, a flap, the cut, a glide begun or ended, the landing),
@@ -39,23 +40,30 @@ export const GLIDING: AirMode = 2;
 /**
  * An owl's air state, the part every page shares: how high it is above the floor (room px), how fast
  * it is rising (px/s, falling is negative), whether it is on the ground, in the air or gliding, and
- * the flaps it has left before it lands (one after leaving the ground). On the ground above the
- * floor, it stands on a perch.
+ * the flaps it has left before it lands (two after leaving the ground in the tree, one in today's
+ * park). On the ground above the floor, it stands on a perch.
  */
 export interface Air {
   z: number;
   vz: number;
   s: AirMode;
-  f: 0 | 1;
+  f: Flaps;
 }
+
+/** Flaps an owl has left before it lands: 2, 1, 0 in the tree (the triple jump, OP-239), 1, 0 in today's park. */
+export type Flaps = 0 | 1 | 2;
+/** The most flaps any owl has: the tree's two. */
+export const MAX_FLAPS = 2;
 
 export const ON_GROUND: Air = { z: 0, vz: 0, s: GROUNDED, f: 0 };
 
 /** The highest a jump alone carries an owl above what it took off from (px, about 149): a perch a quest may use is lower than this. */
 export const JUMP_RISE = (JUMP_IMPULSE * JUMP_IMPULSE) / (2 * GRAVITY);
-/** The highest a jump and a flap at its top can carry an owl above what it took off from, with room to spare. */
-export const MAX_RISE = Math.ceil((JUMP_IMPULSE * JUMP_IMPULSE + DOUBLE_JUMP_IMPULSE * DOUBLE_JUMP_IMPULSE) / (2 * GRAVITY)) + 20;
-/** The highest an owl can be in any room: a jump and a flap from the highest top a perch may have. */
+/** How much higher a flap at the top of a rise carries an owl (px, about 111): both flaps are the climb's double jump. */
+export const FLAP_RISE = (DOUBLE_JUMP_IMPULSE * DOUBLE_JUMP_IMPULSE) / (2 * GRAVITY);
+/** The highest a jump and both flaps, each at the top of the last, can carry an owl above what it took off from (about 371), with room to spare. */
+export const MAX_RISE = Math.ceil(JUMP_RISE + MAX_FLAPS * FLAP_RISE) + 20;
+/** The highest an owl can be in any room: a jump and both flaps from the highest top a perch may have. */
 export const MAX_AIR_Z = MAX_PERCH_TOP + MAX_RISE;
 
 /** The visitor's own owl: its air state and the timers only its own page keeps. */
@@ -75,16 +83,31 @@ export const newFlier = (): Flier => ({ air: ON_GROUND, bufferMs: 0, coyoteMs: 0
 
 /**
  * What an owl can do in the air: each one of the keys of the lock-and-key game (OP-115), to be earned
- * one day; all three on until then. Without the jump it stays on the ground, without the flap it has
- * no second one, without the glide a held Jump only holds the jump.
+ * one day; all on until then. Without the jump it stays on the ground, without the flap it has no
+ * flap at all, without the second flap only the one (the triple jump's slot, OP-239), without the
+ * glide a held Jump only holds the jump.
  */
 export interface FlightAbilities {
   jump: boolean;
   flap: boolean;
+  secondFlap: boolean;
   glide: boolean;
 }
 
-export const ALL_FLIGHT: Readonly<FlightAbilities> = { jump: true, flap: true, glide: true };
+/** The tree's flight (map 2): the jump, both flaps and the glide. */
+export const ALL_FLIGHT: Readonly<FlightAbilities> = { jump: true, flap: true, secondFlap: true, glide: true };
+/** Today's park (map 1): one flap, as before the triple jump. */
+export const PARK_FLIGHT: Readonly<FlightAbilities> = { ...ALL_FLIGHT, secondFlap: false };
+
+/** The flight an owl has in a park (1 today's, 2 the tree). */
+export function flightFor(map: 1 | 2): Readonly<FlightAbilities> {
+  return map === 2 ? ALL_FLIGHT : PARK_FLIGHT;
+}
+
+/** The flaps an owl with these abilities has as it leaves the ground. */
+export function flapsOf(can: Readonly<FlightAbilities>): Flaps {
+  return !can.flap ? 0 : can.secondFlap ? 2 : 1;
+}
 
 export interface FlightInput {
   /** Jump went down since the last step. */
@@ -99,10 +122,10 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readon
   let { bufferMs, coyoteMs, rising } = fl;
   // Down a slope (OP-238): ground a step lower underfoot keeps the owl on it, at its height, never sliding.
   if (s === GROUNDED && z > ground && z - ground <= SLOPE_CATCH) z = ground;
-  // Off an edge: what was underfoot is lower now, so the owl falls, its flap still to come.
+  // Off an edge: what was underfoot is lower now, so the owl falls, its flaps still to come.
   if (s === GROUNDED && z > ground) {
     s = AIRBORNE;
-    f = 1;
+    f = flapsOf(can);
   }
   coyoteMs = s === GROUNDED ? COYOTE_MS : Math.max(0, coyoteMs - FLIGHT_STEP_MS);
   bufferMs = input.pressed ? JUMP_BUFFER_MS : Math.max(0, bufferMs - FLIGHT_STEP_MS);
@@ -110,15 +133,15 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readon
     // Off the ground (or just after it): the climb's jump.
     vz = JUMP_IMPULSE;
     s = AIRBORNE;
-    f = 1;
+    f = flapsOf(can);
     rising = true;
     bufferMs = 0;
     coyoteMs = 0;
-  } else if (bufferMs > 0 && can.flap && f === 1 && s !== GROUNDED) {
-    // The second flap, in the air or out of a glide: the climb's double jump.
+  } else if (bufferMs > 0 && can.flap && f > 0 && s !== GROUNDED) {
+    // A flap, in the air or out of a glide: the climb's double jump, and in the tree once more after it.
     vz = DOUBLE_JUMP_IMPULSE;
     s = AIRBORNE;
-    f = 0;
+    f = f === 2 ? 1 : 0;
     rising = true;
     bufferMs = 0;
   }
@@ -168,11 +191,11 @@ export function airChanged(a: Air, b: Air): boolean {
   return a.s !== b.s || a.f !== b.f || Math.abs(a.vz - b.vz) > 1;
 }
 
-/** Whether a value has an air state's shape: two numbers, a mode and flaps it knows. */
+/** Whether a value has an air state's shape: two numbers, a mode and flaps it knows (0 to MAX_FLAPS). */
 export function isAirShape(v: unknown): v is Air {
   if (typeof v !== 'object' || v === null) return false;
   const { z, vz, s, f } = v as Record<string, unknown>;
-  return typeof z === 'number' && typeof vz === 'number' && Number.isFinite(z) && Number.isFinite(vz) && (s === GROUNDED || s === AIRBORNE || s === GLIDING) && (f === 0 || f === 1);
+  return typeof z === 'number' && typeof vz === 'number' && Number.isFinite(z) && Number.isFinite(vz) && (s === GROUNDED || s === AIRBORNE || s === GLIDING) && (f === 0 || f === 1 || f === 2);
 }
 
 /**

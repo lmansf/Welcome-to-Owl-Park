@@ -165,7 +165,7 @@ export const LIMITS = {
   /** Air states (OP-084): a burst, then this many more a second; more are dropped quietly, and only those count towards the flood. */
   airBurst: AIR_BURST,
   airRefillPerS: AIR_REFILL_PER_S,
-  /** How far above the room's highest perch an owl can be (a jump and a flap at its top, flight.ts). */
+  /** How far above the room's highest perch an owl can be (a jump and both flaps, each at the top of the last, flight.ts). */
   maxRise: MAX_RISE,
   /** One prewritten phrase per visitor this often; faster ones are dropped quietly. */
   sayEveryMs: SAY_EVERY_MS,

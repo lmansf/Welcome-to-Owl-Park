@@ -55,6 +55,7 @@ side:
   hop `needs`, with the `reach` that tier gives at that rise. A hop passes only when the gap is no
   more than the reach. The codes:
   - `T1`, `T2`, `T3`: `hopTier`'s tiers in `routes.ts`, a single jump, the flap, a glide;
+  - `T2b`: in the tree, a hop that takes both flaps (`hopFlaps` 2);
   - `T1 into U3`: a hop into an updraft's column;
   - `U (glide off)`: off the top of a column, gliding (one down for three along), and
     `U + flap`: the same with the flap kept for the top;
@@ -75,11 +76,12 @@ The park's flight (`flight.ts`) runs on the climb's jump (`jump.ts`), in room pi
 | --- | --- | --- |
 | Jump height | 148.9 px | `JUMP_RISE` = `JUMP_IMPULSE`² / 2 `GRAVITY` = 880² / 5200 |
 | Flap height | 111.1 px more, 260 in all | `DOUBLE_JUMP_IMPULSE` 760 |
+| The tree's second flap (the triple jump, OP-239) | 111.1 px more again, 371 in all; map 2 only, not the climb | `ALL_FLIGHT.secondFlap`, `flightFor` |
 | Speed across, in the air | 260 px/s | `WALK_SPEED` |
 | Glide | falls 1 px for 3 across, 86.7 px/s | `GLIDE_SLOPE`, `GLIDE_SINK` |
 | A hop's margins | a rise 10 px short of the top, 0.8 of the reach across | `ROUTE_MARGIN`, `ROUTE_REACH` |
 | The highest ledge | 540 over the ground line | `MAX_PERCH_TOP` |
-| The highest an owl may be | the room's highest top + 280 | `MAX_RISE`, `Room.ts` |
+| The highest an owl may be | the room's highest top + 392 (a jump and both flaps, 371, and 20 to spare) | `MAX_RISE`, `Room.ts` |
 | The dash | 162 px in 180 ms, once per jump, back when the owl stands on something, never sooner than 350 ms after the last | `AIR_DASH_SPEED` 900, `AIR_DASH_MS` 180, `AIR_DASH_COOLDOWN_MS` 350 (`dash.ts`, PR 72) |
 | The dash on a hop | +115 px across: the dash is a walk while the owl is up, so the fall goes on through it, and its 180 ms give up 47 px of the ordinary 260 px/s drift (162 - 47). Counted at 0.8: **+92** on a glide's reach | `dash.ts`, `flight.ts` |
 | A gap the dash must not cross | checked at the plain 0.8 x 162 = **+130**, so it stays shut under either reckoning | |
@@ -98,6 +100,28 @@ The reach across, by rise (px; `routes.ts`'s `hopTier`, margins in):
 | 200 | - | 176 | 275 | 367 |
 | 220 | - | 168 | 227 | 319 |
 | 250 | - | 149 | 155 | 247 |
+
+In the tree (map 2) the owl has both flaps (OP-239), so `perchTiers` reckons a tree room's hops with
+two (`roomFlaps`), and `hopFlaps` says whether a T2 hop takes the second. The reach across with both
+flaps, by rise (px, margins in; `T2b` is a T2 hop that takes the second flap):
+
+| Rise | T2b, both flaps | T3, both flaps and a glide | With the dash too |
+| ---: | ---: | ---: | ---: |
+| -200 | 330 | 1563 | 1655 |
+| -100 | 317 | 1323 | 1415 |
+| 0 | 303 | 1083 | 1175 |
+| 50 | 295 | 963 | 1055 |
+| 100 | 287 | 843 | 935 |
+| 130 | 282 | 771 | 863 |
+| 150 | 278 | 723 | 815 |
+| 200 | 267 | 603 | 695 |
+| 220 | 263 | 555 | 647 |
+| 250 | 255 | 483 | 575 |
+| 300 | 241 | 363 | 455 |
+| 350 | 218 | 243 | 335 |
+
+The second flap more than doubles a glide's reach up a rise (at 200, 275 px becomes 603), so the
+tree plans' gaps are measured again with it (each plan's section "With the triple jump").
 
 A glide is strong: level, it carries an owl 755 px. So a mechanic is only needed where a hop rises
 (at a rise of 200 a glide reaches 275 px, with the dash 367) or a hazard blocks the glide's line. Both
@@ -127,7 +151,15 @@ tree courses are built on that.
   trunk still closed, by 7 px, and moved 20 px nearer (360 to 340 px) for room. Two optional dash
   skips no longer work (the Canopy's past updraft U12 and Brushstroke's past the bridge from `k8`),
   so those mechanics are now always needed. Every gap that must stay shut even with the dash holds
-  at +130.
+  at +130. (Superseded for the tree by the triple jump, next.)
+- **The second flap (OP-239) let an owl skip almost every mechanic** in both tree plans: every
+  updraft, the bridges, both dash gaps. Fix: height first. The ledge a mechanic leads to now stands
+  370 to 420 px over the one before it, past a jump and both flaps, and hanging thorn curtains or
+  cloud banks hold an owl that passes under them to a single jump's lift. Only the dash gaps were
+  widened: the Canopy's to 380 px at a rise of 320, Brushstroke's to 650 px at a rise of 200. Each
+  plan's section 9 has the old-versus-new table. One reach stays open: lost feather 4 in the Canopy
+  can also be reached by a long glide back from `u2`. The "in the air" rows (a hop made under a
+  hanging hazard) need the flight stepped through, not this file's hop formula.
 - **The tower was short:** about 4.6 minutes for a first clear. Fix (Claude Duet's call; the owner can change it): bands 7 and 8,
   measured with the pilot; about 6.5 minutes now, and about 7 with the hidden pane room.
 
