@@ -534,6 +534,8 @@ def kit_sheet(key: str) -> tuple[dict, str]:
                 return sheets[name[len(area) + 1:]], f"kit-{area}-"
         if name.startswith("cut-") and name[len("cut-"):] in kit.get("recut", {}).get("sheets", {}):
             return kit["recut"]["sheets"][name[len("cut-"):]], "kit-cut-"
+        if name.startswith("puzzle-") and name[len("puzzle-"):] in kit.get("puzzle", {}).get("sheets", {}):
+            return kit["puzzle"]["sheets"][name[len("puzzle-"):]], "kit-puzzle-"
         if name.startswith("landmark-") and name[len("landmark-"):] in kit.get("landmarks", {}):
             # a landmark is one prop on its own square canvas: a one-piece sheet
             piece = kit["landmarks"][name[len("landmark-"):]]
@@ -719,7 +721,7 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     if a.clear_haze:
         rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
         note(f"{key}: clear-haze {n} px")
-    cols, rows = (1, 1) if len(sheet["pieces"]) == 1 else (3, 2)
+    cols, rows = {1: (1, 1), 3: (3, 1), 4: (2, 2)}.get(len(sheet["pieces"]), (3, 2))
     alpha = np.asarray(rgba.getchannel("A"))
     blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
     n = cols * rows

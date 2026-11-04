@@ -270,6 +270,11 @@ assembler (OP-234) builds screens from the published files, whose format is this
   piece marked `tile` is healed up and down so stacked copies meet with no seam (the trunk's middle). A join sheet (`kit.recut.sheets.<name>`, `kit-sheet-cut-<name>`)
   holds six props (corners, ground transitions, slope joins, trunk and bough edges) cut by
   `art:finish pieces` to `kit-cut-<piece>`. The old pieces stay until rooms move off them.
+- **Puzzle quest art** (OP-256, `kit.puzzle` in `config/kit.json`): two keyed sheets painted with the
+  level 4 target as the reference, `kit-sheet-puzzle-props` (the lock post shut and open, the blank
+  clue carving, the brass key; four props, two by two) and `kit-sheet-puzzle-symbols` (the six code
+  symbols), cut by `art:finish pieces` to `kit-puzzle-<piece>`. The room's markers and the code pad
+  draw them in place of the code-drawn stand-ins, and fall back to those until the art is loaded.
 - **Art targets** (OP-249, `targets.mjs`): three finished screens, `target-l4`, `target-plaza` and
   `target-clearing`, painted as one picture each at 1600 x 900 under one light (the moon, upper right)
   from two references in `work/art/guides/`: `<key>-preview.png` (the screen as the kit draws it today,

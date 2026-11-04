@@ -3054,5 +3054,69 @@
         ]
       }
     }
+  },
+  "puzzle": {
+    "about": "OP-256: the puzzle quests' pieces, drawn by the room and the code pad in place of the code-drawn stand-ins (OP-255). Two keyed sheets painted with the level 4 target as the reference: the props (a lock post shut and open, a blank clue carving, a brass key) and the six code symbols, each symbol one bold shape readable at 32 px on a phone.",
+    "ref": "target-l4",
+    "sheets": {
+      "props": {
+        "pieces": [
+          {
+            "name": "lock-closed",
+            "w": 64,
+            "h": 112,
+            "desc": "a short wooden lock post, a squared oak post with a rounded top and a brass code lock set in its face, the lock shut, its hasp down, three small dark slots across the lock's face, a touch of moss at the post's foot"
+          },
+          {
+            "name": "lock-open",
+            "w": 64,
+            "h": 112,
+            "desc": "the same short wooden lock post with its brass code lock sprung open, the hasp swung up and out, a faint warm glow from the open lock"
+          },
+          {
+            "name": "carving",
+            "w": 64,
+            "h": 64,
+            "desc": "a square patch of tree bark with a smooth panel carved into its middle, the panel blank pale wood with nothing drawn on it, a thin dark groove around the panel's edge"
+          },
+          {
+            "name": "key",
+            "w": 48,
+            "h": 48,
+            "desc": "a small old brass key seen from the side, a round bow with a hole, a short shank and two square teeth, with a soft warm shine"
+          }
+        ]
+      },
+      "symbols": {
+        "w": 64,
+        "h": 64,
+        "pieces": [
+          {
+            "name": "symbol-moon",
+            "desc": "a crescent moon icon: one bold cream shape with a thick dark brown outline, flat, no shading"
+          },
+          {
+            "name": "symbol-leaf",
+            "desc": "a single leaf icon with its midrib, one bold cream shape with a thick dark brown outline, flat"
+          },
+          {
+            "name": "symbol-feather",
+            "desc": "a single feather icon, one bold cream shape with a thick dark brown outline, flat"
+          },
+          {
+            "name": "symbol-acorn",
+            "desc": "an acorn icon with its cap, one bold cream shape with a thick dark brown outline, flat"
+          },
+          {
+            "name": "symbol-star",
+            "desc": "a five-pointed star icon, one bold cream shape with a thick dark brown outline, flat"
+          },
+          {
+            "name": "symbol-mushroom",
+            "desc": "a toadstool icon with a domed cap and a stem, one bold cream shape with a thick dark brown outline, flat"
+          }
+        ]
+      }
+    }
   }
 }

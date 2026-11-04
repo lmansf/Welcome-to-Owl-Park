@@ -156,7 +156,7 @@ import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './a
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
-import { artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
+import { PUZZLE_ART_KEYS, artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 import { admitTarget } from './gateAdmit';
@@ -657,6 +657,15 @@ export class RoomScene extends Phaser.Scene {
     void this.connect(joining);
     this.soft = soft;
     void this.sharpen(gen);
+    void this.loadPuzzleArt(gen, cap);
+  }
+
+  /** The puzzle quests' art (OP-256), after the room's own: the marks already standing are drawn again with it. */
+  private async loadPuzzleArt(gen: number, cap: number): Promise<void> {
+    if (this.spectator || PUZZLE_ART_KEYS.length === 0) return;
+    await loadArt(this, PUZZLE_ART_KEYS, this.cfg.pixelRatio, cap);
+    if (gen !== this.gen || !this.scene.isActive()) return;
+    for (const m of this.puzzleMarks.values()) m.redraw();
   }
 
   /** The keepers' position overlay (?pos=1 with the room server): asked for once a tab, as the first room starts to load, and up from then on. */

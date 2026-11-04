@@ -165,6 +165,33 @@ for (const [name, col] of Object.entries(KIT_RECUT.columns ?? {})) {
   KIT_RECUT_PROMPTS[key] = `${col.pieces.length === 3 ? 'Three' : String(col.pieces.length)} separate tall vertical columns of game art standing side by side on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, each column one unbroken piece running from the very top edge of the frame to the very bottom edge so the frame cuts it off above and below, with clear flat magenta between the columns, the columns not touching each other, each about the same height and standing straight. From left to right: ${items.join('; ')}. Every column is seen straight from the side as in a side-scrolling platform game, with no ground, no cast shadow and no glow painted on the magenta. ${KIT_RECUT.light}. ${KIT_STYLE}`;
   col.pieces.forEach((p, i) => KIT_RECUT_PIECES.push({ key: `kit-cut-${p.name}`, sheet: key, cell: i, w: p.w, h: p.h, column: true }));
 }
+/** The puzzle quests' pieces (OP-256): two keyed sheets, four props and six symbols. */
+export const KIT_PUZZLE = KIT.puzzle ?? { sheets: {} };
+export const KIT_PUZZLE_SHEET_KEYS = [];
+export const KIT_PUZZLE_PROMPTS = {};
+export const KIT_PUZZLE_REFS = {};
+export const KIT_PUZZLE_PIECES = [];
+for (const [name, sheet] of Object.entries(KIT_PUZZLE.sheets ?? {})) {
+  const key = `kit-sheet-puzzle-${name}`;
+  const items = sheet.pieces.map((p, i) => `${i + 1}) ${p.desc}`);
+  const n = sheet.pieces.length;
+  const grid = n === 4 ? 'two across and two down' : 'three across and two down';
+  const cols = n === 4 ? 2 : 3;
+  KIT_PUZZLE_SHEET_KEYS.push(key);
+  KIT_PUZZLE_REFS[key] = [recutRef(KIT_PUZZLE.ref)];
+  KIT_PUZZLE_PROMPTS[key] = `A sheet of ${n === 4 ? 'four' : 'six'} separate game ${name === 'symbols' ? 'icons' : 'props'} on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, laid out in a grid of ${grid}, each one whole and centred in its own cell with clear flat magenta all round it, none touching another or the edge of the frame, each cell the same size. Along the top row from left to right: ${items.slice(0, cols).join('; ')}. Along the bottom row from left to right: ${items.slice(cols).join('; ')}. ${name === 'symbols' ? 'Every icon is a flat, simple, bold shape that stays readable when drawn tiny, with no shading, no texture and no cast shadow, all six in the same cream colour and the same dark brown outline weight.' : 'Every prop is seen straight from the side as in a side-scrolling platform game, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta.'} ${KIT_RECUT.light}. ${KIT_STYLE}`;
+  sheet.pieces.forEach((p, i) => KIT_PUZZLE_PIECES.push({ key: `kit-puzzle-${p.name}`, sheet: key, cell: i, w: p.w ?? sheet.w, h: p.h ?? sheet.h }));
+}
+export const PUZZLE_SEED = 10300;
+
+export function puzzleJobs(seedBase = PUZZLE_SEED) {
+  return KIT_PUZZLE_SHEET_KEYS.map((key, i) => ({
+    key, kind: 'sheet', realm: 'kit', size: SHEET_SIZE, seed: seedBase + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR,
+    derives: KIT_PUZZLE_PIECES.filter((p) => p.sheet === key).map((p) => p.key), refs: KIT_PUZZLE_REFS[key],
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_PUZZLE_PROMPTS[key],
+  }));
+}
+
 export const RECUT_SEED = 9900;
 
 export function recutJobs(seedBase = RECUT_SEED) {
@@ -220,5 +247,5 @@ export function kitJobs(seedBase = 7000) {
     providers: { fal: { output_format: 'png' } }, prompt: KIT_SHEET_PROMPTS[key],
   }));
   const areas = Object.keys(KIT_AREAS).flatMap((a) => areaJobs(a, AREA_SEEDS[a] ?? seedBase + 400));
-  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs(), ...recutJobs()];
+  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs(), ...recutJobs(), ...puzzleJobs()];
 }

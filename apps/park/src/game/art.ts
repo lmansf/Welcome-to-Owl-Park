@@ -679,6 +679,16 @@ export const ART: Record<string, ArtSpec> = {
   'kit-cut-stone-mossy-mid-320': { w: 320, h: 120, kind: 'piece' },
   'kit-cut-stone-mossy-mid-480': { w: 480, h: 120, kind: 'piece' },
   'kit-cut-stone-mossy-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-puzzle-lock-closed': { w: 64, h: 112, kind: 'piece' },
+  'kit-puzzle-lock-open': { w: 64, h: 112, kind: 'piece' },
+  'kit-puzzle-carving': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-key': { w: 48, h: 48, kind: 'piece' },
+  'kit-puzzle-symbol-moon': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-leaf': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-feather': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-acorn': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-star': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-mushroom': { w: 64, h: 64, kind: 'piece' },
   'kit-cut-earth-cap-left': { w: 160, h: 200, kind: 'piece' },
   'kit-cut-earth-cap-right': { w: 160, h: 200, kind: 'piece' },
   'kit-cut-earth-mid-320': { w: 320, h: 200, kind: 'piece' },
@@ -870,6 +880,14 @@ export { FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS };
 
 /** The climb's pieces, loaded by its scene when a climb opens and released when it closes. */
 export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'climb');
+/** The puzzle quests' pieces (OP-256): the lock post, the clue carving, the key and the six code symbols, drawn by the room's markers and the code pad. */
+export const PUZZLE_ART_KEYS = Object.keys(ART).filter((k) => k.startsWith('kit-puzzle-'));
+
+/** The address of a published piece's 1x raster for an element outside the game canvas (the code pad's symbols), or null when this build does not ship it. */
+export function publishedArtUrl(key: string): string | null {
+  const name = `${key}.webp`;
+  return PUBLISHED_ART.has(name) ? `${baseUrl()}${versioned(name)}` : null;
+}
 
 // The art kit's pieces (OP-234), at their logical sizes.
 for (const [key, { w, h }] of Object.entries(KIT_ART)) ART[key] ??= { w, h, kind: 'kit' };
