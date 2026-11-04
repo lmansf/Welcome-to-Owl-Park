@@ -48,6 +48,11 @@ export interface Sighting extends Visit {
   /** It came by travel from the Menu's map (OP-130). */
   travel?: boolean;
   /**
+   * At its hello, the park the page has the owl walking (OP-265): a room both parks share (a nest, a
+   * realm the tree opens into) has its stay logged in it. A room of one park alone ignores it.
+   */
+  map?: 1 | 2;
+  /**
    * Inside the park, whether the socket is a spectator's (OP-191, OP-192): true for a spectator, false
    * for a full visitor. Left out outside the turnstiles (the lobby, the street, the nests), where
    * nobody is either.
@@ -202,7 +207,8 @@ export class ParkStats {
     const home = v.room === 'lobby' || (v.room === 'nest' && s.own === true);
     // After the restart closed its stay, the owl comes back in from the home screen.
     const source: StayEntry = s.travel === true ? 'travel' : live?.open ? 'walked' : live ? (home ? 'spawn' : 'walked') : home ? 'spawn' : 'deep_link';
-    const map = stayMap(place, live ? (live.map === 2 ? 2 : 1) : null);
+    const said = s.map === 1 || s.map === 2 ? s.map : null;
+    const map = stayMap(place, said ?? (live ? (live.map === 2 ? 2 : 1) : null));
     const seq = (live?.seq ?? 0) + 1;
     this.sql.exec(
       `INSERT OR REPLACE INTO stats_live (pass, cid, seq, place, room, map, entered, open, ending) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
@@ -291,9 +297,9 @@ export function visitMaps(places: readonly string[]): (1 | 2)[] {
 
 /**
  * The park a live stay is in (OP-265), from its room alone: a room of the tree is map 2 and one only
- * today's park has is map 1; a room both share (the market, a nest) takes the park of the stay before
- * it in the visit, or today's park for a visit's first stay. A live row cannot wait to see the visit's
- * later rooms, as `visitMaps` does.
+ * today's park has is map 1; a room both share (the market, a nest) takes `before`: the park the page
+ * says it walks, else the park of the stay before it in the visit, else today's park. A live row
+ * cannot wait to see the visit's later rooms, as `visitMaps` does.
  */
 export function stayMap(place: string, before: 1 | 2 | null): 1 | 2 {
   if (!isNestRoom(place) && !TREE_REALMS.has(place)) {

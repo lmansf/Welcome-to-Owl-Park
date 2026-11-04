@@ -1099,7 +1099,8 @@ export class RoomScene extends Phaser.Scene {
         if (owl) this.bubbles?.say(owl, n, Date.now());
       },
     };
-    const self = { ...this.snapshot(at, null), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}) } as PlayerState;
+    // The park the owl walks goes with the hello, so a nest's or a shared realm's stay is logged in the right one (OP-265).
+    const self = { ...this.snapshot(at, null), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}), map: this.walking() } as PlayerState;
     // Where the own owl is as the room's socket opens (OP-138): a question, not news, so never held back; until the scene has its owl, where it comes in.
     const here = (): Vec2 | null => (!live() ? null : this.built ? { ...this.me.pos } : { ...at });
     const conn = this.transport.join(this.room.id, self, { ...heldBack(handlers, () => (this.heard === heard ? heard : null)), here });

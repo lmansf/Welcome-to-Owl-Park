@@ -395,6 +395,31 @@ describe('room stays, live (OP-265)', () => {
     expect((await t.sent<RealmVisitRow>('realm_visit')).map((r) => r.realm).sort()).toEqual(['grove', 'hub', 'market']);
   });
 
+  it('logs a tree owl\'s nest, its visit\'s first stay, in the tree when the page says the owl walks the tree', async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true, map: 2 }), BARN, MON); // Play lands it in its nest; it walks the tree
+    t.stats.seen(into('l5-street'), BARN, MON + MIN);
+    t.stats.seen(into('market', { map: 2 }), BARN, MON + 2 * MIN); // a realm both parks share, walked from the tree
+    t.stats.seen(into('hub', { map: 2 }), BARN, MON + 3 * MIN); // a room of today's park alone is in today's park, whatever the page says
+    t.stats.close(MON + 3 * MIN + VISIT_GRACE_MS);
+    const enters = (await t.sent<RoomStayRow>('room_stay')).filter((r): r is Extract<RoomStayRow, { event: 'enter' }> => r.event === 'enter');
+    expect(enters.map((r) => [r.realm, r.map_id])).toEqual([
+      ['nest', 2],
+      ['l5-street', 2],
+      ['market', 2],
+      ['hub', 1],
+    ]);
+  });
+
+  it('logs a nest in today\'s park when the page says so, or says nothing', async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true, map: 1 }), BARN, MON);
+    t.stats.seen({ ...into(NEST, { own: true }), pass: 'v_visitBBBB2' }, BARN, MON + MIN);
+    t.stats.close(MON + MIN + VISIT_GRACE_MS);
+    const enters = (await t.sent<RoomStayRow>('room_stay')).filter((r): r is Extract<RoomStayRow, { event: 'enter' }> => r.event === 'enter');
+    expect(enters.map((r) => r.map_id)).toEqual([1, 1]);
+  });
+
   it('puts a shared room in the park of the stay before it, and a first one in today\'s park', () => {
     expect(stayMap('l3', null)).toBe(2);
     expect(stayMap('hub', 2)).toBe(1);

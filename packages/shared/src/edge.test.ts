@@ -127,6 +127,12 @@ describe('parseClientFrame', () => {
     for (const bad of ['not a token', `${'a'.repeat(201)}.${'s'.repeat(43)}`, `abc.${'s'.repeat(42)}`, `abc.${'s'.repeat(43)}=`, 42, null]) {
       expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, keeper: bad })), String(bad)).toBeNull();
     }
+    // The park the owl walks (OP-265): 1 or 2, nothing else.
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, map: 2 }))).toEqual({ t: 'hello', v: V, look, map: 2 });
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, map: 1 }))).toEqual({ t: 'hello', v: V, look, map: 1 });
+    for (const bad of [0, 3, '2', 1.5, null]) {
+      expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, map: bad })), String(bad)).toBeNull();
+    }
     // An owl asleep or awake (OP-126): a plain yes or no, nothing else.
     expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: true }))).toEqual({ t: 'rest', asleep: true });
     expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: false, extra: 1 }))).toEqual({ t: 'rest', asleep: false });
