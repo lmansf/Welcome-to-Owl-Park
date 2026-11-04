@@ -32,6 +32,12 @@ export const KIT_STRIP = 4;
 export const KIT_PATH_SLACK = 16;
 /** How near the end of a walk a barrier (or a doorway) must stand to close it (room px). */
 export const KIT_BARRIER_REACH = 48;
+/** The widest a scene's group may run, its props' art and what it is about (room px): wider is a row, not a scene. */
+export const KIT_SCENE_SPAN = 720;
+/** The least room left between two scenes' groups (room px), so each reads as its own. */
+export const KIT_SCENE_GAP = 40;
+/** The longest a scene's one-line story may be. */
+export const KIT_STORY_MAX = 140;
 
 /** Where a kit room draws a piece, from back to front (the park's depths, kitView.ts). */
 export type KitLayer = 'back' | 'play' | 'piece' | 'front';
@@ -458,6 +464,73 @@ export function walkedAt(room: Pick<RoomDef, 'walkable' | 'perches'>, ground: nu
  * Also: every key is a kit key of the catalogue, every stair's treads, doorway's door and perch are
  * the room's, and every stretch of floor an owl walks is drawn (a path at top 0 covers it).
  */
+/** A scene of a kit room (docs/TREE_STYLE.md section 8) where it is drawn: its group's art from x0 to x1 (room px). */
+export interface KitSceneSpan {
+  id: string;
+  story: string;
+  x0: number;
+  x1: number;
+  /** The screen its group's middle stands on (0 is the room's first). */
+  screen: number;
+}
+
+/** Where each scene of a kit room is drawn: the art of its props and of the doorways, barriers and ledges it is about, left to right. */
+export function kitSceneSpans(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitSceneSpan[] {
+  const plan = kitDrawPlan(room);
+  const art = (d: KitDraw) => {
+    const s = sizeOf(d.key);
+    const a = artSpan(s);
+    const k = d.w / s.w;
+    return [d.x + a.left * k, d.x + a.right * k] as const;
+  };
+  const out: KitSceneSpan[] = [];
+  for (const sc of room.kit?.scenes ?? []) {
+    const ids = new Set([...sc.props, ...(sc.about ?? [])]);
+    const spans = plan.filter((d) => (d.role === 'prop' || d.role === 'door' || d.role === 'barrier' || d.role === 'ledge') && ids.has(d.id)).map(art);
+    if (!spans.length) continue;
+    const x0 = Math.round(Math.min(...spans.map((a) => a[0])));
+    const x1 = Math.round(Math.max(...spans.map((a) => a[1])));
+    out.push({ id: sc.id, story: sc.story, x0, x1, screen: Math.floor((x0 + x1) / 2 / ROOM_W) });
+  }
+  return out.sort((a, b) => a.x0 - b.x0);
+}
+
+/**
+ * The story rule (the owner, 2026-11-03; docs/TREE_STYLE.md section 8): every prop of a kit room belongs
+ * to exactly one scene with a one-line story; a scene's group is close together (KIT_SCENE_SPAN) with
+ * room around it (KIT_SCENE_GAP), so props never stand in an even row like a catalogue.
+ */
+export function kitSceneProblems(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): string[] {
+  const kit = room.kit;
+  if (!kit) return [];
+  const out: string[] = [];
+  const scenes = kit.scenes ?? [];
+  const propIds = new Set((kit.props ?? []).map((p) => p.id));
+  const anchors = new Set([...room.doors.map((d) => d.id), ...(kit.barriers ?? []).map((b) => b.id), ...(kit.ledges ?? []).map((l) => l.id)]);
+  const owner = new Map<string, string>();
+  for (const sc of scenes) {
+    const story = sc.story.trim();
+    if (!story) out.push(`scene ${sc.id} has no story`);
+    else if (/\n/.test(sc.story) || story.length > KIT_STORY_MAX) out.push(`scene ${sc.id}'s story is not one line of at most ${KIT_STORY_MAX} characters`);
+    if (!sc.props.length) out.push(`scene ${sc.id} groups no props`);
+    for (const id of sc.props) {
+      if (!propIds.has(id)) out.push(`scene ${sc.id} groups ${id}, which is no prop of the room`);
+      else if (owner.has(id)) out.push(`prop ${id} is in two scenes, ${owner.get(id)} and ${sc.id}`);
+      else owner.set(id, sc.id);
+    }
+    for (const id of sc.about ?? []) if (!anchors.has(id)) out.push(`scene ${sc.id} is about ${id}, which is no doorway, barrier or ledge of the room`);
+  }
+  for (const id of propIds) if (!owner.has(id)) out.push(`prop ${id} belongs to no scene: what story does it tell?`);
+  const spans = kitSceneSpans(room);
+  for (const sp of spans) if (sp.x1 - sp.x0 > KIT_SCENE_SPAN) out.push(`scene ${sp.id} runs ${sp.x1 - sp.x0} px, more than ${KIT_SCENE_SPAN}: a row, not a scene`);
+  for (let i = 1; i < spans.length; i++) {
+    const a = spans[i - 1]!;
+    const b = spans[i]!;
+    if (b.x0 - a.x1 < KIT_SCENE_GAP) out.push(`scenes ${a.id} and ${b.id} run into each other (${b.x0 - a.x1} px apart, at least ${KIT_SCENE_GAP})`);
+  }
+  return out;
+}
+
 export function kitProblems(room: RoomDef): string[] {
   const kit = room.kit;
   if (!kit) return [];
@@ -513,5 +586,5 @@ export function kitProblems(room: RoomDef): string[] {
       }
     }
   }
-  return out;
+  return [...out, ...kitSceneProblems(room)];
 }

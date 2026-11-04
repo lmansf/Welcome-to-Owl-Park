@@ -217,6 +217,7 @@ export function planOf(shared, room) {
     doors: room.doors,
     perches: (room.perches ?? []).map((p) => ({ id: p.id, top: p.top, x0: Math.min(...p.area.map((q) => q.x)), x1: Math.max(...p.area.map((q) => q.x)) })),
     spawns: room.spawns,
+    scenes: kit.kitSceneSpans(room),
     problems: kit.kitProblems(room),
   };
 }

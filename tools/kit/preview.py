@@ -10,7 +10,10 @@ for scale. One PNG per screen, and one of the whole room at rest.
 
 --marks draws where an owl stands (white), the doorways' triggers (gold) and the ground line (blue).
 --target also writes the room's target screen (OP-249, tools/art/targets/) beside the screen it was
-painted for, <room>-vs-target.png, for holding a screen to its target before it ships (OP-252).
+painted for, <room>-vs-target.png, for holding a screen to its target before it ships (OP-252), with
+the story of each scene on that screen under it (docs/TREE_STYLE.md section 8: what story does this
+corner tell?). It fails when a prop belongs to no scene or the scenes break the story rule.
+The whole-room PNG marks each scene's group and prints its story under the room.
 Needs Pillow with webp. The PNGs go to work/kit/preview/ by default (work/ is not committed).
 """
 import json
@@ -18,7 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
 ART = ROOT / 'apps' / 'park' / 'public' / 'art'
@@ -167,6 +170,40 @@ def beside(screen, target, gap=8):
     return sheet
 
 
+def font(size):
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow without FreeType: the fixed bitmap font
+        return ImageFont.load_default()
+
+
+def with_stories(im, scenes, cam_x, k, mark=False):
+    """The picture with a strip under it: one line per scene in view, its number, id and story (the story rule).
+    With mark, the strip opens with a bracket under each scene's group, numbered as its line."""
+    size = max(12, round(28 * k))
+    f = font(size)
+    line = round(size * 1.5)
+    lines = scenes or [{'id': '', 'story': 'no scenes: no props on this screen'}]
+    band = line + size // 2 if mark and scenes else 0
+    strip = Image.new('RGB', (im.width, band + line * len(lines) + size), (20, 20, 28))
+    d = ImageDraw.Draw(strip)
+    if band:
+        y = size // 2
+        for i, sc in enumerate(scenes):
+            x0, x1 = (sc['x0'] - cam_x) * k, (sc['x1'] - cam_x) * k
+            d.line([(x0, y), (x1, y)], fill=(232, 192, 64), width=3)
+            d.line([(x0, y), (x0, y + size // 2)], fill=(232, 192, 64), width=3)
+            d.line([(x1, y), (x1, y + size // 2)], fill=(232, 192, 64), width=3)
+            d.text(((x0 + x1) / 2 - size / 3, y + 4), str(i + 1), fill=(232, 192, 64), font=f)
+    for i, sc in enumerate(lines):
+        text = f"{i + 1}. {sc['id']}: {sc['story']}" if sc['id'] else sc['story']
+        d.text((size, band + size // 2 + i * line), text, fill=(236, 230, 214), font=f)
+    out = Image.new('RGB', (im.width, im.height + strip.height))
+    out.paste(im.convert('RGB'), (0, 0))
+    out.paste(strip, (0, im.height))
+    return out
+
+
 def main(argv):
     args = argv[1:]
     def flag(name, default=None):
@@ -203,14 +240,21 @@ def main(argv):
             print(f"no target screen for {p['id']} (targets: {', '.join(ROOM_TARGETS)})", file=sys.stderr)
             return 2
         key, s = ROOM_TARGETS[p['id']]
-        sheet = beside(render(p, s * ROOM_W, ROOM_W, k, marks), Image.open(TARGETS / f'{key}.png'))
+        on_screen = [sc for sc in p.get('scenes', []) if sc['screen'] == s]
+        sheet = with_stories(beside(render(p, s * ROOM_W, ROOM_W, k, marks), Image.open(TARGETS / f'{key}.png')), on_screen, s * ROOM_W, k)
         f = out_dir / f"{p['id']}-vs-target{tag}.png"
         sheet.save(f)
         print(f'wrote {f}')
-    whole = render(p, 0, p['size']['w'], k, marks)
+        for sc in on_screen:
+            print(f"screen {s}, {sc['id']}: {sc['story']}")
+    whole = with_stories(render(p, 0, p['size']['w'], k, marks), p.get('scenes', []), 0, k, mark=True)
     f = out_dir / f"{p['id']}-whole{tag}.png"
-    whole.convert('RGB').save(f)
+    whole.save(f)
     print(f'wrote {f}')
+    story_faults = [m for m in p['problems'] if m.startswith(('scene', 'scenes', 'prop '))]
+    if with_target and story_faults:
+        print('not ready to ship: every prop must belong to a scene that tells a story (docs/TREE_STYLE.md section 8)', file=sys.stderr)
+        return 1
     return 0
 
 
