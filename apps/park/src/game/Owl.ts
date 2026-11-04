@@ -44,6 +44,8 @@ export interface Held {
   beat?: WingBeat;
   tumbling?: boolean;
 }
+/** How much of a slope's angle a standing owl leans with (OP-238). */
+const SLOPE_LEAN = 1 / 3;
 const HELD_GLIDING: Air = { z: 0, vz: 0, s: GLIDING, f: 0 };
 const HELD_FALLING: Air = { z: 0, vz: 0, s: AIRBORNE, f: 0 };
 
@@ -142,6 +144,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private lift = 0;
   /** What the owl comes down on where it is (OP-084, perches.ts groundAt): the scene's, the floor until it says. */
   groundUnder: (pos: Vec2, z: number) => number = () => 0;
+  /** The sloped ground under the owl (OP-238, perches.ts slopeUnder): null where it is flat. */
+  slopeUnder: (pos: Vec2, z: number) => { top: number; grade: number } | null = () => null;
+  /** Its height as drawn on a slope, carried from frame to frame from the air it was last told. */
+  private slopeZ: { from: Air; z: number } | null = null;
   /** Whether the visitor asked for calm motion: the scene's (no landing dust then). */
   calm: () => boolean = () => false;
   /** Its last landing (OP-084): when (ms), and how hard (landingHardness); and how fast it was last falling in the air. */
@@ -638,7 +644,12 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
     // In the air (OP-084): carried on from the last state told, as every page does; or held there by a game (OP-135).
     const held = this.held;
-    const air = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
+    const told = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
+    // Standing on a slope (OP-238), the owl is drawn at the slope's height where it walks: its page
+    // tells the room nothing while it walks, so the height it was told is carried along the slope.
+    const slope = told.s === GROUNDED ? this.slopeUnder(this.pos, this.slopeZ?.from === told ? this.slopeZ.z : told.z) : null;
+    this.slopeZ = slope ? { from: told, z: slope.top } : null;
+    const air = slope ? { ...told, z: slope.top } : told;
     this.air = air;
     const flying = air.s !== GROUNDED;
     // Its place among the room's things: by where it stands, a ledge's band further back (OP-173).
@@ -694,7 +705,9 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     const moving = walkingHere || this.waddleIn > 0;
     const waddle = moving ? walkPose({ amount: this.waddleIn, walking: walkingHere, grounded: !flying, dt, now, calm: this.calm() }) : null;
     this.waddleIn = waddle?.amount ?? 0;
-    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0);
+    // On a slope it leans a little with the ground (OP-238): cosmetic, a third of the slope's angle.
+    const lean = slope ? -Math.atan(slope.grade) * SLOPE_LEAN : 0;
+    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0) + lean;
     const ground = this.groundUnder(this.pos, air.z);
     this.shadow.y = -ground / (OWL_SCALE * this.size);
     const up = shadowFade(air.z - ground);

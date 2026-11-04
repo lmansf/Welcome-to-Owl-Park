@@ -18,7 +18,7 @@
  */
 import { landDash, type DashCharge } from './dash';
 import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
-import { MAX_PERCH_TOP } from './perches';
+import { MAX_PERCH_TOP, SLOPE_CATCH, type Standing } from './perches';
 import { WALK_SPEED } from './walk';
 
 /** One step of flight: the climb's (jump.ts). */
@@ -97,6 +97,8 @@ export interface FlightInput {
 export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readonly<FlightAbilities> = ALL_FLIGHT): Flier {
   let { z, vz, s, f } = fl.air;
   let { bufferMs, coyoteMs, rising } = fl;
+  // Down a slope (OP-238): ground a step lower underfoot keeps the owl on it, at its height, never sliding.
+  if (s === GROUNDED && z > ground && z - ground <= SLOPE_CATCH) z = ground;
   // Off an edge: what was underfoot is lower now, so the owl falls, its flap still to come.
   if (s === GROUNDED && z > ground) {
     s = AIRBORNE;
@@ -177,15 +179,19 @@ export function isAirShape(v: unknown): v is Air {
  * An air state as the room server accepts it from a visitor (null for one it drops): its shape, its
  * numbers in range, and on the ground only at a height an owl can stand at, which it is put at
  * exactly. `maxZ` is the highest an owl can be in the room, `standing` the heights it can stand at
- * there (the floor and its perches' tops, perches.ts), or null where any height up to `maxZ` will do.
+ * there (the floor and its perches' tops, a sloped perch's range, perches.ts), or null where any
+ * height up to `maxZ` will do.
  * Rounded to a tenth, as it goes out.
  */
-export function checkAir(v: unknown, maxZ: number, standing: readonly number[] | null = [0]): Air | null {
+export function checkAir(v: unknown, maxZ: number, standing: readonly Standing[] | null = [0]): Air | null {
   if (!isAirShape(v)) return null;
   const { z, vz, s, f } = v;
   if (z < -0.5 || z > maxZ || vz < -MAX_FALL - 1 || vz > JUMP_IMPULSE + 1) return null;
   if (s === GROUNDED) {
-    const at = standing === null ? z : standing.find((h) => Math.abs(z - h) <= 0.5);
+    // A flat height is put at exactly; a sloped perch's range (OP-238) takes any height along it.
+    const fit = (h: Standing) => (typeof h === 'number' ? Math.abs(z - h) <= 0.5 : z >= h[0] - 0.5 && z <= h[1] + 0.5);
+    const hit = standing === null ? z : standing.find(fit);
+    const at = hit === undefined ? undefined : typeof hit === 'number' ? hit : Math.min(hit[1], Math.max(hit[0], z));
     return at === undefined || vz !== 0 ? null : { z: Math.round(Math.max(0, at) * 10) / 10, vz: 0, s, f };
   }
   return { z: Math.round(z * 10) / 10, vz: Math.round(vz * 10) / 10, s, f };

@@ -99,6 +99,7 @@ import {
   airChanged,
   fall,
   newFlier,
+  slopeUnder,
   stepFlier,
   FRESH_DASH,
   dashEnd,
@@ -442,6 +443,7 @@ export class RoomScene extends Phaser.Scene {
   private reSteer = false;
   /** What an owl comes down on where it is in this room: the floor, or a perch's top (OP-084). */
   private readonly groundUnder = (p: Vec2, z: number): number => groundAt(this.room.perches, p, z);
+  private readonly slopeBelow = (p: Vec2, z: number) => slopeUnder(this.room.perches, p, z);
   private airRefilledAt = 0;
   /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
   private flown = { n: 0, peak: 0, glided: false, ms: 0 };
@@ -905,6 +907,7 @@ export class RoomScene extends Phaser.Scene {
 
     this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1).setRaisedBand(this.raisedBand());
     this.me.groundUnder = this.groundUnder;
+    this.me.slopeUnder = this.slopeBelow;
     this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
     // Come in to stand before the mirror (Play, OP-105), the owl faces it.
@@ -1255,6 +1258,7 @@ export class RoomScene extends Phaser.Scene {
     if (!owl) {
       owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1).setRaisedBand(this.raisedBand());
       owl.groundUnder = this.groundUnder;
+      owl.slopeUnder = this.slopeBelow;
       owl.calm = () => this.calm();
       owl.setAlpha(0);
       this.tweens.add({ targets: owl, alpha: 1, duration: 400 });
