@@ -7,6 +7,7 @@
  */
 import { PUZZLE_SYMBOLS, type LockView, type PuzzleSymbol, type PuzzleView } from '@owl-park/shared';
 import type { PuzzleNeighbour } from '../collect/service';
+import { publishedArtUrl } from '../game/art';
 
 export const SYMBOL_FACE: Record<PuzzleSymbol, string> = { moon: '🌙', leaf: '🍃', feather: '🪶', acorn: '🌰', star: '⭐', mushroom: '🍄' };
 export const SYMBOL_WORD: Record<PuzzleSymbol, string> = { moon: 'Moon', leaf: 'Leaf', feather: 'Feather', acorn: 'Acorn', star: 'Star', mushroom: 'Mushroom' };
@@ -26,6 +27,8 @@ export const PUZZLE_CSS = `
 #hud .sheet.pad .slots span{width:44px;height:44px;display:grid;place-items:center;border-radius:10px;background:rgba(246,241,227,.08);border:1px solid rgba(246,241,227,.18)}
 #hud .sheet.pad .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 #hud .sheet.pad .keys button{min-height:52px;font-size:24px}
+#hud .pbox .syms span .sym{width:22px;height:22px;vertical-align:middle}
+#hud .sheet.pad .sym{width:32px;height:32px;vertical-align:middle;image-rendering:auto}
 #hud .sheet.pad .found{font-size:13px;opacity:.9;text-align:center}
 #hud .sheet.pad .row2{display:flex;gap:8px;justify-content:flex-end}
 #hud .sheet.pad .note{font-size:13px;text-align:center;min-height:18px;color:#FFD36A}
@@ -45,8 +48,23 @@ function button(label: string, cls: string, onClick: () => void, disabled = fals
   return b;
 }
 
+/** A symbol as the pad shows it: its painted icon (OP-256) when this build ships it, the emoji otherwise. */
+function symbolFace(s: PuzzleSymbol): HTMLElement | string {
+  const url = publishedArtUrl(`kit-puzzle-symbol-${s}`);
+  if (!url) return SYMBOL_FACE[s];
+  const img = document.createElement('img');
+  img.className = 'sym';
+  img.src = url;
+  img.alt = '';
+  img.width = 32;
+  img.height = 32;
+  img.draggable = false;
+  return img;
+}
+
 function symbolSpan(s: PuzzleSymbol | null): HTMLSpanElement {
-  const span = el('span', '', s ? SYMBOL_FACE[s] : '?');
+  const span = el('span', '', s ? '' : '?');
+  if (s) span.append(symbolFace(s));
   span.setAttribute('aria-label', s ? SYMBOL_WORD[s] : 'not found yet');
   return span;
 }
@@ -150,12 +168,14 @@ export function createCodePad(root: HTMLElement, tryCode: (quest: string, lock: 
     const keys = el('div', 'keys');
     const jammed = l.jammedUntil > Date.now();
     for (const s of PUZZLE_SYMBOLS) {
-      const b = button(SYMBOL_FACE[s], '', () => {
+      const face = symbolFace(s);
+      const b = button(typeof face === 'string' ? face : '', '', () => {
         if (code.length >= l.length) return;
         code = [...code, s];
         note = '';
         draw();
       }, pending || jammed || code.length >= l.length);
+      if (typeof face !== 'string') b.append(face);
       b.setAttribute('aria-label', SYMBOL_WORD[s]);
       b.dataset['symbol'] = s;
       keys.appendChild(b);
