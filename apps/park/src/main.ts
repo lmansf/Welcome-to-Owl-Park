@@ -44,6 +44,10 @@ analytics.init({
   },
 });
 
+// The page's intro (index.html, #intro: the SEO audit's h1, definition and links for crawlers and pages
+// without scripts) goes once the park runs, so the home screen's own h1 is the page's only one.
+document.getElementById('intro')?.remove();
+
 // Back from the store's checkout (OP-190, ui/checkoutReturn.ts): the store sends the buyer to
 // `?checkout=done`. A game page watching for the ticket answers, and this window (checkout's own)
 // closes or says the ticket is waiting in the park window, with Play here instead; with no answer

@@ -73,6 +73,8 @@
          still scroll. The viewport tag keeps zoom off in Chrome as well. */
       :where(body *) { touch-action: pan-x pan-y; }
       #game { position: fixed; inset: 0; }
+      /* The intro (#intro): read by crawlers and screen readers, not drawn over the load screen. */
+      .intro { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
       #game canvas { display: block; }
       /* The load screen (OP-129): an owl on a branch that grows as the park loads. It shows with the
          page, before the script has come; src/ui/loader.ts then sets its progress (--p, 0 to 1), its
@@ -110,15 +112,22 @@
     </style>
   </head>
   <body>
+    <!-- What the park is, in words a crawler or a page without scripts can read (the SEO audit, Nov 5):
+         the page's one h1, its "Owl Park is ..." definition and links to the other pages. Screen-reader
+         only while the park loads, shown in full without scripts, and removed by src/main.ts on boot, so
+         the home screen's own h1 is the only one once the park runs. -->
+    <main id="intro" class="intro">
+      <h1>Owl Park</h1>
+      <p>Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now.</p>
+      <p>Enter free as a guest to look around and play. Guests keep nothing they win, and ticketed owls keep everything.</p>
+      <p>There is no typed chat in the park. Owls talk only with the 24 set phrases on the Say wheel.</p>
+      <p>Built for anyone who misses the old chatroom worlds: grown-up owls welcome. Owl Park is one of the old kind of <a href="/chatroom-worlds/">chatroom worlds</a>, made small and safe.</p>
+      <p>Read <a href="/about/">about the park</a>, or the <a href="/about/#questions">questions grown-ups ask about Owl Park</a>.</p>
+      <p>See <a href="/changelog/">what's new in Owl Park</a>, or find <a href="/about/#contact">how to contact the park</a>.</p>
+      <noscript><p>The park needs JavaScript to run. Turn it on and reload this page to come in.</p></noscript>
+    </main>
     <noscript>
-      <style>#loader{display:none} .nojs{max-width:560px;margin:0 auto;padding:32px 16px;line-height:1.5} .nojs a{color:#FFD36A}</style>
-      <main class="nojs">
-        <h1>Owl Park</h1>
-        <p>Owl Park is a cozy park you visit in your browser, with no download. Enter free as a guest, and wander as an owl alongside everyone else who is here right now.</p>
-        <p>Built for anyone who misses the old chatroom worlds: grown-up owls welcome.</p>
-        <p>The park needs JavaScript to run. Turn it on and reload this page to come in.</p>
-        <p><a href="/about/">About the park</a> · <a href="/about/#questions">Questions</a> · <a href="/about/#contact">Contact</a> · <a href="/chatroom-worlds/">A small, safe chatroom world</a> · <a href="/changelog/">What's new</a></p>
-      </main>
+      <style>#loader{display:none} .intro{position:static;width:auto;height:auto;margin:0 auto;overflow:visible;clip:auto;clip-path:none;white-space:normal;max-width:560px;padding:32px 16px;line-height:1.5} .intro a{color:#FFD36A}</style>
     </noscript>
     <div id="loader" class="lo">
       <div class="lo-scene">
