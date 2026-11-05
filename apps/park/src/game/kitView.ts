@@ -22,7 +22,7 @@ import { TREE_PLAY_TINT } from './treeView';
  * flag that stands the kit's l4 in for the painted one) and the greybox tool (`pnpm kit:greybox`).
  */
 
-/** The room drawn for `room`: a kit room as it is; a painted one, or with `?kit=1` the kit room that stands in for it. */
+/** The room drawn for `room`: a kit room as it is; a painted one, unless the page asks for the paintings (`?kit=0`), as the kit room that stands in for it. */
 export function drawnRoom(room: RoomDef, cfg: { kit: boolean }): RoomDef {
   if (room.kit || !cfg.kit) return room;
   return kitDemoFor(room.id) ?? room;

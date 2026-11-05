@@ -80,9 +80,10 @@ export interface ParkConfig {
    */
   paint: boolean;
   /**
-   * Rooms built from the art kit (OP-234, `?kit=1`): a painted room that has a kit room standing in
-   * for it (KIT_DEMOS, packages/shared/rooms/kit.ts: level 4 of the tree) is drawn from the kit. The
-   * room's layout is the same, so only the look changes, and only in this page.
+   * Rooms built from the art kit (OP-234): a painted room that has a kit room standing in for it
+   * (KIT_DEMOS, packages/shared/rooms/kit.ts: every room of the tree) is drawn from the kit. The room's
+   * layout is the same, so only the look changes. On for every visitor since the whole tree map was
+   * built in the kit (the owner's rule: all rooms switch together); `?kit=0` shows the painted rooms.
    */
   kit: boolean;
 }
@@ -123,6 +124,6 @@ export function readConfig(): ParkConfig {
     pos: q.get('pos') === '1',
     keeper: q.get('keeper') === '1',
     paint: q.get('paint') === '1',
-    kit: q.get('kit') === '1',
+    kit: q.get('kit') !== '0',
   };
 }

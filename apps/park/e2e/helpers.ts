@@ -202,7 +202,9 @@ export async function walkToDoor(page: Page, doorId: string): Promise<void> {
  * Visits start in the lobby; these tests start in the hub unless they name a room.
  */
 export async function openPark(page: Page, params: Record<string, string> = {}): Promise<void> {
-  const q = new URLSearchParams({ transport: 'local', room: 'hub', ...params });
+  // The tree's painted rooms (`kit: '0'`) unless a test asks for the art kit's, which visitors see:
+  // the painted rooms' layers, fronts and shades are what most tests hold, and the kit rooms have kitRooms.spec.ts.
+  const q = new URLSearchParams({ transport: 'local', room: 'hub', kit: '0', ...params });
   await page.goto(`/?${q.toString()}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
   if (q.get('transport') === 'edge') {
