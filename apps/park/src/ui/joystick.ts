@@ -9,6 +9,8 @@ import type { Vec2 } from '@owl-park/shared';
  */
 
 const D = Math.SQRT1_2;
+/** How far a finger still down may be from where the stick's thumb was last seen and still be that thumb (client px). */
+const THUMB_SLACK_PX = 60;
 /** Right, down-right, down, down-left, left, up-left, up, up-right (screen y points down). */
 export const STICK_WAYS: readonly Vec2[] = [
   { x: 1, y: 0 },
@@ -118,13 +120,26 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
     way = stickWay(dx, dy, radius, way, flick ? 4 : 8);
     if (flick && way !== null && way !== was) flick(STICK_WAYS[way]!);
   };
+  /** Where the thumb on the stick was last seen (client px), to know it is still down when another touch ends. */
+  let at: { x: number; y: number } | null = null;
   const rest = () => {
     pointer = null;
     way = null;
+    at = null;
     knob.style.transform = '';
     stick.classList.remove('on');
   };
   const onDown = (e: PointerEvent) => {
+    // One thumb works the stick. A new touch on it while another is still held means the old one's lift
+    // never came (Safari can drop it amid quick taps elsewhere, Logan 2026-11-05): the new thumb takes over.
+    if (pointer !== null && pointer !== e.pointerId) {
+      try {
+        stick.releasePointerCapture(pointer);
+      } catch {
+        /* that pointer is gone already */
+      }
+      rest();
+    }
     if (pointer !== null) return;
     pointer = e.pointerId;
     try {
@@ -133,15 +148,21 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       /* the move and up events still arrive while the thumb stays on the stick */
     }
     stick.classList.add('on');
+    at = { x: e.clientX, y: e.clientY };
     aim(e);
     e.preventDefault();
   };
   const onMove = (e: PointerEvent) => {
-    if (e.pointerId === pointer) aim(e);
+    if (e.pointerId !== pointer) return;
+    at = { x: e.clientX, y: e.clientY };
+    aim(e);
   };
   /** The thumb lifted: a pull is let go. */
   const onUp = (e: PointerEvent) => {
     if (e.pointerId !== pointer) return;
+    lifted();
+  };
+  const lifted = () => {
     const p = pulled;
     rest();
     p?.release();
@@ -157,11 +178,26 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
   const onHide = () => {
     if (document.visibilityState !== 'visible') cut();
   };
+  /**
+   * The touch screen's own word, whatever became of the pointer events: when a touch ends and no finger
+   * still down is anywhere near where the stick's thumb was, that thumb has lifted.
+   */
+  const onTouchEnd = (e: TouchEvent) => {
+    if (pointer === null) return;
+    const left = Array.from(e.touches);
+    const near = at && left.some((t) => Math.hypot(t.clientX - at!.x, t.clientY - at!.y) <= THUMB_SLACK_PX);
+    if (!near) lifted();
+  };
   stick.addEventListener('pointerdown', onDown);
   stick.addEventListener('pointermove', onMove);
   stick.addEventListener('pointerup', onUp);
   stick.addEventListener('pointercancel', onCut);
   stick.addEventListener('lostpointercapture', onCut);
+  // The stick's lift wherever it lands, in case the stick never held on to its pointer.
+  window.addEventListener('pointerup', onUp, true);
+  window.addEventListener('pointercancel', onCut, true);
+  window.addEventListener('touchend', onTouchEnd, true);
+  window.addEventListener('touchcancel', onTouchEnd, true);
   window.addEventListener('blur', cut);
   document.addEventListener('visibilitychange', onHide);
 
@@ -176,6 +212,10 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       rest();
     },
     detach() {
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onCut, true);
+      window.removeEventListener('touchend', onTouchEnd, true);
+      window.removeEventListener('touchcancel', onTouchEnd, true);
       window.removeEventListener('blur', cut);
       document.removeEventListener('visibilitychange', onHide);
       stick.remove();
