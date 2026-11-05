@@ -87,6 +87,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  # The screen check (OP-252): every kit room's screens, composited from the published art as the park
+  # draws them, held to the value bands and the palette (docs/TREE_STYLE.md sections 1, 2b and 8).
+  kit-screens:
+    name: Kit screens
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python3 -m pip install pillow==12.3.0 numpy==2.5.3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm kit:check
+
   build:
     name: Build
     runs-on: ubuntu-latest

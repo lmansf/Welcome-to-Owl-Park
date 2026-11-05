@@ -8,6 +8,7 @@
 //
 //   node tools/kit/greybox.mjs <room> [--out <file.png>] [--scale <k>] [--placeholders]
 //   node tools/kit/greybox.mjs <room> --plan <file.json|->   (the drawing as data, for tools/kit/preview.py)
+//   node tools/kit/greybox.mjs --list                          (the kit rooms' ids, one a line)
 //   pnpm kit:greybox l4 --scale 0.5
 //
 // <room> is a kit room: one of ROOMS with a kit, or a kit room standing in for a painted one
@@ -245,6 +246,10 @@ async function main(argv) {
   const id = args[0];
   const shared = await loadShared();
   const rooms = kitRooms(shared);
+  if (id === '--list') {
+    for (const k of Object.keys(rooms)) console.log(k);
+    return 0;
+  }
   if (!id || !rooms[id]) {
     console.error(`usage: node tools/kit/greybox.mjs <room> [--out <file.png>] [--scale <k>] [--placeholders] [--plan <file.json|->]\nkit rooms: ${Object.keys(rooms).join(', ') || '(none)'}`);
     return 2;
