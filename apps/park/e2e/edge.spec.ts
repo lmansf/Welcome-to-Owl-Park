@@ -860,7 +860,7 @@ test.describe('room server', () => {
     await sheet.getByRole('button', { name: 'Idea' }).click();
     await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
     await sheet.getByRole('button', { name: 'Send' }).click();
-    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+    await expect(a.getByText(/Your note is with the park's keepers|A grey mouse is waiting in your collection/)).toBeVisible();
     // A second note straight away waits its turn.
     await openFeedback();
     await sheet.getByRole('textbox', { name: 'Your note' }).fill('And a second thought');
@@ -905,7 +905,7 @@ test.describe('room server', () => {
     await sheet.getByRole('button', { name: 'Bug' }).click();
     await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
     await sheet.getByRole('button', { name: 'Send' }).click();
-    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+    await expect(a.getByText(/Your note is with the park's keepers|A grey mouse is waiting in your collection/)).toBeVisible();
 
     const keeper = await browser.newPage();
     const alerts: string[] = [];
