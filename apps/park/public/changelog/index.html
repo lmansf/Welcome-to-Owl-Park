@@ -7,6 +7,11 @@
     <meta name="description" content="Every change to Owl Park, the cozy park you visit in your browser, newest first, with its date." />
     <link rel="canonical" href="https://exploreowlpark.com/changelog/" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- HeyCatch analytics (heycatch.ai/agents.md), as on the park's page (src/main.ts); a page of its own, so events go out at once. -->
+    <script type="module">
+      import { analytics } from 'https://esm.sh/@heycatch/sdk@0.8.5';
+      analytics.init({ projectKey: 'hck_pk_um42q9Cyv2nIM-aHBobpaoE1rupLU1dm', site: 'landing', requestBatching: false, install: { framework: 'web', agent: 'claude-code' } });
+    </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Owl Park" />
     <meta property="og:title" content="What's new in Owl Park" />

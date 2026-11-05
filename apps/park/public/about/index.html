@@ -7,6 +7,11 @@
     <meta name="description" content="What Owl Park is, who it is for, how chat stays safe, what the park keeps, and what is coming before it fully opens." />
     <link rel="canonical" href="https://exploreowlpark.com/about/" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- HeyCatch analytics (heycatch.ai/agents.md), as on the park's page (src/main.ts); a page of its own, so events go out at once. -->
+    <script type="module">
+      import { analytics } from 'https://esm.sh/@heycatch/sdk@0.8.5';
+      analytics.init({ projectKey: 'hck_pk_um42q9Cyv2nIM-aHBobpaoE1rupLU1dm', site: 'landing', requestBatching: false, install: { framework: 'web', agent: 'claude-code' } });
+    </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Owl Park" />
     <meta property="og:title" content="About Owl Park" />
