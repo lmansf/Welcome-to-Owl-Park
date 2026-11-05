@@ -99,10 +99,26 @@ export interface Faq {
   a: string;
 }
 
+/**
+ * What Owl Park is, in one "Owl Park is ..." sentence and one after it (the SEO audit: a page opens with
+ * a definition a search engine can quote). About's first part and the first question both say it.
+ */
+export const WHAT_IT_IS = 'Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now.';
+
+/**
+ * How to write to the park (the SEO audit: a contact route on every page). Only the routes that exist
+ * today: a feedback note from the Menu, and the store's order email for a ticket. A contact address
+ * waits for the owner.
+ */
+export const CONTACT_LINES: readonly string[] = [
+  'To write to the park, send a feedback note from the Menu inside the park. Only the park’s keepers read it.',
+  'For a ticket, reply to the store’s order email.',
+];
+
 /** The questions grown-ups ask (the second audit's FAQ, D5.5): the price only once the owner sets one, the keeper only once named. */
 export function faq(price: string | null = DAY_TICKET_PRICE, keeper: typeof KEEPER = KEEPER): Faq[] {
   const list: Faq[] = [
-    { q: 'What is Owl Park?', a: ABOUT_WORDS.lead },
+    { q: 'What is Owl Park?', a: WHAT_IT_IS },
     { q: 'Is it free?', a: `Guests come in free. ${SPECTATOR_GUEST_NOTE} A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops.` },
     {
       q: 'What does a Day Ticket cost?',
@@ -131,7 +147,7 @@ export function aboutParts(): AboutPart[] {
   const parts: AboutPart[] = [
     {
       heading: 'What it is',
-      lines: ['Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now.'],
+      lines: [WHAT_IT_IS],
     },
     {
       heading: 'What there is to do',
@@ -146,6 +162,7 @@ export function aboutParts(): AboutPart[] {
   if (KEEPER) parts.push({ heading: 'Who keeps the park', lines: [`${KEEPER.name}. ${KEEPER.line}`] });
   if (PLAYER_QUOTES.length) parts.push({ heading: 'What owls say', lines: PLAYER_QUOTES.map((q) => `“${q.words}” ${q.who}`) });
   parts.push({ heading: 'Questions', lines: faq().flatMap((f) => [f.q, f.a]), faq: true });
+  parts.push({ heading: 'Contact', lines: CONTACT_LINES });
   parts.push({ heading: 'What is coming', lines: ['New rooms and things to do arrive as they are ready. Every change, with its date, is listed at exploreowlpark.com/changelog.'] });
   return parts;
 }

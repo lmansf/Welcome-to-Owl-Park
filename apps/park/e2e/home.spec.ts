@@ -113,7 +113,7 @@ test.describe('the home screen (OP-065)', () => {
     await expect(page.locator('[data-home-welcome]')).toHaveText('Built for anyone who misses the old chatroom worlds: grown-up owls welcome.');
     expect(await page.title()).toBe('Owl Park - a cozy virtual park you visit in your browser');
     for (const [kind, title, words] of [
-      ['about', 'About the park', 'It is not a place to chat freely'],
+      ['about', 'About the park', 'It is not for anyone who wants to chat freely'],
       ['grown-ups', 'A note for grown-ups', 'There is no typed chat.'],
     ] as const) {
       const button = page.locator(`[data-home-info="${kind}"]`);

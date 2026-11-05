@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ABOUT_WORDS, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, grownUpParts, presenceLine, ticketLine } from './about';
+import { ABOUT_WORDS, CONTACT_LINES, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, grownUpParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
+// @ts-expect-error: a plain script, no types
+import { INDEXNOW_KEY, indexNowBody, sitemapUrls } from '../../../../tools/indexnow.mjs';
 
 const page = (path: string) => readFileSync(join(__dirname, '../../public', path), 'utf8').replace(/\s+/g, ' ');
 
@@ -63,6 +65,31 @@ describe('what the park is, said plainly (the site audit)', () => {
     const sitemap = page('sitemap.xml');
     for (const path of ['/', '/about/', '/chatroom-worlds/', '/changelog/']) expect(sitemap).toContain(`<loc>https://exploreowlpark.com${path}</loc>`);
     expect(page('robots.txt')).toContain('Sitemap: https://exploreowlpark.com/sitemap.xml');
+  });
+
+  it('gives every page a real lastmod, robots.txt the audit’s minimum, and IndexNow its key file (the SEO audit)', () => {
+    const sitemap = page('sitemap.xml');
+    const urls = sitemapUrls(sitemap);
+    expect(urls.length).toBe(4);
+    expect([...sitemap.matchAll(/<lastmod>(\d{4}-\d\d-\d\d)<\/lastmod>/g)].length).toBe(urls.length);
+    const robots = page('robots.txt');
+    expect(robots).toContain('User-agent: * Allow: /');
+    expect(readFileSync(join(__dirname, `../../public/${INDEXNOW_KEY}.txt`), 'utf8')).toBe(INDEXNOW_KEY);
+    expect(indexNowBody(urls)).toEqual({ host: 'exploreowlpark.com', key: INDEXNOW_KEY, keyLocation: `https://exploreowlpark.com/${INDEXNOW_KEY}.txt`, urlList: urls });
+  });
+
+  it('opens with "Owl Park is", names the site as one Organization, and links Contact on every page (the SEO audit)', () => {
+    expect(WHAT_IT_IS.startsWith('Owl Park is ')).toBe(true);
+    expect(faq()[0]).toEqual({ q: 'What is Owl Park?', a: WHAT_IT_IS });
+    expect(aboutParts().find((p) => p.heading === 'Contact')?.lines).toEqual(CONTACT_LINES);
+    const home = readFileSync(join(__dirname, '../../index.html'), 'utf8').replace(/\s+/g, ' ');
+    expect(home).toContain('<p>Owl Park is a cozy park you visit in your browser');
+    for (const html of [home, page('about/index.html'), page('changelog/index.html'), page('chatroom-worlds/index.html')]) {
+      expect(html).toContain('"@type": "Organization", "@id": "https://exploreowlpark.com/#org", "name": "Owl Park"');
+      expect(html).toContain('href="/about/#contact"');
+      expect(html.match(/<h1[\s>]/g)?.length).toBe(1);
+    }
+    expect(page('about/index.html')).toContain('<h2 id="contact">Contact</h2>');
   });
 
   it('dates every change on the changelog, newest first', () => {
