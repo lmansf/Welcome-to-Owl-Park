@@ -42,17 +42,20 @@ export const CSP_REPORT_PATH = '/api/csp-report';
  * The park's page policy (OP-140). Scripts: the page's own, and its two inline ones by the nonce.
  * Styles: its own and inline ones (the load screen's leaves and the HUD set theirs inline). Images:
  * its own, and the data: and blob: ones it makes itself (a nest's picture, the menu's drawn edges, art
- * fetched whole). Connections: its API and its room sockets, on its own host. No plugins, no base, forms
- * only to itself, and no page may frame it.
+ * fetched whole). Connections: its API and its room sockets, on its own host. HeyCatch's analytics host
+ * for both: the SDK sends its events there and loads one small helper script from it. No plugins, no
+ * base, forms only to itself, and no page may frame it.
  */
+export const ANALYTICS_HOST = 'https://in.heycatch.ai';
+
 export function parkPolicy(url: URL, nonce: string): string {
   const sockets = `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`;
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' ${ANALYTICS_HOST}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
-    `connect-src 'self' ${sockets}`,
+    `connect-src 'self' ${sockets} ${ANALYTICS_HOST}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",

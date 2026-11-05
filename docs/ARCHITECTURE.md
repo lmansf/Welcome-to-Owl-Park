@@ -1120,10 +1120,12 @@ Vote, and the nightly restart.
   (`apps/park/public/_headers`). An upgraded socket goes as it is.
 - **The page's policy** (`parkPolicy`, set by `guardedPage` with a fresh nonce on each load), each
   source with why it is there: `default-src 'self'`; `script-src 'self'` and the nonce, for the page's
-  own bundles and its two inline scripts; `style-src 'self' 'unsafe-inline'`, as the load screen's
+  own bundles and its two inline scripts, and `https://in.heycatch.ai`, for the HeyCatch analytics SDK's
+  one helper script (`ANALYTICS_HOST`); `style-src 'self' 'unsafe-inline'`, as the load screen's
   leaves and the HUD set their styles inline; `img-src 'self' data: blob:`, for the pictures the page
   makes itself (a nest's picture, the Menu's drawn edges, art fetched whole); `connect-src 'self'` and
-  the host's own `wss://`, for the API and the room sockets; `object-src 'none'`, `base-uri 'none'`,
+  the host's own `wss://`, for the API and the room sockets, and `https://in.heycatch.ai`, where the
+  analytics SDK (started in `apps/park/src/main.ts`) sends its events; `object-src 'none'`, `base-uri 'none'`,
   `form-action 'self'`, `frame-ancestors 'none'` (and `X-Frame-Options: DENY`); `report-uri
   /api/csp-report`. The page also goes out with `Referrer-Policy: strict-origin-when-cross-origin`.
 - **What the policy blocked**: a browser reports it to `/api/csp-report` (`CSP_REPORT_PATH`, at most

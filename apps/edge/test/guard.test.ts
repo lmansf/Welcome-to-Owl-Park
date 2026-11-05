@@ -72,7 +72,7 @@ afterEach(() => {
 });
 
 describe('the park’s page and every answer (OP-140)', () => {
-  it('runs only its own scripts, its inline ones by a nonce fresh each load, and talks only to its own host; no page may frame it', async () => {
+  it('runs only its own scripts, its inline ones by a nonce fresh each load, and talks only to its own host and the analytics host; no page may frame it', async () => {
     const r = await call('/');
     const csp = r.headers.get('Content-Security-Policy') ?? '';
     const nonce = /script-src 'self' 'nonce-([0-9a-f]{32})'/.exec(csp)?.[1];
@@ -83,7 +83,9 @@ describe('the park’s page and every answer (OP-140)', () => {
     expect(html.split(`nonce="${nonce}"`)).toHaveLength(4);
     expect(html.replaceAll(` nonce="${nonce}"`, '')).toBe(PAGE);
     expect(csp).toBe(parkPolicy(new URL('https://park.example/'), nonce!));
-    expect(csp).toContain("connect-src 'self' wss://park.example;");
+    expect(csp).toContain("connect-src 'self' wss://park.example https://in.heycatch.ai;");
+    // HeyCatch's analytics: the page's SDK loads its helper script from that host and sends its events there.
+    expect(csp).toContain(`'nonce-${nonce}' https://in.heycatch.ai;`);
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain('report-uri /api/csp-report');
@@ -104,7 +106,7 @@ describe('the park’s page and every answer (OP-140)', () => {
     const local = await call('/', {}, env(), 'http://localhost:8787');
     expect(local.headers.get('Strict-Transport-Security')).toBeNull();
     // The browser tests' page talks to its own server's sockets, over ws.
-    expect(local.headers.get('Content-Security-Policy')).toContain("connect-src 'self' ws://localhost:8787;");
+    expect(local.headers.get('Content-Security-Policy')).toContain("connect-src 'self' ws://localhost:8787 https://in.heycatch.ai;");
     const api = await call('/api/notice');
     expect(api.headers.get('Strict-Transport-Security')).toBe(HSTS);
     expect(api.headers.get('X-Content-Type-Options')).toBe('nosniff');

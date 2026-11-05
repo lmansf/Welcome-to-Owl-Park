@@ -1,3 +1,4 @@
+import { analytics } from '@heycatch/sdk';
 import Phaser from 'phaser';
 import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
@@ -30,6 +31,18 @@ import { linkToast } from './ui/tickets';
 import { createRibbon } from './ui/ribbon';
 import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
+
+// HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
+// page's visits and clicks and the reserved short links (/a to /z, /0 to /9) are seen from the first
+// load. The key is publishable. The page's policy lets the SDK reach its host (apps/edge/src/guard.ts).
+analytics.init({
+  projectKey: 'hck_pk_um42q9Cyv2nIM-aHBobpaoE1rupLU1dm',
+  site: 'landing',
+  install: {
+    framework: 'web',
+    agent: 'claude-code',
+  },
+});
 
 // Back from the store's checkout (OP-190, ui/checkoutReturn.ts): the store sends the buyer to
 // `?checkout=done`. A game page watching for the ticket answers, and this window (checkout's own)
