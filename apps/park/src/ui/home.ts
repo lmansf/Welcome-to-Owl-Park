@@ -1,6 +1,7 @@
 /**
  * The home screen (OP-065): what the park opens on. Logged out (no owl on this device yet): the
- * park's name with its mascot, Make your owl and Settings. Logged in: Play, a line about the tickets
+ * park's name and what it is, with its mascot, Make your owl, Look around free (a ready-made owl,
+ * straight in, the second site audit) and Settings. Logged in: Play, a line about the tickets
  * on this device, and Settings, with the visitor's own owl drawn big beside them (the builder's
  * preview scene draws it in the frame this screen leaves for it). Play always lands the owl in its
  * own nest, before its mirror (OP-105), and the park is out of the nest's door. "Logged in" means
@@ -115,6 +116,8 @@ export function walletSummary(tickets: readonly WalletEntry[], gate: Entry['gate
 
 export interface HomeActions {
   logIn(button: HTMLElement): void;
+  /** Look around free (the second audit, D2.1): a ready-made owl on this device, straight in, as a guest at the turnstiles. */
+  lookAround(): void;
   /** Into the owl's own nest (OP-105), through the line while the park has one. */
   play(): void;
   settings(button: HTMLElement): void;
@@ -174,6 +177,7 @@ function css(): string {
 #hud .home .h-mascot{--m:clamp(56px,13vh,112px);flex:none;width:var(--m);height:var(--m);border-radius:50%;
   background:url(${base}home-mascot.webp) center/cover no-repeat;box-shadow:0 0 22px rgba(255,211,106,.35)}
 #hud .home h1{margin:0;font-size:clamp(28px,5.6vh,46px);line-height:1.05;color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
+#hud .home h1 .h-tag{display:block;margin-top:4px;font-size:clamp(14px,2.3vh,18px);font-weight:600;line-height:1.25;color:#F6F1E3}
 #hud .home .h-side button{width:100%}
 #hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
 #hud .home .h-small{min-height:40px;font-size:14px}
@@ -204,6 +208,7 @@ function css(): string {
   #hud .home .h-side{padding-left:max(14px,env(safe-area-inset-left));padding-right:10px}
   #hud .home .h-brand{flex-direction:column;align-items:flex-start;gap:8px}
   #hud .home h1{font-size:clamp(24px,7.4vw,32px)}
+  #hud .home h1 .h-tag{font-size:13px}
   #hud .home .h-lead{font-size:14px}
   #hud .home .h-welcome,#hud .home .h-presence{font-size:13px}
 }
@@ -226,7 +231,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   el.setAttribute('aria-label', HOME_WORDS.name);
   el.innerHTML = `
     <div class="h-side">
-      <div class="h-brand"><span class="h-mascot" aria-hidden="true"></span><h1></h1></div>
+      <div class="h-brand"><span class="h-mascot" aria-hidden="true"></span><h1><span data-home-name></span> <span class="h-tag" data-home-tag></span></h1></div>
       <p class="h-lead" data-home-lead></p>
       <p class="h-note" data-home-note hidden></p>
       <div class="h-closed" data-home-closed role="status" aria-live="polite" hidden>
@@ -235,6 +240,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
         <p data-closed-keeper hidden></p>
       </div>
       <button class="h-main" data-home-btn="login"></button>
+      <button class="ghost h-small h-free" data-home-btn="guest"></button>
       <button class="h-main" data-home-btn="play"></button>
       <div class="h-line" data-home-line role="status" aria-live="polite" hidden>
         <h2 data-line-heading></h2>
@@ -257,8 +263,9 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     <div class="h-stage" data-home-stage></div>`;
   root.appendChild(el);
   const $ = <T extends Element>(sel: string) => el.querySelector(sel) as T;
-  $<HTMLElement>('h1').textContent = HOME_WORDS.name;
-  $<HTMLElement>('[data-home-lead]').textContent = ABOUT_WORDS.lead;
+  $<HTMLElement>('[data-home-name]').textContent = HOME_WORDS.name;
+  $<HTMLElement>('[data-home-tag]').textContent = ABOUT_WORDS.tagline;
+  $<HTMLElement>('[data-home-lead]').textContent = ABOUT_WORDS.homeLead;
   $<HTMLElement>('[data-home-welcome]').textContent = ABOUT_WORDS.welcome;
   const presenceEl = $<HTMLElement>('[data-home-presence]');
   const aboutBtn = $<HTMLButtonElement>('[data-home-info="about"]');
@@ -268,6 +275,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   aboutBtn.addEventListener('click', () => actions.info('about', aboutBtn));
   grownUpsBtn.addEventListener('click', () => actions.info('grown-ups', grownUpsBtn));
   const login = $<HTMLButtonElement>('[data-home-btn="login"]');
+  const guest = $<HTMLButtonElement>('[data-home-btn="guest"]');
   const play = $<HTMLButtonElement>('[data-home-btn="play"]');
   const settings = $<HTMLButtonElement>('[data-home-btn="settings"]');
   const restore = $<HTMLButtonElement>('[data-home-btn="restore"]');
@@ -290,11 +298,13 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   closedKeeper.textContent = CLOSED_WORDS.keeper;
   lineTicket.textContent = LINE_WORDS.ticket;
   login.textContent = HOME_WORDS.logIn;
+  guest.textContent = ABOUT_WORDS.lookAround;
   play.textContent = HOME_WORDS.play;
   settings.textContent = HOME_WORDS.settings;
   restore.textContent = ACCOUNT_WORDS.restore;
   // Logged in, Make your owl goes: the builder hands the focus back to Play.
   login.addEventListener('click', () => actions.logIn(play));
+  guest.addEventListener('click', () => actions.lookAround());
   play.addEventListener('click', () => actions.play());
   settings.addEventListener('click', () => actions.settings(settings));
   restore.addEventListener('click', () => actions.restore(restore));
@@ -307,6 +317,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   /** Play and Make your owl as the screen stands: one or the other, unless the line or the closed card has their place. */
   const buttons = () => {
     login.hidden = loggedIn || shut;
+    guest.hidden = loggedIn || shut;
     play.hidden = !loggedIn || waiting || shut;
   };
   const frame = (): PreviewFrame => {

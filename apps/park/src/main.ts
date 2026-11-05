@@ -577,6 +577,20 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
       opener,
     );
   },
+  // Look around free (the second site audit, D2.1): what Skip makes, with no quiz and no builder, then
+  // Play. Every visit starts in the owl's own nest, and the turnstiles offer Enter as a guest.
+  lookAround: () => {
+    if (!atHome || loggedIn) return;
+    loggedIn = true;
+    startCollection();
+    void refreshWallet();
+    const look = lookNow();
+    keepLook(look);
+    hud.setLook(look);
+    home.show(loggedIn);
+    drawOwl(home.frame(), false);
+    startPlay();
+  },
   play: () => startPlay(),
   settings: (opener) => hud.openSettings(opener),
   restore: (opener) => accountScreens?.openEmail('restore', opener),
