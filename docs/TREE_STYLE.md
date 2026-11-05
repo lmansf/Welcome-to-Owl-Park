@@ -228,3 +228,8 @@ the screen beside its area's target) has been shown to the owner with each scene
 has said yes to it, and `pnpm kit:check` passes. This rule is a must-have of the launch checklist
 (OP-066) and of every hero screen (OP-230); switching the kit art on for visitors waits on it for
 every room.
+
+Every room of the tree is built in the kit (levels 0 to 5, the nests street, the canopy and the
+arcade cave), and the kit art is on for every visitor, all rooms together (the owner's rule). `?kit=0`
+shows the painted rooms, which stay as the fallback until they are retired. The room server walks the
+painted geometry, which each kit room keeps (kit.test.ts).
