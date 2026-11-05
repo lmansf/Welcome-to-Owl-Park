@@ -14,6 +14,13 @@ height, all drawn from one palette.
   `#3E5A3A` and `#6E8B4E`, leaf `#4F7A3E` and `#8DAE5A`, lantern gold `#C9A227` and `#FFD36A`, cream
   `#F6F1E3`, navy `#0C1E36` to `#07122A`, dusk blue `#2E4C7A`, sky blue `#6F9BC8`. No level brings a
   colour of its own except Neon Roost's neon, kept inside the cave's three bays.
+  The palette's tolerance (OP-252, `tools/art/artlib/palette.py`): every pixel of a screen belongs to
+  its nearest family (the segment between a family's two colours in CIE Lab, lightness counted half,
+  since light and shade move value and the value bands hold value). A family on at least 1 % of the
+  screen may lean on average at most 13 in hue and chroma (Lab a and b) from its colours, lantern gold
+  18 because its glow falls off warm toward orange in the approved targets themselves, and at most
+  1.5 % of the screen may sit further than 25 from every family. The three approved targets lean at
+  most 12 (gold 16.5) and put at most 0.6 % off the palette.
 - **The same trunk runs through every level.** Screen 0 of every level is the trunk's screen. The trunk
   is the same width, bark and moss pattern on every level, centred at x 800 of screen 0, narrowing a
   little with height (level 1 about 900 px wide, level 5 about 600). Its edges run off the top and
@@ -49,7 +56,7 @@ stair screen, the plaza's west end and the Treehouse Clearing's Commons) are pai
 one light, with the backdrop darker and softer than the floor. The bands below are measured on them, and
 every published backdrop layer is held to its band in code: `pnpm art:finish bands --all` pulls a layer
 into its band (`tools/art/README.md`), and `tools/art/test_art_tools.py` (`TestBands`) fails any layer
-outside it.
+outside it. `pnpm kit:check` holds every kit room's screens to them as composited (section 8, OP-252).
 
 **How the numbers are taken** (`tools/art/artlib/bands.py`; `pnpm art:finish bands --measure <png>` prints
 them for any screen). Lightness is CIE Lab L (0 to 100), over a layer's opaque pixels (alpha 128 or more):
@@ -198,3 +205,26 @@ story, the props it groups and the doorways, barriers or ledges it is about. `ki
 scene under the screen and its target, and marks each scene's group on the whole room. The review answers,
 for every screen: what story does this corner tell? A screen whose props tell none is reworked, not
 shipped, and the tool fails while any prop belongs to no scene.
+
+**The check** (OP-252), `pnpm kit:check` (`python3 tools/kit/preview.py --check [<room> ...]`), runs in CI
+on every kit room and holds every screen, composited as the park draws it, to sections 1 and 2b:
+
+- the backdrop as seen (the pixels no room piece covers) inside its layers' bands taken together, and
+  each backdrop layer the room names a kit layer inside its own band;
+- the walkable layer as seen (the floor, the platforms and the props on them: the play, piece and front
+  cells) inside the walkable band, its contrast at least 7.5; a front overlay, where there is one, in
+  its band; the trunk and walls behind the walkway (the back cells) are neither and are not banded;
+- the order: the walkway at least 5 lighter in L mean than the backdrop, harder in local contrast and
+  brighter at the rim (the ink-wash realm keeps only the contrast and rim order);
+- every colour family within the palette's tolerance (section 1);
+- no kit problem, and every prop in a scene that tells a story.
+
+It prints each screen's numbers, and beside the screen a target was painted for, the target's. On
+2026-11-05 level 4's walkway reads L 33.3 and 33.8 against the band's floor of 33: it passes, with
+little to spare.
+
+**No screen goes live until** its side-by-side (`--target`, or for a screen with no target of its own,
+the screen beside its area's target) has been shown to the owner with each scene's story, the owner
+has said yes to it, and `pnpm kit:check` passes. This rule is a must-have of the launch checklist
+(OP-066) and of every hero screen (OP-230); switching the kit art on for visitors waits on it for
+every room.

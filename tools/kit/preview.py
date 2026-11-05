@@ -14,7 +14,22 @@ painted for, <room>-vs-target.png, for holding a screen to its target before it 
 the story of each scene on that screen under it (docs/TREE_STYLE.md section 8: what story does this
 corner tell?). It fails when a prop belongs to no scene or the scenes break the story rule.
 The whole-room PNG marks each scene's group and prints its story under the room.
-Needs Pillow with webp. The PNGs go to work/kit/preview/ by default (work/ is not committed).
+
+  python3 tools/kit/preview.py --check [<room> ...]
+
+--check holds every screen of each kit room (all of them when none is named) to the value bands and the
+palette (OP-252), as the park composites it, writes no PNG, and fails on the first room that misses:
+- the backdrop as seen (the pixels no room piece covers) inside its layers' bands taken together, and
+  every backdrop layer the room uses a kit layer inside its own band (docs/TREE_STYLE.md section 2b);
+- the walkable layer as seen (the floor, the platforms and the props on them: the play, piece and front
+  cells) inside the walkable band, its contrast at least 7.5;
+- the front overlay, where a room has one, inside its band;
+- the order: the walkable layer lighter than the backdrop by ORDER_GAP and harder and brighter at the rim
+  (the ink-wash realm, which fades toward paper, keeps only the contrast and rim order);
+- every colour family within the palette's tolerance and little off it (tools/art/artlib/palette.py);
+- no kit problem, and every prop in a scene that tells a story.
+It prints each screen's numbers, and for the screen a target was painted for, the target's beside them.
+Needs Pillow with webp, and numpy. The PNGs go to work/kit/preview/ by default (work/ is not committed).
 """
 import json
 import subprocess
@@ -24,6 +39,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'tools' / 'art'))
 ART = ROOT / 'apps' / 'park' / 'public' / 'art'
 ROOM_W, ROOM_H = 1600, 900
 TILE_GROW = 0.2
@@ -107,7 +123,7 @@ def owl(dst, x, y, k, scale):
         d.ellipse([(x + w * (ex - 0.09)) * k, (y - h * 0.82) * k, (x + w * (ex + 0.09)) * k, (y - h * 0.64) * k], fill=(255, 211, 106, 255))
 
 
-def render(p, cam_x, view_w, k, marks):
+def render(p, cam_x, view_w, k, marks, owl_marker=True):
     out = Image.new('RGBA', (round(view_w * k), round(p['size']['h'] * k)), (12, 30, 54, 255))
     rest = view_w != ROOM_W
     for t in p['backgrounds']:
@@ -124,7 +140,7 @@ def render(p, cam_x, view_w, k, marks):
             continue
         draw_cell(out, c, cam_x, k)
     for s in p['spawns'].values() if marks else [p['spawns'].get('default')]:
-        if s:
+        if s and owl_marker:
             owl(out, s['x'] - cam_x, s['y'], k, p['owlScale'])
     for c in fronts:
         draw_cell(out, c, cam_x, k)
@@ -204,8 +220,141 @@ def with_stories(im, scenes, cam_x, k, mark=False):
     return out
 
 
+#: The cells of the walkable layer: the floor and platforms (play) and the props on them (piece, and front,
+#: the props an owl walks behind). The back cells (the trunk, a wall) are neither backdrop nor walkway.
+WALK_LAYERS = ('play', 'piece', 'front')
+#: How much lighter (L mean) the walkable layer reads than the backdrop on every screen: a step darker (section 1).
+ORDER_GAP = 5.0
+#: The walkable layer's contrast floor (docs/TREE_STYLE.md section 2b: "14, and at least 7.5").
+WALK_CONTRAST_MIN = 7.5
+
+
+def kit_rooms():
+    out = subprocess.run(['node', str(ROOT / 'tools' / 'kit' / 'greybox.mjs'), '--list'], check=True, capture_output=True, text=True, cwd=ROOT).stdout
+    return [line for line in out.split() if line]
+
+
+def alpha_of(p, cam_x, k, size, layers=(), foregrounds=False):
+    """The alpha (H, W) of a room's cells in the given layers, or of its foreground tiles, as the screen draws them."""
+    import numpy as np
+    im = Image.new('RGBA', size, (0, 0, 0, 0))
+    for c in p['images']:
+        if c['layer'] in layers:
+            draw_cell(im, c, cam_x, k)
+    if foregrounds:
+        for t in p['foregrounds']:
+            tile(im, t, cam_x, k, ROOM_W)
+    return np.asarray(im)[..., 3]
+
+
+def envelope(keys):
+    """The backdrop layers' bands taken together (the loosest of each limit), and why any key has none."""
+    from artlib import bands
+    limits, faults = [], []
+    for key in dict.fromkeys(keys):
+        try:
+            limits.append(bands.band_of(key)[1])
+        except ValueError:
+            faults.append(f'backdrop {key} is not a kit backdrop layer, so it has no value band')
+    if not limits:
+        return None, faults
+    env = {'L_mean': (min(b['L_mean'][0] for b in limits), max(b['L_mean'][1] for b in limits))}
+    for m in ('L_p95', 'contrast', 'sat'):
+        env[m] = max(b[m] for b in limits)
+    return env, faults
+
+
+def check_screen(p, s, k):
+    """(problems, numbers) for one screen of a kit room, as the park composites it (no owl marker)."""
+    import numpy as np
+    from artlib import bands, palette
+    cam = s * ROOM_W
+    comp = render(p, cam, ROOM_W, k, False, owl_marker=False).convert('RGB')
+    size = comp.size
+    rgb = np.asarray(comp).astype(np.float64) / 255.0
+    blk = bands.block_for(size[0])
+    walk = alpha_of(p, cam, k, size, WALK_LAYERS) >= bands.OPAQUE
+    front = alpha_of(p, cam, k, size, foregrounds=True)
+    covered = (alpha_of(p, cam, k, size, ('back',) + WALK_LAYERS) >= 8) | (front >= 8)
+    nums = {'backdrop': bands.stats_of(rgb, ~covered, blk), 'walk': bands.stats_of(rgb, walk, blk)}
+    if (front >= bands.OPAQUE).any():
+        nums['overlay'] = bands.stats_of(rgb, front >= bands.OPAQUE, blk)
+    nums['palette'] = palette.measure(comp)
+    out = []
+    keys = [t['key'] for t in p['backgrounds']]
+    env, faults = envelope(keys)
+    out += faults
+    if env and nums['backdrop']['opaque'] > 0:
+        out += [f'backdrop: {m}' for m in bands.problems(nums['backdrop'], env)]
+    if nums['walk']['opaque'] > 0:
+        out += [f'walkable layer: {m}' for m in bands.problems(nums['walk'], 'walk')]
+        if nums['walk']['contrast'] < WALK_CONTRAST_MIN:
+            out.append(f"walkable layer: contrast {nums['walk']['contrast']} under {WALK_CONTRAST_MIN}")
+    else:
+        out.append('no walkable layer on this screen')
+    if 'overlay' in nums:
+        out += [f'front overlay: {m}' for m in bands.problems(nums['overlay'], 'front')]
+    b, w = nums['backdrop'], nums['walk']
+    if b['opaque'] > 0 and w['opaque'] > 0:
+        paper = any(bands.layer_area(key) in bands.AREA_BANDS for key in keys if key.startswith('kit-'))
+        if not paper and w['L_mean'] < b['L_mean'] + ORDER_GAP:
+            out.append(f"the backdrop competes with the walkway: L mean {b['L_mean']} behind {w['L_mean']} (the walkway at least {ORDER_GAP} lighter)")
+        if w['contrast'] <= b['contrast']:
+            out.append(f"the backdrop reads as hard as the walkway: contrast {b['contrast']} behind {w['contrast']}")
+        if w['L_p95'] < b['L_p95']:
+            out.append(f"the backdrop's rim light outshines the walkway's: L p95 {b['L_p95']} behind {w['L_p95']}")
+    out += [f'palette: {m}' for m in palette.problems(nums['palette'])]
+    return out, nums
+
+
+def fmt(st):
+    return f"L {st['L_mean']}, p95 {st['L_p95']}, contrast {st['contrast']}, sat {st['sat']}"
+
+
+def check(rooms, k=0.5):
+    """Holds every screen of the kit rooms to the bands and the palette; prints the numbers; returns the exit code."""
+    from artlib import bands, palette
+    failed = []
+    for room in rooms or kit_rooms():
+        p = plan_of(room)
+        faults = list(p['problems'])
+        for key in dict.fromkeys(t['key'] for t in p['backgrounds']):
+            im = art(key)
+            if im is None:
+                faults.append(f'backdrop {key} has no published art')
+                continue
+            try:
+                name, band = bands.band_of(key)
+            except ValueError:
+                continue
+            faults += [f'backdrop layer {key} ({name}): {m}' for m in bands.problems(bands.stats(im), band)]
+        target = ROOM_TARGETS.get(p['id'])
+        for s in range(max(1, round(p['size']['w'] / ROOM_W))):
+            probs, nums = check_screen(p, s, k)
+            pal = nums['palette']
+            fams = ', '.join(f"{n} {f['drift']}" for n, f in pal['families'].items() if f['share'] >= palette.MIN_SHARE)
+            print(f"{p['id']} screen {s}: backdrop {fmt(nums['backdrop'])}; walkway {fmt(nums['walk'])}")
+            print(f"  palette: {pal['off'] * 100:.1f} % off; drift {fams}")
+            if target and target[1] == s:
+                t = bands.measure_target(Image.open(TARGETS / f'{target[0]}.png'))
+                print(f"  its target {target[0]}: backdrop band {fmt(t['backdrop'])}; floor band {fmt(t['floor'])}")
+            faults += [f'screen {s}: {m}' for m in probs]
+        for m in faults:
+            print(f'  FAIL {m}')
+        print(f"{p['id']}: {'not ready to ship' if faults else 'inside the bands and the palette'}")
+        if faults:
+            failed.append(p['id'])
+    if failed:
+        print(f"failed: {', '.join(failed)} (docs/TREE_STYLE.md sections 1 and 2b)", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv):
     args = argv[1:]
+    if '--check' in args:
+        args.remove('--check')
+        return check(args)
     def flag(name, default=None):
         if name in args:
             i = args.index(name)
