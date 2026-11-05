@@ -121,7 +121,7 @@ const L1_KIT: RoomKit = {
   columns: [{ id: 'trunk', x0: ROOM_W + 350, x1: ROOM_W + 1250, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
   // The old stone wall along the west path, behind the boulder and the log: its face down to the path.
   surfaces: [{ id: 'wall-face', texture: 'kit-tex-stone', rect: { x: 700, y: TREE_GROUND - 176, w: 740, h: 176 } }],
-  paths: [{ id: 'path', x0: 0, x1: 4 * ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-ground-forest-floor' }],
+  paths: [{ id: 'path', x0: 0, x1: 4 * ROOM_W, top: 0, row: 'kit-cut-earth-path', mids: ['kit-cut-earth-path-mid-480', 'kit-cut-earth-path-mid-640'], mid: 'kit-tex-ground-forest-floor' }],
   ledges: [
     { id: 'boulder', x0: 680, x1: 850, top: 110, cap: 'kit-ground-mossy-boulder' },
     { id: 'log', x0: 1010, x1: 1210, top: 85, cap: 'kit-clearing-log-bridge' },
