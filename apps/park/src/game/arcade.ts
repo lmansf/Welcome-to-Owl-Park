@@ -129,19 +129,22 @@ const HINTS: Readonly<Record<ArcadeGame, { touch: string; keys: string }>> = {
   sling: { touch: 'Pull the stick, let go', keys: 'Pull back and let go, or arrows and space' },
 };
 
+/** What a game is for, in a visitor's terms: the first line of each how-to card. Visitor-facing. */
+export const ARCADE_JOB = 'A quick game to play with whoever is in the park right now.';
+
 /** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
 const HOW_TO: Readonly<Record<ArcadeGame, { touch: readonly string[]; keys: readonly string[] }>> = {
   crossing: {
-    touch: [HOP_GOAL, 'Flick the stick to hop up, down, left or right, or swipe the screen. Three lives.'],
-    keys: [HOP_GOAL, 'The arrow keys or WASD hop up, down, left or right. Three lives.'],
+    touch: [ARCADE_JOB, HOP_GOAL, 'Flick the stick to hop up, down, left or right, or swipe the screen. Three lives.'],
+    keys: [ARCADE_JOB, HOP_GOAL, 'The arrow keys or WASD hop up, down, left or right. Three lives.'],
   },
   flight: {
-    touch: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
-    keys: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+    touch: [ARCADE_JOB, 'Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+    keys: [ARCADE_JOB, 'Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
   },
   sling: {
-    touch: [KNOCK_GOAL, 'Pull the stick back to aim (the dots show where the owl will fly) and let go to launch. You can pull back on the screen too.'],
-    keys: [KNOCK_GOAL, 'Pull back on the screen and let go, or aim with the arrow keys and launch with space.'],
+    touch: [ARCADE_JOB, KNOCK_GOAL, 'Pull the stick back to aim (the dots show where the owl will fly) and let go to launch. You can pull back on the screen too.'],
+    keys: [ARCADE_JOB, KNOCK_GOAL, 'Pull back on the screen and let go, or aim with the arrow keys and launch with space.'],
   },
 };
 

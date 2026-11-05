@@ -106,6 +106,31 @@ test.describe('the home screen (OP-065)', () => {
     expect((await state(page)).look.body).toBe('#3E6B48');
   });
 
+  test('says what the park is, and opens About the park and A note for grown-ups (the site audit)', async ({ page, isMobile }) => {
+    await openHome(page);
+    await expect(page.locator('[data-home-lead]')).toHaveText('A cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now.');
+    await expect(page.locator('[data-home-welcome]')).toHaveText('Built for anyone who misses the old chatroom worlds: grown-up owls welcome.');
+    expect(await page.title()).toBe('Owl Park - a cozy virtual park you visit in your browser');
+    for (const [kind, title, words] of [
+      ['about', 'About the park', 'It is not a place to chat freely'],
+      ['grown-ups', 'A note for grown-ups', 'There is no typed chat.'],
+    ] as const) {
+      const button = page.locator(`[data-home-info="${kind}"]`);
+      await expect(button).toHaveText(title);
+      if (isMobile) await button.tap();
+      else await button.click();
+      const card = page.getByRole('dialog', { name: title });
+      await expect(card).toBeVisible();
+      await expect(card).toContainText(words);
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-${kind}.png` });
+      await page.keyboard.press('Escape');
+      await expect(card).toBeHidden();
+      await expect(button).toBeFocused();
+    }
+    // The screens are words only: the home screen's buttons are as they were.
+    expect(await shownButtons(page)).toEqual(['Make your owl', 'Settings']);
+  });
+
   test('a return visit is logged in at once, with the owl as it was, and Play takes the focus', async ({ page }) => {
     await openHome(page);
     await logIn(page);

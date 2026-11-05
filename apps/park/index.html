@@ -22,8 +22,36 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0C1E36" />
-    <meta name="description" content="Owl Park: a virtual owl park you visit online. Wander the park as an owl, alongside everyone else who is here right now." />
-    <title>Owl Park</title>
+    <meta name="description" content="Owl Park: a cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now." />
+    <title>Owl Park - a cozy virtual park you visit in your browser</title>
+    <link rel="canonical" href="https://exploreowlpark.com/" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://exploreowlpark.com/#org",
+            "name": "Owl Park",
+            "url": "https://exploreowlpark.com/",
+            "logo": "https://exploreowlpark.com/apple-touch-icon.png"
+          },
+          {
+            "@type": "WebSite",
+            "name": "Owl Park",
+            "url": "https://exploreowlpark.com/",
+            "publisher": { "@id": "https://exploreowlpark.com/#org" }
+          },
+          {
+            "@type": "Product",
+            "name": "Owl Park Day Ticket",
+            "description": "A Day Ticket for Owl Park, a cozy park you visit in your browser. Guests play free and keep nothing they win; ticketed owls keep everything.",
+            "brand": { "@id": "https://exploreowlpark.com/#org" },
+            "image": "https://exploreowlpark.com/og-image.jpg"
+          }
+        ]
+      }
+    </script>
     <link rel="icon" type="image/png" href="%BASE_URL%favicon.png" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <meta property="og:type" content="website" />
@@ -82,6 +110,16 @@
     </style>
   </head>
   <body>
+    <noscript>
+      <style>#loader{display:none} .nojs{max-width:560px;margin:0 auto;padding:32px 16px;line-height:1.5} .nojs a{color:#FFD36A}</style>
+      <main class="nojs">
+        <h1>Owl Park</h1>
+        <p>A cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now.</p>
+        <p>Built for anyone who misses the old chatroom worlds: grown-up owls welcome.</p>
+        <p>The park needs JavaScript to run. Turn it on and reload this page to come in.</p>
+        <p><a href="/about/">About the park</a> · <a href="/changelog/">What's new</a></p>
+      </main>
+    </noscript>
     <div id="loader" class="lo">
       <div class="lo-scene">
         <svg viewBox="0 8 326 106" role="progressbar" aria-label="Opening the park" aria-valuemin="0" aria-valuemax="100">

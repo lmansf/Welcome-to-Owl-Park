@@ -377,7 +377,7 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       subEl.textContent = climbSubline(v.banked, v.remainingCap, v.cap);
       $<HTMLElement>('[data-start-line]').textContent = v.resumed ? 'Your climb is where you left it.' : TIER_NAMES[v.tier];
       const best = v.bestBandToday > 0 ? `Highest today: ${BAND_NAMES[v.bestBandToday - 1]}.` : '';
-      $<HTMLElement>('[data-start-sub]').textContent = v.resumed ? `${BAND_NAMES[v.banked - 1] ?? 'The foot'} banked. ${best}`.trim() : `Six storeys to the clouds. ${best}`.trim();
+      $<HTMLElement>('[data-start-sub]').textContent = v.resumed ? `${BAND_NAMES[v.banked - 1] ?? 'The foot'} banked. ${best}`.trim() : `Something to do on a short visit: six storeys to the clouds, and you can stop and carry on later. ${best}`.trim();
       $<HTMLElement>('[data-start-note]').textContent = v.previousForgotten ? 'Your last climb was left too long and is forgotten; this is a fresh one.' : v.remainingCap <= 0 ? 'No more feathers from games today: this climb is for the view.' : '';
       $<HTMLButtonElement>('[data-go]').textContent = v.resumed ? 'Carry on' : 'Start';
       startCard.classList.add('show');
