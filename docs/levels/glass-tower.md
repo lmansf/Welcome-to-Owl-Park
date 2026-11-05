@@ -767,3 +767,17 @@ knob if the owner wants it longer (at 150 px/s each takes 16 s). The gold time (
 - Art: the act arches, the lift car and its shaft on the tower's outside, the rungs, the sill and
   the pane, the lamp moth, the shrine, and two more tower glass pieces for bands 7 and 8. The tower's
   glass pieces (`climb-*`) are the owner's to pick, as now.
+
+## 8. With the triple jump (OP-239): unchanged, on purpose
+
+The tree's second flap (OP-239) does not reach the Glass Tower, so this plan is left as it is. The
+tower is the climb (`climb.ts`, `ClimbScene.ts`), with its own physics: a short, heavy jump, one
+double jump, the dash, the cling and the kick. It never calls `flightFor` or `stepFlier`, the park's
+flight, where the second flap lives (`ALL_FLIGHT.secondFlap`, map 2 only), and OP-239 left
+`climb.ts` untouched. The ticket says it the same way: the climb tower keeps its double jump, since
+its puzzles are tuned for it. So every number in section 2 (the double jump 111 px more, 260 in
+all) and every reach in the bands still holds, and so do the times in section 6.
+
+Checked on 2026-11-05: `climb.ts` has no change since before OP-239; the climb's own tests
+(`climb.test.ts`: the jump, the cut and the one double jump; the cling and kick keeping the double)
+pass as they are.

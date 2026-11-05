@@ -60,7 +60,9 @@ two panels, each climbing from its foot to 540, joined at the fold.
   Canopy's, section 2 there.)
 - **The dash.** The real one, from PR 72 (`dash.ts`): 162 px in 180 ms, once per jump, Shift on a
   computer and a button on a phone, only in courses; on a hop it adds 115 px, counted at 0.8 as +92
-  (the README). The two dash hops (`n2` to `n3`, and the optional `m2` to `m3`) are checked at that.
+  (the README). The dash hop (`n2` to `n3`) is counted at that; a gap is shut only when it is past
+  the full reach of the flight stepped through (and, where the dash must not cross it, that reach and
+  the dash's 115 px), 10 px to spare.
 - **Shortcuts that stay open, per owl:** the bamboo, the raft and the crane, kept for good in the
   course book (`coursebook.ts`, PR 72), as decided on 2026-11-02.
 - **Seals.** A red seal is picked up by standing on its ledge; it counts for this run. The scroll at
@@ -113,7 +115,7 @@ Floor along the ground line:
 | `g1` | stepping stone (solid) | 300 | 700 | 120 | 70 | `path` | 70 | 0 | T1 | 122 |
 | `k1` | brush stone, arrow right | 480 | 670 | 140 | 100 | `g1` | 30 | 60 | T1 | 133 |
 | `k1~` | ink bridge from k1 | 620 | 670 | 480 | 100 | - | - | - | - | - |
-| `reed1` | reed tuft, lost feather 1 | 1000 | 320 | 80 | 450 | `k1~` | 350 | 0 | T2b | 218 |
+| `reed1` | reed tuft, lost feather 1 | 1060 | 320 | 80 | 450 | `k1~` | 350 | 0 | T2b | 218 |
 | `c1` | paper cliff, bench 1 (solid) | 1260 | 370 | 340 | 400 | `k1~` | 300 | 160 | T2b | 241 |
 
 **Screen 1.2 Strokes in a row** (x 1600 to 3200). Beat: Bench 1. Two bridges back to back, each inside its 4 s. The crane asleep on its rock in the pond (wake it: an easter egg, and act 3's shortcut). Time: 45 s on a first clear, 7 s on a shortcut run.
@@ -123,21 +125,21 @@ Floor along the ground line:
 | `k2` | brush stone, arrow right | 1700 | 630 | 140 | 140 | `c1` | -260 | 100 | T1 | 187 |
 | `k2~` | ink bridge from k2 | 1840 | 630 | 480 | 140 | - | - | - | - | - |
 | `crane-rock` | the sleeping crane's rock | 2050 | 730 | 160 | 40 | `k2~` | -100 | 0 | T1 | 161 |
-| `reed2` | reed tuft, lost feather 2 | 2000 | 480 | 80 | 290 | `k2~` | 150 | 0 | T2 | 192 |
+| `reed2` | reed tuft, lost feather 2 | 2000 | 520 | 80 | 250 | `k2~` | 110 | 0 | T1 | 106 |
 | `k3` | brush stone, arrow right | 2360 | 650 | 140 | 120 | `k2~` | -20 | 40 | T1 | 145 |
 | `k3~` | ink bridge from k3 | 2500 | 650 | 480 | 120 | - | - | - | - | - |
-| `bamboo` | the bamboo bridge, once pushed down (shortcut) | 1600 | 370 | 1460 | 400 | `c1` | 0 | 0 | T1 | 141 |
-| `c2` | paper cliff; the bamboo stand (solid) | 3060 | 350 | 300 | 420 | `k3~` | 300 | 80 | T2b | 241 |
+| `bamboo` | the bamboo bridge, once pushed down (shortcut) | 1600 | 370 | 1500 | 400 | `c1` | 0 | 0 | T1 | 141 |
+| `c2` | paper cliff; the bamboo stand (solid) | 3100 | 350 | 300 | 420 | `k3~` | 300 | 120 | T2b | 241 |
 
 **Screen 1.3 The upward stroke** (x 3200 to 4800). Beat: A long glide down off the cliff to an arrow pointing up: it paints three treads above its stone; climb them before they fade. Seal 1, then the tea terrace and the unfinished painting. Time: 40 s on a first clear, 16 s on a shortcut run.
 
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
-| `k4` | brush stone, arrow up | 4100 | 670 | 160 | 100 | `c2` | -320 | 740 | T3 | 1851 |
+| `k4` | brush stone, arrow up | 4100 | 670 | 160 | 100 | `c2` | -320 | 700 | T3 | 1851 |
 | `k4~1` | ink tread 1 over k4 | 4100 | 540 | 160 | 230 | - | - | - | - | - |
 | `k4~2` | ink tread 2 over k4 | 4100 | 410 | 160 | 360 | - | - | - | - | - |
 | `k4~3` | ink tread 3 over k4 | 4100 | 280 | 160 | 490 | - | - | - | - | - |
-| `c3` | high ledge, red seal 1 | 4290 | 230 | 260 | 540 | `k4~3` | 50 | 30 | T1 | 128 |
+| `c3` | high ledge, red seal 1 | 4540 | 230 | 260 | 540 | `k4~3` | 50 | 280 | T2b | 294 |
 | `t1` | the tea terrace (solid) | 4300 | 610 | 500 | 160 | `c3` | -380 | 0 | T1 | 203 |
 
 More hops, and notes on the ones above:
@@ -145,7 +147,7 @@ More hops, and notes on the ones above:
 | hop | rise | gap | needs | reach | note |
 | --- | ---: | ---: | --- | ---: | --- |
 | `k1~` to `reed1` | 350 | 0 | T2b | 218 | straight up off the bridge, both flaps |
-| `c2` to `k4` | -320 | 740 | T3 | 1851 | a long glide down off the cliff to the upward stroke |
+| `c2` to `k4` | -320 | 700 | T3 | 1851 | a long glide down off the cliff to the upward stroke |
 | `c1` to `bamboo` | 0 | 0 | T1 | 141 | the shortcut, once open |
 | `bamboo` to `c2` | 20 | 0 | T1 | 136 |  |
 
@@ -154,12 +156,12 @@ Doors, benches and the rest:
 | mark | thing | x | top |
 | --- | --- | ---: | ---: |
 | D | door `to-commons`: back to the ink-wash realm's Commons (down is left) | 40 | 0 |
-| * | lost feather 1, on `reed1`, straight up from k1's bridge | 1040 | 450 |
+| * | lost feather 1, on `reed1`, straight up from k1's bridge | 1100 | 450 |
 | B | bench 1, on `c1` | 1500 | 400 |
 | C | the sleeping crane on `crane-rock`: three hoots (emotes) standing beside it wake it, and it flies off up the mountain (stored per owl) | 2130 | 40 |
-| * | lost feather 2, on `reed2`, straight up from k2's bridge | 2040 | 290 |
-| P | the bamboo stand's push point on `c2`: Use drops the bamboo west to `c1` for this owl for good | 3080 | 420 |
-| o | red seal 1, on `c3` | 4420 | 540 |
+| * | lost feather 2, on `reed2`, straight up from k2's bridge | 2040 | 250 |
+| P | the bamboo stand's push point on `c2`: Use drops the bamboo west to `c1` for this owl for good | 3120 | 420 |
+| o | red seal 1, on `c3` | 4670 | 540 |
 | E | the unfinished painting, on an easel on the terrace | 4400 | 160 |
 | D | door `to-rain` on `t1`: the moon gate to act 2 (`brush-2`) | 4720 | 160 |
 
@@ -168,11 +170,11 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | the bridge from k1 | `k1` | `c1` | 300 | 640 | 363 | 455 |
-| the bridge from k1 (to the reed) | `k1` | `reed1` | 350 | 380 | 243 | 335 |
-| the bridge from k3 | `k3` | `c2` | 300 | 560 | 363 | 455 |
-| the treads from k4 | `c2` | `c3` | 120 | 930 | 795 | 887 |
-| the treads from k4 (from the stone) | `k4` | `c3` | 440 | 30 | over both flaps | - |
-| the bridges (from bench 1) | `c1` | `c2` | 20 | 1460 | 1035 | 1127 |
+| the bridge from k1 (to the reed) | `k1` | `reed1` | 350 | 440 | 306 | 421 |
+| the bridge from k3 | `k3` | `c2` | 300 | 600 | 472 | 587 |
+| the treads from k4 | `c2` | `c3` | 120 | 1140 | 1014 | 1129 |
+| the treads from k4 (from the stone) | `k4` | `c3` | 440 | 280 | over both flaps | - |
+| the bridges (from bench 1) | `c1` | `c2` | 20 | 1500 | 1315 | 1430 |
 
 **The unfinished painting.** On an easel on the tea terrace (x 4400): an ink landscape of this very
 garden, one stroke missing where the river should be crossed. Looking at it (Use) the first time
@@ -234,8 +236,8 @@ behind it (z 430 to 600), where the ledge and `k10`'s bridge pass through.
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
 | `k6` | brush stone, arrow right (rain: its bridge fades in 2 s) | 560 | 680 | 120 | 90 | `dock-w` | 90 | 60 | T1 | 115 |
 | `k6~` | ink bridge from k6 | 680 | 680 | 480 | 90 | - | - | - | - | - |
-| `r1` | rock pillar (solid) | 1180 | 380 | 140 | 390 | `k6~` | 300 | 180 | T2b | 241 |
-| `k7` | brush stone under eave 1 (sheltered: 4 s) | 1500 | 650 | 120 | 120 | `r1` | -270 | 180 | T1 | 188 |
+| `r1` | rock pillar (solid) | 1280 | 380 | 140 | 390 | `k6~` | 300 | 280 | T2b | 377 |
+| `k7` | brush stone under eave 1 (sheltered: 4 s) | 1500 | 650 | 120 | 120 | `r1` | -270 | 80 | T1 | 188 |
 
 **Screen 2.2 Shelter** (x 1600 to 3200). Beat: A stone under a temple eave paints a bridge that keeps its 4 s. The painter, a heron, on the porch step. Time: 40 s on a first clear, skipped on a shortcut run.
 
@@ -245,7 +247,7 @@ behind it (z 430 to 600), where the ledge and `k10`'s bridge pass through.
 | `porch` | a dry porch step under eave 2 | 2100 | 710 | 100 | 60 | `k7~` | -60 | 0 | T1 | 154 |
 | `k8` | brush stone under eave 2 (sheltered: 4 s) | 2240 | 730 | 120 | 40 | `k7~` | -80 | 140 | T1 | 158 |
 | `k8~` | ink bridge from k8 | 2360 | 730 | 480 | 40 | - | - | - | - | - |
-| `post` | a mooring post, lost feather 4 | 2760 | 390 | 60 | 380 | `k8~` | 340 | 0 | T2b | 224 |
+| `post` | a mooring post (solid), lost feather 4 | 2960 | 390 | 60 | 380 | `k8~` | 340 | 120 | T2b | 276 |
 | `r2` | rock pillar (solid) | 3060 | 510 | 140 | 260 | `k8~` | 220 | 220 | T2b | 263 |
 
 **Screen 2.3 The falls** (x 3200 to 4800). Beat: Two rain bridges with no shelter, one through the waterfall: the ledge behind it hides the hidden room and seal 2. Untie the raft on the east dock. Time: 35 s on a first clear, 22 s on a shortcut run.
@@ -254,9 +256,9 @@ behind it (z 430 to 600), where the ledge and `k10`'s bridge pass through.
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
 | `k9` | brush stone (rain: 2 s) | 3260 | 570 | 120 | 200 | `r2` | -60 | 60 | T1 | 154 |
 | `k9~` | ink bridge from k9 | 3380 | 570 | 480 | 200 | - | - | - | - | - |
-| `k10` | brush stone (rain: 2 s) | 4040 | 330 | 120 | 440 | `k9~` | 240 | 420 | T3 | 507 |
-| `k10~` | ink bridge from k10 | 4160 | 330 | 480 | 440 | - | - | - | - | - |
-| `falls-ledge` | the ledge behind the waterfall | 4180 | 330 | 180 | 440 | `k10~` | 0 | 0 | T1 | 141 |
+| `k10` | brush stone (rain: 2 s) | 4040 | 230 | 120 | 540 | `k9~` | 340 | 240 | T2b | 276 |
+| `k10~` | ink bridge from k10 | 4160 | 230 | 480 | 540 | - | - | - | - | - |
+| `falls-ledge` | the ledge behind the waterfall | 4180 | 230 | 180 | 540 | `k10~` | 0 | 0 | T1 | 141 |
 | `kE` | brush stone on the east dock, arrow up (rain: 2 s) | 4440 | 710 | 120 | 60 | `dock-e` | 60 | 0 | T1 | 125 |
 | `kE~1` | ink tread 1 over kE | 4420 | 580 | 160 | 190 | - | - | - | - | - |
 | `kE~2` | ink tread 2 over kE | 4420 | 450 | 160 | 320 | - | - | - | - | - |
@@ -266,13 +268,13 @@ More hops, and notes on the ones above:
 
 | hop | rise | gap | needs | reach | note |
 | --- | ---: | ---: | --- | ---: | --- |
-| `k6~` (from x 1000) to `r1` | 300 | 180 | T2b | 241 | jump off at x 1000, about 1.2 s after landing on k6, inside the 2 s, and flap twice |
-| `k8~` to `post` | 340 | 0 | T2b | 224 | straight up off the bridge, both flaps |
-| `k9~` (from x 3620) to `k10` | 240 | 420 | T3 | 507 | jump off at x 3620, about 0.9 s along the bridge, flap twice and glide |
-| `k10~` to `dock-e` | -440 | 0 | T1 | 210 | walk on through the dry band past the falls and drop to the dock |
+| `k6~` (from x 1000) to `r1` | 300 | 280 | T2b | 377 | jump off at x 1000, about 1.2 s after landing on k6, inside the 2 s, and flap twice |
+| `k8~` to `post` | 340 | 120 | T2b | 276 | both flaps off the bridge's end; the post stands in the river past it, and every way on to `r2` goes over it |
+| `k9~` (from x 3800) to `k10` | 340 | 240 | T2b | 276 | jump off at x 3800, about 1.6 s along the bridge, inside the 2 s, and flap twice |
+| `k10~` to `dock-e` | -540 | 0 | T1 | 210 | walk on through the dry band past the falls and drop to the dock |
 | `dock-e` to `kE` | 60 | 0 | T1 | 125 | the raft run: off the raft, up the treads to the falls |
 | `kE` to `kE~2` | 260 | 0 | T2b | 253 | both flaps, straight to the second tread |
-| `kE~3` to `falls-ledge` | -10 | 60 | T1 | 143 | step west off the top tread into the dry band behind the falls |
+| `kE~3` to `falls-ledge` | 90 | 60 | T1 | 117 | hop west off the top tread, up into the dry band behind the falls |
 
 Doors, benches and the rest:
 
@@ -281,9 +283,9 @@ Doors, benches and the rest:
 | D | door `back`: back to `brush-1` | 40 | 0 |
 | B | bench 2 | 200 | 0 |
 | R | door `raft-w`: the ferry raft's west mooring; the raft is tied up at the east dock, in plain view, until it is untied there | 420 | 0 |
-| * | lost feather 4, on `post`, straight up from k8's bridge | 2790 | 380 |
+| * | lost feather 4, on `post`, both flaps off the end of k8's bridge | 2990 | 380 |
 | ? | the painter, a grey heron, on `porch` (secret character; there only after the owl has looked at the unfinished painting) | 2150 | 60 |
-| W | the waterfall (x 4180 to 4360); door `falls` on `falls-ledge`, to the hidden room `brush-falls` | 4260 | 440 |
+| W | the waterfall (x 4180 to 4360); door `falls` on `falls-ledge`, to the hidden room `brush-falls` | 4260 | 540 |
 | R | door `raft-e` on the east dock: Use unties the raft and opens the crossing for this owl for good | 4460 | 0 |
 | D | door `to-mountain`: the mountain gate, to act 3 (`brush-3a`) | 4740 | 0 |
 
@@ -291,15 +293,15 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the bridge from k6 | `k6` | `r1` | 300 | 500 | 363 | 455 |
+| the bridge from k6 | `k6` | `r1` | 300 | 600 | 472 | 587 |
 | the bridge from k8 | `k8` | `r2` | 220 | 700 | 555 | 647 |
-| the bridge from k8 (to the post) | `k8` | `post` | 340 | 400 | 267 | 359 |
-| the bridge from k9 | `k9` | `k10` | 240 | 660 | 507 | 599 |
-| the treads from kE (the raft run) | `dock-e` | `falls-ledge` | 440 | 40 | over both flaps | - |
+| the bridge from k8 (to the post) | `k8` | `post` | 340 | 600 | 345 | 460 |
+| the bridge from k9 | `k9` | `k10` | 340 | 660 | 345 | 460 |
+| the treads from kE (the raft run) | `dock-e` | `falls-ledge` | 540 | 40 | over both flaps | - |
 
 **Bridge timing in the rain.** Every rain hop above is checked in time as well as in reach. At 260
 px/s an owl covers 520 px in 2 s, so each rain bridge is left within about 400 px of its stone: `k6`
-at x 1000 (1.2 s), `k9` at x 3620 (0.9 s), `k10`'s at once (the ledge behind the falls starts where
+at x 1000 (1.2 s), `k9` at x 3800 (1.6 s), `k10`'s at once (the ledge behind the falls starts where
 the bridge does), and `kE`'s treads in two hops (both flaps to the second, then the third), about 1 s.
 The sheltered bridges (`k7`, `k8`) are run to their ends, about 2.1 s, inside their 4 s.
 
@@ -348,8 +350,8 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 ## 5. Act 3: The Mountain Scroll
 
 Four screens on two panels of a hanging scroll. Arrows now point up, across and back: the first
-panel is climbed right, back left, up and right again. The dash comes in twice: as an expert's skip
-on the first panel and as the course's one dash-only gap, on a dry stone (a brush stone with no ink
+panel is climbed right, back left, up and right again. The dash comes in once: the course's one
+dash-only gap, on a dry stone (a brush stone with no ink
 left) on the second. The shortcut is the crane: woken in act 1, it waits on the summit pavilion's
 roof; meeting it there (the far side) sends it down to its perch at the mountain's foot, and from
 then on it flies an owl from there over the first panel to the second's foot (10 s), below seals 3
@@ -418,15 +420,15 @@ Hazards (z is height over the ground line):
 | `k14` | brush stone, arrow right | 1200 | 710 | 120 | 60 | `m1` | -460 | 360 | T3 | 2187 |
 | `k14~` | ink bridge from k14, under the cloud bank | 1320 | 710 | 480 | 60 | - | - | - | - | - |
 
-**Screen 3.2 The long glide** (x 1600 to 3200). Beat: A bridge under the cloud bank, both flaps up a ledge, a bridge, both flaps up a crag, the fold. An expert dashes straight from `m2` to the crag. Time: 35 s on a first clear, skipped on a shortcut run.
+**Screen 3.2 The long glide** (x 1600 to 3200). Beat: A bridge under the cloud bank, both flaps up a ledge, a bridge, both flaps up a crag, the fold. Time: 35 s on a first clear, skipped on a shortcut run.
 
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
-| `m2` | ledge on the scroll | 1900 | 410 | 240 | 360 | `k14~` | 300 | 100 | T2b | 241 |
-| `k15` | brush stone, arrow right | 2160 | 510 | 120 | 260 | `m2` | -100 | 20 | T1 | 161 |
-| `k15~` | ink bridge from k15 | 2280 | 510 | 480 | 260 | - | - | - | - | - |
-| `m3` | crag (solid) | 2850 | 230 | 160 | 540 | `k15~` | 280 | 90 | T2b | 247 |
-| `m4` | ledge at the fold | 3040 | 250 | 160 | 520 | `m3` | -20 | 30 | T1 | 145 |
+| `m2` | ledge on the scroll | 1900 | 510 | 160 | 260 | `k14~` | 200 | 100 | T2b | 618 |
+| `k15` | brush stone, arrow right | 2080 | 510 | 120 | 260 | `m2` | 0 | 20 | T1 | 141 |
+| `k15~` | ink bridge from k15 | 2200 | 510 | 480 | 260 | - | - | - | - | - |
+| `m3` | crag (solid) | 2870 | 230 | 150 | 540 | `k15~` | 280 | 190 | T2b | 426 |
+| `m4` | ledge at the fold | 3040 | 250 | 160 | 520 | `m3` | -20 | 20 | T1 | 145 |
 
 More hops, and notes on the ones above:
 
@@ -434,7 +436,6 @@ More hops, and notes on the ones above:
 | --- | ---: | ---: | --- | ---: | --- |
 | `m1` to `pine` | 20 | 500 | T3 | 1035 | the other way to feather 5: a glide back west off the high ledge |
 | `m1` to `k14` | -460 | 360 | T3 | 2187 | the long glide: down off the high ledge to the stone under the cloud bank |
-| `m2` to `m3` | 180 | 710 | D (dash) | 743 | the expert's dash skip past k15 |
 
 Doors, benches and the rest:
 
@@ -453,10 +454,10 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | the back bridge and the treads | `k11` | `m1` | 420 | 100 | over both flaps | - |
 | the treads | `k13` | `m1` | 370 | 80 | over both flaps | - |
 | the treads (to the pine) | `k13` | `pine` | 390 | 300 | over both flaps | - |
-| the bridge from k14 | `k14` | `m2` | 300 | 580 | 363 | 455 |
-| the bridge from k14 (from the high ledge) | under the cloud bank (in the air, z 100) | `m2` | 260 | 150 | over both flaps (in the air) | - |
-| the bridge from k15 | `k15` | `m3` | 280 | 570 | 411 | 503 |
-| the bridge from k15 (from m2: the expert's dash skip) | `m2` | `m3` | 180 | 710 | 651 | 743 |
+| the bridge from k14 | `k14` | `m2` | 200 | 580 | the cloud bank: nothing off `k14` stays under it to its end | - |
+| the bridge from k14 (from the high ledge) | `m1`, down under the cloud bank | `m2` | -260 | 1060 | the cloud bank: a glide under it meets the mist before its end | - |
+| the bridge from k15 | `k15` | `m3` | 280 | 670 | 533 | 648 |
+| the bridge from k15 (from m2) | `m2` | `m3` | 280 | 810 | 533 | 648 |
 
 A row "in the air" is a glide the cloud bank stops. From the high ledge `m1` an owl glides a long
 way (level, 1083 px with both flaps), so the cloud bank hangs over `k14`'s bridge from 100 px up to
@@ -496,9 +497,9 @@ Hazards (z is height over the ground line):
 
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
-| `n2` | a dry stone: the dash run-up | 1700 | 430 | 160 | 340 | `k18~` | 280 | 100 | T2b | 247 |
-| `n3` | ledge past the dash gap, red seal 4 | 2510 | 230 | 200 | 540 | `n2` | 200 | 650 | D (dash) | 695 |
-| `n4` | the summit pavilion's terrace (solid) | 2900 | 230 | 300 | 540 | `n3` | 0 | 190 | T2 | 224 |
+| `n2` | a dry stone: the dash run-up | 1700 | 570 | 160 | 200 | `k18~` | 140 | 100 | T2 | 194 |
+| `n3` | ledge past the dash gap, red seal 4 | 2220 | 230 | 200 | 540 | `n2` | 340 | 360 | D (dash) | 368 |
+| `n4` | the summit pavilion's terrace (solid) | 2610 | 230 | 590 | 540 | `n3` | 0 | 190 | T2 | 224 |
 
 Doors, benches and the rest:
 
@@ -507,7 +508,7 @@ Doors, benches and the rest:
 | D | door `back`: back to `brush-3a` | 40 | 0 |
 | o | red seal 3, on `n1` | 680 | 520 |
 | B | bench 4, on `n1` | 780 | 520 |
-| o | red seal 4, on `n3` | 2610 | 540 |
+| o | red seal 4, on `n3` | 2320 | 540 |
 | S | the finish shrine: the scroll stamped with the four seals; the ink-wash scarf on a first clear; the woken crane waits on the roof | 3050 | 540 |
 | X | a misty stair to a farther peak: a "maybe later" barrier with the sign `Hatching Soon` | 3180 | 540 |
 
@@ -517,14 +518,15 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | the treads from k16 | `terrace` | `n1` | 520 | 320 | over both flaps | - |
 | the treads from k16 (from the stone) | `k16` | `n1` | 410 | 100 | over both flaps | - |
-| the bridge from k18 | `k18` | `n2` | 280 | 580 | 411 | 503 |
-| the bridge from k18 (from the high ledge) | under the cloud bank (in the air, z 100) | `n2` | 240 | 200 | over both flaps (in the air) | - |
-| the dash (from the bridge) | `k18~` | `n3` | 480 | 910 | over both flaps | - |
-| the dash | `n2` | `n3` | 200 | 650 | 603 | 695 |
-| the dash gap at all (from the high ledge) | under the cloud bank (in the air, z 100) | `n3` | 440 | 1010 | over both flaps (in the air) | - |
+| the bridge from k18 | `k18` | `n2` | 140 | 580 | the cloud bank: nothing off `k18` stays under it to its end | - |
+| the bridge from k18 (from the high ledge) | `n1`, down under the cloud bank | `n2` | -320 | 880 | the cloud bank: a glide under it meets the mist before its end | - |
+| the dash (from the bridge) | `k18~` | `n3` | 480 | 620 | over both flaps | - |
+| the dash | `n2` | `n3` | 340 | 360 | 345 | 460 |
+| the dash gap at all (from the high ledge) | under the cloud bank (in the air, z 100) | `n3` | 440 | 720 | over both flaps (in the air) | - |
 
-**The dash gap.** `n2` to `n3`: 650 px, rising 200. A jump, both flaps and a glide reach 603 px at
-that rise; with the dash, 695. The cloud bank over `k18`'s bridge stops the long glide from the
+**The dash gap.** `n2` to `n3`: 360 px, rising 340. A jump, both flaps and a glide reach 345 px at
+that rise at their very best, so the gap is shut by 15 px; the dash, counted at 0.8 as every hop is,
+reaches 368, and at its best 460. The cloud bank over `k18`'s bridge stops the long glide from the
 high ledge `n1`. `n2` is a dry stone: it looks like a brush stone with its ink gone,
 so a visitor sees there is no bridge to wait for.
 
@@ -541,7 +543,7 @@ clear. The woken crane stands on the roof.
 | Three acts of three or four screens, about ten in all, joined by doors | Act 1: 3 screens (`brush-1`); act 2: 3 (`brush-2`); act 3: 4 (`brush-3a`, `brush-3b`). Doors `to-rain`, `to-mountain` and `fold` |
 | Four benches | Bench 1 (on `c1`), bench 2 (the west dock), bench 3 (the mountain's foot), bench 4 (on `n1`) |
 | One shortcut per act, opened from its far side | The bamboo (pushed from `c2`), the raft (untied at the east dock), the crane (met at the summit) |
-| One dash-only gap | `n2` to `n3` in screen 3.4; the `m2` to `m3` dash in 3.2 is an optional skip |
+| One dash-only gap | `n2` to `n3` in screen 3.4 |
 | Five lost feathers | 1: `reed1` (1.1); 2: `reed2` (1.2); 3: the hidden room's high shelf; 4: the mooring `post` (2.2); 5: `pine` (3.1) |
 | One hidden room | `brush-falls`, behind the waterfall |
 | One secret character | The painter, a heron, under eave 2 |
@@ -609,7 +611,7 @@ hops (T2b), which is what the triple jump is for.
 
 | hop or check | with one flap (first plan) | the first plan with both flaps | now, with both flaps |
 | --- | --- | --- | --- |
-| without the bridge from k1: `k1` to `c1` | rise 180, gap 640: reach 323, shut | reach 651: open | `c1` raised to 400: rise 300, glide 363, dash 455 (and `reed1` raised to 450, out of a dash's reach from `k1`) |
+| without the bridge from k1: `k1` to `c1` | rise 180, gap 640: reach 323, shut | reach 651: open | `c1` raised to 400: rise 300, glide 363, dash 455 (and `reed1` raised to 450, and on Nov 5 moved 60 px east, out of a dash's reach from `k1`) |
 | without the bridge from k3: `k3` to `c2` | rise 180, gap 580: 323, shut | 651: open | `c2` raised to 420, `k3` lowered to 120: rise 300, gap 560: 363, dash 455 |
 | without the treads from k4: `c2` to `c3` | rise 180, gap 400: 323, shut | 651: open | `k4` and `c3` moved east past a long glide: rise 120, gap 930: 795, dash 887 |
 | without the bridge from k6: `k6` to `r1` | rise 160, gap 620: 371, shut | 699: open | `r1` raised to 390: rise 300, gap 500: 363, dash 455 |
@@ -618,8 +620,8 @@ hops (T2b), which is what the triple jump is for.
 | without the bridge from k14: `m1` to `m2` | rise 20, gap 760: 707, shut | 1035: open | `k14` lowered to 60 under a cloud bank: from under it, rise 260 to `m2` |
 | without the bridge from k15: `k15` to `m3` | rise 180, gap 640: 323, shut | 651: open | `m3` raised to 540, `k15` at 260: rise 280, gap 570: 411, dash 503 |
 | without the bridge from k18: `k18` to `n2` | rise 100, gap 580: 515, shut | 843: open | `k18` lowered to 60: rise 280: 411, dash 503; a cloud bank stops the glide from `n1` |
-| the expert's skip: `m2` to `m3` | rise -60, gap 920: glide 899, dash 991 | glide 1227: no dash needed | rise 180, gap 710: glide 651, dash 743 |
-| the dash gap: `n2` to `n3` | rise 200, gap 340: glide 275, dash 367 | glide 603: no dash needed | gap 650: glide 603, dash 695 |
+| the expert's skip: `m2` to `m3` | rise -60, gap 920: glide 899, dash 991 | glide 1227: no dash needed | gone (Nov 5): `m2` lowered to 260, rise 280, gap 810, shut even with the dash |
+| the dash gap: `n2` to `n3` | rise 200, gap 340: glide 275, dash 367 | glide 603: no dash needed | rise 340, gap 360: glide at best 345, dash 368 (Nov 5; at rise 200 and gap 650 a glide stepped through crossed) |
 | the hidden room: `seal-shelf` to `high-shelf` | rise 180, gap 250: T3, 323 | T2b, 272 | unchanged; now a both-flaps hop |
 
 Other changes that came with these. The temple eaves were perches; from eave 1 a glide now reaches
@@ -628,4 +630,32 @@ to a new mooring post off k8's bridge. Lost feather 5's pine stood where it let 
 bridge from k15; it moved over the mountain's foot in 3.1. `k13`'s treads now reach 540, three of
 them. The waterfall is now a hazard but for a dry band at the ledge behind it, so `k10`'s bridge
 is the way in. The README's note that the dash gap is 340 px is out of date for this course: it
-is 650 px now.
+is 360 px now, rising 340.
+
+### Checked again, step by step (2026-11-05)
+
+The tables above first counted a glide's reach at 0.8 of its best (`ROUTE_REACH`), the margin
+`hopTier` keeps so a hop it calls possible is easy. That margin is right for a hop that must be
+made and wrong for one that must stay shut: an owl that times its flaps well reaches the whole of
+it. So every pair of ledges in every room was searched again with the real flight (`stepFlier` with
+`ALL_FLIGHT`, 120 steps a second), over take-off points, a short or a held jump, both flaps at every
+timing and a dash at every moment, with the bridges and treads left unpainted, the mist, the
+waterfall and solid ledges in the way. The reach of a jump and both flaps at its best, up a rise:
+1014 px at 120, 773 at 200, 533 at 280, 472 at 300, 345 at 340; a dash adds 115. Rows changed in
+the tables above now give those full figures.
+
+| what the search found | fix |
+| --- | --- |
+| `n2` to `n3` (the dash gap, rise 200, gap 650) needed no dash | `n2` lowered to 200, `n3` moved in: rise 340, gap 360; the terrace `n4` widened to meet it. The cloud bank still stops every way to `n2` but the bridge |
+| `m2` to `m3` (the expert's dash skip) needed no dash, skipping the bridge from k15; `k15` to `m3` took the dash | the skip is gone: `m2` lowered to 260 and narrowed, `k15` and its bridge 80 px west, `m3` 20 px east: `k15` to `m3` is 670 px, past the dash's best 648 |
+| `c2` to `c3` (rise 120, gap 930) skipped the treads from k4 | `c3` and seal 1 moved east to x 4540: gap 1140, past the dash's best 1129; the top tread to `c3` is a both-flaps hop |
+| `k3` to `c2` (rise 300, gap 560) took the dash past the bridge from k3; so did `reed2` | `c2` 40 px east (the bamboo 40 px longer): gap 600; `reed2` lowered to 250 |
+| `k1` to `reed1` took the dash past k1's bridge | `reed1` 60 px east: gap 440 |
+| `k6` to `r1` (rise 300, gap 500) took the dash past the bridge from k6 | `r1` 100 px east: gap 600 |
+| `r1` to `r2`, a long glide over the whole of screen 2.2, and `k8` to `r2` (rise 220, gap 700) skipped the bridges from k7 and k8 | the mooring post is solid now, up out of the river at x 2960: every glide on to `r2` has to clear its top, 1540 px from `r1` and 600 from `k8`, past the dash's best from both. Lost feather 4 on it is a both-flaps hop off the end of k8's bridge |
+| `k9` to `k10` (rise 240, gap 660) took the dash past the bridge from k9, and the post reached `k10` | `k10`, its bridge and the ledge behind the falls raised to 540 (still in the dry band): rise 340 |
+
+Every other "without" row holds, with the dash too. The time estimates (section 7) rest on screen
+widths and the beats, which these moves change by about a second at most, so they stand. The
+room sketches are not redrawn for these moves (the most, `c3`, is three characters); the tables are
+the plan.
