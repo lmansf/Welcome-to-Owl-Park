@@ -119,29 +119,51 @@ test.describe('the thumbstick lets go (OP-242)', () => {
     // their side (tree.spec.ts): held upright, a card asks to turn the phone over the pad.
     await page.setViewportSize({ width: 839, height: 412 });
     await openPark(page, { room: 'l1' });
-    const cdp = await page.context().newCDPSession(page);
-    const jump = await centreOf(page, '[data-pad-jump]');
     const before = (await state(page)).flown.n;
-    const air = async () => (await state(page)).air;
-    const tap = async () => {
-      await touches(cdp, 'touchStart', [{ ...jump, id: 5 }]);
-      await page.waitForTimeout(250);
-      await touches(cdp, 'touchEnd', [{ ...jump, id: 5 }]);
-    };
-    /** Near the top of the rise (no faster than 120 px/s up), still in the air. */
-    const nearTop = () => expect.poll(async () => { const a = await air(); return a.s !== 0 && a.vz <= 120; }, { timeout: 5_000, intervals: [20] }).toBe(true);
-
-    await tap();
-    await nearTop();
-    expect((await air()).f).toBe(2);
-    await tap();
-    await expect.poll(async () => (await air()).f, { timeout: 2_000, intervals: [20] }).toBe(1);
-    await nearTop();
-    await tap();
-    await expect.poll(async () => (await air()).f, { timeout: 2_000, intervals: [20] }).toBe(0);
-    // All one flight, and down again.
-    await expect.poll(async () => { const s = await state(page); return s.flown.n > before && s.air.s === 0; }, { timeout: 15_000 }).toBe(true);
+    // Thumb taps on the pad's Jump, each held a moment, the next one going down once the last one's rise
+    // has slowed near its top. Read in the page as it steps, so a runner's few frames cannot miss a top:
+    // the flaps left, each time they change in the air.
+    const flaps = await page.evaluate(
+      () =>
+        new Promise<number[]>((resolve, reject) => {
+          const btn = document.querySelector<HTMLElement>('[data-pad-jump]')!;
+          const r = btn.getBoundingClientRect();
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          let id = 60;
+          const thumb = (type: string) => btn.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: true, bubbles: true, clientX: x, clientY: y }));
+          const seen: number[] = [];
+          let presses = 0;
+          let downAt: number | null = null;
+          const giveUp = setTimeout(() => {
+            const under = document.elementFromPoint(x, y);
+            reject(new Error(`after ${presses} taps the flaps went ${JSON.stringify(seen)}; the air ${JSON.stringify(window.owlPark.state()?.air)}; under the thumb ${under?.tagName}.${under?.className}`));
+          }, 10_000);
+          const step = () => {
+            const a = window.owlPark.state()?.air;
+            if (a && a.s !== 0 && presses > 0 && seen[seen.length - 1] !== a.f) seen.push(a.f);
+            if (downAt !== null && performance.now() - downAt >= 120) {
+              thumb('pointerup');
+              downAt = null;
+            }
+            if (presses === 3 && seen.length === 3 && a?.s === 0) {
+              clearTimeout(giveUp);
+              return resolve(seen);
+            }
+            const ready = presses === 0 ? a?.s === 0 : seen.length === presses && a !== undefined && a.s !== 0 && a.vz <= 120;
+            if (downAt === null && presses < 3 && ready) {
+              id += 1;
+              thumb('pointerdown');
+              downAt = performance.now();
+              presses += 1;
+            }
+            requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+    // A jump (two flaps left), the first flap, the second: all one flight, and down again.
+    expect(flaps).toEqual([2, 1, 0]);
     expect((await state(page)).flown.n - before).toBe(1);
-    await cdp.detach();
   });
 });
