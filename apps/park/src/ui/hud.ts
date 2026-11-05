@@ -14,7 +14,7 @@ import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbRe
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
-import { bugIcon, createFeedbackBug } from './feedbackBug';
+import { createFeedbackBug, feedbackIcon } from './feedbackBug';
 import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
 import { createTreeMinimap } from './treeMinimap';
 import { createJoystick } from './joystick';
@@ -1013,7 +1013,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       menuFeedback.type = 'button';
       menuFeedback.className = 'mfeedback';
       menuFeedback.dataset['menuFeedback'] = '';
-      menuFeedback.innerHTML = `${bugIcon('currentColor', 'rgba(255,255,255,.55)')}<span>Send feedback</span>`;
+      menuFeedback.innerHTML = `${feedbackIcon('currentColor')}<span>Send feedback</span>`;
       menuFeedback.addEventListener('click', () => openScreen('feedback', true));
       menu.headButton(menuFeedback);
       // The feedback bug (OP-208): on screen everywhere until the full opening. Over a game or a
