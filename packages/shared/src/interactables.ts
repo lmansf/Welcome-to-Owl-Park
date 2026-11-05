@@ -36,6 +36,9 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
   moonbeam: { label: 'Bask in the moonbeam', noun: 'moonbeam', plural: 'moonbeams', verb: 'Bask in', reach: 120, shared: false },
 };
 
+/** The tree's ground line (rooms' TREE_GROUND), where an owl's feet are on the tree's plans. */
+const TREE_FLOOR = 770;
+
 export const INTERACTABLES: readonly InteractableDef[] = [
   // Leaves blow in through the storybook arch and pile up just inside the great tree...
   { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 1930, y: 820 } },
@@ -53,6 +56,33 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
   { id: 'hub-moonbeam', kind: 'moonbeam', room: 'hub', pos: { x: 2400, y: 690 } },
+  // The tree (OP-234): something at every end of the walk and the top of every climb, each in the
+  // scene its room tells around it (rooms/kit.ts). Leaves pay as the hub's do, under the same daily cap.
+  // Underground, leaves blown down the stair shaft: on the low wall at the west end and the root ledge.
+  { id: 'l0-leaves-wall', kind: 'leaf-pile', room: 'l0', pos: { x: 170, y: TREE_FLOOR }, top: 118 },
+  { id: 'l0-leaves-roots', kind: 'leaf-pile', room: 'l0', pos: { x: 2080, y: TREE_FLOOR }, top: 264 },
+  // Neon Roost's cave: leaves blown in under the shut east roots, and on the flat boulder between the bays.
+  { id: 'arcade-leaves-roots', kind: 'leaf-pile', room: 'l0-arcade', pos: { x: 4440, y: TREE_FLOOR } },
+  { id: 'arcade-leaves-boulder', kind: 'leaf-pile', room: 'l0-arcade', pos: { x: 1800, y: TREE_FLOOR }, top: 100 },
+  // Level 1: up on the old wall's top by the locked gate, and on the boarded stall roofs.
+  { id: 'l1-leaves-wall', kind: 'leaf-pile', room: 'l1', pos: { x: 1330, y: TREE_FLOOR }, top: 190 },
+  { id: 'l1-leaves-roofs', kind: 'leaf-pile', room: 'l1', pos: { x: 4100, y: TREE_FLOOR }, top: 350 },
+  // Level 2: by the diner where the boardwalk starts, up on the high bough over the common, and by the rope.
+  { id: 'l2-leaves-diner', kind: 'leaf-pile', room: 'l2', pos: { x: 420, y: TREE_FLOOR } },
+  { id: 'l2-leaves-bough', kind: 'leaf-pile', room: 'l2', pos: { x: 2440, y: TREE_FLOOR }, top: 220 },
+  { id: 'l2-leaves-rope', kind: 'leaf-pile', room: 'l2', pos: { x: 4120, y: TREE_FLOOR } },
+  // Level 3: the moon clear over the high branch, and leaves blown up off the crowns against the reach's rope.
+  { id: 'l3-moonbeam', kind: 'moonbeam', room: 'l3', pos: { x: 2960, y: TREE_FLOOR }, top: 220 },
+  { id: 'l3-leaves-reach', kind: 'leaf-pile', room: 'l3', pos: { x: 3960, y: TREE_FLOOR } },
+  // Level 4: leaves at the rope at the walk's west end, the moon over the lookout at the top of the climb.
+  { id: 'l4-leaves-west', kind: 'leaf-pile', room: 'l4', pos: { x: 250, y: TREE_FLOOR } },
+  { id: 'l4-moonbeam', kind: 'moonbeam', room: 'l4', pos: { x: 2774, y: TREE_FLOOR }, top: 431 },
+  // The nests street: leaves against the boarded spare nest, and drifted round the crown by the gate.
+  { id: 'l5-street-leaves-spare', kind: 'leaf-pile', room: 'l5-street', pos: { x: 940, y: TREE_FLOOR } },
+  { id: 'l5-street-leaves-crown', kind: 'leaf-pile', room: 'l5-street', pos: { x: 3620, y: TREE_FLOOR } },
+  // The canopy: the full moon on the open pier, and leaves on the top leaf perch by the pier's end.
+  { id: 'l5-moonbeam', kind: 'moonbeam', room: 'l5', pos: { x: 3050, y: TREE_FLOOR } },
+  { id: 'l5-leaves-perch', kind: 'leaf-pile', room: 'l5', pos: { x: 3600, y: TREE_FLOOR }, top: 220 },
 ];
 
 const BY_ID: Readonly<Record<string, InteractableDef>> = Object.fromEntries(INTERACTABLES.map((i) => [i.id, i]));

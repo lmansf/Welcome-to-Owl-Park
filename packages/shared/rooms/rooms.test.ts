@@ -843,14 +843,16 @@ describe('the tree (map 2)', () => {
     expect([down.to, down.top, down.way]).toEqual([{ room: 'l4', spawn: 'from-l5' }, 0, 'down']);
     expect([up.to, up.top, up.way]).toEqual([{ room: 'l5', spawn: 'from-l4' }, 0, 'up']);
     // The street's west end: a doorway for places beyond Owl Park at the foot of bough 6, leading nowhere
-    // yet, behind a fallen branch (OP-220); the boughs are shut, so neither room has a ledge.
+    // yet, behind a fallen branch (OP-220); the boughs are shut, so neither holds a ledge past it. The canopy's
+    // only ledges are the two leaf steps short of bough 7, up to a leaf pile.
     const beyond = street.doors.find((d) => d.id === 'closed-beyond')!;
     expect(beyond.to).toBeUndefined();
     expect(beyond.closedSign).toBe('Hatching Soon');
     expect(beyond.top).toBe(0);
     expect(street.barriers?.find((b) => b.id === 'closed-beyond')?.kind).toBe('branch');
     expect(canopy.barriers?.find((b) => b.id === 'bough-7')?.kind).toBe('branch');
-    expect([street.perches ?? [], canopy.perches ?? []]).toEqual([[], []]);
+    expect([street.perches ?? [], (canopy.perches ?? []).map((p) => p.id)]).toEqual([[], ['leaf-low', 'leaf-high']]);
+    for (const p of canopy.perches ?? []) expect(Math.max(...p.area.map((q) => q.x)), p.id).toBeLessThan(canopy.barriers!.find((b) => b.id === 'bough-7')!.x);
     for (const [room, spawn] of [[street, 'from-canopy'], [canopy, 'from-l4'], [l4, 'from-l5']] as const) expect(room.spawns[spawn], `${room.id} ${spawn}`).toBeDefined();
   });
 
@@ -1088,7 +1090,8 @@ describe("the tree's directions and barriers (OP-220)", () => {
   it("the parkour that leads nowhere yet is shut: the boughs, level 3's reach and level 1's roof run hold no ledge, behind a barrier", () => {
     const ledges = (id: string) => (getRoom(id).perches ?? []).map((p) => p.id);
     expect(ledges('l5-street')).toEqual([]);
-    expect(ledges('l5')).toEqual([]);
+    // The canopy's two leaf steps stop short of bough 7 and lead to a leaf pile, not on past the branch.
+    expect(ledges('l5')).toEqual(['leaf-low', 'leaf-high']);
     for (const id of ['stump', 'table', 'fungus', 'board-1', 'board-2', 'tip']) expect(ledges('l3'), id).not.toContain(id);
     for (const id of ['crates-1', 'crates-2', 'crates-3', 'roof-low', 'barrel', 'roof-high', 'tower-balcony']) expect(ledges('l1'), id).not.toContain(id);
     // Each has its barrier: the fallen branches across the boughs, the ropes across the reach and the roof run's foot.

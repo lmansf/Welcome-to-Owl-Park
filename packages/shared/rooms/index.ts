@@ -1179,6 +1179,8 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
     // No ledges: the stair up is taken at its foot (OP-220), so its treads and its landing are not ledges,
     // and the reach's stump, table, fungus, boards and tip lead nowhere yet, behind the rope.
+    // Past the bench, drawn by the art kit (rooms/kit.ts): a branch a hop up and a higher one a hop and the flap above it.
+    perches: [treeLedge('low-branch', ROOM_W + 840, ROOM_W + 1020, 110), treeLedge('high-branch', ROOM_W + 1100, ROOM_W + 1480, 220)],
     spawns: {
       default: { x: 300, y: TREE_GROUND },
       // Down from level 4, just west of the stair up; up from level 2, just east of the stairhead: each
@@ -1245,6 +1247,9 @@ export const ROOMS: Record<string, RoomDef> = {
       // The reach: the round perch at the branch's tip, west of the diner's deck (the capstone's place).
       // The landing's stair is taken at its foot (OP-220), so its treads and landing are not ledges.
       treeLedge('tip', 82, 168, 64),
+      // Over the common, drawn by the art kit (rooms/kit.ts): a bough a hop up and another a hop and the flap above it.
+      treeLedge('low-bough', ROOM_W + 180, ROOM_W + 390, 110),
+      treeLedge('high-bough', ROOM_W + 480, ROOM_W + 960, 220),
     ],
     spawns: {
       default: { x: 2 * ROOM_W + 300, y: TREE_GROUND },
@@ -1376,6 +1381,8 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 20, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
+    // By the pier's end, drawn by the art kit (rooms/kit.ts): leaf tops a hop up and a hop and the flap above that.
+    perches: [treeLedge('leaf-low', 3160, 3420, 110), treeLedge('leaf-high', 3480, 3760, 220)],
     spawns: {
       // Through the gate: under the entrance arch.
       default: { x: 800, y: TREE_GROUND },
@@ -1435,6 +1442,8 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('knob-low', ROOM_W + 380, ROOM_W + 470, 93),
       treeLedge('knob-high', ROOM_W + 480, ROOM_W + 560, 128),
       treeLedge('root-ledge', ROOM_W + 330, ROOM_W + 610, 264),
+      // The mound in the middle of the west cave, a hop up (drawn by the art kit, rooms/kit.ts).
+      treeLedge('mound', 1180, 1416, 80),
       // The stair up to the lobby ring is taken from the floor at its foot (OP-220), so its treads are not ledges.
     ],
     // Down from the lobby ring at the stair's foot; back from the arcade cave inside its mouth; the
@@ -1490,6 +1499,8 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 40, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
+    // The flat boulder between the first two bays, a hop up (drawn by the art kit, rooms/kit.ts).
+    perches: [treeLedge('boulder', 1730, 1875, 100)],
     spawns: { default: { x: 300, y: TREE_GROUND }, 'from-l0': { x: 220, y: TREE_GROUND } },
     doors: [
       // The mouth, back out into the cavern.

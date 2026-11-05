@@ -68,13 +68,13 @@ const L4_KIT: RoomKit = {
   scenes: [
     {
       id: 'way-down',
-      story: 'A lantern lights the boardwalk to the trunk, and a sign stands by the hatch it names: the way down.',
+      story: 'A lantern lights the walk to the trunk and a sign names the hatch, the way down; blown leaves heap at the rope beyond.',
       props: ['pole-0', 'sign-down'],
       about: ['stair-l4-l3'],
     },
     {
       id: 'rest-stop',
-      story: 'Where the walk leaves the trunk, a bench under a lantern looks out over the crowns, at the foot of the climb.',
+      story: 'Where the walk leaves the trunk, a bench under a lantern looks out over the crowns, at the foot of the climb whose lookout catches the moon.',
       props: ['bench', 'pole-1'],
     },
   ],
@@ -169,7 +169,7 @@ const L1_KIT: RoomKit = {
   scenes: [
     {
       id: 'closed-gate',
-      story: 'A lantern still burns on the path to the locked gate, whose board says the way west is not open yet.',
+      story: 'A lantern still burns by the locked gate, whose board says the way west is not open yet; leaves lie piled on the old wall.',
       props: ['gate-lantern'],
       about: ['closed-west', 'west-gate'],
     },
@@ -198,7 +198,7 @@ const L1_KIT: RoomKit = {
     },
     {
       id: 'market-stall',
-      story: 'The square\'s stall trades under the boarded roof, its sacks piled by the counter.',
+      story: 'The square\'s stall trades under the boarded roof, its sacks piled by the counter; up on the roof the leaves lie where nobody sweeps.',
       props: ['stall', 'sacks'],
     },
     {
@@ -273,7 +273,12 @@ const L2_KIT: RoomKit = {
   ],
   columns: [{ id: 'trunk', x0: 2 * ROOM_W + 410, x1: 2 * ROOM_W + 1190, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
   paths: [{ id: 'boardwalk', x0: 150, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-plank', trim: 'kit-trim-moss-a' }],
-  ledges: [{ id: 'tip', x0: 82, x1: 168, top: 64, cap: 'kit-cut-branch-mossy-cap-left' }],
+  ledges: [
+    { id: 'tip', x0: 82, x1: 168, top: 64, cap: 'kit-cut-branch-mossy-cap-left' },
+    // Over the common, a bough a hop up from the boardwalk and another a hop and the flap above it.
+    { id: 'low-bough', x0: ROOM_W + 180, x1: ROOM_W + 390, top: 110, row: 'kit-cut-branch-thin' },
+    { id: 'high-bough', x0: ROOM_W + 480, x1: ROOM_W + 960, top: 220, row: 'kit-cut-branch-thin' },
+  ],
   doors: [
     { door: 'stair-l2-l1', piece: 'kit-hatch-down', scale: 1.3 },
     { door: 'stair-l3-l2', piece: 'kit-low-knothole-door-open' },
@@ -288,11 +293,13 @@ const L2_KIT: RoomKit = {
     { id: 'common-lantern', piece: 'kit-low-branch-lantern', x: ROOM_W + 1080, top: 0 },
     { id: 'landing-sign', piece: 'kit-low-signpost-blank', x: 2 * ROOM_W + 345, top: 0, scale: 0.8 },
     { id: 'landing-lantern', piece: 'kit-low-branch-lantern', x: 2 * ROOM_W + 120, top: 0 },
+    { id: 'bough-lantern', piece: 'kit-low-branch-lantern', x: ROOM_W + 560, top: 220, scale: 0.8 },
+    { id: 'pulley', piece: 'kit-low-pulley-bucket', x: 2 * ROOM_W + 960, top: 0 },
   ],
   scenes: [
     {
       id: 'diner',
-      story: 'The treetop diner on the reach: a table and two stools under a lantern, set for owls in off the branch.',
+      story: 'The treetop diner: a table and two stools under a lantern, set for owls in off the branch, leaves blown in by the table.',
       props: ['table', 'stool-west', 'stool-east', 'diner-lantern'],
     },
     {
@@ -305,6 +312,16 @@ const L2_KIT: RoomKit = {
       story: 'On the trunk\'s landing a lantern lights the hatch down, and a signpost points on up through the knothole.',
       props: ['landing-lantern', 'landing-sign'],
       about: ['stair-l2-l1', 'stair-l3-l2'],
+    },
+    {
+      id: 'high-bough',
+      story: 'Up on the high bough over the common a lantern hangs where nobody sweeps, and the leaves lie piled for an owl that hops up.',
+      props: ['bough-lantern'],
+    },
+    {
+      id: 'shut-side',
+      story: 'Past the landing a pulley bucket hangs by the rope that shuts the trunk\'s east side, the leaves heaped against the rope.',
+      props: ['pulley'],
     },
   ],
   decals: [
@@ -332,6 +349,11 @@ const L3_KIT: RoomKit = {
   ],
   columns: [{ id: 'trunk', x0: 440, x1: 1160, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
   paths: [{ id: 'boardwalk', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-plank' }],
+  // Past the bench, a branch a hop up and a higher one a hop and the flap above it, out in the moonlight.
+  ledges: [
+    { id: 'low-branch', x0: ROOM_W + 840, x1: ROOM_W + 1020, top: 110, row: 'kit-cut-branch-thin' },
+    { id: 'high-branch', x0: ROOM_W + 1100, x1: ROOM_W + 1480, top: 220, row: 'kit-cut-branch-thin' },
+  ],
   doors: [
     { door: 'stair-l3-l2', piece: 'kit-hatch-down', scale: 1.3 },
     { door: 'stair-l4-l3', piece: 'kit-high-knothole-door-open' },
@@ -348,6 +370,7 @@ const L3_KIT: RoomKit = {
     { id: 'bench-lantern', piece: 'kit-high-lantern-pole', x: ROOM_W + 820, top: 0, front: true },
     { id: 'glass-lantern-west', piece: 'kit-high-hook-lantern', x: 2 * ROOM_W + 410, top: 0, flip: true },
     { id: 'glass-lantern-east', piece: 'kit-high-hook-lantern', x: 2 * ROOM_W + 670, top: 0 },
+    { id: 'branch-lantern', piece: 'kit-high-hook-lantern', x: ROOM_W + 1150, top: 220, scale: 0.8 },
   ],
   scenes: [
     {
@@ -363,9 +386,14 @@ const L3_KIT: RoomKit = {
     },
     {
       id: 'glass-door',
-      story: 'Lanterns hang either side of the stained-glass door, the way into the glass street.',
+      story: 'Lanterns hang either side of the stained-glass door into the glass street; blown leaves pile at the reach\'s rope past it.',
       props: ['glass-lantern-west', 'glass-lantern-east'],
       about: ['to-glass'],
+    },
+    {
+      id: 'moon-branch',
+      story: 'A lantern marks the high branch out past the bench, where the moon falls clear between the clouds for an owl that hops up to bask.',
+      props: ['branch-lantern'],
     },
   ],
   decals: [
@@ -414,6 +442,8 @@ const L5_STREET_KIT: RoomKit = {
     { id: 'street-planter', piece: 'kit-canopy-planter-wicker', x: 2580, top: 0, scale: 0.8 },
     { id: 'gate-sign', piece: 'kit-canopy-sign-board', x: 2 * ROOM_W + 1330, top: 0 },
     { id: 'gate-lantern', piece: 'kit-canopy-nest-lantern', x: 2 * ROOM_W + 1440, top: 0 },
+    { id: 'spare-lantern', piece: 'kit-canopy-nest-lantern', x: 690, top: 0, scale: 0.8 },
+    { id: 'crown-bench', piece: 'kit-canopy-twig-bench', x: 2 * ROOM_W + 220, top: 0 },
   ],
   scenes: [
     {
@@ -431,7 +461,16 @@ const L5_STREET_KIT: RoomKit = {
       id: 'front-gate',
       story: 'The front gate\'s sign and lantern, where an owl with a ticket goes on through the turnstiles.',
       props: ['gate-sign', 'gate-lantern'],
-      about: ['gate'],
+    },
+    {
+      id: 'spare-nest',
+      story: 'The westmost nest is still to hatch: boarded up, a lantern left burning by it, and the leaves blown against its boards.',
+      props: ['spare-lantern'],
+    },
+    {
+      id: 'crown',
+      story: 'Round the trunk\'s crown a twig bench under the hanging basket, where the leaves drift down off the crown.',
+      props: ['crown-bench'],
     },
   ],
   decals: [
@@ -460,6 +499,11 @@ const L5_KIT: RoomKit = {
     { door: 'to-street', piece: 'kit-turnstile' },
     { door: 'stair-l5-l4', piece: 'kit-hatch-down', scale: 1.3 },
   ],
+  // By the pier's end, leaf tops to hop up onto: one a hop up, the other a hop and the flap above it.
+  ledges: [
+    { id: 'leaf-low', x0: 3160, x1: 3420, top: 110, cap: 'kit-canopy-leaf-perch' },
+    { id: 'leaf-high', x0: 3480, x1: 3760, top: 220, cap: 'kit-canopy-leaf-perch' },
+  ],
   barriers: [{ id: 'bough-7', x0: 3860, x1: 4100, top: 0, piece: 'kit-barrier-branch' }],
   props: [
     { id: 'arch-sign', piece: 'kit-canopy-sign-board', x: 340, top: 0 },
@@ -469,7 +513,7 @@ const L5_KIT: RoomKit = {
     { id: 'lounge-lantern', piece: 'kit-canopy-nest-lantern', x: ROOM_W + 110, top: 0 },
     { id: 'shop-stand', piece: 'kit-entrance-shop-stand', x: ROOM_W + 1150, top: 0 },
     { id: 'shop-hats', piece: 'kit-entrance-shop-shelf-hats', x: ROOM_W + 1330, top: 0, scale: 0.9 },
-    { id: 'pier-coil', piece: 'kit-canopy-rope-coil', x: 3700, top: 0, scale: 0.8 },
+    { id: 'pier-coil', piece: 'kit-canopy-rope-coil', x: 3800, top: 0, scale: 0.8 },
   ],
   scenes: [
     {
@@ -496,7 +540,7 @@ const L5_KIT: RoomKit = {
     },
     {
       id: 'pier-end',
-      story: 'A rope coiled at the pier\'s end, by the fallen branch that shuts the bough beyond for now.',
+      story: 'Out on the open pier the moon falls clear; leaf tops step up to the highest, piled with leaves, by a coiled rope and the shut bough.',
       props: ['pier-coil'],
       about: ['bough-7'],
     },
@@ -530,6 +574,8 @@ const L0_KIT: RoomKit = {
     { id: 'knob-low', x0: 1980, x1: 2070, top: 93, cap: 'kit-under-root-knot' },
     { id: 'knob-high', x0: 2080, x1: 2160, top: 128, cap: 'kit-under-root-knot' },
     { id: 'root-ledge', x0: 1930, x1: 2210, top: 264, cap: 'kit-under-root-ledge-mid' },
+    // In the empty middle of the west cave, a mound where the roots heaved the floor up, a hop high.
+    { id: 'mound', x0: 1180, x1: 1416, top: 80, cap: 'kit-under-earth-mound' },
   ],
   doors: [
     { door: 'stair-challenge', piece: 'kit-hatch-down', scale: 1.3 },
@@ -543,6 +589,9 @@ const L0_KIT: RoomKit = {
   props: [
     { id: 'challenge-sign', piece: 'kit-under-sign-root', x: 900, top: 0, scale: 0.8 },
     { id: 'stair-lantern', piece: 'kit-under-lantern-post', x: ROOM_W + 1180, top: 0 },
+    { id: 'wall-lantern', piece: 'kit-under-lantern-post', x: 380, top: 0, scale: 0.8 },
+    { id: 'mound-mushrooms', piece: 'kit-under-mushroom-cluster', x: 1300, top: 80 },
+    { id: 'roots-lantern', piece: 'kit-under-lantern-post', x: 1990, top: 264, scale: 0.6 },
   ],
   scenes: [
     {
@@ -557,11 +606,26 @@ const L0_KIT: RoomKit = {
       props: ['stair-lantern'],
       about: ['stair-l1-l0'],
     },
+    {
+      id: 'old-wall',
+      story: 'A lantern by the old low wall at the cave\'s west end, where the leaves drifted down through the tree settle on its top.',
+      props: ['wall-lantern'],
+    },
+    {
+      id: 'mound',
+      story: 'Where the roots heaved the floor up into a mound, mushrooms grow on its top in the damp.',
+      props: ['mound-mushrooms'],
+    },
+    {
+      id: 'root-top',
+      story: 'A small lantern on the root ledge at the top of the climb, where the leaves blown down the stair settle.',
+      props: ['roots-lantern'],
+    },
   ],
   decals: [
     { piece: 'kit-under-stalactites', x: 420, y: 60 },
     { piece: 'kit-under-root-hang', x: 1260, y: 150, flip: true },
-    { piece: 'kit-under-mushroom-cluster', x: 1500, y: TREE_GROUND - 30, front: true },
+    { piece: 'kit-under-mushroom-cluster', x: 1520, y: TREE_GROUND - 30, front: true },
     { piece: 'kit-under-lantern-hang', x: ROOM_W + 1420, y: 200 },
   ],
 };
@@ -586,12 +650,17 @@ const ARCADE_KIT: RoomKit = {
     { door: 'cabinet-flight', piece: 'kit-landmark-cabinet-miniature', scale: 1.4 },
     { door: 'cabinet-sling', piece: 'kit-landmark-cabinet-miniature', scale: 1.4 },
   ],
+  // Between the first two bays, a flat boulder a hop up, to sit on and watch the Crossing.
+  ledges: [{ id: 'boulder', x0: 1730, x1: 1875, top: 100, cap: 'kit-under-boulder-flat' }],
   barriers: [{ id: 'east-roots', x0: 4560, x1: 4880, top: 0, piece: 'kit-under-barrier-roots' }],
   props: [
     { id: 'crossing-lantern', piece: 'kit-under-lantern-post', x: 1010, top: 0 },
     { id: 'robot', piece: 'kit-landmark-robot-owl', x: 2560, top: 0, scale: 0.8 },
     { id: 'sling-bench', piece: 'kit-bench-stone', x: 4050, top: 0 },
     { id: 'sling-lantern', piece: 'kit-under-lantern-post', x: 4230, top: 0 },
+    { id: 'boulder-lantern', piece: 'kit-under-lantern-post', x: 1960, top: 0, scale: 0.8 },
+    { id: 'dig-stones', piece: 'kit-under-stone-pile', x: 3260, top: 0 },
+    { id: 'roots-mushrooms', piece: 'kit-under-mushroom-cluster', x: 4500, top: 0 },
   ],
   scenes: [
     {
@@ -611,6 +680,21 @@ const ARCADE_KIT: RoomKit = {
       story: 'A stone bench under a lantern by the Sling cabinet, for owls waiting their turn.',
       props: ['sling-bench', 'sling-lantern'],
       about: ['cabinet-sling'],
+    },
+    {
+      id: 'boulder',
+      story: 'Between the first two bays a flat boulder where owls sit to watch the Crossing, a lantern beside it and the leaves blown in on its top.',
+      props: ['boulder-lantern'],
+    },
+    {
+      id: 'dig',
+      story: 'The stones dug out to make room for the Sling bay, left piled by the cave wall.',
+      props: ['dig-stones'],
+    },
+    {
+      id: 'east-roots',
+      story: 'The leaves blow in under the east roots, which let no owl through yet, and mushrooms grow in the damp at their foot.',
+      props: ['roots-mushrooms'],
     },
   ],
   decals: [
