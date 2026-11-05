@@ -29,7 +29,7 @@ const L4_KIT: RoomKit = {
   backdrops: [
     { key: 'kit-high-sky-b', rate: 0.5, screens: [1, 1] },
     { key: 'kit-high-sky-a', rate: 0.5, screens: [0, 0], fade: { right: SKY_FADE } },
-    { key: 'kit-high-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+    { key: 'kit-hero-l4-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-high-mid-b', rate: 0.75, screens: [1, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
   // The trunk, about 660 wide at this height, centred at x 800 of screen 0 and running off its top: the
@@ -133,8 +133,8 @@ const PLAZA_KIT: RoomKit = {
   backdrops: [
     { key: 'kit-entrance-sky-b', rate: 0.5, screens: [1, 1] },
     { key: 'kit-entrance-sky-a', rate: 0.5, screens: [0, 0], fade: { right: SKY_FADE } },
-    { key: 'kit-entrance-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
-    { key: 'kit-entrance-mid-c', rate: 0.75, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+    { key: 'kit-hero-plaza-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+    { key: 'kit-hero-plaza-mid-a', rate: 0.75, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
   ],
   paths: [{ id: 'plaza', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-entrance-plaza-stone' }],
   doors: [

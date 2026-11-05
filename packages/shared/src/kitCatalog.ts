@@ -602,4 +602,7 @@ export const KIT_CATALOG: Readonly<Record<string, KitCatalogEntry>> = {
   'kit-ink-mid-a': { w: 800, h: 450, kind: 'layer' },
   'kit-ink-mid-b': { w: 800, h: 450, kind: 'layer' },
   'kit-ink-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-hero-plaza-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-hero-plaza-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-hero-l4-far-a': { w: 1600, h: 900, kind: 'layer' },
 };
