@@ -1,6 +1,6 @@
 import { kitPerches, kitRoom } from '../src/kit';
-import { ROOM_W, type RoomDef, type RoomKit } from '../src/room';
-import { TREE_GROUND } from './index';
+import { ROOM_W, type KitBackdrop, type RoomDef, type RoomKit } from '../src/room';
+import { ROOMS, TREE_GROUND } from './index';
 
 /**
  * Rooms built from the art kit (OP-234) that stand in for a painted room only when the page asks
@@ -219,6 +219,404 @@ const L1_KIT: RoomKit = {
   ],
 };
 
+
+/** A backdrop layer of an area on a stretch of screens, faded at its edges as the painted tree's middle layers are. */
+const layer = (key: string, rate: number, screens: readonly [number, number], fade?: KitBackdrop['fade']): KitBackdrop => ({ key, rate, screens, ...(fade ? { fade } : {}) });
+const FADES = { left: MID_FADE, right: MID_FADE };
+
+/**
+ * A level of the tree drawn from the kit with the painted level's layout as it stands: its size, floor,
+ * doorways, spawns and everything else the room server checks taken from the painted room, its ledges
+ * from the kit's (kit.test.ts holds them to the painted perches). Moving it over for good is giving the
+ * painted entry this kit.
+ */
+function fromPainted(id: string, kit: RoomKit): RoomDef {
+  const p = ROOMS[id]!;
+  return kitRoom({
+    id,
+    ...(p.map ? { map: p.map } : {}),
+    ...(p.gated ? { gated: p.gated } : {}),
+    ...(p.owlScale ? { owlScale: p.owlScale } : {}),
+    size: p.size,
+    mood: p.mood,
+    walkable: p.walkable,
+    ...(p.perches ? { perches: kitPerches(kit) } : {}),
+    spawns: p.spawns,
+    doors: p.doors,
+    ...(p.spots ? { spots: p.spots } : {}),
+    ...(p.places ? { places: p.places } : {}),
+    kit,
+  });
+}
+
+/**
+ * Level 2, Hoot Hollow (low off the ground: amber light through thick leaves, the lower boughs of the
+ * neighbouring trees): the branch's reach with the treetop diner and the tip's round perch in the west,
+ * the grove's common area, left open for its idol, guardian and game, and the trunk's landing in the
+ * east, the hatch down to level 1 west of the trunk and the knothole up to level 3 in its foot. The
+ * branch runs on behind the trunk's east side, roped off before steps that lead nowhere yet.
+ */
+const L2_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    layer('kit-low-sky-b', 0.5, [0, 1]),
+    layer('kit-low-sky-a', 0.5, [2, 2], { left: SKY_FADE }),
+    layer('kit-low-far-b', 0.6, [0, 1], FADES),
+    layer('kit-low-far-a', 0.6, [2, 2], FADES),
+    layer('kit-low-mid-a', 0.75, [0, 0], FADES),
+    layer('kit-low-mid-b', 0.75, [1, 1], FADES),
+  ],
+  columns: [{ id: 'trunk', x0: 2 * ROOM_W + 410, x1: 2 * ROOM_W + 1190, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
+  paths: [{ id: 'boardwalk', x0: 150, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-plank', trim: 'kit-trim-moss-a' }],
+  ledges: [{ id: 'tip', x0: 82, x1: 168, top: 64, cap: 'kit-cut-branch-mossy-cap-left' }],
+  doors: [
+    { door: 'stair-l2-l1', piece: 'kit-hatch-down', scale: 1.3 },
+    { door: 'stair-l3-l2', piece: 'kit-low-knothole-door-open' },
+  ],
+  barriers: [{ id: 'trunk-east', x0: 2 * ROOM_W + 1060, x1: 2 * ROOM_W + 1300, top: 0, piece: 'kit-low-rope-barrier' }],
+  props: [
+    { id: 'table', piece: 'kit-table-round', x: 760, top: 0 },
+    { id: 'stool-west', piece: 'kit-stool', x: 610, top: 0, scale: 0.8 },
+    { id: 'stool-east', piece: 'kit-stool', x: 910, top: 0, scale: 0.8 },
+    { id: 'diner-lantern', piece: 'kit-low-branch-lantern', x: 1060, top: 0 },
+    { id: 'common-bench', piece: 'kit-low-log-bench', x: ROOM_W + 900, top: 0 },
+    { id: 'common-lantern', piece: 'kit-low-branch-lantern', x: ROOM_W + 1080, top: 0 },
+    { id: 'landing-sign', piece: 'kit-low-signpost-blank', x: 2 * ROOM_W + 345, top: 0, scale: 0.8 },
+    { id: 'landing-lantern', piece: 'kit-low-branch-lantern', x: 2 * ROOM_W + 120, top: 0 },
+  ],
+  scenes: [
+    {
+      id: 'diner',
+      story: 'The treetop diner on the reach: a table and two stools under a lantern, set for owls in off the branch.',
+      props: ['table', 'stool-west', 'stool-east', 'diner-lantern'],
+    },
+    {
+      id: 'common-bench',
+      story: 'A log bench under a lantern at the edge of the common, left open for what the grove will hold.',
+      props: ['common-bench', 'common-lantern'],
+    },
+    {
+      id: 'landing',
+      story: 'On the trunk\'s landing a lantern lights the hatch down, and a signpost points on up through the knothole.',
+      props: ['landing-lantern', 'landing-sign'],
+      about: ['stair-l2-l1', 'stair-l3-l2'],
+    },
+  ],
+  decals: [
+    { piece: 'kit-low-leaf-clump', x: 1420, y: 120 },
+    { piece: 'kit-low-hanging-basket', x: ROOM_W + 420, y: 300 },
+    { piece: 'kit-low-leaf-clump', x: ROOM_W + 1500, y: 90, flip: true },
+  ],
+};
+
+/**
+ * Level 3, the stained-glass branch (high off the ground: cool moonlight, crowns well below, clouds
+ * level with the walk): the trunk's landing in the west, the hatch down to level 2 at the boardwalk's
+ * west end and the knothole up to level 4 in the trunk's foot, the common area, and the reach with the
+ * stained-glass doorway into the glass street, roped off past it.
+ */
+const L3_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    layer('kit-high-sky-b', 0.5, [1, 2]),
+    layer('kit-high-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
+    layer('kit-high-far-b', 0.6, [1, 2], FADES),
+    layer('kit-high-far-a', 0.6, [0, 0], FADES),
+    layer('kit-high-mid-a', 0.75, [1, 1], FADES),
+    layer('kit-high-mid-c', 0.75, [2, 2], FADES),
+  ],
+  columns: [{ id: 'trunk', x0: 440, x1: 1160, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
+  paths: [{ id: 'boardwalk', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-plank' }],
+  doors: [
+    { door: 'stair-l3-l2', piece: 'kit-hatch-down', scale: 1.3 },
+    { door: 'stair-l4-l3', piece: 'kit-high-knothole-door-open' },
+    { door: 'to-glass', piece: 'kit-glass-door-glass-open' },
+  ],
+  barriers: [
+    { id: 'west-rope', x0: -112, x1: 150, top: 0, piece: 'kit-high-rope-barrier' },
+    { id: 'reach', x0: 2 * ROOM_W + 860, x1: 2 * ROOM_W + 1122, top: 0, piece: 'kit-high-rope-barrier' },
+  ],
+  props: [
+    { id: 'sign-down', piece: 'kit-high-sign-board', x: 330, top: 0, scale: 0.8 },
+    { id: 'pole-down', piece: 'kit-high-lantern-pole', x: 40, top: 0, front: true },
+    { id: 'bench', piece: 'kit-high-cloud-bench', x: ROOM_W + 640, top: 0 },
+    { id: 'bench-lantern', piece: 'kit-high-lantern-pole', x: ROOM_W + 820, top: 0, front: true },
+    { id: 'glass-lantern-west', piece: 'kit-high-hook-lantern', x: 2 * ROOM_W + 410, top: 0, flip: true },
+    { id: 'glass-lantern-east', piece: 'kit-high-hook-lantern', x: 2 * ROOM_W + 670, top: 0 },
+  ],
+  scenes: [
+    {
+      id: 'way-down',
+      story: 'A lantern and a sign by the hatch at the boardwalk\'s west end: the way down to level 2.',
+      props: ['pole-down', 'sign-down'],
+      about: ['stair-l3-l2'],
+    },
+    {
+      id: 'view-bench',
+      story: 'A bench under a lantern in the middle of the branch, looking out over the crowns below.',
+      props: ['bench', 'bench-lantern'],
+    },
+    {
+      id: 'glass-door',
+      story: 'Lanterns hang either side of the stained-glass door, the way into the glass street.',
+      props: ['glass-lantern-west', 'glass-lantern-east'],
+      about: ['to-glass'],
+    },
+  ],
+  decals: [
+    { piece: 'kit-high-hanging-moss', x: 1180, y: 110, flip: true },
+    { piece: 'kit-high-wind-chime', x: 2 * ROOM_W + 1000, y: 300 },
+    { piece: 'kit-high-cloud-tuft', x: ROOM_W + 300, y: 860, front: true },
+    { piece: 'kit-high-cloud-tuft', x: 2 * ROOM_W + 1300, y: 870, front: true, flip: true },
+  ],
+};
+
+/**
+ * The nests street on level 5 (the top of the canopy: open sky, a sea of leaf tops below): from the
+ * fallen branch at the foot of bough 6 in the west, where a closed doorway waits for the places beyond
+ * Owl Park, along the nest doors (the owl's own, door 0, nearest the gate; the westmost still to hatch,
+ * boarded), round the trunk's crown, to the front gate's turnstiles in the east.
+ */
+const L5_STREET_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    layer('kit-canopy-sky-b', 0.5, [0, 1]),
+    layer('kit-canopy-sky-a', 0.5, [2, 2], { left: SKY_FADE }),
+    layer('kit-canopy-far-b', 0.6, [0, 1], FADES),
+    layer('kit-canopy-far-a', 0.6, [2, 2], FADES),
+    layer('kit-canopy-mid-a', 0.75, [0, 0], FADES),
+    layer('kit-canopy-mid-b', 0.75, [1, 1], FADES),
+  ],
+  columns: [{ id: 'trunk', x0: 2 * ROOM_W + 500, x1: 2 * ROOM_W + 1100, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
+  paths: [{ id: 'street', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-plank' }],
+  doors: [
+    { door: 'gate', piece: 'kit-turnstile' },
+    { door: 'nest-door-0', piece: 'kit-canopy-door-nest-open' },
+    { door: 'nest-door-1', piece: 'kit-canopy-door-nest-open' },
+    { door: 'nest-door-2', piece: 'kit-canopy-door-nest-open' },
+    { door: 'nest-door-3', piece: 'kit-canopy-door-nest-open' },
+    { door: 'nest-door-4', piece: 'kit-canopy-door-nest-open', scale: 0.9 },
+    { door: 'nest-door-5', piece: 'kit-canopy-door-nest-open', scale: 0.9 },
+    { door: 'spare-nest', piece: 'kit-canopy-door-nest-closed', scale: 0.9 },
+    { door: 'closed-beyond', piece: 'kit-canopy-sign-board', scale: 0.8 },
+  ],
+  barriers: [
+    { id: 'closed-beyond', x0: 420, x1: 600, top: 0, piece: 'kit-barrier-branch' },
+    { id: 'spare-nest', x0: 760, x1: 880, top: 0, piece: 'kit-barrier-boards' },
+  ],
+  props: [
+    { id: 'home-lantern', piece: 'kit-canopy-nest-lantern', x: 3160, top: 0 },
+    { id: 'street-bench', piece: 'kit-canopy-twig-bench', x: 2420, top: 0 },
+    { id: 'street-planter', piece: 'kit-canopy-planter-wicker', x: 2580, top: 0, scale: 0.8 },
+    { id: 'gate-sign', piece: 'kit-canopy-sign-board', x: 2 * ROOM_W + 1330, top: 0 },
+    { id: 'gate-lantern', piece: 'kit-canopy-nest-lantern', x: 2 * ROOM_W + 1440, top: 0 },
+  ],
+  scenes: [
+    {
+      id: 'home',
+      story: 'A lantern by the owl\'s own nest, the door nearest the gate, so it always finds its way home.',
+      props: ['home-lantern'],
+      about: ['nest-door-0'],
+    },
+    {
+      id: 'neighbours',
+      story: 'A twig bench and a planter halfway along the street, where neighbours sit outside their nests.',
+      props: ['street-bench', 'street-planter'],
+    },
+    {
+      id: 'front-gate',
+      story: 'The front gate\'s sign and lantern, where an owl with a ticket goes on through the turnstiles.',
+      props: ['gate-sign', 'gate-lantern'],
+      about: ['gate'],
+    },
+  ],
+  decals: [
+    { piece: 'kit-canopy-lantern-string', x: 1530, y: 400 },
+    { piece: 'kit-canopy-leaf-cluster', x: 200, y: 140 },
+    { piece: 'kit-canopy-hanging-basket', x: 2 * ROOM_W + 220, y: 330 },
+  ],
+};
+
+/**
+ * The canopy on level 5, inside the front gate: in through the turnstiles from the street, past the
+ * hatch down to level 4, the lounge and the gift shop, out to the end of the pier, where a fallen branch
+ * shuts bough 7 for now.
+ */
+const L5_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    layer('kit-canopy-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
+    layer('kit-canopy-sky-b', 0.5, [1, 2]),
+    layer('kit-canopy-far-a', 0.6, [0, 0], FADES),
+    layer('kit-canopy-far-b', 0.6, [1, 2], FADES),
+    layer('kit-canopy-mid-c', 0.75, [1, 1], FADES),
+    layer('kit-canopy-mid-a', 0.75, [2, 2], FADES),
+  ],
+  paths: [{ id: 'pier', x0: 0, x1: 4100, top: 0, row: 'kit-cut-plank' }],
+  doors: [
+    { door: 'to-street', piece: 'kit-turnstile' },
+    { door: 'stair-l5-l4', piece: 'kit-hatch-down', scale: 1.3 },
+  ],
+  barriers: [{ id: 'bough-7', x0: 3860, x1: 4100, top: 0, piece: 'kit-barrier-branch' }],
+  props: [
+    { id: 'arch-sign', piece: 'kit-canopy-sign-board', x: 340, top: 0 },
+    { id: 'stair-lantern', piece: 'kit-canopy-nest-lantern', x: 1420, top: 0 },
+    { id: 'lounge-bench', piece: 'kit-canopy-twig-bench', x: ROOM_W + 300, top: 0 },
+    { id: 'lounge-planter', piece: 'kit-canopy-planter-wicker', x: ROOM_W + 500, top: 0, scale: 0.8 },
+    { id: 'lounge-lantern', piece: 'kit-canopy-nest-lantern', x: ROOM_W + 110, top: 0 },
+    { id: 'shop-stand', piece: 'kit-entrance-shop-stand', x: ROOM_W + 1150, top: 0 },
+    { id: 'shop-hats', piece: 'kit-entrance-shop-shelf-hats', x: ROOM_W + 1330, top: 0, scale: 0.9 },
+    { id: 'pier-coil', piece: 'kit-canopy-rope-coil', x: 3700, top: 0, scale: 0.8 },
+  ],
+  scenes: [
+    {
+      id: 'welcome',
+      story: 'Just through the turnstiles from the street, a sign welcomes owls into the canopy.',
+      props: ['arch-sign'],
+      about: ['to-street'],
+    },
+    {
+      id: 'way-down',
+      story: 'A lantern burns by the hatch down to level 4, the way into the tree.',
+      props: ['stair-lantern'],
+      about: ['stair-l5-l4'],
+    },
+    {
+      id: 'lounge',
+      story: 'The lounge: a twig bench between a lantern and a planter, facing out over the leaf tops.',
+      props: ['lounge-lantern', 'lounge-bench', 'lounge-planter'],
+    },
+    {
+      id: 'gift-shop',
+      story: 'The gift shop\'s stand on the pier, its hats set out on the shelf beside it.',
+      props: ['shop-stand', 'shop-hats'],
+    },
+    {
+      id: 'pier-end',
+      story: 'A rope coiled at the pier\'s end, by the fallen branch that shuts the bough beyond for now.',
+      props: ['pier-coil'],
+      about: ['bough-7'],
+    },
+  ],
+  decals: [
+    { piece: 'kit-canopy-lantern-string', x: ROOM_W + 400, y: 380 },
+    { piece: 'kit-canopy-leaf-cluster', x: 2 * ROOM_W + 900, y: 120, flip: true },
+  ],
+};
+
+/**
+ * Level 0, the cavern under the tree (no moonlight: lantern gold on cool violet-navy, earth and roots
+ * overhead, never any sky): the low stone wall where the floor ends in the west, the boarded stairwell
+ * down to the realm challenge, then the trunk's base widening into roots, with the find's way up the
+ * great root (the stone shelf, two root knobs, the high root ledge), the root stair up to the lobby
+ * ring, and the mouth of the arcade cave in the east.
+ */
+const L0_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    layer('kit-under-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
+    layer('kit-under-sky-b', 0.5, [1, 1]),
+    layer('kit-under-far-a', 0.6, [0, 1], FADES),
+    layer('kit-under-mid-a', 0.75, [0, 0], FADES),
+  ],
+  columns: [{ id: 'trunk', x0: ROOM_W + 350, x1: ROOM_W + 1250, y0: -40, y1: 900, left: 'kit-cut-trunk-edge-left', mid: 'kit-cut-trunk-mid', right: 'kit-cut-trunk-edge-right' }],
+  paths: [{ id: 'floor', x0: 0, x1: 2 * ROOM_W, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-under-cave-stone' }],
+  ledges: [
+    { id: 'low-wall', x0: 62, x1: 270, top: 118, cap: 'kit-wall-low-stone' },
+    { id: 'shelf', x0: 2070, x1: 2210, top: 46, cap: 'kit-under-root-ledge-mid' },
+    { id: 'knob-low', x0: 1980, x1: 2070, top: 93, cap: 'kit-under-root-knot' },
+    { id: 'knob-high', x0: 2080, x1: 2160, top: 128, cap: 'kit-under-root-knot' },
+    { id: 'root-ledge', x0: 1930, x1: 2210, top: 264, cap: 'kit-under-root-ledge-mid' },
+  ],
+  doors: [
+    { door: 'stair-challenge', piece: 'kit-hatch-down', scale: 1.3 },
+    { door: 'stair-l1-l0', piece: 'kit-under-stair-root-right' },
+    { door: 'to-arcade', piece: 'kit-under-root-arch' },
+  ],
+  barriers: [
+    { id: 'wall-foot', x0: 240, x1: 330, top: 0, piece: 'kit-under-stone-pile' },
+    { id: 'stair-challenge', x0: 590, x1: 770, top: 0, piece: 'kit-barrier-boards' },
+  ],
+  props: [
+    { id: 'challenge-sign', piece: 'kit-under-sign-root', x: 900, top: 0, scale: 0.8 },
+    { id: 'stair-lantern', piece: 'kit-under-lantern-post', x: ROOM_W + 1180, top: 0 },
+  ],
+  scenes: [
+    {
+      id: 'boarded-stair',
+      story: 'A root-carved sign by the boarded stairwell: the challenge below is not open yet.',
+      props: ['challenge-sign'],
+      about: ['stair-challenge'],
+    },
+    {
+      id: 'stair-foot',
+      story: 'A lantern at the foot of the root stair lights the way up to the lobby ring.',
+      props: ['stair-lantern'],
+      about: ['stair-l1-l0'],
+    },
+  ],
+  decals: [
+    { piece: 'kit-under-stalactites', x: 420, y: 60 },
+    { piece: 'kit-under-root-hang', x: 1260, y: 150, flip: true },
+    { piece: 'kit-under-mushroom-cluster', x: 1500, y: TREE_GROUND - 30, front: true },
+    { piece: 'kit-under-lantern-hang', x: ROOM_W + 1420, y: 200 },
+  ],
+};
+
+/**
+ * Neon Roost, the arcade cave off level 0's east end (underground; its neon kept inside its three bays):
+ * the mouth back to the cavern in the west, then a bay a screen, each with its cabinet: Crossing, Flight
+ * and Sling. Roots close the cave in the east.
+ */
+const ARCADE_KIT: RoomKit = {
+  ground: TREE_GROUND,
+  backdrops: [
+    layer('kit-under-sky-b', 0.5, [0, 2]),
+    layer('kit-under-far-b', 0.6, [0, 2], FADES),
+    layer('kit-under-mid-b', 0.75, [0, 0], FADES),
+    layer('kit-under-mid-c', 0.75, [2, 2], FADES),
+  ],
+  paths: [{ id: 'floor', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-under-cave-stone' }],
+  doors: [
+    { door: 'to-l0', piece: 'kit-under-root-arch' },
+    { door: 'cabinet-crossing', piece: 'kit-landmark-cabinet-miniature', scale: 1.4 },
+    { door: 'cabinet-flight', piece: 'kit-landmark-cabinet-miniature', scale: 1.4 },
+    { door: 'cabinet-sling', piece: 'kit-landmark-cabinet-miniature', scale: 1.4 },
+  ],
+  barriers: [{ id: 'east-roots', x0: 4560, x1: 4880, top: 0, piece: 'kit-under-barrier-roots' }],
+  props: [
+    { id: 'crossing-lantern', piece: 'kit-under-lantern-post', x: 1010, top: 0 },
+    { id: 'robot', piece: 'kit-landmark-robot-owl', x: 2560, top: 0, scale: 0.8 },
+    { id: 'sling-bench', piece: 'kit-bench-stone', x: 4050, top: 0 },
+    { id: 'sling-lantern', piece: 'kit-under-lantern-post', x: 4230, top: 0 },
+  ],
+  scenes: [
+    {
+      id: 'crossing-bay',
+      story: 'A lantern lights the first bay\'s cabinet, Crossing, just inside the cave\'s mouth.',
+      props: ['crossing-lantern'],
+      about: ['cabinet-crossing'],
+    },
+    {
+      id: 'flight-bay',
+      story: 'Neon Roost\'s robot owl keeps watch by the Flight cabinet in the middle bay.',
+      props: ['robot'],
+      about: ['cabinet-flight'],
+    },
+    {
+      id: 'sling-bay',
+      story: 'A stone bench under a lantern by the Sling cabinet, for owls waiting their turn.',
+      props: ['sling-bench', 'sling-lantern'],
+      about: ['cabinet-sling'],
+    },
+  ],
+  decals: [
+    { piece: 'kit-under-stalactites', x: 1600, y: 60 },
+    { piece: 'kit-under-stalactites', x: 3200, y: 50, flip: true },
+    { piece: 'kit-under-root-hang', x: 400, y: 160 },
+  ],
+};
+
 export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
   l4: kitRoom({
     id: 'l4',
@@ -274,6 +672,12 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
     ],
     kit: L1_KIT,
   }),
+  l2: fromPainted('l2', L2_KIT),
+  l3: fromPainted('l3', L3_KIT),
+  'l5-street': fromPainted('l5-street', L5_STREET_KIT),
+  l5: fromPainted('l5', L5_KIT),
+  l0: fromPainted('l0', L0_KIT),
+  'l0-arcade': fromPainted('l0-arcade', ARCADE_KIT),
 };
 
 /**
