@@ -15,7 +15,7 @@ import { startWalking, walkingMap } from './game/walkingMap';
 import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
-import { sendFeedback } from './net/feedback';
+import { closeFeedbackCard, feedbackRewards, sendFeedbackNote } from './net/feedback';
 import { storedKeeper } from './net/keeper';
 import { readAccountLink, withoutAccountLink } from './net/accountLinks';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
@@ -664,7 +664,16 @@ hud.attachQuests(quests, {
   tryCode: (quest, lock, code) => roomScene()?.tryCode(quest, lock, code) ?? Promise.resolve(false),
 }, tasks);
 // Feedback goes to the park's keepers through the room server (kept in this browser without one).
-hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
+// A note that counts climbs the owl's thanks ladder (OP-272): the grey mouse, then feathers.
+hud.attachFeedback(
+  async (draft) => {
+    const sent = await sendFeedbackNote(transport, draft, storage);
+    if (sent.reward?.item && !sent.reward.dup) collection.added(sent.reward.item, sent.reward.total);
+    else if (sent.reward) collection.setFeathers(sent.reward.total);
+    return sent;
+  },
+  { load: () => feedbackRewards(transport), close: () => closeFeedbackCard(transport) },
+);
 
 // Accounts (OP-139, with the park's ACCOUNTS on): the Menu's friend code and Protect this owl, the
 // home screen's I already have an owl, the links the park's mail carries, and the card a screen gets

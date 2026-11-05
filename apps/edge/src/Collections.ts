@@ -53,6 +53,7 @@ import {
   type RunSettled,
   type BuyResult,
   type FeedbackDraft,
+  type FeedbackLadderState,
   type FurnitureGiftResult,
   type GatherResult,
   type GiftResult,
@@ -81,7 +82,7 @@ import {
 import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
 import { TravelBook } from './travelBook';
 import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, type CollectibleType, type PurchaseData, type Visit } from './collectLog';
-import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
+import { FeedbackBox, thankForNote, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { randomDeviceId } from './pass';
 import { ROOMS, roomDef } from './rooms';
@@ -487,14 +488,31 @@ export class Collections extends DurableObject<Env> {
    * to the owner's analytics project for the morning feedback run (OP-166): into the log's outbox in
    * this same step, and sent once the step is done, so the note never waits on the log.
    */
-  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null, visit?: Visit): Promise<FeedbackAdd> {
+  /**
+   * A visitor's note for the keepers. With `earns` (the owl is past the turnstiles), a note that counts
+   * climbs the owl's thanks ladder (OP-272): the grey mouse first, then feathers.
+   */
+  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null, visit?: Visit, earns = false): Promise<FeedbackAdd> {
     const at = Date.now();
     const r = this.feedbackBox.add(cid, draft, ua, at);
     if (r.ok && this.log.on) {
       this.log.feedback({ cid, id: r.id, kind: draft.kind, text: draft.text, at, visit: { ...visit, room: draft.room } });
       this.ctx.waitUntil(this.log.flush());
     }
-    return r;
+    if (!r.ok || !earns) return r;
+    const reward = this.during(visit, () => thankForNote(this.book, this.feedbackBox, cid, r.id, draft.text, at));
+    return reward ? { ...r, reward } : r;
+  }
+
+  /** The thanks ladder as the page sees it (OP-272). */
+  async feedbackRewards(cid: string): Promise<FeedbackLadderState> {
+    return this.feedbackBox.ladder(cid);
+  }
+
+  /** The owl closed the page's card about the grey mouse (OP-272). */
+  async closeFeedbackCard(cid: string): Promise<FeedbackLadderState> {
+    this.feedbackBox.closeCard(cid, Date.now());
+    return this.feedbackBox.ladder(cid);
   }
 
   async feedback(status: FeedbackStatus | 'all', limit: number): Promise<FeedbackRow[]> {

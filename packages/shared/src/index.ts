@@ -24,6 +24,7 @@ export * from './homes';
 export * from './nestbook';
 export * from './styles';
 export * from './feedback';
+export * from './feedbackRewards';
 export * from './arcade';
 export * from './arcadebook';
 export * from './phrases';

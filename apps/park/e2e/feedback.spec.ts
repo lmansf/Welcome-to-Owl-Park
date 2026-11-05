@@ -98,7 +98,8 @@ test.describe('Send feedback is the first row of Settings (OP-167)', () => {
     await feedback.getByRole('button', { name: 'Praise' }).click();
     await feedback.getByRole('textbox', { name: 'Your note' }).fill(words);
     await feedback.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByText("Your note is with the park's keepers")).toBeVisible();
+    // A fresh owl's first note that counts also brings the grey mouse (OP-272), so either thanks may come.
+    await expect(page.getByText(/Your note is with the park's keepers|A grey mouse is waiting in your collection/)).toBeVisible();
     const open = await request.get('/api/admin/feedback?status=open', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY } });
     const notes = ((await open.json()) as { feedback: Array<{ kind: string; text: string }> }).feedback;
     expect(notes.find((n) => n.text === words)).toMatchObject({ kind: 'praise' });
@@ -185,5 +186,64 @@ test.describe('The feedback bug, until the full opening (OP-208)', () => {
     await feedback.getByRole('button', { name: 'Close feedback' }).click();
     await expect(feedback).toBeHidden();
     await expect(builder).toBeVisible();
+  });
+});
+
+/**
+ * Thanks for feedback (OP-272): a grey mouse's card beside the feedback bug until the owl wins the
+ * mouse or closes the card (the park keeps the close for the owl); the form says what the note will
+ * bring, and the first note that counts brings the mouse.
+ */
+test.describe('Thanks for feedback, through the room server (OP-272)', () => {
+  test.skip(Date.now() >= FULL_OPENING_MS, 'the card goes with the bug at the full opening');
+
+  async function home(page: Page): Promise<{ card: Locator; bug: Locator }> {
+    await page.goto('/?transport=edge');
+    await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
+    return { card: page.locator('[data-feedback-card]'), bug: page.locator('[data-feedback-bug]') };
+  }
+
+  test('the card sits beside the bug, opens the form, and the first note brings the grey mouse', async ({ page, request }) => {
+    test.skip(!isEdge(), 'needs the room server');
+    // The gate as deployed (open): this owl is past the turnstiles.
+    expect((await request.post('/api/admin/gate', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { mode: 'open' } })).ok()).toBe(true);
+    const { card, bug } = await home(page);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Your first note wins a grey mouse!');
+    // Beside the bug (on the home screen the bug keeps to the right edge, so the card is to its left), never over it.
+    const c = (await card.boundingBox())!;
+    const b = (await bug.boundingBox())!;
+    expect(c.x + c.width).toBeLessThanOrEqual(b.x + 1);
+    expect(Math.abs(c.y + c.height / 2 - (b.y + b.height / 2))).toBeLessThan(8);
+    await card.getByRole('button', { name: 'Send feedback and win a grey mouse' }).click();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    await expect(feedback.getByText('Your first note wins a grey mouse.')).toBeVisible();
+    await feedback.getByRole('button', { name: 'Idea' }).click();
+    await feedback.getByRole('textbox', { name: 'Your note' }).fill(`A pond by the gift shop, please (${Date.now().toString(36)})`);
+    await feedback.getByRole('button', { name: 'Send' }).click();
+    await expect(page.getByText('Thank you! A grey mouse is waiting in your collection.')).toBeVisible();
+    await expect(card).toBeHidden();
+    await bug.click();
+    await expect(feedback.getByText('Your next note earns 10 feathers.')).toBeVisible();
+    // A page opened again stays without the card: the mouse is won.
+    await home(page);
+    await expect(page.locator('[data-feedback-bug]')).toBeVisible();
+    await expect(page.locator('[data-feedback-card]')).toBeHidden();
+  });
+
+  test('closing the card keeps it closed for the owl, and the form still says what the first note brings', async ({ page }) => {
+    test.skip(!isEdge(), 'needs the room server');
+    const { card, bug } = await home(page);
+    await expect(card).toBeVisible();
+    const closed = page.waitForResponse((r) => r.url().endsWith('/api/feedback/close') && r.ok());
+    await card.getByRole('button', { name: 'Hide this' }).click();
+    await expect(card).toBeHidden();
+    await closed;
+    await home(page);
+    await expect(page.locator('[data-feedback-bug]')).toBeVisible();
+    await expect(page.locator('[data-feedback-card]')).toBeHidden();
+    await page.locator('[data-feedback-bug]').click();
+    await expect(page.getByRole('dialog', { name: 'Feedback' }).getByText('Your first note wins a grey mouse.')).toBeVisible();
   });
 });

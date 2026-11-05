@@ -1,6 +1,16 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { FEEDBACK_EVERY_MS, FEEDBACK_PARK_PER_DAY, FEEDBACK_PER_DAY, type FeedbackDraft } from '@owl-park/shared';
-import { FeedbackBox } from '../src/feedbackBox';
+import {
+  CollectionBook,
+  DUPLICATE_FEATHERS,
+  FEEDBACK_EVERY_MS,
+  FEEDBACK_LADDER,
+  FEEDBACK_MOUSE,
+  FEEDBACK_PARK_PER_DAY,
+  FEEDBACK_PER_DAY,
+  MemoryCollectionStore,
+  type FeedbackDraft,
+} from '@owl-park/shared';
+import { FeedbackBox, thankForNote } from '../src/feedbackBox';
 
 const NOW = Date.UTC(2026, 9, 21, 16, 0, 0);
 const DAY = 24 * 3600_000;
@@ -72,5 +82,60 @@ describe('the feedback box', () => {
     for (let i = 0; i < FEEDBACK_PARK_PER_DAY; i++) park.add(`c_${i}`, note('hello'), null, NOW + i);
     expect(park.add('c_new', note('hello'), null, NOW + DAY - 1)).toEqual({ ok: false, reason: 'full' });
     expect(park.list('all', 1000)).toHaveLength(500); // a page holds at most 500
+  });
+});
+
+// ---- The thanks ladder (OP-272): the grey mouse for the first note that counts, then feathers ----
+
+describe('the thanks ladder (OP-272)', () => {
+  const setup = () => {
+    const box = new FeedbackBox(sqlStorage());
+    const book = new CollectionBook(new MemoryCollectionStore());
+    const thank = (cid: string, text: string, at: number) => {
+      const r = box.add(cid, note(text), null, at);
+      if (!r.ok) throw new Error(r.reason);
+      return thankForNote(book, box, cid, r.id, text, at);
+    };
+    return { box, book, thank };
+  };
+  const words = ['The gate froze when I tapped it', 'More ponds in the grove please', 'I love the climb, it is so fun', 'The shop needs more pets in it', 'One more note after the top'];
+
+  it('gives the grey mouse first, then 10, 15 and 20 feathers, then nothing', () => {
+    const { book, thank, box } = setup();
+    const got = words.map((w, i) => thank('c_one', w, NOW + i * FEEDBACK_EVERY_MS));
+    expect(got[0]).toEqual({ step: 1, item: FEEDBACK_MOUSE, dup: false, feathers: 0, total: 0 });
+    expect(got.slice(1, 4).map((r) => r && [r.step, r.feathers, r.total])).toEqual([
+      [2, 10, 10],
+      [3, 15, 25],
+      [4, 20, 45],
+    ]);
+    expect(got[4]).toBeNull();
+    expect(book.inventory('c_one', undefined, NOW).owned).toContain(FEEDBACK_MOUSE);
+    expect(box.ladder('c_one')).toEqual({ given: FEEDBACK_LADDER.length, closed: false });
+  });
+
+  it('keeps a short note or the same words again off the ladder, and keeps every owl on its own', () => {
+    const { thank, box } = setup();
+    expect(thank('c_one', 'Too short', NOW)).toBeNull();
+    expect(thank('c_one', words[0]!, NOW + FEEDBACK_EVERY_MS)?.step).toBe(1);
+    expect(thank('c_one', `  ${words[0]!.toUpperCase()}!! `, NOW + 2 * FEEDBACK_EVERY_MS)).toBeNull();
+    expect(box.ladder('c_one').given).toBe(1);
+    expect(thank('c_two', words[0]!, NOW + 3 * FEEDBACK_EVERY_MS)?.step).toBe(1);
+  });
+
+  it('pays the usual duplicate feathers to an owl that already has the grey mouse', () => {
+    const { book, thank } = setup();
+    book.grant('c_one', FEEDBACK_MOUSE, 'shop', NOW);
+    expect(thank('c_one', words[0]!, NOW)).toEqual({ step: 1, item: FEEDBACK_MOUSE, dup: true, feathers: DUPLICATE_FEATHERS.common, total: DUPLICATE_FEATHERS.common });
+  });
+
+  it('remembers the card closed for the owl, and keeps its place on the ladder', () => {
+    const { box, thank } = setup();
+    expect(box.ladder('c_one')).toEqual({ given: 0, closed: false });
+    box.closeCard('c_one', NOW);
+    expect(box.ladder('c_one')).toEqual({ given: 0, closed: true });
+    expect(thank('c_one', words[0]!, NOW)?.step).toBe(1);
+    expect(box.ladder('c_one')).toEqual({ given: 1, closed: true });
+    expect(box.ladder('c_two')).toEqual({ given: 0, closed: false });
   });
 });

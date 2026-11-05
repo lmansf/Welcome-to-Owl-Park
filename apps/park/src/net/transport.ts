@@ -92,6 +92,10 @@ export interface ParkTransport {
   vote?(realm: string): Promise<Response>;
   /** Send the visitor's feedback to the park's keepers; only the room server keeps it (net/feedback.ts). */
   feedback?(draft: FeedbackDraft): Promise<Response>;
+  /** The thanks ladder for feedback (OP-272): where this owl stands, and whether its notes climb it. */
+  feedbackRewards?(): Promise<Response>;
+  /** The owl closed the card about the grey mouse; the park keeps it closed for this owl. */
+  closeFeedbackCard?(): Promise<Response>;
   /**
    * What the front gate needs: whether the park takes tickets yet, and whether this visitor's pass
    * goes through. Transports without a server have an open gate.
