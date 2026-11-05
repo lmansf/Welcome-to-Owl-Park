@@ -192,6 +192,35 @@ export function puzzleJobs(seedBase = PUZZLE_SEED) {
   }));
 }
 
+/** Hero screens (OP-230): backdrop layers painted for one screen from its target and the screen as the kit assembles it. */
+export const KIT_HERO = KIT.hero ?? {};
+export const KIT_HERO_LAYER_KEYS = [];
+export const KIT_HERO_PROMPTS = {};
+export const KIT_HERO_REFS = {};
+export const KIT_HERO_LAYERS = [];
+for (const [room, hero] of Object.entries(KIT_HERO)) {
+  if (room === 'about') continue;
+  const area = KIT_AREAS[hero.area];
+  for (const [name, desc] of Object.entries(hero.layers)) {
+    const key = `kit-hero-${room}-${name}`;
+    KIT_HERO_LAYER_KEYS.push(key);
+    KIT_HERO_PROMPTS[key] = areaLayerPrompt(area, name, desc);
+    KIT_HERO_REFS[key] = [
+      { ref: `@guide:${hero.ref}-ref`, role: `the approved target screen: paint only its ${name.startsWith('far') ? 'far distance' : 'middle distance'} as one layer in its light, colour and value, on flat magenta wherever this layer has nothing (the open sky, the playable floor and what stands on it)`, optional: false },
+      { ref: `@guide:${hero.guide}`, role: 'the screen as the kit builds it today: the layer goes behind this, so nothing of the floor, the trunk, the arches or the props is painted', optional: true },
+    ];
+    KIT_HERO_LAYERS.push({ key, room, name, w: name.startsWith('mid') ? 800 : 1600, h: name.startsWith('mid') ? 450 : 900 });
+  }
+}
+export const HERO_SEED = 10400;
+
+export function heroJobs(seedBase = HERO_SEED) {
+  return KIT_HERO_LAYER_KEYS.map((key, i) => ({
+    key, kind: 'layer', realm: 'kit', size: '2048x1152', seed: seedBase + i * 4, variants: 4, key_colour: KIT_KEY_COLOUR, refs: KIT_HERO_REFS[key],
+    providers: { fal: { output_format: 'png' } }, prompt: KIT_HERO_PROMPTS[key],
+  }));
+}
+
 export const RECUT_SEED = 9900;
 
 export function recutJobs(seedBase = RECUT_SEED) {
@@ -247,5 +276,5 @@ export function kitJobs(seedBase = 7000) {
     providers: { fal: { output_format: 'png' } }, prompt: KIT_SHEET_PROMPTS[key],
   }));
   const areas = Object.keys(KIT_AREAS).flatMap((a) => areaJobs(a, AREA_SEEDS[a] ?? seedBase + 400));
-  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs(), ...recutJobs(), ...puzzleJobs()];
+  return [...textures, ...sheets, ...areas, ...courseJobs(), ...landmarkJobs(), ...recutJobs(), ...puzzleJobs(), ...heroJobs()];
 }

@@ -3118,5 +3118,26 @@
         ]
       }
     }
+  },
+  "hero": {
+    "about": "OP-230: hero screens get one kit-guided generation pass, about two backdrop layers painted for that one screen from its approved target (OP-249) and the screen as the kit assembles it, so the backdrop matches the target while the playable layer stays the kit's. Keys kit-hero-<room>-far-a and -mid-a, finished and banded like any area layer (far at 1600 x 900, mid at 800 x 450), and named by the room's kit in place of the area's layers.",
+    "plaza": {
+      "ref": "target-plaza",
+      "area": "entrance",
+      "guide": "hero-plaza-screen",
+      "layers": {
+        "far-a": "the far side beyond the Realm Gate plaza as the target shows it: two great boughs of the tree curving in from the left and the right across the upper two thirds, dark bark with moss on top and dense leaf clusters hanging from them, strings of small amber lanterns hung between the boughs, the deep night sky showing between them with a few stars, a low dark mass of leaf tops along the bottom third fading into haze, the open sky at the very top left as flat magenta",
+        "mid-a": "the nearer boughs' undersides over the plaza: a few dark leaf clusters and a mossy bough end hanging into the upper third of the frame, one string of three small amber lanterns, everything below the upper third flat magenta"
+      }
+    },
+    "l4": {
+      "ref": "target-l4",
+      "area": "high",
+      "guide": "hero-l4-screen",
+      "layers": {
+        "far-a": "the far distance from the sky landing as the target shows it: a calm sea of soft cloud and thin mist far below in dusk blue and navy, lit cream on its upper edges, the rounded crowns of the canopy sunk into it as quiet dark shapes low down, low in contrast and soft, filling the lower two thirds and fading at the top, the open sky above left as flat magenta",
+        "mid-a": "a few nearer wisps of thin cloud drifting at mid height, soft and low in contrast, nothing with a hard edge or a flat top, the upper half and the lower quarter flat magenta"
+      }
+    }
   }
 }
