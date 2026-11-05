@@ -84,7 +84,7 @@ The park's flight (`flight.ts`) runs on the climb's jump (`jump.ts`), in room pi
 | The highest an owl may be | the room's highest top + 392 (a jump and both flaps, 371, and 20 to spare) | `MAX_RISE`, `Room.ts` |
 | The dash | 162 px in 180 ms, once per jump, back when the owl stands on something, never sooner than 350 ms after the last | `AIR_DASH_SPEED` 900, `AIR_DASH_MS` 180, `AIR_DASH_COOLDOWN_MS` 350 (`dash.ts`, PR 72) |
 | The dash on a hop | +115 px across: the dash is a walk while the owl is up, so the fall goes on through it, and its 180 ms give up 47 px of the ordinary 260 px/s drift (162 - 47). Counted at 0.8: **+92** on a glide's reach | `dash.ts`, `flight.ts` |
-| A gap the dash must not cross | checked at the plain 0.8 x 162 = **+130**, so it stays shut under either reckoning | |
+| A gap the dash must not cross | first checked at the plain 0.8 x 162 = **+130**. Since 2026-11-05 every gap that must stay shut is checked against the full reach of the flight stepped through, not the 0.8 below, and where the dash must not cross it, that reach and the dash's whole 115 px, 10 px to spare | `stepFlier`, `ALL_FLIGHT` |
 
 The reach across, by rise (px; `routes.ts`'s `hopTier`, margins in):
 
@@ -158,7 +158,17 @@ tree courses are built on that.
   cloud banks hold an owl that passes under them to a single jump's lift. Only the dash gaps were
   widened: the Canopy's to 380 px at a rise of 320, Brushstroke's to 650 px at a rise of 200. Each
   plan's section 9 has the old-versus-new table. One reach stays open: lost feather 4 in the Canopy
-  can also be reached by a long glide back from `u2`. The "in the air" rows (a hop made under a
+  can also be reached by a long glide back from `u2` (an easy feather, kept so).
+- **The 0.8 reach let gaps through (2026-11-05).** This file's reach table counts a glide at 0.8 of
+  its best, which is right for a hop that must be made and too kind to a gap that must stay shut.
+  A search of the real flight, step by step, with both flaps at every timing and a dash at every
+  moment, found both tree dash gaps and bell 3's branch crossable with no dash, and seven of
+  Brushstroke's bridges and treads, and the Canopy's first updraft, skippable (most of them with
+  the dash). A jump and both flaps reach at best 773 px up a rise of 200 and 345 up a rise of 340,
+  so the dash gaps moved to a rise of 340 and a gap of 360 (past 345, inside the dash's 368 counted
+  at 0.8), and the rest moved apart or up. Each plan's section 9 lists them. From now on a gap that
+  must stay shut is checked against the full stepped reach, and with the dash where the dash must
+  not cross it. The climb tower is not touched: it keeps its double jump (`docs/levels/glass-tower.md`, section 8). The "in the air" rows (a hop made under a
   hanging hazard) need the flight stepped through, not this file's hop formula.
 - **The tower was short:** about 4.6 minutes for a first clear. Fix (Claude Duet's call; the owner can change it): bands 7 and 8,
   measured with the pilot; about 6.5 minutes now, and about 7 with the hidden pane room.

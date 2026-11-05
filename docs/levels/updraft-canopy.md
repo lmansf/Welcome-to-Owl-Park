@@ -63,8 +63,9 @@ three-screen vertical climb cannot fit in one room. Each storey's hatch is a doo
   as the climb's thorns do (`safeX`, `safeY` in `climb.ts`): it costs time, nothing else.
 - **The dash.** The real one, from PR 72 (`dash.ts`): 162 px in 180 ms, once per jump, back when
   the owl stands on something, Shift on a computer and a button on a phone, only in courses. On a
-  hop it adds 115 px across, counted at 0.8 as +92 (the README); every dash hop here is checked
-  at that, and every gap the dash must not cross at +130.
+  hop it adds 115 px across, counted at 0.8 as +92 (the README); every dash hop here is counted
+  at that. A gap is shut only when it is past the full reach of the flight stepped through (and,
+  where the dash must not cross it, that reach and the dash's 115 px), 10 px to spare.
 - **Shortcuts that stay open.** The log, the vine and the bough open for one owl for good, from their
   far side. Each is a door pair (the log, the vine) or a perch (the bough) that is shut until that
   owl's record says it was opened. That record is the course book (`coursebook.ts`, PR 72), which
@@ -135,14 +136,14 @@ that passes under one is already in the air.
 | `fern-hi` | high fern, lost feather 1 | 40 | 440 | 120 | 330 | `s2` | 130 | 360 | T3 | 771 |
 | `f1` | fern frond | 760 | 610 | 180 | 160 | `s2` | -40 | 100 | T1 | 150 |
 | `f2` | fern frond | 1050 | 670 | 160 | 100 | `f1` | -60 | 110 | T1 | 154 |
-| `b1` | branch, acorn bell 1 | 1420 | 290 | 160 | 480 | `U1` | -100 | 40 | U (glide off) | 240 |
+| `b1` | branch, acorn bell 1 | 1480 | 290 | 160 | 480 | `U1` | -100 | 100 | U (glide off) | 240 |
 | `U1` | updraft, always on | 1260 | - | 120 | 580 | `f2` | 0 | 50 | T1 into U1 | 141 |
 
 **Screen 1.2 The switching gusts** (x 1600 to 3200). Beat: Updrafts switch: on for 3 s, off for 2 s, and the leaves thin out for the last 0.75 s before a gust drops. Bench 1 sits at the log's west mouth, plugged until later. Time: 40 s on a first clear, skipped on a shortcut run.
 
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
-| `fern-bench` | fern over the bench, lost feather 2 | 1840 | 230 | 100 | 540 | `b1` | 60 | 260 | T2b | 294 |
+| `fern-bench` | fern over the bench, lost feather 2 | 1840 | 230 | 100 | 540 | `b1` | 60 | 200 | T2b | 294 |
 | `s4` | stump (solid) | 2040 | 650 | 140 | 120 | `moss-log` | 120 | 40 | T1 | 101 |
 | `l5` | branch | 2420 | 270 | 200 | 500 | `U2` | -60 | 60 | U (glide off) | 144 |
 | `l6` | branch | 3000 | 230 | 200 | 540 | `U3` | -60 | 80 | U (glide off) | 144 |
@@ -164,7 +165,7 @@ More hops, and notes on the ones above:
 
 | hop | rise | gap | needs | reach | note |
 | --- | ---: | ---: | --- | ---: | --- |
-| `b1` to `fern-bench` | 60 | 260 | T2b | 294 | both flaps, up off bell 1's branch |
+| `b1` to `fern-bench` | 60 | 200 | T2b | 294 | both flaps, up off bell 1's branch |
 | `l5` to `U3` | 0 | 180 | T2 into U3 | 224 | step off the end of l5 and drop straight down under the hanging thorns (their foot is at 300), then glide right into U3 |
 | `l9` to `U5` | 0 | 60 | T1 into U5 | 141 | a short hop (let go of Jump early: a full jump tops out at 309, over the thorns' foot at 300), or step off and glide in |
 | `moss-roots` to `U5` | 0 | 20 | T1 into U5 | 141 | the log run: out of the log's east mouth and up |
@@ -175,7 +176,7 @@ Doors, benches and the rest:
 | --- | --- | ---: | ---: |
 | D | door `to-commons`: back to the Treehouse Clearing's Commons (down is left) | 40 | 0 |
 | * | lost feather 1, on `fern-hi` | 100 | 330 |
-| o | acorn bell 1, on `b1` | 1500 | 480 |
+| o | acorn bell 1, on `b1` | 1560 | 480 |
 | L | door `log-west`: the hollow log's west mouth, plugged with a clod until it is kicked open from the east | 1560 | 0 |
 | * | lost feather 2, on `fern-bench`, over bench 1 | 1890 | 540 |
 | B | bench 1 | 1800 | 0 |
@@ -188,8 +189,9 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| the updraft U1 | `f2` | `b1` | 380 | 210 | over both flaps | - |
-| the updraft U1 (from the stump) | `s2` | `b1` | 280 | 760 | 411 | 503 |
+| the updraft U1 | `f2` | `b1` | 380 | 270 | over both flaps | - |
+| the updraft U1 (from the stump) | `s2` | `b1` | 280 | 820 | 533 | 648 |
+| the updraft U1 (from the frond) | `f1` | `b1` | 320 | 540 | 410 | 525 |
 | the updraft U2 | `s4` | `l5` | 380 | 240 | over both flaps | - |
 | the updraft U2 (from bell 1) | under thorns H1 (in the air, z 260) | `l5` | 240 | 400 | over both flaps (in the air) | - |
 | the updraft U3 | under thorns H2 (in the air, z 300) | `l6` | 240 | 240 | over both flaps (in the air) | - |
@@ -310,7 +312,7 @@ Hazards and wind (z is height over the ground line):
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
 | `t1` | ring shelf | 300 | 640 | 220 | 130 | `trunk-a` | 130 | 0 | T1 | 95 |
 | `t2` | ring shelf | 600 | 570 | 180 | 200 | `t1` | 70 | 80 | T1 | 122 |
-| `b3` | side branch, acorn bell 3 | 160 | 230 | 120 | 540 | `t2` | 340 | 320 | D (dash) | 359 |
+| `b3` | side branch, acorn bell 3 | 120 | 230 | 120 | 540 | `t2` | 340 | 360 | D (dash) | 368 |
 | `t3` | ring shelf | 1100 | 270 | 200 | 500 | `U6` | -60 | 60 | U (glide off) | 144 |
 | `t4` | ring shelf under the hatch | 1360 | 230 | 200 | 540 | `t3` | 40 | 60 | T1 | 131 |
 | `U6` | updraft, on 3 s / off 2 s, phase 0 | 920 | - | 120 | 560 | `t2` | 0 | 140 | T1 into U6 | 141 |
@@ -327,7 +329,7 @@ Doors, benches and the rest:
 | --- | --- | ---: | ---: |
 | D | door `down`: back to `canopy-1` | 40 | 0 |
 | B | bench 2 | 200 | 0 |
-| o | acorn bell 3, on `b3` | 220 | 540 |
+| o | acorn bell 3, on `b3` | 180 | 540 |
 | V | door `vine-foot`: the vine's foot, coiled out of reach until it is dropped from `canopy-2c`; then it leads to `canopy-2c` spawn `vine-top` | 1530 | 0 |
 | D | door `hatch-up` on `t4`: to `canopy-2b` | 1460 | 540 |
 
@@ -336,9 +338,9 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | without | from | to | rise | gap | best glide reach | with a dash |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | the updraft U6 | under the thorn vine (in the air, z 200) | `t3` | 300 | 200 | over both flaps (in the air) | - |
-| the dash | `t2` | `b3` | 340 | 320 | 267 | 359 |
-| the dash (from the low shelf) | `t1` | `b3` | 410 | 20 | over both flaps | - |
-| the dash (from the top shelves) | under the thorn vine (in the air, z 200) | `b3` | 340 | 540 | over both flaps (in the air) | - |
+| the dash | `t2` | `b3` | 340 | 360 | 345 | 460 |
+| the dash (from the low shelf) | `t1` | `b3` | 410 | 60 | over both flaps | - |
+| the dash (from the top shelves) | under the thorn vine (in the air, z 200) | `b3` | 340 | 580 | over both flaps (in the air) | - |
 
 #### Room `canopy-2b` (1600 x 900, 1 screen)
 
@@ -542,8 +544,8 @@ Hazards and wind (z is height over the ground line):
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
 | `c12` | limb: the dash run-up | 4900 | 590 | 200 | 180 | `c10` | -360 | 460 | T3 | 1947 |
-| `c13` | limb past the dash gap | 5480 | 270 | 240 | 500 | `c12` | 320 | 380 | D (dash) | 407 |
-| `c14` | limb, acorn bell 5 | 5760 | 250 | 180 | 520 | `c13` | 20 | 40 | T1 | 136 |
+| `c13` | limb past the dash gap | 5460 | 250 | 240 | 520 | `c12` | 340 | 360 | D (dash) | 368 |
+| `c14` | limb, acorn bell 5 | 5760 | 250 | 180 | 520 | `c13` | 0 | 60 | T1 | 141 |
 | `c15` | the lookout hut's deck (solid) | 6020 | 230 | 360 | 540 | `c14` | 20 | 80 | T1 | 136 |
 
 More hops, and notes on the ones above:
@@ -586,12 +588,13 @@ What each mechanic is for: the hop it makes possible, checked without it (the ho
 | the updraft U13 (from c5) | under creeper curtain K2 (in the air, z 280) | `c7` | 260 | 190 | over both flaps (in the air) | - |
 | the updraft U14 | `c9` | `c10` | 400 | 300 | over both flaps | - |
 | the updraft U14 (straight on) | under thorn curtain K3 (in the air, z 300) | `c10` | 240 | 220 | over both flaps (in the air) | - |
-| the dash (from the high limb) | under thorn curtain K4 (in the air, z 260) | `c13` | 240 | 620 | over both flaps (in the air) | - |
-| the dash gap at all | `c12` | `c14` | 340 | 660 | 267 | 359 |
+| the dash (from the high limb) | under thorn curtain K4 (in the air, z 260) | `c13` | 260 | 600 | over both flaps (in the air) | - |
+| the dash gap at all | `c12` | `c14` | 340 | 660 | 345 | 460 |
 
-**The dash gap.** `c12` to `c13`: a 380 px gap rising 320 px. A jump, both flaps and a glide reach
-314 px at that rise; with the dash, 407. Nothing else reaches `c13` or bell 5 without the dash:
-the table above checks `c12` to `c14` (shut even at +130), and the thorn curtain `K4` stops the
+**The dash gap.** `c12` to `c13`: a 360 px gap rising 340 px. A jump, both flaps and a glide reach
+345 px at that rise at their very best, so the gap is shut by 15 px; the dash, counted at 0.8 as
+every hop is, reaches 368, and at its best 460. Nothing else reaches `c13` or bell 5 without the
+dash: the table above checks `c12` to `c14` (shut even with the dash), and the thorn curtain `K4` stops the
 long glide from the high limb `c10` (an owl under its foot has only its two flaps, too little for
 `c13`). On a computer the dash is Shift; on a phone the
 course shows a dash button beside Jump.
@@ -633,7 +636,7 @@ Doors, benches and the rest:
 | Four benches | Bench 1 (`canopy-1`, x 1800), bench 2 (`canopy-2a`, x 200), bench 3 (`canopy-3`, x 300), bench 4 (`canopy-3`, on `c8`) |
 | One shortcut per act, opened from its far side | The log (kicked open from `log-east`), the vine (dropped from `canopy-2c`'s top), the bough (pushed from `c8`) |
 | One dash-only gap | `c12` to `c13` in screen 3.4. Bell 3's branch in 2.1 also needs the dash (the owner's ask); it is a side reach, not on the line |
-| Five lost feathers | 1: `fern-hi` (1.1); 2: `fern-bench` (1.2); 3: the hidden room's shelf; 4: `knot-shelf` (2.2, a flap kept for the top of U7, or a long glide back from `u2`); 5: `pocket` (3.2) |
+| Five lost feathers | 1: `fern-hi` (1.1); 2: `fern-bench` (1.2); 3: the hidden room's shelf; 4: `knot-shelf` (2.2, a flap kept for the top of U7, or a jump and a glide back west from `u2`: an easy one); 5: `pocket` (3.2) |
 | One hidden room | `canopy-roots`, through the tiny door at x 4560 in `canopy-1` |
 | One secret character | The sleeping owlet, `canopy-2b` |
 | One nod to another realm | The telescope in the hut shows Neon Street |
@@ -716,7 +719,7 @@ thorns is a plain jump with no flap, or a short hop, so the main line stays Tier
 | without U5: `l9` to `b2` | rise 260: over a flap | 459: open | `l9` lowered to 160: rise 380; thorns `H4` moved to stand between `l9` and `U5` |
 | without U6: `t2` to `t3` | rise 210, gap 320: 251, shut | 579: open | the thorn vine now hangs to the trunk's top: from under it, rise 300 |
 | without the dash: `t3` to `b3` | rise -10, gap 840: 779, shut | 1107: open | the thorn vine stands between; `b3` raised to 540 |
-| the dash: `t2` to `b3` | rise 200, gap 340: glide 275, dash 367 | glide 603: no dash needed | rise 340, gap 320: glide 267, dash 359 |
+| the dash: `t2` to `b3` | rise 200, gap 340: glide 275, dash 367 | glide 603: no dash needed | rise 340, gap 360: glide at best 345, dash 368 (Nov 5; it was 320, which a glide stepped through crossed) |
 | without U7: `u1` to `knot-shelf` | rise 280: over a flap | 411: open | `knot-shelf` raised to 520: rise 400 |
 | without U9: `v1` to `v2` | rise 220, gap 240: 227, shut | 555: open | `v2` raised to 480: rise 370 |
 | without U10: `v2` to `v3` | rise 190, gap 340: 299, shut | 627: open | hanging thorns at x 850: from under them, rise 240 |
@@ -725,12 +728,37 @@ thorns is a plain jump with no flap, or a short hop, so the main line stays Tier
 | without U13: `c6` to `c7` | rise 220, gap 300: 227, shut | 555: open | `c6` lowered to 120: rise 420; creeper curtain `K2` stops the glide from `c5` |
 | without U14: `c9` to `c10` | rise 280: over a flap | 411: open | `c9` lowered to 140: rise 400 |
 | without U14, straight on: `c8` to `c10` | rise 80, gap 640: 563, shut | 891: open | thorn curtain `K3`: from under it, rise 240 |
-| the dash gap: `c12` to `c13` | rise 200, gap 340: glide 275, dash 367 | glide 603: no dash needed | rise 320, gap 380: glide 314, dash 407 |
+| the dash gap: `c12` to `c13` | rise 200, gap 340: glide 275, dash 367 | glide 603: no dash needed | rise 340, gap 360: glide at best 345, dash 368 (Nov 5; at rise 320 and gap 380 a glide stepped through crossed) |
 | without the dash, from the high limb: `c10` to `c13` | rise -40, gap 1080: 851, shut | 1179: open | thorn curtain `K4`: from under it, rise 240 |
 
 Other changes that came with these: `c8` is now the crown's great fork, solid, so no low glide
 passes under it; the bough lies at the height of `c3` and `c8` and takes the creeper curtains down
 with it; lost feather 2's fern moved over bench 1, reached from bell 1's branch with both flaps;
 lost feather 4 can also be reached by a long glide back from `u2`, so it no longer asks only for a
-kept flap. The README's note that the dash gap is 340 px is out of date for this course: it is 380
-px now.
+kept flap. The README's note that the dash gap is 340 px is out of date for this course: it is 360
+px now, rising 340.
+
+### Checked again, step by step (2026-11-05)
+
+The tables above first counted a glide's reach at 0.8 of its best (`ROUTE_REACH`), the margin
+`hopTier` keeps so a hop it calls possible is easy. That margin is right for a hop that must be
+made and wrong for one that must stay shut: an owl that times its flaps well reaches the whole of
+it. So every pair of ledges in every room was searched again with the real flight (`stepFlier` with
+`ALL_FLIGHT`, 120 steps a second), over take-off points, a short or a held jump, both flaps at every
+timing and a dash at every moment, with thorns and solid ledges in the way and no updraft or wind
+to help. The reach of a jump and both flaps at its best, up a rise: 773 px at 200, 533 at 280, 472
+at 300, 410 at 320, 345 at 340, 306 at 350. Only from a rise of about 320 up is there a gap a glide cannot
+cross and the dash, counted at 0.8, can.
+
+| what the search found | fix |
+| --- | --- |
+| `t2` to `b3` (bell 3, rise 340, gap 320) needed no dash | `b3` moved 40 px west: gap 360 |
+| `c12` to `c13` (the dash gap, rise 320, gap 380) needed no dash | `c13` moved 20 px west and raised to 520: rise 340, gap 360; `c14` level with it |
+| `f1` to `b1` (bell 1, rise 320, gap 480) skipped updraft U1 with the dash | `b1` moved 60 px east: gap 540, past the dash's best 525 |
+
+Every other "without" row holds, with the dash too. Lost feather 4 is an easy reach from `u2` (a
+jump and a glide back west reaches 531 px over its rise of 30, and the gap is 420); it was before the
+second flap too, and it stays so: a feather may be easy. The time estimates (section 7) rest on
+screen widths and the beats, which these moves do not change by more than a second, so they stand.
+The room sketches are not redrawn for moves this small (under a character each); the tables are the
+plan.
