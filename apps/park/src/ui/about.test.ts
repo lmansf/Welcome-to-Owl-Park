@@ -45,8 +45,11 @@ describe('what the park is, said plainly (the site audit)', () => {
 
   it('marks the About page’s questions up for search engines, word for word', () => {
     const raw = readFileSync(join(__dirname, '../../public/about/index.html'), 'utf8');
-    const ld = JSON.parse(raw.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]!);
-    expect(ld['@type']).toBe('FAQPage');
+    // One JSON-LD block for the page (the SEO audit, Nov 5): the Organization, the page and its questions in one @graph.
+    expect(raw.match(/application\/ld\+json/g)?.length).toBe(1);
+    const graph = JSON.parse(raw.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]!)['@graph'] as { '@type': string }[];
+    expect(graph.map((n) => n['@type'])).toEqual(['Organization', 'AboutPage', 'FAQPage']);
+    const ld = graph[2] as unknown as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] };
     expect(ld.mainEntity.map((e: { name: string; acceptedAnswer: { text: string } }) => ({ q: e.name, a: e.acceptedAnswer.text }))).toEqual(faq());
   });
 

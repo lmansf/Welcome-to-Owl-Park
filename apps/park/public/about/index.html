@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>About Owl Park - a cozy virtual park you visit in your browser</title>
+    <title>About Owl Park - a cozy virtual park in your browser</title>
     <meta name="description" content="What Owl Park is, who it is for, how chat stays safe, what the park keeps, and what is coming before it fully opens." />
     <link rel="canonical" href="https://exploreowlpark.com/about/" />
     <link rel="icon" type="image/png" href="/favicon.png" />
@@ -20,77 +20,90 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": [
+        "@graph": [
+          { "@type": "Organization", "@id": "https://exploreowlpark.com/#org", "name": "Owl Park", "url": "https://exploreowlpark.com/", "logo": "https://exploreowlpark.com/apple-touch-icon.png" },
           {
-            "@type": "Question",
-            "name": "What is Owl Park?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now."
-            }
+            "@type": "AboutPage",
+            "@id": "https://exploreowlpark.com/about/#page",
+            "name": "About Owl Park",
+            "url": "https://exploreowlpark.com/about/",
+            "description": "What Owl Park is, who it is for, how chat stays safe, what the park keeps, and what is coming before it fully opens.",
+            "about": { "@id": "https://exploreowlpark.com/#org" },
+            "publisher": { "@id": "https://exploreowlpark.com/#org" },
+            "primaryImageOfPage": { "@type": "ImageObject", "url": "https://exploreowlpark.com/og-image.jpg", "width": 1200, "height": 630 }
           },
           {
-            "@type": "Question",
-            "name": "Is it free?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Guests come in free. Guests can look around and play, but keep nothing they win. A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "What does a Day Ticket cost?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "The store’s checkout shows the price before you pay. Your ticket’s time starts at the turnstiles."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Who takes the payment?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "A Day Ticket is paid for in the store’s checkout, which Shopify runs; the park never sees a card number."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can I get a refund?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Is there typed chat?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "What does the park keep?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "The owl, what it has found, and which rooms it visited, with no name, email or home address. Playing needs no account and no password: the owl lives in this browser."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Does it need a download?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. The park opens in your browser, on a computer or a phone."
-            }
+            "@type": "FAQPage",
+            "@id": "https://exploreowlpark.com/about/#questions",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is Owl Park?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is it free?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Guests come in free. Guests can look around and play, but keep nothing they win. A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What does a Day Ticket cost?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The store’s checkout shows the price before you pay. Your ticket’s time starts at the turnstiles."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Who takes the payment?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "A Day Ticket is paid for in the store’s checkout, which Shopify runs; the park never sees a card number."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I get a refund?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is there typed chat?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What does the park keep?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The owl, what it has found, and which rooms it visited, with no name, email or home address. Playing needs no account and no password: the owl lives in this browser."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does it need a download?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. The park opens in your browser, on a computer or a phone."
+                }
+              }
+            ]
           }
         ]
       }
-    </script>
-    <script type="application/ld+json">
-      { "@context": "https://schema.org", "@type": "Organization", "@id": "https://exploreowlpark.com/#org", "name": "Owl Park", "url": "https://exploreowlpark.com/", "logo": "https://exploreowlpark.com/apple-touch-icon.png" }
     </script>
     <style>
       :root { color-scheme: dark; }
@@ -105,6 +118,9 @@
       dt { font-weight: 700; margin: 14px 0 2px; }
       dd { margin: 0 0 8px; }
       .play { display: inline-block; margin: 8px 0 0; padding: 12px 22px; border-radius: 999px; background: #C9A227; color: #0C1E36; font-weight: 800; text-decoration: none; }
+      figure { margin: 20px 0 8px; }
+      figure img { display: block; width: 100%; height: auto; border-radius: 12px; }
+      figcaption { margin: 6px 0 0; font-size: 15px; opacity: .8; }
       footer { margin: 40px 0 0; padding: 16px 0 0; border-top: 1px solid rgba(246, 241, 227, .2); font-size: 15px; }
     </style>
   </head>
@@ -114,6 +130,11 @@
       <h1>About Owl Park</h1>
       <p>A cozy park you visit in your browser, no download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now.</p>
       <p><a class="play" href="/">Make your owl</a></p>
+
+      <figure>
+        <img src="/og-image.jpg" width="1200" height="630" alt="The Owl Park mascot, a great horned owl, beside the moonlit hollow inside the park's ancient tree." />
+        <figcaption>The park's mascot, a great horned owl, and the hollow inside the park's ancient tree.</figcaption>
+      </figure>
 
       <!-- Three moments from the park, each with its alt text, go here once the owner approves the pictures (ui/about.ts, STILLS). -->
 
