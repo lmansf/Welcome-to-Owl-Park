@@ -1283,6 +1283,62 @@
       "key_colour": "#FF00FF",
       "with_2x": true
     },
+    "item-painted-egg": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-rainbow-bunny": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-crack-light": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-crack-heavy": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-rainbow-bunny-hop": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-hatch-1": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-hatch-2": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-hatch-3": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
     "item-snow-bunny": {
       "w": 90,
       "h": 90,
