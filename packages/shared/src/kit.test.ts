@@ -156,9 +156,9 @@ describe('the story rule (the owner, 2026-11-03; docs/TREE_STYLE.md section 8)',
   });
 });
 
-describe('the l4 demo drawn from the kit (OP-234)', () => {
-  const kit = KIT_DEMOS['l4']!;
-  const painted = ROOMS['l4']!;
+describe.each(Object.keys(KIT_DEMOS))('the %s demo drawn from the kit (OP-234)', (id) => {
+  const kit = KIT_DEMOS[id]!;
+  const painted = ROOMS[id]!;
 
   it("keeps the painted level's doorways, spawns and ledges", () => {
     expect(kit.doors).toEqual(painted.doors);
@@ -178,6 +178,19 @@ describe('the l4 demo drawn from the kit (OP-234)', () => {
     const stairOf = new Map((kit.kit?.stairs ?? []).flatMap((s) => s.treads.map((t) => [t, s.id] as const)));
     for (const p of kit.perches ?? []) expect(plan.some((d) => (d.role === 'ledge' && d.id === p.id) || (d.role === 'stair' && d.id === stairOf.get(p.id))), p.id).toBe(true);
   });
+
+  it("signs every way not open yet over a barrier the kit draws there", () => {
+    const drawn = kitDrawPlan(kit).filter((d) => d.role === 'barrier');
+    for (const b of kit.barriers ?? []) expect(drawn.some((d) => d.x < b.x + b.w && b.x < d.x + d.w), b.id).toBe(true);
+  });
+
+  it('draws no foreground overlay of painted art', () => {
+    expect(kit.foregrounds).toBeUndefined();
+  });
+});
+
+describe('the l4 demo drawn from the kit (OP-234)', () => {
+  const kit = KIT_DEMOS['l4']!;
 
   it('draws its backdrops as the room tiles, with parallax rates and fades like the painted layers (sky, far, and a middle layer on screen 1 only, as the target has)', () => {
     expect(kit.backgrounds?.map((t) => t.rate)).toEqual([0.5, 0.5, 0.6, 0.6, 0.75]);
