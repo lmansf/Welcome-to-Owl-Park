@@ -179,6 +179,11 @@ describe.each(Object.keys(KIT_DEMOS))('the %s demo drawn from the kit (OP-234)',
     for (const p of kit.perches ?? []) expect(plan.some((d) => (d.role === 'ledge' && d.id === p.id) || (d.role === 'stair' && d.id === stairOf.get(p.id))), p.id).toBe(true);
   });
 
+  it("signs every way not open yet over a barrier the kit draws there", () => {
+    const drawn = kitDrawPlan(kit).filter((d) => d.role === 'barrier');
+    for (const b of kit.barriers ?? []) expect(drawn.some((d) => d.x < b.x + b.w && b.x < d.x + d.w), b.id).toBe(true);
+  });
+
   it('draws no foreground overlay of painted art', () => {
     expect(kit.foregrounds).toBeUndefined();
   });

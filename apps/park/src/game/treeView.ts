@@ -22,7 +22,8 @@ import type { Barrier, DoorDef, Polygon, RoomDef } from '@owl-park/shared';
  *   goes, up or down (`way`, OP-220).
  * - What shuts a way not open yet (`barriers`, OP-220) is drawn by the game, never painted: a locked gate,
  *   a rope across, a fallen branch or boards over an arch, each with its sign (an approved phrase) and a
- *   warm glow behind it that says shut for now, not for good.
+ *   warm glow behind it that says shut for now, not for good. A room built from the art kit draws the
+ *   barrier itself as a kit piece, and the game adds only the sign and the glow.
  * - Where a stair's doorway stands and the painting shows no stair (`landings`, OP-220), the game draws
  *   a stairhead going down through the boardwalk.
  *
@@ -192,7 +193,8 @@ export function dressTreeRoom(scene: Phaser.Scene, room: RoomDef, playTiles: rea
     const glow = scene.add.image(b.x + b.w / 2, opts.ground - 70, 'fx-glow').setTint(BARRIER.glow).setAlpha(BARRIER.glowAlpha).setScale(Math.max(0.9, b.w / 150), 1);
     glow.setDepth(opts.depths.barrier - 0.01).setBlendMode(Phaser.BlendModes.ADD);
     if (!opts.calm) scene.tweens.add({ targets: glow, alpha: BARRIER.glowAlpha * 1.6, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    drawBarrier(shut, b, opts.ground);
+    // A room built from the art kit draws its barrier as a kit piece (RoomKit.barriers); the game adds its sign.
+    if (!room.kit) drawBarrier(shut, b, opts.ground);
     const sign = scene.add
       .text(b.x + b.w / 2, opts.ground - BARRIER.signY, b.sign, { fontFamily: 'system-ui, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#2B1C12', backgroundColor: '#F6F1E3', padding: { x: 9, y: 5 } })
       .setOrigin(0.5)

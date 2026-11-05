@@ -243,6 +243,8 @@ function fromPainted(id: string, kit: RoomKit): RoomDef {
     ...(p.perches ? { perches: kitPerches(kit) } : {}),
     spawns: p.spawns,
     doors: p.doors,
+    // The ways not open yet keep their signs; the kit draws each barrier itself (RoomKit.barriers).
+    ...(p.barriers ? { barriers: p.barriers } : {}),
     ...(p.spots ? { spots: p.spots } : {}),
     ...(p.places ? { places: p.places } : {}),
     kit,
@@ -670,6 +672,9 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
       { id: 'stair-l2-l1', rect: { x: ROOM_W + 960, y: 750, w: 110, h: 40 }, to: { room: 'l2', spawn: 'from-l1' }, top: 0, way: 'up', markAt: { x: ROOM_W + 1015, y: 560 } },
       { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0, markAt: { x: 3 * ROOM_W + 1365, y: 462 } },
     ],
+    // The closed gate's sign over the kit's locked gate. The painted roof run's rope has no kit
+    // counterpart: the kit draws nothing there that looks like a way up.
+    barriers: [{ id: 'closed-west', kind: 'gate', x: 570, w: 90, sign: 'Not Yet Fledged' }],
     kit: L1_KIT,
   }),
   l2: fromPainted('l2', L2_KIT),
