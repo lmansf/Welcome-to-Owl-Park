@@ -15,8 +15,80 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Owl Park" />
     <meta property="og:title" content="About Owl Park" />
-    <meta property="og:description" content="A cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now." />
+    <meta property="og:description" content="A cozy park you visit in your browser, no download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now." />
     <meta property="og:image" content="https://exploreowlpark.com/og-image.jpg" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Owl Park?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A cozy park you visit in your browser, no download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is it free?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Guests come in free. Guests can look around and play, but keep nothing they win. A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does a Day Ticket cost?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The store’s checkout shows the price before you pay. Your ticket’s time starts at the turnstiles."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Who takes the payment?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A Day Ticket is paid for in the store’s checkout, which Shopify runs; the park never sees a card number."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I get a refund?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is there typed chat?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does the park keep?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The owl, what it has found, and which rooms it visited, with no name, email or home address. Playing needs no account and no password: the owl lives in this browser."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does it need a download?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. The park opens in your browser, on a computer or a phone."
+            }
+          }
+        ]
+      }
+    </script>
     <style>
       :root { color-scheme: dark; }
       body { margin: 0; background: #0C1E36; color: #F6F1E3; font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -27,14 +99,16 @@
       p { margin: 0 0 12px; }
       a { color: #FFD36A; }
       nav { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 24px; }
+      dt { font-weight: 700; margin: 14px 0 2px; }
+      dd { margin: 0 0 8px; }
       .play { display: inline-block; margin: 8px 0 0; padding: 12px 22px; border-radius: 999px; background: #C9A227; color: #0C1E36; font-weight: 800; text-decoration: none; }
     </style>
   </head>
   <body>
     <main>
-      <nav aria-label="Owl Park"><a href="/">Play Owl Park</a><a href="/about/">About</a><a href="/changelog/">What's new</a></nav>
+      <nav aria-label="Owl Park"><a href="/">Play Owl Park</a><a href="/about/">About</a><a href="/about/#questions">Questions</a><a href="/changelog/">What's new</a></nav>
       <h1>About Owl Park</h1>
-      <p>A cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now.</p>
+      <p>A cozy park you visit in your browser, no download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now.</p>
       <p><a class="play" href="/">Make your owl</a></p>
 
       <!-- Three moments from the park, each with its alt text, go here once the owner approves the pictures (ui/about.ts, STILLS). -->
@@ -43,18 +117,25 @@
       <p>Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now.</p>
 
       <h2>What there is to do</h2>
-      <p>Quests from the park’s owls, quick arcade games, fishing, the stage quiz, leaf piles to jump in, and a nest of your own to decorate.</p>
+      <p>A spare 20 minutes in a browser tab: quests from the park’s owls, quick arcade games, fishing, the stage quiz and leaf piles to jump in.</p>
+      <p>Dress your owl in what you find, and decorate a nest of your own. Open the nest to visitors, and other owls can walk in and see it.</p>
 
       <h2>Who it is for</h2>
       <p>Built for anyone who misses the old chatroom worlds: grown-up owls welcome.</p>
-      <p>It is not a place to chat freely: owls talk with set phrases only. And it is not finished: the park is in early preview, with more on the way before it fully opens.</p>
+      <p>For the spare minutes in a browser tab you would rather not spend alone: everyone who is in the park at the same time wanders it with you.</p>
+      <p>It is not for anyone who wants to chat freely with strangers: owls talk with set phrases only. And it is not finished: the park is in early preview, with more on the way before it fully opens.</p>
+      <p>Owl Park is one of the old kind of <a href="/chatroom-worlds/">chatroom worlds</a>, made small and safe.</p>
 
       <h2>Tickets</h2>
       <!-- The Day Ticket's price goes at the start of this line once the owner sets it (ui/about.ts, DAY_TICKET_PRICE): "Day Ticket: $X for today." -->
       <p>Guests play free and keep nothing they win; ticketed owls keep everything.</p>
+      <p>A Day Ticket is paid for in the store’s checkout, which Shopify runs; the park never sees a card number.</p>
+      <p>A ticket works for its owl on any screen. Its time starts at its first scan at the turnstiles.</p>
+      <p>A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu.</p>
 
       <!-- Who keeps the park, in the owner's own words, goes here (ui/about.ts, KEEPER). -->
       <!-- Real players' words, with their permission, go here (ui/about.ts, PLAYER_QUOTES). -->
+      <!-- A dated mention of the park somewhere else goes here once one exists (ui/about.ts, OUTSIDE_MENTIONS). -->
 
       <h2 id="grown-ups">A note for grown-ups</h2>
       <h3>Chat is set phrases only</h3>
@@ -67,6 +148,27 @@
       <h3>Buying</h3>
       <p>Nothing is sold inside the park. A Day Ticket is bought in the store’s checkout, and before the store opens a card says: Ask a grown-up before buying.</p>
       <p>The feather shop takes only feathers earned in play, never money. Guests can play free; they keep nothing they win.</p>
+
+      <h2 id="questions">Questions</h2>
+      <!-- The price answer and a "Who keeps the park?" question change once the owner sets them (ui/about.ts, faq). -->
+      <dl>
+        <dt>What is Owl Park?</dt>
+        <dd>A cozy park you visit in your browser, no download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now.</dd>
+        <dt>Is it free?</dt>
+        <dd>Guests come in free. Guests can look around and play, but keep nothing they win. A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops.</dd>
+        <dt>What does a Day Ticket cost?</dt>
+        <dd>The store’s checkout shows the price before you pay. Your ticket’s time starts at the turnstiles.</dd>
+        <dt>Who takes the payment?</dt>
+        <dd>A Day Ticket is paid for in the store’s checkout, which Shopify runs; the park never sees a card number.</dd>
+        <dt>Can I get a refund?</dt>
+        <dd>A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu.</dd>
+        <dt>Is there typed chat?</dt>
+        <dd>No. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park.</dd>
+        <dt>What does the park keep?</dt>
+        <dd>The owl, what it has found, and which rooms it visited, with no name, email or home address. Playing needs no account and no password: the owl lives in this browser.</dd>
+        <dt>Does it need a download?</dt>
+        <dd>No. The park opens in your browser, on a computer or a phone.</dd>
+      </dl>
 
       <h2>What is coming</h2>
       <p>New rooms and things to do arrive as they are ready. Every change, with its date, is listed on <a href="/changelog/">What's new</a>.</p>

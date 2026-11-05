@@ -9,7 +9,7 @@ import { dist, settleCamera, state, toScreen, travelTo } from './helpers';
  * owl in its own nest, before its mirror, every time (OP-105).
  */
 const home = (page: Page) => page.evaluate(() => window.owlPark.home());
-const button = (page: Page, id: 'login' | 'play' | 'settings') => page.locator(`[data-home-btn="${id}"]`);
+const button = (page: Page, id: 'login' | 'guest' | 'play' | 'settings') => page.locator(`[data-home-btn="${id}"]`);
 /** The home screen's buttons as shown, in order. */
 const shownButtons = (page: Page) => page.locator('[data-home-btn]').evaluateAll((bs) => bs.filter((b) => !(b as HTMLElement).hidden).map((b) => b.textContent));
 /** Where Play puts the owl: before its nest's mirror (NEST_ROOM's `mirror` spawn). */
@@ -59,11 +59,12 @@ async function parkSignOnScreen(page: Page): Promise<{ x: number; y: number } | 
 test.describe('the home screen (OP-065)', () => {
   test('a first visit logs in: the owl is made, the builder opens on it, and Play goes into its own nest', async ({ page }) => {
     await openHome(page);
-    await expect(page.locator('[data-home] h1')).toHaveText('Owl Park');
+    await expect(page.locator('[data-home] h1')).toHaveText('Owl Park A cozy park you visit in your browser');
     await expect(button(page, 'login')).toHaveText('Make your owl');
+    await expect(button(page, 'guest')).toHaveText('Look around free');
     await expect(button(page, 'settings')).toBeVisible();
     await expect(button(page, 'play')).toBeHidden();
-    expect(await shownButtons(page)).toEqual(['Make your owl', 'Settings']);
+    expect(await shownButtons(page)).toEqual(['Make your owl', 'Look around free', 'Settings']);
     // Nothing of the park shows: no Menu, no bar, no thumbstick.
     await expect(page.locator('[data-menu-btn]')).toBeHidden();
     await expect(page.locator('#hud .bar')).toBeHidden();
@@ -108,7 +109,7 @@ test.describe('the home screen (OP-065)', () => {
 
   test('says what the park is, and opens About the park and A note for grown-ups (the site audit)', async ({ page, isMobile }) => {
     await openHome(page);
-    await expect(page.locator('[data-home-lead]')).toHaveText('A cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now.');
+    await expect(page.locator('[data-home-lead]')).toHaveText('No download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now.');
     await expect(page.locator('[data-home-welcome]')).toHaveText('Built for anyone who misses the old chatroom worlds: grown-up owls welcome.');
     expect(await page.title()).toBe('Owl Park - a cozy virtual park you visit in your browser');
     for (const [kind, title, words] of [
@@ -128,7 +129,23 @@ test.describe('the home screen (OP-065)', () => {
       await expect(button).toBeFocused();
     }
     // The screens are words only: the home screen's buttons are as they were.
-    expect(await shownButtons(page)).toEqual(['Make your owl', 'Settings']);
+    expect(await shownButtons(page)).toEqual(['Make your owl', 'Look around free', 'Settings']);
+  });
+
+  test('Look around free: a ready-made owl, with no quiz and no builder, straight into its own nest (the second site audit)', async ({ page, isMobile }) => {
+    await openHome(page);
+    if (isMobile) await button(page, 'guest').tap();
+    else await button(page, 'guest').click();
+    await expect(page.getByRole('dialog', { name: 'Which owl are you?' })).toBeHidden();
+    await inOwnNest(page);
+    expect(await page.evaluate(() => localStorage.getItem('owl-park:look'))).not.toBeNull();
+    // Logged in now: the home screen comes back with Play, and no free button.
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="settings"]').click();
+    await menu.locator('[data-screen="title"]').click();
+    await page.waitForFunction(() => window.owlPark.home().shown, null, { timeout: 20_000 });
+    expect(await shownButtons(page)).toEqual(['Play', 'Settings']);
   });
 
   test('a return visit is logged in at once, with the owl as it was, and Play takes the focus', async ({ page }) => {

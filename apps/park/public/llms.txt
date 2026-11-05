@@ -1,11 +1,12 @@
 # Owl Park
 
-> A cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now. Built for anyone who misses the old chatroom worlds: grown-up owls welcome.
+> A cozy park you visit in your browser, no download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now. Built for anyone who misses the old chatroom worlds: grown-up owls welcome.
 
-Owl Park is in early preview. Guests play free and keep nothing they win; ticketed owls keep everything. There is no typed chat: owls talk only with set phrases. Nothing is sold inside the park; a Day Ticket is bought in the store's checkout.
+Owl Park is in early preview. Guests play free and keep nothing they win; ticketed owls keep everything. There is no typed chat: owls talk only with set phrases. Nothing is sold inside the park; a Day Ticket is bought in the store's checkout, which Shopify runs. A ticket can be refunded until it is used or it expires.
 
 ## Pages
 
 - [Play Owl Park](https://exploreowlpark.com/): make an owl and come in
-- [About Owl Park](https://exploreowlpark.com/about/): what it is, who it is for, and a note for grown-ups
+- [About Owl Park](https://exploreowlpark.com/about/): what it is, who it is for, ticket terms, a note for grown-ups, and common questions
+- [A small, safe chatroom world](https://exploreowlpark.com/chatroom-worlds/): what Owl Park keeps from the old chatroom worlds, and what it does differently
 - [What's new](https://exploreowlpark.com/changelog/): every change, with its date
