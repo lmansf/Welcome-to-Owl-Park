@@ -7,6 +7,11 @@
     <meta name="description" content="Owl Park is a small, safe chatroom world: no typed chat, no downloads, one park. What it keeps from the old chatroom worlds, and what it does differently." />
     <link rel="canonical" href="https://exploreowlpark.com/chatroom-worlds/" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- HeyCatch analytics (heycatch.ai/agents.md), as on the park's page (src/main.ts); a page of its own, so events go out at once. -->
+    <script type="module">
+      import { analytics } from 'https://esm.sh/@heycatch/sdk@0.8.5';
+      analytics.init({ projectKey: 'hck_pk_um42q9Cyv2nIM-aHBobpaoE1rupLU1dm', site: 'landing', requestBatching: false, install: { framework: 'web', agent: 'claude-code' } });
+    </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Owl Park" />
     <meta property="og:title" content="A small, safe chatroom world" />
