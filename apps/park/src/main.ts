@@ -528,11 +528,22 @@ const refreshClosed = async () => {
   const v = (await transport.closed?.()) ?? null;
   if (v && atHome) showClosed(v);
 };
+/** The home screen's presence line (the site audit's D3.1): the park's own count, as it stands. */
+const refreshPresence = async () => {
+  const n = (await transport.parkCount?.()) ?? null;
+  if (atHome) home.presence(n);
+};
 setInterval(() => {
-  if (atHome && document.visibilityState === 'visible') void refreshClosed();
+  if (atHome && document.visibilityState === 'visible') {
+    void refreshClosed();
+    void refreshPresence();
+  }
 }, CLOSED_POLL_MS);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && atHome) void refreshClosed();
+  if (document.visibilityState === 'visible' && atHome) {
+    void refreshClosed();
+    void refreshPresence();
+  }
 });
 const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   logIn: (opener) => {
@@ -573,6 +584,7 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
     if (atHome && loggedIn && !hud.isBlocking()) drawOwl(frame, false);
   },
   blocked: () => hud.isBlocking(),
+  info: (kind, opener) => hud.openInfo(kind, opener),
 });
 // The home scene came up (at the start, or from the Menu): its buttons, and the owl beside them.
 game.events.on(HOME_SHOWN, () => {
@@ -598,6 +610,7 @@ game.events.on(HOME_SHOWN, () => {
   }
   void refreshNotice();
   void refreshClosed();
+  void refreshPresence();
   // Back from checkout (OP-190): the ticket came while the park was starting.
   if (backSay) {
     hud.toast(backSay, 6000);

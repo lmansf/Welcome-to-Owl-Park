@@ -87,6 +87,9 @@ const CSS = `
 #hud .today .task.done span{opacity:.6;text-decoration:line-through}
 `;
 
+/** What the quests are for, in a visitor's terms, at the top of the journal. Visitor-facing. */
+export const QUEST_JOB = "Something to do on today's visit, even a short one.";
+
 const CHIP_WORDS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', short: 'Short', long: 'Long', story: 'Story', daily: 'Today', weekly: 'This week', monthly: 'This month' } as const;
 
 /** "5 h", "40 min", "3 days": how long until `at`. */
@@ -272,6 +275,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     const sum = el('p', 'qsum', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…');
     if (board) sum.title = `Room for ${ACTIVE_SLOTS.story} story, ${ACTIVE_SLOTS.daily} daily, ${ACTIVE_SLOTS.weekly} weekly and ${ACTIVE_SLOTS.monthly} monthly quests`;
     sum.dataset['sub'] = '';
+    box.appendChild(el('p', 'qsum qjob', QUEST_JOB));
     box.appendChild(sum);
     const today = tasks.view;
     const tabs: Array<[JournalTab, string]> = [
