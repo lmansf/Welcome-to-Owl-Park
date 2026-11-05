@@ -32,8 +32,10 @@ const CHECK_EVERY_MS = 60_000;
  * drawn in `body`, with its eye and the line round its ear cut out so whatever is behind shows through
  * (the Menu's Feedback button wears it too, OP-242). The inside of its ear and its nose stay pink.
  */
-export const feedbackIcon = (body: string) =>
-  `<svg viewBox="0 0 24 24" aria-hidden="true"><mask id="fb-mouse-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff"/><circle cx="14.4" cy="8.4" r="3.5" fill="#000"/><circle cx="17.7" cy="12.6" r="1" fill="#000"/></mask><g mask="url(#fb-mouse-cut)"><path d="M6 16.7C4 17.3 2.6 16.2 2.8 14.3" fill="none" stroke="${body}" stroke-width="1.5" stroke-linecap="round"/><path d="M5.4 15.3C5.4 11.4 8.4 8.7 12.4 8.7c2.6 0 4.4 1.1 5.8 2.9l3.3 2.2c.5.3.4 1-.1 1.2l-2.6.9c-1 1.6-3.2 2.6-6.4 2.6H7.3C6.2 18.5 5.4 17.5 5.4 16.5z" fill="${body}"/></g><circle cx="14.4" cy="8.4" r="3" fill="${body}"/><circle cx="14.4" cy="8.4" r="1.5" fill="#F2A7B5"/><circle cx="21.6" cy="14.4" r=".8" fill="#F2A7B5"/></svg>`;
+let cuts = 0;
+/** Each drawing has a cut-out of its own: a hidden Menu holding the first one with a shared id would leave the button's mouse without its eye. */
+export const feedbackIcon = (body: string, id = `fb-mouse-cut-${++cuts}`) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff"/><circle cx="14.4" cy="8.4" r="3.5" fill="#000"/><circle cx="17.7" cy="12.6" r="1" fill="#000"/></mask><g mask="url(#${id})"><path d="M6 16.7C4 17.3 2.6 16.2 2.8 14.3" fill="none" stroke="${body}" stroke-width="1.5" stroke-linecap="round"/><path d="M5.4 15.3C5.4 11.4 8.4 8.7 12.4 8.7c2.6 0 4.4 1.1 5.8 2.9l3.3 2.2c.5.3.4 1-.1 1.2l-2.6.9c-1 1.6-3.2 2.6-6.4 2.6H7.3C6.2 18.5 5.4 17.5 5.4 16.5z" fill="${body}"/></g><circle cx="14.4" cy="8.4" r="3" fill="${body}"/><circle cx="14.4" cy="8.4" r="1.5" fill="#F2A7B5"/><circle cx="21.6" cy="14.4" r=".8" fill="#F2A7B5"/></svg>`;
 
 /** The grey of the Mouse that a first note wins (Mouse · Original). */
 const MOUSE_GREY = '#C9CED6';
