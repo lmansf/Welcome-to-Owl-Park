@@ -95,6 +95,24 @@ describe('what the park is, said plainly (the site audit)', () => {
     expect(page('about/index.html')).toContain('<h2 id="contact">Contact</h2>');
   });
 
+  it('keeps the About page’s JSON-LD small and plain ASCII, and its pictures WebP (the SEO audit, round 4)', () => {
+    const raw = page('about/index.html');
+    const ld = raw.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]!;
+    expect(Buffer.byteLength(ld, 'utf8')).toBeLessThan(3500);
+    expect(/^[\x00-\x7f]*$/.test(ld)).toBe(true);
+    const imgs = [...raw.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1]!);
+    expect(imgs.length).toBeGreaterThan(0);
+    for (const src of imgs) expect(src).toMatch(/\.webp$/);
+  });
+
+  it('gives the chatroom-worlds article a WebP diagram with alt text and two outside sources (the SEO audit, round 4)', () => {
+    const raw = page('chatroom-worlds/index.html');
+    expect(raw).toMatch(/<img src="\/chatroom-worlds\/say-wheel\.webp"[^>]* alt="Diagram of the Say wheel[^"]+"/);
+    const body = raw.slice(raw.indexOf('<body>'));
+    const hosts = new Set([...body.matchAll(/href="https:\/\/([^/"]+)/g)].map((m) => m[1]!).filter((h) => !h.endsWith('exploreowlpark.com')));
+    expect(hosts.size).toBeGreaterThanOrEqual(2);
+  });
+
   it('dates every change on the changelog, newest first', () => {
     const dates = [...page('changelog/index.html').matchAll(/<time datetime="(\d{4}-\d\d-\d\d)">/g)].map((m) => m[1]!);
     expect(dates.length).toBeGreaterThan(5);

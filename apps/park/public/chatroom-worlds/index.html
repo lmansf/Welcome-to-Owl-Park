@@ -49,6 +49,9 @@
       a { color: #FFD36A; }
       nav { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 24px; }
       .play { display: inline-block; margin: 8px 0 0; padding: 12px 22px; border-radius: 999px; background: #C9A227; color: #0C1E36; font-weight: 800; text-decoration: none; }
+      figure { margin: 20px 0 8px; }
+      figure img { display: block; width: 100%; height: auto; border-radius: 12px; }
+      figcaption { margin: 6px 0 0; font-size: 15px; opacity: .8; }
       footer { margin: 40px 0 0; padding: 16px 0 0; border-top: 1px solid rgba(246, 241, 227, .2); font-size: 15px; }
     </style>
   </head>
@@ -75,9 +78,14 @@
         <li>Free to look around. Guests come in free and keep nothing they win; ticketed owls keep everything.</li>
         <li>Nothing is sold inside the park. A Day Ticket is bought in the store’s checkout, which Shopify runs.</li>
       </ul>
+      <p>Shopify says its checkout is <a href="https://www.shopify.com/security/pci-compliant">certified Level 1 PCI DSS compliant</a>, the card industry’s security standard, so the park never sees a card number.</p>
 
       <h2>How do owls talk without typed chat?</h2>
       <p>Owls talk by picking a phrase from the Say wheel, and the phrase shows in a bubble over the owl. The wheel holds 24 phrases in six groups of four.</p>
+      <figure>
+        <img src="/chatroom-worlds/say-wheel.webp" width="1200" height="780" loading="lazy" alt="Diagram of the Say wheel: six groups of four set phrases, numbered 1 to 24. Hello: Hi!, Hoot hoot!, Nice to meet you!, Good night!. Thanks and cheers: Thank you!, Great job!, Nice owl!, Well played!. Together: Follow me!, Let's go!, Wait for me!, Over here!. Things to do: Let's light the lanterns!, Fishing?, Quiz time!, Arcade?. Feelings: I'm happy!, So cosy., Sleepy..., Wow!. Help and goodbye: Where to?, I'm lost!, Help me?, Bye for now!" />
+        <figcaption>All 24 phrases on the Say wheel. Only the phrase’s number travels to the park.</figcaption>
+      </figure>
       <p>The groups are Hello, Thanks and cheers, Together, Things to do, Feelings, and Help and goodbye. A few of the phrases are “Nice to meet you!”, “Follow me!”, “Fishing?” and “Bye for now!”.</p>
       <p>Only the phrase’s number travels to the park, never typed words. So nobody can send rude words or personal details.</p>
       <p>An owl can say one phrase every few seconds, and each bubble fades after a moment. That keeps the park from filling with repeats.</p>
@@ -99,7 +107,7 @@
 
       <h2>Do I need a download or an account?</h2>
       <p>No. Owl Park opens in the browser tab you already have, on a computer or a phone.</p>
-      <p>Playing needs no account and no password: the owl lives in this browser. On a phone, a thumbstick and buttons on the screen do the walking and jumping.</p>
+      <p>Playing needs no account and no password: the owl lives in this browser. Its look, and the key to what it has collected, are kept in the browser’s <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage">local storage</a>, which the browser keeps between visits. On a phone, a thumbstick and buttons on the screen do the walking and jumping.</p>
       <p>A grown-up can add an email to protect an owl, where it is offered. That email is used only to send the owl’s links, and is never shown to anyone.</p>
 
       <h2>Is Owl Park free?</h2>
