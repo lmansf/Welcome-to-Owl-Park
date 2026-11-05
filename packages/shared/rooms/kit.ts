@@ -384,8 +384,7 @@ const L5_STREET_KIT: RoomKit = {
   backdrops: [
     layer('kit-canopy-sky-b', 0.5, [0, 1]),
     layer('kit-canopy-sky-a', 0.5, [2, 2], { left: SKY_FADE }),
-    layer('kit-canopy-far-b', 0.6, [0, 1], FADES),
-    layer('kit-canopy-far-a', 0.6, [2, 2], FADES),
+    layer('kit-canopy-far-a', 0.6, [0, 2], FADES),
     layer('kit-canopy-mid-a', 0.75, [0, 0], FADES),
     layer('kit-canopy-mid-b', 0.75, [1, 1], FADES),
   ],
@@ -447,10 +446,9 @@ const L5_STREET_KIT: RoomKit = {
 const L5_KIT: RoomKit = {
   ground: TREE_GROUND,
   backdrops: [
-    layer('kit-canopy-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
     layer('kit-canopy-sky-b', 0.5, [1, 2]),
-    layer('kit-canopy-far-a', 0.6, [0, 0], FADES),
-    layer('kit-canopy-far-b', 0.6, [1, 2], FADES),
+    layer('kit-canopy-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
+    layer('kit-canopy-far-a', 0.6, [0, 2], FADES),
     layer('kit-canopy-mid-c', 0.75, [1, 1], FADES),
     layer('kit-canopy-mid-a', 0.75, [2, 2], FADES),
   ],
@@ -516,8 +514,8 @@ const L5_KIT: RoomKit = {
 const L0_KIT: RoomKit = {
   ground: TREE_GROUND,
   backdrops: [
-    layer('kit-under-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
     layer('kit-under-sky-b', 0.5, [1, 1]),
+    layer('kit-under-sky-a', 0.5, [0, 0], { right: SKY_FADE }),
     layer('kit-under-far-a', 0.6, [0, 1], FADES),
     layer('kit-under-mid-a', 0.75, [0, 0], FADES),
   ],

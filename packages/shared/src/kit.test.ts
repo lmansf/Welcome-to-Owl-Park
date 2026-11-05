@@ -187,6 +187,18 @@ describe.each(Object.keys(KIT_DEMOS))('the %s demo drawn from the kit (OP-234)',
   it('draws no foreground overlay of painted art', () => {
     expect(kit.foregrounds).toBeUndefined();
   });
+
+  it('fades a backdrop over its neighbour where one painting meets another, so no screen edge shows as a cut', () => {
+    // A slower tile is drawn bigger than its screen (tilePlacement), so neighbours overlap and the one drawn later lies on top.
+    const tiles = kit.backgrounds ?? [];
+    tiles.forEach((later, j) => {
+      tiles.slice(0, j).forEach((earlier) => {
+        if ((earlier.rate ?? 1) !== (later.rate ?? 1) || earlier.key === later.key || Math.abs(earlier.x - later.x) !== ROOM_W) return;
+        const side = later.x > earlier.x ? 'left' : 'right';
+        expect(later.fade?.[side] ?? 0, `${later.key} at ${later.x} over ${earlier.key}`).toBeGreaterThan(0);
+      });
+    });
+  });
 });
 
 describe('the l4 demo drawn from the kit (OP-234)', () => {
