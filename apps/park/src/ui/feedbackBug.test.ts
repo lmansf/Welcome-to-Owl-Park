@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FEEDBACK_BUG_WORDS, bugIcon, feedbackBugShown } from './feedbackBug';
+import { FEEDBACK_BUG_WORDS, feedbackBugShown, feedbackIcon } from './feedbackBug';
 import { FULL_OPENING_MS } from './preview';
 
 // The feedback bug (OP-208): on screen everywhere until the park fully opens on December 1.
@@ -23,11 +23,13 @@ describe('the feedback bug (OP-208)', () => {
     expect(FEEDBACK_BUG_WORDS.label).toMatch(/^Send feedback/);
   });
 
-  it("draws the same bug for the Menu's Feedback button in the colours it is given (OP-242)", () => {
-    const svg = bugIcon('currentColor', 'red');
+  it("draws a mouse for the bug and the Menu's Feedback button, in the colour it is given (OP-242)", () => {
+    const svg = feedbackIcon('currentColor');
     expect(svg).toMatch(/^<svg /);
-    expect(svg).not.toContain('#FFD36A');
+    expect(svg).toContain('aria-hidden="true"');
+    expect(svg).not.toContain('#C9CED6');
+    // Tail, body and ear wear the colour; the eye and the ear's edge are cut out, not painted.
     expect(svg.match(/currentColor/g)).toHaveLength(3);
-    expect(svg.match(/"red"/g)).toHaveLength(2);
+    expect(svg).toContain('mask="url(#fb-mouse-cut)"');
   });
 });
