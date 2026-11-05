@@ -1040,7 +1040,8 @@ owner's go. Until then the store's own risk rating and the release tag (section 
   a keeper's token also opens it), `/api/admin/store` (the store's setup), `/api/admin/tickets`
   (tickets without an order), `/api/admin/grant`, `/api/admin/climb` (a climb run by the reference a
   visitor quotes), `/api/admin/collect-log` (the analytics log's backfill), `/api/admin/feedback`,
-  `/api/admin/gate`, `/api/admin/opening`, `/api/admin/restart`, `/api/admin/capacity`,
+  `/api/admin/gate`, `/api/admin/opening`, `/api/admin/restart`, `/api/admin/export` and
+  `/api/admin/restore` (the weekly export, below), `/api/admin/capacity`,
   `/api/vote/tally` and `/api/vote/close`. Until `ADMIN_KEY` is on the live Worker (OP-001, the
   owner's GitHub secrets) every one refuses. QA lists and probes them in OP-092.
 - **When something is wrong**: `docs/PLAYBOOK.md` (is it down, roll back, pause sales, missing
@@ -1062,7 +1063,7 @@ front door (`frontDoor`, below); the rate limits, for `/api/*` and `/ws/*` excep
 park's page going out with its policy (`guardedPage`). Every answer leaves through `finished`
 (`apps/edge/src/guard.ts`), and an error no route handled is logged as one line, then thrown on. The
 crons each run their own job (`jobOf` in `apps/edge/src/crons.ts`): the month-end close of the Realm
-Vote, and the nightly restart.
+Vote, the nightly restart, and the weekly export (OP-185, below).
 
 - `apps/edge/src/routes/table.ts` (`ROUTES`) lists every path the Worker answers, grouped as the
   files that answer them: a route is a path asked exactly, or a prefix every path under it begins
@@ -1176,6 +1177,64 @@ A keeper paints a tree room's ledges, walls, hazards, fronts and placed spots in
   of `overflow_settings` per room, under `masks:<room>`, with `savedAt`. A new save replaces the old.
   A draft of the four lists from before spots (OP-156, part 3) is taken, kept and read back as one
   with no spots (`spots: []`).
+
+### The weekly export (OP-185) [BUILT; runs once R2 is on and the bucket exists]
+
+The owls' records live only in the Worker's Durable Objects, so a lost object, a bad migration or a
+deleted Worker would lose owls. Once a week a copy of every record goes to R2
+(`apps/edge/src/parkExport.ts`).
+
+- **Where the copies live**: the private R2 bucket `owl-park-exports` on the park's own Cloudflare
+  account, bound to the Worker as `PARK_EXPORTS` (`apps/edge/wrangler.jsonc`). Nothing in it is
+  public: no public bucket address and no custom domain, and only the Worker writes to it.
+- **When**: the cron `0 8 * * 0` (`EXPORT_CRON`), 08:00 UTC every Sunday (3:00 AM Eastern in winter,
+  4:00 AM in summer), an hour before that night's restart. `POST /api/admin/export` (the admin key)
+  runs one at once.
+- **What a copy holds**: one file per object, `exports/<YYYY-MM-DD>/<kind>/<name>.json`, dated by its
+  UTC day, beside `exports/<YYYY-MM-DD>/manifest.json` (each file's key, bytes, tables and rows, and
+  the objects missed). The objects: the collections object (`collections/park`: every collector's
+  collection, feathers, quests, nest and furniture, the arcade's and the climb's runs, feedback, the
+  player stats, where owls have walked, and every account: its friend code, device, look and its
+  email's keyed hash), the vote ledger (`votes/park`: the tickets, their orders and links, the
+  Realm Vote, the opening switch and the restart's time) and the overflow object (`overflow/park`:
+  the busy-night settings, the realms and setup switches, the ledge drafts, the line). A file is JSON:
+  `format` (`owl-park-export`), `version` (1), `kind`, `name`, `date`, `at`, `leftOut` and `tables`
+  (each table's rows as they are stored; bytes as `{"$bytes": "<base64>"}`). Each object writes its own
+  file (the bucket is in its env too), so no table crosses the RPC limit between the Worker and it.
+- **What a copy never holds**: an account's sealed email address (`email_seal`, in `owl_accounts`
+  and `account_links`); the email's keyed hash goes in, so a restored owl stays protected and its
+  email still finds it. A restored account has no sealed copy to write to until its email is given
+  again. Nor the analytics log's outbox (`log_outbox`), rows on their way to the owner's analytics
+  that a restore would send twice. The room objects are not exported: they keep a room's passing
+  state only (leaf piles, lanterns, the stage quiz, copies of the overflow object's switches).
+- **Retention**: each run deletes the files dated more than 28 days (`EXPORT_KEEP_DAYS`) before its
+  own day, so four weeks of copies are kept (five files a kind, just after a run). Keys the export did
+  not write are left alone.
+- **The last export**: `GET /api/admin/export` answers `{date, objects, bytes, complete, files,
+  kept}`: the newest day in the bucket, its object files and their bytes, whether its manifest was
+  written, and every day kept.
+- **How to restore**: `POST /api/admin/restore` with `{"kind": "collections" | "votes" | "overflow",
+  "date": "YYYY-MM-DD"}` loads that day's file into the park's object of that kind, in one
+  transaction. It refuses (409, `not-empty`) an object that holds records, so a copy never lands over
+  live owls by mistake; `"force": true` empties the object first and loads the file in its place. A
+  day with no file is 404, a file that is not that object's 422, no bucket 503. Tables and columns
+  the object no longer has are skipped and named (`skipped`); columns the file lacks take their
+  defaults. Close the park for setup first (OP-205), restore each kind, then open it again.
+- **Without the binding** the Worker runs as before: the cron logs `park_export_skipped` and returns,
+  and the two routes answer 503. Each run logs `park_export`; a restore, `park_restore` or
+  `park_restore_refused` (`docs/LOGGING.md`).
+
+**What Cloudflare already keeps.** All four of the park's classes are SQLite-backed (`wrangler.jsonc`
+migrations v1 to v4, `new_sqlite_classes`), so each object has point-in-time recovery: its whole
+database (SQL and key-value) can be put back to any moment in the past 30 days, with
+`ctx.storage.getBookmarkForTime()` and `onNextSessionRestoreBookmark()` and a restart of the object.
+That covers a bad write or a bad migration inside a living object, at any second, and is the first
+thing to reach for there; the park has no route that calls it yet, so using it takes a deploy. What it
+cannot do, the export does: it lives in the object itself, so deleting the class, its namespace or
+the Worker (Cloudflare: "Deleting a class removes its namespace and all of its stored data
+permanently") takes it with them, while the export sits in R2 apart from all three; and the export is
+a file the owner can download, read and keep, which loads into a fresh object, in a new Worker or
+another account. It is not supported in local development; the export's restore is tested here.
 
 ### The park's analytics log (OP-107, OP-111, OP-113, OP-192) [BUILT; on once its secrets are set]
 

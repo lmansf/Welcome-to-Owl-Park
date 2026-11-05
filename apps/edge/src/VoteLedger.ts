@@ -6,6 +6,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { GateSetting } from './gateSwitch';
 import { Ledger, parkDay, parkMonth, previousMonth, walletVoter } from './Ledger';
+import { type CopyOut, type ExportTarget, type RestoreResult, bucketOf, copyIn, copyOut } from './parkExport';
 import { SqlTicketStore } from './sqlTicketStore';
 import { SqlVoteStore } from './sqlVoteStore';
 import { TicketBook } from './TicketBook';
@@ -28,6 +29,15 @@ export class VoteLedger extends DurableObject<Env> {
     this.ledger = new Ledger(new SqlVoteStore(ctx.storage.sql), [...VOTABLE_REALMS]);
     this.tickets = new TicketBook(new SqlTicketStore(ctx.storage.sql));
     this.gate = new GateSetting(ctx.storage.sql);
+  }
+
+  /** The weekly export (OP-185, parkExport.ts): this object's tables to its dated file in the park's bucket, and back into a fresh object. */
+  async exportCopy(t: ExportTarget): Promise<CopyOut | null> {
+    return copyOut(this.ctx.storage, bucketOf(this.env), t);
+  }
+
+  async restoreCopy(t: ExportTarget, force: boolean): Promise<RestoreResult> {
+    return copyIn(this.ctx.storage, bucketOf(this.env), t, force);
   }
 
   /** Internal API, called by the Worker with the visitor already authenticated and admitted. */

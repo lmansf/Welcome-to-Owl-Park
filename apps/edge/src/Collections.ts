@@ -82,6 +82,7 @@ import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Res
 import { TravelBook } from './travelBook';
 import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, type CollectibleType, type PurchaseData, type Visit } from './collectLog';
 import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
+import { type CopyOut, type ExportTarget, type RestoreResult, bucketOf, copyIn, copyOut } from './parkExport';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { randomDeviceId } from './pass';
 import { ROOMS, roomDef } from './rooms';
@@ -256,6 +257,15 @@ export class Collections extends DurableObject<Env> {
   /** The health check's question (OP-068): the object is up and answering. */
   async ping(): Promise<true> {
     return true;
+  }
+
+  /** The weekly export (OP-185, parkExport.ts): this object's tables to its dated file in the park's bucket, and back into a fresh object. */
+  async exportCopy(t: ExportTarget): Promise<CopyOut | null> {
+    return copyOut(this.ctx.storage, bucketOf(this.env), t);
+  }
+
+  async restoreCopy(t: ExportTarget, force: boolean): Promise<RestoreResult> {
+    return copyIn(this.ctx.storage, bucketOf(this.env), t, force);
   }
 
   // A call that may grant something (a new collector's starter pack and presents among them) takes
