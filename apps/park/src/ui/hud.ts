@@ -331,7 +331,9 @@ const CSS = `
   #hud .bar{min-height:44px;padding-right:100px}
   #hud .bottom .left{position:fixed;left:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;flex-direction:row-reverse;gap:8px;width:auto;height:auto;max-width:none}
   #hud .pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
-  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  /* No browser gesture starts on the pad (touch-action none): two thumbs at once must never read as a pinch or a pan (OP-242). */
+  #hud .pad{touch-action:none}
+  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
@@ -838,7 +840,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   });
   // Jump goes down with the thumb and comes up with it (a hold glides); held onto the button, so a
   // thumb that drifts off it while held still holds. A click from a keyboard (no pointer) is a tap.
+  /** The finger holding Jump down, so its lift is heard wherever it lands (quick taps can lose it, OP-242). */
+  let jumpPointer: number | null = null;
   jumpBtn.addEventListener('pointerdown', (e) => {
+    jumpPointer = e.pointerId;
     try {
       jumpBtn.setPointerCapture(e.pointerId);
     } catch {
@@ -846,7 +851,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     }
     jumpCbs?.press(eventTime(e));
   });
-  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) jumpBtn.addEventListener(t, (e) => jumpCbs?.release(eventTime(e)));
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const)
+    jumpBtn.addEventListener(t, (e) => {
+      if (jumpPointer === e.pointerId) jumpPointer = null;
+      jumpCbs?.release(eventTime(e));
+    });
+  for (const t of ['pointerup', 'pointercancel'] as const)
+    window.addEventListener(
+      t,
+      (e) => {
+        if (jumpPointer === null || e.pointerId !== jumpPointer || e.target === jumpBtn) return;
+        jumpPointer = null;
+        jumpCbs?.release(eventTime(e));
+      },
+      true,
+    );
   jumpBtn.addEventListener('click', (e) => {
     if (e.detail !== 0 || !jumpCbs) return;
     const { press, release } = jumpCbs;
