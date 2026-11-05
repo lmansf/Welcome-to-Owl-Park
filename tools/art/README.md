@@ -275,6 +275,13 @@ assembler (OP-234) builds screens from the published files, whose format is this
   clue carving, the brass key; four props, two by two) and `kit-sheet-puzzle-symbols` (the six code
   symbols), cut by `art:finish pieces` to `kit-puzzle-<piece>`. The room's markers and the code pad
   draw them in place of the code-drawn stand-ins, and fall back to those until the art is loaded.
+- **Hero screens** (OP-230, `kit.hero` in `config/kit.json`): a hero screen gets one kit-guided pass,
+  a far and (where the target has one) a middle backdrop layer painted for that screen from its
+  approved target and the screen as the kit assembles it (`work/art/guides/hero-<room>-screen.png`,
+  a `kit:preview` screen), keys `kit-hero-<room>-far-a` and `-mid-a`, finished and banded like any
+  area layer and named by the room's kit in place of the area's layers. `art:finish layer
+  --inpaint-key-hue 0.3` repaints the key's hue where the model painted it into the subject (magenta
+  mist at a bough's foot), which keying would leave pink.
 - **Art targets** (OP-249, `targets.mjs`): three finished screens, `target-l4`, `target-plaza` and
   `target-clearing`, painted as one picture each at 1600 x 900 under one light (the moon, upper right)
   from two references in `work/art/guides/`: `<key>-preview.png` (the screen as the kit draws it today,

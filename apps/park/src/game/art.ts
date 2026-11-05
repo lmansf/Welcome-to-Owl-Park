@@ -452,7 +452,6 @@ export const ART: Record<string, ArtSpec> = {
   'kit-hero-plaza-far-a': { w: 1600, h: 900, kind: 'layer' },
   'kit-hero-plaza-mid-a': { w: 800, h: 450, kind: 'layer' },
   'kit-hero-l4-far-a': { w: 1600, h: 900, kind: 'layer' },
-  'kit-hero-l4-mid-a': { w: 800, h: 450, kind: 'layer' },
   'kit-entrance-far-a': { w: 1600, h: 900, kind: 'layer' },
   'kit-entrance-far-b': { w: 1600, h: 900, kind: 'layer' },
   'kit-entrance-mid-a': { w: 800, h: 450, kind: 'layer' },

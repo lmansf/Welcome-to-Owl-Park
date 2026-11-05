@@ -46,6 +46,7 @@ sidecar supplies the key colour, the owl region colours, the seed and the provid
 from __future__ import annotations
 
 import argparse
+import colorsys
 import io
 import json
 import os
@@ -1069,6 +1070,35 @@ def trim_key_frame(img: Image.Image, key_colour: str, tol: float = 60.0, share: 
     return img.crop((left, top, w - right, h - bottom)), (left, top, right, bottom)
 
 
+def inpaint_key_hue(img: Image.Image, key_colour: str, min_sat: float, hue_window: float = 35.0, radius: int = 24) -> tuple[Image.Image, int]:
+    """Opaque pixels within ``hue_window`` of the key's hue and over ``min_sat`` saturation (the key
+    painted into the subject, which keying leaves as pink) take the colour of what is around them:
+    a wide blur of the other pixels, normalised by coverage, with each pixel's own light kept."""
+    from PIL import ImageFilter
+    rgba = img if img.mode == "RGBA" else img.convert("RGBA")
+    arr = np.array(rgba).astype(np.float32)
+    hsv = np.asarray(rgba.convert("RGB").convert("HSV")).astype(np.float32)
+    kr, kg, kb = parse_hex(key_colour)
+    key_hue = colorsys.rgb_to_hsv(kr / 255, kg / 255, kb / 255)[0] * 360.0
+    d = np.abs(hsv[..., 0] * (360.0 / 255.0) - key_hue)
+    d = np.minimum(d, 360.0 - d)
+    bad = (d <= hue_window) & (hsv[..., 1] / 255.0 > min_sat) & (arr[..., 3] > 0)
+    if not bad.any():
+        return rgba, 0
+    good = (~bad) & (arr[..., 3] > 0)
+    w = good.astype(np.float32)
+    rgb_w = arr[..., :3] * w[..., None]
+    blur = lambda m: np.asarray(Image.fromarray(np.clip(m, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(radius))).astype(np.float32)
+    cover = blur(w * 255.0) / 255.0
+    fill = np.stack([blur(rgb_w[..., c]) for c in range(3)], axis=-1) / np.maximum(cover, 1e-3)[..., None]
+    # keep each bad pixel's own light: scale the fill to the pixel's luminance
+    lum = lambda x: 0.2126 * x[..., 0] + 0.7152 * x[..., 1] + 0.0722 * x[..., 2]
+    scale = np.clip(lum(arr[..., :3]) / np.maximum(lum(fill), 1.0), 0.3, 1.5)
+    out = arr.copy()
+    out[..., :3][bad] = np.clip(fill[bad] * scale[bad][:, None], 0, 255)
+    return Image.fromarray(out.astype(np.uint8), "RGBA"), int(bad.sum())
+
+
 def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
     """A kit backdrop layer (OP-229): a sky plate as painted, or a far or middle layer keyed out of its
     backdrop; cropped to its aspect, healed to repeat sideways, resized to its logical size and shipped
@@ -1093,6 +1123,11 @@ def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
             tools.append(f"layer: trim-key left={trim[0]} top={trim[1]} right={trim[2]} bottom={trim[3]}")
         img, cinfo = key_out(img, chroma_params(a, kc))
         tools.append(f"layer: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}")
+        if a.inpaint_key_hue is not None:
+            # the key's hue painted into the subject itself (magenta mist at a trunk's foot): those
+            # pixels take the colour of their surroundings, their light kept
+            img, n = inpaint_key_hue(img, cinfo["backdrop"], a.inpaint_key_hue)
+            tools.append(f"layer: inpaint-key-hue sat>{a.inpaint_key_hue} {n} px")
     else:
         cinfo = {}
         img = img.convert("RGB")
@@ -2651,6 +2686,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--band", type=float, default=0.2, help="width of the sideways healing band as a fraction of the width")
     sp.add_argument("--trim-key", action="store_true", help="cut away a border of the key colour the painting put round itself before keying")
     sp.add_argument("--fade-top", type=int, default=0, help="ramp a keyed layer's alpha in over this many px below its first opaque row")
+    sp.add_argument("--inpaint-key-hue", type=float, default=None, help="after keying, repaint opaque pixels still in the key's hue above this saturation (the key painted into the subject) with the colour around them")
     sp.add_argument("--no-heal", action="store_true")
     sp.add_argument("--max-seam", type=float, default=1.6)
     sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the final's pixels made transparent (a moon painted into a keyed layer, which must not repeat); repeatable, keyed layers only")
