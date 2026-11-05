@@ -21,7 +21,10 @@ const centreOf = async (page: Page, sel: string): Promise<Point> => {
 const pointing = (page: Page) =>
   page.evaluate(() => (window.owlPark.game.registry.get('hud') as { stickDirection(): { x: number; y: number } | null }).stickDirection());
 
-/** The fingers on the screen now, all of them: the browser works out which went down, moved or lifted. */
+/**
+ * Fingers going down or moving (touchStart, touchMove: every finger on the screen), or lifting (touchEnd: only
+ * the fingers that lift, as Chromium reads it; the others stay down).
+ */
 const touches = (cdp: CDPSession, type: 'touchStart' | 'touchMove' | 'touchEnd', points: Touch[]) =>
   cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(({ x, y, id }) => ({ x, y, id })) });
 
@@ -59,14 +62,14 @@ test.describe('the thumbstick lets go (OP-242)', () => {
     for (let i = 0; i < 3; i++) {
       await touches(cdp, 'touchStart', [thumb, { ...jump, id: 1 }]);
       await page.waitForTimeout(40);
-      await touches(cdp, 'touchEnd', [thumb]);
+      await touches(cdp, 'touchEnd', [{ ...jump, id: 1 }]);
       await page.waitForTimeout(60);
     }
     // The other thumb's lifts never let the stick go.
     expect(await pointing(page)).not.toBeNull();
     await expect(page.locator('#hud .stick')).toHaveClass(/\bon\b/);
     // Its own thumb lifts: it rests, and the owl stops.
-    await touches(cdp, 'touchEnd', []);
+    await touches(cdp, 'touchEnd', [thumb]);
     await expect.poll(() => pointing(page)).toBeNull();
     await expect(page.locator('#hud .stick')).not.toHaveClass(/\bon\b/);
     await standsStill(page);
@@ -74,7 +77,7 @@ test.describe('the thumbstick lets go (OP-242)', () => {
     await touches(cdp, 'touchStart', [{ ...stick, id: 2 }]);
     await touches(cdp, 'touchMove', [{ ...thumb, id: 2 }]);
     await expect.poll(() => pointing(page)).not.toBeNull();
-    await touches(cdp, 'touchEnd', []);
+    await touches(cdp, 'touchEnd', [{ ...thumb, id: 2 }]);
     await expect.poll(() => pointing(page)).toBeNull();
     await cdp.detach();
   });
@@ -112,7 +115,9 @@ test.describe('the thumbstick lets go (OP-242)', () => {
   });
 
   test('in the tree, three taps on the pad’s Jump make the triple jump: a jump and both flaps in one flight (OP-239)', async ({ page }) => {
-    // Two flaps are the tree's (packages/shared flight.ts); the park has one.
+    // Two flaps are the tree's (packages/shared flight.ts); the park has one. Phones play the tree on
+    // their side (tree.spec.ts): held upright, a card asks to turn the phone over the pad.
+    await page.setViewportSize({ width: 839, height: 412 });
     await openPark(page, { room: 'l1' });
     const cdp = await page.context().newCDPSession(page);
     const jump = await centreOf(page, '[data-pad-jump]');
@@ -121,7 +126,7 @@ test.describe('the thumbstick lets go (OP-242)', () => {
     const tap = async () => {
       await touches(cdp, 'touchStart', [{ ...jump, id: 5 }]);
       await page.waitForTimeout(250);
-      await touches(cdp, 'touchEnd', []);
+      await touches(cdp, 'touchEnd', [{ ...jump, id: 5 }]);
     };
     /** Near the top of the rise (no faster than 120 px/s up), still in the air. */
     const nearTop = () => expect.poll(async () => { const a = await air(); return a.s !== 0 && a.vz <= 120; }, { timeout: 5_000, intervals: [20] }).toBe(true);
