@@ -1,5 +1,6 @@
 import { FEEDBACK_KINDS, FEEDBACK_MAX_CHARS, FEEDBACK_MIN_CHARS, cleanFeedbackText, type FeedbackKind } from '@owl-park/shared';
 import type { FeedbackOutcome } from '../net/feedback';
+import { KEEPER } from './about';
 import { createModal, modalHeader } from './modal';
 
 export interface FeedbackScreen {
@@ -26,7 +27,8 @@ const PROMPTS: Record<FeedbackKind | 'none', string> = {
 export function feedbackReply(outcome: FeedbackOutcome): { text: string; done: boolean } {
   switch (outcome) {
     case 'sent':
-      return { text: "Thank you! Your note is with the park's keepers.", done: true };
+      // Once the owner names the keepers (about.ts), the thanks says who reads the note.
+      return { text: KEEPER ? `Thank you! ${KEEPER.name} will read your note.` : "Thank you! Your note is with the park's keepers.", done: true };
     case 'kept':
       return { text: 'Thank you! This park has no server to send it to, so your note is saved on this device.', done: true };
     case 'busy':

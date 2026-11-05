@@ -13,6 +13,7 @@
  *
  * The words are drafts for the owner's approval (SPECTATOR_WORDS, spectator.ts).
  */
+import { DAY_TICKET_PRICE, ticketLine } from './about';
 import { createModal } from './modal';
 import { MENU_THEMES, themeAt, tokenStyle } from './menuTheme';
 import { SPECTATOR_WORDS } from './spectator';
@@ -91,7 +92,8 @@ export function createGatePrompt(root: HTMLElement): GatePrompt {
   const note = document.createElement('p');
   note.className = 'note';
   note.dataset['gateAsk'] = 'note';
-  note.textContent = SPECTATOR_WORDS.guestNote;
+  // With the Day Ticket's price set (about.ts), the note says it beside the guest rule.
+  note.textContent = DAY_TICKET_PRICE ? ticketLine() : SPECTATOR_WORDS.guestNote;
   box.append(says, row, note);
   box.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' && e.code !== 'Escape') return;

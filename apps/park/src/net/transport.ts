@@ -111,6 +111,8 @@ export interface ParkTransport {
    * (out of reach, or too many asks). Transports without a server are never closed.
    */
   closed?(): Promise<ClosedView | null>;
+  /** How many owls are in the park right now, every room added up (/api/counts), for the home screen; null when the park did not say. */
+  parkCount?(): Promise<number | null>;
   /** The owl's account (OP-139): only the room server keeps them, and only with ACCOUNTS on. */
   readonly accounts?: AccountLink;
 }

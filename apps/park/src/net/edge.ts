@@ -172,6 +172,17 @@ export class EdgeTransport implements ParkTransport {
    * Whether the park is closed for setup (OP-233): asked with the browser's cache, which the Worker lets
    * keep the answer a few seconds; null when the park did not answer with one.
    */
+  async parkCount(): Promise<number | null> {
+    try {
+      const res = await fetch(`${this.base}/api/counts`);
+      if (!res.ok) return null;
+      const counts = (await res.json()) as Record<string, unknown>;
+      return Object.values(counts).reduce<number>((sum, n) => sum + (typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : 0), 0);
+    } catch {
+      return null;
+    }
+  }
+
   async closed(): Promise<ClosedView | null> {
     try {
       const res = await fetch(`${this.base}/api/closed`);

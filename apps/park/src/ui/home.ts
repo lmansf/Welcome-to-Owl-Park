@@ -9,6 +9,7 @@
  * and Make your owl, with their words and the time they expect to open; a keeper's tab keeps its Play.
  */
 import type { Entry, WalletEntry } from '../net';
+import { ABOUT_WORDS, presenceLine, type InfoKind } from './about';
 import { ACCOUNT_WORDS } from './account';
 import type { PreviewFrame } from './owlBuilder';
 import { KIND_LABEL, bestTicket, timeLeft } from './tickets';
@@ -123,6 +124,8 @@ export interface HomeActions {
   stage(frame: PreviewFrame): void;
   /** A screen is open over the home screen (the builder, Settings): Enter is theirs. */
   blocked(): boolean;
+  /** About the park, or A note for grown-ups (about.ts). */
+  info(kind: InfoKind, button: HTMLElement): void;
 }
 
 export interface HomeScreen {
@@ -147,6 +150,8 @@ export interface HomeScreen {
   closed(card: ClosedCard | null): void;
   /** Whether the closed card keeps this tab out (shown, and not a keeper's tab). */
   isShut(): boolean;
+  /** How many owls are in the park right now (from /api/counts); null hides the line. */
+  presence(n: number | null): void;
 }
 
 /** Width over height of what the builder's preview keeps in view around the owl, a hat above and a pet behind (VIEW in game/BuilderScene.ts). */
@@ -162,7 +167,7 @@ function css(): string {
 #hud .home{position:absolute;inset:0;z-index:4;display:grid;grid-template-columns:minmax(0,min(440px,56vw)) minmax(0,1fr);pointer-events:none}
 #hud .home[hidden]{display:none}
 #hud.covered .home{visibility:hidden}
-#hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;justify-content:center;gap:clamp(10px,2.2vh,16px);min-height:0;
+#hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;justify-content:safe center;gap:clamp(10px,2.2vh,16px);min-height:0;overflow-y:auto;
   padding:max(16px,env(safe-area-inset-top)) clamp(16px,4vw,44px) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:linear-gradient(90deg,rgba(12,30,54,.9),rgba(12,30,54,.62) 72%,rgba(12,30,54,0))}
 #hud .home .h-brand{display:flex;align-items:center;gap:clamp(10px,2vw,16px);margin-bottom:clamp(4px,2.4vh,20px)}
@@ -172,6 +177,11 @@ function css(): string {
 #hud .home .h-side button{width:100%}
 #hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
 #hud .home .h-small{min-height:40px;font-size:14px}
+#hud .home .h-lead{margin:0;font-size:clamp(14px,2.2vh,17px);line-height:1.4}
+#hud .home .h-welcome,#hud .home .h-presence{margin:0;font-size:14px;line-height:1.35;opacity:.92}
+#hud .home .h-presence{color:#FFD36A;opacity:1}
+#hud .home .h-info{display:flex;flex-wrap:wrap;gap:8px}
+#hud .home .h-side .h-info button{flex:1 1 auto;width:auto}
 #hud .home .h-wallet{margin:-4px 0 0;font-size:14px;line-height:1.35;text-align:center;opacity:.92}
 #hud .home .h-note{margin:0;align-self:flex-start;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;background:rgba(123,201,80,.2);border:1px solid rgba(123,201,80,.65)}
 #hud .home .h-line{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.45)}
@@ -194,6 +204,8 @@ function css(): string {
   #hud .home .h-side{padding-left:max(14px,env(safe-area-inset-left));padding-right:10px}
   #hud .home .h-brand{flex-direction:column;align-items:flex-start;gap:8px}
   #hud .home h1{font-size:clamp(24px,7.4vw,32px)}
+  #hud .home .h-lead{font-size:14px}
+  #hud .home .h-welcome,#hud .home .h-presence{font-size:13px}
 }
 `;
 }
@@ -215,6 +227,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   el.innerHTML = `
     <div class="h-side">
       <div class="h-brand"><span class="h-mascot" aria-hidden="true"></span><h1></h1></div>
+      <p class="h-lead" data-home-lead></p>
       <p class="h-note" data-home-note hidden></p>
       <div class="h-closed" data-home-closed role="status" aria-live="polite" hidden>
         <p class="h-closed-words" data-closed-words></p>
@@ -232,13 +245,28 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
         <p class="h-small-note" data-line-auto></p>
       </div>
       <p class="h-wallet" data-home-wallet hidden></p>
+      <p class="h-presence" data-home-presence role="status" hidden></p>
+      <p class="h-welcome" data-home-welcome></p>
       <button class="ghost h-small" data-home-btn="restore" hidden></button>
       <button class="ghost h-small" data-home-btn="settings"></button>
+      <div class="h-info">
+        <button class="ghost h-small" data-home-info="about"></button>
+        <button class="ghost h-small" data-home-info="grown-ups"></button>
+      </div>
     </div>
     <div class="h-stage" data-home-stage></div>`;
   root.appendChild(el);
   const $ = <T extends Element>(sel: string) => el.querySelector(sel) as T;
   $<HTMLElement>('h1').textContent = HOME_WORDS.name;
+  $<HTMLElement>('[data-home-lead]').textContent = ABOUT_WORDS.lead;
+  $<HTMLElement>('[data-home-welcome]').textContent = ABOUT_WORDS.welcome;
+  const presenceEl = $<HTMLElement>('[data-home-presence]');
+  const aboutBtn = $<HTMLButtonElement>('[data-home-info="about"]');
+  const grownUpsBtn = $<HTMLButtonElement>('[data-home-info="grown-ups"]');
+  aboutBtn.textContent = ABOUT_WORDS.aboutButton;
+  grownUpsBtn.textContent = ABOUT_WORDS.grownUpsButton;
+  aboutBtn.addEventListener('click', () => actions.info('about', aboutBtn));
+  grownUpsBtn.addEventListener('click', () => actions.info('grown-ups', grownUpsBtn));
   const login = $<HTMLButtonElement>('[data-home-btn="login"]');
   const play = $<HTMLButtonElement>('[data-home-btn="play"]');
   const settings = $<HTMLButtonElement>('[data-home-btn="settings"]');
@@ -377,5 +405,10 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       if (wasShut && !shut && shown) (loggedIn ? play : login).focus({ preventScroll: true });
     },
     isShut: () => shut,
+    presence(n) {
+      const line = presenceLine(n);
+      presenceEl.textContent = line ?? '';
+      presenceEl.hidden = line === null;
+    },
   };
 }

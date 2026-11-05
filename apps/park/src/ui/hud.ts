@@ -6,6 +6,7 @@ import type { AccountLink, ConnectionStatus } from '../net';
 import type { FeedbackOutcome } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
+import { createInfoScreens, type InfoKind } from './about';
 import { accountCard, createAccountScreens, type AccountScreenDeps, type AccountScreens } from './account';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
@@ -141,6 +142,8 @@ export interface Hud {
   /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
   openOwl(opener: HTMLElement): void;
   openSettings(opener: HTMLElement): void;
+  /** About the park or A note for grown-ups (about.ts), from the home screen. */
+  openInfo(kind: InfoKind, opener: HTMLElement): void;
   /** Which owl are you (OP-076): a new owl's first run (from Make your owl), drawn over everything. */
   openWhichOwl(run: Omit<WhichOwlRun, 'preview'>, opener: HTMLElement): void;
   /** The feather shop. */
@@ -669,6 +672,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
+  /** About the park and A note for grown-ups (about.ts): the home screen's two small screens. */
+  const info = createInfoScreens(root);
   /** The card before the store (OP-153), before a purchase at the turnstiles, the pass offer or the gift shop; it closes alone on Escape. */
   const storeCard = createStoreCard(root);
   /** The turnstiles' question (OP-198), before the card before the store. */
@@ -722,11 +727,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     whichOwl.close();
     feedback?.close();
     accountScreens?.close();
+    info.close();
     leaveCard.close();
     storeCard.close();
     gatePrompt.close();
   };
-  const isBlocking = () => storeCard.isOpen() || gatePrompt.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  const isBlocking = () => storeCard.isOpen() || gatePrompt.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || info.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
   /** The account's cards for the Menu (OP-139): none while accounts are off. */
   function accountCards(): HTMLElement[] | null {
     if (!account || !accountScreens) return null;
@@ -1056,6 +1062,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     openOwl: (opener) => openScreen('owl', false, opener),
     openSettings: (opener) => openScreen('settings', false, opener),
+    openInfo: (kind, opener) => info.open(kind, opener),
     openWhichOwl,
     openShop() {
       // The feather shop and its free gift are ticket holders' (OP-191).
