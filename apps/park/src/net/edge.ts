@@ -405,6 +405,16 @@ export class EdgeTransport implements ParkTransport {
     return this.api('/api/feedback', { method: 'POST', body: JSON.stringify(draft) });
   }
 
+  /** The thanks ladder for feedback (OP-272). */
+  feedbackRewards(): Promise<Response> {
+    return this.api('/api/feedback/reward');
+  }
+
+  /** Keep the card about the grey mouse closed for this owl (OP-272). */
+  closeFeedbackCard(): Promise<Response> {
+    return this.api('/api/feedback/close', { method: 'POST', body: '{}' });
+  }
+
   async join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection> {
     handlers.onStatus('connecting');
     const wsBase = this.base ? this.base.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;

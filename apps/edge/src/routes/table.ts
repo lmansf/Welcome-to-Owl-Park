@@ -52,6 +52,9 @@ export const ROUTES: readonly Route[] = [
   // ---- Accounts (OP-139) and feedback ----
   { prefix: '/api/account/', handle: account },
   { path: '/api/feedback', handle: feedback },
+  // The thanks ladder's state and the page card's close (OP-272).
+  { path: '/api/feedback/reward', handle: feedback },
+  { path: '/api/feedback/close', handle: feedback },
 
   // ---- Busy nights (OP-075), and closed for setup (OP-233) ----
   { path: '/api/line', handle: line },

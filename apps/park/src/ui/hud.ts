@@ -1,9 +1,9 @@
-import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
+import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
 import type { AccountLink, ConnectionStatus } from '../net';
-import type { FeedbackOutcome } from '../net/feedback';
+import type { FeedbackSent } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { createInfoScreens, type InfoKind } from './about';
@@ -15,6 +15,7 @@ import { createDecorateSheet, type DecorateActions, type DecorateSheet, type Dec
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { bugIcon, createFeedbackBug } from './feedbackBug';
+import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
 import { createTreeMinimap } from './treeMinimap';
 import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
@@ -77,6 +78,12 @@ export interface HudHint {
   text?: string;
 }
 
+/** The thanks ladder for feedback (OP-272): where the owl stands, and closing the card beside the bug. */
+export interface FeedbackRewardLink {
+  load(): Promise<FeedbackRewardView | null>;
+  close(): Promise<FeedbackRewardView | null>;
+}
+
 export interface Hud {
   setCount(n: number): void;
   /** Owls in the whole park, when known (authoritative transports). */
@@ -87,7 +94,7 @@ export interface Hud {
   /** Wire the emote wheel, the owl builder, the feather count and the shop to the visitor's collection. */
   attachCollection(state: CollectionState, actions: CollectionActions): void;
   /** Feedback in the Menu; each note goes with the room the owl is in and the screen's size. */
-  attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
+  attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackSent>, rewards?: FeedbackRewardLink): void;
   /** The owl's account (OP-139): its card in the Menu's Nest and Settings tabs, and the screens that protect and bring back an owl. */
   attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
   /** The Menu's ways out: what "Leave the park" and travel from the map do. */
@@ -518,6 +525,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let spectator = false;
   let getTicket: ((line: string) => void) | null = null;
   let roomId = '';
+  // The thanks ladder for feedback (OP-272), as last heard, its card, and a fresh look at it.
+  let rewardView: FeedbackRewardView | null = null;
+  let feedbackCard: FeedbackCard | null = null;
+  let loadRewards: (() => void) | null = null;
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
   let accountScreens: AccountScreens | null = null;
@@ -981,10 +992,19 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       state.onChange(showFeathers);
       showFeathers();
     },
-    attachFeedback(send) {
+    attachFeedback(send, rewards) {
+      const showReward = (view: FeedbackRewardView | null) => {
+        rewardView = view;
+        feedback?.setReward(view);
+        feedbackCard?.refresh(view);
+      };
       feedback = createFeedbackScreen(
         root,
-        (kind, text) => send({ kind, text, room: roomId || null, screen: `${window.innerWidth}x${window.innerHeight}` }),
+        async (kind, text) => {
+          const sent = await send({ kind, text, room: roomId || null, screen: `${window.innerWidth}x${window.innerHeight}` });
+          if (sent.reward) showReward(afterReward(rewardView, sent.reward));
+          return sent;
+        },
         toast,
         () => openScreen('menu'),
       );
@@ -998,11 +1018,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       menu.headButton(menuFeedback);
       // The feedback bug (OP-208): on screen everywhere until the full opening. Over a game or a
       // covering screen the form opens on top and leaves it as it was; anywhere else it opens as Settings' does.
-      createFeedbackBug(root, (button) => {
+      const openFeedback = (button: HTMLElement) => {
         if (!feedback || feedback.isOpen()) return;
         if (arcade.isOpen() || climb.isOpen() || builder?.isOpen() || whichOwl.isOpen() || accountScreens?.isOpen()) feedback.open(false, button);
         else openScreen('feedback', false, button);
-      });
+      };
+      createFeedbackBug(root, openFeedback);
+      // The thanks ladder (OP-272): a grey mouse's card beside the bug until it is won or closed.
+      if (rewards) {
+        feedbackCard = createFeedbackCard(root, openFeedback, () => {
+          if (rewardView) showReward({ ...rewardView, closed: true });
+          void rewards.close().then((v) => v && showReward(v));
+        });
+        loadRewards = () => void rewards.load().then((v) => v && showReward(v));
+        loadRewards();
+      }
     },
     attachAccount(link, deps) {
       const refresh = () =>
@@ -1094,6 +1124,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setSpectator(on) {
       if (on === spectator) return;
       spectator = on;
+      loadRewards?.();
       badge.set(on);
       if (on) shop?.close();
       menu.refresh();
@@ -1148,6 +1179,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setRoom(id) {
       roomId = id;
+      // Past the turnstiles a note starts to earn: look again until it does.
+      if (!rewardView?.earns) loadRewards?.();
       questUi?.setRoom(id);
       // The map's "You are here".
       menu.refresh();

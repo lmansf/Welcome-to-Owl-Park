@@ -1,9 +1,10 @@
-/** Feedback: visitors send it with their pass; the keepers read it with the admin key. */
+/** Feedback: visitors send it with their pass (and climb the thanks ladder, OP-272); the keepers read it with the admin key. */
 import { hashForLog, parseFeedback } from '@owl-park/shared';
 import { FEEDBACK_STATUSES, type FeedbackStatus } from '../feedbackBox';
+import { admitted } from '../gate';
 import { Counter, limitsOn } from '../limits';
 import { CORS, FEEDBACK_BODY_MAX, clientIp, isAdmin, json, passFrom, readJson, visitOf } from './http';
-import { collections } from './park';
+import { collections, gateOf } from './park';
 import type { RouteCtx } from './router';
 
 /**
@@ -23,11 +24,18 @@ export function forgetFeedbackAddresses(): void {
 // ---- Feedback: visitors send it with their pass; the keepers read it with the admin key ----
 export async function feedback(c: RouteCtx): Promise<Response> {
   const { request, env, log } = c;
+  const { url } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-  if (request.method !== 'POST') return json({ error: 'not found' }, 404);
+  const reward = url.pathname === '/api/feedback/reward' && request.method === 'GET';
+  const close = url.pathname === '/api/feedback/close' && request.method === 'POST';
+  if (!reward && !close && !(url.pathname === '/api/feedback' && request.method === 'POST')) return json({ error: 'not found' }, 404);
   const pass = await passFrom(request, env, log);
   if (!pass) return json({ error: 'bad-pass' }, 401);
   if (!pass.cid) return json({ error: 'no-collector' }, 401);
+  // The thanks ladder (OP-272): only an owl past the turnstiles climbs it, since guests keep nothing they win.
+  const earns = admitted(await gateOf(env), pass);
+  if (reward) return json({ earns, ...(await collections(env).feedbackRewards(pass.cid)) });
+  if (close) return json({ earns, ...(await collections(env).closeFeedbackCard(pass.cid)) });
   // A few lines of words: refuse anything far larger before reading it.
   if (Number(request.headers.get('Content-Length') ?? 0) > FEEDBACK_BODY_MAX) return json({ error: 'too large' }, 413);
   // The words come back with any email, phone number, link, handle or street address taken out (OP-236).
@@ -42,7 +50,7 @@ export async function feedback(c: RouteCtx): Promise<Response> {
     }
   }
   const ua = request.headers.get('User-Agent')?.slice(0, 300) || null;
-  const r = await collections(env).addFeedback(pass.cid, draft, ua, visitOf(pass, request));
+  const r = await collections(env).addFeedback(pass.cid, draft, ua, visitOf(pass, request), earns);
   return json(r, r.ok ? 200 : 429);
 }
 

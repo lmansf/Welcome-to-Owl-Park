@@ -32,8 +32,10 @@ const stub = (answer: (req: Request) => Response) => ({
   get: () => ({ fetch: async (input: Request | string, init?: RequestInit) => answer(typeof input === 'string' ? new Request(input, init) : input) }),
 });
 
-/** Every note that reached the collections object. */
+/** Every note that reached the collections object, and whether each climbs the thanks ladder (OP-272). */
 let kept: FeedbackDraft[] = [];
+let earned: boolean[] = [];
+let closedFor: string[] = [];
 const env = (more: Record<string, string> = {}) =>
   ({
     VOTES: stub((req) => (new URL(req.url).pathname === '/gate' ? Response.json({ gate: null }) : Response.json({ ok: true }))),
@@ -41,9 +43,15 @@ const env = (more: Record<string, string> = {}) =>
     ROOMS: stub(() => new Response('in')),
     COLLECTIONS: {
       getByName: () => ({
-        addFeedback: async (_cid: string, draft: FeedbackDraft) => {
+        addFeedback: async (_cid: string, draft: FeedbackDraft, _ua: unknown, _visit: unknown, earns: boolean) => {
           kept.push(draft);
+          earned.push(earns);
           return { ok: true, id: kept.length };
+        },
+        feedbackRewards: async () => ({ given: 1, closed: false }),
+        closeFeedbackCard: async (cid: string) => {
+          closedFor.push(cid);
+          return { given: 0, closed: true };
         },
       }),
     },
@@ -54,7 +62,7 @@ const env = (more: Record<string, string> = {}) =>
   }) as unknown as Env;
 
 let n = 0;
-const passFor = (cid: string) => mintPass(KEY, { id: `v_note${String(++n).padStart(5, '0')}`, exp: Math.floor(Date.now() / 1000) + 600, adm: true, cid });
+const passFor = (cid: string, adm = true) => mintPass(KEY, { id: `v_note${String(++n).padStart(5, '0')}`, exp: Math.floor(Date.now() / 1000) + 600, adm, cid });
 const send = async (text: string, pass: string, ip = '198.51.100.7', e = env()) =>
   worker.fetch(
     new Request('https://park.example/api/feedback', { method: 'POST', headers: { Authorization: `Bearer ${pass}`, 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify({ kind: 'bug', text }) }),
@@ -65,6 +73,8 @@ const send = async (text: string, pass: string, ip = '198.51.100.7', e = env()) 
 let cap: ReturnType<typeof captureLogs>;
 beforeEach(() => {
   kept = [];
+  earned = [];
+  closedFor = [];
   forgetLimits();
   forgetFeedbackAddresses();
   forgetGate();
@@ -104,5 +114,35 @@ describe('the feedback box at the Worker (OP-236)', () => {
   it('counts nothing with RATE_LIMITS off (a load test’s throwaway copy)', async () => {
     const off = env({ RATE_LIMITS: 'off' });
     for (let i = 0; i < FEEDBACK_PER_ADDRESS.limit + 1; i++) expect((await send(`note ${i}`, await passFor(`c_load${String(i).padStart(6, '0')}`), '198.51.100.7', off)).status).toBe(200);
+  });
+});
+
+describe('the thanks ladder at the Worker (OP-272)', () => {
+  const call = async (path: string, method: string, pass: string, e = env()) =>
+    worker.fetch(new Request(`https://park.example${path}`, { method, headers: { Authorization: `Bearer ${pass}`, 'Content-Type': 'application/json' }, ...(method === 'POST' ? { body: '{}' } : {}) }), e, CTX);
+
+  it('lets an owl past the turnstiles climb it, and keeps a guest’s note without it', async () => {
+    const tickets = env({ GATE: 'ticket' });
+    expect((await send('the gate froze on me twice', await passFor('c_ticket0001'), '198.51.100.7', tickets)).status).toBe(200);
+    expect((await send('the gate froze on me twice', await passFor('c_guest00001', false), '198.51.100.7', tickets)).status).toBe(200);
+    expect(earned).toEqual([true, false]);
+    expect(kept).toHaveLength(2);
+  });
+
+  it('answers the ladder as it stands, with whether this owl earns, and closes the card for this owl only', async () => {
+    const tickets = env({ GATE: 'ticket' });
+    expect(await (await call('/api/feedback/reward', 'GET', await passFor('c_ticket0002'), tickets)).json()).toEqual({ earns: true, given: 1, closed: false });
+    expect(await (await call('/api/feedback/reward', 'GET', await passFor('c_guest00002', false), tickets)).json()).toEqual({ earns: false, given: 1, closed: false });
+    expect(await (await call('/api/feedback/close', 'POST', await passFor('c_ticket0003'), tickets)).json()).toEqual({ earns: true, given: 0, closed: true });
+    expect(closedFor).toEqual(['c_ticket0003']);
+  });
+
+  it('refuses the wrong method, and a request without a pass', async () => {
+    const pass = await passFor('c_ticket0004');
+    expect((await call('/api/feedback/reward', 'POST', pass)).status).toBe(404);
+    expect((await call('/api/feedback/close', 'GET', pass)).status).toBe(404);
+    expect((await call('/api/feedback', 'GET', pass)).status).toBe(404);
+    expect((await worker.fetch(new Request('https://park.example/api/feedback/reward'), env(), CTX)).status).toBe(401);
+    expect(closedFor).toEqual([]);
   });
 });

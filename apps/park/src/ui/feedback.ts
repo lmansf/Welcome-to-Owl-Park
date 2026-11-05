@@ -1,5 +1,6 @@
-import { FEEDBACK_KINDS, FEEDBACK_MAX_CHARS, FEEDBACK_MIN_CHARS, cleanFeedbackText, type FeedbackKind } from '@owl-park/shared';
-import type { FeedbackOutcome } from '../net/feedback';
+import { FEEDBACK_KINDS, FEEDBACK_MAX_CHARS, FEEDBACK_MIN_CHARS, cleanFeedbackText, type FeedbackKind, type FeedbackRewardView } from '@owl-park/shared';
+import type { FeedbackOutcome, FeedbackSent } from '../net/feedback';
+import { rewardLine, rewardThanks } from './feedbackReward';
 import { KEEPER } from './about';
 import { createModal, modalHeader } from './modal';
 
@@ -8,10 +9,12 @@ export interface FeedbackScreen {
   open(fromMenu: boolean, opener?: HTMLElement | null): void;
   close(): void;
   isOpen(): boolean;
+  /** The thanks ladder as it stands (OP-272), for the line saying what this note will bring. */
+  setReward(view: FeedbackRewardView | null): void;
 }
 
 /** Sends what the visitor wrote (the HUD adds the room and the screen size). */
-export type SendFeedback = (kind: FeedbackKind, text: string) => Promise<FeedbackOutcome>;
+export type SendFeedback = (kind: FeedbackKind, text: string) => Promise<FeedbackSent>;
 
 const LABELS: Record<FeedbackKind, string> = { bug: 'Bug', idea: 'Idea', praise: 'Praise', other: 'Other' };
 
@@ -54,6 +57,8 @@ const CSS = `
 #hud .feedback .fb-count{font-size:12px;opacity:.7;flex:1}
 #hud .feedback .fb-lead{font-size:15px;margin:0}
 #hud .feedback .fb-note{font-size:12px;opacity:.75;margin:0}
+#hud .feedback .fb-reward{font-size:13px;margin:0;color:#FFD36A}
+#hud .feedback .fb-reward:empty{display:none}
 #hud .feedback .fb-status{font-size:13px;margin:0;color:#FFD36A}
 #hud .feedback .fb-status:empty{display:none}
 `;
@@ -71,6 +76,7 @@ export function createFeedbackScreen(root: HTMLElement, send: SendFeedback, toas
   const box = modal.box;
   box.innerHTML = `
     <p class="fb-lead">Found a bug? Have an idea?</p>
+    <p class="fb-reward" data-fb-reward></p>
     <div class="kinds" role="group" aria-label="What kind of note"></div>
     <textarea data-fb-text maxlength="${FEEDBACK_MAX_CHARS}" aria-label="Your note"></textarea>
     <p class="fb-note">Please leave out names, emails and other personal details.</p>
@@ -83,6 +89,7 @@ export function createFeedbackScreen(root: HTMLElement, send: SendFeedback, toas
   const status = $<HTMLElement>('[data-fb-status]');
   const sendBtn = $<HTMLButtonElement>('[data-fb-send]');
   const kindsEl = $<HTMLElement>('.kinds');
+  const rewardEl = $<HTMLElement>('[data-fb-reward]');
   let kind: FeedbackKind | null = null;
   let sending = false;
 
@@ -124,14 +131,14 @@ export function createFeedbackScreen(root: HTMLElement, send: SendFeedback, toas
     sending = true;
     status.textContent = '';
     refresh();
-    const outcome = await send(kind ?? 'other', cleanFeedbackText(text.value));
+    const { outcome, reward } = await send(kind ?? 'other', cleanFeedbackText(text.value));
     sending = false;
     const reply = feedbackReply(outcome);
     if (reply.done) {
       text.value = '';
       kind = null;
       modal.close();
-      toast(reply.text, 5000);
+      toast(reward ? rewardThanks(reward) : reply.text, reward ? 7000 : 5000);
     } else status.textContent = reply.text;
     refresh();
   });
@@ -148,5 +155,8 @@ export function createFeedbackScreen(root: HTMLElement, send: SendFeedback, toas
     },
     close: () => modal.close(),
     isOpen: () => modal.isOpen(),
+    setReward(view) {
+      rewardEl.textContent = rewardLine(view) ?? '';
+    },
   };
 }
