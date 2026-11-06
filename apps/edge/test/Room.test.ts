@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, LIFTED, UPDRAFT_RISE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -981,5 +981,48 @@ describe('Room: the dash, in a parkour course (OP-224)', () => {
     room.air('a', jump);
     dash(room, { x: 500, y: 450 });
     expect(refused).toEqual([]);
+  });
+});
+
+describe('Room: updrafts, in a room seen from the side (OP-226)', () => {
+  let now = 1_000_000;
+  const rejected: PositionRejection[] = [];
+  beforeEach(() => {
+    now = 1_000_000;
+    rejected.length = 0;
+  });
+
+  it('takes a lifted owl only inside a column that is on, rising to its top, and tells the others', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const x = probe.positionOf('p')!.x;
+    // One column over where an owl comes in, always on; one that gusts for 3 s in 5, starting at park time 0 (1_000_000 is a whole number of cycles).
+    const columns = { ...def, updrafts: [{ id: 'up', x: x - 60, w: 120, top: 300 }, { id: 'gust', x: x - 60, w: 120, top: 250, onMs: 3000, offMs: 2000 }] };
+    const room = new Room(columns, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const lifted: Air = { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 };
+    expect(room.air('a', lifted)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: lifted });
+    // A top no column here has: refused.
+    expect(room.air('a', { ...lifted, h: 280 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+    // The gust while it is on, and a moment after it drops; not once it has been off a while.
+    now += 1000;
+    expect(room.air('a', { ...lifted, h: 250 })).toBe(true);
+    now += 2300;
+    expect(room.air('a', { ...lifted, h: 250 })).toBe(true);
+    now += 500;
+    expect(room.air('a', { ...lifted, h: 250 })).toBe(false);
+    expect(rejected).toEqual(['lift', 'lift']);
+  });
+
+  it('refuses a lifted owl in a room with no updrafts', () => {
+    const room = new Room(def, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    room.join(new FakePeer(), 'a', hello());
+    expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
   });
 });

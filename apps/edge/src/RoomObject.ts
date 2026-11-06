@@ -61,6 +61,7 @@ import {
   COURSE_START_REACH,
   courseOfRoom,
   inPit,
+  inThorns,
   pieceIn,
   shortcutIn,
   type ClientCourse,
@@ -1025,8 +1026,13 @@ export class RoomObject extends DurableObject<Env> {
           return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, first: res.first }) : no(res.reason);
         }
         case 'fall': {
-          // A fall is the room's to see: the owl stands over one of the act's pits.
-          if (!pos || !inPit(def, pos)) return no('far');
+          // A fall is the room's to see: the owl is down on the floor over one of the act's pits (up on a
+          // ledge over a drop, in a course seen from the side, it has not fallen), or in thorns, at any
+          // height; a moment's slack either side of them, as the room has the owl a moment behind.
+          const pit = !!pos && inPit(def, pos) && room.groundOf(att.id) === 0;
+          const slack = LIMITS.reachSlackPx;
+          const thorny = !!pos && [-slack, 0, slack].some((dx) => [-slack, 0, slack].some((dz) => inThorns(def, pos.x + dx, room.heightOf(att.id) + dz)));
+          if (!pit && !thorny) return no('far');
           const res = await stub.courseFall(cid, att.room);
           if (!res.ok) return no(res.reason);
           room.place(att.id, res.at);

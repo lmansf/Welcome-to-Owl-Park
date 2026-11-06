@@ -71,6 +71,20 @@ export interface RoomCourse {
   shortcuts?: CourseShortcut[];
   /** The finish shrine, in the last act. */
   shrine?: CoursePiece;
+  /**
+   * In an act seen from the side: thorns hanging in the air (OP-226's hazard boxes), from `x0` to `x1`
+   * across and `z0` to `z1` up over the ground line. Touching them is a fall, as a pit is, at any height.
+   */
+  thorns?: CourseThorns[];
+}
+
+/** Thorns in the air of an act seen from the side: a box across and up over the ground line (room px). */
+export interface CourseThorns {
+  id: string;
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
 }
 
 export interface CourseDef {
@@ -125,6 +139,11 @@ export function coursePieces(def: CourseDef, rooms: (id: string) => RoomDef | un
 /** The objective's parts over the course, act by act: what the objective strip counts. */
 export function courseParts(def: CourseDef, rooms: (id: string) => RoomDef | undefined): PlacedPiece[] {
   return coursePieces(def, rooms, 'part');
+}
+
+/** Whether an owl at `x`, `z` up, is in one of a room's thorns (an act seen from the side). */
+export function inThorns(room: Pick<RoomDef, 'course'> | undefined, x: number, z: number): boolean {
+  return (room?.course?.thorns ?? []).some((t) => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1);
 }
 
 /** Whether a point is over one of a room's pits. */

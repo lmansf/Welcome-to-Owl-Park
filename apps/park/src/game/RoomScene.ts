@@ -8,6 +8,7 @@ import {
   FLIGHT_STEP_MS,
   GAMES,
   GLIDING,
+  LIFTED,
   GROUNDED,
   LEFT_PARK_SPAWN,
   LOBBY_ROOM,
@@ -106,6 +107,7 @@ import {
   dashHeading,
   dashRefusal,
   holdsDash,
+  liftAt,
   spendDash,
   type Air,
   type Flier,
@@ -157,6 +159,7 @@ import { ActivityLayer } from './activities';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
+import { UpdraftLeaves } from './updraftLeaves';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
 import { PUZZLE_ART_KEYS, artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
@@ -303,6 +306,8 @@ export class RoomScene extends Phaser.Scene {
   /** The point a tree room's camera follows: the own owl as drawn (OP-156). */
   private readonly camAt = { x: 0, y: 0 };
   private conn: RoomConnection | null = null;
+  /** The leaves in the room's updrafts, drawn (OP-226); none in a room without them. */
+  private updrafts: UpdraftLeaves | null = null;
   /**
    * What the room says while its art loads (OP-129): the page joins as the art starts to load, and
    * each word waits here, in order, until the scene is built and holds the connection. Null after.
@@ -597,6 +602,7 @@ export class RoomScene extends Phaser.Scene {
     this.arcade = null;
     this.climb = null;
     this.course = null;
+    this.updrafts = null;
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -854,11 +860,15 @@ export class RoomScene extends Phaser.Scene {
       awarded: () => void this.collection.refresh(),
       offerTicket: (line) => this.offerDayTicket(line),
     });
+    // The leaves in the room's updrafts (OP-226): what shows a column, and when its gust drops.
+    this.updrafts = room.updrafts?.length
+      ? new UpdraftLeaves(this, room.updrafts, room.kit?.ground ?? TREE_GROUND, 1, () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false)
+      : null;
     this.course = courseFor(room, {
       scene: this,
       hud: this.hud,
       link: () => this.courseLink,
-      me: () => ({ pos: { ...this.me.pos }, grounded: this.flier.air.s === GROUNDED, ground: this.groundNow() }),
+      me: () => ({ pos: { ...this.me.pos }, grounded: this.flier.air.s === GROUNDED, ground: this.groundNow(), z: this.flier.air.z }),
       spawn: () => this.registry.get('spawnName') as string | undefined,
       place: (at) => this.placeAt(at),
       feathers: (total) => this.collection.setFeathers(total),
@@ -993,6 +1003,7 @@ export class RoomScene extends Phaser.Scene {
       this.checkItems(now);
       this.checkPuzzles(now);
       this.course?.tick(now);
+      this.updrafts?.update(now + this.clockSkew());
       this.updateHints();
       this.rest(now);
       this.prefetchNear(now);
@@ -2580,6 +2591,12 @@ export class RoomScene extends Phaser.Scene {
    * spent goes with the next one that has it (as the flight stands then), and the landing is never
    * sent, since every page reckons it.
    */
+  /** The room server's clock less this page's (ms), as the socket reckons it; 0 without one. */
+  private clockSkew(): number {
+    const server = this.conn?.serverNow?.();
+    return server === undefined ? 0 : server - Date.now();
+  }
+
   private fly(now: number): void {
     if (!this.flightClock || now - this.flightClock > FLIGHT_CATCH_UP_MS) this.flightClock = now;
     while (now - this.flightClock >= FLIGHT_STEP_MS) {
@@ -2590,7 +2607,9 @@ export class RoomScene extends Phaser.Scene {
       if (pressed) this.jumpTaken = down;
       const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
       const grounded = this.flier.air.s === GROUNDED;
-      this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities);
+      // The room's gusts keep the room server's time (updraft.ts): the column this owl is in, while it is on.
+      const lift = this.room.updrafts ? (liftAt(this.room.updrafts, this.me.pos.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
+      this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
       const level = footingLevel(this.room, air.z);
       if (level !== this.footLevel) {
@@ -2603,7 +2622,7 @@ export class RoomScene extends Phaser.Scene {
           this.flownFrom = at;
         }
         this.flown.peak = Math.max(this.flown.peak, air.z);
-        if (air.s === GLIDING) this.flown.glided = true;
+        if (air.s === GLIDING || air.s === LIFTED) this.flown.glided = true;
       } else if (!grounded) this.flown.ms = at - this.flownFrom;
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {
@@ -3231,6 +3250,8 @@ export class RoomScene extends Phaser.Scene {
     this.climb = null;
     this.course?.destroy();
     this.course = null;
+    this.updrafts?.destroy();
+    this.updrafts = null;
     this.courseLink = null;
     this.hud.setDash(false);
     this.bubbles?.clear();

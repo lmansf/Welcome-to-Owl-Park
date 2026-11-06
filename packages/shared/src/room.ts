@@ -2,6 +2,7 @@ import type { RoomCourse } from './course';
 import type { Polygon, Rect } from './geometry';
 import type { Perch, Raised } from './perches';
 import type { Vec2 } from './protocol';
+import type { Updraft } from './updraft';
 
 /**
  * Data-driven room definition. Art is swappable: point `background` and
@@ -133,6 +134,8 @@ export interface RoomDef {
    * in the last act, the finish shrine). An owl in such a room holds the dash (dash.ts).
    */
   course?: RoomCourse;
+  /** In a room seen from the side: columns of rising air that lift a gliding owl (updraft.ts, OP-226). */
+  updrafts?: Updraft[];
   /**
    * Only a keeper's owl comes in (OP-224: the test course): the room server turns any other owl away at
    * its hello, and a page without a keeper's token (or the local mode in development) goes to the hub.

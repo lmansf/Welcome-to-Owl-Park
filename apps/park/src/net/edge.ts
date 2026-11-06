@@ -1045,6 +1045,7 @@ export class EdgeTransport implements ParkTransport {
     await connect();
 
     return {
+      serverNow: () => Date.now() + offset,
       send(msg: ParkMessage) {
         switch (msg.t) {
           case 'move':
