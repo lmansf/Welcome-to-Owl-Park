@@ -7,6 +7,7 @@ import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, mapOf, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
 import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
+import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
 import type { CourseDef } from '../src/course';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
@@ -1495,6 +1496,7 @@ export const ROOMS: Record<string, RoomDef> = {
   },
   // The test course (OP-224): keepers only, drawn in plain shapes (trialCourse.ts).
   ...TRIAL_ROOMS,
+  ...CANOPY_ROOMS,
 };
 
 // ---- The new map (map 3): the park laid out as one tree (Nov 6 park map) ----
@@ -1603,7 +1605,7 @@ for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
 }
 
 /** The parkour courses (OP-224, course.ts), by id: today only the keepers' test course. */
-export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE };
+export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE, [CANOPY_COURSE.id]: CANOPY_COURSE };
 
 /**
  * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer
@@ -1734,7 +1736,8 @@ export const GATED_ROOMS: readonly string[] = Object.values(ROOMS).filter((r) =>
  */
 export const TREE_REALMS: ReadonlySet<string> = (() => {
   const seen = new Set<string>();
-  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
+  // A course's rooms (OP-224) are seen from the side too, but are no level of the tree: their trail gate is the course's.
+  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id) && !r.course);
   for (let room = next.pop(); room; room = next.pop()) {
     for (const d of room.doors) {
       const to = roomFor(doorTarget(d, 2)?.room ?? '');

@@ -44,8 +44,10 @@ export const TRIAL_ROOMS: Record<string, RoomDef> = {
     background: 'trail-head',
     walkable: [box(100, 380, 1500, 760)],
     perches: [crate('trail-head-crate', 480, 560, 620, 640)],
-    spawns: { default: { x: 800, y: 580 }, 'from-course': { x: 1180, y: 660 } },
+    spawns: { default: { x: 800, y: 580 }, 'from-course': { x: 1180, y: 660 }, 'from-canopy': { x: 800, y: 460 } },
     doors: [
+      // The Updraft Canopy's trail gate for now (updraftCanopy.ts), until the clearing's course doorway is painted.
+      { id: 'canopy-gate', rect: { x: 740, y: 380, w: 120, h: 40 }, to: { room: 'canopy-1', spawn: 'from-gate' }, marker: { x: 800, y: 360 } },
       { id: 'trail-gate', rect: { x: 1440, y: 470, w: 60, h: 200 }, to: { room: 'trail-1', spawn: 'from-gate' }, marker: { x: 1470, y: 440 } },
       { id: 'west', rect: { x: 100, y: 470, w: 60, h: 200 }, to: { room: 'hub', spawn: 'default' }, marker: { x: 130, y: 440 } },
     ],

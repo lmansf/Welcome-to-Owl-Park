@@ -40,8 +40,10 @@ describe('the test course (OP-224)', () => {
 
   it('is reached from no room visitors walk', () => {
     const trail = new Set([...TRIAL_COURSE.acts, TRIAL_COURSE.gate.room]);
+    for (const id of trail) expect(ROOMS[id]!.keeperOnly, id).toBe(true);
+    // The keepers' rooms (the Updraft Canopy's too, whose trail gate stands in the trailhead for now) may lead here.
     for (const room of Object.values(ROOMS)) {
-      if (trail.has(room.id)) continue;
+      if (trail.has(room.id) || room.keeperOnly) continue;
       for (const d of room.doors) expect(trail.has(d.to?.room ?? ''), `${room.id}:${d.id}`).toBe(false);
     }
   });

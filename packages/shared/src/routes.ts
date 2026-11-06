@@ -17,6 +17,7 @@ import { closestPointOnPolygon, distance, pointInPolygon, type Polygon } from '.
 import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_IMPULSE } from './jump';
 import type { Vec2 } from './protocol';
 import { mapOf, type RoomDef } from './room';
+import type { Updraft } from './updraft';
 import { WALK_SPEED } from './walk';
 
 export type RouteTier = 1 | 2 | 3;
@@ -87,18 +88,37 @@ export function gapBetween(a: Polygon, b: Polygon): number {
   return best;
 }
 
+/** An updraft as a place a route goes through (updraft.ts): its column over the plan, at its top. */
+function updraftNode(u: Updraft): { id: string; area: Polygon; top: number; updraft: true } {
+  const area: Polygon = [
+    { x: u.x, y: -1e6 },
+    { x: u.x + u.w, y: -1e6 },
+    { x: u.x + u.w, y: 1e6 },
+    { x: u.x, y: 1e6 },
+  ];
+  return { id: `updraft:${u.id}`, area, top: u.top, updraft: true };
+}
+
 /**
  * What reaching each of a room's perches from the floor takes, by its id: the easiest route's
  * hardest hop (a route of single jumps is tier 1 even if a flap would cut it short); null for a
- * perch nothing reaches. With the flaps of the room's park (roomFlaps).
+ * perch nothing reaches. With the flaps of the room's park (roomFlaps). A room's updrafts (OP-226)
+ * are places on the way: an owl glides into a column from as high as its top or lower, within a
+ * hop, rises to the top, and glides off it, so a perch reached through one is tier 3, the glide's.
  */
-export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map'>): Record<string, RouteTier | null> {
-  const perches = room.perches ?? [];
+export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 'updrafts'>): Record<string, RouteTier | null> {
+  const ledges = room.perches ?? [];
+  const perches: Array<{ id: string; area: Polygon; top: number; updraft?: true }> = [...ledges, ...(room.updrafts ?? []).map(updraftNode)];
+  const into = (fromTop: number, gap: number, to: { top: number; updraft?: true }): number | null => {
+    if (!to.updraft) return hopTier(to.top - fromTop, gap, flaps);
+    // Into a column: from no higher than its top, a glide in at the height it left from.
+    return fromTop <= to.top && hopTier(0, gap, flaps) !== null ? 3 : null;
+  };
   const flaps = roomFlaps(room);
   const tier = new Map<string, number>(perches.map((p) => [p.id, Number.POSITIVE_INFINITY]));
   for (const p of perches) {
     const gap = Math.min(...room.walkable.map((floor) => gapBetween(floor, p.area)));
-    tier.set(p.id, hopTier(p.top, gap, flaps) ?? Number.POSITIVE_INFINITY);
+    tier.set(p.id, into(0, gap, p) ?? Number.POSITIVE_INFINITY);
   }
   // Relax until nothing gets easier: a perch is as easy as the easiest perch it is a hop from, or the hop.
   for (let changed = true; changed; ) {
@@ -108,7 +128,9 @@ export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map'>):
       if (!Number.isFinite(at)) continue;
       for (const to of perches) {
         if (to === from) continue;
-        const hop = hopTier(to.top - from.top, gapBetween(from.area, to.area), flaps);
+        const gap = gapBetween(from.area, to.area);
+        // Off the top of a column the owl is gliding: what it reaches from there takes the glide.
+        const hop = from.updraft ? (hopTier(to.top - from.top, gap, flaps) === null ? null : 3) : into(from.top, gap, to);
         if (hop === null) continue;
         const via = Math.max(at, hop);
         if (via < tier.get(to.id)!) {
@@ -118,5 +140,5 @@ export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map'>):
       }
     }
   }
-  return Object.fromEntries(perches.map((p) => [p.id, Number.isFinite(tier.get(p.id)!) ? (tier.get(p.id) as RouteTier) : null]));
+  return Object.fromEntries(ledges.map((p) => [p.id, Number.isFinite(tier.get(p.id)!) ? (tier.get(p.id) as RouteTier) : null]));
 }
