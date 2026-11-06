@@ -564,6 +564,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'trail-1:east', 'trail-2:east', 'trail-2:west', 'trail-3:west',
       // The Updraft Canopy (OP-226, updraftCanopy.ts): its doorways and hatches between the rooms of the course, both ways.
       'canopy-1:roots', 'canopy-1:to-trunk', 'canopy-2a:down', 'canopy-2a:hatch-up', 'canopy-2b:down', 'canopy-2b:hatch-up', 'canopy-2c:down', 'canopy-2c:hatch-up', 'canopy-3:down', 'canopy-roots:out',
+      // Brushstroke Bridges (OP-235, brushstrokeBridges.ts): the way behind the waterfall into its cave, and back.
+      'brush-2:falls', 'brush-falls:out',
       // The new map's stairs between its levels (NEW_MAP), as the levels' own (the forest path's root stair now comes up into the hall).
       'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
       // The hollow hall (hollowHall.ts): each landing's doorway into its Commons, and each Commons' way out back to it.

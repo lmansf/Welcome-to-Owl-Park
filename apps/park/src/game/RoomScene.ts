@@ -161,6 +161,7 @@ import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './a
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { UpdraftLeaves } from './updraftLeaves';
+import { BrushInk } from './brushInk';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
 import { PUZZLE_ART_KEYS, artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
@@ -309,6 +310,8 @@ export class RoomScene extends Phaser.Scene {
   private conn: RoomConnection | null = null;
   /** The leaves in the room's updrafts, drawn (OP-226); none in a room without them. */
   private updrafts: UpdraftLeaves | null = null;
+  /** The ink the room's brush stones paint (OP-235): which strokes stand, and their art; none in a room without them. */
+  private brush: BrushInk | null = null;
   /**
    * What the room says while its art loads (OP-129): the page joins as the art starts to load, and
    * each word waits here, in order, until the scene is built and holds the connection. Null after.
@@ -604,6 +607,7 @@ export class RoomScene extends Phaser.Scene {
     this.climb = null;
     this.course = null;
     this.updrafts = null;
+    this.brush = null;
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -869,6 +873,8 @@ export class RoomScene extends Phaser.Scene {
     this.updrafts = room.updrafts?.length
       ? new UpdraftLeaves(this, room.updrafts, groundOf(room), 1, () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false)
       : null;
+    // The ink of the room's brush stones (OP-235): its strokes drawn while they last, and stood on only then.
+    this.brush = room.brushStones?.length ? new BrushInk(this, room.brushStones, groundOf(room)) : null;
     this.course = courseFor(room, {
       scene: this,
       hud: this.hud,
@@ -991,6 +997,7 @@ export class RoomScene extends Phaser.Scene {
   override update(): void {
     if (!this.built) return;
     const now = Date.now();
+    this.paintInk(now);
     this.fly(now);
     let finished = this.me.tick(now);
     this.camAt.x = this.me.x;
@@ -1331,6 +1338,7 @@ export class RoomScene extends Phaser.Scene {
     const owl = this.peers.get(id);
     if (!owl) return;
     this.peers.delete(id);
+    this.brush?.forget(id);
     this.bubbles?.drop(id);
     this.hud.setCount(this.peers.size + 1);
     this.tweens.add({ targets: owl, alpha: 0, duration: 300, onComplete: () => owl.destroy() });
@@ -2596,6 +2604,23 @@ export class RoomScene extends Phaser.Scene {
    * spent goes with the next one that has it (as the flight stands then), and the landing is never
    * sent, since every page reckons it.
    */
+  /**
+   * The brush stones' ink (OP-235), each frame before the flight steps: a landing on a stone, by this owl
+   * or one the page sees, paints it, and the room's perches are its own with the ink as it stands, so
+   * an owl stands on a bridge while it lasts and drops through once it fades.
+   */
+  private paintInk(now: number): void {
+    const brush = this.brush;
+    if (!brush) return;
+    const owls = [
+      { id: this.playerId, x: this.me.pos.x, z: this.flier.air.z, grounded: this.flier.air.s === GROUNDED },
+      ...[...this.peers.values()].map((o) => ({ id: o.id, x: o.pos.x, z: o.flightHeight(), grounded: o.airMode === GROUNDED })),
+    ];
+    brush.update(now, owls);
+    const live = brush.perches(this.ownRoom.perches, now);
+    if (brush.changed(live.key)) this.room = { ...this.ownRoom, perches: live.perches };
+  }
+
   /** The room server's clock less this page's (ms), as the socket reckons it; 0 without one. */
   private clockSkew(): number {
     const server = this.conn?.serverNow?.();
@@ -3259,6 +3284,8 @@ export class RoomScene extends Phaser.Scene {
     this.course = null;
     this.updrafts?.destroy();
     this.updrafts = null;
+    this.brush?.destroy();
+    this.brush = null;
     this.courseLink = null;
     this.hud.setDash(false);
     this.bubbles?.clear();

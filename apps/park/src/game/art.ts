@@ -926,6 +926,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   // A course's pieces drawn from the kit (its benches, bells, lost feathers and shrine).
   const course = room?.course && Object.hasOwn(COURSES, room.course.id) ? COURSES[room.course.id] : undefined;
   for (const a of Object.values(course?.art ?? {})) if (a) keys.push(a.key);
+  // The ink a room's brush stones paint (OP-235): a bridge across and a tread up.
+  if (room?.brushStones?.length) keys.push('kit-ink-bridge-stroke', 'kit-ink-tread-stroke');
   // The tree draws its barriers (OP-220): only today's park's closed arches load the blockade art.
   if (room && mapOf(room) !== 2) for (const door of room.doors) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   // A realm's idol, in the realm or in its Commons in the hollow hall (`votesFor`).

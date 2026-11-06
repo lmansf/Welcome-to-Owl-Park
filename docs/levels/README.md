@@ -14,7 +14,7 @@ the plans for three courses, one file each, written so that someone can type the
 | --- | --- | --- | ---: | --- | ---: | ---: | ---: |
 | Updraft Canopy | the Treehouse Clearing | `updraft-canopy.md` | 10 | updrafts that switch; wind | about 7:15 | about 2:16 | 1:45 |
 | The Glass Tower | the stained-glass realm | `glass-tower.md` | 16 views | (built) the glass lift; two new storeys | about 6:28 | about 1:05 | 1:00 |
-| Brushstroke Bridges | the ink-wash realm | `brushstroke-bridges.md` | 10 | brush stones that paint fading bridges | about 7:05 | about 2:19 | 1:55 |
+| Brushstroke Bridges | the ink-wash realm | `brushstroke-bridges.md` | 10 | (built from the kit, keepers only) brush stones that paint fading bridges | about 7:05 | about 2:19 | 1:55 |
 
 All times are estimates from the physics (each file's time section), except the Glass Tower's
 scripted times, which are MEASURED with the climb's pilot.
@@ -83,7 +83,7 @@ The park's flight (`flight.ts`) runs on the climb's jump (`jump.ts`), in room pi
 | The highest ledge | 540 over the ground line | `MAX_PERCH_TOP` |
 | The highest an owl may be | the room's highest top + 392 (a jump and both flaps, 371, and 20 to spare) | `MAX_RISE`, `Room.ts` |
 | The dash | 162 px in 180 ms, once per jump, back when the owl stands on something, never sooner than 350 ms after the last | `AIR_DASH_SPEED` 900, `AIR_DASH_MS` 180, `AIR_DASH_COOLDOWN_MS` 350 (`dash.ts`, PR 72) |
-| The dash on a hop | +115 px across: the dash is a walk while the owl is up, so the fall goes on through it, and its 180 ms give up 47 px of the ordinary 260 px/s drift (162 - 47). Counted at 0.8: **+92** on a glide's reach | `dash.ts`, `flight.ts` |
+| The dash on a hop | +115 px across: the dash is a walk while the owl is up, so the fall goes on through it, and its 180 ms give up 47 px of the ordinary 260 px/s drift (162 - 47). Counted at 0.8: **+92** on a glide's reach, and the route check counts it in a course room | `dash.ts`, `flight.ts`, `routes.ts` (`DASH_ROUTE_REACH`) |
 | A gap the dash must not cross | first checked at the plain 0.8 x 162 = **+130**. Since 2026-11-05 every gap that must stay shut is checked against the full reach of the flight stepped through, not the 0.8 below, and where the dash must not cross it, that reach and the dash's whole 115 px, 10 px to spare | `stepFlier`, `ALL_FLIGHT` |
 
 The reach across, by rise (px; `routes.ts`'s `hopTier`, margins in):

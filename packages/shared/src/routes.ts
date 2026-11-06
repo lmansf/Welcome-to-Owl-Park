@@ -34,6 +34,12 @@ const fallS = (drop: number) => Math.sqrt((2 * Math.max(0, drop)) / GRAVITY);
 /** Flaps an owl may use on a hop: one (today's park) or two (the tree's triple jump). */
 export type RouteFlaps = 1 | 2;
 
+/**
+ * How much farther a hop reaches with the dash (dash.ts, in a course only): its 115 px, counted at 0.8 as
+ * every hop is (docs/levels/README.md).
+ */
+export const DASH_ROUTE_REACH = Math.round(0.8 * 115);
+
 /** Whether a jump and `n` flaps, with no glide, reach a top `rise` px higher and `gap` px away. */
 function flapsReach(rise: number, gap: number, n: RouteFlaps): boolean {
   const top = JUMP_RISE + n * FLAP_RISE;
@@ -106,11 +112,14 @@ function updraftNode(u: Updraft): { id: string; area: Polygon; top: number; updr
  * are places on the way: an owl glides into a column from as high as its top or lower, within a
  * hop, rises to the top, and glides off it, so a perch reached through one is tier 3, the glide's.
  */
-export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 'updrafts'>): Record<string, RouteTier | null> {
+export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 'updrafts'> & Partial<Pick<RoomDef, 'course'>>): Record<string, RouteTier | null> {
   const ledges = room.perches ?? [];
   const perches: Array<{ id: string; area: Polygon; top: number; updraft?: true }> = [...ledges, ...(room.updrafts ?? []).map(updraftNode)];
+  // In a course the owl holds the dash (dash.ts): a hop nothing else makes may take it, counted as a glide's.
+  const dash = room.course !== undefined;
+  const hop = (rise: number, gap: number): number | null => hopTier(rise, gap, flaps) ?? (dash && hopTier(rise, Math.max(0, gap - DASH_ROUTE_REACH), flaps) !== null ? 3 : null);
   const into = (fromTop: number, gap: number, to: { top: number; updraft?: true }): number | null => {
-    if (!to.updraft) return hopTier(to.top - fromTop, gap, flaps);
+    if (!to.updraft) return hop(to.top - fromTop, gap);
     // Into a column: from no higher than its top, a glide in at the height it left from.
     return fromTop <= to.top && hopTier(0, gap, flaps) !== null ? 3 : null;
   };
@@ -130,9 +139,9 @@ export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 
         if (to === from) continue;
         const gap = gapBetween(from.area, to.area);
         // Off the top of a column the owl is gliding: what it reaches from there takes the glide.
-        const hop = from.updraft ? (hopTier(to.top - from.top, gap, flaps) === null ? null : 3) : into(from.top, gap, to);
-        if (hop === null) continue;
-        const via = Math.max(at, hop);
+        const step = from.updraft ? (hop(to.top - from.top, gap) === null ? null : 3) : into(from.top, gap, to);
+        if (step === null) continue;
+        const via = Math.max(at, step);
         if (via < tier.get(to.id)!) {
           tier.set(to.id, via);
           changed = true;

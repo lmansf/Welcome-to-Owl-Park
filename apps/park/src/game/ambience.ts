@@ -284,7 +284,28 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
       })
       .setDepth(h + 10);
     drifting.push(dust);
-  } else if (room.mood === 'neon') {
+  }
+  // Rain across a room seen from the side (the ink-wash course's act 2, OP-235): grey streaks over the river, under the overlay.
+  if (room.weather === 'rain') {
+    const rain = scene.add
+      .particles(0, 0, 'fx-rain', {
+        x: { min: -100, max: w + 100 },
+        y: -30,
+        lifespan: 1100,
+        speedY: { min: 900, max: 1200 },
+        speedX: { min: -50, max: -30 },
+        rotate: 3,
+        alpha: { start: 0.4, end: 0.08 },
+        scaleY: { min: 0.8, max: 1.5 },
+        tint: [0xc7ceda, 0x9aa3b2, 0xe8ebf0],
+        frequency: 26 / k,
+        quantity: 2,
+        maxAliveParticles: Math.round(120 * k),
+      })
+      .setDepth(h + 20);
+    drifting.push(rain);
+  }
+  if (room.mood === 'neon') {
     const rain = scene.add
       .particles(0, 0, 'fx-rain', {
         x: { min: -100, max: w + 100 },

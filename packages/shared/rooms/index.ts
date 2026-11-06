@@ -8,6 +8,7 @@ import { ROOM_H, ROOM_W, mapOf, type DoorDef, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
 import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
 import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
+import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { HALL_ID, HALL_LEVELS, HALL_ROOM, hallSpawn, type HallLevel } from './hollowHall';
 import type { CourseDef } from '../src/course';
 
@@ -1505,6 +1506,7 @@ export const ROOMS: Record<string, RoomDef> = {
   // The test course (OP-224): keepers only, drawn in plain shapes (trialCourse.ts).
   ...TRIAL_ROOMS,
   ...CANOPY_ROOMS,
+  ...BRUSH_ROOMS,
 };
 
 // ---- The new map (map 3): the park laid out as one tree (Nov 6 park map) ----
@@ -1607,7 +1609,8 @@ ROOMS[HALL_ROOM.id] = HALL_ROOM;
 /** What each level's Commons opens on: its realm (by the hub's east arch) and the realm its idol votes for. */
 const COMMONS_OF: Readonly<Record<HallLevel, { realm?: { room: string; spawn: string }; votesFor?: string; course?: { room: string; spawn: string } }>> = {
   glass: { realm: at('glass', 'from-hub'), votesFor: 'glass' },
-  ink: {},
+  // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
+  ink: { course: at('brush-1', 'from-gate') },
   grove: { realm: at('grove', 'default'), votesFor: 'grove', course: at('canopy-1', 'from-gate') },
   market: { realm: at('market', 'default'), votesFor: 'market' },
 };
@@ -1680,8 +1683,8 @@ for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
   });
 }
 
-/** The parkour courses (OP-224, course.ts), by id: today only the keepers' test course. */
-export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE, [CANOPY_COURSE.id]: CANOPY_COURSE };
+/** The parkour courses (OP-224, course.ts), by id: the keepers' test course, the Updraft Canopy and Brushstroke Bridges (all the keepers' for now). */
+export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE, [CANOPY_COURSE.id]: CANOPY_COURSE, [BRUSH_COURSE.id]: BRUSH_COURSE };
 
 /**
  * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer
