@@ -22,7 +22,7 @@ import {
   type Vec2,
 } from '@owl-park/shared';
 import type { CourseLink, CourseReply } from '../collect/service';
-import { COURSES, ROOMS, TREE_GROUND } from '../rooms';
+import { COURSES, ROOMS, groundOf } from '../rooms';
 import { COURSE_WORDS, clearLine } from '../ui/courseWords';
 import type { Hud } from '../ui/hud';
 import { createObjectiveStrip, type ObjectiveStrip } from '../ui/objectiveStrip';
@@ -268,7 +268,7 @@ export class Course {
     // Thorns in the air of a course seen from the side (OP-226): the game draws them, a dark stem with barbs down its length.
     if (c.thorns?.length) {
       const g = add.graphics().setDepth(this.room.size.h + 40);
-      for (const t of c.thorns) drawThorns(g, t, TREE_GROUND);
+      for (const t of c.thorns) drawThorns(g, t, groundOf(this.room));
       this.thornArt = g;
     }
     for (const s of c.shortcuts ?? []) {

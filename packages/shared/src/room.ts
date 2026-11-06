@@ -351,6 +351,11 @@ export interface KitBackdrop {
   rate: number;
   /** The screens it is drawn on, first and last (0 is the room's west screen). */
   screens: readonly [number, number];
+  /**
+   * The rows of screens it is drawn on, first and last (0 is the room's top row): a tall room seen
+   * from the side has a row for each ROOM_H of its height. Absent, the top row only.
+   */
+  rows?: readonly [number, number];
   /** As a tile's `fade`, at each screen's edges. */
   fade?: { left?: number; right?: number };
   /** Drawn in front of the owls (the overlay). */
@@ -456,9 +461,13 @@ export interface DoorDef {
 
 export const ROOM_W = 1600;
 export const ROOM_H = 900;
-/** The biggest a room may be (four screens wide, two high): positions beyond it are refused. */
+/**
+ * The biggest a room may be (four screens wide, five high): positions beyond it are refused. Five
+ * high since the hollow hall, one room seen from the side that an owl climbs up the inside of the
+ * tree (it was two).
+ */
 export const ROOM_MAX_W = 6400;
-export const ROOM_MAX_H = 1800;
+export const ROOM_MAX_H = 4500;
 
 /** The tiles drawn behind the owls, in drawing order. */
 export function backgroundTiles(room: RoomDef): RoomTile[] {

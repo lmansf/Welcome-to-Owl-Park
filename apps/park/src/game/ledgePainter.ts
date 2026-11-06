@@ -3,7 +3,7 @@ import { ROOM_W, checkMasks, emptyMasks, frontsOf, ledgesOf, placesOf, screenOn,
 import { draftJson, loadMasks, saveMasks } from '../net/masks';
 import { PaintEditor, dragged, drawnMark, find, hitTest, readout, trialPerches, type Hit, type MarkKind, type Tool } from '../paint/editor';
 import { notYetLedges, playfieldAt, suggestLedges, type AlphaPicture, type Suggestion } from '../paint/suggest';
-import { TREE_GROUND } from '../rooms';
+import { groundOf } from '../rooms';
 import { mountPaintPanel, type PaintPanel, type PaintState } from '../ui/paintPanel';
 import { typingInField } from '../ui/typing';
 
@@ -251,7 +251,7 @@ export class LedgePainter {
       this.suggestions = [];
       this.note = 'This screen’s art could not be read for suggestions.';
     } else {
-      this.suggestions = notYetLedges(suggestLedges(pic, { x: tile.x, y: tile.y, scale: ROOM_W / pic.width, ground: TREE_GROUND }), this.editor.draft.ledges);
+      this.suggestions = notYetLedges(suggestLedges(pic, { x: tile.x, y: tile.y, scale: ROOM_W / pic.width, ground: groundOf(this.host.room) }), this.editor.draft.ledges);
       this.note = this.suggestions.length ? `${this.suggestions.length} suggested here (dashed): tap one to take it.` : 'Nothing new to suggest on this screen.';
     }
     this.editor.selected = null;
@@ -344,7 +344,7 @@ export class LedgePainter {
     // edges, and the spot tool only a spot (by its point or its pin's head), whatever lies nearer.
     const lift = PIN_LIFT_PX * this.cssPx();
     const kinds = TAKES[ed.tool];
-    let hit = hitTest(ed.draft, at, reach, TREE_GROUND, kinds ? { lift, kinds } : { lift });
+    let hit = hitTest(ed.draft, at, reach, groundOf(this.host.room), kinds ? { lift, kinds } : { lift });
     if (hit && hit.part === 'inside' && ed.tool !== 'select') hit = null;
     if (hit) {
       this.take(p);
@@ -395,7 +395,7 @@ export class LedgePainter {
     if (!press || press.pointer !== p.id || !p.isDown) return;
     const at = this.worldOf(p);
     if (press.kind === 'drag') {
-      this.editor.preview(dragged(press.before, press.hit, press.from, at, { size: this.host.room.size, ground: TREE_GROUND }));
+      this.editor.preview(dragged(press.before, press.hit, press.from, at, { size: this.host.room.size, ground: groundOf(this.host.room) }));
       this.refresh();
     } else if (press.kind === 'draw') {
       press.to = at;
@@ -408,7 +408,7 @@ export class LedgePainter {
     if (!press || press.pointer !== p.id) return;
     this.press = null;
     const ed = this.editor;
-    const frame = { size: this.host.room.size, ground: TREE_GROUND };
+    const frame = { size: this.host.room.size, ground: groundOf(this.host.room) };
     if (press.kind === 'drag') {
       ed.settle(press.before, dragged(press.before, press.hit, press.from, this.worldOf(p), frame));
       this.changed();
@@ -446,7 +446,7 @@ export class LedgePainter {
     let best = -1;
     let bestD = reach;
     this.suggestions.forEach((s, i) => {
-      const y = TREE_GROUND - s.top;
+      const y = groundOf(this.host.room) - s.top;
       const dx = at.x < s.x0 ? s.x0 - at.x : at.x > s.x1 ? at.x - s.x1 : 0;
       const d = Math.hypot(dx, at.y - y);
       if (d <= bestD) {
@@ -484,7 +484,7 @@ export class LedgePainter {
     const ed = this.editor;
     const press = this.press;
     if (press?.kind === 'draw') {
-      const frame = { size: this.host.room.size, ground: TREE_GROUND };
+      const frame = { size: this.host.room.size, ground: groundOf(this.host.room) };
       const m = press.tool === 'wall' ? drawnMark('wall', press.from, press.to, frame) : drawnMark(press.tool, press.from, press.to, frame);
       if (!m) return `new ${press.tool}: drag further`;
       return 'y0' in m ? `new wall  x ${m.x}  y0 ${m.y0}  y1 ${m.y1}` : `new ${press.tool}  x0 ${m.x0}  x1 ${m.x1}  top ${m.top}`;
@@ -547,8 +547,8 @@ export class LedgePainter {
       for (const q of f.points) handle(q, COLOURS.front, true);
     }
     for (const w of d.walls) line({ x: w.x, y: w.y0 }, { x: w.x, y: w.y1 }, COLOURS.wall, isPicked('wall', w.id));
-    for (const h of d.hazards) line({ x: h.x0, y: TREE_GROUND - h.top }, { x: h.x1, y: TREE_GROUND - h.top }, COLOURS.hazard, isPicked('hazard', h.id));
-    for (const l of d.ledges) line({ x: l.x0, y: TREE_GROUND - l.top }, { x: l.x1, y: TREE_GROUND - l.top }, COLOURS.ledge, isPicked('ledge', l.id));
+    for (const h of d.hazards) line({ x: h.x0, y: groundOf(this.host.room) - h.top }, { x: h.x1, y: groundOf(this.host.room) - h.top }, COLOURS.hazard, isPicked('hazard', h.id));
+    for (const l of d.ledges) line({ x: l.x0, y: groundOf(this.host.room) - l.top }, { x: l.x1, y: groundOf(this.host.room) - l.top }, COLOURS.ledge, isPicked('ledge', l.id));
     // Spots: a pin each, its point ringed where the thing stands and its head over it.
     for (const s of d.spots) {
       const on = isPicked('spot', s.id);
@@ -560,7 +560,7 @@ export class LedgePainter {
     // Suggestions, dashed.
     g.lineStyle(2 * k, SUGGESTED, 0.9);
     for (const s of this.suggestions) {
-      const y = TREE_GROUND - s.top;
+      const y = groundOf(this.host.room) - s.top;
       for (let x = s.x0; x < s.x1; x += 17 * k) g.lineBetween(x, y, Math.min(x + 10 * k, s.x1), y);
     }
     // The front being drawn: its points so far, its first ringed (a tap there closes it).
@@ -577,7 +577,7 @@ export class LedgePainter {
       const end = press.tool === 'wall' ? { x: from.x, y: to.y } : { x: to.x, y: from.y };
       g.lineStyle(3 * k, COLOURS[press.tool], 0.8).lineBetween(from.x, from.y, end.x, end.y);
     }
-    this.label(this.labels, d.ledges.map((l) => ({ id: l.id, words: String(Math.round(l.top)), x: (l.x0 + l.x1) / 2, y: TREE_GROUND - l.top - 7 * k })), '#9CFF57', k);
+    this.label(this.labels, d.ledges.map((l) => ({ id: l.id, words: String(Math.round(l.top)), x: (l.x0 + l.x1) / 2, y: groundOf(this.host.room) - l.top - 7 * k })), '#9CFF57', k);
     this.label(this.pinLabels, d.spots.map((s) => ({ id: s.id, words: s.id, x: s.x, y: s.y - (PIN_LIFT_PX + PIN_HEAD_PX + 3) * k })), '#E9D2FF', k);
     this.drawn = { ledges: d.ledges.map((l) => l.id), walls: d.walls.map((w) => w.id), hazards: d.hazards.map((h) => h.id), fronts: d.fronts.map((f) => f.id), spots: d.spots.map((s) => s.id) };
   }

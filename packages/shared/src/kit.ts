@@ -21,7 +21,7 @@
 import { pointInPolygon } from './geometry';
 import { KIT_ART, kitGroup, type KitArtSpec, type KitTile } from './kitArt';
 import { SLOPE_GENTLE, SLOPE_STEEP, profileProblems, type Perch, type ProfilePoint } from './perches';
-import { ROOM_W, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
+import { ROOM_H, ROOM_W, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
 import { perchTiers } from './routes';
 
 /** How deep a ledge's mid is drawn when the ledge does not say (room px). */
@@ -209,12 +209,14 @@ function hillDraws(hill: KitHill, ground: number, roomH: number, out: KitDraw[])
   }
 }
 
-/** A kit's backdrops as the room's tiles: one per screen each, those behind the owls and those in front. */
+/** A kit's backdrops as the room's tiles: one per screen each (each row of screens, in a tall room), those behind the owls and those in front. */
 export function kitTiles(kit: RoomKit): { backgrounds: RoomTile[]; foregrounds: RoomTile[] } {
   const tiles = (list: KitBackdrop[]) =>
     list.flatMap((b) => {
       const out: RoomTile[] = [];
-      for (let s = b.screens[0]; s <= b.screens[1]; s++) out.push({ key: b.key, x: s * ROOM_W, y: 0, ...(b.rate === 1 ? {} : { rate: b.rate }), ...(b.fade ? { fade: b.fade } : {}) });
+      const [r0, r1] = b.rows ?? [0, 0];
+      for (let r = r0; r <= r1; r++)
+        for (let s = b.screens[0]; s <= b.screens[1]; s++) out.push({ key: b.key, x: s * ROOM_W, y: r * ROOM_H, ...(b.rate === 1 ? {} : { rate: b.rate }), ...(b.fade ? { fade: b.fade } : {}) });
       return out;
     });
   const all = kit.backdrops ?? [];
