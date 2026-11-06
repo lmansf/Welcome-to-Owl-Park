@@ -126,6 +126,21 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     thanks: 'Just as I thought: excellent acoustics. Have my spare hat, it has seen a lot of treetops.',
     requires: ['story-welcome'],
   },
+  {
+    // The new map's stairs (map 3): a pile at the top of the climb on three of them, so the way down the tree has errands of its own.
+    id: 'story-pip-stair-leaves',
+    title: 'Leaves on the stair',
+    giver: 'pip',
+    type: 'interact',
+    difficulty: 'easy',
+    length: 'long',
+    cadence: 'story',
+    steps: [flop(1, 'm3-stair-2'), flop(1, 'm3-ground'), flop(1, 'm3-under'), emote('hoot', { npc: 'pip' })],
+    reward: { feathers: 50, item: null },
+    offer: 'The leaves come down the tree faster than I can sweep. Flop into a pile on the quiet landing, the forest path and the root stair, then come back and hoot for me.',
+    thanks: 'The stair is clear and the lanterns shine again. Here, for your trouble.',
+    requires: ['story-welcome'],
+  },
 ];
 
 // ---------- templates (expanded in bulk) ----------
