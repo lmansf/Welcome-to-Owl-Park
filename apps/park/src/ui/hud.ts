@@ -441,6 +441,8 @@ const ALONE_ICON =
 
 /** A keyboard's click on the pad's Jump is a tap this long: a jump, not a glide. */
 const KEY_TAP_MS = 150;
+/** How long after the home screen a press on the feedback bug or its card is still taken as one meant for Play. */
+const JUST_IN_MS = 2000;
 
 /** How long a place newly lit on the map sparkles, however often the map is drawn again meanwhile (OP-130). */
 const SPARKLE_MS = 4000;
@@ -581,6 +583,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   };
   let previewCb: ((frame: PreviewFrame | null, mirror: boolean) => void) | null = null;
   let justInTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the owl last left the home screen (performance.now()), for presses meant for Play. */
+  let leftHomeAt = Number.NEGATIVE_INFINITY;
   let decorate: DecorateSheet | null = null;
   /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
   let decorateActions: DecorateActions | null = null;
@@ -1026,6 +1030,19 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         else openScreen('feedback', false, button);
       };
       createFeedbackBug(root, openFeedback);
+      // A press made before, or just after, the owl left the home screen was meant for Play, even when a
+      // busy page hands it over late (its timeStamp says when it was made): it never opens Feedback.
+      root.addEventListener(
+        'click',
+        (e) => {
+          if (!(e.target instanceof Element) || !e.target.closest('.fb-bug,.fb-card')) return;
+          if (e.timeStamp < leftHomeAt + JUST_IN_MS) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        },
+        true,
+      );
       // The thanks ladder (OP-272): a grey mouse's card beside the bug until it is won or closed.
       if (rewards) {
         feedbackCard = createFeedbackCard(root, openFeedback, () => {
@@ -1112,9 +1129,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       // Fresh into the park, the presses still landing where Play was (a slow nest, a rage-click) must not
       // open Feedback from the bug or its card, which now sit where Play stood: they take presses a moment later.
       if (!on && root.classList.contains('at-home')) {
+        leftHomeAt = performance.now();
         root.classList.add('just-in');
         clearTimeout(justInTimer);
-        justInTimer = setTimeout(() => root.classList.remove('just-in'), 2000);
+        justInTimer = setTimeout(() => root.classList.remove('just-in'), JUST_IN_MS);
       }
       root.classList.toggle('at-home', on);
     },
