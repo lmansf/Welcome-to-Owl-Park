@@ -59,7 +59,7 @@ const FAR_RETRY_MS = 300;
 /** How long before a refusal is asked again, or said again. */
 const REFUSED_RETRY_MS = 4000;
 
-const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x2c3b1f, thornShade: 0x101a10, mist: 0xd9dde3, mistLight: 0xf3f4f6, falls: 0x9fb4c8, fallsLight: 0xe6eef5 };
+const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x2c3b1f, thornShade: 0x101a10, mist: 0xd9dde3, mistLight: 0xf3f4f6, falls: 0x9fb4c8, fallsLight: 0xe6eef5, wire: 0x1a1d2b, spark: 0x7ff6ff, sparkHot: 0xff5fd2, breaker: 0x3a3f55, breakerFace: 0xd9673e, breakerOn: 0x5ee08a };
 
 /** A room drawn in plain shapes (`drawn`, the test course): the sky, the floor, the pits and the doorways. */
 export function drawPlaceholderRoom(scene: Phaser.Scene, room: RoomDef): Phaser.GameObjects.Graphics {
@@ -262,7 +262,12 @@ export class Course {
         .setDisplaySize(w * scale, h * scale);
     };
     for (const b of c.benches ?? []) mark('bench', b, kitImage(art?.bench, b) ?? add.rectangle(b.at.x, b.at.y - 10 - (b.top ?? 0), 70, 20, C.bench));
-    for (const p of c.parts ?? []) mark('part', p, kitImage(art?.part, p) ?? add.ellipse(p.at.x, p.at.y - 34 - (p.top ?? 0), 32, 32, C.bell).setStrokeStyle(3, 0x0c1e36));
+    // A part with no art of its course's own: a bell in plain shapes, or for breakers a breaker box, its switch's light off (an orange face) until thrown.
+    const plainPart = (p: CoursePiece) =>
+      this.def.objective === 'breakers'
+        ? add.rectangle(p.at.x, p.at.y - 34 - (p.top ?? 0), 40, 56, C.breakerFace).setStrokeStyle(6, C.breaker)
+        : add.ellipse(p.at.x, p.at.y - 34 - (p.top ?? 0), 32, 32, C.bell).setStrokeStyle(3, 0x0c1e36);
+    for (const p of c.parts ?? []) mark('part', p, kitImage(art?.part, p) ?? plainPart(p));
     for (const f of c.feathers ?? []) mark('feather', f, kitImage(art?.feather, f) ?? add.ellipse(f.at.x, f.at.y - 18 - (f.top ?? 0), 12, 26, C.feather));
     if (c.shrine) mark('shrine', c.shrine, kitImage(art?.shrine, c.shrine) ?? add.rectangle(c.shrine.at.x, c.shrine.at.y - 50, 54, 100, C.shrine).setStrokeStyle(3, 0x0c1e36));
     // Thorns in the air of a course seen from the side (OP-226): the game draws them, a dark stem with barbs down its length.
@@ -291,7 +296,10 @@ export class Course {
       const rung = v.run?.parts.includes(p.id) ?? false;
       // A rung part from the kit greys (its tint); one in plain shapes takes the rung colour.
       if (!m) continue;
-      if ('setFillStyle' in m) (m as Phaser.GameObjects.Ellipse).setFillStyle(rung ? C.bellDone : C.bell);
+      if ('setFillStyle' in m) {
+        const [done, waiting] = this.def.objective === 'breakers' ? [C.breakerOn, C.breakerFace] : [C.bellDone, C.bell];
+        (m as Phaser.GameObjects.Shape).setFillStyle(rung ? done : waiting);
+      }
       else if (rung) (m as Phaser.GameObjects.Image).setTint(C.bellDone);
       else (m as Phaser.GameObjects.Image).clearTint();
     }
@@ -306,7 +314,8 @@ export class Course {
 /**
  * A hazard in the air over the ground line `ground`, as it looks: thorns hanging (or grown up), a stem
  * down the middle of their box, barbs either side, a darker shade behind; a bank of cloud mist (the
- * ink-wash course, OP-235), soft billows filling its box; or the water of a falls, pale streaks down it.
+ * ink-wash course, OP-235), soft billows filling its box; the water of a falls, pale streaks down it;
+ * or live wires (the neon realm's course), sagging cables with sparks along them.
  */
 export function drawThorns(g: Phaser.GameObjects.Graphics, t: CourseThorns, ground: number): void {
   const y0 = Math.max(0, ground - t.z1);
@@ -320,6 +329,17 @@ export function drawThorns(g: Phaser.GameObjects.Graphics, t: CourseThorns, grou
       for (let x = t.x0 + ((i % 2) * 40 + 30); x < t.x1; x += 80) g.fillStyle(C.mistLight, 0.5).fillCircle(x, y, 34);
     }
     for (let x = t.x0 + 20; x < t.x1; x += 60) g.fillStyle(C.mistLight, 0.7).fillCircle(x, y1 - 10, 28);
+    return;
+  }
+  if (t.look === 'wires') {
+    // Live wires (the neon realm's course): dark cables sagging across the box, sparks of cyan and pink along them.
+    g.fillStyle(C.wire, 0.25).fillRect(t.x0, y0, w, y1 - y0);
+    for (let y = y0 + 30, i = 0; y < y1; y += 60, i++) {
+      g.lineStyle(4, C.wire, 0.9).beginPath().moveTo(t.x0, y);
+      for (let x = t.x0; x <= t.x1; x += 40) g.lineTo(x, y + Math.sin((x - t.x0) / 70 + i) * 14);
+      g.strokePath();
+      for (let x = t.x0 + ((i * 37) % 90) + 20; x < t.x1; x += 90) g.fillStyle(i % 2 ? C.sparkHot : C.spark, 0.85).fillCircle(x, y + Math.sin((x - t.x0) / 70 + i) * 14, 5);
+    }
     return;
   }
   if (t.look === 'falls') {

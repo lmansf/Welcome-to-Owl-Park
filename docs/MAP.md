@@ -413,7 +413,9 @@ space at each level inside it and the realms and their parkour outside the tree 
   landing, its realm's arch (the ink-wash realm's shut: Hatching Soon), and the Realm Vote's idol for a
   voted realm (`votesFor`): the vote counts for the realm, wherever its idol stands. The Clearing's
   middle arch leads to the Updraft Canopy course, and the paper Commons' middle arch to Brushstroke
-  Bridges (`brush-1` to `brush-3b`, docs/levels/brushstroke-bridges.md), the keepers' for now.
+  Bridges (`brush-1` to `brush-3b`, docs/levels/brushstroke-bridges.md), and the neon Commons' middle
+  arch to the neon realm's course (`circuit-1` to `circuit-3`, docs/levels/neon-course.md), each the
+  keepers' for now.
 - **Switched on** (the owner's "Switch it on", 2026-11-06). Every owl the new map takes goes through the
   turnstiles down the knothole into the hall (`NEW_MAP_WAYS`), each realm's way out leads back into its
   Commons, the Party Grove's way in leads to the trunk's door, and the root stair comes up into the

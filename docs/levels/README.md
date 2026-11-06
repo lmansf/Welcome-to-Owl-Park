@@ -8,13 +8,14 @@
 
 In the remap each realm has a Commons and then a course: in the owner's words, "a full high quality
 map level, with easter eggs, several minutes of gameplay, shortcuts, and everything else". These are
-the plans for three courses, one file each, written so that someone can type them into room data.
+the plans for four courses, one file each, written so that someone can type them into room data.
 
 | Course | Realm | File | Screens | New mechanic | First clear | With shortcuts | Gold |
 | --- | --- | --- | ---: | --- | ---: | ---: | ---: |
 | Updraft Canopy | the Treehouse Clearing | `updraft-canopy.md` | 10 | updrafts that switch; wind | about 7:15 | about 2:16 | 1:45 |
 | The Glass Tower | the stained-glass realm | `glass-tower.md` | 16 views | (built) the glass lift; two new storeys | about 6:28 | about 1:05 | 1:00 |
 | Brushstroke Bridges | the ink-wash realm | `brushstroke-bridges.md` | 10 | (built from the kit, keepers only) brush stones that paint fading bridges | about 7:05 | about 2:19 | 1:55 |
+| The neon realm's course (its name to be picked) | the neon realm | `neon-course.md` | 8 | (built from the kit, keepers only) neon signs on two circuits that take turns | not timed yet | no shortcuts yet | 1:40 (to be played) |
 
 All times are estimates from the physics (each file's time section), except the Glass Tower's
 scripted times, which are MEASURED with the climb's pilot.

@@ -162,6 +162,7 @@ import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { UpdraftLeaves } from './updraftLeaves';
 import { BrushInk } from './brushInk';
+import { NeonSigns } from './neonSigns';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
 import { PUZZLE_ART_KEYS, artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
@@ -312,6 +313,10 @@ export class RoomScene extends Phaser.Scene {
   private updrafts: UpdraftLeaves | null = null;
   /** The ink the room's brush stones paint (OP-235): which strokes stand, and their art; none in a room without them. */
   private brush: BrushInk | null = null;
+  /** The room's neon signs on their circuits (circuit.ts): which are lit, and their art; none in a room without them. */
+  private signs: NeonSigns | null = null;
+  /** Which strokes and signs stood when the room's perches were last set (standPerches). */
+  private standKey = '';
   /**
    * What the room says while its art loads (OP-129): the page joins as the art starts to load, and
    * each word waits here, in order, until the scene is built and holds the connection. Null after.
@@ -608,6 +613,8 @@ export class RoomScene extends Phaser.Scene {
     this.course = null;
     this.updrafts = null;
     this.brush = null;
+    this.signs = null;
+    this.standKey = '';
     this.acts = null;
     this.nests = null;
     this.street = streetDoors(null);
@@ -875,6 +882,8 @@ export class RoomScene extends Phaser.Scene {
       : null;
     // The ink of the room's brush stones (OP-235): its strokes drawn while they last, and stood on only then.
     this.brush = room.brushStones?.length ? new BrushInk(this, room.brushStones, groundOf(room)) : null;
+    // The neon signs on their circuits: drawn lit or dark by park time, and stood on only while lit.
+    this.signs = room.neonSigns?.length ? new NeonSigns(this, room.neonSigns, groundOf(room)) : null;
     this.course = courseFor(room, {
       scene: this,
       hud: this.hud,
@@ -997,7 +1006,7 @@ export class RoomScene extends Phaser.Scene {
   override update(): void {
     if (!this.built) return;
     const now = Date.now();
-    this.paintInk(now);
+    this.standPerches(now);
     this.fly(now);
     let finished = this.me.tick(now);
     this.camAt.x = this.me.x;
@@ -2599,26 +2608,37 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * The own owl's flight, stepped to `now` at the flight's step. Its drawing is told each change the
-   * moment it comes, and so is the room, within its allowance: a change that finds the allowance
-   * spent goes with the next one that has it (as the flight stands then), and the landing is never
-   * sent, since every page reckons it.
+   * What the room's perches are this frame, before the flight steps: the room's own, with the brush
+   * stones' ink as it stands (OP-235: a landing on a stone, by this owl or one the page sees, paints it)
+   * and without the neon signs that are dark (circuit.ts, by park time). So an owl stands on a bridge
+   * while it lasts and on a sign while it is lit, and drops through once either is gone.
    */
-  /**
-   * The brush stones' ink (OP-235), each frame before the flight steps: a landing on a stone, by this owl
-   * or one the page sees, paints it, and the room's perches are its own with the ink as it stands, so
-   * an owl stands on a bridge while it lasts and drops through once it fades.
-   */
-  private paintInk(now: number): void {
-    const brush = this.brush;
-    if (!brush) return;
-    const owls = [
-      { id: this.playerId, x: this.me.pos.x, z: this.flier.air.z, grounded: this.flier.air.s === GROUNDED },
-      ...[...this.peers.values()].map((o) => ({ id: o.id, x: o.pos.x, z: o.flightHeight(), grounded: o.airMode === GROUNDED })),
-    ];
-    brush.update(now, owls);
-    const live = brush.perches(this.ownRoom.perches, now);
-    if (brush.changed(live.key)) this.room = { ...this.ownRoom, perches: live.perches };
+  private standPerches(now: number): void {
+    const { brush, signs } = this;
+    if (!brush && !signs) return;
+    let perches = this.ownRoom.perches ?? [];
+    let key = '';
+    if (brush) {
+      const owls = [
+        { id: this.playerId, x: this.me.pos.x, z: this.flier.air.z, grounded: this.flier.air.s === GROUNDED },
+        ...[...this.peers.values()].map((o) => ({ id: o.id, x: o.pos.x, z: o.flightHeight(), grounded: o.airMode === GROUNDED })),
+      ];
+      brush.update(now, owls);
+      const live = brush.perches(perches, now);
+      perches = live.perches;
+      key = live.key;
+    }
+    if (signs) {
+      const park = now + this.clockSkew();
+      signs.update(park);
+      const lit = signs.perches(perches, park);
+      perches = lit.perches;
+      key += `#${lit.key}`;
+    }
+    if (key !== this.standKey) {
+      this.standKey = key;
+      this.room = { ...this.ownRoom, perches };
+    }
   }
 
   /** The room server's clock less this page's (ms), as the socket reckons it; 0 without one. */
@@ -2627,6 +2647,12 @@ export class RoomScene extends Phaser.Scene {
     return server === undefined ? 0 : server - Date.now();
   }
 
+  /**
+   * The own owl's flight, stepped to `now` at the flight's step. Its drawing is told each change the
+   * moment it comes, and so is the room, within its allowance: a change that finds the allowance
+   * spent goes with the next one that has it (as the flight stands then), and the landing is never
+   * sent, since every page reckons it.
+   */
   private fly(now: number): void {
     if (!this.flightClock || now - this.flightClock > FLIGHT_CATCH_UP_MS) this.flightClock = now;
     while (now - this.flightClock >= FLIGHT_STEP_MS) {
@@ -3286,6 +3312,9 @@ export class RoomScene extends Phaser.Scene {
     this.updrafts = null;
     this.brush?.destroy();
     this.brush = null;
+    this.signs?.destroy();
+    this.signs = null;
+    this.standKey = '';
     this.courseLink = null;
     this.hud.setDash(false);
     this.bubbles?.clear();
