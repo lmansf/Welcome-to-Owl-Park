@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Measures where each published kit piece's art stands in its box (OP-241), for the level assembler.
 
-For every piece in the art kit (tools/art/config/kit.json, its 1x webp in apps/park/public/art) it
+For every piece in the art kit (tools/art/config/kit.json, its 1x webp in apps/park/public/art), and
+every realm kit slot that is a piece once its artist's file is published (OP-274, its 1x png), it
 writes four numbers to tools/kit/stand.json, in the piece's logical pixels:
 
 - top: where its upper edge is across the middle half of its width (the median of the first opaque
@@ -97,11 +98,24 @@ def surface(path, w, h, left, right):
     return [edge(left + span // 8), edge(left + span // 2), edge(right - 1 - span // 8)]
 
 
+def slot_pieces():
+    """Every realm kit slot that is a piece (OP-274: not a texture or a backdrop layer), for each realm,
+    with its logical size: measured once an artist's file for it is published (tools/kit/art_import.py)."""
+    from art_import import REALMS, slot_key, slots
+
+    return [[slot_key(r, s.slot), s.w, s.h] for r in REALMS for s in slots() if not s.slot.startswith('texture-') and s.slot not in ('sky', 'far', 'mid', 'start-screen')]
+
+
+def art_file(key):
+    """A key's 1x file: the kit's WebP, or a realm slot's PNG."""
+    return next((f for f in (ART / f'{key}.webp', ART / f'{key}.png') if f.exists()), None)
+
+
 def main(argv):
     table = {}
-    for key, w, h in pieces():
-        f = ART / f'{key}.webp'
-        if f.exists():
+    for key, w, h in pieces() + slot_pieces():
+        f = art_file(key)
+        if f:
             m = measure(f, w, h)
             table[key] = m + surface(f, w, h, m[2], m[3]) if SURFACE.match(key) else m
     text = '{\n' + ',\n'.join(f'  "{k}": [{", ".join(str(n) for n in v)}]' for k, v in sorted(table.items())) + '\n}\n'
