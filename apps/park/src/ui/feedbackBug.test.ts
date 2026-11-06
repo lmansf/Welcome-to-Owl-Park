@@ -30,6 +30,13 @@ describe('the feedback bug (OP-208)', () => {
     expect(svg).not.toContain('#C9CED6');
     // Tail, body and ear wear the colour; the eye and the ear's edge are cut out, not painted.
     expect(svg.match(/currentColor/g)).toHaveLength(3);
-    expect(svg).toContain('mask="url(#fb-mouse-cut)"');
+    expect(svg).toMatch(/mask="url\(#fb-mouse-cut-\d+\)"/);
+  });
+
+  it('gives each drawing its own cut-out, so a hidden copy never takes the eye from a shown one', () => {
+    const ids = [feedbackIcon('#fff'), feedbackIcon('#fff')].map((svg) => svg.match(/<mask id="([^"]+)"/)?.[1]);
+    expect(ids[0]).toBeTruthy();
+    expect(ids[0]).not.toBe(ids[1]);
+    for (const [i, svg] of [feedbackIcon('#fff', 'a'), feedbackIcon('#fff', 'b')].entries()) expect(svg).toContain(`mask="url(#${'ab'[i]})"`);
   });
 });
