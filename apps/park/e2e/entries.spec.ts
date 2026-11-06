@@ -77,7 +77,7 @@ test.describe('the entries setting (OP-156)', () => {
     await page.context().close();
   });
 
-  test('an owl the tree takes walks the new map: out of its nest onto the nests’ street, to the Treetop Commons, and through the turnstiles down the tree’s first stair', async ({ browser, request }) => {
+  test('an owl the tree takes walks the new map: out of its nest onto the nests’ street, to the Treetop Commons, and through the turnstiles down the knothole into the hollow hall', async ({ browser, request }) => {
     test.slow(); // a visit through the room server across three rooms, drawn with software WebGL
     await share(request, 100);
     const page = await newOwlPlays(browser);
@@ -89,9 +89,9 @@ test.describe('the entries setting (OP-156)', () => {
     await walkToDoor(page, 'to-lobby');
     await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('lobby');
     await online(page);
-    expect(await door('gate')).toBe('m3-stair-1');
+    expect(await door('gate')).toBe('m3-hall');
     await walkToDoor(page, 'gate');
-    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('m3-stair-1');
+    await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('m3-hall');
     await online(page);
     await page.context().close();
   });

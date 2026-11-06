@@ -388,7 +388,7 @@ east end to the cavern; the grove becomes a branch realm rather than an area tha
 outside; the whole park gains a vertical axis for flight (OP-084) and the realm challenges (OP-115).
 Nothing about owls, collections, quests, the climb, the data model or the store changes.
 
-## 13. The hollow hall [BUILT for keepers: the hall and its Commons]
+## 13. The hollow hall [BUILT, switched on 2026-11-06]
 
 The owner's direction of 2026-11-06: the inside of the tree is one great vertical hall, with a common
 space at each level inside it and the realms and their parkour outside the tree on each level.
@@ -413,6 +413,9 @@ space at each level inside it and the realms and their parkour outside the tree 
   landing, its realm's arch (the ink-wash realm's shut: Hatching Soon), and the Realm Vote's idol for a
   voted realm (`votesFor`): the vote counts for the realm, wherever its idol stands. The Clearing's
   middle arch leads to the Updraft Canopy course.
-- **Behind the keeper flag.** The hall and its Commons are `keeperOnly`: the live map walks the stairs
-  (`m3-stair-1` to `m3-stair-3`) until the owner switches the hall on, and the realms' doors still lead
-  back to the stairs.
+- **Switched on** (the owner's "Switch it on", 2026-11-06). Every owl the new map takes goes through the
+  turnstiles down the knothole into the hall (`NEW_MAP_WAYS`), each realm's way out leads back into its
+  Commons, the Party Grove's way in leads to the trunk's door, and the root stair comes up into the
+  hall's floor. The old stairs (`m3-stair-1` to `m3-ground`) are left over: nothing leads into them, and
+  an owl still on one walks out of it into the map as it is. The Updraft Canopy stays the keepers': the
+  Clearing's middle arch reads as shut (Not Yet Fledged) to any owl without a keeper's token.

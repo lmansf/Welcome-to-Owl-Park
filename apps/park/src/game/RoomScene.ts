@@ -3339,6 +3339,8 @@ export class RoomScene extends Phaser.Scene {
    */
   private realmClosed(roomId: string | undefined): boolean {
     const room = roomId ? ROOMS[roomId] : undefined;
+    // A keepers' room (the courses, OP-224) is shut to any owl without a keeper's token, as the room server turns it away.
+    if (room?.keeperOnly) return storedKeeper() === null;
     // The switch's own rule (realmShut): the tree is open too while it takes a share of the arrivals (OP-156).
     if (!room || !realmShut(room, this.realms)) return false;
     return !(mapOf(room) === 2 && storedKeeper() !== null);

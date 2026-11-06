@@ -11,9 +11,9 @@ const hall = ROOMS[HALL_ID]!;
 const doorOf = (id: string) => hall.doors.find((d) => d.id === id)!;
 
 describe('the hollow hall (Nov 6)', () => {
-  it("is the keepers' for now, five screens high, seen from the side, with nothing wrong in its kit", () => {
+  it('is open to every owl, five screens high, seen from the side, with nothing wrong in its kit', () => {
     expect(hall).toBe(HALL_ROOM);
-    expect(hall.keeperOnly).toBe(true);
+    expect(hall.keeperOnly).toBeUndefined();
     expect(mapOf(hall)).toBe(2);
     expect(hall.size.h).toBe(HALL_H);
     expect(hall.kit!.ground).toBe(HALL_GROUND);
@@ -46,7 +46,7 @@ describe('the hollow hall (Nov 6)', () => {
       expect(groundAt(hall.perches, { x: mid, y: HALL_GROUND }, l.top), l.level).toBe(l.top);
       expect(d.to).toEqual({ room: l.commons, spawn: 'from-hall' });
       const commons = ROOMS[l.commons]!;
-      expect(commons.keeperOnly, l.commons).toBe(true);
+      expect(commons.keeperOnly, l.commons).toBeUndefined();
       expect(commons.spawns['from-hall'], l.commons).toBeDefined();
       expect(commons.doors.find((x) => x.id === 'out')!.to).toEqual({ room: HALL_ID, spawn: hallSpawn(l.level) });
     }
@@ -95,7 +95,11 @@ describe("the hollow hall's four Commons", () => {
     const ink = ROOMS['commons-ink']!.doors.find((d) => d.id === 'to-realm')!;
     expect(ink.to).toBeUndefined();
     expect(ink.closedSign).toBeDefined();
-    expect(ROOMS['commons-grove']!.doors.find((d) => d.id === 'to-course')!.to).toEqual({ room: 'canopy-1', spawn: 'from-gate' });
+    const course = ROOMS['commons-grove']!.doors.find((d) => d.id === 'to-course')!;
+    expect(course.to).toEqual({ room: 'canopy-1', spawn: 'from-gate' });
+    // The course is the keepers' for now: the arch reads as shut to any other owl.
+    expect(ROOMS['canopy-1']!.keeperOnly).toBe(true);
+    expect(course.closedSign).toBe('Not Yet Fledged');
     expect(ROOMS['canopy-1']!.doors.find((d) => d.id === 'to-commons')!.to).toEqual({ room: 'commons-grove', spawn: 'from-course' });
   });
 

@@ -14,12 +14,15 @@ export const NEW_MAP: Readonly<Record<string, string>> = {
 };
 
 /**
- * The hollow hall (rooms/hollowHall.ts): the new map's tall room up the inside of the trunk, which the
- * keepers walk ahead of it. Its Commons are today's top-down rooms, as the realms are.
+ * The hollow hall (rooms/hollowHall.ts): the new map's tall room up the inside of the trunk, the way up
+ * and down the tree since the owner switched it on (Nov 6).
  */
 export const NEW_MAP_HALL: readonly string[] = ['m3-hall'];
 
-/** Whether a room is one of the new map's own (NEW_MAP), or its hollow hall (NEW_MAP_HALL). */
+/** The Commons off the hall's landings: top-down rooms on the hub's floor plan, the new map's alone. */
+export const NEW_MAP_COMMONS: readonly string[] = ['commons-glass', 'commons-ink', 'commons-grove', 'commons-market'];
+
+/** Whether a room is one of the new map's own (NEW_MAP), its hollow hall (NEW_MAP_HALL) or a Commons off it. */
 export function isNewMapRoom(id: string | undefined): boolean {
-  return id !== undefined && (Object.hasOwn(NEW_MAP, id) || NEW_MAP_HALL.includes(id));
+  return id !== undefined && (Object.hasOwn(NEW_MAP, id) || NEW_MAP_HALL.includes(id) || NEW_MAP_COMMONS.includes(id));
 }
