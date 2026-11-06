@@ -86,6 +86,12 @@ export interface ParkConfig {
    * built in the kit (the owner's rule: all rooms switch together); `?kit=0` shows the painted rooms.
    */
   kit: boolean;
+  /**
+   * The new map (map 3, `?newmap=1`): the keepers' preview of the park laid out as one tree, from the
+   * Treetop Commons down past the realms to the ground (packages/shared/rooms/index.ts, NEW_MAP). Only a
+   * tab that holds a keeper's token (`?keeper=1`, now or earlier in the tab) walks it; visitors never do.
+   */
+  newMap: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -125,5 +131,6 @@ export function readConfig(): ParkConfig {
     keeper: q.get('keeper') === '1',
     paint: q.get('paint') === '1',
     kit: q.get('kit') !== '0',
+    newMap: q.get('newmap') === '1',
   };
 }

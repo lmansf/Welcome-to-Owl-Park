@@ -127,7 +127,7 @@ export type RealmKind = 'realm' | 'hub' | 'nest';
  * rooms every owl passes through (the lobby, the hub, the street of nests). A new room goes in here:
  * the tests hold every room to it.
  */
-export const ROOM_KINDS: Readonly<Record<string, RealmKind>> = { lobby: 'hub', hub: 'hub', homes: 'hub', grove: 'realm', market: 'realm', arcade: 'realm', glass: 'realm', l1: 'hub', l2: 'hub', l3: 'hub', l4: 'hub', l5: 'hub', 'l5-street': 'hub', l0: 'hub', 'l0-arcade': 'realm', 'trail-head': 'realm', 'trail-1': 'realm', 'trail-2': 'realm', 'trail-3': 'realm' };
+export const ROOM_KINDS: Readonly<Record<string, RealmKind>> = { lobby: 'hub', hub: 'hub', homes: 'hub', grove: 'realm', market: 'realm', arcade: 'realm', glass: 'realm', l1: 'hub', l2: 'hub', l3: 'hub', l4: 'hub', l5: 'hub', 'l5-street': 'hub', l0: 'hub', 'l0-arcade': 'realm', 'trail-head': 'realm', 'trail-1': 'realm', 'trail-2': 'realm', 'trail-3': 'realm', 'm3-stair-1': 'hub', 'm3-stair-2': 'hub', 'm3-stair-3': 'hub', 'm3-ground': 'hub', 'm3-under': 'hub', 'm3-cave': 'realm' };
 
 /** The kind of place a room the log names (`logRoom`) is: every nest is `nest`. */
 export function realmKind(room: string): RealmKind {

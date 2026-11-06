@@ -617,6 +617,31 @@ const ARCADE_KIT: RoomKit = {
   ],
 };
 
+/**
+ * The new map's treehouse-clearing landing (`m3-stair-3`): level 2's reach, with the open realm arch into
+ * the clearing at the far side of its common, beside the log bench left open for what the grove holds.
+ */
+const M3_CLEARING_KIT: RoomKit = {
+  ...L2_KIT,
+  doors: [...L2_KIT.doors!, { door: 'to-grove', piece: 'kit-arch-portal-open' }],
+  scenes: (L2_KIT.scenes ?? []).map((sc) =>
+    sc.id === 'common-bench' ? { ...sc, story: 'A log bench under a lantern by the open arch into the treehouse clearing, for owls waiting on friends.', about: ['to-grove'] } : sc,
+  ),
+};
+
+/**
+ * The new map's ground (`m3-ground`): level 1's forest path, its locked gate in the west opened into an
+ * archway out of the tree to the Party Grove, the lantern on the path lighting the way to it.
+ */
+const M3_GROUND_KIT: RoomKit = {
+  ...L1_KIT,
+  doors: L1_KIT.doors!.map((d) => (d.door === 'closed-west' ? { door: 'to-party', piece: 'kit-ground-gate-arch' } : d)),
+  barriers: (L1_KIT.barriers ?? []).filter((b) => b.id !== 'west-gate'),
+  scenes: (L1_KIT.scenes ?? []).map((sc) =>
+    sc.id === 'closed-gate' ? { id: 'party-arch', story: 'A lantern on the path lights the archway out of the tree, to the Party Grove and its games.', props: sc.props, about: ['to-party'] } : sc,
+  ),
+};
+
 export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
   l4: kitRoom({
     id: 'l4',
@@ -681,6 +706,13 @@ export const KIT_DEMOS: Readonly<Record<string, RoomDef>> = {
   l5: fromPainted('l5', L5_KIT),
   l0: fromPainted('l0', L0_KIT),
   'l0-arcade': fromPainted('l0-arcade', ARCADE_KIT),
+  // The new map's levels (rooms/index.ts, NEW_MAP): each its level's kit, with its new doorways drawn.
+  'm3-stair-1': fromPainted('m3-stair-1', L3_KIT),
+  'm3-stair-2': fromPainted('m3-stair-2', L4_KIT),
+  'm3-stair-3': fromPainted('m3-stair-3', M3_CLEARING_KIT),
+  'm3-ground': fromPainted('m3-ground', M3_GROUND_KIT),
+  'm3-under': fromPainted('m3-under', L0_KIT),
+  'm3-cave': fromPainted('m3-cave', ARCADE_KIT),
 };
 
 /**

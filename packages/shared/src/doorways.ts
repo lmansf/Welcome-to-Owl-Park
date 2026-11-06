@@ -66,8 +66,21 @@ export function laneThrough(room: RoomDef, door: DoorDef, p: Vec2): Lane {
  * Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. A
  * nest door on the street leads into a nest though it has no `to` (each visitor's door goes to its own place).
  */
-/** Where `door` leads an owl walking `map`: its way back to the tree for a tree owl, where it has one, else its own (OP-162). */
-export function doorTarget(door: DoorDef, map: 1 | 2): DoorDef['to'] {
+/**
+ * The park an owl walks: today's park (1), the tree (2), or the new map (3), the keepers' preview of the
+ * park laid out as one tree (rooms/index.ts, NEW_MAP), which only a keeper's tab walks.
+ */
+export type WalkMap = 1 | 2 | 3;
+
+/**
+ * Where `door` leads an owl walking `map`: its way back to the tree for a tree owl, where it has one, else
+ * its own (OP-162). On the new map, its way there where it has one (`toNew`), else its own: the tree's
+ * ways are not the new map's. `cameFrom` is the room the owl came in from.
+ */
+export function doorTarget(door: DoorDef, map: WalkMap, cameFrom?: string): DoorDef['to'] {
+  // On the new map a way of today's park that it leads elsewhere still takes an owl back the way it came
+  // in: into a realm from the Party Grove's arch, its way out leads back to the arch, not its landing.
+  if (map === 3) return door.toNew && door.to && door.to.room === cameFrom ? door.to : (door.toNew ?? door.to);
   if (map === 2 && door.closedInTree) return undefined;
   return map === 2 && door.toTree ? door.toTree : door.to;
 }
