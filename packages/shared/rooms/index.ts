@@ -9,6 +9,7 @@ import type { OwlSpeciesId } from '../src/species';
 import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
 import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
 import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
+import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
 import { HALL_ID, HALL_LEVELS, HALL_ROOM, hallSpawn, type HallLevel } from './hollowHall';
 import type { CourseDef } from '../src/course';
 
@@ -1507,6 +1508,7 @@ export const ROOMS: Record<string, RoomDef> = {
   ...TRIAL_ROOMS,
   ...CANOPY_ROOMS,
   ...BRUSH_ROOMS,
+  ...CIRCUIT_ROOMS,
 };
 
 // ---- The new map (map 3): the park laid out as one tree (Nov 6 park map) ----
@@ -1612,7 +1614,7 @@ const COMMONS_OF: Readonly<Record<HallLevel, { realm?: { room: string; spawn: st
   // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
   ink: { course: at('brush-1', 'from-gate') },
   grove: { realm: at('grove', 'default'), votesFor: 'grove', course: at('canopy-1', 'from-gate') },
-  market: { realm: at('market', 'default'), votesFor: 'market' },
+  market: { realm: at('market', 'default'), votesFor: 'market', course: at('circuit-1', 'from-gate') },
 };
 
 function commonsRoom(id: string, level: HallLevel): RoomDef {
@@ -1683,8 +1685,8 @@ for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
   });
 }
 
-/** The parkour courses (OP-224, course.ts), by id: the keepers' test course, the Updraft Canopy and Brushstroke Bridges (all the keepers' for now). */
-export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE, [CANOPY_COURSE.id]: CANOPY_COURSE, [BRUSH_COURSE.id]: BRUSH_COURSE };
+/** The parkour courses (OP-224, course.ts), by id: the keepers' test course, the Updraft Canopy, Brushstroke Bridges and the neon realm's course (all the keepers' for now). */
+export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE, [CANOPY_COURSE.id]: CANOPY_COURSE, [BRUSH_COURSE.id]: BRUSH_COURSE, [CIRCUIT_COURSE.id]: CIRCUIT_COURSE };
 
 /**
  * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer

@@ -21,7 +21,6 @@ export class BrushInk {
   /** Where each owl stood last frame: on a stone (its id) or not, so a landing paints once. */
   private readonly onStone = new Map<string, string | null>();
   private readonly strokes: Array<{ s: BrushStroke; stone: BrushStone; img: Phaser.GameObjects.Image | null }> = [];
-  private liveKey = '';
 
   /** `ground` is the room's ground line (screen y of height 0). */
   constructor(
@@ -79,13 +78,6 @@ export class BrushInk {
   perches(all: readonly Perch[] | undefined, now: number): { key: string; perches: Perch[] } {
     const perches = livePerches(all, this.stones, this.painted, now);
     return { key: perches.map((p) => p.id).join('|'), perches };
-  }
-
-  /** Whether the perches changed since `key`, by the last call to perches. */
-  changed(key: string): boolean {
-    const was = this.liveKey;
-    this.liveKey = key;
-    return was !== key;
   }
 
   /** Forget an owl that left the room. */

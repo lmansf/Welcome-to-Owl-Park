@@ -33,12 +33,15 @@ export const UPDRAFT_WARN_MS = 750;
 /** A state sent this long ago still counts against a column that has just switched off (ms): the room has the owl a moment behind. */
 export const UPDRAFT_SLACK_MS = 400;
 
-function cycle(u: Updraft): number {
+/** What switches on and off by park time: an updraft's column, or a neon sign (circuit.ts). */
+export type Switching = Pick<Updraft, 'onMs' | 'offMs' | 'phase'>;
+
+function cycle(u: Switching): number {
   return (u.onMs ?? 0) + (u.offMs ?? 0);
 }
 
 /** How far into its cycle a switching column is at time `t` (ms from its switching on), or null for one always on. */
-export function updraftClock(u: Updraft, t: number): number | null {
+export function updraftClock(u: Switching, t: number): number | null {
   const c = cycle(u);
   if (!u.onMs || c <= 0) return null;
   const at = (t + (u.phase ?? 0) * c) % c;
@@ -46,13 +49,13 @@ export function updraftClock(u: Updraft, t: number): number | null {
 }
 
 /** Whether a column is on at time `t`. */
-export function updraftOn(u: Updraft, t: number): boolean {
+export function updraftOn(u: Switching, t: number): boolean {
   const at = updraftClock(u, t);
   return at === null || at < (u.onMs ?? 0);
 }
 
 /** Whether a column is on and in its last moments before it drops (its leaves thin out). */
-export function updraftEnding(u: Updraft, t: number): boolean {
+export function updraftEnding(u: Switching, t: number): boolean {
   const at = updraftClock(u, t);
   return at !== null && at < (u.onMs ?? 0) && at >= (u.onMs ?? 0) - UPDRAFT_WARN_MS;
 }

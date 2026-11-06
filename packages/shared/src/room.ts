@@ -4,6 +4,7 @@ import type { Perch, Raised } from './perches';
 import type { Vec2 } from './protocol';
 import type { Updraft } from './updraft';
 import type { BrushStone } from './brush';
+import type { NeonSign } from './circuit';
 
 /**
  * Data-driven room definition. Art is swappable: point `background` and
@@ -147,6 +148,11 @@ export interface RoomDef {
    * treads of ink when an owl lands on one. Every stroke they can paint is also one of the room's perches.
    */
   brushStones?: BrushStone[];
+  /**
+   * In a room seen from the side: neon signs on circuits (circuit.ts), ledges that stand only while they
+   * are lit, the two circuits taking turns by park time. Every sign is also one of the room's perches.
+   */
+  neonSigns?: NeonSign[];
   /** Rain falls across the room (the ink-wash course's act 2): drawn by the page, and why its brush stones' ink fades sooner. */
   weather?: 'rain';
   /**
