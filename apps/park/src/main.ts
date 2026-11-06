@@ -31,6 +31,7 @@ import { linkToast } from './ui/tickets';
 import { createRibbon } from './ui/ribbon';
 import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
+import { guardZoom } from './ui/noZoom';
 
 // HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
 // page's visits and clicks and the reserved short links (/a to /z, /0 to /9) are seen from the first
@@ -70,6 +71,8 @@ const settings = deviceSettings();
 // The load screen (OP-129), up since the page's first paint: the boot and every room show their art coming on it.
 const loadScreen = createLoadScreen({ sound: () => settings.get().sound, calm: () => settings.get().calm });
 loadScreen.colour(look);
+// A pinch never leaves the page zoomed on a phone (noZoom.ts).
+guardZoom(document, window);
 const hud = createHud(document.body, look, settings);
 // The busy ribbon (OP-075) across the top of the home screen and every room.
 const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);

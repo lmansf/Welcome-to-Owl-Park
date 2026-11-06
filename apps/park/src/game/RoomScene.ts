@@ -172,7 +172,7 @@ import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { placeHints } from './hints';
+import { doorHintTarget, nearTargets, placeHints, touchBottom } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
 import { NestMirror } from './mirror';
@@ -278,6 +278,8 @@ function heldBack<T extends object>(handlers: T, waiting: () => Array<() => void
 const HINT_INSETS = { top: 64, bottom: 84, side: 30 };
 /** On touch screens the thumbstick and the face buttons fill the bottom corners: hints keep above them. */
 const TOUCH_HINT_BOTTOM = 190;
+/** Seen from the side, hints point only at doorways within this far above or below the view (room px): a screen's height. */
+const SIDE_HINT_REACH = ROOM_H;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
 const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347', glass: '#9FD0FF' };
@@ -1454,8 +1456,12 @@ export class RoomScene extends Phaser.Scene {
     const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
-    const targets = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }));
-    const places = placeHints(targets, { x: v.x, y: v.y, w: v.width, h: v.height }, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: TOUCH_HINT_BOTTOM } : {}) });
+    // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
+    const ground = this.sideView() ? groundOf(this.room) : null;
+    const view = { x: v.x, y: v.y, w: v.width, h: v.height };
+    const all = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => doorHintTarget(d, ground));
+    const targets = ground === null ? all : nearTargets(all, view, SIDE_HINT_REACH);
+    const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;
     this.hintsShown = shown;
