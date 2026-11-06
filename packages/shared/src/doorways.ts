@@ -67,8 +67,8 @@ export function laneThrough(room: RoomDef, door: DoorDef, p: Vec2): Lane {
  * nest door on the street leads into a nest though it has no `to` (each visitor's door goes to its own place).
  */
 /**
- * The park an owl walks: today's park (1), the tree (2), or the new map (3), the keepers' preview of the
- * park laid out as one tree (rooms/index.ts, NEW_MAP), which only a keeper's tab walks.
+ * The park an owl walks: today's park (1), the tree (2), or the new map (3), the park laid out as one
+ * tree (rooms/index.ts, NEW_MAP), which every owl the tree takes walks.
  */
 export type WalkMap = 1 | 2 | 3;
 

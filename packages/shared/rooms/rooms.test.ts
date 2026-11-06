@@ -1117,7 +1117,7 @@ describe("the tree's directions and barriers (OP-220)", () => {
   });
 });
 
-describe('the new map (map 3): the keepers’ preview of the park as one tree', () => {
+describe('the new map (map 3): the park as one tree', () => {
   const newRooms = Object.keys(NEW_MAP).map((id) => ROOMS[id]!);
   /** Every doorway of `room` that takes an owl walking the new map somewhere, and where. */
   const ways = (room: RoomDef, cameFrom?: string) => room.doors.flatMap((door) => {
@@ -1125,11 +1125,12 @@ describe('the new map (map 3): the keepers’ preview of the park as one tree', 
     return to ? [{ room, door, to }] : [];
   });
 
-  it('has its own rooms, each a keepers-only copy of a level of the tree, seen from the side', () => {
+  it('has its own rooms, each a copy of a level of the tree seen from the side, open to every owl it takes', () => {
     expect(newRooms.map((r) => r.id)).toEqual(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-under', 'm3-cave']);
     for (const r of newRooms) {
       const from = ROOMS[NEW_MAP[r.id]!]!;
-      expect(r.keeperOnly, r.id).toBe(true);
+      expect(r.keeperOnly, r.id).toBeUndefined();
+      expect(r.gated, r.id).toBe(from.gated);
       expect(mapOf(r), r.id).toBe(2);
       expect(r.size, r.id).toEqual(from.size);
       expect(r.walkable, r.id).toEqual(from.walkable);

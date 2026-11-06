@@ -420,9 +420,8 @@ export interface DoorDef {
    */
   toTree?: { room: string; spawn: string };
   /**
-   * Where the doorway leads an owl walking the new map (map 3, the keepers' preview of the park laid out
-   * as one tree: rooms/index.ts, NEW_MAP) instead of `to`. Only a keeper's tab walks the new map, so no
-   * visitor ever takes it.
+   * Where the doorway leads an owl walking the new map (map 3, the park laid out as one tree:
+   * rooms/index.ts, NEW_MAP) instead of `to`.
    */
   toNew?: { room: string; spawn: string };
   /**
