@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { COURSES, ROOMS } from '../rooms';
 import { TRIAL_COURSE } from '../rooms/trialCourse';
+import { CANOPY_COURSE } from '../rooms/updraftCanopy';
 import { PLAY_FEATHERS_PER_DAY } from './activities';
 import { CollectionBook, MemoryCollectionStore } from './book';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseProblems, holdsDash, inPit, inThorns, openerAt, shutShortcuts } from './course';
+import { GOLDEN_MOUSE } from './collectibles';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, type CourseDef } from './course';
 import { CourseBook, MemoryCourseStore } from './coursebook';
 import { nextParkDayAt } from './parktime';
 
@@ -245,5 +247,56 @@ describe('the course book: the finish shrine pays once, then a little each day',
     expect(row).toMatchObject({ course: 'trail', cleared: true, bestMs: 45_000, left: { first: false, gold: false, emote: true, today: COURSE_REPEAT_FEATHERS } });
     run(courses, MON + 60_000);
     expect(courses.board(CID, MON + 100_000, true)[0]?.left.today).toBe(0);
+  });
+});
+
+describe('the Golden Mouse: clearing every course pays it, once', () => {
+  const cleared = (course: string, at: number) => ({ cid: CID, course, clearedAt: at, bestMs: 60_000, gold: false, emote: false, feathers: [], shortcuts: [], repeatDay: '', repeatPaid: 0 });
+  /** The test course standing in for an open course, beside another course already cleared or not. */
+  function withTwo(otherCleared: boolean) {
+    const store = new MemoryCourseStore();
+    if (otherCleared) store.putCourse(cleared(CANOPY_COURSE.id, MON - 1000));
+    const book = new CollectionBook(new MemoryCollectionStore());
+    const { test: _test, keeper: _keeper, ...open } = TRIAL_COURSE;
+    const { keeper: _k, ...canopy } = CANOPY_COURSE;
+    const defs: Record<string, CourseDef> = { [open.id]: open, [canopy.id]: canopy };
+    return { book, courses: new CourseBook(store, book, defs, rooms) };
+  }
+
+  it('counts the open courses, the test course aside; while none is open, every course but the test course', () => {
+    const ids = (defs: readonly CourseDef[]) => mouseCourses(defs).map((d) => d.id);
+    expect(ids(Object.values(COURSES))).not.toContain(TRIAL_COURSE.id);
+    expect(ids(Object.values(COURSES)).sort()).toEqual(Object.values(COURSES).filter((d) => !d.test).map((d) => d.id).sort());
+    const { keeper: _k, ...canopyOpen } = CANOPY_COURSE;
+    expect(ids([TRIAL_COURSE, canopyOpen, ...Object.values(COURSES).filter((d) => d.id !== CANOPY_COURSE.id)])).toEqual([CANOPY_COURSE.id]);
+    expect(ids([TRIAL_COURSE])).toEqual([]);
+  });
+
+  it('pays the Mouse on the clear that leaves every course cleared, and never again', () => {
+    const { courses, book } = withTwo(true);
+    const r = run(courses, MON, 45_000);
+    expect(r.ok && r.paid.mouse).toBe(GOLDEN_MOUSE);
+    expect(owns(book, GOLDEN_MOUSE)).toBe(true);
+    const again = run(courses, MON + 60_000, 45_000);
+    expect(again.ok && again.paid.mouse).toBeUndefined();
+  });
+
+  it('holds the Mouse back while a course is left to clear', () => {
+    const { courses, book } = withTwo(false);
+    const r = run(courses, MON, 45_000);
+    expect(r.ok && r.paid.first).toBe(true);
+    expect(r.ok && r.paid.mouse).toBeUndefined();
+    expect(owns(book, GOLDEN_MOUSE)).toBe(false);
+  });
+
+  it('counts nothing for the test course, and pays a spectator nothing', () => {
+    const { courses, book } = setup();
+    const r = run(courses, MON, 45_000);
+    expect(r.ok && r.paid.mouse).toBeUndefined();
+    const watch = withTwo(true);
+    const p = run(watch.courses, MON, 45_000, true);
+    expect(p.ok && p.paid).toMatchObject({ practice: true });
+    expect(p.ok && p.paid.mouse).toBeUndefined();
+    expect(owns(book, GOLDEN_MOUSE) || owns(watch.book, GOLDEN_MOUSE)).toBe(false);
   });
 });

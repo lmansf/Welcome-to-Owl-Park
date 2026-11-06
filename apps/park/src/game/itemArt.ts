@@ -3,7 +3,8 @@
  * textures) and the HUD (as icons). Real art is `art/item-<id>` (svg, then 2x/1x webp or png,
  * like every other key, asked for only as the build ships it); until it exists every wearable and pet has a drawn placeholder, so the
  * whole mechanic works before the art pipeline delivers. Colourways rotate the hue of the art
- * (pixels.ts: by hand, because Safari's canvas has no `filter`).
+ * (pixels.ts: by hand, because Safari's canvas has no `filter`), and a gilded item (the Golden Mouse)
+ * is another item's art drawn in gold.
  *
  * Canvas conventions (owl canvas units; the art pipeline fits real art the same way):
  *  - head 140 x 100: the hat's bottom-centre (100% down, 50% across) sits on the crown;
@@ -12,7 +13,7 @@
  *  - pet 90 x 90: feet on the bottom edge, centred, facing right.
  */
 import { CATALOGUE, parseVariant, type ItemDef } from '@owl-park/shared';
-import { rotateHue } from '../collect/pixels';
+import { gild, rotateHue } from '../collect/pixels';
 import { rasterCandidates } from './artFiles';
 import { PUBLISHED_ART, versioned } from './publishedArt';
 
@@ -115,9 +116,10 @@ async function drawVariant(variant: string, scale: number): Promise<HTMLCanvasEl
     ctx.restore();
   }
   const hue = v.colour?.hue ?? 0;
-  if (hue) {
+  if (hue || v.item.gild) {
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    rotateHue(img.data, hue);
+    if (hue) rotateHue(img.data, hue);
+    if (v.item.gild) gild(img.data);
     ctx.putImageData(img, 0, 0);
   }
   return canvas;
@@ -695,7 +697,8 @@ const PET: Record<string, (ctx: Ctx) => void> = {
 /** A recognisable stand-in for an item until its painted art ships. */
 export function drawPlaceholder(ctx: Ctx, item: ItemDef, w: number, h: number): void {
   const table = item.kind === 'pet' ? PET : item.slot === 'head' ? HEAD : item.slot === 'face' ? FACE : NECK;
-  const draw = table[item.id];
+  // An item drawn from another's art (the Golden Mouse, the Mouse's) borrows its placeholder too.
+  const draw = table[item.id] ?? (item.art?.startsWith('item-') ? table[item.art.slice(5)] : undefined);
   if (draw) {
     ctx.shadowColor = OUT;
     ctx.shadowBlur = 0;

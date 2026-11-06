@@ -229,8 +229,9 @@ export class Course {
     this.host.hud.toast(clearLine(paid, SPECTATOR_WORDS.keep), 4000);
     if (paid.gold) this.host.hud.toast(COURSE_WORDS.gold, 3500);
     if (paid.emote) this.host.hud.toast(COURSE_WORDS.emote, 3500);
+    if (paid.mouse) this.host.hud.toast(COURSE_WORDS.mouse, 5000);
     if (!paid.practice) this.host.feathers(paid.total);
-    if (paid.item || paid.gold || paid.emote) this.host.awarded();
+    if (paid.item || paid.gold || paid.emote || paid.mouse) this.host.awarded();
   }
 
   private showStrip(): void {

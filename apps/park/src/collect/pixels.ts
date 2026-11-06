@@ -1,8 +1,8 @@
 /**
  * Pixel helpers for collectibles, free of DOM and Phaser so they are unit-tested in Node:
  * colourway hue rotation (the same matrix as CSS `hue-rotate()`, done by hand because Safari's
- * canvas has no `filter`), the multiply tint of the white collection icons, and the measurement
- * of where wearables sit on an owl.
+ * canvas has no `filter`), the multiply tint of the white collection icons, the gilding of the
+ * Golden Mouse, and the measurement of where wearables sit on an owl.
  */
 
 /** The 3x3 RGB matrix of a hue rotation by `deg` degrees (luminance-preserving, as in CSS filters). */
@@ -36,6 +36,34 @@ export function rotateHue(data: Uint8ClampedArray, deg: number): void {
     data[i] = m[0]! * r + m[1]! * g + m[2]! * b;
     data[i + 1] = m[3]! * r + m[4]! * g + m[5]! * b;
     data[i + 2] = m[6]! * r + m[7]! * g + m[8]! * b;
+  }
+}
+
+/** The gold the Golden Mouse is drawn in: its art's shading, dark to light, mapped onto these, in order. */
+export const GILD_STOPS: ReadonlyArray<readonly [number, number, number]> = [
+  [58, 36, 4],
+  [201, 162, 39],
+  [255, 243, 196],
+];
+
+/**
+ * Gild RGBA pixels in place: each pixel's lightness (as the hue rotation weighs it) picks its gold
+ * from GILD_STOPS, so the art keeps its shading and outline and reads as one piece of gold. Alpha is
+ * untouched.
+ */
+export function gild(data: Uint8ClampedArray): void {
+  const last = GILD_STOPS.length - 1;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+    const l = (0.213 * data[i]! + 0.715 * data[i + 1]! + 0.072 * data[i + 2]!) / 255;
+    const at = Math.min(last, Math.max(0, l * last));
+    const k = Math.min(last - 1, Math.floor(at));
+    const f = at - k;
+    const a = GILD_STOPS[k]!;
+    const b = GILD_STOPS[k + 1]!;
+    data[i] = a[0] + (b[0] - a[0]) * f;
+    data[i + 1] = a[1] + (b[1] - a[1]) * f;
+    data[i + 2] = a[2] + (b[2] - a[2]) * f;
   }
 }
 

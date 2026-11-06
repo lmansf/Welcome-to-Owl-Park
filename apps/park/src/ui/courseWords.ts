@@ -26,6 +26,8 @@ export const COURSE_WORDS = {
   gold: 'Gold time! A sparkle for your collection.',
   /** All five lost feathers found, at the shrine. */
   emote: 'All five lost feathers! A new emote.',
+  /** Every course cleared: the Golden Mouse. */
+  mouse: 'Every course cleared! The Golden Mouse is yours.',
 } as const;
 
 /** A clear's time as m:ss. */

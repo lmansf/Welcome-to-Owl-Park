@@ -158,4 +158,5 @@ export const TRIAL_COURSE: CourseDef = {
   gold: { ms: 60_000, item: 'sparkle~9' },
   floorMs: 8_000,
   keeper: true,
+  test: true,
 };

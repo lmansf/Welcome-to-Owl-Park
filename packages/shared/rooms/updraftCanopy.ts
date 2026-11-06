@@ -370,7 +370,7 @@ export const CANOPY_COURSE: CourseDef = {
   rooms: ['canopy-roots', 'canopy-2b', 'canopy-2c', 'canopy-hut'],
   gate: { room: 'trail-head', door: 'canopy-gate', spawn: 'from-gate' },
   exit: { room: 'canopy-hut', door: 'out' },
-  // Stand-ins from the catalogue until the Golden Mouse is made (the course's own reward, the owner's ask).
+  // Stand-ins from the catalogue until the course has its own item; clearing every course pays the Golden Mouse (coursebook.ts).
   item: 'leaf-crown~0',
   emote: 'twirl',
   gold: { ms: 105_000, item: 'sparkle~9' },

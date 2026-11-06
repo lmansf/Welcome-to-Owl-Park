@@ -14,7 +14,8 @@
  * `course` and `dash` frames (edge.ts), and the collections object's course tables.
  */
 import type { CollectionBook } from './book';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_DAILY, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, coursePieces, courseRoomIds, pieceIn, shortcutIn, type CourseDef, type PieceKind } from './course';
+import { GOLDEN_MOUSE } from './collectibles';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_DAILY, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, coursePieces, courseRoomIds, mouseCourses, pieceIn, shortcutIn, type CourseDef, type PieceKind } from './course';
 import { parkDay } from './parktime';
 import type { Vec2 } from './protocol';
 import { findSpawn, type RoomDef } from './room';
@@ -89,6 +90,8 @@ export interface CoursePaid {
   item?: string;
   gold?: string;
   emote?: string;
+  /** The Golden Mouse, granted now: this clear leaves the owl with every course cleared (mouseCourses). */
+  mouse?: string;
   /** A later clear that paid less than COURSE_REPEAT_FEATHERS: today's are paid already, or the activities' daily cap is reached. */
   why?: 'paid-today' | 'capped';
   /** A spectator's clear (OP-191): it paid nothing. */
@@ -311,8 +314,20 @@ export class CourseBook {
     }
     if (paid.best) next.bestMs = ms;
     this.store.putCourse(next);
+    if (this.clearedAll(cid)) {
+      const g = this.book.grant(cid, GOLDEN_MOUSE, 'granted', now);
+      if (g.ok && g.added) paid.mouse = GOLDEN_MOUSE;
+    }
     paid.total = this.book.feathers(cid, now);
     return { ok: true, view: this.view(cid, def.id, now), paid };
+  }
+
+  /** Whether the owl has cleared every course that pays the Golden Mouse (mouseCourses). */
+  private clearedAll(cid: string): boolean {
+    const counting = mouseCourses(Object.values(this.courses));
+    if (counting.length === 0) return false;
+    const cleared = new Set(this.store.courses(cid).filter((r) => r.clearedAt !== null).map((r) => r.course));
+    return counting.every((d) => cleared.has(d.id));
   }
 
   /** The course board for this owl (courseBoard): keeper courses only when asked for. */

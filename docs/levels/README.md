@@ -35,6 +35,11 @@ scripted times, which are MEASURED with the climb's pilot.
 - Four benches as checkpoints; one shortcut per act, opened from its far side; one dash-only gap;
   five lost feathers, one hidden room, one secret character and one nod to another realm; a finish
   shrine.
+- The Golden Mouse (built): the clear that leaves an owl with every course cleared pays it, once,
+  for all to earn. It counts the courses open to visitors, the test course aside; while none is
+  open, every course but the test course, so the keepers earn it as they try them
+  (`mouseCourses`, `course.ts`). It is the Mouse's own art drawn in gold, in one colourway, and the
+  shop never sells it or gives it as a gift, nor is it a quest's prize.
 
 Each file ends with a table that checks these rules against its plan.
 
