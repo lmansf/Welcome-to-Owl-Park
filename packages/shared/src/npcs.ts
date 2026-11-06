@@ -42,6 +42,12 @@ export const PLACE_NAMES: Readonly<Record<string, string>> = {
   'm3-stair-3': 'the treetop diner',
   'm3-ground': 'the forest path',
   'm3-under': 'the root stair',
+  // The hollow hall up the inside of the trunk, and the Commons off its landings.
+  'm3-hall': 'the hollow hall',
+  'commons-glass': 'the glass commons',
+  'commons-ink': 'the paper commons',
+  'commons-grove': "the clearing's commons",
+  'commons-market': 'the neon commons',
 };
 
 export function placeName(room: string): string {

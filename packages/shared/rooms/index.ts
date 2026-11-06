@@ -8,7 +8,7 @@ import { ROOM_H, ROOM_W, mapOf, type DoorDef, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
 import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
 import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
-import { HALL_LEVELS, HALL_ROOM, hallSpawn, type HallLevel } from './hollowHall';
+import { HALL_ID, HALL_LEVELS, HALL_ROOM, hallSpawn, type HallLevel } from './hollowHall';
 import type { CourseDef } from '../src/course';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
@@ -1586,7 +1586,8 @@ ROOMS['m3-stair-3'] = newMapLevel(
   );
 }
 ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
-  'stair-l1-l0': at('m3-ground', 'from-l0'),
+  // Up the root stair into the hollow hall's floor (the stairs above are left over, see below).
+  'stair-l1-l0': at(HALL_ID, 'from-under'),
   'to-arcade': at('m3-cave', 'from-l0'),
 });
 ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
@@ -1623,7 +1624,8 @@ function commonsRoom(id: string, level: HallLevel): RoomDef {
       ? { id: 'to-realm', rect: arch('to-glass'), to: of.realm, marker: { x: 2665, y: 560 } }
       : { id: 'to-realm', rect: arch('to-glass'), closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
     closed('arch-west', arch('to-grove'), { x: 1765, y: 640 }),
-    of.course ? { id: 'to-course', rect: arch('closed-a'), to: of.course, marker: { x: 2145, y: 600 } } : closed('arch-middle', arch('closed-a'), { x: 2145, y: 668 }),
+    // The course is the keepers' for now: a keeper's owl goes through, any other sees the arch shut.
+    of.course ? { id: 'to-course', rect: arch('closed-a'), to: of.course, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } } : closed('arch-middle', arch('closed-a'), { x: 2145, y: 668 }),
     closed('arch-east', arch('to-market'), { x: 3015, y: 650 }),
     // The idol's gathering spot, a little west of the hollow's middle (where the Commons' own painting has its plinth).
     ...(of.votesFor ? [{ id: 'idol', rect: { x: 2140, y: 740, w: 200, h: 80 }, marker: { x: 2240, y: 780 } }] : []),
@@ -1631,7 +1633,6 @@ function commonsRoom(id: string, level: HallLevel): RoomDef {
   return {
     ...hub,
     id,
-    keeperOnly: true,
     ...(of.votesFor ? { votesFor: of.votesFor } : {}),
     background: 'commons',
     backgrounds: [
@@ -1663,11 +1664,13 @@ for (const l of HALL_LEVELS) ROOMS[l.commons] = commonsRoom(l.commons, l.level);
  * back to it, the plaza's arches into the realms, the neon street's arcade door into the hall.
  */
 const NEW_MAP_WAYS: Readonly<Record<string, Readonly<Record<string, { room: string; spawn: string }>>>> = {
-  lobby: { gate: at('m3-stair-1', 'from-l4') },
-  glass: { 'to-hub': at('m3-stair-1', 'glass') },
-  grove: { 'to-hub': at('m3-stair-3', 'grove') },
-  market: { 'to-hub': at('m3-ground', 'market') },
-  hub: { 'to-lobby': at('m3-ground', 'party') },
+  // Switched on (Nov 6, the owner's "Switch it on"): through the turnstiles down the knothole into the
+  // hollow hall, each realm's way out back into its Commons, and the Party Grove's way into the trunk.
+  lobby: { gate: at(HALL_ID, 'from-lobby') },
+  glass: { 'to-hub': at('commons-glass', 'from-realm') },
+  grove: { 'to-hub': at('commons-grove', 'from-realm') },
+  market: { 'to-hub': at('commons-market', 'from-realm') },
+  hub: { 'to-lobby': at(HALL_ID, 'from-party') },
 };
 for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
   const r = ROOMS[room]!;

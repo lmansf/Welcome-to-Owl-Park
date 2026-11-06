@@ -127,7 +127,7 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     requires: ['story-welcome'],
   },
   {
-    // The new map's stairs (map 3): a pile at the top of the climb on three of them, so the way down the tree has errands of its own.
+    // The new map's way down the tree (map 3): a pile in the hollow hall's nooks, in the Clearing's Commons and on the root stair, so the way down has errands of its own.
     id: 'story-pip-stair-leaves',
     title: 'Leaves on the stair',
     giver: 'pip',
@@ -135,10 +135,10 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     difficulty: 'easy',
     length: 'long',
     cadence: 'story',
-    steps: [flop(1, 'm3-stair-2'), flop(1, 'm3-ground'), flop(1, 'm3-under'), emote('hoot', { npc: 'pip' })],
+    steps: [flop(1, 'm3-hall'), flop(1, 'commons-grove'), flop(1, 'm3-under'), emote('hoot', { npc: 'pip' })],
     reward: { feathers: 50, item: null },
-    offer: 'The leaves come down the tree faster than I can sweep. Flop into a pile on the quiet landing, the forest path and the root stair, then come back and hoot for me.',
-    thanks: 'The stair is clear and the lanterns shine again. Here, for your trouble.',
+    offer: 'The leaves come down the tree faster than I can sweep. Flop into a pile in the hollow hall, the commons of the clearing and the root stair, then come back and hoot for me.',
+    thanks: 'The hall is clear and the lanterns shine again. Here, for your trouble.',
     requires: ['story-welcome'],
   },
 ];

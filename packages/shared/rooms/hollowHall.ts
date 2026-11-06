@@ -12,8 +12,9 @@
  * from the hub). On the floor, the hatch down the root stair to the cavern (west: down is left) and the
  * trunk's door out to the Party Grove (east).
  *
- * For now it is the keepers' (`keeperOnly`), as are its Commons: the live map walks the stairs until
- * the owner switches the hall on.
+ * Switched on for every owl the new map takes (Nov 6, the owner's "Switch it on"): the turnstiles lead
+ * down the knothole into it, the root stair up into its floor, and the Party Grove's way in to its
+ * trunk door. The old stairs (m3-stair-1 to m3-ground) are left over, still leading out.
  */
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_H, ROOM_W, type DoorDef, type KitLedge, type KitProp, type KitScene, type RoomDef, type RoomKit } from '../src/room';
@@ -140,7 +141,6 @@ export const HALL_ROOM: RoomDef = kitRoom({
   map: 2,
   owlScale: 1.25,
   mood: 'hub',
-  keeperOnly: true,
   size: { w: ROOM_W, h: HALL_H },
   walkable: [
     [

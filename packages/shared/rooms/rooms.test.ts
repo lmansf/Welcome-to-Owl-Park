@@ -16,7 +16,7 @@ import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 import { treeLevelOf, treeSpotsFor } from '../src/treeSpots';
-import { NEW_MAP, NEW_MAP_HALL, isNewMapRoom } from '../src/newMap';
+import { NEW_MAP, NEW_MAP_COMMONS, NEW_MAP_HALL, isNewMapRoom } from '../src/newMap';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -564,10 +564,10 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'trail-1:east', 'trail-2:east', 'trail-2:west', 'trail-3:west',
       // The Updraft Canopy (OP-226, updraftCanopy.ts): its doorways and hatches between the rooms of the course, both ways.
       'canopy-1:roots', 'canopy-1:to-trunk', 'canopy-2a:down', 'canopy-2a:hatch-up', 'canopy-2b:down', 'canopy-2b:hatch-up', 'canopy-2c:down', 'canopy-2c:hatch-up', 'canopy-3:down', 'canopy-roots:out',
-      // The new map's stairs between its levels (NEW_MAP), as the levels' own.
-      'm3-ground:stair-l1-l0', 'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
+      // The new map's stairs between its levels (NEW_MAP), as the levels' own (the forest path's root stair now comes up into the hall).
+      'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
       // The hollow hall (hollowHall.ts): each landing's doorway into its Commons, and each Commons' way out back to it.
-      'm3-hall:to-glass', 'm3-hall:to-grove', 'm3-hall:to-ink', 'm3-hall:to-market', 'commons-glass:out', 'commons-grove:out', 'commons-ink:out', 'commons-market:out',
+      'm3-hall:down', 'm3-hall:to-glass', 'm3-hall:to-grove', 'm3-hall:to-ink', 'm3-hall:to-market', 'commons-glass:out', 'commons-grove:out', 'commons-ink:out', 'commons-market:out',
     ].sort());
   });
 
@@ -1161,7 +1161,7 @@ describe('the new map (map 3): the park as one tree', () => {
 
   it('no visitor’s doorway leads into it: only the new map’s own ways (toNew) and its own rooms do', () => {
     for (const room of Object.values(ROOMS)) {
-      // The keepers' rooms (the hollow hall's Commons) are no visitor's.
+      // The keepers' rooms (the courses) are no visitor's.
       if (isNewMapRoom(room.id) || room.keeperOnly) continue;
       for (const d of room.doors) {
         for (const to of [d.to, d.toTree]) expect(isNewMapRoom(to?.room), `${room.id}:${d.id}`).toBe(false);
@@ -1190,7 +1190,9 @@ describe('the new map (map 3): the park as one tree', () => {
   });
 
   it('every way between two of its rooms leads back the way it came, so no stair or doorway is one way', () => {
-    const inMap = new Set([...Object.keys(NEW_MAP), 'lobby', 'glass', 'grove', 'market', 'hub']);
+    // The old stairs are left over since the hall was switched on: they still lead out, and nothing leads back in (the next test).
+    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground']);
+    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'lobby', 'glass', 'grove', 'market', 'hub']);
     for (const id of inMap) {
       for (const { door, to } of ways(ROOMS[id]!)) {
         if (!inMap.has(to.room)) continue;
@@ -1200,7 +1202,40 @@ describe('the new map (map 3): the park as one tree', () => {
     }
   });
 
-  it('runs from the turnstiles past every open realm to the ground, the Party Grove and the arcade cave, all of it reachable', () => {
+  it('runs from the turnstiles down the hollow hall past every open realm\'s Commons to the Party Grove and the arcade cave, all of it reachable', () => {
+    const reach = (from: string) => {
+      const seen = new Set<string>([from]);
+      const next = [from];
+      for (let id = next.pop(); id; id = next.pop()) {
+        for (const { to } of ways(ROOMS[id]!)) {
+          if (seen.has(to.room) || !ROOMS[to.room]) continue;
+          seen.add(to.room);
+          next.push(to.room);
+        }
+      }
+      return seen;
+    };
+    const seen = reach('lobby');
+    for (const id of [...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'm3-under', 'm3-cave', 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    // Through the turnstiles down the knothole; up the root stair into the hall's floor; the Party Grove's way into the trunk.
+    expect(doorTarget(ROOMS['lobby']!.doors.find((d) => d.id === 'gate')!, 3)).toEqual({ room: 'm3-hall', spawn: 'from-lobby' });
+    expect(ways(ROOMS['m3-under']!).find((w) => w.door.way === 'up')?.to).toEqual({ room: 'm3-hall', spawn: 'from-under' });
+    expect(ways(ROOMS['hub']!).find((w) => w.door.id === 'to-lobby')?.to).toEqual({ room: 'm3-hall', spawn: 'from-party' });
+    // Each open realm's Commons hangs off its landing, its Realm Vote idol inside, its realm out through the back arch and back.
+    for (const realm of ['glass', 'grove', 'market'] as const) {
+      const commons = `commons-${realm}`;
+      expect(ways(ROOMS['m3-hall']!).some((w) => w.to.room === commons), commons).toBe(true);
+      expect(ROOMS[commons]!.doors.some((d) => d.id === 'idol'), commons).toBe(true);
+      expect(ways(ROOMS[commons]!).find((w) => w.door.id === 'to-realm')?.to.room, commons).toBe(realm);
+      expect(ways(ROOMS[realm]!).find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe(commons);
+      // In from the Party Grove's arch, back out to it.
+      expect(ways(ROOMS[realm]!, 'hub').find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe('hub');
+    }
+    // The ink-wash realm has no room yet: its Commons' arch is shut.
+    expect(ROOMS['commons-ink']!.doors.find((d) => d.id === 'to-realm')!.to).toBeUndefined();
+  });
+
+  it('leaves the old stairs strand no one: nothing leads into them now, and every one of them still leads out to the hall\'s map', () => {
     const seen = new Set<string>(['lobby']);
     const next = ['lobby'];
     for (let id = next.pop(); id; id = next.pop()) {
@@ -1210,17 +1245,20 @@ describe('the new map (map 3): the park as one tree', () => {
         next.push(to.room);
       }
     }
-    for (const id of [...Object.keys(NEW_MAP), 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
-    // Down the stairs in the order of the park map: the turnstiles, the glass realm's landing, the quiet one, the clearing's, the ground.
-    const down = (id: string) => ways(ROOMS[id]!).find((w) => w.door.way === 'down' || w.door.id === 'gate')?.to.room;
-    expect(['lobby', 'm3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground'].map(down)).toEqual(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-under']);
-    // Each realm's Commons hangs off its landing, its Realm Vote idol inside, and leads back to it.
-    for (const [landing, realm] of [['m3-stair-1', 'glass'], ['m3-stair-3', 'grove'], ['m3-ground', 'market']] as const) {
-      expect(ways(ROOMS[landing]!).some((w) => w.to.room === realm), landing).toBe(true);
-      expect(ROOMS[realm]!.doors.some((d) => d.id === 'idol'), realm).toBe(true);
-      expect(ways(ROOMS[realm]!).find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe(landing);
-      // In from the Party Grove's arch, back out to it.
-      expect(ways(ROOMS[realm]!, 'hub').find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe('hub');
+    const stairs = ['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground'];
+    for (const id of stairs) expect(seen.has(id), id).toBe(false);
+    // An owl still on one when the switch came walks out of it into the map as it is now.
+    for (const id of stairs) {
+      const out = new Set<string>([id]);
+      const todo = [id];
+      for (let r = todo.pop(); r; r = todo.pop()) {
+        for (const { to } of ways(ROOMS[r]!)) {
+          if (out.has(to.room) || !ROOMS[to.room]) continue;
+          out.add(to.room);
+          todo.push(to.room);
+        }
+      }
+      expect([...out].some((r) => seen.has(r)), id).toBe(true);
     }
   });
 
