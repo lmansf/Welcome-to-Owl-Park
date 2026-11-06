@@ -159,6 +159,9 @@ type JournalTab = 'underway' | 'today' | 'more';
  * `onOpen` makes room before a screen or the dialogue opens; `back` returns from the quests screen to
  * the Menu.
  */
+/** In place of "Loading" while the park can't reach the quest board (OP-280): it keeps trying on its own. */
+export const OFFLINE_LINE = 'The quest board isn’t answering right now. It will try again by itself, so you can keep exploring.';
+
 export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState): QuestUi {
   const style = document.createElement('style');
   style.textContent = CSS + PUZZLE_CSS;
@@ -272,7 +275,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     const box = el('div', 'quests journal');
     host.appendChild(box);
     const focused = (document.activeElement as HTMLElement | null)?.dataset?.['tab'] ?? null;
-    const sum = el('p', 'qsum', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…');
+    const sum = el('p', 'qsum', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : state.offline ? 'Not answering' : 'Loading…');
     if (board) sum.title = `Room for ${ACTIVE_SLOTS.story} story, ${ACTIVE_SLOTS.daily} daily, ${ACTIVE_SLOTS.weekly} weekly and ${ACTIVE_SLOTS.monthly} monthly quests`;
     sum.dataset['sub'] = '';
     box.appendChild(el('p', 'qsum qjob', QUEST_JOB));
@@ -303,7 +306,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     box.appendChild(panel);
     if (focused) box.querySelector<HTMLElement>(`[data-tab="${focused}"]`)?.focus();
     if (tab === 'today') {
-      if (!today) return void panel.appendChild(el('p', 'empty', 'Loading today’s tasks…'));
+      if (!today) return void panel.appendChild(el('p', 'empty', state.offline ? OFFLINE_LINE : 'Loading today’s tasks…'));
       const list = el('div', 'today');
       for (const t of today.tasks) {
         const done = t.done >= t.count;
@@ -314,7 +317,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       panel.append(list, el('p', 'empty', `${today.bonus ? 'All three done, bonus paid.' : `Each task pays ${TASK_FEATHERS} feathers, and all three ${TASKS_BONUS} more.`} New tasks in ${timeLeft(today.endsAt)}.`));
       return;
     }
-    if (!board) return void panel.appendChild(el('p', 'empty', 'Loading your quests…'));
+    if (!board) return void panel.appendChild(el('p', 'empty', state.offline ? OFFLINE_LINE : 'Loading your quests…'));
     if (tab === 'more') {
       const givers = Object.entries(board.offers).filter(([, list]) => list.length);
       panel.appendChild(el('h3', '', 'Who has quests for you'));

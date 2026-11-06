@@ -1242,6 +1242,8 @@ export class RoomScene extends Phaser.Scene {
       void this.climb?.reconnected();
     }
     this.lastStatus = s;
+    // The quest board says it isn't answering instead of loading for ever (OP-280); a board clears it.
+    if (wentOffline) this.quests.setOffline(true);
     if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
   }
 
@@ -2121,6 +2123,7 @@ export class RoomScene extends Phaser.Scene {
     this.boardTimer?.remove();
     if (!res.board) {
       if (res.reason === 'spectator') return;
+      if (res.reason === 'offline') this.quests.setOffline(true);
       this.boardTimer = this.time.delayedCall(BOARD_RETRY_MS, () => void this.refreshBoard());
       return;
     }

@@ -17,14 +17,27 @@ export class QuestState {
   readonly puzzles = new Map<string, PuzzleView>();
   /** Owls close by in a run of a puzzle quest, by quest (the journal's Join list). */
   readonly near = new Map<string, PuzzleNeighbour[]>();
+  /**
+   * Whether the room server isn't answering for the board (OP-280): the park could not connect, or a
+   * board request came back offline. Shown in place of "Loading" until a board comes.
+   */
+  offline = false;
   private readonly listeners = new Set<Listener>();
 
   set(board: QuestBoard | null): void {
     this.board = board;
+    if (board) this.offline = false;
     // A puzzle quest no longer carried takes its run off the page.
     const carried = new Set((board?.active ?? []).map((q) => q.id));
     for (const q of [...this.puzzles.keys()]) if (!carried.has(q)) this.puzzles.delete(q);
     for (const q of [...this.near.keys()]) if (!carried.has(q)) this.near.delete(q);
+    this.changed();
+  }
+
+  /** The board isn't answering (true), or is again (false); a change is told to the listeners. */
+  setOffline(on: boolean): void {
+    if (this.offline === on) return;
+    this.offline = on;
     this.changed();
   }
 
