@@ -8,7 +8,8 @@
  * column, and bramble, thorn roots and the drop under the crown are its pits.
  *
  * For now it is the keepers' (`keeperOnly`): its trail gate stands in the test course's trailhead,
- * until the clearing's course doorway is painted. Not built yet, from the plan: the wind of act 3, the
+ * and the Treehouse Clearing's Commons in the hollow hall (hollowHall.ts) has a doorway in too, its
+ * middle arch, where the first act's way back now leads. Not built yet, from the plan: the wind of act 3, the
  * three shortcuts (the log, the vine and the bough), the sleeping owlet's lines and the telescope's view.
  *
  * Every ledge is the plan's: `x` its west end, `w` its width, `top` its height over the ground line.
@@ -291,7 +292,7 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = {
   'canopy-1': canopyRoom('canopy-1', 3, CANOPY_1, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-roots': { x: 4480, y: G }, 'from-trunk': { x: 4660, y: G } },
     doors: [
-      door('to-commons', 40, { room: 'trail-head', spawn: 'from-canopy' }, { way: 'down' }),
+      door('to-commons', 40, { room: 'commons-grove', spawn: 'from-course' }, { way: 'down' }),
       door('roots', 4560, { room: 'canopy-roots', spawn: 'from-roots' }, { w: 60 }),
       door('to-trunk', 4740, { room: 'canopy-2a', spawn: 'from-below' }, { w: 60, way: 'up' }),
     ],

@@ -605,7 +605,7 @@ export function walkedAt(room: Pick<RoomDef, 'walkable' | 'perches'>, ground: nu
  * Also: every key is a kit key of the catalogue, every stair's treads, doorway's door and perch are
  * the room's, and every stretch of floor an owl walks is drawn (a path at top 0 covers it).
  */
-/** A scene of a kit room (docs/TREE_STYLE.md section 8) where it is drawn: its group's art from x0 to x1 (room px). */
+/** A scene of a kit room (docs/TREE_STYLE.md section 8) where it is drawn: its group's art from x0 to x1 (room px), in a row of screens. */
 export interface KitSceneSpan {
   id: string;
   story: string;
@@ -613,6 +613,8 @@ export interface KitSceneSpan {
   x1: number;
   /** The screen its group's middle stands on (0 is the room's first). */
   screen: number;
+  /** The row of screens its group's middle stands in (0 is the top row): a tall room's scenes up the hall stand apart by height. */
+  row: number;
 }
 
 /** Where each scene of a kit room is drawn: the art of its props and of the doorways, barriers and ledges it is about, left to right. */
@@ -622,7 +624,9 @@ export function kitSceneSpans(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): Ki
     const s = sizeOf(d.key);
     const a = artSpan(s);
     const k = d.w / s.w;
-    return [d.x + a.left * k, d.x + a.right * k] as const;
+    const b = artBand(s);
+    const ky = d.h / s.h;
+    return [d.x + a.left * k, d.x + a.right * k, d.y + b.top * ky, d.y + b.foot * ky] as const;
   };
   const out: KitSceneSpan[] = [];
   for (const sc of room.kit?.scenes ?? []) {
@@ -631,9 +635,10 @@ export function kitSceneSpans(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): Ki
     if (!spans.length) continue;
     const x0 = Math.round(Math.min(...spans.map((a) => a[0])));
     const x1 = Math.round(Math.max(...spans.map((a) => a[1])));
-    out.push({ id: sc.id, story: sc.story, x0, x1, screen: Math.floor((x0 + x1) / 2 / ROOM_W) });
+    const y = (Math.min(...spans.map((a) => a[2])) + Math.max(...spans.map((a) => a[3]))) / 2;
+    out.push({ id: sc.id, story: sc.story, x0, x1, screen: Math.floor((x0 + x1) / 2 / ROOM_W), row: Math.max(0, Math.floor(y / ROOM_H)) });
   }
-  return out.sort((a, b) => a.x0 - b.x0);
+  return out.sort((a, b) => a.row - b.row || a.x0 - b.x0);
 }
 
 /**
@@ -667,7 +672,7 @@ export function kitSceneProblems(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>):
   for (let i = 1; i < spans.length; i++) {
     const a = spans[i - 1]!;
     const b = spans[i]!;
-    if (b.x0 - a.x1 < KIT_SCENE_GAP) out.push(`scenes ${a.id} and ${b.id} run into each other (${b.x0 - a.x1} px apart, at least ${KIT_SCENE_GAP})`);
+    if (a.row === b.row && b.x0 - a.x1 < KIT_SCENE_GAP) out.push(`scenes ${a.id} and ${b.id} run into each other (${b.x0 - a.x1} px apart, at least ${KIT_SCENE_GAP})`);
   }
   return out;
 }

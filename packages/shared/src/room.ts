@@ -148,6 +148,11 @@ export interface RoomDef {
    */
   keeperOnly?: true;
   /**
+   * The realm its idol (the `idol` doorway) takes the Realm Vote for, where that is not the room's own
+   * id: a Commons of the hollow hall votes for the realm out through its back arch.
+   */
+  votesFor?: string;
+  /**
    * Drawn by the page in plain shapes, with no painting of its own (OP-224's placeholder rooms): its
    * tiles name no art, nothing is loaded for them, and the scene paints the floor plan instead.
    */

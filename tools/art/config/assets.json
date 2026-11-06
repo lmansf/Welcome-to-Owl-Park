@@ -20,6 +20,24 @@
       "kind": "room",
       "with_2x": true
     },
+    "commons-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "commons": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "commons-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
     "hub-fg": {
       "w": 1600,
       "h": 900,

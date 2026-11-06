@@ -16,7 +16,7 @@ import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 import { treeLevelOf, treeSpotsFor } from '../src/treeSpots';
-import { NEW_MAP, isNewMapRoom } from '../src/newMap';
+import { NEW_MAP, NEW_MAP_HALL, isNewMapRoom } from '../src/newMap';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -189,7 +189,8 @@ describe("the tree's ways into today's park (OP-162)", () => {
   it("a side view's doorways stand at a height, so a ledge over one is walked along without going through", () => {
     for (const room of ALL_ROOMS) {
       // A course's rooms (OP-224) are climbed through hatches up on their ledges: course.test.ts holds them.
-      if (mapOf(room) !== 2 || room.course) continue;
+      // The hollow hall's doorways stand on its landings: hollowHall.test.ts holds them.
+      if (mapOf(room) !== 2 || room.course || NEW_MAP_HALL.includes(room.id)) continue;
       // Every way through is on the ground (OP-220): none is taken from a ledge.
       for (const d of room.doors) {
         if (!d.to) continue;
@@ -254,7 +255,8 @@ describe('a tree level’s placed spots (OP-156)', () => {
   it('are each one of its level’s named spots, once, at a whole room pixel inside the room; no other room has any', () => {
     for (const room of ALL_ROOMS) {
       const places = room.places ?? [];
-      if (mapOf(room) !== 2 || room.course) {
+      // The hollow hall is drawn from the kit, no level's painting: it has no named spots.
+      if (mapOf(room) !== 2 || room.course || NEW_MAP_HALL.includes(room.id)) {
         expect(places, room.id).toEqual([]);
         continue;
       }
@@ -564,6 +566,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'canopy-1:roots', 'canopy-1:to-trunk', 'canopy-2a:down', 'canopy-2a:hatch-up', 'canopy-2b:down', 'canopy-2b:hatch-up', 'canopy-2c:down', 'canopy-2c:hatch-up', 'canopy-3:down', 'canopy-roots:out',
       // The new map's stairs between its levels (NEW_MAP), as the levels' own.
       'm3-ground:stair-l1-l0', 'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
+      // The hollow hall (hollowHall.ts): each landing's doorway into its Commons, and each Commons' way out back to it.
+      'm3-hall:to-glass', 'm3-hall:to-grove', 'm3-hall:to-ink', 'm3-hall:to-market', 'commons-glass:out', 'commons-grove:out', 'commons-ink:out', 'commons-market:out',
     ].sort());
   });
 
@@ -584,7 +588,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
 
 describe("the realms' guardians (OP-112)", () => {
   it('stand in every realm with a Realm Vote spot, and only there', () => {
-    const voting = Object.values(ROOMS).filter((r) => r.doors.some((d) => d.id === 'idol')).map((r) => r.id);
+    // A Commons of the hollow hall holds its realm's idol (votesFor), as the realm itself does until the hall opens.
+    const voting = [...new Set(Object.values(ROOMS).filter((r) => r.doors.some((d) => d.id === 'idol')).map((r) => r.votesFor ?? r.id))];
     expect(GUARDIANS.filter((g) => !g.reserved).map((g) => g.realm).sort()).toEqual(voting.sort());
   });
 
@@ -1156,7 +1161,8 @@ describe('the new map (map 3): the park as one tree', () => {
 
   it('no visitor’s doorway leads into it: only the new map’s own ways (toNew) and its own rooms do', () => {
     for (const room of Object.values(ROOMS)) {
-      if (isNewMapRoom(room.id)) continue;
+      // The keepers' rooms (the hollow hall's Commons) are no visitor's.
+      if (isNewMapRoom(room.id) || room.keeperOnly) continue;
       for (const d of room.doors) {
         for (const to of [d.to, d.toTree]) expect(isNewMapRoom(to?.room), `${room.id}:${d.id}`).toBe(false);
       }

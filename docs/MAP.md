@@ -387,3 +387,32 @@ its nest; the hub becomes the lobby ring at the trunk's foot; Neon Roost moves f
 east end to the cavern; the grove becomes a branch realm rather than an area that reads as the park's
 outside; the whole park gains a vertical axis for flight (OP-084) and the realm challenges (OP-115).
 Nothing about owls, collections, quests, the climb, the data model or the store changes.
+
+## 13. The hollow hall [BUILT for keepers: the hall and its Commons]
+
+The owner's direction of 2026-11-06: the inside of the tree is one great vertical hall, with a common
+space at each level inside it and the realms and their parkour outside the tree on each level.
+
+- **One room, five screens high** (`m3-hall`, packages/shared/rooms/hollowHall.ts), seen from the side
+  and drawn from the clearing's kit. Its ground line is `HALL_GROUND` (4370), as far above its foot as a
+  screen's is, and its ledges stand up to `perchTopLimit(HALL_H)` over it.
+- **The climb and the lift.** A zigzag of fungus shelves climbs from landing to landing, each a jump and
+  a flap above the last (205), and two nooks off it each end in a leaf pile. A column of rising air up
+  the middle (`HALL_LIFT`) lifts a gliding owl from the floor to the knothole. Either way reaches every
+  landing (hollowHall.test.ts).
+- **A landing a level, top to bottom** (`HALL_LEVELS`): the stained-glass realm's (west, 3280), the
+  ink-wash realm's (east, 2460), the Treehouse Clearing's (west, 1640) and the neon realm's (east, 820),
+  each with its doorway into its Commons, taken from the landing (a door's `top`). The knothole's landing
+  (4100) leads up to the Treetop Commons. On the floor, the hatch down the root stair (west) and the
+  trunk's door out to the Party Grove (east): down on the left, up on the right.
+- **Arriving up high.** An owl that comes out of a Commons, or down from the Treetop Commons, arrives
+  standing on its landing (`spawnTops`, `spawnTop`), not on the floor.
+- **The Commons** (`commons-glass`, `commons-ink`, `commons-grove`, `commons-market`) are built on the
+  hub's floor plan and, until their own centre screens are painted (the art order's line 9), on copies
+  of the hub's paintings (`commons-west`, `commons`, `commons-east`). Each has the way out to its
+  landing, its realm's arch (the ink-wash realm's shut: Hatching Soon), and the Realm Vote's idol for a
+  voted realm (`votesFor`): the vote counts for the realm, wherever its idol stands. The Clearing's
+  middle arch leads to the Updraft Canopy course.
+- **Behind the keeper flag.** The hall and its Commons are `keeperOnly`: the live map walks the stairs
+  (`m3-stair-1` to `m3-stair-3`) until the owner switches the hall on, and the realms' doors still lead
+  back to the stairs.

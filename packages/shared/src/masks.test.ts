@@ -3,6 +3,7 @@ import { FRONT_POINTS_MAX, MASK_LIST_MAX, MASK_REASONS, checkMasks, draftOf, emp
 import { MAX_PERCH_TOP } from './perches';
 import { mapOf } from './room';
 import { treeLevelOf, treeSpotsFor } from './treeSpots';
+import { NEW_MAP_HALL } from './newMap';
 import { ROOMS } from '../rooms';
 
 // The ledge painter's draft (OP-156): the one check the Worker, the overflow object and the painter make.
@@ -210,7 +211,8 @@ describe('a room’s own places as the painter starts from them (OP-156, part 3)
   });
 
   it('are named apart from a tree room’s own ledges and fronts, so a draft of them all, every name placed, passes the check', () => {
-    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !r.course);
+    // Not the hollow hall (NEW_MAP_HALL): no painting of its own, so nothing for the painter.
+    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !r.course && !NEW_MAP_HALL.includes(r.id));
     expect(tree.length).toBeGreaterThan(0);
     for (const room of tree) {
       expect(treeLevelOf(room.id), room.id).not.toBeNull();

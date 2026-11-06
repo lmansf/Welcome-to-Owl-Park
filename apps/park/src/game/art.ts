@@ -928,9 +928,11 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   for (const a of Object.values(course?.art ?? {})) if (a) keys.push(a.key);
   // The tree draws its barriers (OP-220): only today's park's closed arches load the blockade art.
   if (room && mapOf(room) !== 2) for (const door of room.doors) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
-  if (roomId === 'grove') keys.push('guardian');
-  if (roomId === 'market') keys.push('robot-owl');
-  if (roomId === 'glass') keys.push('glass-idol');
+  // A realm's idol, in the realm or in its Commons in the hollow hall (`votesFor`).
+  const realm = room?.votesFor ?? roomId;
+  if (realm === 'grove') keys.push('guardian');
+  if (realm === 'market') keys.push('robot-owl');
+  if (realm === 'glass') keys.push('glass-idol');
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
