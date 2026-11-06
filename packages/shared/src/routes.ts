@@ -19,6 +19,7 @@ import type { Vec2 } from './protocol';
 import { mapOf, type RoomDef } from './room';
 import type { Updraft } from './updraft';
 import { WALK_SPEED } from './walk';
+import { WIND_CATCH_BELOW, type WindCurrent } from './wind';
 
 export type RouteTier = 1 | 2 | 3;
 
@@ -106,20 +107,63 @@ function updraftNode(u: Updraft): { id: string; area: Polygon; top: number; updr
 }
 
 /**
+ * A wind current as a place a route goes through (wind.ts): its band from end to end, at its height.
+ * A glide caught in it is carried the band's length and glides off its far end, so like a column's
+ * top what it reaches from there takes the glide; it catches only from a little below the band.
+ */
+function windNode(w: WindCurrent): { id: string; area: Polygon; exit: Polygon; top: number; updraft: true; catchBelow: number } {
+  const strip = (a: number, b: number): Polygon => [
+    { x: a, y: -1e6 },
+    { x: b, y: -1e6 },
+    { x: b, y: 1e6 },
+    { x: a, y: 1e6 },
+  ];
+  // Caught anywhere along it; let go at its downwind end.
+  const end = w.dir === 1 ? w.x1 : w.x0;
+  return { id: `wind:${w.id}`, area: strip(w.x0, w.x1), exit: strip(end - WIND_EXIT_PX, end + WIND_EXIT_PX), top: w.z, updraft: true, catchBelow: WIND_CATCH_BELOW };
+}
+/** How near its downwind end a route lets go of a wind current (room px). */
+const WIND_EXIT_PX = 40;
+
+/**
  * What reaching each of a room's perches from the floor takes, by its id: the easiest route's
  * hardest hop (a route of single jumps is tier 1 even if a flap would cut it short); null for a
  * perch nothing reaches. With the flaps of the room's park (roomFlaps). A room's updrafts (OP-226)
  * are places on the way: an owl glides into a column from as high as its top or lower, within a
  * hop, rises to the top, and glides off it, so a perch reached through one is tier 3, the glide's.
  */
-export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 'updrafts'> & Partial<Pick<RoomDef, 'course'>>): Record<string, RouteTier | null> {
+export function perchTiers(room: RouteRoom): Record<string, RouteTier | null> {
+  const all = routeTiers(room);
+  return Object.fromEntries((room.perches ?? []).map((p) => [p.id, all[p.id] ?? null]));
+}
+
+/**
+ * What reaching each of a room's updrafts and wind currents takes, by `updraft:<id>` and `wind:<id>`,
+ * as perchTiers has it: null for one that no route gets into, which is air no owl will find.
+ */
+export function airTiers(room: RouteRoom): Record<string, RouteTier | null> {
+  const all = routeTiers(room);
+  return Object.fromEntries(Object.entries(all).filter(([id]) => id.startsWith('updraft:') || id.startsWith('wind:')));
+}
+
+type RouteRoom = Pick<RoomDef, 'walkable' | 'perches' | 'map' | 'updrafts'> & Partial<Pick<RoomDef, 'course' | 'winds'>>;
+
+function routeTiers(room: RouteRoom): Record<string, RouteTier | null> {
   const ledges = room.perches ?? [];
-  const perches: Array<{ id: string; area: Polygon; top: number; updraft?: true }> = [...ledges, ...(room.updrafts ?? []).map(updraftNode)];
+  const perches: Array<{ id: string; area: Polygon; exit?: Polygon; top: number; updraft?: true; catchBelow?: number }> = [
+    ...ledges,
+    ...(room.updrafts ?? []).map(updraftNode),
+    ...(room.winds ?? []).map(windNode),
+  ];
   // In a course the owl holds the dash (dash.ts): a hop nothing else makes may take it, counted as a glide's.
   const dash = room.course !== undefined;
   const hop = (rise: number, gap: number): number | null => hopTier(rise, gap, flaps) ?? (dash && hopTier(rise, Math.max(0, gap - DASH_ROUTE_REACH), flaps) !== null ? 3 : null);
-  const into = (fromTop: number, gap: number, to: { top: number; updraft?: true }): number | null => {
+  const into = (fromTop: number, gap: number, to: { top: number; updraft?: true; catchBelow?: number }): number | null => {
     if (!to.updraft) return hop(to.top - fromTop, gap);
+    // Into a wind current (wind.ts): it catches a glide no lower than a little under its band, so the
+    // owl has to get there that high, as onto a ledge at the bottom of the catch; from higher up it
+    // lets itself sink into the band.
+    if (to.catchBelow !== undefined) return hop(to.top - to.catchBelow - fromTop, gap) === null ? null : 3;
     // Into a column: from no higher than its top, a glide in at the height it left from.
     return fromTop <= to.top && hopTier(0, gap, flaps) !== null ? 3 : null;
   };
@@ -137,9 +181,10 @@ export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 
       if (!Number.isFinite(at)) continue;
       for (const to of perches) {
         if (to === from) continue;
-        const gap = gapBetween(from.area, to.area);
+        const gap = gapBetween(from.exit ?? from.area, to.area);
         // Off the top of a column the owl is gliding: what it reaches from there takes the glide.
-        const step = from.updraft ? (hop(to.top - from.top, gap) === null ? null : 3) : into(from.top, gap, to);
+        // Into a wind current from other air, it still catches only near its band.
+        const step = from.updraft && to.catchBelow === undefined ? (hop(to.top - from.top, gap) === null ? null : 3) : into(from.top, gap, to);
         if (step === null) continue;
         const via = Math.max(at, step);
         if (via < tier.get(to.id)!) {
@@ -149,5 +194,5 @@ export function perchTiers(room: Pick<RoomDef, 'walkable' | 'perches' | 'map' | 
       }
     }
   }
-  return Object.fromEntries(ledges.map((p) => [p.id, Number.isFinite(tier.get(p.id)!) ? (tier.get(p.id) as RouteTier) : null]));
+  return Object.fromEntries(perches.map((p) => [p.id, Number.isFinite(tier.get(p.id)!) ? (tier.get(p.id) as RouteTier) : null]));
 }

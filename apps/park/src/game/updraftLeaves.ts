@@ -5,7 +5,9 @@ import { updraftEnding, updraftOn, type Updraft } from '@owl-park/shared';
  * The leaves in a room's updrafts (OP-226, updraft.ts), drawn: each column a stream of small leaves
  * rising from the ground line to its top while it is on, thinning out in its last moments, and none
  * while it is off. The leaves are the only thing that shows a column, so a gust that drops is seen
- * before it lets an owl fall. No art: the leaf is drawn once into a small texture.
+ * before it lets an owl fall. The leaf is drawn once into a small texture. A realm's `updraft` piece
+ * (the column's `art`, a kit slot), once its artist delivers it and it has loaded, is drawn up the
+ * column under the leaves, repeated to its top, and shown only while the column blows.
  */
 
 const LEAF = 'fx-updraft-leaf';
@@ -26,7 +28,7 @@ function leafTexture(scene: Phaser.Scene): string {
 }
 
 export class UpdraftLeaves {
-  private readonly streams: Array<{ u: Updraft; e: Phaser.GameObjects.Particles.ParticleEmitter; rate: number }> = [];
+  private readonly streams: Array<{ u: Updraft; e: Phaser.GameObjects.Particles.ParticleEmitter; rate: number; art?: Phaser.GameObjects.TileSprite }> = [];
 
   /** `ground` is the room's ground line (screen y of height 0); `depth` draws the leaves behind the owls. */
   constructor(scene: Phaser.Scene, columns: readonly Updraft[], ground: number, depth: number, calm: () => boolean) {
@@ -47,7 +49,8 @@ export class UpdraftLeaves {
         emitting: false,
       });
       e.setDepth(depth);
-      this.streams.push({ u, e, rate: 0 });
+      const art = u.art && scene.textures.exists(u.art) ? scene.add.tileSprite(u.x + u.w / 2, ground, scene.textures.get(u.art).getSourceImage().width, u.top, u.art).setOrigin(0.5, 1).setDepth(depth).setVisible(false) : undefined;
+      this.streams.push({ u, e, rate: 0, ...(art ? { art } : {}) });
     }
     this.calm = calm;
   }
@@ -60,6 +63,7 @@ export class UpdraftLeaves {
       const rate = !updraftOn(s.u, serverNow) ? 0 : updraftEnding(s.u, serverNow) ? RATE_ENDING : this.calm() ? RATE_ON / 2 : RATE_ON;
       if (rate === s.rate) continue;
       s.rate = rate;
+      s.art?.setVisible(rate > 0);
       if (rate === 0) s.e.stop();
       else {
         s.e.frequency = 1000 / rate;
@@ -69,7 +73,10 @@ export class UpdraftLeaves {
   }
 
   destroy(): void {
-    for (const s of this.streams) s.e.destroy();
+    for (const s of this.streams) {
+      s.e.destroy();
+      s.art?.destroy();
+    }
     this.streams.length = 0;
   }
 }

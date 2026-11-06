@@ -110,6 +110,9 @@ import {
   holdsDash,
   liftAt,
   spendDash,
+  windAt,
+  windEnd,
+  type WindCurrent,
   type Air,
   type Flier,
   type FlightAbilities,
@@ -161,6 +164,7 @@ import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './a
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
 import { UpdraftLeaves } from './updraftLeaves';
+import { WindStreaks } from './windStreaks';
 import { BrushInk } from './brushInk';
 import { NeonSigns } from './neonSigns';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
@@ -313,6 +317,10 @@ export class RoomScene extends Phaser.Scene {
   private conn: RoomConnection | null = null;
   /** The leaves in the room's updrafts, drawn (OP-226); none in a room without them. */
   private updrafts: UpdraftLeaves | null = null;
+  /** The streaks in the room's wind currents, drawn (OP-275); none in a room without them. */
+  private winds: WindStreaks | null = null;
+  /** Times this page's owl was caught by a wind current in this room, for the tests. */
+  private windRides = 0;
   /** The ink the room's brush stones paint (OP-235): which strokes stand, and their art; none in a room without them. */
   private brush: BrushInk | null = null;
   /** The room's neon signs on their circuits (circuit.ts): which are lit, and their art; none in a room without them. */
@@ -614,6 +622,9 @@ export class RoomScene extends Phaser.Scene {
     this.climb = null;
     this.course = null;
     this.updrafts = null;
+    this.winds?.destroy();
+    this.winds = null;
+    this.windRides = 0;
     this.brush = null;
     this.signs = null;
     this.standKey = '';
@@ -889,6 +900,8 @@ export class RoomScene extends Phaser.Scene {
     this.updrafts = room.updrafts?.length
       ? new UpdraftLeaves(this, room.updrafts, groundOf(room), 1, () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false)
       : null;
+    // The streaks in the room's wind currents (OP-275): which way the air carries a glide, and where.
+    this.winds = room.winds?.length ? new WindStreaks(this, room.winds, groundOf(room), 1, (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false) : null;
     // The ink of the room's brush stones (OP-235): its strokes drawn while they last, and stood on only then.
     this.brush = room.brushStones?.length ? new BrushInk(this, room.brushStones, groundOf(room)) : null;
     // The neon signs on their circuits: drawn lit or dark by park time, and stood on only while lit.
@@ -1965,6 +1978,8 @@ export class RoomScene extends Phaser.Scene {
     spectator: boolean;
     /** The dash (OP-224): whether the owl holds it here, whether it is spent this jump, and the dashes made in this room. */
     dash: { holds: boolean; spent: boolean; dashes: number };
+    /** The room's wind currents (OP-275) and how many times the own owl was caught by one here. */
+    wind: { currents: number; rides: number };
     /** In a parkour course: the course as the room has it for this owl (OP-224). */
     course: ReturnType<Course['debug']>;
   } | null {
@@ -1972,6 +1987,7 @@ export class RoomScene extends Phaser.Scene {
     return {
       spectator: this.spectator,
       dash: { holds: this.flier.dash !== undefined, spent: this.flier.dash?.spent ?? false, dashes: this.dashes },
+      wind: { currents: this.room.winds?.length ?? 0, rides: this.windRides },
       course: this.course?.debug() ?? null,
       room: this.room.id,
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room })),
@@ -2607,6 +2623,22 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * Held in a wind current (OP-275, wind.ts): carried downwind to its far end, as a walk the room checks
+   * like any other. Keys held against the wind keep the owl where they steer it (it hangs in the air);
+   * keys with it, or none, ride on.
+   */
+  private rideWind(w: WindCurrent, caught: boolean): void {
+    if (caught) this.windRides += 1;
+    const held = this.heldWay();
+    if (held && Math.sign(held.x) === -w.dir) return;
+    const to = { x: windEnd(w), y: this.me.pos.y };
+    const walk = this.me.walk;
+    if (walk && Math.abs(walk.to.x - to.x) < 3 && !walk.dash) return;
+    if (Math.abs(this.me.pos.x - to.x) < 3) return;
+    this.walkTo(to);
+  }
+
   /** Back where a fall in a course takes the owl (OP-224): there at once, standing, and the room told. */
   private placeAt(at: Vec2): void {
     this.walkGoal = null;
@@ -2680,9 +2712,14 @@ export class RoomScene extends Phaser.Scene {
       const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
       const grounded = this.flier.air.s === GROUNDED;
       // The room's gusts keep the room server's time (updraft.ts): the column this owl is in, while it is on.
-      const lift = this.room.updrafts ? (liftAt(this.room.updrafts, this.me.pos.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
+      // Else a wind current it glides into (wind.ts, OP-275) holds it at the current's height.
+      const column = this.room.updrafts ? (liftAt(this.room.updrafts, this.me.pos.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
+      const gust = column === null ? windAt(this.room.winds, this.me.pos.x, this.flier.air.z) : undefined;
+      const lift = column ?? gust?.z ?? null;
+      const wasLifted = this.flier.air.s === LIFTED;
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
+      if (gust && air.s === LIFTED && air.h === gust.z) this.rideWind(gust, !wasLifted);
       const level = footingLevel(this.room, air.z);
       if (level !== this.footLevel) {
         this.footLevel = level;
@@ -3326,6 +3363,8 @@ export class RoomScene extends Phaser.Scene {
     this.course = null;
     this.updrafts?.destroy();
     this.updrafts = null;
+    this.winds?.destroy();
+    this.winds = null;
     this.brush?.destroy();
     this.brush = null;
     this.signs?.destroy();

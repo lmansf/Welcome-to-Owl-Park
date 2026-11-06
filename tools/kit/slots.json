@@ -1,0 +1,65 @@
+{
+  "about": "The realm kit's 28 slots (tools/kit/realm-kit.csv) and, per realm, which of today's pieces stands in for each until the realm's artist delivers it (OP-275). A key here is drawn under the slot's name, kit-<realm>-<slot>--<key>, with its own art until kit-<realm>-<slot> is published, and with the slot's art after. A row names a recut row (its caps stand in for perch-end, its middles for perch-mid). The first key of a slot is the one its own key shows meanwhile.",
+  "realms": {
+    "clearing": {
+      "rows": ["kit-cut-earth-path", "kit-cut-plank"],
+      "slots": {
+        "texture-ground": ["kit-tex-clearing-fern-floor", "kit-tex-ground-forest-floor", "kit-tex-clearing-leaf-canopy", "kit-tex-planks"],
+        "texture-wall": ["kit-tex-clearing-hollow-wood", "kit-tex-inner-wood"],
+        "perch-small": ["kit-clearing-bough-perch", "kit-clearing-bough-end-perch", "kit-clearing-fungus-shelf", "kit-clearing-leaf-platform", "kit-clearing-root-shelf", "kit-ground-mossy-boulder", "kit-plank-single"],
+        "updraft": ["kit-clearing-updraft-vent"],
+        "sky": ["kit-clearing-sky-a", "kit-clearing-sky-b", "kit-under-sky-b"],
+        "far": ["kit-clearing-far-a", "kit-clearing-far-b", "kit-under-far-b"],
+        "mid": ["kit-clearing-mid-a", "kit-clearing-mid-b", "kit-under-mid-b"],
+        "knot-hole": ["kit-doorway-knothole", "kit-clearing-trunk-entrance", "kit-landmark-door-root-tiny", "kit-hatch-down", "kit-clearing-hut-door-open", "kit-clearing-vine-curtain", "kit-landmark-hut-lookout"],
+        "roost": ["kit-clearing-checkpoint-bench"],
+        "lost-feather": ["kit-clearing-feather-lost"],
+        "hazard": ["kit-clearing-bramble-patch", "kit-clearing-thorn-roots"],
+        "finish-roost": ["kit-clearing-finish-shrine"],
+        "prop-small": ["kit-clearing-mushroom-cluster", "kit-landmark-bell-hanging", "kit-landmark-cabinet-miniature", "kit-landmark-telescope-brass"],
+        "plant": ["kit-clearing-fern-clump", "kit-clearing-fern-tall", "kit-under-root-hang"]
+      }
+    },
+    "ink": {
+      "rows": ["kit-cut-earth-path", "kit-cut-plank", "kit-cut-plank-thin", "kit-cut-stone", "kit-cut-stone-mossy"],
+      "slots": {
+        "texture-ground": ["kit-tex-ink-ink-stone", "kit-tex-planks"],
+        "perch-small": ["kit-ink-reed-tuft", "kit-ink-paper-cliff", "kit-ink-pine-bough", "kit-ink-rock-pillar"],
+        "sky": ["kit-ink-sky-b"],
+        "far": ["kit-ink-far-a", "kit-ink-far-b"],
+        "mid": ["kit-ink-mid-a"],
+        "knot-hole": ["kit-ink-moon-gate", "kit-ink-door-paper-open", "kit-ink-waterfall-curtain"],
+        "roost": ["kit-ink-checkpoint-bench"],
+        "lost-feather": ["kit-ink-feather-lost"],
+        "mechanic": ["kit-ink-brush-stone"],
+        "finish-roost": ["kit-ink-finish-shrine"],
+        "prop-large": ["kit-ink-tea-stall", "kit-landmark-scroll-tower", "kit-landmark-crane-paper", "kit-landmark-heron-ink", "kit-ink-eave-shelter", "kit-ink-temple-eave"],
+        "prop-small": ["kit-ink-stone-lantern", "kit-ink-paper-lantern", "kit-ink-easel-blank", "kit-ink-seal-red"],
+        "plant": ["kit-ink-lotus-pads", "kit-ink-pond-edge"]
+      }
+    },
+    "neon": {
+      "rows": ["kit-cut-stone"],
+      "slots": {
+        "texture-ground": ["kit-tex-neon-corrugated-tin"],
+        "texture-wall": ["kit-tex-high-silvered-planks"],
+        "perch-mid": ["kit-neon-rooftop-ledge", "kit-neon-sky-bridge-mid"],
+        "perch-small": ["kit-neon-air-unit", "kit-neon-billboard-blank"],
+        "sky": ["kit-neon-sky-a"],
+        "far": ["kit-neon-far-a", "kit-neon-far-b"],
+        "mid": ["kit-neon-mid-b", "kit-neon-mid-c"],
+        "knot-hole": ["kit-neon-rooftop-door-open"],
+        "roost": ["kit-neon-checkpoint-bench"],
+        "lost-feather": ["kit-neon-feather-lost"],
+        "hazard": ["kit-neon-neon-tube-hazard"],
+        "finish-roost": ["kit-neon-finish-shrine"],
+        "prop-large": ["kit-neon-water-tank", "kit-neon-noodle-stall", "kit-neon-antenna-mast"],
+        "prop-small": ["kit-neon-vending-machine", "kit-neon-pigeon-coop", "kit-neon-satellite-dish"]
+      }
+    },
+    "glass": {
+      "rows": [],
+      "slots": {}
+    }
+  }
+}

@@ -62,7 +62,13 @@ describe('the Updraft Canopy (OP-226)', () => {
         const ledge = r.perches!.find((l) => l.top === p.top && Math.min(...l.area.map((v) => v.x)) <= p.at.x && p.at.x <= Math.max(...l.area.map((v) => v.x)));
         expect(ledge, `${id} ${p.id} stands on a ledge ${p.top} high`).toBeDefined();
       }
-      for (const name of Object.keys(r.spawns)) expect(inPit(r, r.spawns[name]!), `${id} spawn ${name}`).toBe(false);
+      for (const name of Object.keys(r.spawns)) {
+        // A spawn up on a ledge (spawnTops) stands on it, wherever the floor is under it; one on the floor stands on safe floor.
+        const top = r.spawnTops?.[name] ?? 0;
+        const at = r.spawns[name]!;
+        if (top) expect(r.perches!.some((l) => l.top === top && Math.min(...l.area.map((v) => v.x)) <= at.x && at.x <= Math.max(...l.area.map((v) => v.x))), `${id} spawn ${name} on a ledge ${top} high`).toBe(true);
+        else expect(inPit(r, at), `${id} spawn ${name}`).toBe(false);
+      }
       for (const t of c.thorns ?? []) expect(t.x0 >= 0 && t.x1 <= r.size.w && t.z0 < t.z1, `${id} ${t.id}`).toBe(true);
     }
     // The hanging thorns over the log's west mouth reach down to 260, and a glide under them passes.

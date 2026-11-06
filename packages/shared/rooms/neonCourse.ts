@@ -16,6 +16,8 @@ import { BROWNOUT_PACE, neonSign, signPerches, type Circuit, type CircuitPace, t
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type DoorDef, type KitBackdrop, type KitDecal, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
+import { inRealmKit } from '../src/kitSlots';
+import { withCourseAir } from './courseAir';
 
 export const CIRCUIT_COURSE_ID = 'circuit';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
@@ -212,7 +214,7 @@ const ANTENNA: RoomKit = {
   decals: tubes(700, 2600),
 };
 
-export const CIRCUIT_ROOMS: Record<string, RoomDef> = {
+export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCourseAir('neon', {
   'circuit-1': circuitRoom('circuit-1', 3, ROOFTOPS, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-cut': { x: 4640, y: G } },
     doors: [door('to-commons', 40, { room: 'commons-market', spawn: 'from-course' }, { way: 'down' }), door('to-cut', 4740, { room: 'circuit-2', spawn: 'from-back' }, { way: 'up' })],
@@ -254,9 +256,9 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = {
       shrine: piece('shrine', 3000, 540),
     },
   }),
-};
+}));
 
-export const CIRCUIT_COURSE: CourseDef = {
+export const CIRCUIT_COURSE: CourseDef = inRealmKit('neon', {
   id: CIRCUIT_COURSE_ID,
   objective: 'breakers',
   acts: ['circuit-1', 'circuit-2', 'circuit-3'],
@@ -272,4 +274,4 @@ export const CIRCUIT_COURSE: CourseDef = {
     feather: { key: 'kit-neon-feather-lost', scale: 0.6 },
     shrine: { key: 'kit-neon-finish-shrine', scale: 0.6 },
   },
-};
+});

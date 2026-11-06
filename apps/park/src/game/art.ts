@@ -8,7 +8,7 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, KIT_ART, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, KIT_ART, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
@@ -918,6 +918,12 @@ export function blockadeKey(phrase: string): string {
   return `blockade-${phrase.toLowerCase().replace(/\s+/g, '-')}`;
 }
 
+/** Whether a realm kit slot's own art (OP-275) is published: delivered by its artist, not a piece standing in for it. */
+export function slotDelivered(key: string, published: ReadonlyMap<string, string> = PUBLISHED_ART): boolean {
+  const spec = KIT_ART[key];
+  return !!spec?.slot && !spec.standIn && (published.has(`${key}.svg`) || rasterNames(key, 1, published).length > 0);
+}
+
 /** Art that belongs to one room (released when it closes; roomOpeningArt is what loads as it opens). */
 export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(roomId)): string[] {
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
@@ -926,6 +932,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   // A course's pieces drawn from the kit (its benches, bells, lost feathers and shrine).
   const course = room?.course && Object.hasOwn(COURSES, room.course.id) ? COURSES[room.course.id] : undefined;
   for (const a of Object.values(course?.art ?? {})) if (a) keys.push(a.key);
+  // A realm's updraft and wind-current art (OP-275), once its artist's is published: until then the leaves and streaks are all.
+  for (const a of [...(room?.updrafts ?? []), ...(room?.winds ?? [])].map((x) => x.art)) if (a && slotDelivered(a) && !keys.includes(a)) keys.push(a);
   // The ink a room's brush stones paint (OP-235): a bridge across and a tread up.
   if (room?.brushStones?.length) keys.push('kit-ink-bridge-stroke', 'kit-ink-tread-stroke');
   // A room's neon signs on their circuits: the kit's sign, lit or dark.
@@ -1014,7 +1022,7 @@ export function softTiles(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'a
   if (scale <= DENSE_SCALE) return [];
   return [...backgroundTiles(room), ...foregroundTiles(room)]
     .map((t) => t.key)
-    .filter((key) => !published.has(`${key}.svg`) && (rasterNames(key, scale, published)[0]?.includes('@2x') ?? false) && rasterNames(key, 1, published).length > 0);
+    .filter((key) => !published.has(`${kitFilesOf(key)}.svg`) && (rasterNames(kitFilesOf(key), scale, published)[0]?.includes('@2x') ?? false) && rasterNames(kitFilesOf(key), 1, published).length > 0);
 }
 
 /** How long the browser's cache gets to say whether it has a file (an answer from it takes a few ms). */
@@ -1043,7 +1051,7 @@ async function inCache(url: string): Promise<boolean> {
 export async function opensSoft(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): Promise<Set<string>> {
   const keys = softTiles(room, cfg);
   const scale = artScale('room', cfg.pixelRatio, roomArtCap(room, cfg));
-  const have = await Promise.all(keys.map((key) => inCache(`${baseUrl()}${versioned(rasterNames(key, scale, PUBLISHED_ART)[0]!)}`)));
+  const have = await Promise.all(keys.map((key) => inCache(`${baseUrl()}${versioned(rasterNames(kitFilesOf(key), scale, PUBLISHED_ART)[0]!)}`)));
   return new Set(keys.filter((_, i) => !have[i]));
 }
 
@@ -1061,7 +1069,7 @@ function imagesShowing(list: Phaser.GameObjects.GameObject[], key: string, out: 
 
 /** A painting's 2x copy, for sharpenArt (OP-129): null when the build has none or it fails to load. */
 export function sharpCopy(key: string, scale: number): Promise<HTMLImageElement | null> {
-  const name = rasterNames(key, scale, PUBLISHED_ART)[0];
+  const name = rasterNames(kitFilesOf(key), scale, PUBLISHED_ART)[0];
   return name?.includes('@2x') ? loadImage(`${baseUrl()}${versioned(name)}`) : Promise.resolve(null);
 }
 
@@ -1152,8 +1160,8 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   const spec = ART[key];
   if (!spec) return false;
   const url = baseUrl();
-  if (PUBLISHED_ART.has(`${key}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${key}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
-  for (const c of rasterCandidates(url, key, scale, PUBLISHED_ART)) {
+  if (PUBLISHED_ART.has(`${kitFilesOf(key)}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${kitFilesOf(key)}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
+  for (const c of rasterCandidates(url, kitFilesOf(key), scale, PUBLISHED_ART)) {
     const img = await (onBytes ? streamImage(c, onBytes) : loadImage(c));
     if (img) {
       if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
@@ -1170,7 +1178,7 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
 export async function loadArtCopy(scene: Phaser.Scene, key: string, as: string): Promise<boolean> {
   if (scene.textures.exists(as)) return true;
   if (!ART[key]) return false;
-  for (const c of rasterCandidates(baseUrl(), key, 1, PUBLISHED_ART)) {
+  for (const c of rasterCandidates(baseUrl(), kitFilesOf(key), 1, PUBLISHED_ART)) {
     const img = await loadImage(c);
     if (img) {
       if (!scene.textures.exists(as)) scene.textures.addImage(as, img);
@@ -1229,7 +1237,7 @@ export interface LoadReport {
 
 /** The file loading `key` at `scale` asks for first: its SVG when the build ships one, else its best picture. */
 function firstFile(key: string, scale: number): string | undefined {
-  return PUBLISHED_ART.has(`${key}.svg`) ? `${key}.svg` : rasterNames(key, scale, PUBLISHED_ART)[0];
+  return PUBLISHED_ART.has(`${kitFilesOf(key)}.svg`) ? `${kitFilesOf(key)}.svg` : rasterNames(kitFilesOf(key), scale, PUBLISHED_ART)[0];
 }
 
 /** The bytes loading `key` at `scale` downloads: its first file's size (none when its texture is here already). */

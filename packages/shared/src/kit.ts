@@ -305,7 +305,8 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
     if (x1 > x0) pieces.push(single ? at(run.cap, run.x0, run.x1, (run.x1 - run.x0) / artSpan(c).w) : at(run.cap, x0, x1, 1, { repeats: true }));
   }
   if (run.left) pieces.push(at(run.left, run.x0, run.x0 + lw, 1));
-  if (run.right) pieces.push(at(run.right, run.x1 - rw, run.x1, 1));
+  // A realm's perch end (OP-275) is painted for the left end and mirrored for the right, once delivered.
+  if (run.right) pieces.push(at(run.right, run.x1 - rw, run.x1, 1, { flip: KIT_ART[run.right]?.slot === 'perch-end' && !KIT_ART[run.right]?.standIn }));
   if (run.trim && pieces[0]) {
     const cap = pieces[0];
     const t = sizeOf(run.trim);

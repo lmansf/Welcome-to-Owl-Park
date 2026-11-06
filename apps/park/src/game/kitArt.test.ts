@@ -1,8 +1,8 @@
-import { KIT_ART, ROOM_W, kitArtKeys, kitCost, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, kitArtKeys, kitCost, kitFilesOf, type RoomDef } from '@owl-park/shared';
 import { KIT_DEMOS } from '@owl-park/shared/rooms/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { ROOMS } from '../rooms';
-import { ART, artScale, roomArtCap, roomArtKeys } from './art';
+import { ART, artScale, roomArtCap, roomArtKeys, slotDelivered } from './art';
 import { PHONE_ROOM_BUDGET, rasterNames } from './artFiles';
 import { drawnRoom } from './kitView';
 
@@ -20,7 +20,8 @@ describe('the art kit in the park (OP-234)', () => {
     for (const [key, spec] of Object.entries(KIT_ART)) {
       const art = ART[key];
       expect(art, key).toBeDefined();
-      expect(art, key).toEqual({ w: spec.w, h: spec.h, kind: spec.kind });
+      // A realm slot's key and its stand-ins (OP-275) draw the kit's placeholder until art comes.
+      expect(art, key).toEqual({ w: spec.w, h: spec.h, kind: spec.slot ? 'kit' : spec.kind });
     }
   });
 
@@ -28,6 +29,18 @@ describe('the art kit in the park (OP-234)', () => {
     expect(rasterNames('kit-tex-bark', 2, shipping('kit-tex-bark.webp', 'kit-tex-bark@2x.webp'))).toEqual(['kit-tex-bark@2x.webp', 'kit-tex-bark.webp']);
     expect(rasterNames('kit-plank-mid', 1, shipping('kit-plank-mid.png'))).toEqual(['kit-plank-mid.png']);
     expect(rasterNames('kit-doorway-stone', 1, shipping())).toEqual([]);
+  });
+
+  it("loads a realm slot's stand-in from the piece standing in, until the slot's own art is published (OP-275)", () => {
+    expect(kitFilesOf('kit-clearing-plant--clearing-fern-clump')).toBe('kit-clearing-fern-clump');
+    expect(kitFilesOf('kit-clearing-plant')).toBe('kit-clearing-fern-clump');
+    expect(kitFilesOf('kit-glass-plant')).toBe('kit-glass-plant');
+    expect(kitFilesOf('kit-tex-bark')).toBe('kit-tex-bark');
+    // A slot's own art counts once it is delivered: published, and no piece standing in for it any more.
+    expect(slotDelivered('kit-ink-wind-current', shipping())).toBe(false);
+    expect(slotDelivered('kit-ink-wind-current', shipping('kit-ink-wind-current.webp'))).toBe(true);
+    expect(slotDelivered('kit-clearing-updraft', shipping('kit-clearing-updraft.webp'))).toBe(false);
+    expect(slotDelivered('kit-tex-bark', shipping('kit-tex-bark.webp'))).toBe(false);
   });
 
   it('draws the painted level unless the page asks for kit rooms', () => {
