@@ -8,7 +8,7 @@ import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, for
 import { OWL_SPECIES, SPECIES } from '../src/species';
 import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
-import { resolveTarget } from '../src/resolveTarget';
+import { resolveTarget, steerTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
 import { FLIGHT_STEP_MS, GLIDE_SLOPE, GROUNDED, MAX_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
 import { PERCH_SLACK, footing, groundAt, perchTopLimit, type Raised } from '../src/perches';
@@ -515,6 +515,25 @@ describe('the stained-glass realm (gated)', () => {
     expect(glass.doors.map((d) => d.id)).toEqual(['to-hub', 'idol', 'portal']);
     expect(glass.doors.find((d) => d.id === 'to-hub')?.to).toEqual({ room: 'hub', spawn: 'from-glass' });
     expect(ANCHORS.glass).toBeDefined();
+  });
+
+  it('lets an owl holding right from the arch slide round the idol\'s plinth, and back again (OP-279)', () => {
+    const hold = (from: Vec2, dir: Vec2, until: (p: Vec2) => boolean) => {
+      let p = from;
+      for (let i = 0; i < 60 && !until(p); i++) {
+        const next = steerTarget(p, dir, glass.walkable);
+        if (!next) break;
+        p = next;
+      }
+      return p;
+    };
+    const east = hold(glass.spawns['default']!, { x: 1, y: 0 }, (p) => p.x > 1500);
+    expect(east.x).toBeGreaterThan(1500);
+    const west = hold({ x: 1500, y: 770 }, { x: -1, y: 0 }, (p) => p.x < 1000);
+    expect(west.x).toBeLessThan(1000);
+    // The plinth itself stays off the floor, and the idol's vote spot in front of it stays on it.
+    expect(isWalkable({ x: 1260, y: 760 }, glass.walkable)).toBe(false);
+    expect(isWalkable({ x: 1260, y: 848 }, glass.walkable)).toBe(true);
   });
 
   it("opens from the hub's east arch, which keeps its sign and blockade while the realm is closed; the west arch stays boarded", () => {
