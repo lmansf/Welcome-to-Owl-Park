@@ -65,6 +65,7 @@ const CSS = `
 /* On the home screen the bug keeps to the right edge, so the card sits to its left with the tail on its right. */
 #hud.at-home:not(.covered) .fb-card{left:auto;right:calc(max(6px,env(safe-area-inset-right)) + 54px)}
 #hud.at-home:not(.covered) .fb-card::before{left:auto;right:-7px;transform:translateY(-50%) rotate(225deg)}
+@media (max-width:520px){#hud.at-home:not(.covered) .fb-card{right:max(6px,env(safe-area-inset-right));top:calc(50% + 32px);transform:none;max-width:calc(44vw - 6px)}#hud.at-home:not(.covered) .fb-card::before{right:16px;top:-7px;transform:rotate(135deg)}#hud.at-home:not(.covered) .fb-card .fb-card-open{max-width:none;font-size:12px}}
 /* Only over the park and the home screen: a covering screen or a game has the room to itself. */
 #hud.covered .fb-card,#hud .fb-card[hidden]{display:none}
 /* A phone's park view keeps Feedback in the Menu (OP-242), so the card goes with the bug. */
