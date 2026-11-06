@@ -309,6 +309,7 @@ const CSS = `
 #hud .pad{display:none}
 #hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .nest-welcome,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
 #hud.no-stick .stick{display:none}
+#hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
 #hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
 #hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
@@ -579,6 +580,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     return tickets.list;
   };
   let previewCb: ((frame: PreviewFrame | null, mirror: boolean) => void) | null = null;
+  let justInTimer: ReturnType<typeof setTimeout> | undefined;
   let decorate: DecorateSheet | null = null;
   /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
   let decorateActions: DecorateActions | null = null;
@@ -1107,6 +1109,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       previewCb = cb;
     },
     setHome(on) {
+      // Fresh into the park, the presses still landing where Play was (a slow nest, a rage-click) must not
+      // open Feedback from the bug or its card, which now sit where Play stood: they take presses a moment later.
+      if (!on && root.classList.contains('at-home')) {
+        root.classList.add('just-in');
+        clearTimeout(justInTimer);
+        justInTimer = setTimeout(() => root.classList.remove('just-in'), 2000);
+      }
       root.classList.toggle('at-home', on);
     },
     openOwl: (opener) => openScreen('owl', false, opener),
