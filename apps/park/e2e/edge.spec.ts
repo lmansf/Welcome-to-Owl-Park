@@ -486,6 +486,49 @@ test.describe('room server', () => {
     });
   }
 
+  test('Play answers the first press: it says Opening the park while the nest is slow, takes no second press, and asks the line once', async ({ browser }) => {
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // A slow park: the owl's nest takes three seconds to answer, as it can on a phone far away.
+    await a.route('**/api/nest', async (route) => {
+      await new Promise((r) => setTimeout(r, 3_000));
+      await route.continue();
+    });
+    let joins = 0;
+    a.on('request', (req) => {
+      if (req.method() === 'POST' && new URL(req.url()).pathname === '/api/line') joins++;
+    });
+    await a.goto('/?transport=edge');
+    const play = a.locator('[data-home-btn="play"]');
+    // Look around free makes the owl and presses Play for it.
+    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await expect(play).toHaveText('Opening the park…');
+    await expect(play).toHaveAttribute('aria-busy', 'true');
+    // Pressed again and again while the park answers, as the visitor did: nothing more is asked of the park.
+    const box = (await play.boundingBox())!;
+    for (let i = 0; i < 6; i++) await a.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await a.keyboard.press('Enter');
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+    expect(joins).toBe(1);
+    // Back on the home screen, Play is itself again.
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="title"]').click();
+    await expect(play).toHaveText('Play', { timeout: 20_000 });
+    await expect(play).not.toHaveAttribute('aria-busy', 'true');
+    await a.context().close();
+  });
+
+  test('Play never hangs on a nest that does not answer: after a few seconds the owl goes to the lobby instead', async ({ browser }) => {
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // The nest never answers.
+    await a.route('**/api/nest', () => new Promise<void>(() => undefined));
+    await a.goto('/?transport=edge');
+    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await expect(a.locator('[data-home-btn="play"]')).toHaveText('Opening the park…');
+    await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('lobby');
+    await a.context().close();
+  });
+
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
     await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
