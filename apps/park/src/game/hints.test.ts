@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { placeHints, type ScreenBox, type ViewRect } from './hints';
+import { ROOMS, groundOf } from '@owl-park/shared/rooms';
+import { SIDE_HINT_OVER, doorHintTarget, nearTargets, placeHints, touchBottom, type ScreenBox, type ViewRect } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -52,5 +53,39 @@ describe('placeHints', () => {
     expect(ys[1]! - ys[0]!).toBeGreaterThanOrEqual(52);
     expect(ys[2]! - ys[1]!).toBeGreaterThanOrEqual(52);
     expect(Math.max(...ys)).toBeLessThanOrEqual(550);
+  });
+});
+
+describe('hints seen from the side (the hollow hall, as an owl comes down the knothole)', () => {
+  const HALL_ROOM = ROOMS['m3-hall']!;
+  const HALL_GROUND = groundOf(HALL_ROOM);
+  const KNOT_TOP = HALL_ROOM.doors.find((d) => d.id === 'up')!.top!;
+  // The knothole's landing filling a phone held sideways: the hall's width, about 540 room px high.
+  const owlAt = HALL_GROUND - KNOT_TOP;
+  const phone: ViewRect = { x: 0, y: owlAt - 400, w: 1600, h: 540 };
+  const doorways = HALL_ROOM.doors.filter((d) => d.to);
+
+  it('points at each doorway on its own landing, not at the floor its rect lies on', () => {
+    const up = HALL_ROOM.doors.find((d) => d.id === 'up')!;
+    expect(doorHintTarget(up, HALL_GROUND).y).toBe(HALL_GROUND - KNOT_TOP - SIDE_HINT_OVER);
+    expect(doorHintTarget(up, null).y).toBe(up.rect.y + up.rect.h / 2);
+  });
+
+  it('shows no chip for the knothole the owl stands under, and one for the landing below, not a row for every level', () => {
+    const near = nearTargets(doorways.map((d) => doorHintTarget(d, HALL_GROUND)), phone, 900);
+    const places = placeHints(near, phone, { w: 844, h: 330, top: 64, bottom: touchBottom(190, 330), side: 30 });
+    expect(places.map((p) => p.id)).toEqual(['to-glass']);
+    expect(places[0]!.angle).toBeGreaterThan(0); // pointing down
+  });
+
+  it('on the floor, points at its own doorways and the lowest landing, and leaves the high ones', () => {
+    const floor: ViewRect = { x: 0, y: HALL_GROUND - 400, w: 1600, h: 540 };
+    const near = nearTargets(doorways.map((d) => doorHintTarget(d, HALL_GROUND)), floor, 900);
+    expect(near.map((t) => t.id).sort()).toEqual(['down', 'to-market', 'to-party']);
+  });
+
+  it("keeps a phone's bottom inset to a quarter of a short screen, and the full inset on a tall one", () => {
+    expect(touchBottom(190, 330)).toBe(83);
+    expect(touchBottom(190, 900)).toBe(190);
   });
 });

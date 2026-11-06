@@ -72,3 +72,43 @@ export function placeHints(targets: HintTarget[], view: ViewRect, screen: Screen
   }
   return placed.map(({ edge: _edge, ...p }) => p);
 }
+
+/** A doorway as hint targets see it: its id, its floor rect and, seen from the side, its height over the ground line. */
+export interface HintDoor {
+  id: string;
+  rect: { x: number; y: number; w: number; h: number };
+  top?: number;
+}
+
+/** How far over a side view's doorway floor a hint aims (room px): the middle of the doorway's art, not its sill. */
+export const SIDE_HINT_OVER = 80;
+
+/**
+ * Where a hint points for a doorway: its rect's middle, or seen from the side (the tree, where every
+ * doorway's rect lies on the ground line and its `top` says which landing it stands on) the doorway
+ * itself, `top` over the ground line `ground`.
+ */
+export function doorHintTarget(door: HintDoor, ground: number | null): HintTarget {
+  const x = door.rect.x + door.rect.w / 2;
+  if (ground === null) return { id: door.id, x, y: door.rect.y + door.rect.h / 2 };
+  return { id: door.id, x, y: ground - (door.top ?? 0) - SIDE_HINT_OVER };
+}
+
+/**
+ * Seen from the side, only the targets within `reach` room px above or below the view: in a tall room
+ * (the hollow hall) the far landings' doorways are found by climbing past the near ones, and a chip for
+ * each would line the screen's edge.
+ */
+export function nearTargets(targets: HintTarget[], view: ViewRect, reach: number): HintTarget[] {
+  return targets.filter((t) => t.y >= view.y - reach && t.y <= view.y + view.h + reach);
+}
+
+/**
+ * The bottom inset on a touch screen: clear of the thumbstick and the face buttons, but never more than
+ * TOUCH_BOTTOM_SHARE of the screen's height, so on a phone held sideways a chip for a way down sits low
+ * on the screen and not across its middle.
+ */
+export const TOUCH_BOTTOM_SHARE = 0.25;
+export function touchBottom(inset: number, screenH: number): number {
+  return Math.min(inset, Math.round(screenH * TOUCH_BOTTOM_SHARE));
+}
