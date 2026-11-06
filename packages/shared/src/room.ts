@@ -65,6 +65,11 @@ export interface RoomDef {
   /** Named spawn points; `default` is required. */
   spawns: Record<string, Vec2>;
   /**
+   * In a room seen from the side, the height a spawn stands at when it is up on a perch (a landing of
+   * the hollow hall, by its doorway): an owl that comes in there stands on that perch. Absent, the floor.
+   */
+  spawnTops?: Record<string, number>;
+  /**
    * Doorways and interaction spots. Walking into a door with `to` changes room; a closed door
    * shows its sign; `shop` and `idol` are spots that offer the gift shop and the Realm Vote.
    * What a spot does is the client's `interactions` table in RoomScene: standing in one shows
@@ -503,6 +508,12 @@ export function tilePlacement(t: RoomTile, view: { w: number; h: number }): { x:
   const cx = t.x + ROOM_W / 2;
   const cy = t.y + ROOM_H / 2;
   return { x: cx - w / 2 - (1 - rate) * (cx - view.w / 2), y: cy - h / 2 - (1 - rate) * (cy - view.h / 2), w, h };
+}
+
+/** The height an owl comes in at by the spawn `name` (RoomDef.spawnTops): 0 on the floor. */
+export function spawnTop(room: Pick<RoomDef, 'spawnTops'>, name: string | undefined): number {
+  const key = name ?? 'default';
+  return room.spawnTops && Object.hasOwn(room.spawnTops, key) ? room.spawnTops[key]! : 0;
 }
 
 export function findSpawn(room: RoomDef, name: string | undefined): Vec2 {

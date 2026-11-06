@@ -631,6 +631,19 @@ const PRESS: FlightInput = { pressed: true, held: true };
 const HOLD: FlightInput = { pressed: false, held: true };
 const NONE: FlightInput = { pressed: false, held: false };
 
+describe('spawns up on a perch (the hollow hall)', () => {
+  it('name a spawn of the room and stand on a perch that high there', () => {
+    for (const room of ALL_ROOMS) {
+      for (const [name, top] of Object.entries(room.spawnTops ?? {})) {
+        const at = room.spawns[name];
+        expect(at, `${room.id}: spawnTops names ${name}, no spawn of the room`).toBeDefined();
+        expect(top, `${room.id} ${name}`).toBeGreaterThan(0);
+        expect(groundAt(room.perches, at!, top), `${room.id} ${name}: a perch ${top} high there`).toBe(top);
+      }
+    }
+  });
+});
+
 describe('perches (OP-084)', () => {
   it('stand in the room, drawn inside it, no higher than a perch may be, each by a floor or a perch to jump from', () => {
     for (const room of ALL_ROOMS) {

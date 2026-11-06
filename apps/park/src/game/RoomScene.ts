@@ -101,6 +101,7 @@ import {
   fall,
   newFlier,
   slopeUnder,
+  spawnTop,
   stepFlier,
   FRESH_DASH,
   dashEnd,
@@ -640,6 +641,10 @@ export class RoomScene extends Phaser.Scene {
     const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
     screen?.show('Opening…');
     const spawn = arrivalPoint(this.room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
+    // A spawn up on a perch (a landing of the hollow hall): the owl comes in standing on it, and its
+    // height is told to the room after the welcome (retellAir).
+    const arriveTop = spawnTop(this.room, this.registry.get('spawnName') as string | undefined);
+    if (arriveTop > 0) this.flier = { ...this.flier, air: { ...this.flier.air, z: arriveTop } };
     const joining = this.join(spawn);
     // Gone before the room was built (the page went on to another scene): the room is left too.
     const leaveEarly = () => void joining.conn.then((conn) => conn.leave());

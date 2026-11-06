@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { groundOf, TREE_GROUND } from '../rooms/index';
 import { MAX_AIR_Z, MAX_RISE, LIFTED, checkAir } from './flight';
 import { kitPerches, kitProblems, kitRoom, kitTiles } from './kit';
-import { MAX_PERCH_TOP, TALL_PERCH_TOP, highestTop, perchTopLimit, profileProblems, type Perch } from './perches';
-import { ROOM_H, ROOM_MAX_H, ROOM_W, tilePlacement, type RoomDef, type RoomKit } from './room';
+import { MAX_PERCH_TOP, TALL_PERCH_TOP, groundAt, highestTop, perchTopLimit, profileProblems, type Perch } from './perches';
+import { ROOM_H, ROOM_MAX_H, ROOM_W, spawnTop, tilePlacement, type RoomDef, type RoomKit } from './room';
 import { perchTiers } from './routes';
 import { UPDRAFT_RISE } from './updraft';
 import { isVec2 } from './validate';
@@ -37,7 +37,8 @@ function hall(): RoomDef {
     ],
     perches: kitPerches(kit),
     updrafts: [{ id: 'up', x: 700, w: 140, top: 3260 }],
-    spawns: { default: { x: 800, y: GROUND } },
+    spawns: { default: { x: 800, y: GROUND }, landing: { x: 1200, y: GROUND } },
+    spawnTops: { landing: 3200 },
     doors: [],
     kit,
   });
@@ -92,6 +93,16 @@ describe('tall rooms seen from the side (the hollow hall)', () => {
     expect(tilePlacement(low, { w: ROOM_W, h: ROOM_H })).toMatchObject({ x: 0, y: 4 * ROOM_H, w: ROOM_W, h: ROOM_H });
     const far = tilePlacement({ ...low, rate: 0.5 }, { w: ROOM_W, h: ROOM_H });
     expect(far.y).toBeLessThan(4 * ROOM_H);
+  });
+
+  it('bring an owl in standing on a landing where its spawn is up there, else on the floor', () => {
+    const r = hall();
+    expect(spawnTop(r, 'landing')).toBe(3200);
+    expect(groundAt(r.perches, r.spawns['landing']!, spawnTop(r, 'landing'))).toBe(3200);
+    expect(spawnTop(r, undefined)).toBe(0);
+    expect(spawnTop(r, 'default')).toBe(0);
+    expect(spawnTop(r, 'toString')).toBe(0);
+    expect(spawnTop({}, 'landing')).toBe(0);
   });
 
   it('stand on their own ground line, the tree ground in a room without a kit', () => {
