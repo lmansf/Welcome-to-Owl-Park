@@ -2906,15 +2906,17 @@ export class RoomScene extends Phaser.Scene {
     }
     this.voting = true;
     try {
-      const outcome = await castVote(this.transport, this.room.id);
+      // At a realm's idol, or at its idol in a Commons of the hollow hall (`votesFor`).
+      const realm = this.room.votesFor ?? this.room.id;
+      const outcome = await castVote(this.transport, realm);
       switch (outcome.kind) {
         case 'voted':
           this.pledged(outcome.realm);
           this.hud.toast('Your vote for this realm is in. One vote a day, so come back tomorrow.', 4000);
           break;
         case 'already':
-          if (outcome.votedFor === this.room.id) this.pledged(this.room.id);
-          this.hud.toast(outcome.votedFor === this.room.id ? 'You already voted for this realm today.' : 'You already voted today. Each day brings one vote.', 3500);
+          if (outcome.votedFor === realm) this.pledged(realm);
+          this.hud.toast(outcome.votedFor === realm ? 'You already voted for this realm today.' : 'You already voted today. Each day brings one vote.', 3500);
           break;
         case 'tickets-required':
           this.hud.toast('Voting opens with tickets: ticket-holders get one vote a day.', 4000);

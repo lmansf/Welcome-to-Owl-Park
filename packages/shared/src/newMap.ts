@@ -13,7 +13,13 @@ export const NEW_MAP: Readonly<Record<string, string>> = {
   'm3-cave': 'l0-arcade',
 };
 
-/** Whether a room is one of the new map's own (NEW_MAP). */
+/**
+ * The hollow hall (rooms/hollowHall.ts): the new map's tall room up the inside of the trunk, which the
+ * keepers walk ahead of it. Its Commons are today's top-down rooms, as the realms are.
+ */
+export const NEW_MAP_HALL: readonly string[] = ['m3-hall'];
+
+/** Whether a room is one of the new map's own (NEW_MAP), or its hollow hall (NEW_MAP_HALL). */
 export function isNewMapRoom(id: string | undefined): boolean {
-  return id !== undefined && Object.hasOwn(NEW_MAP, id);
+  return id !== undefined && (Object.hasOwn(NEW_MAP, id) || NEW_MAP_HALL.includes(id));
 }

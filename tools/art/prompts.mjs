@@ -190,6 +190,8 @@ export const JOBS = [
     variants: 4,
     refs: [treeRef, guide('hub')],
     prompt: PROMPTS.hub,
+    // The hollow hall's Commons stand on a copy of this painting until their own screens land.
+    derives: ['commons'],
   },
   {
     key: 'hub-fg',
@@ -762,6 +764,8 @@ const WING_JOBS = WING_KEYS.map((key) => ({
   refs: [{ ref: `@canvas:${key}`, role: "the painting's edge on a grey canvas to paint over", optional: false }],
   providers: { fal: { output_format: 'png' } },
   prompt: WING_PROMPTS[key],
+  // The hub's wings are copied as the walls of the hollow hall's Commons (commons-west, commons-east).
+  ...(key.startsWith('hub-') ? { derives: [key.replace('hub-', 'commons-')] } : {}),
 }));
 Object.assign(PROMPTS, WING_PROMPTS);
 JOBS.push(...WING_JOBS);

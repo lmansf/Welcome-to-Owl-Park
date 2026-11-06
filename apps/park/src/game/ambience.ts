@@ -98,12 +98,14 @@ function doorGlow(scene: Phaser.Scene, m: { x: number; y: number }, to: string):
 /** Large set pieces (guardian, giant robot owl, blockades) sorted into the owl depth range. */
 export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData) => void): SetPieces {
   const anchors = ANCHORS[room.id] ?? {};
+  // A Commons in the hollow hall stands the realm's idol over its Realm Vote spot (`votesFor`).
+  const realm = room.votesFor ?? room.id;
   const pieces: SetPieces = {};
   const tappable = (img: Phaser.GameObjects.Image) => {
     img.setInteractive(hugging(img, img.texture.key));
     img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event));
   };
-  if (room.id === 'grove' && anchors['guardian']) {
+  if (realm === 'grove' && anchors['guardian']) {
     const a = anchors['guardian'];
     const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const k = fitBelowTop('guardian', a.y);
@@ -136,7 +138,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
       },
     };
   }
-  if (room.id === 'market' && anchors['robot']) {
+  if (realm === 'market' && anchors['robot']) {
     const a = anchors['robot'];
     const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
@@ -167,7 +169,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
-  if (room.id === 'glass' && anchors['idol'] && scene.textures.exists('glass-idol')) {
+  if (realm === 'glass' && anchors['idol'] && scene.textures.exists('glass-idol')) {
     // The stained-glass owl on its plinth: lit from within, it brightens when a visitor pledges.
     const a = anchors['idol'];
     const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
