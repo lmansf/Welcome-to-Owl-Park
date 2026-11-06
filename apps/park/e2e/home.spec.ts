@@ -247,4 +247,32 @@ test.describe('the home screen (OP-065)', () => {
     await play(page);
     await expect(page.locator('[data-menu-btn]')).toBeVisible();
   });
+
+  test('reads as one story: the name and its line, then Play, with Settings and the notes in a small footer (Nov 6)', async ({ page }) => {
+    // The phone project checks the narrowest common phone (375 px), the desktop one a laptop.
+    const phone = test.info().project.name === 'phone';
+    await page.setViewportSize(phone ? { width: 375, height: 812 } : { width: 1280, height: 800 });
+    await openHome(page);
+    const lead = page.locator('[data-home-lead]');
+    const footer = page.locator('[data-home] .h-foot');
+    // A first visit: the lead says what the park is, and the footer holds Settings and the two notes.
+    await expect(lead).toBeVisible();
+    for (const sel of ['[data-home-btn="settings"]', '[data-home-info="about"]', '[data-home-info="grown-ups"]', '[data-home-welcome]']) {
+      await expect(footer.locator(sel)).toBeVisible();
+    }
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-tidy-first-visit.png` });
+
+    await logIn(page);
+    // Coming back, the owl knows what the park is: no lead, and Play is the one big thing.
+    await expect(lead).toBeHidden();
+    const play = await button(page, 'play').boundingBox();
+    const settings = await button(page, 'settings').boundingBox();
+    expect(play && settings).toBeTruthy();
+    // The footer sits under Play, smaller than it.
+    expect(settings!.y).toBeGreaterThan(play!.y + play!.height);
+    expect(settings!.height).toBeLessThan(play!.height);
+    // Everything fits without scrolling the side.
+    expect(await page.locator('[data-home] .h-side').evaluate((s) => s.scrollHeight <= s.clientHeight + 1)).toBe(true);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-tidy-logged-in.png` });
+  });
 });
