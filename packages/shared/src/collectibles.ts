@@ -23,6 +23,13 @@ export interface ItemDef {
   art?: string;
   /** The style of the place it comes from (styles.ts, OP-110); the park's own (`hub`) when absent. */
   style?: string;
+  /**
+   * A reward of its own (the Golden Mouse): it comes in one colourway, its art's own, and only from
+   * what pays it. The shop never sells it, gives it as the day's gift or draws it as a quest's prize.
+   */
+  reward?: true;
+  /** Its art is drawn in gold (pixels.ts, gild): the Golden Mouse is the Mouse's art, gilded. */
+  gild?: true;
 }
 
 /** The park's own style: everything that names no other (styles.ts, OP-110). */
@@ -127,6 +134,12 @@ export function colourwaysFor(kind: ItemKind): readonly Colourway[] {
     case 'emote':
       return [];
   }
+}
+
+/** An item's own colourways: its kind's, or for a reward of its own (the Golden Mouse) its first alone. */
+export function itemColourways(item: Pick<ItemDef, 'kind' | 'reward'>): readonly Colourway[] {
+  const all = colourwaysFor(item.kind);
+  return item.reward ? all.slice(0, 1) : all;
 }
 
 // ---------- the catalogue ----------
@@ -250,6 +263,8 @@ export const CATALOGUE: readonly ItemDef[] = [
       ['black-kitten', 'Black Kitten', R],
     ] as Array<[string, string, Rarity]>
   ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'pet', name, rarity, art: `item-${id}` })),
+  // The Golden Mouse (the owner's ask): every course's clear together pays it (coursebook.ts). The Mouse's own art, gilded.
+  { id: 'golden-mouse', kind: 'pet', name: 'Golden Mouse', rarity: E, art: 'item-mouse', reward: true, gild: true } satisfies ItemDef as ItemDef,
   ...(
     [
       ['aura', 'Aura', C],
@@ -310,6 +325,9 @@ export const CATALOGUE: readonly ItemDef[] = [
 
 export const ITEMS: Readonly<Record<string, ItemDef>> = Object.freeze(Object.fromEntries(CATALOGUE.map((i) => [i.id, i])));
 
+/** The Golden Mouse: clearing every course pays it, once (coursebook.ts, mouseCourses). */
+export const GOLDEN_MOUSE = 'golden-mouse~0';
+
 export const EMOTE_IDS: readonly string[] = CATALOGUE.filter((i) => i.kind === 'emote').map((i) => i.id);
 
 /** The variant id for an item and colourway number. Emotes have no colourways. */
@@ -331,7 +349,7 @@ export function parseVariant(id: unknown): Variant | null {
   if (m[2] === undefined) return null;
   const n = Number(m[2]);
   if (String(n) !== m[2]) return null; // no leading zeros: one spelling per variant
-  const colour = colourwaysFor(item.kind)[n];
+  const colour = itemColourways(item)[n];
   if (!colour) return null;
   return { id, item, colour, rarity: item.rarity };
 }
@@ -369,18 +387,23 @@ export function allVariants(): readonly string[] {
     allCache = [];
     for (const item of CATALOGUE) {
       if (item.kind === 'emote') allCache.push(item.id);
-      else for (const c of colourwaysFor(item.kind)) allCache.push(`${item.id}~${c.n}`);
+      else for (const c of itemColourways(item)) allCache.push(`${item.id}~${c.n}`);
     }
   }
   return allCache;
 }
 
 let byRarityCache: Record<Rarity, string[]> | null = null;
-/** Every variant by rarity, in catalogue order. */
+/** Whether a variant is a reward of its own (the Golden Mouse): never sold, given or drawn as a prize. */
+export function isRewardVariant(id: string): boolean {
+  return parseVariant(id)?.item.reward === true;
+}
+
+/** Every variant a prize may be drawn from, by rarity, in catalogue order (rewards of their own left out). */
 export function variantsByRarity(): Readonly<Record<Rarity, readonly string[]>> {
   if (!byRarityCache) {
     byRarityCache = { common: [], uncommon: [], rare: [], epic: [] };
-    for (const id of allVariants()) byRarityCache[parseVariant(id)!.rarity].push(id);
+    for (const id of allVariants()) if (!isRewardVariant(id)) byRarityCache[parseVariant(id)!.rarity].push(id);
   }
   return byRarityCache;
 }

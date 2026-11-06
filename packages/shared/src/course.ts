@@ -13,6 +13,8 @@
  *    up to COURSE_REPEAT_DAILY feathers a park day for later clears, the gold item once for a clear
  *    within the course's gold time, and the course's emote once all five lost feathers are found.
  *
+ * And the clear that leaves an owl with every course cleared (mouseCourses) pays the Golden Mouse, once.
+ *
  * The room server decides every reward (coursebook.ts); a page only asks. Where each piece stands is
  * the room's (`course` on RoomDef); what the course is, its acts and its rewards, is the course's.
  */
@@ -112,8 +114,10 @@ export interface CourseDef {
   gold: { ms: number; item: string };
   /** The least time a clear can take (ms): a finish sooner than this is refused. */
   floorMs: number;
-  /** Seen by keepers only (the test course): its rooms are keeper-only. */
+  /** Seen by keepers only (the test course, or a course not yet open to visitors): its rooms are keeper-only. */
   keeper?: true;
+  /** The keepers' test course: its clears count toward nothing beyond its own rewards (mouseCourses). */
+  test?: true;
   /** The kit's art for its pieces (kit keys); a piece with none is drawn in plain shapes, as the test course's are. */
   art?: CourseArt;
 }
@@ -256,4 +260,16 @@ export function courseProblems(def: CourseDef, rooms: (id: string) => RoomDef | 
   if (!all.includes(def.exit.room) || exitRoom?.course?.act !== def.acts.length || !exit?.to || rooms(exit.to.room)?.course) out.push(`${def.id}: its exit does not lead out of the course from its last act`);
   if (!(def.gold.ms > def.floorMs)) out.push(`${def.id}: its gold time is no longer than its floor`);
   return out;
+}
+
+/**
+ * The courses whose clears together pay the Golden Mouse: every course open to visitors, the test
+ * course aside. While none is open yet, every course but the test course, so the keepers can earn it
+ * as they try the courses out. A course that opens later counts from then on, for owls that have not
+ * earned the Mouse yet; one that has keeps it.
+ */
+export function mouseCourses(defs: readonly CourseDef[]): CourseDef[] {
+  const realm = defs.filter((d) => !d.test);
+  const open = realm.filter((d) => !d.keeper);
+  return open.length > 0 ? open : realm;
 }

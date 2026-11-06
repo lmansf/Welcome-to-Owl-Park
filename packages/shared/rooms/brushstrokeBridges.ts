@@ -352,7 +352,7 @@ export const BRUSH_COURSE: CourseDef = {
   rooms: ['brush-falls', 'brush-3b'],
   gate: { room: 'commons-ink', door: 'to-course', spawn: 'from-gate' },
   exit: { room: 'brush-3b', door: 'home' },
-  // Stand-ins from the catalogue until the ink-wash scarf and the Golden Mouse are made.
+  // Stand-ins from the catalogue until the ink-wash scarf is made; clearing every course pays the Golden Mouse (coursebook.ts).
   item: 'knit-scarf~3',
   emote: 'preen',
   gold: { ms: 115_000, item: 'sparkle~4' },
