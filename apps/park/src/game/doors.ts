@@ -1,4 +1,4 @@
-import { isStreetRoom, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type DoorDef, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { isStreetRoom, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type DoorDef, type Rect, type RoomDef, type Vec2, type WalkMap } from '@owl-park/shared';
 import { NEST_ROOM, roomFor } from '../rooms';
 
 /**
@@ -54,7 +54,7 @@ export const WAY_DOOR_PX = 8;
  * street) but the one the tap is aimed at, a little wider than drawn, and none the owl at `pos`
  * already stands in. A leg that ended by one on its way would go through it.
  */
-export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean, map: 1 | 2 = 1): Rect[] {
+export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean, map: WalkMap = 1): Rect[] {
   const m = WAY_DOOR_PX;
   return room.doors
     .filter((d) => {
@@ -86,7 +86,7 @@ export function roomsAhead(
   walkTo: Vec2 | null,
   fromKeys: boolean,
   closed: (roomId: string) => boolean,
-  map: 1 | 2 = 1,
+  map: WalkMap = 1,
   sideView = false,
 ): RoomDef[] {
   const out: RoomDef[] = [];

@@ -396,7 +396,8 @@ async function playStart(): Promise<RoomStart> {
     // An owl of the tree came from the tree's front gate (TREE_STREET_ROOM), and goes back before it.
     return { room: walkingMap() === 2 ? TREE_STREET_ROOM : LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
   }
-  const map = transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  // A keeper's tab that asked for the new map (`?keeper=1&newmap=1`) walks it; anyone else, as their pass says.
+  const map = newMapTab() ? 3 : transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
   startWalking(map);
   const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
@@ -523,6 +524,12 @@ const SENT_HOME_TRUST_MS = 35_000;
 let sentHomeAt = Number.NEGATIVE_INFINITY;
 /** A keeper's tab (OP-156: `?keeper=1`, or a token kept from earlier in the tab): its Play still walks in. */
 const keeperTab = () => cfg.keeper || storedKeeper() !== null;
+/** A keeper's tab that asked for the new map (`?newmap=1`): only keepers walk it. */
+function newMapTab(): boolean {
+  return cfg.newMap && keeperTab();
+}
+// Opened straight into a room (`?room=`), the new map is walked from the first room.
+if (newMapTab()) startWalking(3);
 const showClosed = (v: ClosedView) => {
   if (!v.closed && Date.now() - sentHomeAt < SENT_HOME_TRUST_MS) return;
   home.closed(v.closed ? { words: v.words ?? SETUP_WORDS, reopenAt: v.reopenAt, keeper: keeperTab() } : null);

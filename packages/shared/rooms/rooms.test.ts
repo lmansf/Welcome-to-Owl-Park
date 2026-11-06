@@ -16,6 +16,7 @@ import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 import { treeLevelOf, treeSpotsFor } from '../src/treeSpots';
+import { NEW_MAP, isNewMapRoom } from '../src/newMap';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -558,7 +559,9 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l0:stair-l1-l0', 'l1:stair-l1-l0', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:gate', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
       // The test course's acts (OP-224, trialCourse.ts): each act's doorway east into the next, and back west.
       'trail-1:east', 'trail-2:east', 'trail-2:west', 'trail-3:west',
-    ]);
+      // The new map's stairs between its levels (NEW_MAP), as the levels' own.
+      'm3-ground:stair-l1-l0', 'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
+    ].sort());
   });
 
   it("takes the owl through the gate's left turnstile, between the plinth and the first post, onto the hub's path at its left", () => {
@@ -719,7 +722,8 @@ describe('perches (OP-084)', () => {
 
 // ---- The tree (map 2, OP-128 and OP-156): a side-scrolling world, dark until it opens ----
 describe('the tree (map 2)', () => {
-  const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+  // The tree visitors walk: the new map's copies of its levels (NEW_MAP) have their own tests below.
+  const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
   const l1 = getRoom('l1');
   /** The tree's floor strip's y extent, from a polygon of it. */
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
@@ -954,7 +958,7 @@ describe('the tree (map 2)', () => {
 });
 
 describe("the tree's directions and barriers (OP-220)", () => {
-  const tree = ALL_ROOMS.filter((r) => mapOf(r) === 2);
+  const tree = ALL_ROOMS.filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
   const levels = tree.filter((r) => treeLevelOf(r.id) !== null);
   const isStair = (d: DoorDef) => d.id.startsWith('stair-');
   const x0 = (d: DoorDef) => d.rect.x;
@@ -1062,7 +1066,8 @@ describe("the tree's directions and barriers (OP-220)", () => {
       const [a, b] = floorSpan(room);
       const ids = new Set<string>();
       for (const bar of room.barriers ?? []) {
-        count++;
+        // The new map's levels (NEW_MAP) keep their levels' barriers: counted once, on the levels.
+        if (!isNewMapRoom(room.id)) count++;
         expect(ids.has(bar.id), `${room.id} ${bar.id} once`).toBe(false);
         ids.add(bar.id);
         expect(CLOSED_SIGNS as readonly string[], `${room.id} ${bar.id}`).toContain(bar.sign);
@@ -1109,5 +1114,100 @@ describe("the tree's directions and barriers (OP-220)", () => {
       }
     }
     expect(drawn.sort()).toEqual(['l2:stair-l2-l1', 'l3:stair-l3-l2']);
+  });
+});
+
+describe('the new map (map 3): the keepers’ preview of the park as one tree', () => {
+  const newRooms = Object.keys(NEW_MAP).map((id) => ROOMS[id]!);
+  /** Every doorway of `room` that takes an owl walking the new map somewhere, and where. */
+  const ways = (room: RoomDef, cameFrom?: string) => room.doors.flatMap((door) => {
+    const to = doorTarget(door, 3, cameFrom);
+    return to ? [{ room, door, to }] : [];
+  });
+
+  it('has its own rooms, each a keepers-only copy of a level of the tree, seen from the side', () => {
+    expect(newRooms.map((r) => r.id)).toEqual(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-under', 'm3-cave']);
+    for (const r of newRooms) {
+      const from = ROOMS[NEW_MAP[r.id]!]!;
+      expect(r.keeperOnly, r.id).toBe(true);
+      expect(mapOf(r), r.id).toBe(2);
+      expect(r.size, r.id).toEqual(from.size);
+      expect(r.walkable, r.id).toEqual(from.walkable);
+      expect(r.perches, r.id).toEqual(from.perches);
+    }
+  });
+
+  it('no visitor’s doorway leads into it: only the new map’s own ways (toNew) and its own rooms do', () => {
+    for (const room of Object.values(ROOMS)) {
+      if (isNewMapRoom(room.id)) continue;
+      for (const d of room.doors) {
+        for (const to of [d.to, d.toTree]) expect(isNewMapRoom(to?.room), `${room.id}:${d.id}`).toBe(false);
+      }
+    }
+    // And the levels it copies are as they were: their ways lead where they always have.
+    expect(doorTarget(ROOMS['lobby']!.doors.find((d) => d.id === 'gate')!, 1)).toEqual({ room: 'hub', spawn: 'default' });
+    expect(doorTarget(ROOMS['glass']!.doors.find((d) => d.id === 'to-hub')!, 2)).toEqual({ room: 'l3', spawn: 'glass' });
+  });
+
+  it('every way of it leads to a spawn that is there, landing every lane on the floor near it, out of the exits', () => {
+    for (const room of Object.values(ROOMS)) {
+      for (const { door, to } of ways(room)) {
+        const dest = roomFor(to.room);
+        const where = `${room.id}:${door.id}`;
+        expect(dest, where).toBeDefined();
+        expect(dest!.spawns[to.spawn], where).toBeDefined();
+        for (const t of [0, 0.5, 1]) {
+          const p = arrivalPoint(dest!, to.spawn, room.id, { axis: doorAxis(room, door), t });
+          expect(isWalkable(p, dest!.walkable), `${where} t=${t}`).toBe(true);
+          expect(inExit(dest!, p), `${where} t=${t}`).toBe(false);
+          expect(distance(p, dest!.spawns[to.spawn]!), `${where} t=${t}`).toBeLessThanOrEqual(240);
+        }
+      }
+    }
+  });
+
+  it('every way between two of its rooms leads back the way it came, so no stair or doorway is one way', () => {
+    const inMap = new Set([...Object.keys(NEW_MAP), 'lobby', 'glass', 'grove', 'market', 'hub']);
+    for (const id of inMap) {
+      for (const { door, to } of ways(ROOMS[id]!)) {
+        if (!inMap.has(to.room)) continue;
+        const back = ways(ROOMS[to.room]!, id).filter((w) => w.to.room === id);
+        expect(back.length, `${id}:${door.id} back from ${to.room}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('runs from the turnstiles past every open realm to the ground, the Party Grove and the arcade cave, all of it reachable', () => {
+    const seen = new Set<string>(['lobby']);
+    const next = ['lobby'];
+    for (let id = next.pop(); id; id = next.pop()) {
+      for (const { to } of ways(ROOMS[id]!)) {
+        if (seen.has(to.room) || !ROOMS[to.room]) continue;
+        seen.add(to.room);
+        next.push(to.room);
+      }
+    }
+    for (const id of [...Object.keys(NEW_MAP), 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    // Down the stairs in the order of the park map: the turnstiles, the glass realm's landing, the quiet one, the clearing's, the ground.
+    const down = (id: string) => ways(ROOMS[id]!).find((w) => w.door.way === 'down' || w.door.id === 'gate')?.to.room;
+    expect(['lobby', 'm3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground'].map(down)).toEqual(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-under']);
+    // Each realm's Commons hangs off its landing, its Realm Vote idol inside, and leads back to it.
+    for (const [landing, realm] of [['m3-stair-1', 'glass'], ['m3-stair-3', 'grove'], ['m3-ground', 'market']] as const) {
+      expect(ways(ROOMS[landing]!).some((w) => w.to.room === realm), landing).toBe(true);
+      expect(ROOMS[realm]!.doors.some((d) => d.id === 'idol'), realm).toBe(true);
+      expect(ways(ROOMS[realm]!).find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe(landing);
+      // In from the Party Grove's arch, back out to it.
+      expect(ways(ROOMS[realm]!, 'hub').find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe('hub');
+    }
+  });
+
+  it("each of its doorways to another room has a mark over the arch, and its stairs are a level's", () => {
+    for (const room of newRooms) {
+      for (const { door } of ways(room)) {
+        if (nestDoorIndex(door.id) !== null) continue;
+        expect(door.markAt, `${room.id}:${door.id}`).toBeDefined();
+        expect(door.top, `${room.id}:${door.id}`).toBe(0);
+      }
+    }
   });
 });

@@ -126,6 +126,7 @@ import {
   type PuzzleStep,
   type PuzzleSymbol,
   type PuzzleView,
+  type WalkMap,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -1100,7 +1101,7 @@ export class RoomScene extends Phaser.Scene {
       },
     };
     // The park the owl walks goes with the hello, so a nest's or a shared realm's stay is logged in the right one (OP-265).
-    const self = { ...this.snapshot(at, null), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}), map: this.walking() } as PlayerState;
+    const self = { ...this.snapshot(at, null), ...(spawnName ? { spawn: spawnName } : {}), ...(this.via ? { via: this.via } : {}), map: this.walking() === 3 ? 2 : this.walking() } as PlayerState;
     // Where the own owl is as the room's socket opens (OP-138): a question, not news, so never held back; until the scene has its owl, where it comes in.
     const here = (): Vec2 | null => (!live() ? null : this.built ? { ...this.me.pos } : { ...at });
     const conn = this.transport.join(this.room.id, self, { ...heldBack(handlers, () => (this.heard === heard ? heard : null)), here });
@@ -3095,7 +3096,7 @@ export class RoomScene extends Phaser.Scene {
    * lane: it stands still while the turnstiles decide and comes out in the hub as far across (OP-124).
    */
   private async throughGate(door: DoorDef, at: Vec2): Promise<void> {
-    const to = door.to;
+    const to = this.doorTo(door);
     if (this.passingGate || this.leaving || !to) return;
     this.passingGate = true;
     this.me.walk = null;
@@ -3315,9 +3316,9 @@ export class RoomScene extends Phaser.Scene {
     return !(mapOf(room) === 2 && storedKeeper() !== null);
   }
 
-  /** Where `door` leads this owl: the tree's way for an owl walking the tree (OP-162). */
+  /** Where `door` leads this owl: the tree's way for an owl walking the tree (OP-162), the new map's for one walking it. */
   private doorTo(door: DoorDef): DoorDef['to'] {
-    return doorTarget(door, this.walking());
+    return doorTarget(door, this.walking(), this.cameFrom?.room);
   }
 
   /**
@@ -3325,7 +3326,7 @@ export class RoomScene extends Phaser.Scene {
    * keeper's token), an owl of the tree takes today's park's ways, so its nest's door and a realm's
    * way out still lead somewhere rather than to a closed tree (OP-156).
    */
-  private walking(): 1 | 2 {
+  private walking(): WalkMap {
     const map = walkingMap();
     return map === 2 && this.realmClosed(TREE_ARRIVAL.room) ? 1 : map;
   }

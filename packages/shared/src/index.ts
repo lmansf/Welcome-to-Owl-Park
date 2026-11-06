@@ -43,6 +43,7 @@ export * from './coursebook';
 export * from './perches';
 export * from './masks';
 export * from './treeSpots';
+export * from './newMap';
 export * from './routes';
 export * from './sprites';
 export * from './owlFacts';

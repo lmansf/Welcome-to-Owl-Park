@@ -64,8 +64,8 @@ export function isStreetRoom(roomId: string | undefined): boolean {
   return roomId === STREET_ROOM || roomId === TREE_STREET_ROOM;
 }
 
-/** The street of nests on the map an owl walks: the tree's on map 2, today's park's otherwise. */
-export function streetOf(map: 1 | 2): string {
+/** The street of nests on the map an owl walks: the tree's on map 2, today's park's otherwise (the new map's too). */
+export function streetOf(map: 1 | 2 | 3): string {
   return map === 2 ? TREE_STREET_ROOM : STREET_ROOM;
 }
 /** Nest doors along the street, `nest-door-0` to `nest-door-5`, each with a `from-nest-<n>` spawn in front. */

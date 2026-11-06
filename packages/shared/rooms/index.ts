@@ -1,6 +1,7 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
 import { doorTarget } from '../src/doorways';
+import { isNewMapRoom } from '../src/newMap';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_W, mapOf, type RoomDef } from '../src/room';
@@ -9,6 +10,7 @@ import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
 import type { CourseDef } from '../src/course';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
+export { NEW_MAP } from '../src/newMap';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
@@ -1495,6 +1497,111 @@ export const ROOMS: Record<string, RoomDef> = {
   ...TRIAL_ROOMS,
 };
 
+// ---- The new map (map 3): the park laid out as one tree, the keepers' preview (Nov 6 park map) ----
+//
+// Only a keeper's tab walks it (`?keeper=1&newmap=1`): no visitor's door leads into its rooms, and the
+// park visitors walk is as it was. It is built from rooms and art the park already has. The common spaces
+// are today's top-down rooms: the lobby is the Treetop Commons (the turnstiles and the booth: the
+// entrance with its gift shop), its street the canopy nests, the three open realms the Commons with their
+// Realm Vote idols, the hub the Party Grove at the tree's foot and the arcade hall below the neon realm.
+// The stairs between them are levels of the tree seen from the side, each a copy of one under its own id
+// with its doorways led on to the new map's rooms: from the turnstiles down past the stained-glass realm
+// (level 3's branch), a quiet landing (level 4), the treehouse clearing (level 2's reach), to the ground
+// (level 1's forest path) with the neon realm's gate, the way out to the Party Grove and the root stair
+// down to the cavern and its arcade cave (level 0). Its rooms' kits are the levels' own (rooms/kit.ts).
+// The ink-wash realm has no room yet, so its landing has no doorway.
+
+/** Where an owl walking the new map starts without a nest: the Treetop Commons, before the turnstiles. */
+export const NEW_MAP_ARRIVAL = { room: 'lobby', spawn: 'default' } as const;
+
+/** A copy of the tree's level `from` as the new map's room `id`, keepers only, its doorways led on by `ways` (door id to target). */
+function newMapLevel(id: string, from: string, ways: Readonly<Record<string, { room: string; spawn: string }>>, more: Partial<RoomDef> = {}): RoomDef {
+  const src = ROOMS[from]!;
+  const doors = src.doors.map((d) => {
+    const to = ways[d.id];
+    if (!to) return d;
+    const { toTree: _tree, closedInTree: _closed, ...rest } = d;
+    return { ...rest, to };
+  });
+  return { ...src, id, keeperOnly: true, ...more, doors: [...doors, ...(more.doors ?? [])], spawns: { ...src.spawns, ...more.spawns } };
+}
+
+const at = (room: string, spawn: string) => ({ room, spawn });
+
+ROOMS['m3-stair-1'] = newMapLevel('m3-stair-1', 'l3', {
+  // Up the knothole: back to the Treetop Commons, before the turnstiles.
+  'stair-l4-l3': at('lobby', 'from-hub'),
+  'stair-l3-l2': at('m3-stair-2', 'from-l5'),
+  'to-glass': at('glass', 'default'),
+});
+ROOMS['m3-stair-2'] = newMapLevel('m3-stair-2', 'l4', {
+  'stair-l5-l4': at('m3-stair-1', 'from-l2'),
+  'stair-l4-l3': at('m3-stair-3', 'from-l3'),
+});
+ROOMS['m3-stair-3'] = newMapLevel(
+  'm3-stair-3',
+  'l2',
+  {
+    'stair-l3-l2': at('m3-stair-2', 'from-l3'),
+    'stair-l2-l1': at('m3-ground', 'from-l2'),
+  },
+  {
+    // The treehouse clearing's doorway at the far side of the reach's common, by its log bench.
+    spawns: { grove: { x: ROOM_W + 1180, y: TREE_GROUND } },
+    doors: [{ id: 'to-grove', rect: { x: ROOM_W + 1250, y: 750, w: 110, h: 40 }, to: at('grove', 'default'), top: 0, markAt: { x: ROOM_W + 1305, y: 330 } }],
+  },
+);
+{
+  // The ground: level 1's forest path. Its closed gate in the west is the way out of the tree to the Party
+  // Grove; the neon realm's gate in the east; the root stair down to the cavern.
+  const l1 = ROOMS['l1']!;
+  const closedWest = l1.doors.find((d) => d.id === 'closed-west')!;
+  ROOMS['m3-ground'] = newMapLevel(
+    'm3-ground',
+    'l1',
+    {
+      'stair-l2-l1': at('m3-stair-3', 'from-l1'),
+      'stair-l1-l0': at('m3-under', 'from-l1'),
+      'to-market': at('market', 'default'),
+    },
+    {
+      spawns: { party: { x: 760, y: TREE_GROUND } },
+      // The kit's level 1 draws no rope at the painted roof run, so the new map's ground has no barrier.
+      barriers: [],
+    },
+  );
+  const ground = ROOMS['m3-ground']!;
+  ground.doors = ground.doors.map((d) =>
+    d.id === 'closed-west' ? { id: 'to-party', rect: closedWest.rect, to: at('hub', 'default'), top: 0, markAt: { x: closedWest.rect.x + closedWest.rect.w / 2, y: 462 } } : d,
+  );
+}
+ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
+  'stair-l1-l0': at('m3-ground', 'from-l0'),
+  'to-arcade': at('m3-cave', 'from-l0'),
+});
+ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
+
+/**
+ * The new map's ways out of today's top-down rooms (DoorDef.toNew), by room and door: each realm's way out
+ * back to its landing, the turnstiles down into the tree, and the Party Grove's way back in. Every other
+ * door of those rooms leads where it always has: the lobby's west end to the street of nests, the nests
+ * back to it, the plaza's arches into the realms, the neon street's arcade door into the hall.
+ */
+const NEW_MAP_WAYS: Readonly<Record<string, Readonly<Record<string, { room: string; spawn: string }>>>> = {
+  lobby: { gate: at('m3-stair-1', 'from-l4') },
+  glass: { 'to-hub': at('m3-stair-1', 'glass') },
+  grove: { 'to-hub': at('m3-stair-3', 'grove') },
+  market: { 'to-hub': at('m3-ground', 'market') },
+  hub: { 'to-lobby': at('m3-ground', 'party') },
+};
+for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
+  const r = ROOMS[room]!;
+  r.doors = r.doors.map((d) => {
+    const toNew = ways[d.id];
+    return toNew ? { ...d, toNew } : d;
+  });
+}
+
 /** The parkour courses (OP-224, course.ts), by id: today only the keepers' test course. */
 export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE };
 
@@ -1627,7 +1734,7 @@ export const GATED_ROOMS: readonly string[] = Object.values(ROOMS).filter((r) =>
  */
 export const TREE_REALMS: ReadonlySet<string> = (() => {
   const seen = new Set<string>();
-  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
   for (let room = next.pop(); room; room = next.pop()) {
     for (const d of room.doors) {
       const to = roomFor(doorTarget(d, 2)?.room ?? '');
