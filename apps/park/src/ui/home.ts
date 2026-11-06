@@ -23,6 +23,11 @@ export const HOME_WORDS = {
   logIn: 'Make your owl',
   /** Into the owl's own nest, before its mirror, where Your owl is (OP-077, OP-105). */
   play: 'Play',
+  /**
+   * Play the moment it is pressed, until the park has answered (the line, the owl's nest): the same words
+   * as the load screen that follows, so a slow answer never looks like a button that did nothing.
+   */
+  opening: 'Opening the park…',
   settings: 'Settings',
   added: 'Ticket added',
   /** A ticket link whose ticket is already running on another owl (OP-174). */
@@ -144,6 +149,13 @@ export interface HomeScreen {
   line(view: LineView | null): void;
   /** Whether the owl is waiting in the line. */
   inLine(): boolean;
+  /**
+   * Play was pressed and the park has not answered yet: Play says so (HOME_WORDS.opening) and takes no
+   * second press until this is false again. The line, the closed card and leaving the screen end it too.
+   */
+  opening(on: boolean): void;
+  /** Whether Play is waiting on the park's answer. */
+  isOpening(): boolean;
   /** Whether the park keeps accounts (OP-139): I already have an owl is shown only then. */
   setAccounts(on: boolean): void;
   /**
@@ -181,6 +193,12 @@ function css(): string {
 #hud .home .h-side button{width:100%}
 #hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
 #hud .home .h-small{min-height:40px;font-size:14px}
+/* Pressed: a press shows at once, on a phone too (data-pressed, as touch screens do not all show :active). */
+#hud .home .h-main:active,#hud .home .h-main[data-pressed]{transform:translateY(1px) scale(.985);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+/* Opening the park: Play says so and pulses gently until the park answers; it takes no second press. */
+#hud .home .h-main[aria-busy="true"]{cursor:progress;animation:h-opening 1.2s ease-in-out infinite}
+@keyframes h-opening{0%,100%{opacity:1}50%{opacity:.72}}
+@media (prefers-reduced-motion:reduce){#hud .home .h-main[aria-busy="true"]{animation:none;opacity:.85}}
 #hud .home .h-lead{margin:0;font-size:clamp(14px,2.2vh,17px);line-height:1.4}
 #hud .home .h-welcome,#hud .home .h-presence{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-presence{color:#FFD36A;opacity:1}
@@ -305,7 +323,12 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   // Logged in, Make your owl goes: the builder hands the focus back to Play.
   login.addEventListener('click', () => actions.logIn(play));
   guest.addEventListener('click', () => actions.lookAround());
-  play.addEventListener('click', () => actions.play());
+  // A press shows the moment the finger or button is down, before the click and before the park answers.
+  play.addEventListener('pointerdown', () => play.setAttribute('data-pressed', ''));
+  for (const end of ['pointerup', 'pointercancel', 'pointerleave'] as const) play.addEventListener(end, () => play.removeAttribute('data-pressed'));
+  play.addEventListener('click', () => {
+    if (!opening) actions.play();
+  });
   settings.addEventListener('click', () => actions.settings(settings));
   restore.addEventListener('click', () => actions.restore(restore));
 
@@ -314,6 +337,16 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   let waiting = false;
   /** The closed card keeps this tab out (OP-233): no Play, no Make your owl. */
   let shut = false;
+  /** Play was pressed and the park has not answered yet. */
+  let opening = false;
+  const setOpening = (on: boolean) => {
+    opening = on;
+    play.textContent = on ? HOME_WORDS.opening : HOME_WORDS.play;
+    if (on) play.setAttribute('aria-busy', 'true');
+    else play.removeAttribute('aria-busy');
+    // Not `disabled`: a disabled button drops the focus, and Enter or a screen reader would lose Play.
+    play.setAttribute('aria-disabled', String(on));
+  };
   /** Play and Make your owl as the screen stands: one or the other, unless the line or the closed card has their place. */
   const buttons = () => {
     login.hidden = loggedIn || shut;
@@ -333,7 +366,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   }).observe(stage);
   // On a computer, Enter plays; a focused button takes Enter itself.
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || shut || actions.blocked() || typingInField(e)) return;
+    if (e.key !== 'Enter' || e.repeat || !shown || !loggedIn || waiting || shut || opening || actions.blocked() || typingInField(e)) return;
     const t = e.target;
     if (t instanceof HTMLElement && t !== document.body && (!el.contains(t) || t instanceof HTMLButtonElement)) return;
     e.preventDefault();
@@ -356,6 +389,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     hide() {
       shown = false;
       el.hidden = true;
+      setOpening(false);
     },
     isShown: () => shown,
     setWallet(line) {
@@ -368,8 +402,9 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     },
     frame,
     line(view) {
-      // While the owl waits, Play gives way to its place in line.
+      // While the owl waits, Play gives way to its place in line (and is itself again when it comes back).
       waiting = view !== null;
+      setOpening(false);
       lineEl.hidden = !waiting;
       buttons();
       if (waiting) wallet.hidden = true;
@@ -398,12 +433,15 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       lineAuto.textContent = LINE_WORDS.auto;
     },
     inLine: () => waiting,
+    opening: setOpening,
+    isOpening: () => opening,
     setAccounts(on) {
       restore.hidden = !on;
     },
     closed(card) {
       const wasShut = shut;
       shut = card !== null && !card.keeper;
+      if (shut) setOpening(false);
       closedEl.hidden = card === null;
       if (card) {
         closedWords.textContent = card.words;

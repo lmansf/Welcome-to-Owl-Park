@@ -387,6 +387,16 @@ let backSay: string | null = null;
  * An owl the keepers send into the tree (OP-156's entries setting, its pass says so) walks the tree
  * from here: its nest's door leads out into the tree, and without a nest it starts at the tree's arrival.
  */
+/** How long Play waits for the owl's nest before it takes the owl to the lobby instead. */
+const NEST_WAIT_MS = 6_000;
+/** The promise's answer, or `fallback` once `ms` have passed without one (the request itself runs on). */
+function answerWithin<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
 async function playStart(): Promise<RoomStart> {
   if (backFromCheckout) {
     // Back from checkout in this page (OP-190): in front of the turnstiles, and through them with the ticket.
@@ -401,7 +411,8 @@ async function playStart(): Promise<RoomStart> {
   const entry = newMapTab() ? 3 : transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
   const map = entry === 2 && !cfg.oldMap ? 3 : entry;
   startWalking(map);
-  const nest = await collection.service.homeNest().catch(() => null);
+  // A nest that has not answered in NEST_WAIT_MS counts as none: Play never hangs on the home screen.
+  const nest = await answerWithin(collection.service.homeNest(), NEST_WAIT_MS, null).catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
   if (room) return { room, spawn: NEST_SPAWN };
   return map === 2 ? { room: TREE_ARRIVAL.room, spawn: TREE_ARRIVAL.spawn } : { room: LOBBY_ROOM, spawn: undefined };
@@ -459,6 +470,8 @@ const enterPark = async () => {
     leaveHome(await playStart());
   } finally {
     entering = false;
+    // Still home (the park said nothing to go on): Play is itself again, ready for another press.
+    if (atHome) home.opening(false);
   }
 };
 /** What the line said: in the park, its turn, a turn that passed, or its place (and when to look again). */
@@ -497,10 +510,16 @@ async function askLine(join: boolean): Promise<void> {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && atHome && lineNumber !== null) lineSoon(() => void askLine(false), 0);
 });
-/** Play: into the owl's own nest, through the line when the park has one (the server says), else straight in. */
+/**
+ * Play: into the owl's own nest, through the line when the park has one (the server says), else straight in.
+ * Play says Opening the park the moment it is pressed, and takes no second press until the park has
+ * answered: the line's answer and the nest can each take a moment on a slow phone, and with nothing to
+ * show for a press a visitor presses again and again (and each press asked the line for a new place).
+ */
 const startPlay = () => {
   // Closed for setup (OP-233): no way in from here (Enter, Q, a kept owl's Keep it) while the card is up.
-  if (!atHome || home.isShut() || home.inLine() || lineTimer || entering) return;
+  if (!atHome || home.isShut() || home.inLine() || home.isOpening() || lineTimer || entering) return;
+  home.opening(true);
   if (!transport.line) return void enterPark();
   void askLine(true);
 };
