@@ -1497,10 +1497,10 @@ export const ROOMS: Record<string, RoomDef> = {
   ...TRIAL_ROOMS,
 };
 
-// ---- The new map (map 3): the park laid out as one tree, the keepers' preview (Nov 6 park map) ----
+// ---- The new map (map 3): the park laid out as one tree (Nov 6 park map) ----
 //
-// Only a keeper's tab walks it (`?keeper=1&newmap=1`): no visitor's door leads into its rooms, and the
-// park visitors walk is as it was. It is built from rooms and art the park already has. The common spaces
+// Every owl the tree takes walks it (the entries setting, OP-156), and a keeper's tab with `?newmap=1`;
+// `?newmap=0` walks the tree as it was. Only its own ways (DoorDef.toNew) lead into its rooms. It is built from rooms and art the park already has. The common spaces
 // are today's top-down rooms: the lobby is the Treetop Commons (the turnstiles and the booth: the
 // entrance with its gift shop), its street the canopy nests, the three open realms the Commons with their
 // Realm Vote idols, the hub the Party Grove at the tree's foot and the arcade hall below the neon realm.
@@ -1514,7 +1514,7 @@ export const ROOMS: Record<string, RoomDef> = {
 /** Where an owl walking the new map starts without a nest: the Treetop Commons, before the turnstiles. */
 export const NEW_MAP_ARRIVAL = { room: 'lobby', spawn: 'default' } as const;
 
-/** A copy of the tree's level `from` as the new map's room `id`, keepers only, its doorways led on by `ways` (door id to target). */
+/** A copy of the tree's level `from` as the new map's room `id`, its doorways led on by `ways` (door id to target). */
 function newMapLevel(id: string, from: string, ways: Readonly<Record<string, { room: string; spawn: string }>>, more: Partial<RoomDef> = {}): RoomDef {
   const src = ROOMS[from]!;
   const doors = src.doors.map((d) => {
@@ -1523,7 +1523,7 @@ function newMapLevel(id: string, from: string, ways: Readonly<Record<string, { r
     const { toTree: _tree, closedInTree: _closed, ...rest } = d;
     return { ...rest, to };
   });
-  return { ...src, id, keeperOnly: true, ...more, doors: [...doors, ...(more.doors ?? [])], spawns: { ...src.spawns, ...more.spawns } };
+  return { ...src, id, ...more, doors: [...doors, ...(more.doors ?? [])], spawns: { ...src.spawns, ...more.spawns } };
 }
 
 const at = (room: string, spawn: string) => ({ room, spawn });

@@ -396,8 +396,10 @@ async function playStart(): Promise<RoomStart> {
     // An owl of the tree came from the tree's front gate (TREE_STREET_ROOM), and goes back before it.
     return { room: walkingMap() === 2 ? TREE_STREET_ROOM : LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
   }
-  // A keeper's tab that asked for the new map (`?keeper=1&newmap=1`) walks it; anyone else, as their pass says.
-  const map = newMapTab() ? 3 : transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  // A keeper's tab that asked for the new map (`?keeper=1&newmap=1`) walks it; anyone else, as their pass
+  // says, and an owl the tree takes walks the new map unless its tab asked for the tree as it was (`?newmap=0`).
+  const entry = newMapTab() ? 3 : transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  const map = entry === 2 && !cfg.oldMap ? 3 : entry;
   startWalking(map);
   const nest = await collection.service.homeNest().catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
@@ -524,7 +526,7 @@ const SENT_HOME_TRUST_MS = 35_000;
 let sentHomeAt = Number.NEGATIVE_INFINITY;
 /** A keeper's tab (OP-156: `?keeper=1`, or a token kept from earlier in the tab): its Play still walks in. */
 const keeperTab = () => cfg.keeper || storedKeeper() !== null;
-/** A keeper's tab that asked for the new map (`?newmap=1`): only keepers walk it. */
+/** A keeper's tab that asked for the new map (`?newmap=1`): it walks it from the first room. */
 function newMapTab(): boolean {
   return cfg.newMap && keeperTab();
 }

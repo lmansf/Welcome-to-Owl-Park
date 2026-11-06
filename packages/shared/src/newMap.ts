@@ -1,6 +1,6 @@
 /**
- * The new map (map 3): the park laid out as one tree, the keepers' preview (rooms/index.ts builds its
- * rooms). Only a keeper's tab walks it (`?keeper=1&newmap=1`), so no visitor ever sees it.
+ * The new map (map 3): the park laid out as one tree (rooms/index.ts builds its rooms). Every owl the
+ * tree takes walks it, unless its tab asked for the tree as it was (`?newmap=0`).
  */
 
 /** The new map's own rooms, all seen from the side, by id: the level of the tree each is a copy of. */

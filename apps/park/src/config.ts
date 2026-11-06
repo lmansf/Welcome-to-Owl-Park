@@ -87,11 +87,13 @@ export interface ParkConfig {
    */
   kit: boolean;
   /**
-   * The new map (map 3, `?newmap=1`): the keepers' preview of the park laid out as one tree, from the
-   * Treetop Commons down past the realms to the ground (packages/shared/rooms/index.ts, NEW_MAP). Only a
-   * tab that holds a keeper's token (`?keeper=1`, now or earlier in the tab) walks it; visitors never do.
+   * The new map (map 3): the park laid out as one tree, from the Treetop Commons down past the realms to
+   * the ground (packages/shared/rooms/index.ts, NEW_MAP). Every owl the tree takes walks it; a keeper's
+   * tab (`?keeper=1`, now or earlier in the tab) walks it from the first room with `?newmap=1`.
    */
   newMap: boolean;
+  /** `?newmap=0`: an owl the tree takes walks the tree as it was (map 2), not the new map. */
+  oldMap: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -132,5 +134,6 @@ export function readConfig(): ParkConfig {
     paint: q.get('paint') === '1',
     kit: q.get('kit') !== '0',
     newMap: q.get('newmap') === '1',
+    oldMap: q.get('newmap') === '0',
   };
 }
