@@ -463,8 +463,9 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
   const g = kit.ground;
   for (const s of kit.surfaces ?? []) out.push({ key: s.texture, ...s.rect, tile: sizeOf(s.texture).tile, layer: 'back', role: 'surface', id: s.id });
   for (const c of kit.columns ?? []) columnDraws(c, out);
-  for (const p of kit.paths ?? []) runDraws(p, g, p.depth ?? room.size.h - (g - p.top), 'path', out);
+  // A hill under the paths, so the path it rises from runs on over its foot (its body below the path hidden).
   for (const h of kit.hills ?? []) hillDraws(h, g, room.size.h, out);
+  for (const p of kit.paths ?? []) runDraws(p, g, p.depth ?? room.size.h - (g - p.top), 'path', out);
   const treads = new Map<string, { stair: string; tread: string | undefined; post: string | undefined }>();
   for (const st of kit.stairs ?? []) for (const id of st.treads) treads.set(id, { stair: st.id, tread: st.tread, post: st.post });
   for (const l of kit.ledges ?? []) {

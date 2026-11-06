@@ -931,6 +931,16 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('steps-1', 2 * ROOM_W + 397, 2 * ROOM_W + 462, 190),
       treeLedge('steps-2', 2 * ROOM_W + 412, 2 * ROOM_W + 476, 238),
       treeLedge('steps-3', 2 * ROOM_W + 434, 2 * ROOM_W + 496, 285),
+      // On the way to the market, the level's first hill (OP-238): the lane rises gently (1 in 4) over a
+      // knoll, 80 up at its top, and down again before the archway. Drawn by the art kit (rooms/kit.ts).
+      {
+        ...treeLedge('knoll', 3 * ROOM_W + 300, 3 * ROOM_W + 940, 80),
+        profile: [
+          { x: 3 * ROOM_W + 300, top: 0 },
+          { x: 3 * ROOM_W + 620, top: 80 },
+          { x: 3 * ROOM_W + 940, top: 0 },
+        ],
+      },
       // The roof run's crates, roofs and lantern tower lead nowhere yet (the market's adventure is still
       // to come), so they are not ledges: a rope across the foot of the crates shuts the climb (OP-220).
     ],

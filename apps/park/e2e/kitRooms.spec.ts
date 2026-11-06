@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openPark, state } from './helpers';
+import { openPark, state, walkAndStop } from './helpers';
 
 /**
  * The tree drawn from the art kit (OP-234), as every visitor sees it: each room of the tree opens with
@@ -22,6 +22,20 @@ test.describe('the tree drawn from the art kit (OP-234)', () => {
       for (const l of s.layers) expect(l.key, l.key).toMatch(/^kit-/);
     });
   }
+
+  test("walks the owl over level 1's knoll on the way to the market (OP-238)", async ({ page }) => {
+    const R = 1600;
+    const standsAt = (top: number) =>
+      expect.poll(async () => { const s = await state(page); return [s.air.s, Math.round(s.air.z)]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, top]);
+    await openPark(page, { room: 'l1', kit: '1', spawn: 'east' });
+    // Halfway up its west side, on its top, and down past its east foot again.
+    await walkAndStop(page, 3 * R + 620, GROUND);
+    await standsAt(80);
+    await walkAndStop(page, 3 * R + 460, GROUND);
+    await standsAt(40);
+    await walkAndStop(page, 3 * R + 1000, GROUND);
+    await standsAt(0);
+  });
 
   test('shows the paintings again when the page asks for them', async ({ page }) => {
     await openPark(page, { room: 'l1', kit: '0' });
