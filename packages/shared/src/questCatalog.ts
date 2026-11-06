@@ -35,8 +35,14 @@ function lengthOf(steps: number): QuestLength {
   return steps <= 1 ? 'short' : steps <= 3 ? 'medium' : 'long';
 }
 
+/**
+ * The owls of the open town (the great tree, the clearing and the neon street), who give and take the
+ * templates' quests. A realm's own quest owl (OP-276) gives only its own story quests: a realm may be
+ * gated, and no quest should send an owl to a door it cannot open.
+ */
+export const TOWN_NPCS = NPCS.filter((n) => (ROOMS as readonly string[]).includes(n.room));
 const roomOf = (npc: string) => getNpc(npc)!.room as RoomId;
-const others = (npc: string) => NPCS.filter((n) => n.id !== npc);
+const others = (npc: string) => TOWN_NPCS.filter((n) => n.id !== npc);
 const othersIn = (npc: string, room: string) => others(npc).filter((n) => n.room === room);
 const othersElsewhere = (npc: string) => others(npc).filter((n) => n.room !== roomOf(npc));
 
@@ -141,6 +147,21 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     thanks: 'The hall is clear and the lanterns shine again. Here, for your trouble.',
     requires: ['story-welcome'],
   },
+  {
+    // The stained-glass realm's start (OP-276): a job from the quest owl at the post, the leaves by the
+    // trading nest, and a hoot for the guardian on the vote spot, so the start has something to do.
+    id: 'story-prism-panes',
+    title: 'Leaves on the glass',
+    giver: 'prism',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'glass'), emote('hoot', { npc: 'prism' })],
+    reward: { feathers: 40, item: null },
+    offer: 'The wind off the climb keeps blowing leaves against the trading nest. Flop into the pile for me, then come back and give me a hoot.',
+    thanks: 'The panes are clear again and the light is back. Here, for your trouble.',
+  },
 ];
 
 // ---------- templates (expanded in bulk) ----------
@@ -182,7 +203,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'errand',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       const near = othersIn(giver, roomOf(giver));
       const far = othersElsewhere(giver);
@@ -207,7 +228,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'tour',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       const away = ROOMS.filter((r) => r !== roomOf(giver));
       let steps: QuestStep[];
@@ -225,12 +246,12 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'show',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       let steps: QuestStep[];
       if (d === 'easy') steps = [emote(pick(key, ['hoot', 'flap']), { npc: giver })];
       else if (d === 'medium') steps = ROOMS.filter((r) => r !== roomOf(giver)).map((r) => emote(pick(key + r, ['hoot', 'flap']), { room: r }));
-      else steps = [...ROOMS.map((r) => emote('hoot', { npc: pick(key + r, NPCS.filter((n) => n.room === r && n.id !== giver)).id })), emote('flap', { npc: giver })];
+      else steps = [...ROOMS.map((r) => emote('hoot', { npc: pick(key + r, TOWN_NPCS.filter((n) => n.room === r && n.id !== giver)).id })), emote('flap', { npc: giver })];
       // Titles and offers follow the emotes the steps ask for.
       const emotes = steps.map((s) => (s.goal.kind === 'emote' ? s.goal.emote : ''));
       const hoots = emotes.every((e) => e === 'hoot');
@@ -250,7 +271,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'gather',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       const home = roomOf(giver);
       const away = pick(key, ROOMS.filter((r) => r !== home));
@@ -295,7 +316,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'grand',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       if (d === 'easy') return null;
       const rnd = rotationRandom(key);
@@ -320,7 +341,7 @@ const TEMPLATES: readonly Template[] = [
       const steps = order.slice(0, n).map((i) => pool[i]!());
       return {
         // One title per giver: the week's two grand quests come from different givers, so they never share one.
-        title: GRAND_TITLES[NPCS.findIndex((n) => n.id === giver) % GRAND_TITLES.length]!,
+        title: GRAND_TITLES[TOWN_NPCS.findIndex((n) => n.id === giver) % GRAND_TITLES.length]!,
         type: 'mixed',
         steps,
         offer: pick(key + 'o', ['I have a long list and a good feeling about you. It will take a while.', 'This one is a proper adventure. Are you up for it?']),
@@ -331,7 +352,7 @@ const TEMPLATES: readonly Template[] = [
   {
     // The monthly tour (OP-254): seven steps across every room, hard only, one title per giver.
     id: 'odyssey',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       if (d !== 'hard') return null;
       const rnd = rotationRandom(key);
@@ -351,7 +372,7 @@ const TEMPLATES: readonly Template[] = [
         [order[i], order[j]] = [order[j]!, order[i]!];
       }
       return {
-        title: ODYSSEY_TITLES[NPCS.findIndex((n) => n.id === giver) % ODYSSEY_TITLES.length]!,
+        title: ODYSSEY_TITLES[TOWN_NPCS.findIndex((n) => n.id === giver) % ODYSSEY_TITLES.length]!,
         type: 'mixed',
         steps: order.slice(0, 7).map((i) => pool[i]!()),
         offer: pick(key + 'o', ['This one takes a whole month of wandering, if you like. Every corner of the park.', 'A long road, all around the park. Take your time: you have the whole month.']),

@@ -5,7 +5,7 @@ import { distance } from './geometry';
 import { INTERACTABLES } from './interactables';
 import { NPCS } from './npcs';
 import { nextParkMonthAt, parkMonth, parkWeek } from './parktime';
-import { MONTHLY_POOL, MONTHLY_PUZZLE_POOL, PUZZLE_QUESTS, QUESTS, WEEKLY_PUZZLE_POOL, getQuest, questPuzzle } from './questCatalog';
+import { MONTHLY_POOL, MONTHLY_PUZZLE_POOL, PUZZLE_QUESTS, QUESTS, TOWN_NPCS, WEEKLY_PUZZLE_POOL, getQuest, questPuzzle } from './questCatalog';
 import { QuestBook, monthlyQuestIds, weeklyPuzzleIds, weeklyQuestIds, type QuestSpots } from './questbook';
 import { ACTIVE_SLOTS, DAILY_QUEST_FEATHERS, MONTHLY_QUEST_FEATHERS, MONTHLY_REWARD_ODDS, WEEKLY_QUEST_FEATHERS, WEEKLY_REWARD_ODDS, rewardOdds } from './quests';
 import {
@@ -75,7 +75,8 @@ describe('quest tiers (OP-254)', () => {
   });
 
   it('offers a monthly puzzle and a tour from different givers, and a weekly puzzle beside the grand quests', () => {
-    expect(MONTHLY_POOL.length).toBe(NPCS.length);
+    // One tour for each owl of the open town (a realm's own quest owl gives only its own quests, OP-276).
+    expect(MONTHLY_POOL.length).toBe(TOWN_NPCS.length);
     expect(MONTHLY_POOL.every((q) => q.steps.length === 7 && q.difficulty === 'hard')).toBe(true);
     for (let m = 0; m < 12; m++) {
       const month = parkMonth(Date.UTC(2026, m, 15));

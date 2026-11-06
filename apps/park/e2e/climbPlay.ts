@@ -7,13 +7,14 @@ import { doAction, state, walkAndStop } from './helpers';
  * controls for the storeys, which no slow runner can mistime.
  */
 
-/** The portal's spot at the east end of the glass realm (room pixels). */
-export const PORTAL = { x: 2885, y: 745 };
+/** The portal's spot: the way on at the east end of the glass realm's start (room pixels, OP-276). */
+export const PORTAL = { x: 1500, y: 600 };
 
 /** From the realm's doorway along the floor to the portal. */
 export async function toPortal(page: Page): Promise<void> {
-  // In front of the idol's plinth (no floor itself, OP-127), then along the street.
-  await walkAndStop(page, 1200, 850);
+  // Along the front of the floor past the guardian (its base is no floor), then up to the way on.
+  await walkAndStop(page, 700, 820);
+  await walkAndStop(page, 1200, 800);
   await walkAndStop(page, PORTAL.x, PORTAL.y);
 }
 

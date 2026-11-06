@@ -87,6 +87,13 @@ export interface RoomDef {
    * than a jump (unit-tested in rooms.test.ts).
    */
   spots?: Array<Vec2 & Raised>;
+  /**
+   * In a room seen from above (OP-276): set pieces the game draws over the painting, each from the art
+   * kit by its key (a realm slot such as kit-glass-quest-post), standing with its foot at (x, y) and
+   * sorted with the owls by that foot; `flip` mirrors it. A realm's start screen draws its quest post,
+   * trading nest and decor this way, so an artist's delivery replaces each without touching the room.
+   */
+  pieces?: RoomPiece[];
   /** Ambient mood used by the scene for lighting and particles (`arcade`: neon indoors, no rain). */
   mood: 'hub' | 'dusk' | 'neon' | 'arcade';
   /**
@@ -181,6 +188,17 @@ export interface RoomDef {
  * perch's are; every piece names its art by key (`kit-<group>-<name>`, KIT_ART), and a key with no
  * art yet is drawn as a placeholder in the tree's palette.
  */
+/** A set piece of a room seen from above (RoomDef.pieces, OP-276). */
+export interface RoomPiece {
+  id: string;
+  /** Its art: a key of the kit (KIT_ART). */
+  key: string;
+  /** Where its foot stands (room px): the middle of its bottom edge. */
+  x: number;
+  y: number;
+  flip?: true;
+}
+
 export interface RoomKit {
   /** The ground line the kit's heights stand on (room px): the tree's TREE_GROUND. */
   ground: number;

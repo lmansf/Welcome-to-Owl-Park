@@ -6,6 +6,7 @@
  */
 import type { Raised } from './perches';
 import type { Vec2 } from './protocol';
+import { START_LEAVES, START_STALL } from './realmStart';
 
 export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam';
 
@@ -77,6 +78,10 @@ export const INTERACTABLES: readonly InteractableDef[] = [
     { id: `commons-${level}-leaves-1`, kind: 'leaf-pile', room: `commons-${level}`, pos: { x: 1930, y: 820 } },
     { id: `commons-${level}-leaves-beam`, kind: 'leaf-pile', room: `commons-${level}`, pos: { x: 930, y: 696 }, top: 264 },
   ]),
+  // A realm's start (OP-276, realmStart.ts): the wind off its course blows leaves in at the way on, and
+  // they pile against the trading nest, where an owl can browse what the realm has.
+  { id: 'glass-leaves-start', kind: 'leaf-pile', room: 'glass', pos: { ...START_LEAVES } },
+  { id: 'glass-nest', kind: 'stall', room: 'glass', pos: { ...START_STALL } },
   { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 400, y: 705 } },
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },

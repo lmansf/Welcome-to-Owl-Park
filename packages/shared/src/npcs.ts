@@ -5,6 +5,7 @@
  * (proposal C31) before they ship.
  */
 import type { OwlLook, Vec2 } from './protocol';
+import { START_QUEST_OWL } from './realmStart';
 
 export interface NpcDef {
   id: string;
@@ -34,6 +35,7 @@ export const NPC_EMOTE_RADIUS = 220;
 /** Public-safe names for the rooms, used in quest text (realm names stay internal). */
 export const PLACE_NAMES: Readonly<Record<string, string>> = {
   hub: 'the great tree',
+  glass: 'the glass street',
   grove: 'the treehouse clearing',
   market: 'the neon street',
   // The new map's stairs (map 3), top to bottom.
@@ -124,6 +126,20 @@ export const NPCS: readonly NpcDef[] = [
     look: { body: '#6B6B6B', belly: '#BFC9D6', accent: '#00E5FF', wear: { head: 'propeller-cap~0', face: 'brass-goggles~0', pet: 'beetle~4' } },
     greetings: ['Do not touch the blinking one. Or do, it is fine, probably.', 'Gears, springs, a little neon: that is all anything is.', 'I dropped something again. I always drop something.'],
     idle: ['tilt', 'spin'],
+  },
+  {
+    // The stained-glass realm's quest owl (OP-276), at the foot of the quest post on the realm's start,
+    // in the realm's own circlet (the realm hat until its artist's is delivered). Its quests are its own:
+    // the realm is gated, so no quest elsewhere in the park sends an owl here (questCatalog.ts, TOWN_NPCS).
+    id: 'prism',
+    name: 'Prism',
+    role: 'Keeper of the glass street',
+    room: 'glass',
+    pos: { ...START_QUEST_OWL },
+    facing: 1,
+    look: { body: '#4B5D8A', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'glass-circlet~0', neck: 'moon-pendant~0' } },
+    greetings: ['The light comes through every pane a different colour. I keep count.', 'The guardian listens when you stand in front of it.', 'The climb is just past the nest. Mind the wind.'],
+    idle: ['tilt', 'nod'],
   },
 ];
 

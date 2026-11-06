@@ -171,7 +171,7 @@ describe('LocalCollections', () => {
 });
 
 describe('the stained-glass climb in the local mode', () => {
-  const PORTAL = { x: 2885, y: 745 };
+  const PORTAL = { x: 1500, y: 600 };
   const FLOORS_EASY = CLIMB_FLOORS['city-2']!.easy;
 
   function climber(storage = new MemoryStorage(), clock = { now: at }) {

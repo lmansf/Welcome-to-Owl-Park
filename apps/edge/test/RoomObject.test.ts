@@ -1161,12 +1161,14 @@ describe('the climb in the room object (the stained-glass realm)', () => {
   const open = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));
   const LIVE = { open: ['glass'], portal: true, night: 'easy' };
   const EASY = NIGHTS['easy']!;
-  /** Walk an owl from the glass room's doorway to the portal at its far end and let the walk finish. */
+  /** Walk an owl from the glass room's knot-hole to the portal at the way on and let the walk finish. */
   async function toPortal(obj: Obj, ws: FakeSocket) {
-    // In front of the idol's plinth (no floor itself, OP-127), then along the street.
-    await send(obj, ws, { t: 'move', to: { x: 1200, y: 850 }, seq: 1 });
+    // Along the front of the floor past the guardian (its base is no floor, OP-276), then up to the way on.
+    await send(obj, ws, { t: 'move', to: { x: 700, y: 820 }, seq: 1 });
     clock += 10_000;
-    await send(obj, ws, { t: 'move', to: { x: 2885, y: 745 }, seq: 2 });
+    await send(obj, ws, { t: 'move', to: { x: 1200, y: 800 }, seq: 2 });
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to: { x: 1500, y: 600 }, seq: 3 });
     clock += 10_000;
   }
   const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
@@ -1936,7 +1938,7 @@ describe('spectators in the room object (OP-191)', () => {
     const obj = roomObject();
     await obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: { open: ['glass'], portal: true, night: 'easy' } }) }));
     const ws = await spectator(obj, 'glass');
-    await walk(obj, ws, { x: 1200, y: 850 }, { x: 2885, y: 745 });
+    await walk(obj, ws, { x: 700, y: 820 }, { x: 1200, y: 800 }, { x: 1500, y: 600 });
     await send(obj, ws, { t: 'act', a: 'climb', r: 1 });
     await settle();
     const started = act(ws, 1) as { seed: number; startedAt: number };
