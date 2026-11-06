@@ -188,7 +188,8 @@ describe("the tree's ways into today's park (OP-162)", () => {
 
   it("a side view's doorways stand at a height, so a ledge over one is walked along without going through", () => {
     for (const room of ALL_ROOMS) {
-      if (mapOf(room) !== 2) continue;
+      // A course's rooms (OP-224) are climbed through hatches up on their ledges: course.test.ts holds them.
+      if (mapOf(room) !== 2 || room.course) continue;
       // Every way through is on the ground (OP-220): none is taken from a ledge.
       for (const d of room.doors) {
         if (!d.to) continue;
@@ -253,7 +254,7 @@ describe('a tree level’s placed spots (OP-156)', () => {
   it('are each one of its level’s named spots, once, at a whole room pixel inside the room; no other room has any', () => {
     for (const room of ALL_ROOMS) {
       const places = room.places ?? [];
-      if (mapOf(room) !== 2) {
+      if (mapOf(room) !== 2 || room.course) {
         expect(places, room.id).toEqual([]);
         continue;
       }
@@ -559,6 +560,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'glass:to-hub', 'grove:to-hub', 'homes:to-lobby', 'hub:to-glass', 'hub:to-grove', 'hub:to-lobby', 'l0:stair-l1-l0', 'l1:stair-l1-l0', 'l1:stair-l2-l1', 'l2:stair-l2-l1', 'l2:stair-l3-l2', 'l3:stair-l3-l2', 'l3:stair-l4-l3', 'l3:to-glass', 'l4:stair-l4-l3', 'l4:stair-l5-l4', 'l5-street:gate', 'l5:stair-l5-l4', 'l5:to-street', 'lobby:gate', 'lobby:to-homes',
       // The test course's acts (OP-224, trialCourse.ts): each act's doorway east into the next, and back west.
       'trail-1:east', 'trail-2:east', 'trail-2:west', 'trail-3:west',
+      // The Updraft Canopy (OP-226, updraftCanopy.ts): its doorways and hatches between the rooms of the course, both ways.
+      'canopy-1:roots', 'canopy-1:to-trunk', 'canopy-2a:down', 'canopy-2a:hatch-up', 'canopy-2b:down', 'canopy-2b:hatch-up', 'canopy-2c:down', 'canopy-2c:hatch-up', 'canopy-3:down', 'canopy-roots:out',
       // The new map's stairs between its levels (NEW_MAP), as the levels' own.
       'm3-ground:stair-l1-l0', 'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
     ].sort());
@@ -723,7 +726,7 @@ describe('perches (OP-084)', () => {
 // ---- The tree (map 2, OP-128 and OP-156): a side-scrolling world, dark until it opens ----
 describe('the tree (map 2)', () => {
   // The tree visitors walk: the new map's copies of its levels (NEW_MAP) have their own tests below.
-  const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
+  const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id) && !r.course);
   const l1 = getRoom('l1');
   /** The tree's floor strip's y extent, from a polygon of it. */
   const yRange = (poly: readonly Vec2[]): [number, number] => [Math.min(...poly.map((p) => p.y)), Math.max(...poly.map((p) => p.y))];
@@ -958,7 +961,7 @@ describe('the tree (map 2)', () => {
 });
 
 describe("the tree's directions and barriers (OP-220)", () => {
-  const tree = ALL_ROOMS.filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
+  const tree = ALL_ROOMS.filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id) && !r.course);
   const levels = tree.filter((r) => treeLevelOf(r.id) !== null);
   const isStair = (d: DoorDef) => d.id.startsWith('stair-');
   const x0 = (d: DoorDef) => d.rect.x;

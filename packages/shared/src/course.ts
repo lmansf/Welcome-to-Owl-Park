@@ -90,8 +90,14 @@ export interface CourseThorns {
 export interface CourseDef {
   id: string;
   objective: ObjectiveKind;
-  /** The rooms of its acts, first to last (one to MAX_ACTS). */
+  /** The rooms of its acts, first to last (one to MAX_ACTS): each act's way in. */
   acts: readonly string[];
+  /**
+   * The other rooms of its acts (a storey above the first, a hidden room off one, the room the finish
+   * shrine stands in): each an act of the course by its own `course.act`, reached by a door from a
+   * room of the course. Its pieces count with its act's.
+   */
+  rooms?: readonly string[];
   /** The trail gate: the door (in the room before the first act) whose way in grants the dash, and the spawn in the first act it leads to. */
   gate: { room: string; door: string; spawn: string };
   /** The way out of the last act: its door, which takes the dash away. */
@@ -106,6 +112,23 @@ export interface CourseDef {
   floorMs: number;
   /** Seen by keepers only (the test course): its rooms are keeper-only. */
   keeper?: true;
+  /** The kit's art for its pieces (kit keys); a piece with none is drawn in plain shapes, as the test course's are. */
+  art?: CourseArt;
+}
+
+/** How a course's pieces are drawn from the kit: each a kit key, with how high over its piece's height its art stands (room px) and its scale. */
+export interface CourseArt {
+  bench?: CourseArtPiece;
+  part?: CourseArtPiece;
+  feather?: CourseArtPiece;
+  shrine?: CourseArtPiece;
+}
+
+export interface CourseArtPiece {
+  key: string;
+  /** The art's foot this far over the height its piece stands at (a bell hangs over the owl's head). */
+  lift?: number;
+  scale?: number;
 }
 
 /** A piece and the room it stands in. */
@@ -131,9 +154,23 @@ export function shortcutIn(room: Pick<RoomDef, 'course'> | undefined, id: string
   return room?.course?.shortcuts?.find((s) => s.id === id);
 }
 
-/** Every piece of a kind over a course's acts, act by act. */
+/** Every room of a course: its acts' ways in, then its other rooms. */
+export function courseRoomIds(def: CourseDef): string[] {
+  return [...def.acts, ...(def.rooms ?? [])];
+}
+
+/** A course's rooms in act order (an act's way in first, then its other rooms as listed). */
+function roomsByAct(def: CourseDef, rooms: (id: string) => RoomDef | undefined): string[] {
+  const act = (id: string) => rooms(id)?.course?.act ?? Number.MAX_SAFE_INTEGER;
+  return courseRoomIds(def)
+    .map((id, i) => ({ id, i }))
+    .sort((a, b) => act(a.id) - act(b.id) || a.i - b.i)
+    .map((r) => r.id);
+}
+
+/** Every piece of a kind over a course's rooms, act by act. */
 export function coursePieces(def: CourseDef, rooms: (id: string) => RoomDef | undefined, kind: PieceKind): PlacedPiece[] {
-  return def.acts.flatMap((id) => piecesIn(rooms(id), kind).map((p) => ({ ...p, room: id })));
+  return roomsByAct(def, rooms).flatMap((id) => piecesIn(rooms(id), kind).map((p) => ({ ...p, room: id })));
 }
 
 /** The objective's parts over the course, act by act: what the objective strip counts. */
@@ -188,14 +225,23 @@ export function courseProblems(def: CourseDef, rooms: (id: string) => RoomDef | 
     }
     if (r.course?.id !== def.id || r.course.act !== i + 1) out.push(`${id}: is not act ${i + 1} of ${def.id}`);
     if (piecesIn(r, 'bench').length === 0) out.push(`${id}: has no bench`);
-    const last = i === def.acts.length - 1;
-    if (last !== (r.course?.shrine !== undefined)) out.push(`${id}: ${last ? 'has no shrine' : 'has a shrine but is not the last act'}`);
   });
+  for (const id of def.rooms ?? []) {
+    const r = rooms(id);
+    if (!r) out.push(`${def.id}: no room ${id}`);
+    else if (r.course?.id !== def.id || !(r.course.act >= 1 && r.course.act <= def.acts.length)) out.push(`${id}: is no act of ${def.id}`);
+    if (def.acts.includes(id)) out.push(`${id}: is both an act's way in and another room of ${def.id}`);
+  }
+  const all = courseRoomIds(def);
+  if (new Set(all).size !== all.length) out.push(`${def.id}: lists a room twice`);
+  const shrines = all.filter((id) => rooms(id)?.course?.shrine !== undefined);
+  if (shrines.length !== 1) out.push(`${def.id}: has ${shrines.length} finish shrines`);
+  else if (rooms(shrines[0]!)?.course?.act !== def.acts.length) out.push(`${shrines[0]}: has a shrine but is not in the last act`);
   for (const kind of ['bench', 'part', 'feather'] as const) {
     const ids = coursePieces(def, rooms, kind).map((p) => p.id);
     if (new Set(ids).size !== ids.length) out.push(`${def.id}: two ${kind}s share an id`);
   }
-  const shortcuts = def.acts.flatMap((id) => rooms(id)?.course?.shortcuts ?? []).map((s) => s.id);
+  const shortcuts = all.flatMap((id) => rooms(id)?.course?.shortcuts ?? []).map((s) => s.id);
   if (new Set(shortcuts).size !== shortcuts.length) out.push(`${def.id}: two shortcuts share an id`);
   if (coursePieces(def, rooms, 'feather').length !== LOST_FEATHERS) out.push(`${def.id}: hides ${coursePieces(def, rooms, 'feather').length} lost feathers, not ${LOST_FEATHERS}`);
   if (courseParts(def, rooms).length === 0) out.push(`${def.id}: its objective has no parts`);
@@ -203,10 +249,9 @@ export function courseProblems(def: CourseDef, rooms: (id: string) => RoomDef | 
   const gate = gateRoom?.doors.find((d) => d.id === def.gate.door);
   if (gate?.to?.room !== def.acts[0] || gate?.to?.spawn !== def.gate.spawn) out.push(`${def.id}: its trail gate does not lead into its first act`);
   if (gateRoom?.course) out.push(`${def.id}: its trail gate stands inside a course`);
-  const last = def.acts[def.acts.length - 1];
   const exitRoom = rooms(def.exit.room);
   const exit = exitRoom?.doors.find((d) => d.id === def.exit.door);
-  if (def.exit.room !== last || !exit?.to || rooms(exit.to.room)?.course) out.push(`${def.id}: its exit does not lead out of the course from its last act`);
+  if (!all.includes(def.exit.room) || exitRoom?.course?.act !== def.acts.length || !exit?.to || rooms(exit.to.room)?.course) out.push(`${def.id}: its exit does not lead out of the course from its last act`);
   if (!(def.gold.ms > def.floorMs)) out.push(`${def.id}: its gold time is no longer than its floor`);
   return out;
 }

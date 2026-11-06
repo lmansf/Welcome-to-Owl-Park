@@ -210,7 +210,7 @@ describe('a room’s own places as the painter starts from them (OP-156, part 3)
   });
 
   it('are named apart from a tree room’s own ledges and fronts, so a draft of them all, every name placed, passes the check', () => {
-    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !r.course);
     expect(tree.length).toBeGreaterThan(0);
     for (const room of tree) {
       expect(treeLevelOf(room.id), room.id).not.toBeNull();

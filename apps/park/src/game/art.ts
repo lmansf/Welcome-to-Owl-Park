@@ -11,7 +11,7 @@ import Phaser from 'phaser';
 import { FURNITURE, KIT_ART, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
-import { ROOMS, TREE_GROUND, roomFor } from '../rooms';
+import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { drawKitOps } from './kitView';
@@ -923,6 +923,9 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
   // A room built from the art kit (OP-234) loads its pieces too.
   if (room?.kit) keys.push(...kitArtKeys(room));
+  // A course's pieces drawn from the kit (its benches, bells, lost feathers and shrine).
+  const course = room?.course && Object.hasOwn(COURSES, room.course.id) ? COURSES[room.course.id] : undefined;
+  for (const a of Object.values(course?.art ?? {})) if (a) keys.push(a.key);
   // The tree draws its barriers (OP-220): only today's park's closed arches load the blockade art.
   if (room && mapOf(room) !== 2) for (const door of room.doors) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
   if (roomId === 'grove') keys.push('guardian');

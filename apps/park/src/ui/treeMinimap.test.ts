@@ -9,8 +9,8 @@ const bandOf = (room: string) => layout.bands.find((b) => b.strips.some((s) => s
 
 describe('the tree’s minimap (OP-213)', () => {
   it('places every room of the tree, each on its own level', () => {
-    // The tree visitors walk; the new map's levels (NEW_MAP, the keepers' preview) have no minimap yet.
-    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id));
+    // The tree visitors walk; the new map's levels (NEW_MAP, the keepers' preview) have no minimap yet, and a course's rooms (OP-224) are no level of it.
+    const tree = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id) && !r.course);
     expect(tree.length).toBeGreaterThanOrEqual(8);
     for (const room of tree) {
       expect(TREE_ROOM_SCREENS[room.id], room.id).toBeDefined();

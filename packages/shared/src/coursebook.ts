@@ -14,7 +14,7 @@
  * `course` and `dash` frames (edge.ts), and the collections object's course tables.
  */
 import type { CollectionBook } from './book';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_DAILY, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, coursePieces, pieceIn, shortcutIn, type CourseDef, type PieceKind } from './course';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_DAILY, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, coursePieces, courseRoomIds, pieceIn, shortcutIn, type CourseDef, type PieceKind } from './course';
 import { parkDay } from './parktime';
 import type { Vec2 } from './protocol';
 import { findSpawn, type RoomDef } from './room';
@@ -157,7 +157,7 @@ export class CourseBook {
     const room = this.rooms(roomId);
     const id = room?.course?.id;
     const def = id !== undefined && Object.hasOwn(this.courses, id) ? this.courses[id] : undefined;
-    return room && def && def.acts.includes(roomId) ? { def, room } : null;
+    return room && def && courseRoomIds(def).includes(roomId) ? { def, room } : null;
   }
 
   /** The owl's run, if it is in this course and not forgotten (a forgotten one is let go). */
@@ -198,7 +198,7 @@ export class CourseBook {
    */
   start(cid: string, roomId: string, now: number, practice = false): CourseAnswer {
     const at = this.where(roomId);
-    if (!at || at.room.course?.act !== 1) return { ok: false, reason: 'unknown' };
+    if (!at || roomId !== at.def.acts[0]) return { ok: false, reason: 'unknown' };
     this.store.putRun({ cid, course: at.def.id, startedAt: now, parts: [], bench: null, ...(practice ? { practice: true as const } : {}) });
     return { ok: true, view: this.view(cid, at.def.id, now) };
   }
@@ -250,7 +250,7 @@ export class CourseBook {
     if (!at) return { ok: false, reason: 'unknown' };
     const run = this.runIn(cid, at.def.id, now);
     const bench = run?.bench && run.bench.room === roomId ? pieceIn(at.room, 'bench', run.bench.id) : undefined;
-    const back = bench ? bench.at : findSpawn(at.room, at.room.course?.act === 1 ? at.def.gate.spawn : undefined);
+    const back = bench ? bench.at : findSpawn(at.room, roomId === at.def.acts[0] ? at.def.gate.spawn : undefined);
     return { ok: true, view: this.view(cid, at.def.id, now), at: { x: back.x, y: back.y } };
   }
 
