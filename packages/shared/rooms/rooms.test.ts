@@ -1193,8 +1193,9 @@ describe('the new map (map 3): the park as one tree', () => {
 
   it('every way between two of its rooms leads back the way it came, so no stair or doorway is one way', () => {
     // The old stairs are left over since the hall was switched on: they still lead out, and nothing leads back in (the next test).
-    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground']);
-    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'lobby', 'glass', 'grove', 'market', 'hub']);
+    // So is the cavern's side-view arcade since its door leads to the top-down arcade (OP-283).
+    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-cave']);
+    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'lobby', 'glass', 'grove', 'market', 'hub', 'arcade']);
     for (const id of inMap) {
       for (const { door, to } of ways(ROOMS[id]!)) {
         if (!inMap.has(to.room)) continue;
@@ -1204,7 +1205,7 @@ describe('the new map (map 3): the park as one tree', () => {
     }
   });
 
-  it('runs from the turnstiles down the hollow hall past every open realm\'s Commons to the Party Grove and the arcade cave, all of it reachable', () => {
+  it('runs from the turnstiles down the hollow hall past every open realm\'s Commons to the Party Grove and the arcade, all of it reachable', () => {
     const reach = (from: string) => {
       const seen = new Set<string>([from]);
       const next = [from];
@@ -1218,7 +1219,14 @@ describe('the new map (map 3): the park as one tree', () => {
       return seen;
     };
     const seen = reach('lobby');
-    for (const id of [...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'm3-under', 'm3-cave', 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    for (const id of [...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'm3-under', 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    // The cavern's arcade is the top-down one (OP-283), and its street door leads back the way the owl came.
+    expect(ways(ROOMS['m3-under']!).find((w) => w.door.id === 'to-arcade')?.to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
+    const street = ROOMS['arcade']!.doors.find((d) => d.id === 'to-market')!;
+    expect(doorTarget(street, 3, 'm3-under')).toEqual({ room: 'm3-under', spawn: 'from-arcade' });
+    expect(doorTarget(street, 3, 'market')).toEqual({ room: 'market', spawn: 'from-arcade' });
+    expect(doorTarget(street, 1, 'market')).toEqual({ room: 'market', spawn: 'from-arcade' });
+    expect(ROOMS['m3-under']!.spawns['from-arcade']).toBeDefined();
     // Through the turnstiles down the knothole; up the root stair into the hall's floor; the Party Grove's way into the trunk.
     expect(doorTarget(ROOMS['lobby']!.doors.find((d) => d.id === 'gate')!, 3)).toEqual({ room: 'm3-hall', spawn: 'from-lobby' });
     expect(ways(ROOMS['m3-under']!).find((w) => w.door.way === 'up')?.to).toEqual({ room: 'm3-hall', spawn: 'from-under' });
