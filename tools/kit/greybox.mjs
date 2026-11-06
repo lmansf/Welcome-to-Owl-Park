@@ -220,6 +220,10 @@ export function planOf(shared, room) {
     spawns: room.spawns,
     scenes: kit.kitSceneSpans(room),
     problems: kit.kitProblems(room),
+    // Which art file each key draws from (OP-275): a realm slot's stand-in draws today's piece, a delivered slot its own file.
+    files: Object.fromEntries(
+      [...new Set([...images.map((i) => i.key), ...(room.backgrounds ?? []).map((t) => t.key), ...(room.foregrounds ?? []).map((t) => t.key)])].map((k) => [k, shared.kitArt.kitFilesOf(k)]),
+    ),
   };
 }
 

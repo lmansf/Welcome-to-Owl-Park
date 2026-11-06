@@ -59,16 +59,31 @@ SOFTEN = {"far": {"haze": 0.14, "blur": 1.6}, "mid": {"haze": 0.07, "blur": 1.0}
 MARGIN = {"L_mean": 0.5, "L_p95": 1.0, "contrast": 0.96, "sat": 0.97}
 
 
-def layer_band(key: str) -> str:
-    """``sky``, ``far`` or ``mid`` for a kit backdrop layer key (``kit-<area>-sky-a`` ...)."""
+def _layer_parts(key: str) -> tuple[str, str] | None:
+    """(area, band) of a kit backdrop layer key: a kit layer (``kit-<area>-sky-a`` ...), a realm kit
+    slot (``kit-<realm>-sky``, OP-275) or a slot's stand-in (``kit-<realm>-sky--<area>-sky-a``), which
+    is held to the band of the layer standing in."""
+    if "--" in key:
+        key = "kit-" + key.split("--", 1)[1]
     parts = key.split("-")
     if len(parts) >= 4 and parts[0] == "kit" and parts[-2] in ("sky", "far", "mid"):
-        return parts[-2]
+        return "-".join(parts[1:-2]), parts[-2]
+    if len(parts) == 3 and parts[0] == "kit" and parts[2] in ("sky", "far", "mid"):
+        return parts[1], parts[2]
+    return None
+
+
+def layer_band(key: str) -> str:
+    """``sky``, ``far`` or ``mid`` for a kit backdrop layer key (``kit-<area>-sky-a`` ...)."""
+    got = _layer_parts(key)
+    if got:
+        return got[1]
     raise ValueError(f"{key!r} is not a backdrop layer key (kit-<area>-sky|far|mid-<x>)")
 
 
 def layer_area(key: str) -> str:
-    return "-".join(key.split("-")[1:-2])
+    got = _layer_parts(key)
+    return got[0] if got else "-".join(key.split("-")[1:-2])
 
 
 def band_of(key: str) -> tuple[str, dict]:
