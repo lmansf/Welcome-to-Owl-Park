@@ -46,11 +46,12 @@ function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedg
 }
 
 /** The looks of the course's ledges, from the kit. */
-const BRANCH = { row: 'kit-cut-branch-mossy' };
-const TWIG = { row: 'kit-cut-branch-thin' };
+const BRANCH = { cap: 'kit-clearing-bough-perch' };
+const TWIG = { cap: 'kit-clearing-bough-end-perch' };
 const FROND = { cap: 'kit-clearing-leaf-platform' };
 const SHELF = { cap: 'kit-clearing-fungus-shelf' };
-const stump = (top: number) => ({ cap: 'kit-ground-tree-stump', mid: 'kit-tex-bark', depth: top });
+/** A mossy boulder on the fern floor, an owl's hop up. */
+const BOULDER = { cap: 'kit-ground-mossy-boulder' };
 
 /** A doorway on the ground line or up on a ledge (`top`), `w` wide, centred on `x`. */
 function door(id: string, x: number, to: DoorDef['to'], opts: { top?: number; w?: number; way?: DoorDef['way'] } = {}): DoorDef {
@@ -75,25 +76,26 @@ function updraft(id: string, x: number, top: number, cycle?: { on: number; off: 
 }
 
 /** The vent each column rises from, at its foot. */
-const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece: 'kit-clearing-updraft-vent', x: u.x + u.w / 2, y: G - 60, scale: 0.8 }));
+const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece: 'kit-clearing-updraft-vent', x: u.x + u.w / 2, y: G - 40, scale: 0.6 }));
 
 /** Bramble over a pit of the fern floor, patch by patch. */
 function bramble(x0: number, x1: number, piece = 'kit-clearing-bramble-patch', step = 240): KitDecal[] {
   const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, front: true, ...(i % 2 ? { flip: true } : {}) });
+  // Half see-through, so the floor under them still reads as the floor: the game marks the pits.
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, alpha: 0.4, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
 
 const layer = (key: string, rate: number, screens: readonly [number, number], fade?: KitBackdrop['fade']): KitBackdrop => ({ key, rate, screens, ...(fade ? { fade } : {}) });
 const FADES = { left: 230, right: 230 };
 
-/** The clearing's air, screen by screen: its two skies (each screen's own tile), far trees and middle layers in turn. */
+/** The clearing's air, screen by screen: its two skies (each screen's own tile), far trees and the two quieter middle layers in turn. */
 function clearingAir(screens: number): KitBackdrop[] {
   const out: KitBackdrop[] = [];
   for (let s = 0; s < screens; s++) {
     out.push(layer(s % 2 ? 'kit-clearing-sky-b' : 'kit-clearing-sky-a', 1, [s, s]));
     out.push(layer(s % 2 ? 'kit-clearing-far-b' : 'kit-clearing-far-a', 0.6, [s, s], FADES));
-    out.push(layer(['kit-clearing-mid-a', 'kit-clearing-mid-b', 'kit-clearing-mid-c'][s % 3]!, 0.75, [s, s], FADES));
+    out.push(layer(s % 2 ? 'kit-clearing-mid-b' : 'kit-clearing-mid-a', 0.75, [s, s], FADES));
   }
   return out;
 }
@@ -142,16 +144,16 @@ const U_ACT1 = [
 const CANOPY_1: RoomKit = {
   ground: G,
   backdrops: clearingAir(3),
-  paths: [{ id: 'fern-floor', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-clearing-fern-floor' }],
+  paths: [{ id: 'fern-floor', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-clearing-fern-floor' }],
   ledges: [
-    ledge('s1', 300, 160, 90, stump(90)),
-    ledge('s2', 520, 140, 200, stump(200)),
+    ledge('s1', 300, 160, 90, BOULDER),
+    ledge('s2', 520, 140, 200, BOULDER),
     ledge('fern-hi', 40, 120, 330, FROND),
     ledge('f1', 760, 180, 160, FROND),
     ledge('f2', 1050, 160, 100, FROND),
     ledge('b1', 1480, 160, 480, BRANCH),
     ledge('fern-bench', 1840, 100, 540, FROND),
-    ledge('s4', 2040, 140, 120, stump(120)),
+    ledge('s4', 2040, 140, 120, BOULDER),
     ledge('l5', 2420, 200, 500, BRANCH),
     ledge('l6', 3000, 200, 540, BRANCH),
     ledge('l7', 3250, 140, 120, TWIG),
@@ -178,7 +180,7 @@ const CANOPY_1: RoomKit = {
 const ROOT_DEN: RoomKit = {
   ground: G,
   backdrops: [layer('kit-under-sky-b', 1, [0, 0]), layer('kit-under-far-b', 0.6, [0, 0], FADES), layer('kit-under-mid-b', 0.75, [0, 0], FADES)],
-  paths: [{ id: 'den', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-under-packed-earth' }],
+  paths: [{ id: 'den', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-ground-forest-floor' }],
   ledges: [ledge('shelf', 900, 200, 200, { cap: 'kit-clearing-root-shelf' })],
   doors: [{ door: 'out', piece: 'kit-landmark-door-root-tiny' }],
   props: [
@@ -195,7 +197,7 @@ const U_2A = [updraft('U6', 920, 560, { on: 3, off: 2, phase: 0 })];
 const TRUNK_A: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
-  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-roots' }],
+  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
   ledges: [ledge('t1', 300, 220, 130, SHELF), ledge('t2', 600, 180, 200, SHELF), ledge('b3', 120, 120, 540, TWIG), ledge('t3', 1100, 200, 500, SHELF), ledge('t4', 1360, 200, 540, SHELF)],
   doors: [
     { door: 'down', piece: 'kit-doorway-knothole', scale: 0.8 },
@@ -208,7 +210,7 @@ const U_2B = [updraft('U7', 640, 550, { on: 3, off: 2, phase: 0 }), updraft('U8'
 const TRUNK_B: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
-  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-roots' }],
+  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
   ledges: [
     ledge('u1', 420, 160, 120, SHELF),
     ledge('knot-shelf', 300, 100, 520, SHELF),
@@ -227,7 +229,7 @@ const U_2C = [updraft('U9', 520, 540, { on: 2, off: 2, phase: 0 }), updraft('U10
 const TRUNK_C: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
-  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-roots' }],
+  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
   ledges: [ledge('v1', 320, 140, 110, SHELF), ledge('v2', 700, 120, 480, SHELF), ledge('v3', 1160, 180, 520, SHELF), ledge('v4', 1380, 200, 540, SHELF)],
   doors: [
     { door: 'down', piece: 'kit-hatch-down' },
@@ -247,7 +249,8 @@ const U_ACT3 = [
 const CROWN: RoomKit = {
   ground: G,
   backdrops: clearingAir(4),
-  paths: [{ id: 'crown-floor', x0: 0, x1: 4 * ROOM_W, top: 0, row: 'kit-cut-earth', mid: 'kit-tex-clearing-fern-floor' }],
+  // Far below the crown run, the clearing's leaves: the drop an owl falls back from.
+  paths: [{ id: 'crown-floor', x0: 0, x1: 4 * ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-clearing-leaf-canopy' }],
   ledges: [
     ledge('c1', 620, 160, 120, TWIG),
     ledge('c2', 920, 160, 160, TWIG),
@@ -255,10 +258,10 @@ const CROWN: RoomKit = {
     ledge('c4', 1800, 260, 120, TWIG),
     ledge('pocket', 1640, 100, 40, FROND),
     ledge('c5', 2380, 160, 540, TWIG),
-    ledge('snag', 2580, 40, 520, { row: 'kit-cut-branch-thin', mid: 'kit-tex-bark', depth: 520 }),
+    ledge('snag', 2580, 40, 520, TWIG),
     ledge('c6', 2680, 160, 120, TWIG),
     ledge('c7', 3100, 140, 540, TWIG),
-    ledge('c8', 3300, 300, 540, { row: 'kit-cut-branch-mossy', mid: 'kit-tex-bark', depth: 540 }),
+    ledge('c8', 3300, 300, 540, BRANCH),
     ledge('c9', 3780, 160, 140, TWIG),
     ledge('c10', 4240, 200, 540, BRANCH),
     ledge('c12', 4900, 200, 180, BRANCH),
