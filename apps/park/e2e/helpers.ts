@@ -156,7 +156,7 @@ export const E2E_STORE = {
 
 /** The card before the store (OP-153): every way from the park to the store shows it first. */
 export const STORE_CARD = '[data-store-card]';
-export const STORE_LINE = 'Ask a grown-up before buying';
+export const STORE_LINE = 'This opens the store in a new tab';
 
 /** The card before the store is up, its line shown and the focus on it (not on Continue). */
 export async function expectStoreCard(page: Page): Promise<void> {

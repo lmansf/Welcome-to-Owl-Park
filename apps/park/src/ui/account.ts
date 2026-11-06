@@ -1,9 +1,8 @@
 /**
  * The owl's account on the page (OP-139), with the park's accounts on: its friend code and whether
- * an email protects it (the Menu's Nest tab), the box a grown-up types an email in (to protect this
+ * an email protects it (the Menu's Nest tab), the box the player types an email in (to protect this
  * owl, or to bring one to this screen), the owls a restore link shows as pictures to tap, and the
- * card a screen gets when its owl has moved to another one. A child never types here: every box that
- * takes an email says it is for a grown-up.
+ * card a screen gets when its owl has moved to another one.
  */
 import { speciesOf, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
 import type { AccountLink, AccountSend } from '../net';
@@ -14,14 +13,14 @@ export const ACCOUNT_WORDS = {
   friendCode: 'Your friend code',
   friendNote: 'Four letters that are yours alone, and never change.',
   unprotected: 'This owl lives only on this screen.',
-  unprotectedMore: 'If this screen is lost or its browser is cleared, the owl is gone. A grown-up can protect it with an email, so it can come back on another screen.',
+  unprotectedMore: 'If this screen is lost or its browser is cleared, the owl is gone. You can protect it with an email, so it can come back on another screen.',
   protectedLine: 'Protected: this owl can come back on another screen.',
   protect: 'Protect this owl',
   restore: 'I already have an owl',
   protectTitle: 'Protect this owl',
-  protectLead: 'For a grown-up: type your email and we will send you a link. Open it to protect this owl, so it can come back on another screen.',
+  protectLead: 'Type your email and we will send you a link. Open it to protect this owl, so it can come back on another screen.',
   restoreTitle: 'Bring your owl here',
-  restoreLead: 'Ask a grown-up to type the email that protects your owl. We will send a link to open on this screen.',
+  restoreLead: 'Type the email that protects your owl. We will send a link to open on this screen.',
   email: 'Email',
   send: 'Send the link',
   privacy: 'The park keeps the email only to send these links, and never shows it to anyone.',
@@ -139,7 +138,7 @@ export function accountCard(account: OwlAccount, protect: (button: HTMLElement) 
 }
 
 export interface AccountScreens {
-  /** The box for a grown-up's email: a link that protects this owl, or one that brings an owl here. */
+  /** The box for the player's email: a link that protects this owl, or one that brings an owl here. */
   openEmail(kind: 'protect' | 'restore', opener?: HTMLElement | null): void;
   /** A restore link opened: its email's owls, as pictures to tap. */
   openPictures(token: string): void;

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ABOUT_WORDS, CONTACT_LINES, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, grownUpParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
+import { ABOUT_WORDS, CONTACT_LINES, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, safetyParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
 // @ts-expect-error: a plain script, no types
 import { INDEXNOW_KEY, indexNowBody, sitemapUrls } from '../../../../tools/indexnow.mjs';
 
@@ -28,12 +28,12 @@ describe('what the park is, said plainly (the site audit)', () => {
     expect(STILLS).toEqual([]);
     expect(PLAYER_QUOTES).toEqual([]);
     expect(OUTSIDE_MENTIONS).toEqual([]);
-    const headings = [...aboutParts(), ...grownUpParts()].map((p) => p.heading);
+    const headings = [...aboutParts(), ...safetyParts()].map((p) => p.heading);
     expect(headings).not.toContain('Who keeps the park');
     expect(headings).not.toContain('What owls say');
   });
 
-  it('answers the questions grown-ups ask, with the price and the keeper only once the owner sets them (the second audit)', () => {
+  it('answers the questions visitors ask, with the price and the keeper only once the owner sets them (the second audit)', () => {
     const questions = faq().map((f) => f.q);
     expect(questions).toContain('Can I get a refund?');
     expect(questions).not.toContain('Who keeps the park?');
@@ -56,8 +56,8 @@ describe('what the park is, said plainly (the site audit)', () => {
   it('keeps the About page for search engines in step with the screens in the park', () => {
     const about = page('about/index.html');
     expect(about).toContain(ABOUT_WORDS.lead);
-    expect(about).toContain(ABOUT_WORDS.grownUpsTitle);
-    for (const p of [...aboutParts(), ...grownUpParts()]) {
+    expect(about).toContain(ABOUT_WORDS.safetyTitle);
+    for (const p of [...aboutParts(), ...safetyParts()]) {
       expect(about, p.heading).toContain(p.heading);
       // The park's screen says "at exploreowlpark.com/changelog" (no link in the park); the page links it.
       for (const line of p.lines) if (!line.includes('changelog')) expect(about, line).toContain(line);

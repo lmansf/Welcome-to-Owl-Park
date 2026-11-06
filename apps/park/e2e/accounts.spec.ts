@@ -59,7 +59,7 @@ async function pick(page: Page, code: string): Promise<void> {
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
 }
 
-/** A grown-up types an email in the open account box and sends the link. */
+/** The player types an email in the open account box and sends the link. */
 async function sendLink(page: Page, email: string): Promise<void> {
   const box = page.locator('.modal.account');
   await box.locator('[data-account-email]').fill(email);
@@ -70,7 +70,7 @@ async function sendLink(page: Page, email: string): Promise<void> {
 const friendCodeOf = async (page: Page) => (await openMenu(page, 'nest')).locator('[data-friend-code]').getAttribute('data-friend-code');
 
 test.describe('accounts without passwords (OP-139)', () => {
-  test('a free owl has a friend code and lives on its screen until a grown-up protects it by an emailed link', async ({ browser }) => {
+  test('a free owl has a friend code and lives on its screen until its player protects it by an emailed link', async ({ browser }) => {
     const a = await screen(browser);
     const menu = await openMenu(a, 'nest');
     const code = await menu.locator('[data-friend-code]').getAttribute('data-friend-code');

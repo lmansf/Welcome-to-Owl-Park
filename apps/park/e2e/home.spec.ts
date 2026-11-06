@@ -107,14 +107,14 @@ test.describe('the home screen (OP-065)', () => {
     expect((await state(page)).look.body).toBe('#3E6B48');
   });
 
-  test('says what the park is, and opens About the park and A note for grown-ups (the site audit)', async ({ page, isMobile }) => {
+  test('says what the park is, and opens About the park and Safety and privacy (the site audit)', async ({ page, isMobile }) => {
     await openHome(page);
     await expect(page.locator('[data-home-lead]')).toHaveText('No download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now.');
-    await expect(page.locator('[data-home-welcome]')).toHaveText('Built for anyone who misses the old chatroom worlds: grown-up owls welcome.');
+    await expect(page.locator('[data-home-welcome]')).toHaveText('Built for anyone who misses the old chatroom worlds.');
     expect(await page.title()).toBe('Owl Park - a cozy virtual park you visit in your browser');
     for (const [kind, title, words] of [
       ['about', 'About the park', 'It is not for anyone who wants to chat freely'],
-      ['grown-ups', 'A note for grown-ups', 'There is no typed chat.'],
+      ['safety', 'Safety and privacy', 'There is no typed chat.'],
     ] as const) {
       const button = page.locator(`[data-home-info="${kind}"]`);
       await expect(button).toHaveText(title);
@@ -248,7 +248,7 @@ test.describe('the home screen (OP-065)', () => {
     await expect(page.locator('[data-menu-btn]')).toBeVisible();
   });
 
-  test('reads as one story: the name and its line, then Play, with Settings and the notes in a small footer (Nov 6)', async ({ page }) => {
+  test('reads as one story: the name and its line, then Play, with Settings and the two screens in a small footer close under it (Nov 6)', async ({ page }) => {
     // The phone project checks the narrowest common phone (375 px), the desktop one a laptop.
     const phone = test.info().project.name === 'phone';
     await page.setViewportSize(phone ? { width: 375, height: 812 } : { width: 1280, height: 800 });
@@ -257,7 +257,7 @@ test.describe('the home screen (OP-065)', () => {
     const footer = page.locator('[data-home] .h-foot');
     // A first visit: the lead says what the park is, and the footer holds Settings and the two notes.
     await expect(lead).toBeVisible();
-    for (const sel of ['[data-home-btn="settings"]', '[data-home-info="about"]', '[data-home-info="grown-ups"]', '[data-home-welcome]']) {
+    for (const sel of ['[data-home-btn="settings"]', '[data-home-info="about"]', '[data-home-info="safety"]', '[data-home-welcome]']) {
       await expect(footer.locator(sel)).toBeVisible();
     }
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-tidy-first-visit.png` });
@@ -273,6 +273,13 @@ test.describe('the home screen (OP-065)', () => {
     expect(settings!.height).toBeLessThan(play!.height);
     // Everything fits without scrolling the side.
     expect(await page.locator('[data-home] .h-side').evaluate((s) => s.scrollHeight <= s.clientHeight + 1)).toBe(true);
+    // Balanced: the footer follows the hero closely (no empty band between them on a tall phone), and its
+    // three links take at most two rows.
+    const hero = (await page.locator('[data-home] .h-hero').boundingBox())!;
+    const foot = (await footer.boundingBox())!;
+    expect(foot.y - (hero.y + hero.height)).toBeLessThan(40);
+    const rows = await footer.locator('.h-links button').evaluateAll((bs) => new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top))).size);
+    expect(rows).toBeLessThanOrEqual(2);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-tidy-logged-in.png` });
   });
 });

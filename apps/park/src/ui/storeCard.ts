@@ -33,7 +33,7 @@ import type { Opener } from './checkout';
 /** Everything the card says, in one place. */
 export const STORE_WORDS = {
   /** The card's line: a draft until the owner approves the final words. */
-  ask: 'Ask a grown-up before buying',
+  ask: 'This opens the store in a new tab',
   go: 'Continue',
   stay: 'Not now',
   /** What a screen reader calls the card. */

@@ -149,7 +149,7 @@ export interface Hud {
   /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
   openOwl(opener: HTMLElement): void;
   openSettings(opener: HTMLElement): void;
-  /** About the park or A note for grown-ups (about.ts), from the home screen. */
+  /** About the park or Safety and privacy (about.ts), from the home screen. */
   openInfo(kind: InfoKind, opener: HTMLElement): void;
   /** Which owl are you (OP-076): a new owl's first run (from Make your owl), drawn over everything. */
   openWhichOwl(run: Omit<WhichOwlRun, 'preview'>, opener: HTMLElement): void;
@@ -685,7 +685,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
-  /** About the park and A note for grown-ups (about.ts): the home screen's two small screens. */
+  /** About the park and Safety and privacy (about.ts): the home screen's two small screens. */
   const info = createInfoScreens(root);
   /** The card before the store (OP-153), before a purchase at the turnstiles, the pass offer or the gift shop; it closes alone on Escape. */
   const storeCard = createStoreCard(root);

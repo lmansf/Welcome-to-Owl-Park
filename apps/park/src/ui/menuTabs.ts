@@ -423,7 +423,7 @@ export interface SettingsTabDeps {
   feedback(): void;
   title(): void;
   leave(): void;
-  /** The owl's account (OP-139): where a grown-up protects the owl. Null while accounts are off. */
+  /** The owl's account (OP-139): where the player protects the owl. Null while accounts are off. */
   account?: HTMLElement[] | null;
   /** Retake the quiz (OP-076): which owl are you, again, for a new kind and colours. Null with no owl yet. */
   retake?: (() => void) | null;
