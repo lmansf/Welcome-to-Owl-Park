@@ -238,7 +238,7 @@ export class AccountBook {
    */
   orderLink(cid: string, orderHash: string, nonce: string, now: number): number | null {
     // A protected owl keeps its email: the mail would tell the buyer it is not protected, and opening
-    // the link would move it to theirs. Its grown-up can still change it in the Menu.
+    // the link would move it to theirs. Its owner can still change it in the Menu.
     if (this.row(cid)?.['email_hash']) return null;
     this.sql.exec('DELETE FROM account_order_offers WHERE at <= ?', now - ORDER_LINK_MS - LINKS_KEPT_MS);
     if (this.sql.exec('SELECT 1 FROM account_order_offers WHERE order_hash = ? AND cid = ?', orderHash, cid).toArray().length) return null;

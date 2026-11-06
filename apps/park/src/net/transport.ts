@@ -123,7 +123,7 @@ export interface ParkTransport {
   readonly accounts?: AccountLink;
 }
 
-/** What sending a link to a grown-up's email came to. */
+/** What sending a link to the protecting email came to. */
 export type AccountSend = 'sent' | 'bad-email' | 'try-later' | 'not-ready' | 'offline';
 
 /** A protect link opened: the owl it protects now (`mine`: this screen's own), or why not. */

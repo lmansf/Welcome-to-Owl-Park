@@ -1,7 +1,7 @@
 /**
  * What the park is, said plainly (the site audit's Quick wins and Do this quarter, Nov 5): the home
- * screen's lead and its grown-ups line, the presence line under them (fed by /api/counts), the gate's
- * price line, and two short screens the home screen opens: About the park and A note for grown-ups.
+ * screen's lead and its chatroom-worlds line, the presence line under them (fed by /api/counts), the gate's
+ * price line, and two short screens the home screen opens: About the park and Safety and privacy.
  * The same words stand in public/about/index.html for search engines and anyone without scripts
  * (about.test.ts keeps the two in step).
  *
@@ -17,7 +17,7 @@
  * The second audit (Nov 5) added the free way in on the home screen (Look around free), a line for the
  * spare minutes in a browser tab, what there is to do as the jobs it does, who the park is not for,
  * the ticket's terms (who takes the payment, a ticket that does not work, refunds: the owner's answers
- * of Nov 1), and the questions grown-ups ask, which the About page also marks up for search engines.
+ * of Nov 1), and the questions visitors ask, which the About page also marks up for search engines.
  */
 import { createModal, modalHeader } from './modal';
 import { SPECTATOR_WORDS } from './spectator';
@@ -65,12 +65,12 @@ export const ABOUT_WORDS = {
   /** The home screen's free way in, beside Make your owl (D2.1): a ready-made owl, straight in. */
   lookAround: 'Look around free',
   /** Under the entry buttons. */
-  welcome: 'Built for anyone who misses the old chatroom worlds: grown-up owls welcome.',
+  welcome: 'Built for anyone who misses the old chatroom worlds.',
   /** The home screen's two small buttons. */
   aboutButton: 'About the park',
-  grownUpsButton: 'A note for grown-ups',
+  safetyButton: 'Safety and privacy',
   aboutTitle: 'About the park',
-  grownUpsTitle: 'A note for grown-ups',
+  safetyTitle: 'Safety and privacy',
 } as const;
 
 /** What there is to do, as the jobs it does (D1.3): a spare few minutes, the old worlds, and an owl and nest others see. */
@@ -93,7 +93,7 @@ export const TICKET_TERMS: readonly string[] = [
   'A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu.',
 ];
 
-/** A question grown-ups ask, and its answer in the park’s words. */
+/** A question visitors ask, and its answer in the park’s words. */
 export interface Faq {
   q: string;
   a: string;
@@ -115,7 +115,7 @@ export const CONTACT_LINES: readonly string[] = [
   'For a ticket, reply to the store’s order email.',
 ];
 
-/** The questions grown-ups ask (the second audit's FAQ, D5.5): the price only once the owner sets one, the keeper only once named. */
+/** The questions visitors ask (the second audit's FAQ, D5.5): the price only once the owner sets one, the keeper only once named. */
 export function faq(price: string | null = DAY_TICKET_PRICE, keeper: typeof KEEPER = KEEPER): Faq[] {
   const list: Faq[] = [
     { q: 'What is Owl Park?', a: WHAT_IT_IS },
@@ -167,14 +167,14 @@ export function aboutParts(): AboutPart[] {
   return parts;
 }
 
-/** A note for grown-ups: chat, what the park keeps, buying, and who runs it. */
-export function grownUpParts(): AboutPart[] {
+/** Safety and privacy: chat, what the park keeps, buying, and who runs it. */
+export function safetyParts(): AboutPart[] {
   const parts: AboutPart[] = [
     {
       heading: 'Chat is set phrases only',
       lines: [
         'There is no typed chat. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park.',
-        'The only things anyone types are a feedback note, which only the park’s keepers read, and, where it is offered, a grown-up’s email to protect an owl.',
+        'The only things anyone types are a feedback note, which only the park’s keepers read, and, where it is offered, an email to protect an owl.',
       ],
     },
     {
@@ -188,7 +188,7 @@ export function grownUpParts(): AboutPart[] {
     {
       heading: 'Buying',
       lines: [
-        'Nothing is sold inside the park. A Day Ticket is bought in the store’s checkout, and before the store opens a card says: Ask a grown-up before buying.',
+        'Nothing is sold inside the park. A Day Ticket is bought in the store’s checkout, and a card always asks first before the store opens.',
         'The feather shop takes only feathers earned in play, never money. Guests can play free; they keep nothing they win.',
       ],
     },
@@ -197,7 +197,7 @@ export function grownUpParts(): AboutPart[] {
   return parts;
 }
 
-export type InfoKind = 'about' | 'grown-ups';
+export type InfoKind = 'about' | 'safety';
 
 export interface InfoScreens {
   open(kind: InfoKind, opener: HTMLElement): void;
@@ -216,7 +216,7 @@ const CSS = `
 
 let styled = false;
 
-/** About the park and A note for grown-ups: one card, opened from the home screen. */
+/** About the park and Safety and privacy: one card, opened from the home screen. */
 export function createInfoScreens(root: HTMLElement): InfoScreens {
   if (!styled) {
     const style = document.createElement('style');
@@ -243,7 +243,7 @@ export function createInfoScreens(root: HTMLElement): InfoScreens {
   };
   return {
     open(kind, opener) {
-      const title = kind === 'about' ? ABOUT_WORDS.aboutTitle : ABOUT_WORDS.grownUpsTitle;
+      const title = kind === 'about' ? ABOUT_WORDS.aboutTitle : ABOUT_WORDS.safetyTitle;
       box.setAttribute('aria-label', title);
       box.dataset['info'] = kind;
       box.replaceChildren(modalHeader(title, { onClose: () => modal.close(), closeLabel: `Close ${title.toLowerCase()}` }));
@@ -259,7 +259,7 @@ export function createInfoScreens(root: HTMLElement): InfoScreens {
         }
         box.appendChild(grid);
       }
-      for (const p of kind === 'about' ? aboutParts() : grownUpParts()) box.appendChild(part(p));
+      for (const p of kind === 'about' ? aboutParts() : safetyParts()) box.appendChild(part(p));
       modal.open(opener);
     },
     close: () => modal.close(),

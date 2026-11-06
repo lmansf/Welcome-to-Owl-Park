@@ -96,7 +96,7 @@ Nothing more specific (no times, no refunds, no causes) without the owner's word
 ## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-076, OP-082, OP-083, OP-084, OP-104, OP-105, OP-108, OP-114, OP-126, OP-130, OP-153, OP-167, OP-180, OP-190, OP-191, OP-198)]
 
 What a visitor has in hand on `main` 01e9722. Nothing a visitor does needs typing, apart from a
-feedback note and a grown-up's email (section 8).
+feedback note and an email to protect an owl (section 8).
 
 **The home screen and the first run** (`apps/park/src/ui/home.ts`, `whichOwl.ts`). A device with no
 owl yet shows **Make your owl**. It opens the quiz first, **Which owl are you?** (OP-076): a voice
@@ -207,7 +207,7 @@ spectators off) opens the turnstiles' sale (`gateSale.ts`) on the card before th
 **The card before the store** (OP-153, `apps/park/src/ui/storeCard.ts`): every way from the park to
 the store's pages shows this one card first, once for each purchase, right before it: the
 turnstiles' Day Ticket, opening night's pass offer after the turnstiles, and the gift shop's door.
-Its line is "Ask a grown-up before buying" (`STORE_WORDS.ask`, a draft until the owner approves the
+Its line is "This opens the store in a new tab" (`STORE_WORDS.ask`, a draft until the owner approves the
 final words), with **Continue** and **Not now**; no timer and no spending limit. At the turnstiles,
 with the annual pass's cart link to hand, Continue reads **Day Ticket** and **Annual Pass** sits
 beside it, under "Or get the Annual Pass and come back all year." (`UPGRADE_WORDS`, drafts). Under
@@ -258,10 +258,10 @@ keeper can do depends on whether an email protects it. The Menu's Nest and Setti
 ("Protected: this owl can come back on another screen." or "This owl lives only on this screen.").
 
 - **Not protected**: nothing can be done. The owl lived only in that browser; a lost screen or a
-  cleared browser takes it. The keepers cannot find it or bring it back. The family makes a new owl, and a grown-up can protect it (Protect this owl, in the Nest or
+  cleared browser takes it. The keepers cannot find it or bring it back. The family makes a new owl, and can protect it (Protect this owl, in the Nest or
   Settings tab) so it can come back next time.
 - **Protected**: the family brings it back themselves. On the new screen, **I already have an owl**
-  on the home screen (or **Bring your owl here** on the card before the store) asks a grown-up for
+  on the home screen (or **Bring your owl here** on the card before the store) asks for
   the email that protects it; the park mails a link (good for `MAGIC_LINK_MS`, 15 minutes, used once;
   at most `LINKS_PER_EMAIL_PER_HOUR`, 3, per email and `LINKS_PER_IP_PER_HOUR`, 10, per address). On
   that screen the link shows the email's owls as pictures; a tap on theirs brings it there, and the

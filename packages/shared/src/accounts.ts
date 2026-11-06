@@ -8,11 +8,11 @@
  *   (for friends, OP-050, and parties, OP-115), for every owl, ticket or not;
  * - one screen at a time: the browser's collector token names its device, and the owl's account
  *   names the device it is on; a token for another device finds its owl moved;
- * - the email that protects an owl, never typed by a child: a ticket's order email is mailed a
- *   one-tap link at the claim (OP-186, good for ORDER_LINK_MS), or a grown-up types one in Settings
+ * - the email that protects an owl: a ticket's order email is mailed a
+ *   one-tap link at the claim (OP-186, good for ORDER_LINK_MS), or the player types one in Settings
  *   and confirms it by a link. An owl without one lives only on its screen. One email may protect
  *   several owls (siblings);
- * - magic links: a grown-up types the protecting email on another screen, opens the link sent to it
+ * - magic links: the player types the protecting email on another screen, opens the link sent to it
  *   there and taps the owl's picture, and that screen holds the owl from then on.
  *
  * The park keeps an email only as a keyed hash (to find its owls) and a sealed copy (to write to);

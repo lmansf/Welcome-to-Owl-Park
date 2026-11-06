@@ -11,8 +11,8 @@
  *
  * The screen reads top to bottom as one story (Nov 6): who the park is (the mascot, the name, its one line),
  * the way in (Play, or Make your owl and Look around free on a first visit), one small line under it about
- * tickets and who is in, and I already have an owl as a quiet link. Settings, About the park, A note for
- * grown-ups and the grown-ups line sit in a small footer. The lead under the name is for a first visit only:
+ * tickets and who is in, and I already have an owl as a quiet link. Settings, About the park, Safety and
+ * privacy and the chatroom-worlds line sit in a small footer. The lead under the name is for a first visit only:
  * an owl coming back already knows what the park is.
  */
 import type { Entry, WalletEntry } from '../net';
@@ -132,13 +132,13 @@ export interface HomeActions {
   /** Into the owl's own nest (OP-105), through the line while the park has one. */
   play(): void;
   settings(button: HTMLElement): void;
-  /** I already have an owl (OP-139): a grown-up's email brings an owl it protects to this screen. */
+  /** I already have an owl (OP-139): the email that protects an owl brings it to this screen. */
   restore(button: HTMLElement): void;
   /** Where the owl stands moved (the screen came up, or its size changed). */
   stage(frame: PreviewFrame): void;
   /** A screen is open over the home screen (the builder, Settings): Enter is theirs. */
   blocked(): boolean;
-  /** About the park, or A note for grown-ups (about.ts). */
+  /** About the park, or Safety and privacy (about.ts). */
   info(kind: InfoKind, button: HTMLElement): void;
 }
 
@@ -188,11 +188,11 @@ function css(): string {
 #hud .home{position:absolute;inset:0;z-index:4;display:grid;grid-template-columns:minmax(0,min(440px,56vw)) minmax(0,1fr);pointer-events:none}
 #hud .home[hidden]{display:none}
 #hud.covered .home{visibility:hidden}
-#hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;min-height:0;overflow-y:auto;
+#hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;justify-content:safe center;min-height:0;overflow-y:auto;
   padding:max(16px,env(safe-area-inset-top)) clamp(16px,4vw,44px) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:linear-gradient(90deg,rgba(12,30,54,.9),rgba(12,30,54,.62) 72%,rgba(12,30,54,0))}
-/* The hero takes the free height's middle, and the footer keeps to the bottom (its margins give way when the side scrolls). */
-#hud .home .h-hero{display:flex;flex-direction:column;gap:clamp(10px,2.2vh,16px);margin-block:auto}
+/* The hero and its footer are one block, in the middle of the side's height: no gap opens between them on a tall phone. */
+#hud .home .h-hero{display:flex;flex-direction:column;gap:clamp(10px,2.2vh,16px)}
 #hud .home .h-brand{display:flex;align-items:center;gap:clamp(10px,2vw,16px);margin-bottom:clamp(4px,2.4vh,20px)}
 #hud .home .h-mascot{--m:clamp(56px,13vh,112px);flex:none;width:var(--m);height:var(--m);border-radius:50%;
   background:url(${base}home-mascot.webp) center/cover no-repeat;box-shadow:0 0 22px rgba(255,211,106,.35)}
@@ -219,8 +219,10 @@ function css(): string {
 #hud .home .h-side button.h-link:hover{opacity:1;text-decoration-color:currentColor}
 #hud .home .h-side button.h-link:focus-visible{opacity:1;outline:2px solid #FFD36A;outline-offset:2px;border-radius:8px}
 #hud .home .h-side button.h-restore{align-self:center;margin-top:-6px;font-size:14px}
-#hud .home .h-foot{display:flex;flex-direction:column;gap:2px;padding-top:clamp(12px,3vh,24px)}
-#hud .home .h-links{display:flex;flex-wrap:wrap;margin-left:-10px}
+#hud .home .h-foot{display:flex;flex-direction:column;align-items:center;gap:2px;padding-top:clamp(14px,3.5vh,28px);text-align:center}
+/* Settings and the two screens in one centred row, under Play's middle (a narrow phone wraps the last to a second row). */
+#hud .home .h-links{display:flex;flex-wrap:wrap;justify-content:center;column-gap:2px}
+#hud .home .h-side .h-links button.h-link{padding:6px 8px}
 #hud .home .h-welcome{margin:0;font-size:12px;line-height:1.35;opacity:.62}
 #hud .home .h-note{margin:0;align-self:flex-start;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;background:rgba(123,201,80,.2);border:1px solid rgba(123,201,80,.65)}
 #hud .home .h-line{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.45)}
@@ -237,14 +239,17 @@ function css(): string {
 /* After every rule that sets a display, so a hidden part (the line, its message, the note) stays hidden. */
 #hud .home [hidden]{display:none}
 @media (max-width:520px){
-  #hud .home{grid-template-columns:minmax(0,50vw) minmax(0,1fr)}
+  /* A little wider than half, so the footer's links sit in a row; the owl still has the rest. */
+  #hud .home{grid-template-columns:minmax(0,56vw) minmax(0,1fr)}
   /* Make your owl on one line on a phone (a very narrow one may still wrap it). */
   #hud .home .h-main{font-size:clamp(15px,4.8vw,20px);padding-left:10px;padding-right:10px}
   #hud .home .h-side{padding-left:max(14px,env(safe-area-inset-left));padding-right:10px}
-  #hud .home .h-brand{flex-direction:column;align-items:flex-start;gap:8px}
+  /* On a phone the side is one centred column: mascot, name, line, Play and the rest share its middle. */
+  #hud .home .h-brand{flex-direction:column;align-items:center;gap:8px;text-align:center}
   #hud .home h1{font-size:clamp(24px,7.4vw,32px)}
   #hud .home h1 .h-tag{font-size:13px}
-  #hud .home .h-lead{font-size:14px}
+  #hud .home .h-lead{font-size:14px;text-align:center}
+  #hud .home .h-side .h-links button.h-link{font-size:12px;padding:6px}
   #hud .home .h-sub{font-size:12px}
   #hud .home .h-welcome{font-size:11px}
 }
@@ -294,7 +299,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
         <div class="h-links">
           <button class="h-link" data-home-btn="settings"></button>
           <button class="h-link" data-home-info="about"></button>
-          <button class="h-link" data-home-info="grown-ups"></button>
+          <button class="h-link" data-home-info="safety"></button>
         </div>
         <p class="h-welcome" data-home-welcome></p>
       </footer>
@@ -310,11 +315,11 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   const lead = $<HTMLElement>('[data-home-lead]');
   const sub = $<HTMLElement>('[data-home-sub]');
   const aboutBtn = $<HTMLButtonElement>('[data-home-info="about"]');
-  const grownUpsBtn = $<HTMLButtonElement>('[data-home-info="grown-ups"]');
+  const safetyBtn = $<HTMLButtonElement>('[data-home-info="safety"]');
   aboutBtn.textContent = ABOUT_WORDS.aboutButton;
-  grownUpsBtn.textContent = ABOUT_WORDS.grownUpsButton;
+  safetyBtn.textContent = ABOUT_WORDS.safetyButton;
   aboutBtn.addEventListener('click', () => actions.info('about', aboutBtn));
-  grownUpsBtn.addEventListener('click', () => actions.info('grown-ups', grownUpsBtn));
+  safetyBtn.addEventListener('click', () => actions.info('safety', safetyBtn));
   const login = $<HTMLButtonElement>('[data-home-btn="login"]');
   const guest = $<HTMLButtonElement>('[data-home-btn="guest"]');
   const play = $<HTMLButtonElement>('[data-home-btn="play"]');

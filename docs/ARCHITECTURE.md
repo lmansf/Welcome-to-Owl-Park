@@ -696,10 +696,10 @@ in the `Collections` object's SQLite beside the collections. Each owl's account 
   and never logged. One email may protect several owls. An owl without one lives only on its screen;
 - its look, for the picture a restoring screen shows.
 
-A child never types an email. A grown-up protects an owl in Settings (`POST /api/account/protect`,
+A player protects an owl in Settings (`POST /api/account/protect`,
 then the emailed link, `/api/account/confirm`), or a ticket's buyer is mailed a one-tap protect link
 as the ticket lands on an owl (OP-186), which carries the address sealed in its own token, so the
-park keeps nothing about it unless the link is opened. To bring an owl to another screen, a grown-up
+park keeps nothing about it unless the link is opened. To bring an owl to another screen, the player
 types the protecting email there (`/api/account/restore`, answered the same whether the email
 protects any owl or not), opens the link sent to it on that screen, and taps the owl's picture
 (`/api/account/owls`, then `/api/account/bind` with its friend code): that screen holds the owl from
@@ -745,8 +745,8 @@ closed row.
 
 **The card before the store** BUILT (OP-153, OP-180, OP-198; `apps/park/src/ui/storeCard.ts`).
 Every way from the park to the store's pages first shows one card: a short line and two buttons,
-Continue and Not now, with no timer and no spending limit. Its line is `STORE_WORDS.ask` ("Ask a
-grown-up before buying"), a draft until the owner approves it. It shows once for each purchase,
+Continue and Not now, with no timer and no spending limit. Its line is `STORE_WORDS.ask` ("This opens
+the store in a new tab"), a draft until the owner approves it. It shows once for each purchase,
 right before it: at a turnstile reached without a ticket that works, before checkout opens for a Day
 Ticket; before opening night's pass checkout; and at the gift shop's door, before the store's page.
 Continue goes on in the same click, so a popup blocker lets the window through: a way that opens a
