@@ -49,6 +49,24 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   // the left tree's treehouse, which only a glide from the loft reaches (the glide's small extra).
   { id: 'grove-leaves-porch', kind: 'leaf-pile', room: 'grove', pos: { x: 4290, y: 708 }, top: 218 },
   { id: 'grove-leaves-hut', kind: 'leaf-pile', room: 'grove', pos: { x: 3645, y: 696 }, top: 345 },
+  // The new map's stairs (map 3): leaves fall down the tree and come to rest where each way runs out, so
+  // every climb and every far end of a boardwalk has a pile to flop into. Pip's stair quest asks for three.
+  // On the high boardwalk the wind chime's draught sweeps them east past the coloured door, against the last rope post.
+  { id: 'm3-stair-1-leaves-end', kind: 'leaf-pile', room: 'm3-stair-1', pos: { x: 4020, y: 770 } },
+  // On the quiet landing they catch on the lookout at the top of the climb up the trunk...
+  { id: 'm3-stair-2-leaves-lookout', kind: 'leaf-pile', room: 'm3-stair-2', pos: { x: 2740, y: 770 }, top: 431 },
+  // ...and the ones that miss it drift to the trunk's foot, where the boardwalk stops.
+  { id: 'm3-stair-2-leaves-end', kind: 'leaf-pile', room: 'm3-stair-2', pos: { x: 2870, y: 770 } },
+  // At the treetop diner a few land on the log end west of the table, a hop up past the stools...
+  { id: 'm3-stair-3-leaves-log', kind: 'leaf-pile', room: 'm3-stair-3', pos: { x: 125, y: 770 }, top: 64 },
+  // ...and the rest blow round the trunk to the rope posts at the boardwalk's east end.
+  { id: 'm3-stair-3-leaves-end', kind: 'leaf-pile', room: 'm3-stair-3', pos: { x: 4240, y: 770 } },
+  // On the forest path the trunk's shelf fungus holds a pile at the top of its climb...
+  { id: 'm3-ground-leaves-fungus', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 2175, y: 770 }, top: 282 },
+  // ...and the boarded stall roofs by the market square gather the ones the fence lets through.
+  { id: 'm3-ground-leaves-roof', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 3900, y: 770 }, top: 350 },
+  // Down the root stair, the leaves that fall through the roots settle on the log ledge on the trunk.
+  { id: 'm3-under-leaves-ledge', kind: 'leaf-pile', room: 'm3-under', pos: { x: 2070, y: 770 }, top: 264 },
   { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 400, y: 705 } },
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },

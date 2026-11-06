@@ -36,6 +36,12 @@ export const PLACE_NAMES: Readonly<Record<string, string>> = {
   hub: 'the great tree',
   grove: 'the treehouse clearing',
   market: 'the neon street',
+  // The new map's stairs (map 3), top to bottom.
+  'm3-stair-1': 'the high boardwalk',
+  'm3-stair-2': 'the quiet landing',
+  'm3-stair-3': 'the treetop diner',
+  'm3-ground': 'the forest path',
+  'm3-under': 'the root stair',
 };
 
 export function placeName(room: string): string {
