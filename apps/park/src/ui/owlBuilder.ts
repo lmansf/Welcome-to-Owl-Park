@@ -5,7 +5,7 @@ import {
   CATALOGUE,
   RARITY_COLOURS,
   RARITY_NAMES,
-  colourwaysFor,
+  itemColourways,
   equipSlotOf,
   getSpecies,
   parseVariant,
@@ -241,7 +241,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     content.appendChild(button('Natural colours', 'ghost natural', () => setLook({ ...look, ...getSpecies(look.species).natural })));
   };
 
-  const ownedVariantsOf = (item: ItemDef) => colourwaysFor(item.kind).map((c) => `${item.id}~${c.n}`).filter((v) => state.owns(v));
+  const ownedVariantsOf = (item: ItemDef) => itemColourways(item).map((c) => `${item.id}~${c.n}`).filter((v) => state.owns(v));
 
   /** Tap a card: wear its colourway (or take it off when it is on); not owned, say where to find it. */
   const tapItem = (item: ItemDef, variant: string) => {
@@ -254,7 +254,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
 
   const card = (item: ItemDef, worn: Set<string>): HTMLElement => {
     const owned = ownedVariantsOf(item);
-    const ways = colourwaysFor(item.kind);
+    const ways = itemColourways(item);
     const firstOwned = owned[0] ? (parseVariant(owned[0])?.colour?.n ?? 0) : 0;
     const wornHere = owned.find((o) => worn.has(o));
     const n = pick.get(item.id) ?? (wornHere ? (parseVariant(wornHere)?.colour?.n ?? firstOwned) : firstOwned);
@@ -322,7 +322,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     detail.appendChild(what);
     const sel = selected;
     const slot = equipSlotOf(v);
-    if (!state.owns(sel)) detail.appendChild(el('div', 'what', 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
+    if (!state.owns(sel)) detail.appendChild(el('div', 'what', v.item.reward ? 'Not yet yours: clear every course to earn it.' : 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
     else if (slot) {
       const on = actions.wear()?.[slot] === sel;
       detail.appendChild(

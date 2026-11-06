@@ -136,6 +136,12 @@ export function colourwaysFor(kind: ItemKind): readonly Colourway[] {
   }
 }
 
+/** An item's own colourways: its kind's, or for a reward of its own (the Golden Mouse) its first alone. */
+export function itemColourways(item: Pick<ItemDef, 'kind' | 'reward'>): readonly Colourway[] {
+  const all = colourwaysFor(item.kind);
+  return item.reward ? all.slice(0, 1) : all;
+}
+
 // ---------- the catalogue ----------
 
 const C: Rarity = 'common';
@@ -343,8 +349,7 @@ export function parseVariant(id: unknown): Variant | null {
   if (m[2] === undefined) return null;
   const n = Number(m[2]);
   if (String(n) !== m[2]) return null; // no leading zeros: one spelling per variant
-  if (item.reward && n !== 0) return null; // a reward of its own comes in its one colourway
-  const colour = colourwaysFor(item.kind)[n];
+  const colour = itemColourways(item)[n];
   if (!colour) return null;
   return { id, item, colour, rarity: item.rarity };
 }
@@ -382,8 +387,7 @@ export function allVariants(): readonly string[] {
     allCache = [];
     for (const item of CATALOGUE) {
       if (item.kind === 'emote') allCache.push(item.id);
-      else if (item.reward) allCache.push(`${item.id}~0`);
-      else for (const c of colourwaysFor(item.kind)) allCache.push(`${item.id}~${c.n}`);
+      else for (const c of itemColourways(item)) allCache.push(`${item.id}~${c.n}`);
     }
   }
   return allCache;
