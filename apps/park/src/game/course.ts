@@ -59,7 +59,7 @@ const FAR_RETRY_MS = 300;
 /** How long before a refusal is asked again, or said again. */
 const REFUSED_RETRY_MS = 4000;
 
-const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x2c3b1f, thornShade: 0x101a10 };
+const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x2c3b1f, thornShade: 0x101a10, mist: 0xd9dde3, mistLight: 0xf3f4f6, falls: 0x9fb4c8, fallsLight: 0xe6eef5 };
 
 /** A room drawn in plain shapes (`drawn`, the test course): the sky, the floor, the pits and the doorways. */
 export function drawPlaceholderRoom(scene: Phaser.Scene, room: RoomDef): Phaser.GameObjects.Graphics {
@@ -303,12 +303,30 @@ export class Course {
   }
 }
 
-/** Thorns hanging (or grown up) over the ground line `ground`: a stem down the middle of their box, barbs either side, a darker shade behind. */
+/**
+ * A hazard in the air over the ground line `ground`, as it looks: thorns hanging (or grown up), a stem
+ * down the middle of their box, barbs either side, a darker shade behind; a bank of cloud mist (the
+ * ink-wash course, OP-235), soft billows filling its box; or the water of a falls, pale streaks down it.
+ */
 export function drawThorns(g: Phaser.GameObjects.Graphics, t: CourseThorns, ground: number): void {
   const y0 = Math.max(0, ground - t.z1);
   const y1 = ground - t.z0;
   const w = t.x1 - t.x0;
   const mid = t.x0 + w / 2;
+  if (t.look === 'mist') {
+    g.fillStyle(C.mist, 0.42).fillRect(t.x0, y0, w, y1 - y0);
+    // Billows along its edges and through it, so it reads as cloud and not a wall; its foot shows how low it reaches.
+    for (let y = y0 + 40, i = 0; y < y1; y += 70, i++) {
+      for (let x = t.x0 + ((i % 2) * 40 + 30); x < t.x1; x += 80) g.fillStyle(C.mistLight, 0.5).fillCircle(x, y, 34);
+    }
+    for (let x = t.x0 + 20; x < t.x1; x += 60) g.fillStyle(C.mistLight, 0.7).fillCircle(x, y1 - 10, 28);
+    return;
+  }
+  if (t.look === 'falls') {
+    g.fillStyle(C.falls, 0.35).fillRect(t.x0, y0, w, y1 - y0);
+    for (let x = t.x0 + 12; x < t.x1; x += 24) g.lineStyle(3, C.fallsLight, 0.55).lineBetween(x, y0, x, y1);
+    return;
+  }
   g.fillStyle(C.thornShade, 0.55).fillRect(t.x0, y0, w, y1 - y0);
   g.lineStyle(Math.max(4, Math.min(10, w / 5)), C.thorn, 1).lineBetween(mid, y0, mid, y1);
   g.fillStyle(C.thorn, 1);

@@ -38,6 +38,7 @@ export * from './climbCity';
 export * from './climbPilot';
 export * from './flight';
 export * from './updraft';
+export * from './brush';
 export * from './dash';
 export * from './course';
 export * from './coursebook';

@@ -1,8 +1,8 @@
 # Brushstroke Bridges: the ink-wash realm's course
 
-- Status: PLANNED (OP-235). A level plan: nothing here is built.
+- Status: BUILT FROM THE KIT, keepers only (OP-235): its five rooms, the brush stones, the rain and the four seals, drawn from the ink-wash kit with no new art. Not built yet: the three shortcuts (the bamboo, the ferry raft, the crane), the painter's lines and the painting's last stroke, the misty stair past the pavilion, and the reward (the scarf and the emote are stand-ins).
 - Verified against: main 503b9bf (2026-11-02); every hop re-measured with both flaps (the triple jump, OP-239) on 2026-11-04
-- Code: none yet. Built on `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts` (`hopTier`), `perches.ts` (`MAX_PERCH_TOP`, `PERCH_SLACK`), `packages/shared/src/room.ts` and `packages/shared/rooms/index.ts` (`treeLedge`, `TREE_GROUND`, `CLOSED_SIGNS`)
+- Code: `packages/shared/src/brush.ts` (the brush stones), `packages/shared/rooms/brushstrokeBridges.ts` (the rooms and the course), `apps/park/src/game/brushInk.ts` (the ink on the page). Built on `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts` (`hopTier`), `perches.ts` (`MAX_PERCH_TOP`, `PERCH_SLACK`), `packages/shared/src/room.ts` and `packages/shared/rooms/index.ts` (`treeLedge`, `TREE_GROUND`, `CLOSED_SIGNS`)
 - Tickets: OP-235, OP-239 (the triple jump: re-measured, section 9)
 - Related: `docs/levels/README.md` (the shared rules, the physics and how to read the tables), `docs/MAP.md` (the ink-wash realm's gate on level 1, section 3)
 

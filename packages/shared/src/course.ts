@@ -85,6 +85,8 @@ export interface CourseThorns {
   x1: number;
   z0: number;
   z1: number;
+  /** How the game draws it: thorns (the default), a bank of cloud mist, or a waterfall. Each is a fall all the same. */
+  look?: 'thorns' | 'mist' | 'falls';
 }
 
 export interface CourseDef {

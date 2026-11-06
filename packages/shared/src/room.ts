@@ -3,6 +3,7 @@ import type { Polygon, Rect } from './geometry';
 import type { Perch, Raised } from './perches';
 import type { Vec2 } from './protocol';
 import type { Updraft } from './updraft';
+import type { BrushStone } from './brush';
 
 /**
  * Data-driven room definition. Art is swappable: point `background` and
@@ -141,6 +142,13 @@ export interface RoomDef {
   course?: RoomCourse;
   /** In a room seen from the side: columns of rising air that lift a gliding owl (updraft.ts, OP-226). */
   updrafts?: Updraft[];
+  /**
+   * In a room seen from the side: brush stones (brush.ts, OP-235), ledges that paint fading bridges and
+   * treads of ink when an owl lands on one. Every stroke they can paint is also one of the room's perches.
+   */
+  brushStones?: BrushStone[];
+  /** Rain falls across the room (the ink-wash course's act 2): drawn by the page, and why its brush stones' ink fades sooner. */
+  weather?: 'rain';
   /**
    * Only a keeper's owl comes in (OP-224: the test course): the room server turns any other owl away at
    * its hello, and a page without a keeper's token (or the local mode in development) goes to the hub.
