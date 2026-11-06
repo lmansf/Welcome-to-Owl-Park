@@ -13,6 +13,8 @@ import { openPark, state } from './helpers';
  */
 
 const LIFTED = 3;
+/** The long bough c3 runs from 1340 to 1600; the wind over the drop starts past its end, at 1700. */
+const C3_END = 1580;
 const U11_TOP = 600;
 const C3_TOP = 540;
 const WIND_Z = 580;
@@ -80,7 +82,7 @@ test.describe('the courses’ air (OP-275)', () => {
     expect((await state(page)).course?.falls ?? 0).toBe(0);
 
     // Along the bough toward its end, then a jump and a glide east off it: the current catches it.
-    await walkTo(page, 1700);
+    await walkTo(page, C3_END);
     expect((await state(page)).air.z).toBe(C3_TOP);
     await holdJumpAndWalk(page, isMobile, 2440);
     await expect.poll(async () => (await state(page)).wind.rides, { timeout: 10_000, intervals: [50], message: `no ride: ${await seen(page)}` }).toBeGreaterThanOrEqual(1);
