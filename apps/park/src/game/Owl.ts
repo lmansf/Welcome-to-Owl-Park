@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, LIFTED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, loadFlightArt, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
@@ -707,7 +707,8 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.waddleIn = waddle?.amount ?? 0;
     // On a slope it leans a little with the ground (OP-238): cosmetic, a third of the slope's angle.
     const lean = slope ? -Math.atan(slope.grade) * SLOPE_LEAN : 0;
-    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0) + lean;
+    // Lifted by an updraft, it holds its wings spread as in a glide.
+    this.art.rotation = air.s === GLIDING || air.s === LIFTED ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0) + lean;
     const ground = this.groundUnder(this.pos, air.z);
     this.shadow.y = -ground / (OWL_SCALE * this.size);
     const up = shadowFade(air.z - ground);

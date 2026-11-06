@@ -7,7 +7,7 @@
  * Carried on, a flight comes down on the floor; a landing on a perch is told (its page knows what was
  * under the owl), and the owl stands on it until the next state.
  */
-import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, JUMP_CUT_SPEED, MAX_FALL, ON_GROUND, fall, type Air } from '@owl-park/shared';
+import { AIRBORNE, FLIGHT_STEP_MS, GLIDING, GROUNDED, LIFTED, JUMP_CUT_SPEED, MAX_FALL, ON_GROUND, fall, type Air } from '@owl-park/shared';
 
 /** How long the wings beat for a jump or a flap, and how many beats that is. */
 export const FLAP_MS = 420;
@@ -96,7 +96,7 @@ export class AirTrack {
       Object.assign(this.flown, { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 });
     }
     this.flown.peak = Math.max(this.flown.peak, c.air.z);
-    if (c.air.s === GLIDING) this.flown.glided = true;
+    if (c.air.s === GLIDING || c.air.s === LIFTED) this.flown.glided = true;
   }
 }
 
@@ -112,7 +112,7 @@ export function wingTurn(air: Air, sinceFlapMs: number, beat: WingBeat = PARK_BE
     const swing = 0.5 - 0.5 * Math.cos((2 * Math.PI * beat.beats * sinceFlapMs) / beat.ms);
     return { turn: WING_TURN.up + (WING_TURN.down - WING_TURN.up) * swing, beating: true };
   }
-  return { turn: air.s === GLIDING ? WING_TURN.glide : WING_TURN.fall, beating: false };
+  return { turn: air.s === GLIDING || air.s === LIFTED ? WING_TURN.glide : WING_TURN.fall, beating: false };
 }
 
 /** How much of its size and darkness the shadow on the floor gives up at a height: 0 on the floor, 1 from SHADOW_FULL_Z up. */

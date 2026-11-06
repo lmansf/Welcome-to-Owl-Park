@@ -72,6 +72,8 @@ export interface RoomConnection {
   course?: CourseLink;
   /** The nests on the street and in a nest, kept by the same server. */
   nests?: NestLink;
+  /** The room server's clock now (ms), as this socket has reckoned it: what the room's gusts keep time by (updraft.ts). */
+  serverNow?(): number;
   /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */
   drop?(): void;
   /** A spectator's ticket went through (OP-191): the room server takes the admitted pass in place. False: it did not, and `renew` is the fallback. */

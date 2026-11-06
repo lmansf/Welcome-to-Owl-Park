@@ -20,6 +20,7 @@
 import { landDash, type DashCharge } from './dash';
 import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
 import { MAX_PERCH_TOP, SLOPE_CATCH, type Standing } from './perches';
+import { UPDRAFT_RISE } from './updraft';
 import { WALK_SPEED } from './walk';
 
 /** One step of flight: the climb's (jump.ts). */
@@ -31,11 +32,12 @@ export const GLIDE_SINK = WALK_SPEED / GLIDE_SLOPE;
 /** How quickly spread wings bring a fall to the glide's (per second): the fall eases in, not snaps. */
 export const GLIDE_EASE = 12;
 
-/** On the ground, in the air, or gliding. */
-export type AirMode = 0 | 1 | 2;
+/** On the ground, in the air, gliding, or lifted by an updraft (updraft.ts) up to its top. */
+export type AirMode = 0 | 1 | 2 | 3;
 export const GROUNDED: AirMode = 0;
 export const AIRBORNE: AirMode = 1;
 export const GLIDING: AirMode = 2;
+export const LIFTED: AirMode = 3;
 
 /**
  * An owl's air state, the part every page shares: how high it is above the floor (room px), how fast
@@ -48,6 +50,8 @@ export interface Air {
   vz: number;
   s: AirMode;
   f: Flaps;
+  /** Lifted only: the top of the updraft it rises to and hovers at. */
+  h?: number;
 }
 
 /** Flaps an owl has left before it lands: 2, 1, 0 in the tree (the triple jump, OP-239), 1, 0 in today's park. */
@@ -116,9 +120,13 @@ export interface FlightInput {
   held: boolean;
 }
 
-/** One step of the visitor's own owl (FLIGHT_STEP_MS), with what it can do in the air. */
-export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readonly<FlightAbilities> = ALL_FLIGHT): Flier {
+/**
+ * One step of the visitor's own owl (FLIGHT_STEP_MS), with what it can do in the air. `lift` is the
+ * top of the updraft the owl is inside now, while that column is on (updraft.ts, liftAt), else null.
+ */
+export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readonly<FlightAbilities> = ALL_FLIGHT, lift: number | null = null): Flier {
   let { z, vz, s, f } = fl.air;
+  let h = fl.air.h;
   let { bufferMs, coyoteMs, rising } = fl;
   // Down a slope (OP-238): ground a step lower underfoot keeps the owl on it, at its height, never sliding.
   if (s === GROUNDED && z > ground && z - ground <= SLOPE_CATCH) z = ground;
@@ -153,7 +161,17 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readon
   if (vz <= 0) rising = false;
   if (s === AIRBORNE && can.glide && input.held && vz <= 0) s = GLIDING;
   else if (s === GLIDING && !input.held) s = AIRBORNE;
-  const air = fall({ z, vz, s, f }, FLIGHT_STEP_MS, ground);
+  // Gliding into a column that is on, the leaves carry the owl up; out of it, or Jump let go, it falls on from there.
+  if (lift !== null && input.held && (s === GLIDING || s === LIFTED)) {
+    s = LIFTED;
+    vz = UPDRAFT_RISE;
+    h = lift;
+  } else if (s === LIFTED) {
+    s = AIRBORNE;
+    vz = 0;
+  }
+  if (s !== LIFTED) h = undefined;
+  const air = fall(h === undefined ? { z, vz, s, f } : { z, vz, s, f, h }, FLIGHT_STEP_MS, ground);
   const out: Flier = { air, bufferMs, coyoteMs, rising: air.s === GROUNDED ? false : rising };
   // Standing on something again: a dash spent in the air is back (OP-224).
   if (fl.dash) out.dash = air.s === GROUNDED ? landDash(fl.dash) : fl.dash;
@@ -167,6 +185,8 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readon
 export function fall(a: Air, ms: number, ground = 0): Air {
   if (a.s === GROUNDED) return a.z === ground ? a : { ...a, z: ground };
   const dt = ms / 1000;
+  // Lifted: up at the updraft's pace to its top, and held there.
+  if (a.s === LIFTED) return { ...a, z: Math.min(a.h ?? a.z, a.z + a.vz * dt) };
   let vz = a.vz;
   if (a.s === GLIDING) vz += (-GLIDE_SINK - vz) * Math.min(1, GLIDE_EASE * dt);
   else vz = Math.max(-MAX_FALL, vz - GRAVITY * dt);
@@ -188,14 +208,15 @@ export function carryOn(a: Air, ms: number, ground = 0): Air {
 
 /** Whether two air states differ enough that the room should be told: a new mode, a flap, or a speed the other pages would not reckon. */
 export function airChanged(a: Air, b: Air): boolean {
-  return a.s !== b.s || a.f !== b.f || Math.abs(a.vz - b.vz) > 1;
+  return a.s !== b.s || a.f !== b.f || a.h !== b.h || Math.abs(a.vz - b.vz) > 1;
 }
 
 /** Whether a value has an air state's shape: two numbers, a mode and flaps it knows (0 to MAX_FLAPS). */
 export function isAirShape(v: unknown): v is Air {
   if (typeof v !== 'object' || v === null) return false;
-  const { z, vz, s, f } = v as Record<string, unknown>;
-  return typeof z === 'number' && typeof vz === 'number' && Number.isFinite(z) && Number.isFinite(vz) && (s === GROUNDED || s === AIRBORNE || s === GLIDING) && (f === 0 || f === 1 || f === 2);
+  const { z, vz, s, f, h } = v as Record<string, unknown>;
+  const lifted = s === LIFTED ? typeof h === 'number' && Number.isFinite(h) : h === undefined;
+  return typeof z === 'number' && typeof vz === 'number' && Number.isFinite(z) && Number.isFinite(vz) && (s === GROUNDED || s === AIRBORNE || s === GLIDING || s === LIFTED) && (f === 0 || f === 1 || f === 2) && lifted;
 }
 
 /**
@@ -216,6 +237,12 @@ export function checkAir(v: unknown, maxZ: number, standing: readonly Standing[]
     const hit = standing === null ? z : standing.find(fit);
     const at = hit === undefined ? undefined : typeof hit === 'number' ? hit : Math.min(hit[1], Math.max(hit[0], z));
     return at === undefined || vz !== 0 ? null : { z: Math.round(Math.max(0, at) * 10) / 10, vz: 0, s, f };
+  }
+  // Lifted: at the updraft's pace, to a top an owl may reach; which column it is in is the room's to check.
+  if (s === LIFTED) {
+    const h = v.h!;
+    if (Math.abs(vz - UPDRAFT_RISE) > 1 || h < 0 || h > maxZ || z > h + 0.5) return null;
+    return { z: Math.round(z * 10) / 10, vz: UPDRAFT_RISE, s, f, h: Math.round(h * 10) / 10 };
   }
   return { z: Math.round(z * 10) / 10, vz: Math.round(vz * 10) / 10, s, f };
 }

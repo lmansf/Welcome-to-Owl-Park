@@ -3,7 +3,7 @@ import { COURSES, ROOMS } from '../rooms';
 import { TRIAL_COURSE } from '../rooms/trialCourse';
 import { PLAY_FEATHERS_PER_DAY } from './activities';
 import { CollectionBook, MemoryCollectionStore } from './book';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseProblems, holdsDash, inPit, openerAt, shutShortcuts } from './course';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseProblems, holdsDash, inPit, inThorns, openerAt, shutShortcuts } from './course';
 import { CourseBook, MemoryCourseStore } from './coursebook';
 import { nextParkDayAt } from './parktime';
 
@@ -92,6 +92,15 @@ describe('the course book: runs and checkpoints', () => {
     expect(courses.fall(CID, 'trail-2', MON + 5)).toMatchObject({ ok: true, at: ROOMS['trail-2']!.spawns['default'] });
     courses.reach(CID, 'trail-2', 'bench', 'b4', MON + 6);
     expect(courses.fall(CID, 'trail-2', MON + 7)).toMatchObject({ ok: true, at: { x: 960, y: 450 } });
+  });
+
+  it('reads thorns hanging in a side-view act as a fall at any height inside them, and nowhere else', () => {
+    const act = { course: { id: 'x', act: 1, thorns: [{ id: 'h1', x0: 1960, x1: 2020, z0: 260, z1: 940 }] } };
+    expect(inThorns(act, 1990, 300)).toBe(true);
+    expect(inThorns(act, 1990, 940)).toBe(true);
+    expect(inThorns(act, 1990, 250)).toBe(false);
+    expect(inThorns(act, 2030, 300)).toBe(false);
+    expect(inThorns({}, 1990, 300)).toBe(false);
   });
 
   it('reads a pit as a fall, a shut shortcut as floor no owl crosses, and its opener from the far side', () => {

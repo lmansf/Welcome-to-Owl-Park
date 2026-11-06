@@ -43,6 +43,8 @@ import {
   FRESH_DASH,
   dashRefusal,
   holdsDash,
+  liftHolds,
+  LIFTED,
   landDash,
   roomDashEnd,
   spendDash,
@@ -143,7 +145,7 @@ export interface RoomOptions {
  *  - `dash`: a dash the owl could not make (OP-224: no course here, on the ground, spent this jump, too
  *    soon after the last): the owl walks on as the room had it, and its page is told so.
  */
-export type PositionRejection = 'room' | 'floor' | 'perch' | 'arrival' | 'dash';
+export type PositionRejection = 'room' | 'floor' | 'perch' | 'arrival' | 'dash' | 'lift';
 
 export const LIMITS = {
   moveBurst: MOVE_BURST,
@@ -711,6 +713,11 @@ export class Room {
     v.airTokens -= 1;
     const air = checkAir(a, this.airTop, this.standing);
     if (!air) return false;
+    // Lifted only inside a column of this room that is on, rising to its top (updraft.ts).
+    if (air.s === LIFTED && !liftHolds(this.def.updrafts, this.currentPos(v).x, air.h!, now, LIMITS.reachSlackPx)) {
+      this.opts.rejected?.(id, 'lift');
+      return false;
+    }
     // Off the ground from standing (the floor or a perch): it landed since its last dash, which is back (OP-224).
     if (air.s !== GROUNDED && !this.upAt(v, now)) v.dash = landDash(v.dash);
     // Standing up there only where a perch that high is (OP-149): the others never see an owl standing in mid-air.
@@ -772,6 +779,13 @@ export class Room {
     if (!v) return 0;
     const a = this.airOf(v);
     return groundAt(this.def.perches, this.currentPos(v), a ? carryOn(a, this.now() - a.at).z : 0);
+  }
+
+  /** How high a visitor is now (room px over the floor), its air as its page last told it, carried on. */
+  heightOf(id: string): number {
+    const v = this.visitors.get(id);
+    const a = v ? this.airOf(v) : undefined;
+    return a ? carryOn(a, this.now() - a.at).z : 0;
   }
 
   /** Whether a visitor can reach a thing that may sit up on a perch: near it, and on the same perch (or both on the floor). */

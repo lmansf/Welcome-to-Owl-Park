@@ -6,6 +6,7 @@ import {
   courseParts,
   distance,
   inPit,
+  inThorns,
   openerAt,
   sameLevel,
   shutShortcuts,
@@ -36,8 +37,8 @@ export interface CourseHost {
   hud: Hud;
   /** The course's link (null until connected). */
   link(): CourseLink | null;
-  /** Where the own owl stands, whether it is on something (not in the air), and the top it stands on (0: the floor). */
-  me(): { pos: Vec2; grounded: boolean; ground: number };
+  /** Where the own owl stands, whether it is on something (not in the air), the top it stands on (0: the floor) and its height now. */
+  me(): { pos: Vec2; grounded: boolean; ground: number; z: number };
   /** The spawn the owl came in at. */
   spawn(): string | undefined;
   /** Back to where a fall takes it: placed there, standing. */
@@ -136,7 +137,8 @@ export class Course {
     const me = this.host.me();
     const c = this.room.course;
     if (!c) return;
-    if (me.grounded && inPit(this.room, me.pos)) {
+    // Down on the floor over a pit: a fall. Up on a ledge over a drop (a course seen from the side) is not one.
+    if ((me.grounded && me.ground === 0 && inPit(this.room, me.pos)) || inThorns(this.room, me.pos.x, me.z)) {
       this.ask('fall', now, () => link.fall(), (res) => {
         if (res.at) this.host.place(res.at);
         this.falls += 1;
