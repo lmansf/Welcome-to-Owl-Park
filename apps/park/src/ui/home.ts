@@ -8,6 +8,12 @@
  * only that this device holds an owl: the park has no accounts, and nobody types a thing.
  * While the keepers have the park closed for setup (OP-233), the closed card takes the place of Play
  * and Make your owl, with their words and the time they expect to open; a keeper's tab keeps its Play.
+ *
+ * The screen reads top to bottom as one story (Nov 6): who the park is (the mascot, the name, its one line),
+ * the way in (Play, or Make your owl and Look around free on a first visit), one small line under it about
+ * tickets and who is in, and I already have an owl as a quiet link. Settings, About the park, A note for
+ * grown-ups and the grown-ups line sit in a small footer. The lead under the name is for a first visit only:
+ * an owl coming back already knows what the park is.
  */
 import type { Entry, WalletEntry } from '../net';
 import { ABOUT_WORDS, presenceLine, type InfoKind } from './about';
@@ -182,9 +188,11 @@ function css(): string {
 #hud .home{position:absolute;inset:0;z-index:4;display:grid;grid-template-columns:minmax(0,min(440px,56vw)) minmax(0,1fr);pointer-events:none}
 #hud .home[hidden]{display:none}
 #hud.covered .home{visibility:hidden}
-#hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;justify-content:safe center;gap:clamp(10px,2.2vh,16px);min-height:0;overflow-y:auto;
+#hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;min-height:0;overflow-y:auto;
   padding:max(16px,env(safe-area-inset-top)) clamp(16px,4vw,44px) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:linear-gradient(90deg,rgba(12,30,54,.9),rgba(12,30,54,.62) 72%,rgba(12,30,54,0))}
+/* The hero takes the free height's middle, and the footer keeps to the bottom (its margins give way when the side scrolls). */
+#hud .home .h-hero{display:flex;flex-direction:column;gap:clamp(10px,2.2vh,16px);margin-block:auto}
 #hud .home .h-brand{display:flex;align-items:center;gap:clamp(10px,2vw,16px);margin-bottom:clamp(4px,2.4vh,20px)}
 #hud .home .h-mascot{--m:clamp(56px,13vh,112px);flex:none;width:var(--m);height:var(--m);border-radius:50%;
   background:url(${base}home-mascot.webp) center/cover no-repeat;box-shadow:0 0 22px rgba(255,211,106,.35)}
@@ -200,11 +208,20 @@ function css(): string {
 @keyframes h-opening{0%,100%{opacity:1}50%{opacity:.72}}
 @media (prefers-reduced-motion:reduce){#hud .home .h-main[aria-busy="true"]{animation:none;opacity:.85}}
 #hud .home .h-lead{margin:0;font-size:clamp(14px,2.2vh,17px);line-height:1.4}
-#hud .home .h-welcome,#hud .home .h-presence{margin:0;font-size:14px;line-height:1.35;opacity:.92}
-#hud .home .h-presence{color:#FFD36A;opacity:1}
-#hud .home .h-info{display:flex;flex-wrap:wrap;gap:8px}
-#hud .home .h-side .h-info button{flex:1 1 auto;width:auto}
-#hud .home .h-wallet{margin:-4px 0 0;font-size:14px;line-height:1.35;text-align:center;opacity:.92}
+/* One small line under Play: the ticket line and who is in the park, side by side when both show. */
+#hud .home .h-sub{margin:-4px 0 0;font-size:13px;line-height:1.4;text-align:center;color:#F6F1E3}
+#hud .home .h-sub>span{opacity:.82}
+#hud .home .h-sub .h-presence{color:#FFD36A;opacity:.95}
+#hud .home .h-sub>span:not([hidden])~span:not([hidden])::before{content:" · ";color:#F6F1E3}
+/* Quiet links: I already have an owl under Play, and the footer's three. Still 40 px tall to tap. */
+#hud .home .h-side button.h-link{width:auto;min-height:40px;padding:8px 10px;background:none;border:0;box-shadow:none;color:#F6F1E3;
+  font-size:13px;font-weight:600;opacity:.85;text-decoration:underline;text-decoration-color:rgba(246,241,227,.35);text-underline-offset:3px}
+#hud .home .h-side button.h-link:hover{opacity:1;text-decoration-color:currentColor}
+#hud .home .h-side button.h-link:focus-visible{opacity:1;outline:2px solid #FFD36A;outline-offset:2px;border-radius:8px}
+#hud .home .h-side button.h-restore{align-self:center;margin-top:-6px;font-size:14px}
+#hud .home .h-foot{display:flex;flex-direction:column;gap:2px;padding-top:clamp(12px,3vh,24px)}
+#hud .home .h-links{display:flex;flex-wrap:wrap;margin-left:-10px}
+#hud .home .h-welcome{margin:0;font-size:12px;line-height:1.35;opacity:.62}
 #hud .home .h-note{margin:0;align-self:flex-start;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;background:rgba(123,201,80,.2);border:1px solid rgba(123,201,80,.65)}
 #hud .home .h-line{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.45)}
 #hud .home .h-line h2{margin:0;font-size:clamp(16px,2.4vh,19px);color:#FFD36A}
@@ -228,7 +245,8 @@ function css(): string {
   #hud .home h1{font-size:clamp(24px,7.4vw,32px)}
   #hud .home h1 .h-tag{font-size:13px}
   #hud .home .h-lead{font-size:14px}
-  #hud .home .h-welcome,#hud .home .h-presence{font-size:13px}
+  #hud .home .h-sub{font-size:12px}
+  #hud .home .h-welcome{font-size:11px}
 }
 `;
 }
@@ -249,6 +267,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   el.setAttribute('aria-label', HOME_WORDS.name);
   el.innerHTML = `
     <div class="h-side">
+      <div class="h-hero">
       <div class="h-brand"><span class="h-mascot" aria-hidden="true"></span><h1><span data-home-name></span> <span class="h-tag" data-home-tag></span></h1></div>
       <p class="h-lead" data-home-lead></p>
       <p class="h-note" data-home-note hidden></p>
@@ -268,15 +287,17 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
         <p class="h-small-note" data-line-ticket hidden></p>
         <p class="h-small-note" data-line-auto></p>
       </div>
-      <p class="h-wallet" data-home-wallet hidden></p>
-      <p class="h-presence" data-home-presence role="status" hidden></p>
-      <p class="h-welcome" data-home-welcome></p>
-      <button class="ghost h-small" data-home-btn="restore" hidden></button>
-      <button class="ghost h-small" data-home-btn="settings"></button>
-      <div class="h-info">
-        <button class="ghost h-small" data-home-info="about"></button>
-        <button class="ghost h-small" data-home-info="grown-ups"></button>
+      <p class="h-sub" data-home-sub hidden><span class="h-wallet" data-home-wallet hidden></span><span class="h-presence" data-home-presence role="status" hidden></span></p>
+      <button class="h-link h-restore" data-home-btn="restore" hidden></button>
       </div>
+      <footer class="h-foot">
+        <div class="h-links">
+          <button class="h-link" data-home-btn="settings"></button>
+          <button class="h-link" data-home-info="about"></button>
+          <button class="h-link" data-home-info="grown-ups"></button>
+        </div>
+        <p class="h-welcome" data-home-welcome></p>
+      </footer>
     </div>
     <div class="h-stage" data-home-stage></div>`;
   root.appendChild(el);
@@ -286,6 +307,8 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   $<HTMLElement>('[data-home-lead]').textContent = ABOUT_WORDS.homeLead;
   $<HTMLElement>('[data-home-welcome]').textContent = ABOUT_WORDS.welcome;
   const presenceEl = $<HTMLElement>('[data-home-presence]');
+  const lead = $<HTMLElement>('[data-home-lead]');
+  const sub = $<HTMLElement>('[data-home-sub]');
   const aboutBtn = $<HTMLButtonElement>('[data-home-info="about"]');
   const grownUpsBtn = $<HTMLButtonElement>('[data-home-info="grown-ups"]');
   aboutBtn.textContent = ABOUT_WORDS.aboutButton;
@@ -298,6 +321,10 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   const settings = $<HTMLButtonElement>('[data-home-btn="settings"]');
   const restore = $<HTMLButtonElement>('[data-home-btn="restore"]');
   const wallet = $<HTMLElement>('[data-home-wallet]');
+  /** The small line under Play shows while either of its parts does. */
+  const syncSub = () => {
+    sub.hidden = wallet.hidden && presenceEl.hidden;
+  };
   const noteEl = $<HTMLElement>('[data-home-note]');
   const stage = $<HTMLElement>('[data-home-stage]');
   const lineEl = $<HTMLElement>('[data-home-line]');
@@ -379,10 +406,13 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       shown = true;
       el.hidden = false;
       buttons();
+      // The lead is for a first visit: an owl coming back already knows what the park is.
+      lead.hidden = isIn;
       if (!isIn) {
         wallet.hidden = true;
         noteEl.hidden = true;
       }
+      syncSub();
       if (!shut) (isIn ? play : login).focus({ preventScroll: true });
       if (isIn) actions.stage(frame());
     },
@@ -395,6 +425,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
     setWallet(line) {
       wallet.textContent = line ?? '';
       wallet.hidden = !line || !loggedIn || waiting;
+      syncSub();
     },
     note(text) {
       noteEl.textContent = text ?? '';
@@ -409,6 +440,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       buttons();
       if (waiting) wallet.hidden = true;
       else wallet.hidden = !wallet.textContent || !loggedIn;
+      syncSub();
       if (!view) return;
       if ('message' in view) {
         // A short message in the place's spot: the turn, a turn that passed, or the park out of reach.
@@ -458,6 +490,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       const line = presenceLine(n);
       presenceEl.textContent = line ?? '';
       presenceEl.hidden = line === null;
+      syncSub();
     },
   };
 }
