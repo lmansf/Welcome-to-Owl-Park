@@ -20,7 +20,7 @@
  */
 import { isWalkable, pointInPolygon, type Polygon, type Shut } from './geometry';
 import type { Vec2 } from './protocol';
-import type { RoomDef } from './room';
+import { ROOM_H, ROOM_MAX_H, type RoomDef } from './room';
 
 export interface Perch {
   /** A name for tests and the ?boxes=1 overlay (OP-127). */
@@ -85,7 +85,7 @@ export function lowTop(perch: Pick<Perch, 'top' | 'profile'>): number {
 }
 
 /** What is wrong with a sloped perch's profile, as sentences: its points in order, each stretch flat, gentle or steep, and its top its highest. */
-export function profileProblems(perch: Perch): string[] {
+export function profileProblems(perch: Perch, limit = MAX_PERCH_TOP): string[] {
   const pts = perch.profile;
   if (!pts) return [];
   const out: string[] = [];
@@ -102,7 +102,7 @@ export function profileProblems(perch: Perch): string[] {
     const ok = rise <= 0.5 || Math.abs(run / rise - SLOPE_GENTLE) <= 0.1 || Math.abs(run / rise - SLOPE_STEEP) <= 0.1;
     if (!ok) out.push(`${perch.id} slopes ${rise} up in ${run} from x ${a.x}: not flat, gentle (1 in ${SLOPE_GENTLE}) or steep (1 in ${SLOPE_STEEP})`);
   }
-  for (const p of pts) if (p.top < 0 || p.top > MAX_PERCH_TOP) out.push(`${perch.id}'s profile is ${p.top} high at x ${p.x}, outside 0 to ${MAX_PERCH_TOP}`);
+  for (const p of pts) if (p.top < 0 || p.top > limit) out.push(`${perch.id}'s profile is ${p.top} high at x ${p.x}, outside 0 to ${limit}`);
   if (pts.length && Math.abs(Math.max(...pts.map((p) => p.top)) - perch.top) > 0.5) out.push(`${perch.id}'s top ${perch.top} is not its profile's highest`);
   return out;
 }
@@ -133,6 +133,18 @@ export const PERCH_SLACK = 4;
  * roof run, whose lantern tower has its balcony 530 up (it was 480).
  */
 export const MAX_PERCH_TOP = 540;
+
+/**
+ * The highest a perch's top may be in a room `roomH` high: MAX_PERCH_TOP in a room one screen high,
+ * and as much higher as the room is taller, so a tall room seen from the side (the hollow hall) keeps
+ * the same headroom over its highest ledge.
+ */
+export function perchTopLimit(roomH: number): number {
+  return MAX_PERCH_TOP + Math.max(0, Math.min(roomH, ROOM_MAX_H) - ROOM_H);
+}
+
+/** The highest a perch's top may be in any room: in the tallest room there may be. */
+export const TALL_PERCH_TOP = perchTopLimit(ROOM_MAX_H);
 
 type Levels = Pick<RoomDef, 'walkable' | 'perches'>;
 

@@ -29,7 +29,9 @@ reaches it (section 9).
   ledge, arch and doorway is sized from that one number: an arch is about twice the owl's height.
 - **The ground line** is room y `TREE_GROUND` (770), painted at 985 of 1152. The floor is a thin strip
   along it; what an owl stands on above it are perches (ledges), each a span of the strip and a top
-  over the ground line, at most `MAX_PERCH_TOP` (540) (`packages/shared/src/perches.ts`).
+  over the ground line, at most `MAX_PERCH_TOP` (540) (`packages/shared/src/perches.ts`). A tall
+  room seen from the side (the hollow hall) has its own ground line near its foot (its kit's
+  `ground`, read with `groundOf`) and its ledges as much higher as it is taller (`perchTopLimit`).
 - **Movement.** Jump, double flap and glide (OP-084) work everywhere; dash and pogo stay in the climb;
   the wall-kick turns on per realm where a lock needs it.
 - **Phones play the tree in landscape only** (OP-155, decision (d)); a phone held upright in a tree

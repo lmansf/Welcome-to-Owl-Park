@@ -305,7 +305,8 @@ it, so doorways, spots and walks are as before.
   perch of that height is under the owl or within `perchReachPx` of its walk (the `perch` rejection).
   The room never closes a socket over air. Nothing about flight is logged.
 - **Perches** (`packages/shared/src/perches.ts`; a room's `perches`): each an `area` on the floor
-  plan and a `top`, its height in room pixels (at most `MAX_PERCH_TOP`, 540). A `solid` perch is a
+  plan and a `top`, its height in room pixels (at most `MAX_PERCH_TOP`, 540, in a room one screen
+  high, and as much higher as a taller room is taller: `perchTopLimit`). A `solid` perch is a
   wall to an owl below its top; one that is not is walked under and jumped up through. The ground
   under an owl is the top of the highest perch at or a little above its height there (within
   `PERCH_SLACK`, 4 px), else the floor (`groundAt`). Walking at a height is walking as before, on the
@@ -383,7 +384,8 @@ tests' room server (`playwright.config.ts`).
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
 Rooms are data shared by the client and the server: a `size` (one screen is 1600 x 900; a room
-may be up to 6400 x 1800, `ROOM_MAX_W` x `ROOM_MAX_H`, and the camera follows the owl across it),
+may be up to 6400 x 4500, `ROOM_MAX_W` x `ROOM_MAX_H`, and the camera follows the owl across it
+and up it; a kit backdrop's `rows` draw it down a tall room's screens),
 `walkable` polygons, `spawns`, `doors`
 (open with `to`, or closed with an approved `closedSign`), `mood` for ambience, `spots` where
 quests hide their items, and anchors for large set pieces. NPC owls and interactables are placed

@@ -101,6 +101,7 @@ import {
   fall,
   newFlier,
   slopeUnder,
+  spawnTop,
   stepFlier,
   FRESH_DASH,
   dashEnd,
@@ -142,7 +143,7 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, TREE_GROUND, getRoom, roomFor } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor } from '../rooms';
 import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
@@ -640,6 +641,10 @@ export class RoomScene extends Phaser.Scene {
     const screen = this.registry.get('loadScreen') as LoadScreen | undefined;
     screen?.show('Opening…');
     const spawn = arrivalPoint(this.room, this.registry.get('spawnName') as string | undefined, this.cameFrom?.room, this.lane);
+    // A spawn up on a perch (a landing of the hollow hall): the owl comes in standing on it, and its
+    // height is told to the room after the welcome (retellAir).
+    const arriveTop = spawnTop(this.room, this.registry.get('spawnName') as string | undefined);
+    if (arriveTop > 0) this.flier = { ...this.flier, air: { ...this.flier.air, z: arriveTop } };
     const joining = this.join(spawn);
     // Gone before the room was built (the page went on to another scene): the room is left too.
     const leaveEarly = () => void joining.conn.then((conn) => conn.leave());
@@ -862,7 +867,7 @@ export class RoomScene extends Phaser.Scene {
     });
     // The leaves in the room's updrafts (OP-226): what shows a column, and when its gust drops.
     this.updrafts = room.updrafts?.length
-      ? new UpdraftLeaves(this, room.updrafts, room.kit?.ground ?? TREE_GROUND, 1, () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false)
+      ? new UpdraftLeaves(this, room.updrafts, groundOf(room), 1, () => (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false)
       : null;
     this.course = courseFor(room, {
       scene: this,
@@ -907,11 +912,11 @@ export class RoomScene extends Phaser.Scene {
     // under the owls, the shapes painted in front of the path over them, under the overlay.
     if (mapOf(room) === 2) {
       this.treeDress = dressTreeRoom(this, art, playTiles, {
-        ground: TREE_GROUND,
+        ground: groundOf(room),
         // A kit room's ledges carry their own edge, the cap.
         lips: !art.kit,
         // A raised front lies between the owls on ledges (drawn TREE_RAISED_BAND back) and those on the floor.
-        depths: { shade: -0.9, lip: -0.8, barrier: -0.7, front: room.size.h + 50, raised: TREE_GROUND - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
+        depths: { shade: -0.9, lip: -0.8, barrier: -0.7, front: room.size.h + 50, raised: groundOf(room) - TREE_RAISED_BAND / 2, mark: room.size.h + 60 },
         open: (door) => !this.realmClosed(this.doorTo(door)?.room),
         calm: this.calm(),
         onMarkTap: (door) => this.walkToDoorway(door.id),
@@ -1784,7 +1789,7 @@ export class RoomScene extends Phaser.Scene {
     }
     this.tweens.killTweensOf(this.upHint);
     const x = door.rect.x + door.rect.w / 2;
-    const y = TREE_GROUND - (door.top ?? 0) - UP_HINT.over * (this.room.owlScale ?? 1);
+    const y = groundOf(this.room) - (door.top ?? 0) - UP_HINT.over * (this.room.owlScale ?? 1);
     this.upHint.setPosition(x, y).setVisible(true);
     if (!this.calm()) this.tweens.add({ targets: this.upHint, y: y - UP_HINT.bob, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }

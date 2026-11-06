@@ -43,6 +43,13 @@ export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Ou
 
 /** The tree's ground line on a screen of map 2 (room px; OP-157's painting puts it at 985 of 1152). */
 export const TREE_GROUND = 770;
+/**
+ * The ground line of a room seen from the side (room px): its kit's own, else the tree's. A tall room
+ * (the hollow hall) has its ground near its own foot, ROOM_H - TREE_GROUND above it as on a screen.
+ */
+export function groundOf(room: Pick<RoomDef, 'kit'>): number {
+  return room.kit?.ground ?? TREE_GROUND;
+}
 /** Half the depth of the tree's floor strip: an owl's spot on the plan stays on the ground line. */
 const TREE_STRIP = 4;
 /**

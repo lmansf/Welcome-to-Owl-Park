@@ -19,7 +19,7 @@
  */
 import { landDash, type DashCharge } from './dash';
 import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
-import { MAX_PERCH_TOP, SLOPE_CATCH, type Standing } from './perches';
+import { SLOPE_CATCH, TALL_PERCH_TOP, type Standing } from './perches';
 import { UPDRAFT_RISE } from './updraft';
 import { WALK_SPEED } from './walk';
 
@@ -67,8 +67,11 @@ export const JUMP_RISE = (JUMP_IMPULSE * JUMP_IMPULSE) / (2 * GRAVITY);
 export const FLAP_RISE = (DOUBLE_JUMP_IMPULSE * DOUBLE_JUMP_IMPULSE) / (2 * GRAVITY);
 /** The highest a jump and both flaps, each at the top of the last, can carry an owl above what it took off from (about 371), with room to spare. */
 export const MAX_RISE = Math.ceil(JUMP_RISE + MAX_FLAPS * FLAP_RISE) + 20;
-/** The highest an owl can be in any room: a jump and both flaps from the highest top a perch may have. */
-export const MAX_AIR_Z = MAX_PERCH_TOP + MAX_RISE;
+/**
+ * The highest an owl can be in any room: a jump and both flaps from the highest top a perch may have,
+ * in the tallest room (TALL_PERCH_TOP). Each room holds its own owls to its own highest top (Room.ts).
+ */
+export const MAX_AIR_Z = TALL_PERCH_TOP + MAX_RISE;
 
 /** The visitor's own owl: its air state and the timers only its own page keeps. */
 export interface Flier {

@@ -65,6 +65,11 @@ export interface RoomDef {
   /** Named spawn points; `default` is required. */
   spawns: Record<string, Vec2>;
   /**
+   * In a room seen from the side, the height a spawn stands at when it is up on a perch (a landing of
+   * the hollow hall, by its doorway): an owl that comes in there stands on that perch. Absent, the floor.
+   */
+  spawnTops?: Record<string, number>;
+  /**
    * Doorways and interaction spots. Walking into a door with `to` changes room; a closed door
    * shows its sign; `shop` and `idol` are spots that offer the gift shop and the Realm Vote.
    * What a spot does is the client's `interactions` table in RoomScene: standing in one shows
@@ -351,6 +356,11 @@ export interface KitBackdrop {
   rate: number;
   /** The screens it is drawn on, first and last (0 is the room's west screen). */
   screens: readonly [number, number];
+  /**
+   * The rows of screens it is drawn on, first and last (0 is the room's top row): a tall room seen
+   * from the side has a row for each ROOM_H of its height. Absent, the top row only.
+   */
+  rows?: readonly [number, number];
   /** As a tile's `fade`, at each screen's edges. */
   fade?: { left?: number; right?: number };
   /** Drawn in front of the owls (the overlay). */
@@ -456,9 +466,13 @@ export interface DoorDef {
 
 export const ROOM_W = 1600;
 export const ROOM_H = 900;
-/** The biggest a room may be (four screens wide, two high): positions beyond it are refused. */
+/**
+ * The biggest a room may be (four screens wide, five high): positions beyond it are refused. Five
+ * high since the hollow hall, one room seen from the side that an owl climbs up the inside of the
+ * tree (it was two).
+ */
 export const ROOM_MAX_W = 6400;
-export const ROOM_MAX_H = 1800;
+export const ROOM_MAX_H = 4500;
 
 /** The tiles drawn behind the owls, in drawing order. */
 export function backgroundTiles(room: RoomDef): RoomTile[] {
@@ -494,6 +508,12 @@ export function tilePlacement(t: RoomTile, view: { w: number; h: number }): { x:
   const cx = t.x + ROOM_W / 2;
   const cy = t.y + ROOM_H / 2;
   return { x: cx - w / 2 - (1 - rate) * (cx - view.w / 2), y: cy - h / 2 - (1 - rate) * (cy - view.h / 2), w, h };
+}
+
+/** The height an owl comes in at by the spawn `name` (RoomDef.spawnTops): 0 on the floor. */
+export function spawnTop(room: Pick<RoomDef, 'spawnTops'>, name: string | undefined): number {
+  const key = name ?? 'default';
+  return room.spawnTops && Object.hasOwn(room.spawnTops, key) ? room.spawnTops[key]! : 0;
 }
 
 export function findSpawn(room: RoomDef, name: string | undefined): Vec2 {

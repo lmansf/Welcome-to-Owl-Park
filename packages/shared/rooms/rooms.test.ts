@@ -11,7 +11,7 @@ import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
 import { FLIGHT_STEP_MS, GLIDE_SLOPE, GROUNDED, MAX_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
-import { MAX_PERCH_TOP, PERCH_SLACK, footing, groundAt, type Raised } from '../src/perches';
+import { PERCH_SLACK, footing, groundAt, perchTopLimit, type Raised } from '../src/perches';
 import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
@@ -631,6 +631,19 @@ const PRESS: FlightInput = { pressed: true, held: true };
 const HOLD: FlightInput = { pressed: false, held: true };
 const NONE: FlightInput = { pressed: false, held: false };
 
+describe('spawns up on a perch (the hollow hall)', () => {
+  it('name a spawn of the room and stand on a perch that high there', () => {
+    for (const room of ALL_ROOMS) {
+      for (const [name, top] of Object.entries(room.spawnTops ?? {})) {
+        const at = room.spawns[name];
+        expect(at, `${room.id}: spawnTops names ${name}, no spawn of the room`).toBeDefined();
+        expect(top, `${room.id} ${name}`).toBeGreaterThan(0);
+        expect(groundAt(room.perches, at!, top), `${room.id} ${name}: a perch ${top} high there`).toBe(top);
+      }
+    }
+  });
+});
+
 describe('perches (OP-084)', () => {
   it('stand in the room, drawn inside it, no higher than a perch may be, each by a floor or a perch to jump from', () => {
     for (const room of ALL_ROOMS) {
@@ -640,7 +653,7 @@ describe('perches (OP-084)', () => {
         ids.add(p.id);
         expect(p.area.length, p.id).toBeGreaterThanOrEqual(3);
         expect(p.top, p.id).toBeGreaterThan(0);
-        expect(p.top, p.id).toBeLessThanOrEqual(MAX_PERCH_TOP);
+        expect(p.top, p.id).toBeLessThanOrEqual(perchTopLimit(room.size.h));
         for (const v of p.area) {
           expect(v.x >= 0 && v.x <= room.size.w && v.y <= room.size.h, `${p.id} ${v.x},${v.y}`).toBe(true);
           expect(v.y - p.top, `${p.id}: its top is drawn above the room`).toBeGreaterThanOrEqual(0);
