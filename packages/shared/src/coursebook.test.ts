@@ -98,6 +98,15 @@ describe('the course book: runs and checkpoints', () => {
     expect(courses.fall(CID, 'trail-2', MON + 7)).toMatchObject({ ok: true, at: { x: 960, y: 450 } });
   });
 
+  it('sends a fall at a bench up on a ledge back onto the ledge, not the pit floor under it', () => {
+    const { courses } = setup();
+    expect(courses.start(CID, 'brush-1', MON).ok).toBe(true);
+    // A bench on the ground: no height, as before.
+    expect(courses.fall(CID, 'brush-1', MON + 1)).not.toHaveProperty('top');
+    courses.reach(CID, 'brush-1', 'bench', 'bench-1', MON + 2);
+    expect(courses.fall(CID, 'brush-1', MON + 3)).toMatchObject({ ok: true, at: { x: 1500 }, top: 360 });
+  });
+
   it('reads thorns hanging in a side-view act as a fall at any height inside them, and nowhere else', () => {
     const act = { course: { id: 'x', act: 1, thorns: [{ id: 'h1', x0: 1960, x1: 2020, z0: 260, z1: 940 }] } };
     expect(inThorns(act, 1990, 300)).toBe(true);

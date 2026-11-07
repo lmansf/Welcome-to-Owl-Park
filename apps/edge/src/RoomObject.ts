@@ -1089,8 +1089,8 @@ export class RoomObject extends DurableObject<Env> {
           if (!pit && !thorny) return no('far');
           const res = await stub.courseFall(cid, att.room);
           if (!res.ok) return no(res.reason);
-          room.place(att.id, res.at);
-          return this.send(ws, { t: 'course', r, a, ok: true, view: res.view, at: res.at });
+          room.place(att.id, res.at, res.top);
+          return this.send(ws, { t: 'course', r, a, ok: true, view: res.view, at: res.at, ...(res.top ? { top: res.top } : {}) });
         }
         case 'finish': {
           const shrine = def.course?.shrine;

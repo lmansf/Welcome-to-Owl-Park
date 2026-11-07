@@ -555,7 +555,7 @@ export interface ServerAdmitted {
  * room tells the others with a move), for `finish` what the shrine paid. `far`: the owl is not where
  * the piece is. A spectator's run is practice (coursebook.ts): it is answered as anyone's.
  */
-export type ServerCourse = { t: 'course'; r: number; a: CourseAct } & ({ ok: true; view: CourseView; first?: boolean; at?: Vec2; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' });
+export type ServerCourse = { t: 'course'; r: number; a: CourseAct } & ({ ok: true; view: CourseView; first?: boolean; at?: Vec2; top?: number; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' });
 /** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
 export interface ServerRealms {
   t: 'realms';
