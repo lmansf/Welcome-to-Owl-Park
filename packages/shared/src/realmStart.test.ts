@@ -49,7 +49,7 @@ describe("every realm's start, one screen from above (OP-276)", () => {
         expect(back!.id).toBe('to-hub');
         expect(back!.to).toEqual({ room: 'hub', spawn: 'from-glass' });
         expect(back!.toTree).toEqual({ room: 'l3', spawn: 'glass' });
-        expect(back!.toNew).toEqual({ room: 'commons-glass', spawn: 'from-realm' });
+        expect(back!.toNew).toEqual({ room: 'm3-hall', spawn: 'from-glass' });
         expect(idol!.id).toBe('idol');
         expect(idol!.rect).toEqual(START_VOTE);
         expect(on!.id).toBe('portal');

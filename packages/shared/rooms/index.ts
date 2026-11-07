@@ -10,7 +10,7 @@ import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
 import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
 import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
-import { HALL_ID, HALL_LEVELS, HALL_ROOM, hallSpawn, type HallLevel } from './hollowHall';
+import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
 import type { CourseDef } from '../src/course';
 import { realmStart, realmStartAnchors } from '../src/realmStart';
 
@@ -1554,71 +1554,13 @@ ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
 // The side-view copy of the tree's arcade the cavern led to before OP-283; nothing leads in now.
 ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
 
-// ---- The hollow hall and its four Commons (hollowHall.ts) ----
+// ---- The Great Hollow (hollowHall.ts) ----
 //
-// The hall is one tall room inside the trunk, a landing a level; each landing's doorway opens on its
-// level's Commons, a round hall in the hollow with the realm's idol, out through its back arch to the
-// realm. Each Commons is the hub's floor under the hub's own painting, copied as commons-west, commons
-// and commons-east (the hub is to be painted as the Party Grove's clearing), until each Commons' own
-// middle screen is painted (the art order's line 9: commons-glass and the others). The hub's painting
-// has four arches: the realm's is the east one, the others are closed, and the clearing's west one
-// leads out to the Updraft Canopy. The ink-wash realm has no room yet: its arch is closed.
+// The inside of the tree, one room seen from above with the four Commons side by side in it (Nov 7,
+// the owner's "Build the big room"), in place of the tall hall seen from the side with a Commons behind
+// a door on each landing.
 
 ROOMS[HALL_ROOM.id] = HALL_ROOM;
-
-/** What each level's Commons opens on: its realm (by the hub's east arch) and the realm its idol votes for. */
-const COMMONS_OF: Readonly<Record<HallLevel, { realm?: { room: string; spawn: string }; votesFor?: string; course?: { room: string; spawn: string } }>> = {
-  glass: { realm: at('glass', 'from-hub'), votesFor: 'glass' },
-  // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
-  ink: { course: at('brush-1', 'from-gate') },
-  grove: { realm: at('grove', 'default'), votesFor: 'grove', course: at('canopy-1', 'from-gate') },
-  market: { realm: at('market', 'default'), votesFor: 'market', course: at('circuit-1', 'from-gate') },
-};
-
-function commonsRoom(id: string, level: HallLevel): RoomDef {
-  const hub = ROOMS['hub']!;
-  const of = COMMONS_OF[level];
-  const arch = (name: string) => hub.doors.find((d) => d.id === name)!.rect;
-  const closed = (doorId: string, rect: DoorDef['rect'], marker: Vec2): DoorDef => ({ id: doorId, rect, closedSign: 'Not Yet Fledged', marker });
-  const doors: DoorDef[] = [
-    // The way out, where the hub's is: back to this level's landing in the hall.
-    { id: 'out', rect: arch('to-lobby'), to: at(HALL_ROOM.id, hallSpawn(level)), marker: { x: 2400, y: 872 } },
-    of.realm
-      ? { id: 'to-realm', rect: arch('to-glass'), to: of.realm, marker: { x: 2665, y: 560 } }
-      : { id: 'to-realm', rect: arch('to-glass'), closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
-    closed('arch-west', arch('to-grove'), { x: 1765, y: 640 }),
-    // The course's trail gate, open to every owl (OP-285).
-    of.course ? { id: 'to-course', rect: arch('closed-a'), to: of.course, marker: { x: 2145, y: 560 } } : closed('arch-middle', arch('closed-a'), { x: 2145, y: 668 }),
-    closed('arch-east', arch('to-market'), { x: 3015, y: 650 }),
-    // The idol's gathering spot, a little west of the hollow's middle (where the Commons' own painting has its plinth).
-    ...(of.votesFor ? [{ id: 'idol', rect: { x: 2140, y: 740, w: 200, h: 80 }, marker: { x: 2240, y: 780 } }] : []),
-  ];
-  return {
-    ...hub,
-    id,
-    ...(of.votesFor ? { votesFor: of.votesFor } : {}),
-    background: 'commons',
-    backgrounds: [
-      { key: 'commons-west', x: 0, y: 0 },
-      { key: 'commons', x: ROOM_W, y: 0 },
-      { key: 'commons-east', x: 2 * ROOM_W, y: 0 },
-    ],
-    foregrounds: [],
-    // The hub's hiding spots, less any by a doorway of the Commons' own (the idol's gathering spot).
-    ...(hub.spots ? { spots: hub.spots.filter((s) => doors.every((d) => rectGap(d.rect, s) >= 60)) } : {}),
-    spawns: { default: { x: 2400, y: 730 }, 'from-hall': { x: 2400, y: 820 }, 'from-realm': { x: 2665, y: 740 }, ...(of.course ? { 'from-course': { x: 2145, y: 740 } } : {}) },
-    doors,
-  };
-}
-
-/** How far a point is from a rectangle's nearest edge (0 inside it). */
-function rectGap(r: { x: number; y: number; w: number; h: number }, p: { x: number; y: number }): number {
-  const dx = Math.max(r.x - p.x, 0, p.x - (r.x + r.w));
-  const dy = Math.max(r.y - p.y, 0, p.y - (r.y + r.h));
-  return Math.hypot(dx, dy);
-}
-
-for (const l of HALL_LEVELS) ROOMS[l.commons] = commonsRoom(l.commons, l.level);
 
 /**
  * The new map's ways out of today's top-down rooms (DoorDef.toNew), by room and door: each realm's way out
@@ -1628,11 +1570,11 @@ for (const l of HALL_LEVELS) ROOMS[l.commons] = commonsRoom(l.commons, l.level);
  */
 const NEW_MAP_WAYS: Readonly<Record<string, Readonly<Record<string, { room: string; spawn: string }>>>> = {
   // Switched on (Nov 6, the owner's "Switch it on"): through the turnstiles down the knothole into the
-  // hollow hall, each realm's way out back into its Commons, and the Party Grove's way into the trunk.
+  // Great Hollow, each realm's way out back into its Commons there, and the Party Grove's way into the trunk.
   lobby: { gate: at(HALL_ID, 'from-lobby') },
-  glass: { 'to-hub': at('commons-glass', 'from-realm') },
-  grove: { 'to-hub': at('commons-grove', 'from-realm') },
-  market: { 'to-hub': at('commons-market', 'from-realm') },
+  glass: { 'to-hub': at(HALL_ID, fromRealm('glass')) },
+  grove: { 'to-hub': at(HALL_ID, fromRealm('grove')) },
+  market: { 'to-hub': at(HALL_ID, fromRealm('market')) },
   hub: { 'to-lobby': at(HALL_ID, 'from-party') },
 };
 for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
@@ -1734,10 +1676,8 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   grove: { guardian: { x: 2400, y: 430 }, gathering: { x: 2400, y: 612 } },
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
   glass: realmStartAnchors(),
-  // The idols in the hollow hall's Commons, each just behind its Realm Vote spot (the `idol` door).
-  'commons-glass': { idol: { x: 2240, y: 735 } },
-  'commons-grove': { guardian: { x: 2240, y: 735 }, gathering: { x: 2240, y: 780 } },
-  'commons-market': { robot: { x: 2240, y: 735 } },
+  // The idols in the Great Hollow's Commons, each just behind its Realm Vote spot (RoomDef.idols).
+  [HALL_ID]: HALL_ANCHORS,
 };
 
 /** A realm's guardian: the owl over its Realm Vote spot (the `idol` door). */

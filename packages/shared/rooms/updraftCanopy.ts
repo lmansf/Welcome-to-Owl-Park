@@ -14,6 +14,7 @@
  *
  * Every ledge is the plan's: `x` its west end, `w` its width, `top` its height over the ground line.
  */
+import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type KitBackdrop, type KitDecal, type KitLedge, type DoorDef, type RoomDef, type RoomKit } from '../src/room';
@@ -295,7 +296,7 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
   'canopy-1': canopyRoom('canopy-1', 3, CANOPY_1, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-roots': { x: 4480, y: G }, 'from-trunk': { x: 4660, y: G } },
     doors: [
-      door('to-commons', 40, { room: 'commons-grove', spawn: 'from-course' }, { way: 'down' }),
+      door('to-commons', 40, { room: HALL_ID, spawn: fromCourse('grove') }, { way: 'down' }),
       door('roots', 4560, { room: 'canopy-roots', spawn: 'from-roots' }, { w: 60 }),
       door('to-trunk', 4740, { room: 'canopy-2a', spawn: 'from-below' }, { w: 60, way: 'up' }),
     ],
@@ -364,7 +365,7 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
   }),
   'canopy-hut': canopyRoom('canopy-hut', 1, HUT, {
     spawns: { default: { x: 240, y: G }, 'from-deck': { x: 240, y: G } },
-    doors: [door('out', 80, { room: 'commons-grove', spawn: 'from-course' }, { w: 60, way: 'down' })],
+    doors: [door('out', 80, { room: HALL_ID, spawn: fromCourse('grove') }, { w: 60, way: 'down' })],
     course: { act: 3, shrine: piece('shrine', 600) },
   }),
 }));
@@ -374,7 +375,7 @@ export const CANOPY_COURSE: CourseDef = inRealmKit('clearing', {
   objective: 'bells',
   acts: ['canopy-1', 'canopy-2a', 'canopy-3'],
   rooms: ['canopy-roots', 'canopy-2b', 'canopy-2c', 'canopy-hut'],
-  gate: { room: 'commons-grove', door: 'to-course', spawn: 'from-gate' },
+  gate: { room: HALL_ID, door: courseDoor('grove'), spawn: 'from-gate' },
   exit: { room: 'canopy-hut', door: 'out' },
   // Stand-ins from the catalogue until the course has its own item; clearing every course pays the Golden Mouse (coursebook.ts).
   item: 'leaf-crown~0',

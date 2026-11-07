@@ -18,10 +18,10 @@
  *   doorway's height; a barrier or a prop stands on its height the same way, a decal where placed.
  * - The backdrops are the room's tiles (kitRoom), so their parallax and fades are a painted room's.
  */
-import { pointInPolygon } from './geometry';
+import { pointInPolygon, pointInRect } from './geometry';
 import { KIT_ART, kitGroup, type KitArtSpec, type KitTile } from './kitArt';
 import { SLOPE_GENTLE, SLOPE_STEEP, profileProblems, type Perch, type ProfilePoint } from './perches';
-import { ROOM_H, ROOM_W, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
+import { ROOM_H, ROOM_W, mapOf, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
 import { perchTiers } from './routes';
 
 /** How deep a ledge's mid is drawn when the ledge does not say (room px). */
@@ -725,6 +725,23 @@ export function kitProblems(room: RoomDef): string[] {
 
   // Rolling ground (OP-238): each hill stood on as its profile, its pieces fit for their angles, its ends met.
   for (const h of kit.hills ?? []) out.push(...kitHillProblems(room, h));
+
+  // A room seen from above (the Great Hollow) is walked across its floor polygons, not along a ground
+  // line, and has no paths: every bit of its floor is drawn by a surface of the kit.
+  if (mapOf(room) !== 2 && !kit.paths?.length) {
+    for (const poly of room.walkable) {
+      const xs = poly.map((p) => p.x);
+      const ys = poly.map((p) => p.y);
+      const bare = (x: number, y: number) => pointInPolygon({ x, y }, poly) && !(kit.surfaces ?? []).some((s) => pointInRect({ x, y }, s.rect));
+      search: for (let x = Math.min(...xs); x <= Math.max(...xs); x += 16)
+        for (let y = Math.min(...ys); y <= Math.max(...ys); y += 16)
+          if (bare(x, y)) {
+            out.push(`the floor at ${Math.round(x)}, ${Math.round(y)} is walked but not drawn`);
+            break search;
+          }
+    }
+    return [...out, ...kitSceneProblems(room)];
+  }
 
   // The floor an owl walks is drawn.
   const floorPaths = (kit.paths ?? []).filter((p) => p.top === 0);

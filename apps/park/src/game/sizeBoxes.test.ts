@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { KIT_ART, KIT_SLOT_SPECS, NEW_MAP, NEW_MAP_COMMONS, NEW_MAP_HALL } from '@owl-park/shared';
+import { KIT_ART, KIT_SLOT_SPECS, NEW_MAP, NEW_MAP_HALL } from '@owl-park/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ART, drawnAsSizeBox, loadArtKey, roomOpeningArt, sharpCopy, useSizeBoxes } from './art';
 import { drawnRoom } from './kitView';
@@ -144,7 +144,7 @@ describe('size boxes (?sizes=1)', () => {
 
   it('cover every piece of map art the new map opens with', () => {
     useSizeBoxes(true);
-    const rooms = [...Object.keys(NEW_MAP), ...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'lobby', 'homes', 'hub'];
+    const rooms = [...Object.keys(NEW_MAP), ...NEW_MAP_HALL, 'lobby', 'homes', 'hub'];
     const left: string[] = [];
     for (const id of rooms) {
       const room = roomFor(id);

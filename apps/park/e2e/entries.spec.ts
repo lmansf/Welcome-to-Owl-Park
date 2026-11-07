@@ -77,7 +77,7 @@ test.describe('the entries setting (OP-156)', () => {
     await page.context().close();
   });
 
-  test('an owl the tree takes walks the new map: out of its nest onto the nests’ street, to the Treetop Commons, and through the turnstiles down the knothole into the hollow hall', async ({ browser, request }) => {
+  test('an owl the tree takes walks the new map: out of its nest onto the nests’ street, to the Treetop Commons, and through the turnstiles down the knothole into the Great Hollow', async ({ browser, request }) => {
     test.slow(); // a visit through the room server across three rooms, drawn with software WebGL
     await share(request, 100);
     const page = await newOwlPlays(browser);
@@ -92,14 +92,12 @@ test.describe('the entries setting (OP-156)', () => {
     expect(await door('gate')).toBe('m3-hall');
     await walkToDoor(page, 'gate');
     await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('m3-hall');
-    // In at the knothole and drawn there, where the camera looks, before any key is pressed (OP-277).
+    // In at the knothole on the Great Hollow's floor, seen from above (Nov 7), and drawn there below the
+    // owl count (and, on a touch screen, the Menu and Say), not under them (OP-278).
     const arrived = await state(page);
-    expect(arrived.air.z).toBeGreaterThan(0);
-    expect(arrived.height).toBe(arrived.air.z);
-    // The knothole's doorway is at the hall's top edge: the camera stops with that edge below the owl
-    // count (and, on a touch screen, the Menu and Say up there), not under them (OP-278).
+    expect(Math.abs(arrived.pos.x - 3030)).toBeLessThan(120);
     await settleCamera(page);
-    const roomTop = (await toScreen(page, 0, 0)).y;
+    const owlOnScreen = await toScreen(page, arrived.pos.x, arrived.pos.y);
     const hudTop = await page.evaluate(() =>
       Math.max(
         0,
@@ -109,8 +107,7 @@ test.describe('the entries setting (OP-156)', () => {
           .map((r) => r.bottom),
       ),
     );
-    expect(hudTop).toBeGreaterThan(0);
-    expect(roomTop).toBeGreaterThanOrEqual(hudTop - 1);
+    expect(owlOnScreen.y).toBeGreaterThan(hudTop);
     await online(page);
     await page.context().close();
   });

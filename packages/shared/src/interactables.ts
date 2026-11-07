@@ -68,16 +68,10 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'm3-ground-leaves-roof', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 3900, y: 770 }, top: 350 },
   // Down the root stair, the leaves that fall through the roots settle on the log ledge on the trunk.
   { id: 'm3-under-leaves-ledge', kind: 'leaf-pile', room: 'm3-under', pos: { x: 2070, y: 770 }, top: 264 },
-  // The hollow hall (keepers only): leaves blown in at the knothole come down the hollow, and the two
-  // nooks off the climb catch them; each nook is a hop off the way up with nothing else in it.
-  { id: 'm3-hall-leaves-nook-east', kind: 'leaf-pile', room: 'm3-hall', pos: { x: 1380, y: 4370 }, top: 1230 },
-  { id: 'm3-hall-leaves-nook-west', kind: 'leaf-pile', room: 'm3-hall', pos: { x: 320, y: 4370 }, top: 2050 },
-  // Each Commons has the hub's two piles, where its hub floor and root beam have them: one by the way
-  // in from the west wing, one up on the beam.
-  ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level): InteractableDef[] => [
-    { id: `commons-${level}-leaves-1`, kind: 'leaf-pile', room: `commons-${level}`, pos: { x: 1930, y: 820 } },
-    { id: `commons-${level}-leaves-beam`, kind: 'leaf-pile', room: `commons-${level}`, pos: { x: 930, y: 696 }, top: 264 },
-  ]),
+  // The Great Hollow: leaves blown in at the knothole drift to the front of each Commons, one pile a
+  // Commons, between its realm's doorway and its idol, and one more by the root stair's hatch.
+  ...(['glass', 'ink', 'grove', 'market'] as const).map((level, i): InteractableDef => ({ id: `m3-hall-leaves-${level}`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 560, y: 820 } })),
+  { id: 'm3-hall-leaves-hatch', kind: 'leaf-pile', room: 'm3-hall', pos: { x: 3420, y: 830 } },
   // A realm's start (OP-276, realmStart.ts): the wind off its course blows leaves in at the way on, and
   // they pile against the trading nest, where an owl can browse what the realm has.
   { id: 'glass-leaves-start', kind: 'leaf-pile', room: 'glass', pos: { ...START_LEAVES } },

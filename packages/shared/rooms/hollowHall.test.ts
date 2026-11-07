@@ -1,110 +1,86 @@
 import { describe, expect, it } from 'vitest';
+import { doorTarget } from '../src/doorways';
+import { pointInPolygon } from '../src/geometry';
 import { INTERACTABLES } from '../src/interactables';
 import { kitProblems } from '../src/kit';
-import { groundAt, perchTopLimit } from '../src/perches';
-import { mapOf, spawnTop } from '../src/room';
-import { perchTiers } from '../src/routes';
-import { HALL_GROUND, HALL_H, HALL_ID, HALL_LEVELS, HALL_LIFT, HALL_ROOM, KNOT_TOP, hallSpawn } from './hollowHall';
+import { idolRealms, mapOf, voteRealmAt } from '../src/room';
+import { HALL_BACK, HALL_COMMONS, HALL_FRONT, HALL_ID, HALL_MIDDLE, HALL_ROOM, HALL_W, commonsX, courseDoor, fromCourse, fromRealm, idolAt, realmDoor, voteDoor } from './hollowHall';
 import { ANCHORS, ROOMS, TREE_REALMS } from './index';
 
 const hall = ROOMS[HALL_ID]!;
 const doorOf = (id: string) => hall.doors.find((d) => d.id === id)!;
+const onFloor = (p: { x: number; y: number }) => hall.walkable.some((poly) => pointInPolygon(p, poly));
+const middle = (id: string) => {
+  const r = doorOf(id).rect;
+  return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+};
+/** Where a room's ways lead on the new map (doorTarget with map 3). */
+const leadsTo = (room: string) => ROOMS[room]!.doors.map((d) => doorTarget(d, 3)).filter((t) => t !== undefined);
 
-describe('the hollow hall (Nov 6)', () => {
-  it('is open to every owl, five screens high, seen from the side, with nothing wrong in its kit', () => {
+describe('the Great Hollow (Nov 7)', () => {
+  it('is one top-down room, four screens wide, open to every owl, with nothing wrong in its kit', () => {
     expect(hall).toBe(HALL_ROOM);
     expect(hall.keeperOnly).toBeUndefined();
-    expect(mapOf(hall)).toBe(2);
-    expect(hall.size.h).toBe(HALL_H);
-    expect(hall.kit!.ground).toBe(HALL_GROUND);
+    expect(mapOf(hall)).not.toBe(2);
+    expect(hall.size.w).toBe(HALL_W);
     expect(kitProblems(hall)).toEqual([]);
-    for (const p of hall.perches ?? []) expect(p.top, p.id).toBeLessThanOrEqual(perchTopLimit(hall.size.h));
     expect(TREE_REALMS.has(HALL_ID)).toBe(false);
   });
 
-  it('has a landing a level, top to bottom glass, ink, the clearing and neon, on alternate sides, and the knothole over them', () => {
-    expect(HALL_LEVELS.map((l) => l.level)).toEqual(['glass', 'ink', 'grove', 'market']);
-    expect(HALL_LEVELS.map((l) => l.side)).toEqual(['west', 'east', 'west', 'east']);
-    const tops = (hall.perches ?? []).filter((p) => p.id.startsWith('landing-')).map((p) => [p.id, p.top]);
-    expect(Object.fromEntries(tops)).toEqual({ 'landing-market': 820, 'landing-grove': 1640, 'landing-ink': 2460, 'landing-glass': 3280, 'landing-knot': KNOT_TOP });
+  it('sets the four Commons side by side, west to east glass, ink, the clearing and neon, and leaves no old Commons rooms', () => {
+    expect(HALL_COMMONS.map((c) => c.level)).toEqual(['glass', 'ink', 'grove', 'market']);
+    expect(HALL_COMMONS.map((c) => commonsX(c.level))).toEqual([0, HALL_W / 4, HALL_W / 2, (3 * HALL_W) / 4]);
+    for (const level of ['glass', 'ink', 'grove', 'market']) expect(ROOMS[`commons-${level}`], level).toBeUndefined();
   });
 
-  it('reaches every shelf and landing by the climb, and the column of air lifts a glider to the knothole', () => {
-    const tiers = perchTiers(hall);
-    for (const [ledge, tier] of Object.entries(tiers)) expect(tier, ledge).not.toBeNull();
-    // The climb alone still reaches every landing: the column is the quick way, not the only way.
-    const climbOnly = perchTiers({ ...hall, updrafts: [] });
-    for (const l of ['landing-market', 'landing-grove', 'landing-ink', 'landing-glass', 'landing-knot']) expect(climbOnly[l], l).not.toBeNull();
-    expect(HALL_LIFT.top).toBeGreaterThan(KNOT_TOP);
+  it('gives every spawn floor to stand on, and every doorway a bit of floor to step into', () => {
+    for (const [name, at] of Object.entries(hall.spawns)) expect(onFloor(at), name).toBe(true);
+    for (const d of hall.doors) expect(onFloor(middle(d.id)) || onFloor(d.marker!), d.id).toBe(true);
   });
 
-  it("stands each landing's doorway on its landing, by the trunk's wall, into its own Commons, and the Commons lead back to it", () => {
-    for (const l of HALL_LEVELS) {
-      const d = doorOf(`to-${l.level}`);
-      expect(d.top, l.level).toBe(l.top);
-      const mid = d.rect.x + d.rect.w / 2;
-      expect(groundAt(hall.perches, { x: mid, y: HALL_GROUND }, l.top), l.level).toBe(l.top);
-      expect(d.to).toEqual({ room: l.commons, spawn: 'from-hall' });
-      const commons = ROOMS[l.commons]!;
-      expect(commons.keeperOnly, l.commons).toBeUndefined();
-      expect(commons.spawns['from-hall'], l.commons).toBeDefined();
-      expect(commons.doors.find((x) => x.id === 'out')!.to).toEqual({ room: HALL_ID, spawn: hallSpawn(l.level) });
+  it("opens each Commons on its realm and its course, and shuts the ways that aren't there yet with a sign", () => {
+    for (const c of HALL_COMMONS) {
+      const realm = doorOf(realmDoor(c.level));
+      const course = doorOf(courseDoor(c.level));
+      expect(realm.to, c.level).toEqual(c.realm);
+      expect(course.to, c.level).toEqual(c.course);
+      expect(!!realm.closedSign, c.level).toBe(!c.realm);
+      expect(!!course.closedSign, c.level).toBe(!c.course);
+      for (const way of [c.realm, c.course]) if (way) expect(ROOMS[way.room]?.spawns[way.spawn], way.room).toBeDefined();
     }
-    expect(doorOf('up').top).toBe(KNOT_TOP);
-    expect(doorOf('up').way).toBe('up');
-    expect(doorOf('down').way).toBe('down');
-    expect(doorOf('down').rect.x).toBeLessThan(doorOf('to-party').rect.x);
+    expect(doorOf(realmDoor('ink')).closedSign).toBe('Hatching Soon');
+    expect(doorOf(courseDoor('glass')).closedSign).toBe('Not Yet Fledged');
   });
 
-  it('brings an owl out of a Commons standing on its landing, and down from the knothole on the top landing', () => {
-    for (const l of HALL_LEVELS) {
-      const name = hallSpawn(l.level);
-      expect(spawnTop(hall, name), name).toBe(l.top);
-      expect(groundAt(hall.perches, hall.spawns[name]!, l.top), name).toBe(l.top);
+  it('brings an owl back from each realm and course to its own doorway', () => {
+    for (const c of HALL_COMMONS) {
+      if (c.realm) expect(leadsTo(c.realm.room), c.level).toContainEqual({ room: HALL_ID, spawn: fromRealm(c.level) });
+      if (c.course) expect(leadsTo(c.course.room), c.level).toContainEqual({ room: HALL_ID, spawn: fromCourse(c.level) });
     }
-    expect(spawnTop(hall, 'from-lobby')).toBe(KNOT_TOP);
-    expect(groundAt(hall.perches, hall.spawns['from-lobby']!, KNOT_TOP)).toBe(KNOT_TOP);
-    for (const floor of ['default', 'from-under', 'from-party']) expect(spawnTop(hall, floor), floor).toBe(0);
   });
 
-  it('ends each nook off the climb in a leaf pile, up on its shelf', () => {
+  it('stands an idol over a Realm Vote spot in each Commons of a voted realm, and none in the ink-wash Commons', () => {
+    expect(idolRealms(hall)).toEqual(['glass', 'grove', 'market']);
+    for (const realm of ['glass', 'grove', 'market'] as const) {
+      expect(voteRealmAt(hall, voteDoor(realm)), realm).toBe(realm);
+      expect(onFloor(middle(voteDoor(realm))), realm).toBe(true);
+      // The idol stands on its base, off the floor, so owls walk round it.
+      expect(onFloor(idolAt(realm)), realm).toBe(false);
+    }
+    expect(hall.doors.some((d) => d.id === voteDoor('ink'))).toBe(false);
+    expect(voteRealmAt(hall, 'idol')).toBeNull();
+    expect(Object.keys(ANCHORS[HALL_ID] ?? {}).sort()).toEqual(['gathering', 'guardian', 'idol', 'robot']);
+  });
+
+  it('keeps the ways up, out and down together in the middle, and a leaf pile in each Commons', () => {
+    expect(doorOf('up').to).toEqual({ room: 'lobby', spawn: 'from-hub' });
+    expect(doorOf('to-party').to).toEqual({ room: 'hub', spawn: 'default' });
+    expect(doorOf('down').to).toEqual({ room: 'm3-under', spawn: 'from-l1' });
+    for (const id of ['up', 'to-party', 'down']) expect(Math.abs(middle(id).x - HALL_MIDDLE), id).toBeLessThan(250);
+    expect(middle('down').y).toBeGreaterThan(HALL_FRONT - 60);
+    expect(middle('up').y).toBeLessThan(HALL_BACK + 40);
     const piles = INTERACTABLES.filter((t) => t.room === HALL_ID);
-    expect(piles.map((p) => p.id).sort()).toEqual(['m3-hall-leaves-nook-east', 'm3-hall-leaves-nook-west']);
-    for (const p of piles) expect(groundAt(hall.perches, p.pos, p.top ?? 0), p.id).toBe(p.top);
-  });
-});
-
-describe("the hollow hall's four Commons", () => {
-  it('stand an idol over the Realm Vote in each Commons of a voted realm, and none in the ink-wash Commons', () => {
-    expect(ROOMS['commons-glass']!.votesFor).toBe('glass');
-    expect(ROOMS['commons-grove']!.votesFor).toBe('grove');
-    expect(ROOMS['commons-market']!.votesFor).toBe('market');
-    expect(ROOMS['commons-ink']!.votesFor).toBeUndefined();
-    expect(ROOMS['commons-ink']!.doors.some((d) => d.id === 'idol')).toBe(false);
-    for (const id of ['commons-glass', 'commons-grove', 'commons-market']) {
-      const idol = ROOMS[id]!.doors.find((d) => d.id === 'idol');
-      expect(idol, id).toBeDefined();
-      expect(Object.keys(ANCHORS[id] ?? {}).length, id).toBeGreaterThan(0);
-    }
-  });
-
-  it("lead to their realms where a realm is open, the clearing's middle arch to the Updraft Canopy, and keep the ink-wash arch shut", () => {
-    expect(ROOMS['commons-glass']!.doors.find((d) => d.id === 'to-realm')!.to?.room).toBe('glass');
-    expect(ROOMS['commons-grove']!.doors.find((d) => d.id === 'to-realm')!.to?.room).toBe('grove');
-    expect(ROOMS['commons-market']!.doors.find((d) => d.id === 'to-realm')!.to?.room).toBe('market');
-    const ink = ROOMS['commons-ink']!.doors.find((d) => d.id === 'to-realm')!;
-    expect(ink.to).toBeUndefined();
-    expect(ink.closedSign).toBeDefined();
-    const course = ROOMS['commons-grove']!.doors.find((d) => d.id === 'to-course')!;
-    expect(course.to).toEqual({ room: 'canopy-1', spawn: 'from-gate' });
-    // The course is open to every owl (OP-285): no sign on its arch, and the hut's way out leads back here too.
-    expect(ROOMS['canopy-1']!.keeperOnly).toBeUndefined();
-    expect(course.closedSign).toBeUndefined();
-    expect(ROOMS['canopy-1']!.doors.find((d) => d.id === 'to-commons')!.to).toEqual({ room: 'commons-grove', spawn: 'from-course' });
-    expect(ROOMS['canopy-hut']!.doors.find((d) => d.id === 'out')!.to).toEqual({ room: 'commons-grove', spawn: 'from-course' });
-  });
-
-  it("draw the Commons' own screens, the hub's paintings standing in until theirs land", () => {
-    for (const l of HALL_LEVELS) expect(ROOMS[l.commons]!.backgrounds?.map((b) => b.key), l.commons).toEqual(['commons-west', 'commons', 'commons-east']);
+    for (const c of HALL_COMMONS) expect(piles.some((p) => p.id === `m3-hall-leaves-${c.level}`), c.level).toBe(true);
+    for (const p of piles) expect(onFloor(p.pos), p.id).toBe(true);
   });
 });

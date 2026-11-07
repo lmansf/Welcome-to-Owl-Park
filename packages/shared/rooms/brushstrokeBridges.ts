@@ -16,6 +16,7 @@
  * but for the dash gap's far ledge `n3`, 10 px nearer `n2` (350 px) so the route check's counted dash
  * (routes.ts) makes it, still past a glide's best at that rise (345 px, the plan's section 9).
  */
+import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import { RAIN_BRIDGE_MS, brushPerches, type BrushArrow, type BrushStone } from '../src/brush';
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
@@ -286,7 +287,7 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
   'brush-1': brushRoom('brush-1', 3, GARDEN, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-rain': { x: 4620, y: G } },
     spawnTops: { 'from-rain': 160 },
-    doors: [door('to-commons', 40, { room: 'commons-ink', spawn: 'from-course' }, { way: 'down' }), door('to-rain', 4720, { room: 'brush-2', spawn: 'from-back' }, { top: 160, way: 'up' })],
+    doors: [door('to-commons', 40, { room: HALL_ID, spawn: fromCourse('ink') }, { way: 'down' }), door('to-rain', 4720, { room: 'brush-2', spawn: 'from-back' }, { top: 160, way: 'up' })],
     stones: S1.map((s) => s.stone),
     course: {
       act: 1,
@@ -334,7 +335,7 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
   }),
   'brush-3b': brushRoom('brush-3b', 2, PANEL_2, {
     spawns: { default: { x: 120, y: G }, 'from-back': { x: 120, y: G } },
-    doors: [door('back', 40, { room: 'brush-3a', spawn: 'from-fold' }, { way: 'down' }), door('home', 2700, { room: 'commons-ink', spawn: 'from-course' }, { top: 540, w: 80, way: 'down' })],
+    doors: [door('back', 40, { room: 'brush-3a', spawn: 'from-fold' }, { way: 'down' }), door('home', 2700, { room: HALL_ID, spawn: fromCourse('ink') }, { top: 540, w: 80, way: 'down' })],
     stones: S3B.map((s) => s.stone),
     course: {
       act: 3,
@@ -352,7 +353,7 @@ export const BRUSH_COURSE: CourseDef = inRealmKit('ink', {
   objective: 'seals',
   acts: ['brush-1', 'brush-2', 'brush-3a'],
   rooms: ['brush-falls', 'brush-3b'],
-  gate: { room: 'commons-ink', door: 'to-course', spawn: 'from-gate' },
+  gate: { room: HALL_ID, door: courseDoor('ink'), spawn: 'from-gate' },
   exit: { room: 'brush-3b', door: 'home' },
   // Stand-ins from the catalogue until the ink-wash scarf is made; clearing every course pays the Golden Mouse (coursebook.ts).
   item: 'knit-scarf~3',

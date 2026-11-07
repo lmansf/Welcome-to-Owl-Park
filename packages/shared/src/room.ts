@@ -173,9 +173,15 @@ export interface RoomDef {
   keeperOnly?: true;
   /**
    * The realm its idol (the `idol` doorway) takes the Realm Vote for, where that is not the room's own
-   * id: a Commons of the hollow hall votes for the realm out through its back arch.
+   * id.
    */
   votesFor?: string;
+  /**
+   * A room with more than one Realm Vote idol (the Great Hollow, its four Commons in one room): each
+   * realm's idol and the doorway in front of it where an owl votes for that realm. A room with one idol
+   * has its `idol` doorway instead.
+   */
+  idols?: Array<{ realm: string; door: string }>;
   /**
    * Drawn by the page in plain shapes, with no painting of its own (OP-224's placeholder rooms): its
    * tiles name no art, nothing is loaded for them, and the scene paints the floor plan instead.
@@ -522,6 +528,17 @@ export function backgroundTiles(room: RoomDef): RoomTile[] {
 /** The tiles drawn in front of the owls, in drawing order (none for a room without overlays). */
 export function foregroundTiles(room: RoomDef): RoomTile[] {
   return room.foregrounds ?? (room.foreground ? [{ key: room.foreground, x: 0, y: 0 }] : []);
+}
+
+/** The realms whose idols stand in a room: its several idols, else the one its `idol` doorway votes for. */
+export function idolRealms(room: Pick<RoomDef, 'id' | 'votesFor' | 'idols'>): string[] {
+  return room.idols?.map((i) => i.realm) ?? [room.votesFor ?? room.id];
+}
+
+/** The realm a Realm Vote spot (a doorway) votes for, or null for a doorway that is no vote spot. */
+export function voteRealmAt(room: Pick<RoomDef, 'id' | 'votesFor' | 'idols'>, doorId: string): string | null {
+  if (room.idols) return room.idols.find((i) => i.door === doorId)?.realm ?? null;
+  return doorId === 'idol' ? (room.votesFor ?? room.id) : null;
 }
 
 /** The park a room belongs to: 1 for today's park, 2 for the tree (OP-128). */

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KIT_ART, ROOM_W, WAY_OUT_DOOR, kitFilesOf, mapOf, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, mapOf, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
 import { footOrigin, hitArea } from './fit';
@@ -92,7 +92,10 @@ export interface Idol {
 }
 
 export interface SetPieces {
+  /** The room's idol: its one, or the first of several. */
   idol?: Idol;
+  /** A room with several idols (RoomDef.idols): each, by the realm it takes the vote for. */
+  idols?: Record<string, Idol>;
   /** The lobby's turnstiles: a flash of gold as an owl goes through. */
   gate?: { react(): void };
   /** The hub's arches into gated realms, by door id: the blockade while the realm is closed, the doorway's glow while it is open. */
@@ -109,16 +112,27 @@ function doorGlow(scene: Phaser.Scene, m: { x: number; y: number }, to: string):
 }
 
 /** Large set pieces (guardian, giant robot owl, blockades) sorted into the owl depth range. */
-export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData) => void): SetPieces {
+export function addSetPieces(
+  scene: Phaser.Scene,
+  room: RoomDef,
+  onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData, realm: string) => void,
+): SetPieces {
   const anchors = ANCHORS[room.id] ?? {};
-  // A Commons in the hollow hall stands the realm's idol over its Realm Vote spot (`votesFor`).
-  const realm = room.votesFor ?? room.id;
+  // The realms whose idols stand here: the room's own, the one its `idol` doorway votes for, or each of
+  // several over its own spot (the Great Hollow's Commons, RoomDef.idols).
+  const realms = idolRealms(room);
   const pieces: SetPieces = {};
-  const tappable = (img: Phaser.GameObjects.Image) => {
+  const tappable = (img: Phaser.GameObjects.Image, realm: string) => {
     img.setInteractive(hugging(img, img.texture.key));
-    img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event));
+    img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event, realm));
   };
-  if (realm === 'grove' && anchors['guardian']) {
+  const stood = (realm: string, idol: Idol) => {
+    pieces.idol ??= idol;
+    if (!room.idols) return;
+    pieces.idols ??= {};
+    pieces.idols[realm] = idol;
+  };
+  if (realms.includes('grove') && anchors['guardian']) {
     const a = anchors['guardian'];
     const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const k = fitBelowTop('guardian', a.y);
@@ -128,8 +142,8 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     guardian.setScale(sx, sy);
     scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    tappable(guardian);
-    pieces.idol = {
+    tappable(guardian, 'grove');
+    stood('grove', {
       image: guardian,
       react: () => {
         // The guardian stirs: its glow swells and a drift of fireflies rises from the bough.
@@ -149,16 +163,16 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
           .setDepth(a.y + 1)
           .explode(36);
       },
-    };
+    });
   }
-  if (realm === 'market' && anchors['robot']) {
+  if (realms.includes('market') && anchors['robot']) {
     const a = anchors['robot'];
     const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
     const kr = fitBelowTop('robot-owl', a.y);
     robot.setScale(robot.scaleX * kr, robot.scaleY * kr);
-    tappable(robot);
-    pieces.idol = {
+    tappable(robot, 'market');
+    stood('market', {
       image: robot,
       react: () => {
         // The robot owl flares: a cyan flash and a swell of its glow.
@@ -178,19 +192,19 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
           .setDepth(a.y + 1)
           .explode(40);
       },
-    };
+    });
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
-  if (realm === 'glass' && anchors['idol'] && scene.textures.exists(GLASS_IDOL)) {
+  if (realms.includes('glass') && anchors['idol'] && scene.textures.exists(GLASS_IDOL)) {
     // The stained-glass owl on its plinth: lit from within, it brightens when a visitor pledges.
     const a = anchors['idol'];
     const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const idol = piece(scene, a.x, a.y, GLASS_IDOL).setDepth(a.y);
     const ki = fitBelowTop(GLASS_IDOL, a.y);
     idol.setScale(idol.scaleX * ki, idol.scaleY * ki);
-    tappable(idol);
-    pieces.idol = {
+    tappable(idol, 'glass');
+    stood('glass', {
       image: idol,
       react: () => {
         // The panes flare white-gold and a scatter of glass light rises from the owl.
@@ -211,7 +225,7 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
           .setDepth(a.y + 1)
           .explode(36);
       },
-    };
+    });
     scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
   // A realm start's pieces (OP-276): its quest post, trading nest and decor, each standing at its foot among the owls.

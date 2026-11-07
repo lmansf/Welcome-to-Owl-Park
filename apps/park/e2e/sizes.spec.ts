@@ -7,7 +7,7 @@ import { openPark, state } from './helpers';
  * comes in where it does with the art, the doors are the same, and it walks the same floor.
  */
 
-const ROOMS = ['m3-hall', 'commons-glass', 'm3-ground', 'hub'];
+const ROOMS = ['m3-hall', 'm3-ground', 'hub'];
 
 test.describe('size boxes in place of the map art', () => {
   for (const room of ROOMS) {

@@ -56,32 +56,32 @@ describe('placeHints', () => {
   });
 });
 
-describe('hints seen from the side (the hollow hall, as an owl comes down the knothole)', () => {
-  const HALL_ROOM = ROOMS['m3-hall']!;
-  const HALL_GROUND = groundOf(HALL_ROOM);
-  const KNOT_TOP = HALL_ROOM.doors.find((d) => d.id === 'up')!.top!;
-  // The knothole's landing filling a phone held sideways: the hall's width, about 540 room px high.
-  const owlAt = HALL_GROUND - KNOT_TOP;
+describe('hints seen from the side (an Updraft Canopy room, as an owl stands by the hatch up)', () => {
+  const ROOM = ROOMS['canopy-2a']!;
+  const GROUND = groundOf(ROOM);
+  const HATCH = ROOM.doors.find((d) => d.id === 'hatch-up')!;
+  const HATCH_TOP = HATCH.top!;
+  // The hatch's ledge filling a phone held sideways: the room's width, about 540 room px high.
+  const owlAt = GROUND - HATCH_TOP;
   const phone: ViewRect = { x: 0, y: owlAt - 400, w: 1600, h: 540 };
-  const doorways = HALL_ROOM.doors.filter((d) => d.to);
+  const doorways = ROOM.doors.filter((d) => d.to);
 
-  it('points at each doorway on its own landing, not at the floor its rect lies on', () => {
-    const up = HALL_ROOM.doors.find((d) => d.id === 'up')!;
-    expect(doorHintTarget(up, HALL_GROUND).y).toBe(HALL_GROUND - KNOT_TOP - SIDE_HINT_OVER);
-    expect(doorHintTarget(up, null).y).toBe(up.rect.y + up.rect.h / 2);
+  it('points at each doorway on its own ledge, not at the floor its rect lies on', () => {
+    expect(doorHintTarget(HATCH, GROUND).y).toBe(GROUND - HATCH_TOP - SIDE_HINT_OVER);
+    expect(doorHintTarget(HATCH, null).y).toBe(HATCH.rect.y + HATCH.rect.h / 2);
   });
 
-  it('shows no chip for the knothole the owl stands under, and one for the landing below, not a row for every level', () => {
-    const near = nearTargets(doorways.map((d) => doorHintTarget(d, HALL_GROUND)), phone, 900);
+  it('shows no chip for the hatch the owl stands under, and one for the way down on the floor below', () => {
+    const near = nearTargets(doorways.map((d) => doorHintTarget(d, GROUND)), phone, 900);
     const places = placeHints(near, phone, { w: 844, h: 330, top: 64, bottom: touchBottom(190, 330), side: 30 });
-    expect(places.map((p) => p.id)).toEqual(['to-glass']);
+    expect(places.map((p) => p.id)).toEqual(['down']);
     expect(places[0]!.angle).toBeGreaterThan(0); // pointing down
   });
 
-  it('on the floor, points at its own doorways and the lowest landing, and leaves the high ones', () => {
-    const floor: ViewRect = { x: 0, y: HALL_GROUND - 400, w: 1600, h: 540 };
-    const near = nearTargets(doorways.map((d) => doorHintTarget(d, HALL_GROUND)), floor, 900);
-    expect(near.map((t) => t.id).sort()).toEqual(['down', 'to-market', 'to-party']);
+  it('on the floor, points at its own doorway and the hatch up on its ledge', () => {
+    const floor: ViewRect = { x: 0, y: GROUND - 400, w: 1600, h: 540 };
+    const near = nearTargets(doorways.map((d) => doorHintTarget(d, GROUND)), floor, 900);
+    expect(near.map((t) => t.id).sort()).toEqual(['down', 'hatch-up']);
   });
 
   it("keeps a phone's bottom inset to a quarter of a short screen, and the full inset on a tall one", () => {

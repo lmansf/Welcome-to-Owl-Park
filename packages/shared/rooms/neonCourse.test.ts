@@ -65,12 +65,12 @@ describe("the neon realm's course", () => {
     }
   });
 
-  it("is reached through the neon Commons' middle arch, open to every owl (OP-285), and the tallest roof's door leads back there", () => {
-    const arch = ROOMS['commons-market']!.doors.find((d) => d.id === 'to-course')!;
+  it("is reached through the neon Commons' course gate in the Great Hollow, open to every owl (OP-285), and the tallest roof's door leads back there", () => {
+    const arch = ROOMS['m3-hall']!.doors.find((d) => d.id === 'course-market')!;
     expect(arch.to).toEqual({ room: 'circuit-1', spawn: 'from-gate' });
     expect(arch.closedSign).toBeUndefined();
-    expect(ROOMS['commons-market']!.spawns['from-course']).toBeDefined();
-    expect(ROOMS['circuit-3']!.doors.find((d) => d.id === 'home')!.to).toEqual({ room: 'commons-market', spawn: 'from-course' });
+    expect(ROOMS['m3-hall']!.spawns['from-market-course']).toBeDefined();
+    expect(ROOMS['circuit-3']!.doors.find((d) => d.id === 'home')!.to).toEqual({ room: 'm3-hall', spawn: 'from-market-course' });
   });
 
   it('declares every sign as a perch of its room, so the room believes an owl standing on one, and leaves the dark ones out as the circuits take turns', () => {

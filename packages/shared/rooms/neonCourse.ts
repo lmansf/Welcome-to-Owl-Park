@@ -12,6 +12,7 @@
  * `w` its width, `top` its height over the ground line. The ground line is the roofs' own deck; where
  * it stops, between two buildings, is the drop to the street, a fall.
  */
+import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import { BROWNOUT_PACE, neonSign, signPerches, type Circuit, type CircuitPace, type NeonSign } from '../src/circuit';
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
@@ -217,7 +218,7 @@ const ANTENNA: RoomKit = {
 export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCourseAir('neon', {
   'circuit-1': circuitRoom('circuit-1', 3, ROOFTOPS, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-cut': { x: 4640, y: G } },
-    doors: [door('to-commons', 40, { room: 'commons-market', spawn: 'from-course' }, { way: 'down' }), door('to-cut', 4740, { room: 'circuit-2', spawn: 'from-back' }, { way: 'up' })],
+    doors: [door('to-commons', 40, { room: HALL_ID, spawn: fromCourse('market') }, { way: 'down' }), door('to-cut', 4740, { room: 'circuit-2', spawn: 'from-back' }, { way: 'up' })],
     signs: SIGNS_1,
     course: {
       act: 1,
@@ -243,7 +244,7 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCou
   }),
   'circuit-3': circuitRoom('circuit-3', 2, ANTENNA, {
     spawns: { default: { x: 120, y: G }, 'from-back': { x: 120, y: G } },
-    doors: [door('back', 40, { room: 'circuit-2', spawn: 'from-mast' }, { way: 'down' }), door('home', 2800, { room: 'commons-market', spawn: 'from-course' }, { top: 540, way: 'down' })],
+    doors: [door('back', 40, { room: 'circuit-2', spawn: 'from-mast' }, { way: 'down' }), door('home', 2800, { room: HALL_ID, spawn: fromCourse('market') }, { top: 540, way: 'down' })],
     signs: SIGNS_3,
     course: {
       act: 3,
@@ -262,7 +263,7 @@ export const CIRCUIT_COURSE: CourseDef = inRealmKit('neon', {
   id: CIRCUIT_COURSE_ID,
   objective: 'breakers',
   acts: ['circuit-1', 'circuit-2', 'circuit-3'],
-  gate: { room: 'commons-market', door: 'to-course', spawn: 'from-gate' },
+  gate: { room: HALL_ID, door: courseDoor('market'), spawn: 'from-gate' },
   exit: { room: 'circuit-3', door: 'home' },
   // Stand-ins from the catalogue until the neon realm's own reward is made.
   item: 'bandana~3',

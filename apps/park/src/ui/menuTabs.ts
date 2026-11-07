@@ -245,27 +245,23 @@ export const MAP_PATHS: ReadonlyArray<[string, string]> = [
 
 /**
  * The new map (OP-282), top to bottom as it is walked: the nests and the Treetop Commons with the
- * turnstiles, then down the knothole into the hollow hall, a Commons off each of its landings (west
- * and east) with its realm beyond, the Party Grove at the tree's foot, and the root stair down to the
- * cavern and its arcade. Travel keeps to the places it has a landing for (TRAVEL_LANDINGS); the hall,
- * the Commons and the cavern show where the owl is.
+ * turnstiles, then down the knothole into the Great Hollow, the four Commons side by side in it with
+ * the realms beyond them, the Party Grove out of the trunk's door, and the root stair down to the
+ * cavern and its arcade. Travel keeps to the places it has a landing for (TRAVEL_LANDINGS); the hollow,
+ * the Party Grove and the cavern show where the owl is.
  */
 export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'nest', name: NEST_WORDS.yourNest, col: 0, row: 0 },
   { id: 'homes', name: 'The nests’ street', col: 1, row: 0 },
   { id: 'lobby', name: 'The Treetop Commons', col: 1, row: 1 },
-  { id: 'commons-glass', name: 'The glass commons', col: 0, row: 2, noTravel: true },
-  { id: 'commons-ink', name: 'The paper commons', col: 2, row: 2, noTravel: true },
+  { id: 'm3-hall', name: 'The Great Hollow', col: 1, row: 2, noTravel: true },
   { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
-  { id: 'm3-hall', name: 'The hollow hall', col: 1, row: 3, noTravel: true },
-  { id: 'commons-grove', name: 'The clearing’s commons', col: 0, row: 4, noTravel: true },
-  { id: 'commons-market', name: 'The neon commons', col: 2, row: 4, noTravel: true },
-  { id: 'grove', name: 'The treehouse clearing', col: 0, row: 5 },
+  { id: 'grove', name: 'The treehouse clearing', col: 1, row: 3 },
+  { id: 'market', name: 'The neon street', col: 2, row: 3 },
   // Travel to 'hub' lands outside the turnstiles (the old map's great tree); here it is the Party Grove, walked to.
-  { id: 'hub', name: 'The Party Grove', col: 1, row: 5, noTravel: true },
-  { id: 'market', name: 'The neon street', col: 2, row: 5 },
-  { id: 'm3-under', name: 'The root stair', col: 1, row: 6, noTravel: true },
-  { id: 'arcade', name: ARCADE_NAME, col: 2, row: 6 },
+  { id: 'hub', name: 'The Party Grove', col: 2, row: 2, noTravel: true },
+  { id: 'm3-under', name: 'The root stair', col: 1, row: 4, noTravel: true },
+  { id: 'arcade', name: ARCADE_NAME, col: 2, row: 4 },
 ];
 
 /** The new map's paths, as its doorways join the places. */
@@ -273,22 +269,18 @@ export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['nest', 'homes'],
   ['homes', 'lobby'],
   ['lobby', 'm3-hall'],
-  ['m3-hall', 'commons-glass'],
-  ['m3-hall', 'commons-ink'],
-  ['m3-hall', 'commons-grove'],
-  ['m3-hall', 'commons-market'],
-  ['commons-glass', 'glass'],
-  ['commons-grove', 'grove'],
-  ['commons-market', 'market'],
+  ['m3-hall', 'glass'],
+  ['m3-hall', 'grove'],
+  ['m3-hall', 'market'],
   ['m3-hall', 'hub'],
-  ['hub', 'm3-under'],
+  ['m3-hall', 'm3-under'],
   ['m3-under', 'arcade'],
   ['market', 'arcade'],
 ];
 
 /** The map's places and paths for the park the owl walks: the new map (3), or today's park and the tree. */
 export function mapLayout(walking: number): { places: readonly Place[]; paths: ReadonlyArray<[string, string]>; cols: number; rows: number } {
-  return walking === 3 ? { places: NEW_MAP_PLACES, paths: NEW_MAP_PATHS, cols: 3, rows: 7 } : { places: MAP_PLACES, paths: MAP_PATHS, cols: 3, rows: 5 };
+  return walking === 3 ? { places: NEW_MAP_PLACES, paths: NEW_MAP_PATHS, cols: 3, rows: 5 } : { places: MAP_PLACES, paths: MAP_PATHS, cols: 3, rows: 5 };
 }
 
 /** The map's place for a room the owl is in: any owl's nest is "a nest"; the owl's own is Your nest. */
