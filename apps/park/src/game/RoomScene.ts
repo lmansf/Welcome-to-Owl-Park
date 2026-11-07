@@ -3674,10 +3674,11 @@ export class RoomScene extends Phaser.Scene {
     const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
     cam.setViewport(0, 0, width, h);
     cam.setZoom(Math.max(width / this.room.size.w, h / this.room.size.h));
-    // A side view's doorways, landings and hatches can scroll out from under the HUD (OP-278); the
+    // Doorways, landings, hatches and leaf piles at the room's edges can scroll out from under the HUD,
+    // seen from the side (OP-278) or from above (OP-292); the
     // Decorate sheet's own view stops above it already.
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.hud.coveredEdges();
-    const b = cameraBounds(this.room.size, this.sideView(), covered, this.cfg.pixelRatio / cam.zoom);
+    const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
     cam.setBounds(b.x, b.y, b.w, b.h);
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }
