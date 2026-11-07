@@ -1,9 +1,9 @@
 # Brushstroke Bridges: the ink-wash realm's course
 
 - Status: BUILT FROM THE KIT, keepers only (OP-235): its five rooms, the brush stones, the rain and the four seals, drawn from the ink-wash kit with no new art. Not built yet: the three shortcuts (the bamboo, the ferry raft, the crane), the painter's lines and the painting's last stroke, the misty stair past the pavilion, and the reward (the scarf and the emote are stand-ins).
-- Verified against: main 503b9bf (2026-11-02); every hop re-measured with both flaps (the triple jump, OP-239) on 2026-11-04
+- Verified against: main 503b9bf (2026-11-02); every hop re-measured with both flaps (the triple jump, OP-239) on 2026-11-04; eased for younger players and measured again on 2026-11-07 (section 10)
 - Code: `packages/shared/src/brush.ts` (the brush stones), `packages/shared/rooms/brushstrokeBridges.ts` (the rooms and the course), `apps/park/src/game/brushInk.ts` (the ink on the page). Built on `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts` (`hopTier`), `perches.ts` (`MAX_PERCH_TOP`, `PERCH_SLACK`), `packages/shared/src/room.ts` and `packages/shared/rooms/index.ts` (`treeLedge`, `TREE_GROUND`, `CLOSED_SIGNS`)
-- Tickets: OP-235, OP-239 (the triple jump: re-measured, section 9)
+- Tickets: OP-235, OP-239 (the triple jump: re-measured, section 9), OP-299 (eased for younger players, section 10)
 - Related: `docs/levels/README.md` (the shared rules, the physics and how to read the tables), `docs/MAP.md` (the ink-wash realm's gate on level 1, section 3)
 
 The ink-wash realm's course, after its Commons: through a paper garden, across a river in the rain
@@ -44,10 +44,10 @@ two panels, each climbing from its foot to 540, joined at the fold.
     long, from the stone's right edge (R) or left edge (L).
   - **U (up):** three treads, each 160 px wide and centred over the stone, at the stone's top plus
     130, 260 and 390 (a Tier 1 step each), as many as fit under `MAX_PERCH_TOP`.
-  - A painted perch lasts `BRIDGE_MS` (proposed 4000 ms) from the landing, greys over its last
+  - A painted perch lasts `BRIDGE_MS` (6000 ms since Nov 7; first 4000) from the landing, greys over its last
     second, then is gone; an owl on it falls, as off frail glass. Landing on the stone again paints
-    it afresh. In act 2's rain it lasts `RAIN_BRIDGE_MS` (2000 ms) unless its stone stands under an
-    eave (a shelter span `{ x0, x1 }` under a roof), when it keeps the full 4000 ms.
+    it afresh. In act 2's rain it lasts `RAIN_BRIDGE_MS` (4000 ms since Nov 7; first 2000) unless its stone stands under an
+    eave (a shelter span `{ x0, x1 }` under a roof), when it keeps the full `BRIDGE_MS`.
   - The room server must let an owl stand on a painted perch: each one is declared in the room data
     (as here, `k1~`, `k4~1` and so on), so `standingHeights` and `groundAt` know its top. Course
     rooms are shared (decided 2026-11-02), so a painted bridge is drawn for every owl in the
@@ -541,9 +541,9 @@ clear. The woken crane stands on the roof.
 | Rule | Where |
 | --- | --- |
 | Three acts of three or four screens, about ten in all, joined by doors | Act 1: 3 screens (`brush-1`); act 2: 3 (`brush-2`); act 3: 4 (`brush-3a`, `brush-3b`). Doors `to-rain`, `to-mountain` and `fold` |
-| Four benches | Bench 1 (on `c1`), bench 2 (the west dock), bench 3 (the mountain's foot), bench 4 (on `n1`) |
+| Four benches (ten since Nov 7, section 10) | Bench 1 (on `c1`), bench 2 (the west dock), bench 3 (the mountain's foot), bench 4 (on `n1`); since Nov 7 also 1b (on `c2`), 2b (on `r1`), 2c (on `r2`), 3b (on `m1`), 3c (on `m2`), 4b (on `n2`) |
 | One shortcut per act, opened from its far side | The bamboo (pushed from `c2`), the raft (untied at the east dock), the crane (met at the summit) |
-| One dash-only gap | `n2` to `n3` in screen 3.4 |
+| One dash-only gap | `n2` to `n3` in screen 3.4; since Nov 7 a hard jump without the dash and an easy one with it (section 10) |
 | Five lost feathers | 1: `reed1` (1.1); 2: `reed2` (1.2); 3: the hidden room's high shelf; 4: the mooring `post` (2.2); 5: `pine` (3.1) |
 | One hidden room | `brush-falls`, behind the waterfall |
 | One secret character | The painter, a heron, under eave 2 |
@@ -659,3 +659,48 @@ Every other "without" row holds, with the dash too. The time estimates (section 
 widths and the beats, which these moves change by about a second at most, so they stand. The
 room sketches are not redrawn for these moves (the most, `c3`, is three characters); the tables are
 the plan.
+
+## 10. Easier for younger players (Nov 7)
+
+The owner asked for this course to be one a 10 year old can beat in a few tries. Before, the
+climbs off two bridges in act 2 landed for about one try in seven, the rain's ink ran out on the
+way, the dash gap almost always needed the dash at its best, and a fall could mean a whole act
+again. The owl's movement is unchanged; the course gives more room.
+
+Measured with the real flight (`stepFlier` with `ALL_FLIGHT`), taking off from anywhere on the
+bridge, over every timing of no flap, one or two flaps: the share of tries that land, at the best
+take-off point, and the ink left when a slow owl walks from the stone to that point.
+
+| hop | before | after | what changed |
+| --- | --- | --- | --- |
+| off k1's bridge to `c1` | 58%, rise 300 | 75%, rise 260 | `c1` lowered to 360 and 100 px east (narrowed to 260) |
+| off k3's bridge to `c2` | 58%, rise 300 | 75%, rise 260 | `c2` lowered to 380 and 140 px east |
+| off k6's bridge to `r1` (rain) | 58%, 0.2 s of ink left | 65%, 1.9 s left | `r1` lowered to 380, `k6` raised to 100 and 140 px west: rise 280 |
+| off k8's bridge to the `post` (lost feather 4, a side ledge) | 14%, rise 340 | 58%, rise 300 | the post lowered to 340, the feather with it |
+| from k9 up to `k10` (rain) | 14% off its bridge, 0.04 s of ink left | 97% off its top tread, 3.7 s left | `k9` paints treads (an up stone) instead of a bridge: two steps of 130, then a short hop up 80 |
+| off k14's bridge to `m2` | 96%, but half the bridge ran under the cloud | 96%, the whole bridge clear | the cloud 50 px shorter |
+| off k15's bridge to `m3` | 68%, rise 280 | 74%, rise 260 | `m3` lowered to 520, narrowed and 80 px east |
+| the dash gap, `n2` to `n3` | 0.6% without the dash, 14% with it | 37% without, 57% with | `n2` raised to 260, `n3` and seal 4 150 px east: rise 280, gap 500 |
+| ink | 4 s, 2 s in the rain | 6 s, 4 s in the rain | `BRIDGE_MS`, `RAIN_BRIDGE_MS` |
+| benches | four: a fall could restart an act's room | ten: one on every screen past each act's first | section 6 |
+
+Every other hop on the main line lands for 90 to 100% of tries, as before.
+
+**Kept shut.** Each move was checked so a bridge is still needed: from each stone with nothing
+painted, over every take-off point, flap timing and dash moment, the owl reaches none of `c1`,
+`c2`, `r1`, `k10` or `m3`, and the updraft in 3.1 no longer glides on to `m3`. The dash skips
+over the rain screen that were there before stay: from `r1` a well-timed dash reaches `k9` or the
+post, and from k8's stone it reaches `r2`; none needs less than a dash.
+
+**The art check.** The river's first and last screens sit at the edge of the kit's value bands
+(`pnpm kit:check`), so `r1`, `k6` and `k9` were set where those screens still pass: `k9` stays at
+200, which is why it paints treads now rather than standing higher.
+
+**Falls onto a bench on a ledge.** A fall sends the owl to its last bench; for a bench up on a
+ledge it now puts the owl on the ledge (`CourseBook.fall` returns its `top`, the room server and the
+client stand the owl there). Before, the owl was put at the bench's x on the pit floor and fell
+again. This also fixes bench 4 of the Updraft Canopy and bench 1 of the Blackout Circuit, which
+stand on ledges too.
+
+The README's shared rules (four benches, one dash-only gap) still hold for the other courses; this
+course keeps a dash gap that a careful jump can also make.

@@ -25,11 +25,12 @@ describe('brush stones (OP-235)', () => {
     expect(Math.max(...tops)).toBeLessThanOrEqual(MAX_PERCH_TOP);
   });
 
-  it('keep their ink four seconds from the landing, or two out in the rain', () => {
+  it('keep their ink six seconds from the landing, or four out in the rain (eased for younger players, Nov 7)', () => {
+    expect([BRIDGE_MS, RAIN_BRIDGE_MS]).toEqual([6000, 4000]);
     expect(inkLeft(across, undefined, 1000)).toBe(0);
     expect(inkLeft(across, 1000, 1000)).toBe(BRIDGE_MS);
     expect(inkLeft(across, 1000, 1000 + BRIDGE_MS)).toBe(0);
-    expect(inkLeft({ ms: RAIN_BRIDGE_MS }, 1000, 2500)).toBe(500);
+    expect(inkLeft({ ms: RAIN_BRIDGE_MS }, 1000, 4500)).toBe(500);
   });
 
   it('lets an owl stand on a bridge only while it lasts, and drop through once it fades', () => {

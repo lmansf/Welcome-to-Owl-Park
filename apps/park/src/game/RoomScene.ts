@@ -915,7 +915,7 @@ export class RoomScene extends Phaser.Scene {
       link: () => this.courseLink,
       me: () => ({ pos: { ...this.me.pos }, grounded: this.flier.air.s === GROUNDED, ground: this.groundNow(), z: this.flier.air.z }),
       spawn: () => this.registry.get('spawnName') as string | undefined,
-      place: (at) => this.placeAt(at),
+      place: (at, top) => this.placeAt(at, top),
       feathers: (total) => this.collection.setFeathers(total),
       awarded: () => void this.collection.refresh(),
       hudRoot: () => document.getElementById('hud'),
@@ -2656,12 +2656,21 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /** Back where a fall in a course takes the owl (OP-224): there at once, standing, and the room told. */
-  private placeAt(at: Vec2): void {
+  private placeAt(at: Vec2, top = 0): void {
     this.walkGoal = null;
     this.wayTo = null;
     this.keyWalk = false;
     this.me.place(at);
     this.stop();
+    // Standing where it is put (a course's fall): on the floor, or up on the ledge of the bench it is back
+    // at. Left as it was, an owl that fell in the air would go on falling there, and one put back under a
+    // bench up on a ledge over a pit would stand on the pit's floor and fall again, over and over.
+    if (top > 0 || this.flier.air.s !== GROUNDED || this.flier.air.z !== 0) {
+      this.flier = { ...this.flier, air: { z: top, vz: 0, s: GROUNDED, f: 0 } };
+      this.drawnAir = this.flier.air;
+      this.me.fly(this.flier.air, Date.now());
+      this.retellAir();
+    }
   }
 
   /** Jump pressed now and let go `holdMs` after the press takes, set at once (the tests and the console). */

@@ -103,7 +103,8 @@ export type CourseRefusal = 'unknown' | 'idle' | 'parts' | 'too-fast' | 'forgott
 
 export type CourseAnswer = { ok: true; view: CourseView } | { ok: false; reason: CourseRefusal };
 export type ReachAnswer = { ok: true; view: CourseView; first: boolean } | { ok: false; reason: CourseRefusal };
-export type FallAnswer = { ok: true; view: CourseView; at: Vec2 } | { ok: false; reason: CourseRefusal };
+/** Where a fall takes the owl: `at` on the floor, or up on the bench's ledge `top` high when the bench stands on one. */
+export type FallAnswer = { ok: true; view: CourseView; at: Vec2; top?: number } | { ok: false; reason: CourseRefusal };
 export type FinishAnswer = { ok: true; view: CourseView; paid: CoursePaid } | { ok: false; reason: CourseRefusal };
 
 /** One course on the course board (for a Commons to show): what the owl has cleared, its best, what is left to earn. */
@@ -246,7 +247,8 @@ export class CourseBook {
   /**
    * A fall (the caller has checked the owl is over a pit): where it goes back to, the last bench of its
    * run in this room, else the act's way in (the trail gate's spawn in the first act, the default
-   * spawn in any other).
+   * spawn in any other). A bench up on a ledge puts the owl back standing on that ledge (`top`), not on
+   * the floor under it, which over a pit would be a fall again.
    */
   fall(cid: string, roomId: string, now: number): FallAnswer {
     const at = this.where(roomId);
@@ -254,7 +256,8 @@ export class CourseBook {
     const run = this.runIn(cid, at.def.id, now);
     const bench = run?.bench && run.bench.room === roomId ? pieceIn(at.room, 'bench', run.bench.id) : undefined;
     const back = bench ? bench.at : findSpawn(at.room, roomId === at.def.acts[0] ? at.def.gate.spawn : undefined);
-    return { ok: true, view: this.view(cid, at.def.id, now), at: { x: back.x, y: back.y } };
+    const top = bench?.top ?? 0;
+    return { ok: true, view: this.view(cid, at.def.id, now), at: { x: back.x, y: back.y }, ...(top > 0 ? { top } : {}) };
   }
 
   /**

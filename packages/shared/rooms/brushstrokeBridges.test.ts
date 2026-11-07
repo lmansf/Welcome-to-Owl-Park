@@ -40,13 +40,26 @@ const tiersFrom = (id: string, ink = true) => {
 };
 
 describe('Brushstroke Bridges (OP-235)', () => {
-  it('is a course with nothing wrong with it: three acts, five rooms, four seals, four benches, five lost feathers and the shrine at the summit', () => {
+  it('is a course with nothing wrong with it: three acts, five rooms, four seals, a bench on every screen, five lost feathers and the shrine at the summit', () => {
     expect(COURSES[BRUSH_COURSE.id]).toBe(BRUSH_COURSE);
     expect(courseProblems(BRUSH_COURSE, rooms)).toEqual([]);
     expect(Object.keys(BRUSH_ROOMS).sort()).toEqual([...ids].sort());
     expect(BRUSH_COURSE.objective).toBe('seals');
     expect(courseParts(BRUSH_COURSE, rooms).map((p) => p.id)).toEqual(['seal-1', 'seal-2', 'seal-3', 'seal-4']);
-    expect(coursePieces(BRUSH_COURSE, rooms, 'bench')).toHaveLength(4);
+    // A bench on every screen past the first of each act (eased for younger players, Nov 7): a fall is a
+    // screen's climb again at most, never an act's.
+    expect(coursePieces(BRUSH_COURSE, rooms, 'bench').map((b) => `${b.room}:${b.id}`)).toEqual([
+      'brush-1:bench-1',
+      'brush-1:bench-1b',
+      'brush-2:bench-2',
+      'brush-2:bench-2b',
+      'brush-2:bench-2c',
+      'brush-3a:bench-3',
+      'brush-3a:bench-3b',
+      'brush-3a:bench-3c',
+      'brush-3b:bench-4',
+      'brush-3b:bench-4b',
+    ]);
     const feathers = coursePieces(BRUSH_COURSE, rooms, 'feather');
     expect(feathers).toHaveLength(LOST_FEATHERS);
     expect(feathers.map((f) => `${f.room}:${f.id}`)).toEqual(['brush-1:feather-1', 'brush-1:feather-2', 'brush-2:feather-4', 'brush-falls:feather-3', 'brush-3a:feather-5']);
@@ -85,9 +98,9 @@ describe('Brushstroke Bridges (OP-235)', () => {
       }
       for (const s of r.brushStones ?? []) expect(r.perches!.some((p) => p.id === s.id && p.top === s.top), `${id} stone ${s.id}`).toBe(true);
     }
-    // Out in the rain every stone's ink fades in two seconds, but under the temple eaves.
-    const rain = Object.fromEntries((ROOMS['brush-2']!.brushStones ?? []).map((s) => [s.id, s.ms ?? 4000]));
-    expect(rain).toEqual({ k6: 2000, k7: 4000, k8: 4000, k9: 2000, k10: 2000, kE: 2000 });
+    // Out in the rain every stone's ink fades in four seconds, but under the temple eaves, where it keeps its six.
+    const rain = Object.fromEntries((ROOMS['brush-2']!.brushStones ?? []).map((s) => [s.id, s.ms ?? 6000]));
+    expect(rain).toEqual({ k6: 4000, k7: 6000, k8: 6000, k9: 4000, k10: 4000, kE: 4000 });
     expect(ROOMS['brush-2']!.weather).toBe('rain');
   });
 
