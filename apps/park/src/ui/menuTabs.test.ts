@@ -1,6 +1,6 @@
 import { TRAVEL_WORDS } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
-import { MAP_LIT_KEY, MAP_PLACES, newlyLit, placeCard } from './menuTabs';
+import { MAP_LIT_KEY, MAP_PLACES, mapLayout, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
 
 const walked = (places: string[], gate = false) => ({ places, gate });
 
@@ -48,5 +48,36 @@ describe('the map’s travel cards (OP-130)', () => {
     expect(newlyLit({ getItem: () => { throw new Error('denied'); }, setItem: () => undefined }, ['grove'])).toEqual([]);
     kept.set(MAP_LIT_KEY, '{"not":"a list"}');
     expect(newlyLit(storage, ['grove'])).toEqual(['grove']);
+  });
+});
+
+describe('the map on the new map (OP-282)', () => {
+  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'commons-glass', 'commons-ink', 'commons-grove', 'commons-market', 'glass', 'grove', 'market', 'hub', 'm3-under', 'arcade'];
+
+  it("shows 'You are here' in every room of the new map, and in a nest", () => {
+    for (const room of NEW_ROOMS) expect(mapPlaceOf(room, true, [], 3), room).toBe(room);
+    expect(mapPlaceOf('nest-abc', true, [], 3)).toBe('nest');
+    expect(mapPlaceOf('nest-abc', false, [], 3)).toBe('homes');
+  });
+
+  it('leaves the old map as it was (?newmap=0): the hall and the Commons are not on it', () => {
+    expect(mapPlaceOf('m3-hall', true, [], 1)).toBeNull();
+    expect(mapPlaceOf('commons-grove', true, [], 2)).toBeNull();
+    expect(mapLayout(1).places).toBe(MAP_PLACES);
+    expect(mapPlaceOf('hub', true)).toBe('hub');
+  });
+
+  it('puts each place in its own cell, joins only places on the map, and offers travel only where it has a landing', () => {
+    const { places, paths, cols, rows } = mapLayout(3);
+    const cells = places.map((p) => `${p.col},${p.row}`);
+    expect(new Set(cells).size).toBe(places.length);
+    for (const p of places) expect(p.col < cols && p.row < rows, p.id).toBe(true);
+    for (const [a, b] of paths) expect(places.some((p) => p.id === a) && places.some((p) => p.id === b), `${a}-${b}`).toBe(true);
+    for (const p of places.filter((p) => !p.noTravel)) expect(placeCard(p.id, null, walked(NEW_ROOMS, true)).button, p.id).not.toBeNull();
+  });
+
+  it('keeps travel off the hall, the Commons, the cavern and the Party Grove (travel to hub lands outside the turnstiles)', () => {
+    const still = mapLayout(3).places.filter((p) => p.noTravel).map((p) => p.id).sort();
+    expect(still).toEqual(['commons-glass', 'commons-grove', 'commons-ink', 'commons-market', 'hub', 'm3-hall', 'm3-under']);
   });
 });

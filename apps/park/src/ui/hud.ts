@@ -17,6 +17,7 @@ import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createFeedbackBug, feedbackIcon } from './feedbackBug';
 import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
 import { coveredBy, type CoveredEdges } from '../game/hudInset';
+import { walkingMap } from '../game/walkingMap';
 import { createTreeMinimap } from './treeMinimap';
 import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
@@ -678,7 +679,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
           }),
       },
       // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
-      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms, mapTravel()) },
+      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms, walkingMap()), openRealms, mapTravel(), walkingMap()) },
       {
         id: 'settings',
         label: 'Settings',
