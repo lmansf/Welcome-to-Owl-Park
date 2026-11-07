@@ -896,7 +896,7 @@ export class EdgeTransport implements ParkTransport {
       const f = await request({ t: 'course', a, ...(id !== undefined ? { id } : {}) });
       if (f?.t !== 'course') return { ok: false, reason: 'offline' };
       if (!f.ok) return { ok: false, reason: f.reason };
-      return { ok: true, view: f.view, ...(f.first !== undefined ? { first: f.first } : {}), ...(f.at ? { at: f.at } : {}), ...(f.paid ? { paid: f.paid } : {}) };
+      return { ok: true, view: f.view, ...(f.first !== undefined ? { first: f.first } : {}), ...(f.at ? { at: f.at } : {}), ...(typeof f.top === 'number' && f.top > 0 ? { top: f.top } : {}), ...(f.paid ? { paid: f.paid } : {}) };
     };
     const course: CourseLink = {
       state: () => courseAsk('state'),

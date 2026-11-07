@@ -214,7 +214,7 @@ export interface ActivityPushes {
 }
 
 /** A course step as the room answered it (OP-224): the owl's course as it now stands, or why not. */
-export type CourseReply = { ok: true; view: CourseView; first?: boolean; at?: Vec2; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' };
+export type CourseReply = { ok: true; view: CourseView; first?: boolean; at?: Vec2; top?: number; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' };
 
 /**
  * A parkour course in one of its acts (course.ts in @owl-park/shared): the room server checks where

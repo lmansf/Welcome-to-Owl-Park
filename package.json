@@ -34,6 +34,7 @@
     "kit:greybox": "node tools/kit/greybox.mjs",
     "kit:catalog": "node tools/kit/catalog.mjs",
     "kit:preview": "python3 tools/kit/preview.py",
+    "kit:skin": "python3 tools/kit/skin_sheet.py",
     "kit:check": "python3 -B -m unittest discover -s tools/kit -p \"test_*.py\"",
     "kit:test": "node --test tools/kit/greybox.test.mjs",
     "art:generate": "node tools/art/generate.mjs",

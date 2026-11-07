@@ -13,8 +13,8 @@
  * painting's last stroke, and the misty stair past the pavilion.
  *
  * Every ledge is the plan's: `x` its west end, `w` its width, `top` its height over the ground line,
- * but for the dash gap's far ledge `n3`, 10 px nearer `n2` (350 px) so the route check's counted dash
- * (routes.ts) makes it, still past a glide's best at that rise (345 px, the plan's section 9).
+ * as the plan's section 10 eased them for younger players (Nov 7): the climbs off the bridges lower,
+ * the ink lasting longer, a bench on every screen, and the dash gap lower and nearer.
  */
 import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import { RAIN_BRIDGE_MS, brushPerches, type BrushArrow, type BrushStone } from '../src/brush';
@@ -158,10 +158,10 @@ const GARDEN: RoomKit = {
     ledge('g1', 300, 120, 70, ROCK),
     ...S1.map((s) => s.ledge),
     ledge('reed1', 1060, 80, 450, REED),
-    ledge('c1', 1260, 340, 400, CLIFF),
+    ledge('c1', 1360, 260, 360, CLIFF),
     ledge('crane-rock', 2050, 160, 40, ROCK),
     ledge('reed2', 2000, 80, 250, REED),
-    ledge('c2', 3100, 300, 420, CLIFF),
+    ledge('c2', 3240, 300, 380, CLIFF),
     ledge('c3', 4540, 260, 540, PINE),
     ledge('t1', 4300, 500, 160, terrace(160)),
   ],
@@ -186,11 +186,11 @@ const GARDEN: RoomKit = {
 // ---------- Act 2: the washing rain ----------
 
 const S2 = [
-  stone('k6', 560, 120, 90, 'R', RAIN_BRIDGE_MS),
+  stone('k6', 420, 120, 100, 'R', RAIN_BRIDGE_MS),
   // Under the temple eaves: sheltered from the rain, their ink keeps its four seconds.
   stone('k7', 1500, 120, 120, 'R'),
   stone('k8', 2240, 120, 40, 'R'),
-  stone('k9', 3260, 120, 200, 'R', RAIN_BRIDGE_MS),
+  stone('k9', 3260, 120, 200, 'U', RAIN_BRIDGE_MS),
   stone('k10', 4040, 120, 540, 'R', RAIN_BRIDGE_MS),
   stone('kE', 4440, 120, 60, 'U', RAIN_BRIDGE_MS),
 ];
@@ -201,9 +201,9 @@ const RIVER: RoomKit = {
   paths: [groundPath(3 * ROOM_W)],
   ledges: [
     ...S2.map((s) => s.ledge),
-    ledge('r1', 1280, 140, 390, pillar(390)),
+    ledge('r1', 1280, 140, 380, pillar(380)),
     ledge('porch', 2100, 100, 60, PLANK),
-    ledge('post', 2960, 60, 380, pillar(380)),
+    ledge('post', 2960, 60, 340, pillar(340)),
     ledge('r2', 3060, 140, 260, pillar(260)),
     ledge('falls-ledge', 4180, 180, 540, ROCK),
   ],
@@ -255,7 +255,7 @@ const PANEL_1: RoomKit = {
     ledge('pine', 40, 100, 540, PINE),
     ledge('m1', 640, 200, 520, ROCK),
     ledge('m2', 1900, 160, 260, ROCK),
-    ledge('m3', 2870, 150, 540, pillar(540)),
+    ledge('m3', 2950, 80, 520, pillar(520)),
     ledge('m4', 3040, 160, 520, CLIFF),
   ],
   doors: [
@@ -273,7 +273,7 @@ const PANEL_2: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
   paths: [groundPath(2 * ROOM_W, MOUNTAIN_PATH)],
-  ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 200, DRY), ledge('n3', 2210, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
+  ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
   doors: [
     { door: 'back', piece: 'kit-ink-door-paper-open', scale: 0.7 },
     { door: 'home', piece: 'kit-ink-moon-gate', scale: 0.5 },
@@ -292,7 +292,7 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
     course: {
       act: 1,
       pits: [floor(700, 4300)],
-      benches: [piece('bench-1', 1500, 400)],
+      benches: [piece('bench-1', 1500, 360), piece('bench-1b', 3300, 380)],
       parts: [piece('seal-1', 4670, 540)],
       feathers: [piece('feather-1', 1100, 450), piece('feather-2', 2040, 250)],
     },
@@ -311,8 +311,8 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
       act: 2,
       pits: [floor(500, 4400)],
       thorns: [hazard('falls-low', 4180, 4360, 0, 'falls', 430), hazard('falls-high', 4180, 4360, 600, 'falls')],
-      benches: [piece('bench-2', 200)],
-      feathers: [piece('feather-4', 2990, 380)],
+      benches: [piece('bench-2', 200), piece('bench-2b', 1350, 380), piece('bench-2c', 3130, 260)],
+      feathers: [piece('feather-4', 2990, 340)],
     },
   }),
   'brush-falls': brushRoom('brush-falls', 1, FALLS_CAVE, {
@@ -328,8 +328,8 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
     course: {
       act: 3,
       pits: [floor(400, 2 * ROOM_W)],
-      thorns: [hazard('cloud', 1450, 1750, 100, 'mist')],
-      benches: [piece('bench-3', 200)],
+      thorns: [hazard('cloud', 1450, 1700, 100, 'mist')],
+      benches: [piece('bench-3', 200), piece('bench-3b', 740, 520), piece('bench-3c', 1960, 260)],
       feathers: [piece('feather-5', 90, 540)],
     },
   }),
@@ -340,9 +340,9 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
     course: {
       act: 3,
       pits: [floor(300, 2 * ROOM_W)],
-      thorns: [hazard('cloud', 1150, 1500, 100, 'mist')],
-      benches: [piece('bench-4', 780, 520)],
-      parts: [piece('seal-3', 680, 520), piece('seal-4', 2310, 540)],
+      thorns: [hazard('cloud', 1150, 1450, 100, 'mist')],
+      benches: [piece('bench-4', 780, 520), piece('bench-4b', 1780, 260)],
+      parts: [piece('seal-3', 680, 520), piece('seal-4', 2460, 540)],
       shrine: piece('shrine', 3050, 540),
     },
   }),

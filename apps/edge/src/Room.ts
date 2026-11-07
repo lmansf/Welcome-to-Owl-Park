@@ -631,17 +631,21 @@ export class Room {
    * one move of an owl that is not a walk the page asked for. The others are told it as a walk that
    * starts and ends there, as a halt is; the owl's page put its own owl there already.
    */
-  place(id: string, at: Vec2): boolean {
+  place(id: string, at: Vec2, top = 0): boolean {
     const v = this.visitors.get(id);
     if (!v || !isWalkable(at, this.anyFooting)) return false;
     const now = this.now();
     const p = { x: Math.round(at.x), y: Math.round(at.y) };
+    // Up on a ledge (a bench over a pit): standing on it, as the room has its perches; else on the floor.
+    const up = top > 0 && groundAt(this.def.perches, p, top) === top;
     v.st.pos = p;
     v.st.walk = null;
-    delete v.st.air;
+    if (up) v.st.air = { z: top, vz: 0, s: GROUNDED, f: 0, at: now };
+    else delete v.st.air;
     v.dash = landDash(v.dash);
     v.peer.persist?.(v.st);
     this.broadcast({ t: 'move', id, from: p, to: p, at: now }, id);
+    if (up) this.broadcast({ t: 'air', id, air: { z: top, vz: 0, s: GROUNDED, f: 0 }, at: now }, id);
     return true;
   }
 

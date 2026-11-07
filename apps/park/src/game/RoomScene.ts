@@ -189,6 +189,8 @@ import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds } from './hudInset';
+import { SizeLabels } from './sizeLabels';
+import { drawWalkFloor } from './walkFloor';
 
 export interface RoomStart {
   room: string;
@@ -509,6 +511,10 @@ export class RoomScene extends Phaser.Scene {
   private decor: NestDecor | null = null;
   /** The fit overlay (OP-127, `?boxes=1`). */
   private fitOverlay: FitOverlay | null = null;
+  /** The labels over the size boxes (`?sizes=1`): one per piece in the room. */
+  private sizeLabels: SizeLabels | null = null;
+  /** Whether this room draws its walkable floor plainly: every room seen from above. */
+  private floorShown = false;
   /** The ledge painter (OP-156, `?paint=1` with a keeper's token), over a room of the tree. */
   private painter: LedgePainter | null = null;
   /** The room as the park has it: `room` is this with the painter's draft's ledges while the painter tries them (OP-156). */
@@ -879,6 +885,8 @@ export class RoomScene extends Phaser.Scene {
         if ((t.rate ?? 1) === 1) playTiles.push(img);
       }
     }
+    // Seen from above, where an owl can walk reads at a glance: the floor edged, the rest veiled (walkFloor.ts).
+    this.floorShown = mapOf(room) !== 2 && !room.drawn && !!drawWalkFloor(this, room, this.cfg.sizes, -0.6);
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
     this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
@@ -918,7 +926,7 @@ export class RoomScene extends Phaser.Scene {
       link: () => this.courseLink,
       me: () => ({ pos: { ...this.me.pos }, grounded: this.flier.air.s === GROUNDED, ground: this.groundNow(), z: this.flier.air.z }),
       spawn: () => this.registry.get('spawnName') as string | undefined,
-      place: (at) => this.placeAt(at),
+      place: (at, top) => this.placeAt(at, top),
       feathers: (total) => this.collection.setFeathers(total),
       awarded: () => void this.collection.refresh(),
       hudRoot: () => document.getElementById('hud'),
@@ -928,6 +936,7 @@ export class RoomScene extends Phaser.Scene {
     const ambience = addAmbience(this, room);
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
     this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
+    if (this.cfg.sizes) this.sizeLabels = new SizeLabels(this, room.size.h + 140, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -1980,6 +1989,8 @@ export class RoomScene extends Phaser.Scene {
     soft: string[];
     /** The room's art drawn as size boxes (`?sizes=1`, sizeBoxes.ts): each key whose box is up. */
     sizeBoxes: string[];
+    sizeLabels: string[];
+    floorShown: boolean;
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
     /** The art tiles that scroll at rates of their own (OP-156): each one's key, scroll factor and where it is drawn. */
@@ -2045,6 +2056,8 @@ export class RoomScene extends Phaser.Scene {
       mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
       soft: [...this.soft],
       sizeBoxes: roomArtKeys(this.room.id, drawnRoom(this.room, this.cfg)).filter((k) => drawnAsSizeBox(k) && this.textures.exists(k)),
+      sizeLabels: this.sizeLabels?.keys() ?? [],
+      floorShown: this.floorShown,
       travel: this.travelNow(),
       paint: this.painter?.debug() ?? null,
     };
@@ -2659,12 +2672,21 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /** Back where a fall in a course takes the owl (OP-224): there at once, standing, and the room told. */
-  private placeAt(at: Vec2): void {
+  private placeAt(at: Vec2, top = 0): void {
     this.walkGoal = null;
     this.wayTo = null;
     this.keyWalk = false;
     this.me.place(at);
     this.stop();
+    // Standing where it is put (a course's fall): on the floor, or up on the ledge of the bench it is back
+    // at. Left as it was, an owl that fell in the air would go on falling there, and one put back under a
+    // bench up on a ledge over a pit would stand on the pit's floor and fall again, over and over.
+    if (top > 0 || this.flier.air.s !== GROUNDED || this.flier.air.z !== 0) {
+      this.flier = { ...this.flier, air: { z: top, vz: 0, s: GROUNDED, f: 0 } };
+      this.drawnAir = this.flier.air;
+      this.me.fly(this.flier.air, Date.now());
+      this.retellAir();
+    }
   }
 
   /** Jump pressed now and let go `holdMs` after the press takes, set at once (the tests and the console). */

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { updraftEnding, updraftOn, type Updraft } from '@owl-park/shared';
+import { updraftBitsKey } from './skinTrial';
 
 /**
  * The leaves in a room's updrafts (OP-226, updraft.ts), drawn: each column a stream of small leaves
@@ -7,7 +8,8 @@ import { updraftEnding, updraftOn, type Updraft } from '@owl-park/shared';
  * while it is off. The leaves are the only thing that shows a column, so a gust that drops is seen
  * before it lets an owl fall. The leaf is drawn once into a small texture. A realm's `updraft` piece
  * (the column's `art`, a kit slot), once its artist delivers it and it has loaded, is drawn up the
- * column under the leaves, repeated to its top, and shown only while the column blows.
+ * column under the leaves, repeated to its top, and shown only while the column blows. On a skin
+ * trial with updraft bits (skinTrial.ts, a strip of square frames), the bits rise in place of the leaf.
  */
 
 const LEAF = 'fx-updraft-leaf';
@@ -27,12 +29,28 @@ function leafTexture(scene: Phaser.Scene): string {
   return LEAF;
 }
 
+/** A realm's updraft bits as the particle, one frame a bit (the strip's square frames), or null when none has loaded. */
+function bitsTexture(scene: Phaser.Scene, columns: readonly Updraft[]): { key: string; frames: number[]; size: number } | null {
+  const art = columns.find((u) => u.art)?.art;
+  const key = art ? updraftBitsKey(art) : undefined;
+  if (!key || !scene.textures.exists(key)) return null;
+  const tex = scene.textures.get(key);
+  const img = tex.getSourceImage() as { width: number; height: number };
+  const n = Math.max(1, Math.round(img.width / img.height));
+  const fw = img.width / n;
+  for (let i = 0; i < n; i++) if (!tex.has(`bit-${i}`)) tex.add(`bit-${i}`, 0, i * fw, 0, fw, img.height);
+  return { key, frames: Array.from({ length: n }, (_, i) => i), size: fw };
+}
+
 export class UpdraftLeaves {
   private readonly streams: Array<{ u: Updraft; e: Phaser.GameObjects.Particles.ParticleEmitter; rate: number; art?: Phaser.GameObjects.TileSprite }> = [];
 
   /** `ground` is the room's ground line (screen y of height 0); `depth` draws the leaves behind the owls. */
   constructor(scene: Phaser.Scene, columns: readonly Updraft[], ground: number, depth: number, calm: () => boolean) {
-    const key = leafTexture(scene);
+    const bits = bitsTexture(scene, columns);
+    const key = bits?.key ?? leafTexture(scene);
+    // A bit is drawn about 40 px across, a leaf at its own 16.
+    const look = bits ? { frame: bits.frames.map((i) => `bit-${i}`), scale: { min: 32 / bits.size, max: 48 / bits.size } } : { tint: LEAF_TINTS, scale: { min: 0.7, max: 1.2 } };
     for (const u of columns) {
       const life = (u.top / 300) * 1000;
       const e = scene.add.particles(0, 0, key, {
@@ -42,9 +60,8 @@ export class UpdraftLeaves {
         speedX: { min: -25, max: 25 },
         lifespan: life,
         rotate: { start: 0, end: 360 },
-        scale: { min: 0.7, max: 1.2 },
+        ...look,
         alpha: { start: 0.95, end: 0 },
-        tint: LEAF_TINTS,
         frequency: 1000 / RATE_ON,
         emitting: false,
       });

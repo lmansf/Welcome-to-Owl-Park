@@ -44,8 +44,8 @@ export interface CourseHost {
   me(): { pos: Vec2; grounded: boolean; ground: number; z: number };
   /** The spawn the owl came in at. */
   spawn(): string | undefined;
-  /** Back to where a fall takes it: placed there, standing. */
-  place(at: Vec2): void;
+  /** Back to where a fall takes it: placed there, standing (up on a bench's ledge `top` high, else on the floor). */
+  place(at: Vec2, top?: number): void;
   /** The feather balance changed. */
   feathers(total: number): void;
   /** Something was granted: the collection should be read again. */
@@ -145,7 +145,7 @@ export class Course {
     // Down on the floor over a pit: a fall. Up on a ledge over a drop (a course seen from the side) is not one.
     if ((me.grounded && me.ground === 0 && inPit(this.room, me.pos)) || inThorns(this.room, me.pos.x, me.z)) {
       this.ask('fall', now, () => link.fall(), (res) => {
-        if (res.at) this.host.place(res.at);
+        if (res.at) this.host.place(res.at, res.top ?? 0);
         this.falls += 1;
       });
       return;

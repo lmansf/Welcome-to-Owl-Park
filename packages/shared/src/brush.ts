@@ -44,9 +44,9 @@ export interface BrushStroke {
 /** A bridge's length (room px). */
 export const BRIDGE_LEN = 480;
 /** How long ink lasts from a landing (ms). */
-export const BRIDGE_MS = 4000;
+export const BRIDGE_MS = 6000;
 /** Out in the rain (act 2): how long ink lasts on a stone with no eave over it (ms). */
-export const RAIN_BRIDGE_MS = 2000;
+export const RAIN_BRIDGE_MS = 4000;
 /** The last stretch of a stroke's life, in which it greys out (ms). */
 export const BRUSH_FADE_MS = 1000;
 /** A tread's width (room px), centred over its stone. */
