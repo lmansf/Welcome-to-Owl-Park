@@ -1,0 +1,35 @@
+name: QA shots (temporary)
+on:
+  push:
+    branches: [qa-shots-hollow]
+permissions:
+  contents: read
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/park
+      - run: pnpm exec playwright test qashots sizes --project=desktop --project=phone || true
+        working-directory: apps/park
+      - name: Print the pictures
+        working-directory: apps/park
+        run: |
+          for f in qa-shots/*.png e2e-screenshots/*.png; do
+            [ -f "$f" ] || continue
+            convert "$f" -resize 1000x1000\> -quality 55 /tmp/shot.jpg
+            echo "=====BEGIN $f"
+            base64 -w 0 /tmp/shot.jpg
+            echo
+            echo "=====END $f"
+          done
