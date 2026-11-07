@@ -10,12 +10,14 @@
  *   may. A browser always says which page a socket comes from: one that says nothing is refused. An
  *   API call from another site's page is refused too; one that names no page (the store's webhooks,
  *   the uptime check, a same-origin GET) is not.
- * - Every answer: nosniff, HSTS on https, and CORS for the park's own pages only, never `*`.
+ * - Every answer: nosniff, HSTS on https, a Permissions-Policy that turns off the camera, microphone,
+ *   location, payments, USB and ad topics (OP-246), and CORS for the park's own pages only, never `*`.
  * - The park's page runs only its own scripts, with a fresh nonce for its two inline ones on each
  *   load, and connects only to its own host (`parkPolicy`). A browser reports what the policy blocked
  *   to /api/csp-report, logged as csp_violation (a few lines a while, however many pages report).
  */
 import type { Logger } from '@owl-park/shared';
+import { PERMISSIONS_POLICY } from '@owl-park/shared/headers';
 
 /** A host on this machine: local development and the browser tests. */
 export function isLocalHost(hostname: string): boolean {
@@ -38,13 +40,17 @@ export const HSTS = 'max-age=31536000';
 /** Where a browser sends what the page's policy blocked. */
 export const CSP_REPORT_PATH = '/api/csp-report';
 
+export { PERMISSIONS_POLICY };
+
 /**
  * The park's page policy (OP-140). Scripts: the page's own, and its two inline ones by the nonce.
  * Styles: its own and inline ones (the load screen's leaves and the HUD set theirs inline). Images:
  * its own, and the data: and blob: ones it makes itself (a nest's picture, the menu's drawn edges, art
  * fetched whole). Connections: its API and its room sockets, on its own host. HeyCatch's analytics host
  * for both: the SDK sends its events there and loads one small helper script from it. No plugins, no
- * base, forms only to itself, and no page may frame it.
+ * base, forms only to itself, and no page may frame it. Fonts, sound and the app manifest only from
+ * itself, and no workers or frames at all (OP-246): the page uses system fonts, makes its sound, and
+ * opens the store's checkout in a window of its own. Over https, any http address it names goes as https.
  */
 export const ANALYTICS_HOST = 'https://in.heycatch.ai';
 
@@ -60,6 +66,13 @@ export function parkPolicy(url: URL, nonce: string): string {
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    "font-src 'self'",
+    "media-src 'self'",
+    "worker-src 'none'",
+    "frame-src 'none'",
+    "manifest-src 'self'",
+    // Not on this machine's http, where the browser tests' page and sockets have no https to go to.
+    ...(url.protocol === 'https:' ? ['upgrade-insecure-requests'] : []),
     `report-uri ${CSP_REPORT_PATH}`,
   ].join('; ');
 }
@@ -83,14 +96,17 @@ export async function guardedPage(page: Response, url: URL): Promise<Response> {
   headers.set('Content-Security-Policy', parkPolicy(url, nonce));
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Its own window to itself (OP-246), while the store's checkout it opens still answers it.
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   return new Response(withNonce(await page.text(), nonce), { status: page.status, statusText: page.statusText, headers });
 }
 
-/** Every answer as it leaves (an upgraded socket goes as it is): nosniff, HSTS on https, CORS for the park's own pages. */
+/** Every answer as it leaves (an upgraded socket goes as it is): nosniff, the Permissions-Policy, HSTS on https, CORS for the park's own pages. */
 export function finished(request: Request, url: URL, res: Response, listed: string | undefined): Response {
   if (res.status === 101 || res.webSocket) return res;
   const headers = new Headers(res.headers);
   headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Permissions-Policy', PERMISSIONS_POLICY);
   // Only over https (the static files' own rule, public/_headers, puts it on the page as it comes from them).
   if (url.protocol === 'https:' && !isLocalHost(url.hostname)) headers.set('Strict-Transport-Security', HSTS);
   else headers.delete('Strict-Transport-Security');
