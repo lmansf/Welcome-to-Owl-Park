@@ -187,6 +187,7 @@ import { OWL_SCALE, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
+import { cameraBounds } from './hudInset';
 
 export interface RoomStart {
   room: string;
@@ -3645,7 +3646,6 @@ export class RoomScene extends Phaser.Scene {
 
   private setupCamera(): void {
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, this.room.size.w, this.room.size.h);
     cam.startFollow(this.followed(), true, 0.12, 0.12);
     const fit = () => this.fitCamera();
     fit();
@@ -3666,6 +3666,7 @@ export class RoomScene extends Phaser.Scene {
       const k = this.cfg.pixelRatio;
       cam.setViewport(Math.round(f.x * k), Math.round(f.y * k), Math.max(1, Math.round(f.w * k)), Math.max(1, Math.round(f.h * k)));
       cam.setZoom(Math.max(0.1, Math.min((f.w * k) / 340, (f.h * k) / 280, 4)));
+      cam.setBounds(0, 0, this.room.size.w, this.room.size.h);
       const x = this.mirror ? (this.me.pos.x + NEST_MIRROR.x) / 2 : this.me.pos.x;
       cam.centerOn(x, this.me.pos.y - 90);
       return;
@@ -3673,6 +3674,11 @@ export class RoomScene extends Phaser.Scene {
     const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
     cam.setViewport(0, 0, width, h);
     cam.setZoom(Math.max(width / this.room.size.w, h / this.room.size.h));
+    // A side view's doorways, landings and hatches can scroll out from under the HUD (OP-278); the
+    // Decorate sheet's own view stops above it already.
+    const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.hud.coveredEdges();
+    const b = cameraBounds(this.room.size, this.sideView(), covered, this.cfg.pixelRatio / cam.zoom);
+    cam.setBounds(b.x, b.y, b.w, b.h);
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }
 
