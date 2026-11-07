@@ -29,7 +29,7 @@ describe('the walkable floor, seen from above', () => {
     expect(calls.some((c) => c.op === 'stroke')).toBe(true);
   });
 
-  it('reads the look\'s colours as Phaser takes them', () => {
+  it("reads the look's colours as Phaser takes them", () => {
     expect(rgba('rgba(255, 244, 214, 0.55)')).toEqual({ color: 0xfff4d6, alpha: 0.55 });
     expect(rgba(floorLook(false).solidEdge).alpha).toBeGreaterThan(0);
   });

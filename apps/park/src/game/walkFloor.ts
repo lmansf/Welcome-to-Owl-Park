@@ -110,7 +110,12 @@ export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number
  * Draws the floor plan over the room, under its pieces and owls: its edges alone over the painting, the
  * whole plan with size boxes on. Returns what it drew, or null where the room has no floor.
  */
-export function drawWalkFloor(scene: Phaser.Scene, room: RoomDef, boxes: boolean, depth: number): Phaser.GameObjects.Image | Phaser.GameObjects.Graphics | null {
+export function drawWalkFloor(
+  scene: Phaser.Scene,
+  room: RoomDef,
+  boxes: boolean,
+  depth: number,
+): Phaser.GameObjects.Image | Phaser.GameObjects.Graphics | null {
   if (!room.walkable.length) return null;
   if (!boxes) return drawFloorEdges(scene, room, depth);
   const key = `walk-floor-${room.id}${boxes ? '-boxes' : ''}`;
