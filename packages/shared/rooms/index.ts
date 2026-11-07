@@ -708,10 +708,11 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 300, y: 810 }, 'from-market': { x: 300, y: 810 } },
+    spawns: { 'default': { x: 300, y: 810 }, 'from-market': { x: 300, y: 810 }, 'from-cavern': { x: 300, y: 810 } },
     doors: [
-      // The open doorway, out onto the street past its threshold.
-      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, marker: { x: 100, y: 640 } },
+      // The open doorway, out onto the street past its threshold. On the new map an owl that came up
+      // from the cavern goes back down there (OP-283); one that came from the market goes back to it.
+      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, toNew: { room: 'm3-under', spawn: 'from-arcade' }, marker: { x: 100, y: 640 } },
       // The three cabinets, each spot on the floor in front of its cabinet and each marker on its screen.
       { id: 'cabinet-crossing', rect: { x: 540, y: 812, w: 160, h: 60 }, marker: { x: 652, y: 482 } },
       { id: 'cabinet-flight', rect: { x: 1820, y: 790, w: 160, h: 60 }, marker: { x: 1862, y: 496 } },
@@ -1593,8 +1594,12 @@ ROOMS['m3-stair-3'] = newMapLevel(
 ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
   // Up the root stair into the hollow hall's floor (the stairs above are left over, see below).
   'stair-l1-l0': at(HALL_ID, 'from-under'),
-  'to-arcade': at('m3-cave', 'from-l0'),
+  // The arcade is a communal room, so seen from above (the owner's camera rule, OP-283): the cavern's
+  // arcade door leads into the top-down arcade, whose street door leads back down here for an owl
+  // that came this way (its `toNew`).
+  'to-arcade': at('arcade', 'from-cavern'),
 });
+// The side-view copy of the tree's arcade the cavern led to before OP-283; nothing leads in now.
 ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
 
 // ---- The hollow hall and its four Commons (keepers only, hollowHall.ts) ----
