@@ -88,6 +88,12 @@ export const CLOSE = {
   TOO_LARGE: 1009,
 } as const;
 
+/**
+ * What no answer of the park's may use (OP-246): the park needs none of these, so no script on it gets
+ * them. The Worker sets it on its answers, and the static files' public/_headers says the same.
+ */
+export const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()';
+
 /** What a room says a moment before the park's nightly restart closes its socket (OP-181): the owner approves these words. */
 export const RESTART_NOTICE = 'The park closes for the night in a moment. See you soon!';
 /** What the home screen says after the nightly restart sent the owl out (OP-181): the owner approves these words too. */

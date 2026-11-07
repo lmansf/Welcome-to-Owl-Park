@@ -16,7 +16,7 @@
  *   load, and connects only to its own host (`parkPolicy`). A browser reports what the policy blocked
  *   to /api/csp-report, logged as csp_violation (a few lines a while, however many pages report).
  */
-import type { Logger } from '@owl-park/shared';
+import { PERMISSIONS_POLICY, type Logger } from '@owl-park/shared';
 
 /** A host on this machine: local development and the browser tests. */
 export function isLocalHost(hostname: string): boolean {
@@ -39,8 +39,7 @@ export const HSTS = 'max-age=31536000';
 /** Where a browser sends what the page's policy blocked. */
 export const CSP_REPORT_PATH = '/api/csp-report';
 
-/** What no answer of the park's may use (OP-246): the park needs none of these, so no script on it gets them. */
-export const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()';
+export { PERMISSIONS_POLICY };
 
 /**
  * The park's page policy (OP-140). Scripts: the page's own, and its two inline ones by the nonce.

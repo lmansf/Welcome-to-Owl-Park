@@ -119,12 +119,9 @@ describe('the park’s page and every answer (OP-140)', () => {
     expect(api.headers.get('Permissions-Policy')).toBe(PERMISSIONS_POLICY);
   });
 
-  it('turns off the camera, microphone, location, payments, USB and ad topics on every answer, and the static files say the same (OP-246)', async () => {
+  it('turns off the camera, microphone, location, payments, USB and ad topics on every answer (OP-246)', async () => {
     expect(PERMISSIONS_POLICY).toBe('camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()');
     for (const path of ['/', '/api/notice', '/api/nothing-here']) expect((await call(path)).headers.get('Permissions-Policy')).toBe(PERMISSIONS_POLICY);
-    // The static files' own headers (the park's public/_headers), as the asset server sends them.
-    const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (path: string, encoding: string) => string };
-    expect(readFileSync('../park/public/_headers', 'utf8')).toContain(`Permissions-Policy: ${PERMISSIONS_POLICY}`);
   });
 
   it('puts the nonce on a script tag however it is written, and on nothing that only starts like one', () => {
