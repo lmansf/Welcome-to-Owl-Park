@@ -1,8 +1,9 @@
 /**
  * The HUD's solid controls sit over the room's edges: on a computer the Menu, Emotes and Say along the
  * bottom and the owl count at the top right; on a touch screen the Menu and Say at the top right
- * (OP-278). In a room seen from the side the camera may scroll past the room's top and bottom by as
- * much, so a doorway, landing or hatch at an edge can always be brought out from under them.
+ * (OP-278). The camera may scroll past the room's top and bottom by as much, so a doorway, landing,
+ * hatch or leaf pile at an edge can always be brought out from under them: in a room seen from the
+ * side (OP-278) and in one seen from above, whose floor runs to the bottom of the screen (OP-292).
  */
 
 /** How far the HUD's controls reach in from the top and the bottom of the screen, in CSS px. */
@@ -20,11 +21,10 @@ export interface Bounds {
 
 /**
  * The camera's bounds for a room `size` wide and tall. `cssToWorld` is room units per CSS pixel
- * (the device's pixel ratio over the camera's zoom). Rooms seen from above keep the room's own
- * rectangle: they are framed to the screen and walked in, and the HUD's corners hold nothing there.
+ * (the device's pixel ratio over the camera's zoom).
  */
-export function cameraBounds(size: { w: number; h: number }, side: boolean, covered: CoveredEdges, cssToWorld: number): Bounds {
-  if (!side || !(cssToWorld > 0)) return { x: 0, y: 0, w: size.w, h: size.h };
+export function cameraBounds(size: { w: number; h: number }, covered: CoveredEdges, cssToWorld: number): Bounds {
+  if (!(cssToWorld > 0)) return { x: 0, y: 0, w: size.w, h: size.h };
   const top = Math.max(0, covered.top) * cssToWorld;
   const bottom = Math.max(0, covered.bottom) * cssToWorld;
   return { x: 0, y: -top, w: size.w, h: size.h + top + bottom };

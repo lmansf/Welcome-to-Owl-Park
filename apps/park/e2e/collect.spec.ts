@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { frames, openPark, state } from './helpers';
+import { frames, openPark, settleCamera, state, toScreen } from './helpers';
 
 /** Give a collector a variant before the park loads (as if earned earlier), stored the way the local mode keeps it. */
 async function seed(page: Page, collector: string, variant: string): Promise<void> {
@@ -128,6 +128,26 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     expect(await page.evaluate(() => window.owlPark.use('grove-leaves-2'))).toBe(true);
     await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-2')?.here, { timeout: 15_000 }).toBe(false);
     expect((await state(page)).room).toBe('grove');
+  });
+
+  test('standing at the Party Grove’s floor-level leaf pile, the pile is clear of Menu, Emotes and Say (OP-292)', async ({ page }) => {
+    await openPark(page, { collector: 'e2e-pile-hud', tz: 'UTC', room: 'hub' });
+    expect(await page.evaluate(() => window.owlPark.use('hub-leaves-1'))).toBe(true);
+    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'hub-leaves-1')?.here, { timeout: 15_000 }).toBe(false);
+    await settleCamera(page);
+    // The top of the HUD's controls along the bottom of the screen (a touch screen has none there).
+    const hudBottom = await page.evaluate(() =>
+      Math.min(
+        window.innerHeight,
+        ...[...document.querySelectorAll('#hud .bar .pill, #hud [data-menu-btn], #hud [data-emotes-btn], #hud [data-say-btn]')]
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.height > 0 && r.top + r.height / 2 >= window.innerHeight / 2)
+          .map((r) => r.top),
+      ),
+    );
+    const pile = await toScreen(page, 1930, 820);
+    // The pile's foot, with room to see it above the buttons (on main it sat right at their top edge).
+    expect(pile.y).toBeLessThan(hudBottom - 24);
   });
 
   test('the feather shop gives a gift a day and sells today’s three, the featured shelf and the week', async ({ page }) => {
