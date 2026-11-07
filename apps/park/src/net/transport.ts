@@ -54,6 +54,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onRestart?(): void;
   /** The park is closed for setup (OP-205): the owl goes to the home screen, which shows these words until the park opens again. */
   onSetup?(words: string): void;
+  /** The ticket that let the owl in ran out of time (OP-237): the owl goes to the home screen, and Play brings it back through the gate. */
+  onTicketEnded?(): void;
   /** Whether this owl walks the park as a spectator (OP-191): said with every welcome, and false once a ticket admits it in place. */
   onSpectator?(spectator: boolean): void;
 }

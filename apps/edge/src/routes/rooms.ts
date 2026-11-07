@@ -3,11 +3,11 @@ import { CLOSE, type Logger, hashForLog } from '@owl-park/shared';
 import type { OverflowState } from '../Overflow';
 import { copiesIn, pickCopy } from '../copies';
 import type { Env } from '../env';
-import { mayEnter, spectating, spectatorsOn } from '../gate';
+import { isFreeRoom, mayEnter, spectating, spectatorsOn } from '../gate';
 import { health } from '../health';
 import { countIn, countedOneMore } from '../overflowState';
 import { isLocalHost } from '../guard';
-import { mintEntry, passRefusal, requireSecret, signingKeySet, verifyEntry, verifyPass } from '../pass';
+import { type PassPayload, mintEntry, passRefusal, requireSecret, signingKeySet, verifyEntry, verifyPass } from '../pass';
 import { ROOMS, isRoomId, roomCap } from '../rooms';
 import { CORS, adminKeySet, clientIp, json, whoOf } from './http';
 import { collections, gateOf, objectFor, objectName, overflowOf, readGate } from './park';
@@ -114,6 +114,16 @@ export async function counts(c: RouteCtx): Promise<Response> {
   return new Response(r.body, { headers: { ...CORS, 'Content-Type': 'application/json' } });
 }
 
+/**
+ * When a room socket's ticket time runs out, in ms (OP-237), or null when nothing ends it: the gate
+ * takes tickets, a ticket admitted the pass, and the room is past the turnstiles. A spectator, a free
+ * room, or an open gate has no ticket time to keep.
+ */
+export function ticketUntil(mode: 'open' | 'ticket', pass: Pick<PassPayload, 'adm' | 'exp'>, roomId: string, spectator: boolean): number | null {
+  if (mode !== 'ticket' || !pass.adm || spectator || isFreeRoom(roomId)) return null;
+  return pass.exp * 1000;
+}
+
 export async function socket(c: RouteCtx): Promise<Response> {
   const { request, env, ctx, url, log } = c;
   const roomId = url.pathname.slice(4);
@@ -164,6 +174,11 @@ export async function socket(c: RouteCtx): Promise<Response> {
   if (pass.cid) headers.set('X-Collector-Id', pass.cid);
   if (pass.tz) headers.set('X-Collector-Tz', pass.tz);
   if (pass.dev) headers.set('X-Collector-Dev', pass.dev);
+  // When the ticket that let this owl in runs out (OP-237): the room closes its socket then. Only the
+  // pass says so, and only where the ticket is what opened the room; whatever the page sent goes.
+  headers.delete('X-Ticket-Until');
+  const until = ticketUntil(gate.mode, pass, roomId, spectator);
+  if (until !== null) headers.set('X-Ticket-Until', String(until));
   headers.set('X-Visitor-Ip', clientIp(request, env));
   return objectFor(env, roomId, copy).fetch(new Request(request, { headers }));
 }

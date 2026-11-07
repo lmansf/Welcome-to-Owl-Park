@@ -996,6 +996,15 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return;
         }
+        if (ev.code === CLOSE.TICKET_ENDED) {
+          // Its ticket ran out mid-visit (OP-237): home, with a fresh pass for the next Play, which
+          // meets the front gate again. Nothing reconnects.
+          this.pass = null;
+          this.ticketId = null;
+          handlers.onTicketEnded?.();
+          handlers.onStatus('offline');
+          return;
+        }
         if (ev.code === CLOSE.SETUP) {
           // Closed for setup (OP-205): home, where the closed card shows the keepers' words. Nothing
           // reconnects; Play tries again, and the room says so again until the park opens.

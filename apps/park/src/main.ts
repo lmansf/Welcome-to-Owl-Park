@@ -1,6 +1,6 @@
 import { analytics } from '@heycatch/sdk';
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TICKET_ENDED_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -10,7 +10,7 @@ import { BootScene } from './game/BootScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
-import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, type RoomStart } from './game/RoomScene';
+import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, TICKET_ENDED_KEY, type RoomStart } from './game/RoomScene';
 import { startWalking, walkingMap } from './game/walkingMap';
 import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
@@ -670,6 +670,11 @@ game.events.on(HOME_SHOWN, () => {
   if (game.registry.get(RESTARTED_KEY) === true) {
     game.registry.set(RESTARTED_KEY, false);
     hud.toast(RESTART_HOME, 8000);
+  }
+  // Sent home because its ticket ran out mid-visit (OP-237): said once; Play brings the owl to the gate.
+  if (game.registry.get(TICKET_ENDED_KEY) === true) {
+    game.registry.set(TICKET_ENDED_KEY, false);
+    hud.toast(TICKET_ENDED_HOME, 8000);
   }
   // Closed for setup (OP-205): the room sent the owl here with the keepers' words. The closed card
   // takes Play's place at once (OP-233), and the park's own answer fills in the reopen time.

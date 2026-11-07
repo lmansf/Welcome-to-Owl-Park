@@ -211,6 +211,8 @@ const TAP_SLOP = 16;
 const LEAVE_FADE_MS = 220;
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
 export const RESTARTED_KEY = 'restarted';
+/** The registry's word that the owl's ticket ran out mid-visit (OP-237): the home screen says so once. */
+export const TICKET_ENDED_KEY = 'ticketEnded';
 /** The registry's closed card (OP-205): the words the home screen shows while the park is closed for setup. */
 export const SETUP_KEY = 'setup';
 /** The restart's notice stays up until the room closes, near enough (the room waits ten seconds, OP-181). */
@@ -1144,6 +1146,7 @@ export class RoomScene extends Phaser.Scene {
       onRestartNotice: (words) => live() && this.hud.toast(words, RESTART_NOTICE_MS),
       onRestart: () => live() && this.restarted(),
       onSetup: (words) => live() && this.closedForSetup(words),
+      onTicketEnded: () => live() && this.ticketEnded(),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -1295,6 +1298,15 @@ export class RoomScene extends Phaser.Scene {
   private restarted(): void {
     if (this.leaving) return;
     this.registry.set(RESTARTED_KEY, true);
+    void this.leaveRoom().then((left) => {
+      if (left) this.scene.start('home');
+    });
+  }
+
+  /** The ticket that let the owl in ran out of time (OP-237): out of the room as through a door, to the home screen. */
+  private ticketEnded(): void {
+    if (this.leaving) return;
+    this.registry.set(TICKET_ENDED_KEY, true);
     void this.leaveRoom().then((left) => {
       if (left) this.scene.start('home');
     });

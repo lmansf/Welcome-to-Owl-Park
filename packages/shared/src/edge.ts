@@ -83,12 +83,16 @@ export const CLOSE = {
   RESTART: 4016,
   /** The park is closed for setup (OP-205): the page shows the closed card on the home screen, and nothing reconnects. */
   SETUP: 4017,
+  /** The ticket that let this owl in has run out of time (OP-237): the page goes home, and Play brings it back in through the gate. */
+  TICKET_ENDED: 4018,
   TOO_LARGE: 1009,
 } as const;
 
 /** What a room says a moment before the park's nightly restart closes its socket (OP-181): the owner approves these words. */
 export const RESTART_NOTICE = 'The park closes for the night in a moment. See you soon!';
 /** What the home screen says after the nightly restart sent the owl out (OP-181): the owner approves these words too. */
+/** What the home screen says after an owl's ticket ran out of time mid-visit (OP-237): the owner approves these words too. */
+export const TICKET_ENDED_HOME = 'Your ticket’s time is up. Thanks for visiting Owl Park!';
 export const RESTART_HOME = 'The park closed for the night and is open again. Press Play to come back in.';
 
 export interface ServerWalk {
