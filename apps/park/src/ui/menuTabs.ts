@@ -213,6 +213,8 @@ interface Place {
   row: number;
   /** A closed arch: shown, its name kept until it is public. */
   closed?: boolean;
+  /** A place shown with 'You are here' but no travel card (the new map's places travel has no landing for yet). */
+  noTravel?: boolean;
 }
 
 /** The park as it stands: inside the turnstiles the great tree and what leads off it, outside the gate the nests. */
@@ -241,10 +243,58 @@ export const MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['homes', 'nest'],
 ];
 
+/**
+ * The new map (OP-282), top to bottom as it is walked: the nests and the Treetop Commons with the
+ * turnstiles, then down the knothole into the hollow hall, a Commons off each of its landings (west
+ * and east) with its realm beyond, the Party Grove at the tree's foot, and the root stair down to the
+ * cavern and its arcade. Travel keeps to the places it has a landing for (TRAVEL_LANDINGS); the hall,
+ * the Commons and the cavern show where the owl is.
+ */
+export const NEW_MAP_PLACES: readonly Place[] = [
+  { id: 'nest', name: NEST_WORDS.yourNest, col: 0, row: 0 },
+  { id: 'homes', name: 'The nests’ street', col: 1, row: 0 },
+  { id: 'lobby', name: 'The Treetop Commons', col: 1, row: 1 },
+  { id: 'commons-glass', name: 'The glass commons', col: 0, row: 2, noTravel: true },
+  { id: 'commons-ink', name: 'The paper commons', col: 2, row: 2, noTravel: true },
+  { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
+  { id: 'm3-hall', name: 'The hollow hall', col: 1, row: 3, noTravel: true },
+  { id: 'commons-grove', name: 'The clearing’s commons', col: 0, row: 4, noTravel: true },
+  { id: 'commons-market', name: 'The neon commons', col: 2, row: 4, noTravel: true },
+  { id: 'grove', name: 'The treehouse clearing', col: 0, row: 5 },
+  // Travel to 'hub' lands outside the turnstiles (the old map's great tree); here it is the Party Grove, walked to.
+  { id: 'hub', name: 'The Party Grove', col: 1, row: 5, noTravel: true },
+  { id: 'market', name: 'The neon street', col: 2, row: 5 },
+  { id: 'm3-under', name: 'The root stair', col: 1, row: 6, noTravel: true },
+  { id: 'arcade', name: ARCADE_NAME, col: 2, row: 6 },
+];
+
+/** The new map's paths, as its doorways join the places. */
+export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
+  ['nest', 'homes'],
+  ['homes', 'lobby'],
+  ['lobby', 'm3-hall'],
+  ['m3-hall', 'commons-glass'],
+  ['m3-hall', 'commons-ink'],
+  ['m3-hall', 'commons-grove'],
+  ['m3-hall', 'commons-market'],
+  ['commons-glass', 'glass'],
+  ['commons-grove', 'grove'],
+  ['commons-market', 'market'],
+  ['m3-hall', 'hub'],
+  ['hub', 'm3-under'],
+  ['m3-under', 'arcade'],
+  ['market', 'arcade'],
+];
+
+/** The map's places and paths for the park the owl walks: the new map (3), or today's park and the tree. */
+export function mapLayout(walking: number): { places: readonly Place[]; paths: ReadonlyArray<[string, string]>; cols: number; rows: number } {
+  return walking === 3 ? { places: NEW_MAP_PLACES, paths: NEW_MAP_PATHS, cols: 3, rows: 7 } : { places: MAP_PLACES, paths: MAP_PATHS, cols: 3, rows: 5 };
+}
+
 /** The map's place for a room the owl is in: any owl's nest is "a nest"; the owl's own is Your nest. */
-export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = []): string | null {
+export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = [], walking = 1): string | null {
   if (room.startsWith('nest-') || room === 'nest') return ownNest ? 'nest' : 'homes';
-  return MAP_PLACES.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
+  return mapLayout(walking).places.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
 }
 
 /** Travel from the map (OP-130), as the Map tab shows it. */
@@ -317,12 +367,13 @@ export function newlyLit(storage: Pick<Storage, 'getItem' | 'setItem'> | null, p
  * With `travel` (OP-130) each open place is a button: lit once walked into (the nest always), and a
  * tap opens its card below the map, with the hold that travels.
  */
-export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = [], travel: MapTravel | null = null): void {
+export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = [], travel: MapTravel | null = null, walking = 1): void {
   const map = el('div', 'mmap');
-  const cols = 3;
-  const rows = 5;
-  const at = new Map(MAP_PLACES.map((p) => [p.id, { ...p, closed: p.closed && !open.includes(p.id) }]));
-  const lines = MAP_PATHS.map(([a, b]) => {
+  const layout = mapLayout(walking);
+  const { cols, rows } = layout;
+  map.style.gridTemplateRows = `repeat(${rows},minmax(72px,auto))`;
+  const at = new Map(layout.places.map((p) => [p.id, { ...p, closed: p.closed && !open.includes(p.id) }]));
+  const lines = layout.paths.map(([a, b]) => {
     const p = at.get(a)!;
     const q = at.get(b)!;
     return `<line x1="${p.col + 0.5}" y1="${p.row + 0.5}" x2="${q.col + 0.5}" y2="${q.row + 0.5}"${q.closed ? ' class="closed"' : ''}/>`;
@@ -334,7 +385,7 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   const drawCard = () => {
     cardBox.replaceChildren();
     const place = picked ? at.get(picked) : undefined;
-    if (!travel || !place || place.closed) return;
+    if (!travel || !place || place.closed || place.noTravel) return;
     const what = placeCard(place.id, here, travel);
     const box = card(place.name);
     box.dataset['travelCard'] = place.id;
@@ -371,7 +422,7 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     cardBox.appendChild(box);
   };
   for (const p of at.values()) {
-    const tappable = travel !== null && !p.closed;
+    const tappable = travel !== null && !p.closed && !p.noTravel;
     const lit = tappable && (p.id === 'nest' || canTravel(p.id, travel.places));
     const pin = el(tappable ? 'button' : 'div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}${tappable && !lit ? ' unlit' : ''}`);
     pin.dataset['place'] = p.id;
@@ -408,6 +459,10 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   panel.appendChild(cardBox);
   drawCard();
   if (travel) panel.appendChild(note(TRAVEL_WORDS.map));
+  if (walking === 3) {
+    panel.appendChild(note('Through the turnstiles and down the knothole: the hollow hall, a Commons off each landing with its realm beyond, the Party Grove at the tree’s foot, and the root stair down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
+    return;
+  }
   panel.appendChild(note('Inside the turnstiles: the great tree, with the treehouse clearing and the neon street on either side, and Neon Roost off the neon street. Outside the gate: the nests’ street and your nest. The boarded arches open as new realms arrive.'));
 }
 
