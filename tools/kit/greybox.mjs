@@ -227,9 +227,14 @@ export function planOf(shared, room) {
   };
 }
 
-/** The kit rooms the greybox can draw, by id. */
+/**
+ * The kit rooms the greybox can draw, by id: the rooms seen from the side (docs/TREE_STYLE.md). A room
+ * seen from above that is drawn from kit surfaces alone (the Great Hollow) has no backdrop or walkway
+ * layers to compare, and its floor is checked against its surfaces by kitProblems.
+ */
+const seenFromAbove = (r) => (r.map ?? 1) !== 2 && !r.kit.paths?.length;
 export function kitRooms(shared) {
-  const out = { ...Object.fromEntries(Object.entries(shared.rooms.ROOMS).filter(([, r]) => r.kit)), ...shared.demos.KIT_DEMOS, ...(shared.demos.KIT_PREVIEWS ?? {}) };
+  const out = { ...Object.fromEntries(Object.entries(shared.rooms.ROOMS).filter(([, r]) => r.kit && !seenFromAbove(r))), ...shared.demos.KIT_DEMOS, ...(shared.demos.KIT_PREVIEWS ?? {}) };
   return out;
 }
 
