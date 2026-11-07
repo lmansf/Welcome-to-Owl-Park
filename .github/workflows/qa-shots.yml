@@ -27,9 +27,8 @@ jobs:
         run: |
           for f in qa-shots/*.png e2e-screenshots/*.png; do
             [ -f "$f" ] || continue
-            convert "$f" -resize 1000x1000\> -quality 55 /tmp/shot.jpg
             echo "=====BEGIN $f"
-            base64 -w 0 /tmp/shot.jpg
+            base64 -w 0 "$f"
             echo
             echo "=====END $f"
           done
