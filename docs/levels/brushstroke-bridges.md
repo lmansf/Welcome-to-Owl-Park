@@ -675,9 +675,9 @@ take-off point, and the ink left when a slow owl walks from the stone to that po
 | --- | --- | --- | --- |
 | off k1's bridge to `c1` | 58%, rise 300 | 75%, rise 260 | `c1` lowered to 360 and 100 px east (narrowed to 260) |
 | off k3's bridge to `c2` | 58%, rise 300 | 75%, rise 260 | `c2` lowered to 380 and 140 px east |
-| off k6's bridge to `r1` (rain) | 58%, 0.2 s of ink left | 75%, 1.9 s left | `r1` lowered to 350; `k6` 140 px west |
-| off k8's bridge to the `post` | 14%, rise 340 | 76%, rise 260 | the post lowered to 300 (lost feather 4 with it) |
-| off k9's bridge to `k10` (rain) | 14%, 0.04 s of ink left | 69%, 2 s left | `k9` raised to 260: rise 280 |
+| off k6's bridge to `r1` (rain) | 58%, 0.2 s of ink left | 65%, 1.9 s left | `r1` lowered to 380, `k6` raised to 100 and 140 px west: rise 280 |
+| off k8's bridge to the `post` (lost feather 4, a side ledge) | 14%, rise 340 | 58%, rise 300 | the post lowered to 340, the feather with it |
+| from k9 up to `k10` (rain) | 14% off its bridge, 0.04 s of ink left | 97% off its top tread, 3.7 s left | `k9` paints treads (an up stone) instead of a bridge: two steps of 130, then a short hop up 80 |
 | off k14's bridge to `m2` | 96%, but half the bridge ran under the cloud | 96%, the whole bridge clear | the cloud 50 px shorter |
 | off k15's bridge to `m3` | 68%, rise 280 | 74%, rise 260 | `m3` lowered to 520, narrowed and 80 px east |
 | the dash gap, `n2` to `n3` | 0.6% without the dash, 14% with it | 37% without, 57% with | `n2` raised to 260, `n3` and seal 4 150 px east: rise 280, gap 500 |
@@ -688,9 +688,13 @@ Every other hop on the main line lands for 90 to 100% of tries, as before.
 
 **Kept shut.** Each move was checked so a bridge is still needed: from each stone with nothing
 painted, over every take-off point, flap timing and dash moment, the owl reaches none of `c1`,
-`c2`, `r1`, `k10` or `m3`, and the updraft in 3.1 no longer glides on to `m3`. One skip stays, as
-it did before: from k8's stone (and from `r1`) a well-timed dash reaches the post, a side ledge for
-lost feather 4, and k8's stone already reached `r2` with a dash.
+`c2`, `r1`, `k10` or `m3`, and the updraft in 3.1 no longer glides on to `m3`. The dash skips
+over the rain screen that were there before stay: from `r1` a well-timed dash reaches `k9` or the
+post, and from k8's stone it reaches `r2`; none needs less than a dash.
+
+**The art check.** The river's first and last screens sit at the edge of the kit's value bands
+(`pnpm kit:check`), so `r1`, `k6` and `k9` were set where those screens still pass: `k9` stays at
+200, which is why it paints treads now rather than standing higher.
 
 **Falls onto a bench on a ledge.** A fall sends the owl to its last bench; for a bench up on a
 ledge it now puts the owl on the ledge (`CourseBook.fall` returns its `top`, the room server and the

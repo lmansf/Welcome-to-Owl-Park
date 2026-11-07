@@ -185,11 +185,11 @@ const GARDEN: RoomKit = {
 // ---------- Act 2: the washing rain ----------
 
 const S2 = [
-  stone('k6', 420, 120, 90, 'R', RAIN_BRIDGE_MS),
+  stone('k6', 420, 120, 100, 'R', RAIN_BRIDGE_MS),
   // Under the temple eaves: sheltered from the rain, their ink keeps its four seconds.
   stone('k7', 1500, 120, 120, 'R'),
   stone('k8', 2240, 120, 40, 'R'),
-  stone('k9', 3260, 120, 260, 'R', RAIN_BRIDGE_MS),
+  stone('k9', 3260, 120, 200, 'U', RAIN_BRIDGE_MS),
   stone('k10', 4040, 120, 540, 'R', RAIN_BRIDGE_MS),
   stone('kE', 4440, 120, 60, 'U', RAIN_BRIDGE_MS),
 ];
@@ -200,9 +200,9 @@ const RIVER: RoomKit = {
   paths: [groundPath(3 * ROOM_W)],
   ledges: [
     ...S2.map((s) => s.ledge),
-    ledge('r1', 1280, 140, 350, pillar(350)),
+    ledge('r1', 1280, 140, 380, pillar(380)),
     ledge('porch', 2100, 100, 60, PLANK),
-    ledge('post', 2960, 60, 300, pillar(300)),
+    ledge('post', 2960, 60, 340, pillar(340)),
     ledge('r2', 3060, 140, 260, pillar(260)),
     ledge('falls-ledge', 4180, 180, 540, ROCK),
   ],
@@ -310,8 +310,8 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
       act: 2,
       pits: [floor(500, 4400)],
       thorns: [hazard('falls-low', 4180, 4360, 0, 'falls', 430), hazard('falls-high', 4180, 4360, 600, 'falls')],
-      benches: [piece('bench-2', 200), piece('bench-2b', 1350, 350), piece('bench-2c', 3130, 260)],
-      feathers: [piece('feather-4', 2990, 300)],
+      benches: [piece('bench-2', 200), piece('bench-2b', 1350, 380), piece('bench-2c', 3130, 260)],
+      feathers: [piece('feather-4', 2990, 340)],
     },
   }),
   'brush-falls': brushRoom('brush-falls', 1, FALLS_CAVE, {
