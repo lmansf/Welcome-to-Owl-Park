@@ -450,6 +450,8 @@ async function refreshWallet(): Promise<void> {
 let lineTimer: ReturnType<typeof setTimeout> | null = null;
 /** The number this owl holds in the line, while it waits. */
 let lineNumber: number | null = null;
+/** How long a page told its network holds its share of the line waits before asking again (OP-244). */
+const LINE_FULL_RETRY_MS = 30_000;
 const lineSoon = (fn: () => void, ms: number) => {
   if (lineTimer) clearTimeout(lineTimer);
   lineTimer = setTimeout(() => {
@@ -490,6 +492,13 @@ const onLine = (s: LineStatus) => {
     lineNumber = null;
     home.line({ message: 'passed' });
     lineSoon(() => void askLine(true), 2_500);
+    return;
+  }
+  if (s.state === 'full') {
+    // This network holds its share of the line already (OP-244): no number yet, so ask again later.
+    lineNumber = null;
+    home.line({ message: 'full' });
+    lineSoon(() => void askLine(true), LINE_FULL_RETRY_MS);
     return;
   }
   lineNumber = s.n;

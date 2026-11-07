@@ -1,8 +1,8 @@
 /** Busy nights (OP-075): a visitor's place in the line, and the busy ribbon's words; and whether the park is closed for setup (OP-233). */
-import { type LineStatus, closedView, waitMinutes } from '@owl-park/shared';
+import { LINE_CALL_ZONE, type LineStatus, closedView, waitMinutes } from '@owl-park/shared';
 import type { LineAnswer } from '../Overflow';
-import { mintEntry, requireSecret, verifyEntry } from '../pass';
-import { CORS, json, passFrom, readJson, whoOf } from './http';
+import { addressKey, mintEntry, requireSecret, verifyEntry } from '../pass';
+import { CORS, clientIp, json, passFrom, readJson, whoOf } from './http';
 import { overflow, overflowOf } from './park';
 import type { RouteCtx } from './router';
 
@@ -29,16 +29,18 @@ export async function line(c: RouteCtx): Promise<Response> {
   if (request.method === 'POST') {
     // In the park lately (this browser holds an entry): straight back in, no line.
     if (await verifyEntry(secret, (await readJson(request))?.['entry'], who)) return go();
-    return answer(await ask('/line/join', {}));
+    // The address only as its key (OP-244): the line counts numbers per address, never holding one.
+    return answer(await ask('/line/join', { addr: await addressKey(secret, clientIp(request, env)) }));
   }
   if (request.method !== 'GET') return json({ error: 'not found' }, 404);
   const n = Number(url.searchParams.get('n'));
   if (!Number.isInteger(n) || n < 1) return json({ error: 'bad request' }, 400);
   // Still waiting when the line was last read: its place is how far its number stands above the
   // line's front, so the many polls of a long line are answered here without asking the line.
-  // A number called since, or taken since (above every number waiting then), is asked about.
+  // A number called since, or taken since (above every number waiting then), is asked about, and so
+  // is one near the front (OP-244): asking there is how the line knows the page is still looking.
   const place = n - st.front;
-  if (place >= 1 && place <= st.waiting) return json({ state: 'waiting', n, place, waitMin: waitMinutes(place, st.rate) } satisfies LineStatus);
+  if (place > LINE_CALL_ZONE && place <= st.waiting) return json({ state: 'waiting', n, place, waitMin: waitMinutes(place, st.rate) } satisfies LineStatus);
   return answer(await ask('/line/status', { n }));
 }
 
