@@ -97,10 +97,11 @@ describe("the hollow hall's four Commons", () => {
     expect(ink.closedSign).toBeDefined();
     const course = ROOMS['commons-grove']!.doors.find((d) => d.id === 'to-course')!;
     expect(course.to).toEqual({ room: 'canopy-1', spawn: 'from-gate' });
-    // The course is the keepers' for now: the arch reads as shut to any other owl.
-    expect(ROOMS['canopy-1']!.keeperOnly).toBe(true);
-    expect(course.closedSign).toBe('Not Yet Fledged');
+    // The course is open to every owl (OP-285): no sign on its arch, and the hut's way out leads back here too.
+    expect(ROOMS['canopy-1']!.keeperOnly).toBeUndefined();
+    expect(course.closedSign).toBeUndefined();
     expect(ROOMS['canopy-1']!.doors.find((d) => d.id === 'to-commons')!.to).toEqual({ room: 'commons-grove', spawn: 'from-course' });
+    expect(ROOMS['canopy-hut']!.doors.find((d) => d.id === 'out')!.to).toEqual({ room: 'commons-grove', spawn: 'from-course' });
   });
 
   it("draw the Commons' own screens, the hub's paintings standing in until theirs land", () => {

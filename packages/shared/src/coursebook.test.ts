@@ -5,7 +5,7 @@ import { CANOPY_COURSE } from '../rooms/updraftCanopy';
 import { PLAY_FEATHERS_PER_DAY } from './activities';
 import { CollectionBook, MemoryCollectionStore } from './book';
 import { GOLDEN_MOUSE } from './collectibles';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, type CourseDef } from './course';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, type CourseDef } from './course';
 import { CourseBook, MemoryCourseStore } from './coursebook';
 import { nextParkDayAt } from './parktime';
 
@@ -241,12 +241,16 @@ describe('the course book: the finish shrine pays once, then a little each day',
 
   it('shows the course board: what is cleared, the best time and what is left (keeper courses only when asked)', () => {
     const { courses } = setup();
-    expect(courses.board(CID, MON)).toEqual([]);
+    // The open courses (OP-285), none cleared yet; the keepers' test course only when asked.
+    const open = Object.values(COURSES).filter((d) => !d.keeper).map((d) => d.id);
+    expect(open.length).toBeGreaterThan(0);
+    expect(courses.board(CID, MON).map((r) => r.course)).toEqual(open);
+    expect(courses.board(CID, MON).every((r) => !r.cleared)).toBe(true);
     run(courses, MON, 45_000);
-    const [row] = courses.board(CID, MON + 50_000, true);
+    const row = courses.board(CID, MON + 50_000, true).find((r) => r.course === 'trail');
     expect(row).toMatchObject({ course: 'trail', cleared: true, bestMs: 45_000, left: { first: false, gold: false, emote: true, today: COURSE_REPEAT_FEATHERS } });
     run(courses, MON + 60_000);
-    expect(courses.board(CID, MON + 100_000, true)[0]?.left.today).toBe(0);
+    expect(courses.board(CID, MON + 100_000, true).find((r) => r.course === 'trail')?.left.today).toBe(0);
   });
 });
 
@@ -267,8 +271,12 @@ describe('the Golden Mouse: clearing every course pays it, once', () => {
     const ids = (defs: readonly CourseDef[]) => mouseCourses(defs).map((d) => d.id);
     expect(ids(Object.values(COURSES))).not.toContain(TRIAL_COURSE.id);
     expect(ids(Object.values(COURSES)).sort()).toEqual(Object.values(COURSES).filter((d) => !d.test).map((d) => d.id).sort());
-    const { keeper: _k, ...canopyOpen } = CANOPY_COURSE;
-    expect(ids([TRIAL_COURSE, canopyOpen, ...Object.values(COURSES).filter((d) => d.id !== CANOPY_COURSE.id)])).toEqual([CANOPY_COURSE.id]);
+    // The three named courses are open to visitors (OP-285): the Mouse is for clearing all three.
+    expect(ids(Object.values(COURSES)).sort()).toEqual(['brush', 'canopy', 'circuit']);
+    const shut = (d: CourseDef): CourseDef => ({ ...d, keeper: true });
+    const others = Object.values(COURSES).filter((d) => !d.test && d.id !== CANOPY_COURSE.id);
+    expect(ids([TRIAL_COURSE, CANOPY_COURSE, ...others.map(shut)])).toEqual([CANOPY_COURSE.id]);
+    expect(ids([TRIAL_COURSE, shut(CANOPY_COURSE), ...others.map(shut)]).sort()).toEqual(['brush', 'canopy', 'circuit']);
     expect(ids([TRIAL_COURSE])).toEqual([]);
   });
 
@@ -279,6 +287,27 @@ describe('the Golden Mouse: clearing every course pays it, once', () => {
     expect(owns(book, GOLDEN_MOUSE)).toBe(true);
     const again = run(courses, MON + 60_000, 45_000);
     expect(again.ok && again.paid.mouse).toBeUndefined();
+  });
+
+  it('pays a visitor the Mouse for clearing the three open courses, and the test course counts for nothing (OP-285)', () => {
+    const { courses, book } = setup();
+    /** A real run of an open course: in at its first act, every part reached in its room, out at its shrine. */
+    const clear = (def: CourseDef, t: number) => {
+      expect(courses.start(CID, def.acts[0]!, t).ok, def.id).toBe(true);
+      courseParts(def, rooms).forEach((p, i) => expect(courses.reach(CID, p.room, 'part', p.id, t + 1000 * (i + 1)).ok, `${def.id} ${p.id}`).toBe(true));
+      const shrine = [...def.acts, ...(def.rooms ?? [])].find((id) => ROOMS[id]?.course?.shrine)!;
+      return courses.finish(CID, shrine, t + (def.floorMs ?? 0) + 30_000);
+    };
+    const open = Object.values(COURSES).filter((d) => !d.test && !d.keeper);
+    expect(open.map((d) => d.id).sort()).toEqual(['brush', 'canopy', 'circuit']);
+    expect(run(courses, MON, 45_000).ok).toBe(true);
+    open.forEach((def, i) => {
+      const r = clear(def, MON + 600_000 * (i + 1));
+      expect(r.ok, def.id).toBe(true);
+      const last = i === open.length - 1;
+      expect(r.ok && r.paid.mouse, def.id).toBe(last ? GOLDEN_MOUSE : undefined);
+    });
+    expect(owns(book, GOLDEN_MOUSE)).toBe(true);
   });
 
   it('holds the Mouse back while a course is left to clear', () => {

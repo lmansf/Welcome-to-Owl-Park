@@ -24,12 +24,12 @@ describe('the Updraft Canopy (OP-226)', () => {
     expect(ROOMS['canopy-hut']!.course!.shrine).toBeDefined();
   });
 
-  it("is the keepers' for now, seen from the side on the tree's ground line, holding the dash in every room, and no level of the tree", () => {
+  it("is open to every owl (OP-285), seen from the side on the tree's ground line, holding the dash in every room, and no level of the tree", () => {
     expect(CANOPY_GROUND).toBe(TREE_GROUND);
-    expect(CANOPY_COURSE.keeper).toBe(true);
+    expect(CANOPY_COURSE.keeper).toBeUndefined();
     for (const id of ids) {
       const r = ROOMS[id]!;
-      expect(r.keeperOnly, id).toBe(true);
+      expect(r.keeperOnly, id).toBeUndefined();
       expect(mapOf(r), id).toBe(2);
       expect(holdsDash(r), id).toBe(true);
     }
