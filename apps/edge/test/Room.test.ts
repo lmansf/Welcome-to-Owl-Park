@@ -1026,3 +1026,133 @@ describe('Room: updrafts, in a room seen from the side (OP-226)', () => {
     expect(rejected).toEqual(['lift']);
   });
 });
+
+describe('no walk ends on top of another owl (OP-248)', () => {
+  let now = 1_000_000;
+  let room: Room;
+  let seq = 0;
+  const peers = new Map<string, FakePeer>();
+  beforeEach(() => {
+    now = 1_000_000;
+    seq = 0;
+    peers.clear();
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    room = new Room(def, { now: () => now, random, cap: 20 });
+  });
+  const join = (id: string) => {
+    const p = new FakePeer();
+    peers.set(id, p);
+    room.join(p, id, hello());
+    return p;
+  };
+  /** Send a walk and let it finish; returns where the room said it ends. */
+  const walk = (id: string, to: Vec2, finish = true) => {
+    room.move(id, { t: 'move', to, seq: ++seq });
+    const end = peers.get(id)!.last('move')!;
+    if (finish) now += 60_000;
+    return end;
+  };
+  /** An owl standing at exactly `at`, far from where any other owl stands. */
+  const standing = (id: string, at: Vec2) => {
+    join(id);
+    expect(walk(id, at).to).toEqual(at);
+  };
+  const gap = LIMITS.minSpacingPx;
+
+  it('a walk aimed dead on a standing owl ends just beside them, on the side it came from', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    const echo = walk('b', { x: 800, y: 700 });
+    expect(distance(echo.to, { x: 800, y: 700 })).toBeGreaterThanOrEqual(gap);
+    expect(distance(echo.to, { x: 800, y: 700 })).toBeLessThanOrEqual(gap + LIMITS.spacingSlackPx + 1);
+    expect(echo.to.x).toBeLessThan(800); // short of them, on the walker's side
+    expect(echo.seq).toBe(seq);
+    // Everyone else is told the same spot, and the room has the owl there once it arrives.
+    expect(peers.get('a')!.last('move')!.to).toEqual(echo.to);
+    expect(room.positionOf('b')).toEqual(echo.to);
+  });
+
+  it('a walk aimed a little off another owl ends just outside them on the side it was aimed at', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 600 });
+    const aim = { x: 800, y: 712 }; // just below them, from the walker's left
+    const end = walk('b', aim).to;
+    expect(distance(end, { x: 800, y: 700 })).toBeGreaterThanOrEqual(gap);
+    expect(end.y).toBeGreaterThan(700);
+    expect(distance(end, aim)).toBeLessThan(gap);
+  });
+
+  it('a walk aimed just past another owl ends past them, not short of them', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    const end = walk('b', { x: 812, y: 700 }).to;
+    expect(end.x).toBeGreaterThanOrEqual(800 + gap);
+  });
+
+  it('counts where a walking owl will stop, not where it is on the way', () => {
+    standing('a', { x: 300, y: 700 });
+    standing('b', { x: 1200, y: 700 });
+    walk('a', { x: 800, y: 700 }, false); // under way, still far from its end
+    const end = walk('b', { x: 800, y: 700 }).to;
+    expect(distance(end, { x: 800, y: 700 })).toBeGreaterThanOrEqual(gap);
+    expect(end.x).toBeGreaterThan(800);
+  });
+
+  it('lets a walk end where another owl only was, once it has walked off', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    walk('a', { x: 1300, y: 700 }, false); // leaving: its walk ends far away
+    expect(walk('b', { x: 800, y: 700 }).to).toEqual({ x: 800, y: 700 });
+  });
+
+  it('keeps the spot beside them on the floor when the side it was aimed at is off it', () => {
+    standing('a', { x: 800, y: 505 }); // at the top edge of the floor
+    standing('b', { x: 800, y: 800 });
+    const end = walk('b', { x: 800, y: 480 }).to; // past them, off the floor
+    expect(isWalkable(end, def.walkable)).toBe(true);
+    expect(distance(end, { x: 800, y: 505 })).toBeGreaterThanOrEqual(gap);
+  });
+
+  it('finds a free side when the nearest spot beside them is taken by a third owl', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('c', { x: 800 - gap - LIMITS.spacingSlackPx, y: 700 }); // right where a walk from the left would stop
+    standing('b', { x: 400, y: 700 });
+    const end = walk('b', { x: 800, y: 700 }).to;
+    expect(end.y).toBeLessThan(700); // the next side round from the walker's, the same one every time
+    for (const id of ['a', 'c']) {
+      const at = room.positionOf(id)!;
+      expect(distance(end, at)).toBeGreaterThanOrEqual(gap);
+    }
+  });
+
+  it('an owl already beside another owl that aims onto them stays put, and its page is told so', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    const beside = walk('b', { x: 800, y: 700 }).to;
+    const echo = walk('b', { x: 800, y: 700 });
+    expect(echo.from).toEqual(beside);
+    expect(echo.to).toEqual(beside);
+    expect(echo.seq).toBe(seq);
+  });
+
+  it('with no free spot reachable beside them, a walk ends where it was aimed, as before', () => {
+    const box: RoomDef = { ...def, walkable: [[{ x: 785, y: 685 }, { x: 815, y: 685 }, { x: 815, y: 715 }, { x: 785, y: 715 }]], spawns: { default: { x: 800, y: 700 } } };
+    room = new Room(box, { now: () => now, random: () => 0.5, cap: 20 });
+    join('a');
+    join('b');
+    walk('a', { x: 800, y: 700 });
+    expect(walk('b', { x: 787, y: 687 }).to).toEqual({ x: 787, y: 687 });
+    expect(walk('b', { x: 800, y: 700 }).to).toEqual({ x: 800, y: 700 });
+  });
+
+  it('leaves a walk aimed near nobody exactly as it was aimed', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    expect(walk('b', { x: 800 - gap - 10, y: 700 }).to).toEqual({ x: 800 - gap - 10, y: 700 });
+    expect(walk('b', { x: 800 - gap, y: 700 }).to).toEqual({ x: 800 - gap, y: 700 }); // the spacing itself is clear
+  });
+});

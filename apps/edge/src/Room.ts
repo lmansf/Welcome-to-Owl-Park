@@ -147,6 +147,9 @@ export interface RoomOptions {
  *  - `dash`: a dash the owl could not make (OP-224: no course here, on the ground, spent this jump, too
  *    soon after the last): the owl walks on as the room had it, and its page is told so.
  */
+/** The turns (degrees) around another owl tried, in order, for where a walk aimed on them ends (OP-248). */
+const SPACING_TURNS = [0, 45, -45, 90, -90, 135, -135, 180] as const;
+
 export type PositionRejection = 'room' | 'floor' | 'perch' | 'arrival' | 'dash' | 'lift';
 
 export const LIMITS = {
@@ -158,6 +161,8 @@ export const LIMITS = {
   framesPerWindow: 40,
   minMovePx: 4,
   minSpacingPx: 24,
+  /** How far past the spacing a walk that would end on another owl stops (OP-248), so rounding keeps it clear. */
+  spacingSlackPx: 2,
   scatterDefault: 220,
   scatterDoor: 60,
   scatterAttempts: 11,
@@ -323,6 +328,40 @@ export class Room {
       if (distance(this.currentPos(v), p) < LIMITS.minSpacingPx) return true;
     }
     return false;
+  }
+
+  /**
+   * Where another owl than `except` stands or will stand within the minimum spacing of `p` (OP-248):
+   * the end of its walk if it is walking, as that is where it stops.
+   */
+  private restingNear(p: Vec2, except: string): Vec2 | null {
+    for (const [id, v] of this.visitors) {
+      if (id === except) continue;
+      const end = v.st.walk?.to ?? this.currentPos(v);
+      if (distance(end, p) < LIMITS.minSpacingPx) return end;
+    }
+    return null;
+  }
+
+  /**
+   * Where a walk from `from` aimed at `target` ends (OP-248). Aimed within the minimum spacing of another
+   * owl, it ends just outside that owl: on the side it was aimed at (aimed dead on them, the side the
+   * walker comes from), else around them a step at a time, wherever this walk gets to on the way that no
+   * other owl has. With no such spot around them, the walk ends where it was aimed, as before.
+   */
+  private spaced(id: string, from: Vec2, target: Vec2): Vec2 {
+    const other = this.restingNear(target, id);
+    if (!other) return target;
+    const side = target.x === other.x && target.y === other.y ? from : target;
+    const base = Math.atan2(side.y - other.y, side.x - other.x);
+    const r = LIMITS.minSpacingPx + LIMITS.spacingSlackPx;
+    for (const turn of SPACING_TURNS) {
+      const a = base + (turn * Math.PI) / 180;
+      const reached = resolveTarget(from, { x: other.x + r * Math.cos(a), y: other.y + r * Math.sin(a) }, this.anyFooting);
+      const q = { x: Math.round(reached.x), y: Math.round(reached.y) };
+      if (!this.restingNear(q, id)) return q;
+    }
+    return target;
   }
 
   /** A point the owl may be put on: walkable, not in an exit, not on top of another owl. */
@@ -511,11 +550,19 @@ export class Room {
     const to = resolveTarget(from, msg.to, this.anyFooting);
     // Aimed off every floor here: walked as far as the floor goes, as any walk is, and said (OP-149).
     if (distance(msg.to, snapToWalkable(msg.to, this.anyFooting)) > LIMITS.offFloorPx) this.opts.rejected?.(id, 'floor');
-    const target = { x: Math.round(to.x), y: Math.round(to.y) };
-    if (distance(from, target) < LIMITS.minMovePx) {
+    const aimed = { x: Math.round(to.x), y: Math.round(to.y) };
+    if (distance(from, aimed) < LIMITS.minMovePx) {
       // Asking to walk to where the owl already is means stop (letting go of the arrow keys): a walk
       // under way ends here for everyone. A standing owl has nothing to stop.
       if (v.st.walk) this.halt(id, v, msg.seq);
+      return;
+    }
+    // No walk ends on top of another owl (OP-248): it ends just beside them instead.
+    const target = this.spaced(id, from, aimed);
+    if (distance(from, target) < LIMITS.minMovePx) {
+      // Beside them is where the owl already is: it stays, and its page is told so even standing, as its
+      // owl set off towards the other owl there.
+      this.halt(id, v, msg.seq);
       return;
     }
     const at = this.now();
