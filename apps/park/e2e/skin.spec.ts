@@ -36,6 +36,7 @@ const shot = (page: Page, name: string) => page.screenshot({ path: `e2e-screensh
 
 test.describe('skin trials in Updraft Canopy', () => {
   test('a visitor’s page draws the course as it is and asks for no trial file', async ({ page, isMobile }) => {
+    test.slow(); // four rooms opened and shot, on a slow phone runner too
     if (isMobile) await page.setViewportSize({ width: 390, height: 844 });
     for (const { room, spawn } of SPOTS) {
       const asked = await trialRequests(page, () => openPark(page, { room, spawn, kit: '1' }));
