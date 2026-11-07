@@ -177,7 +177,7 @@ import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, placeHints, touchBottom } from './hints';
+import { doorHintTarget, nearTargets, nearestOffSides, placeHints, touchBottom } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
 import { NestMirror } from './mirror';
@@ -1498,7 +1498,7 @@ export class RoomScene extends Phaser.Scene {
     const ground = this.sideView() ? groundOf(this.room) : null;
     const view = { x: v.x, y: v.y, w: v.width, h: v.height };
     const all = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => doorHintTarget(d, ground));
-    const targets = ground === null ? all : nearTargets(all, view, SIDE_HINT_REACH);
+    const targets = ground === null ? nearestOffSides(all, view, 2, new Set([own, toPark].filter((id): id is string => !!id))) : nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;

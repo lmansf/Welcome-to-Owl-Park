@@ -104,6 +104,19 @@ export function nearTargets(targets: HintTarget[], view: ViewRect, reach: number
 }
 
 /**
+ * Seen from above, the nearest few targets off each side of the view, and every one the view could
+ * show: in a long room (the Great Hollow) a chip for every doorway down the room would line the
+ * screen's edge, and a ten year old could not tell which is which. `keep` are always shown (the
+ * owl's own nest door, the way to the park).
+ */
+export function nearestOffSides(targets: HintTarget[], view: ViewRect, perSide = 2, keep: ReadonlySet<string> = new Set()): HintTarget[] {
+  const left = targets.filter((t) => t.x < view.x && !keep.has(t.id)).sort((a, b) => b.x - a.x);
+  const right = targets.filter((t) => t.x > view.x + view.w && !keep.has(t.id)).sort((a, b) => a.x - b.x);
+  const dropped = new Set([...left.slice(perSide), ...right.slice(perSide)].map((t) => t.id));
+  return targets.filter((t) => !dropped.has(t.id));
+}
+
+/**
  * The bottom inset on a touch screen: clear of the thumbstick and the face buttons, but never more than
  * TOUCH_BOTTOM_SHARE of the screen's height, so on a phone held sideways a chip for a way down sits low
  * on the screen and not across its middle.

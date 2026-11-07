@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, doorHintTarget, nearTargets, placeHints, touchBottom, type ScreenBox, type ViewRect } from './hints';
+import { SIDE_HINT_OVER, doorHintTarget, nearTargets, nearestOffSides, placeHints, touchBottom, type ScreenBox, type ViewRect } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -87,5 +87,26 @@ describe('hints seen from the side (an Updraft Canopy room, as an owl stands by 
   it("keeps a phone's bottom inset to a quarter of a short screen, and the full inset on a tall one", () => {
     expect(touchBottom(190, 330)).toBe(83);
     expect(touchBottom(190, 900)).toBe(190);
+  });
+});
+
+describe('hints seen from above (the Great Hollow, a long room of doorways)', () => {
+  const HALL = ROOMS['m3-hall']!;
+  const doorways = HALL.doors.filter((d) => d.to).map((d) => doorHintTarget(d, null));
+  // A phone held upright at the glass Commons' realm doorway: about 500 room px across.
+  const phone: ViewRect = { x: 80, y: 200, w: 500, h: 700 };
+
+  it('points at the nearest two doorways off each side, not at every doorway down the room', () => {
+    expect(doorways.filter((t) => t.x > phone.x + phone.w).length).toBeGreaterThan(4);
+    const near = nearestOffSides(doorways, phone);
+    const right = near.filter((t) => t.x > phone.x + phone.w);
+    // The glass course's gate and the ink-wash realm's doorway are shut, so they have no chip.
+    expect(right.map((t) => t.id)).toEqual(['course-ink', 'up']);
+    expect(near.filter((t) => t.x < phone.x)).toEqual([]);
+  });
+
+  it('always keeps a doorway it is told to keep, however far', () => {
+    const near = nearestOffSides(doorways, phone, 2, new Set(['to-party']));
+    expect(near.map((t) => t.id)).toContain('to-party');
   });
 });
