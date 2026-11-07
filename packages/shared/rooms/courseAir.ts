@@ -22,17 +22,19 @@ const up = (id: string, x: number, top: number, w = 120): Updraft => ({ id, x, w
 const wind = (id: string, x0: number, x1: number, z: number, dir: 1 | -1 = 1): WindCurrent => ({ id, x0, x1, z, dir });
 
 export const COURSE_AIR: Readonly<Record<string, { updrafts?: Updraft[]; winds?: WindCurrent[] }>> = {
-  // Updraft Canopy, act 3: off the end of the long bough c3 on the wind over the drop to c5 (beside the
-  // cycled column U12); and the plan's wind along the crown, from the high bough c10 over the drop to c13.
-  'canopy-3': { winds: [wind('bough-wind', 1700, 2420, 580), wind('crown-wind', 4440, 5460, 610)] },
+  // Updraft Canopy, act 3: past the last thorn curtain (K4), up from the low bough c12 in a column of
+  // its own, out of its top in a glide that sinks onto the wind along the crown, and across the drop to
+  // c13. The wind runs too high to flap up into from c12, so c13 stays a ledge only the air reaches.
+  // Every other drop in the act has a thorn curtain across it, which a current would carry an owl
+  // straight into: the curtains and the cycled columns behind them are the act's own way on.
+  'canopy-3': { updrafts: [up('crown-lift', 5120, 740)], winds: [wind('crown-wind', 5300, 5640, 660)] },
   // Brushstroke Bridges, act 1: up beside the first cliff; then up over the pond and across to the second cliff on the wind.
   'brush-1': { updrafts: [up('pond-lift', 2520, 470)], winds: [wind('pond-wind', 2600, 3120, 450)] },
   // Act 2: up beside the first rock; then on the wind toward the falls ledge.
   'brush-2': { updrafts: [up('river-lift', 1150, 450)], winds: [wind('rain-wind', 3460, 4060, 580)] },
-  // Act 3a: off the high shelf m1 on the wind toward m2, and up over the water to m2.
-  'brush-3a': { updrafts: [up('scroll-lift', 1850, 420, 110)], winds: [wind('scroll-wind', 840, 1900, 400)] },
-  // Act 3b: off n1 on the wind to n2 (the cliff n3 stays the dash's).
-  'brush-3b': { winds: [wind('fold-wind', 560, 1640, 240)] },
+  // Act 3a: up over the water to m2. (No current here: the cloud bank across the drop from m1 is a fall
+  // from its foot up, so a current toward m2 would carry an owl into it; the same goes for act 3b.)
+  'brush-3a': { updrafts: [up('scroll-lift', 1850, 420, 110)] },
   // Blackout Circuit, act 1: off the first roof on the wind over the street to the footbridge.
   'circuit-1': { winds: [wind('roof-wind', 1400, 1700, 460)] },
   // Act 2: from the lit signs on the wind over the dark block to roof r2.

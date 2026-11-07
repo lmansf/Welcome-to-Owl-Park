@@ -3,23 +3,24 @@ import { expect, test } from './fixtures';
 import { openPark, state } from './helpers';
 
 /**
- * The air of the realms' courses (OP-275), in Updraft Canopy's third act on the local transport: from
- * the twig c2 a glide into the first column (U11) carries the owl up to its top, and from there it
- * glides down onto the long bough c3; off the bough's end a glide into the wind current over the drop
- * (bough-wind) holds it at the current's height and carries it across to the twig c5, where it comes
- * down. Jump is held as this device holds it: Space on a computer, the pad's Jump on a phone. The
- * shapes of the air (and that no column or current reaches a ledge a course keeps for its mechanic)
- * are in packages/shared's tests.
+ * The air of the realms' courses (OP-275), in Updraft Canopy's third act on the local transport. First
+ * an updraft: from the twig c2 a glide into the first column (U11) carries the owl up to its top, and
+ * from there it glides down onto the long bough c3. Then a wind current: from the low bough c12 a glide
+ * into the crown's column (crown-lift) carries it up, out of the top it glides down onto the wind along
+ * the crown (crown-wind), which holds it at the current's height and carries it across the drop; let go
+ * over c13 and it comes down there. Jump is held as this device holds it: Space on a computer, the pad's
+ * Jump on a phone. The shapes of the air (no column or current reaches a ledge a course keeps for its
+ * mechanic, nor runs into a course's thorns) are in packages/shared's tests.
  */
 
 const LIFTED = 3;
-/** The long bough c3 runs from 1340 to 1600; the wind over the drop starts past its end, at 1700. */
-const C3_END = 1580;
 const U11_TOP = 600;
 const C3_TOP = 540;
-const WIND_Z = 580;
-const WIND_END = 2420;
-const C5 = { x0: 2380, x1: 2540, top: 540 };
+const CROWN_LIFT = 5180;
+const CROWN_LIFT_TOP = 740;
+const WIND_Z = 660;
+const WIND_END = 5640;
+const C13 = { x0: 5460, x1: 5700, top: 520 };
 
 /** Jump pressed and held as this device does, and a walk east to `x` asked for in the same frame (the owl is off the twig before it can walk off it). */
 async function holdJumpAndWalk(page: Page, phone: boolean, x: number): Promise<void> {
@@ -42,12 +43,6 @@ async function letGo(page: Page, phone: boolean): Promise<void> {
   }, phone);
 }
 
-/** Walk to `x` along what the owl stands on, and wait until it stops. */
-async function walkTo(page: Page, x: number): Promise<void> {
-  await page.evaluate((x) => window.owlPark.walkTo(x, window.owlPark.state()!.pos.y), x);
-  await expect.poll(async () => (await state(page)).walking, { timeout: 10_000 }).toBe(false);
-}
-
 /** What the test reads of the owl, for the messages of a poll that fails. */
 async function seen(page: Page): Promise<string> {
   const s = await state(page);
@@ -63,7 +58,7 @@ test.describe('the courses’ air (OP-275)', () => {
     if (isMobile) await page.setViewportSize({ width: 390, height: 844 });
     await openPark(page, { room: 'canopy-3', spawn: 'on-c2', kit: '1' });
     await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(160);
-    expect((await state(page)).wind.currents).toBe(2);
+    expect((await state(page)).wind.currents).toBe(1);
     if (isMobile) await expect(page.locator('[data-pad-jump]')).toBeVisible();
 
     // Up: off the twig and into the column, held there rising to its top.
@@ -81,26 +76,31 @@ test.describe('the courses’ air (OP-275)', () => {
     await letGo(page, isMobile);
     expect((await state(page)).course?.falls ?? 0).toBe(0);
 
-    // Along the bough toward its end, then a jump and a glide east off it: the current catches it.
-    await walkTo(page, C3_END);
-    expect((await state(page)).air.z).toBe(C3_TOP);
-    await holdJumpAndWalk(page, isMobile, 2440);
+    // The crown: on the low bough c12, past the last thorn curtain.
+    await openPark(page, { room: 'canopy-3', spawn: 'on-c12', kit: '1' });
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(180);
+    // Off the bough into the crown's column, up to its top.
+    await holdJumpAndWalk(page, isMobile, CROWN_LIFT);
+    await expect
+      .poll(async () => { const s = await state(page); return s.air.s === LIFTED && s.air.z >= CROWN_LIFT_TOP - 1; }, { timeout: 10_000, intervals: [50], message: `not lifted up the crown's column: ${await seen(page)}` })
+      .toBe(true);
+    // Out of its top east, gliding down onto the wind: it catches the owl.
+    await page.evaluate(() => window.owlPark.walkTo(5700, window.owlPark.state()!.pos.y));
     await expect.poll(async () => (await state(page)).wind.rides, { timeout: 10_000, intervals: [50], message: `no ride: ${await seen(page)}` }).toBeGreaterThanOrEqual(1);
-    const riding = await state(page);
-    expect(riding.air.s).toBe(LIFTED);
+    expect((await state(page)).air.s).toBe(LIFTED);
     await shot(page, 'wind-ride');
-    // Carried to the current's far end, over the twig c5, at the current's height.
+    // Carried to the current's far end, over c13, at the current's height.
     await expect
       .poll(async () => { const s = await state(page); return s.pos.x >= WIND_END - 4 && s.air.s === LIFTED && Math.abs(s.air.z - WIND_Z) < 1; }, { timeout: 10_000, intervals: [50], message: `not carried across: ${await seen(page)}` })
       .toBe(true);
-    // Let go: down on the twig, across the drop without a fall.
+    // Let go: down on c13, across the drop without a fall.
     await letGo(page, isMobile);
     await expect
-      .poll(async () => { const s = await state(page); return [s.air.s, s.air.z]; }, { timeout: 5_000, intervals: [50], message: `not down on c5: ${await seen(page)}` })
-      .toEqual([0, C5.top]);
+      .poll(async () => { const s = await state(page); return [s.air.s, s.air.z]; }, { timeout: 5_000, intervals: [50], message: `not down on c13: ${await seen(page)}` })
+      .toEqual([0, C13.top]);
     const landed = await state(page);
-    expect(landed.pos.x).toBeGreaterThanOrEqual(C5.x0);
-    expect(landed.pos.x).toBeLessThanOrEqual(C5.x1);
+    expect(landed.pos.x).toBeGreaterThanOrEqual(C13.x0);
+    expect(landed.pos.x).toBeLessThanOrEqual(C13.x1);
     expect(landed.course?.falls ?? 0).toBe(0);
     await shot(page, 'across');
     if (isMobile) {

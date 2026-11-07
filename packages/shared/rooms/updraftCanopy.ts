@@ -347,9 +347,10 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     },
   }),
   'canopy-3': canopyRoom('canopy-3', 4, CROWN, {
-    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-hut': { x: 400, y: G }, 'on-c2': { x: 1040, y: G } },
-    // On the twig c2, by the first column (U11): where the browser test of the course's air starts (e2e/air.spec.ts).
-    spawnTops: { 'on-c2': 160 },
+    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-hut': { x: 400, y: G }, 'on-c2': { x: 1040, y: G }, 'on-c12': { x: 5000, y: G } },
+    // On the twig c2, by the first column (U11), and on the low bough c12, by the crown's column and wind:
+    // where the browser test of the course's air starts each of its two flights (e2e/air.spec.ts).
+    spawnTops: { 'on-c2': 160, 'on-c12': 180 },
     doors: [door('down', 40, { room: 'canopy-2c', spawn: 'from-above' }, { w: 60, way: 'down' }), door('hut', 6200, { room: 'canopy-hut', spawn: 'from-deck' }, { top: 540, w: 100 })],
     updrafts: U_ACT3,
     course: {
