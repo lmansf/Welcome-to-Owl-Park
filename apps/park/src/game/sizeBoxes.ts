@@ -77,14 +77,23 @@ export function artStatus(key: string, published: ReadonlyMap<string, string>): 
 
 const STATUS_WORDS = { art: 'has art', 'stand-in': 'stand-in art', none: 'no art yet' } as const;
 
-/** The lines a box shows, top to bottom: its name, its size in the game, the size to deliver, whether it has art. */
+/** The lines the size list gives a piece: its name, its size in the game, the size to deliver, whether it has art. */
 export function sizeLabel(key: string, spec: Pick<ArtSpec, 'w' | 'h' | 'kind'>, published: ReadonlyMap<string, string>): string[] {
   const d = deliverySize(key, spec);
   const deliver = d.w === spec.w && d.h === spec.h ? 'deliver at this size' : `deliver ${d.w} × ${d.h}`;
   return [boxName(key), `${spec.w} × ${spec.h} in game`, deliver, STATUS_WORDS[artStatus(key, published)]];
 }
 
-/** How a box is drawn: a screen fills its rectangle; an overlay or a layer over others is see-through, its label kept clear of theirs. */
+/**
+ * The one small line a box carries in the game (the owner's ask, Nov 7: simpler boxes): its name and the
+ * size to make it at. The rest (its size in the game, whether it has art) is in the size list.
+ */
+export function boxLabel(key: string, spec: Pick<ArtSpec, 'w' | 'h' | 'kind'>): string {
+  const d = deliverySize(key, spec);
+  return `${boxName(key)}  ${d.w}×${d.h}`;
+}
+
+/** How a box is drawn: a screen fills its rectangle; an overlay or a layer over others is see-through. */
 export type BoxRole = 'screen' | 'overlay' | 'layer' | 'piece' | 'texture';
 
 export function boxRole(key: string, spec: Pick<ArtSpec, 'kind'>): BoxRole {
@@ -98,72 +107,37 @@ export function boxRole(key: string, spec: Pick<ArtSpec, 'kind'>): BoxRole {
   return 'piece';
 }
 
-/** Where down a box its label stands (a share of its height): layers drawn over one screen each keep their own line. */
-export function labelAt(key: string, role: BoxRole): number {
-  if (role === 'overlay') return 0.86;
-  if (role !== 'layer') return 0.5;
-  if (/-far(-[a-z])?$/.test(key)) return 0.22;
-  if (/-back$/.test(key)) return 0.34;
-  if (/-mid(-[a-z])?$/.test(key)) return 0.66;
-  if (/-front$/.test(key)) return 0.78;
-  return 0.5;
-}
-
-const LOOK: Record<BoxRole, { fill: string | null; edge: string; dash: boolean }> = {
-  screen: { fill: '#1d2b44', edge: '#ffd36a', dash: false },
+/**
+ * How each role looks: a screen is a plain dark ground; everything over it is a thin outline with the
+ * faintest wash, so boxes that overlap stay readable and a tiled texture reads as one surface.
+ */
+export const BOX_LOOK: Record<BoxRole, { fill: string | null; edge: string; dash: boolean }> = {
+  screen: { fill: '#1b2638', edge: '#3a4a66', dash: false },
   overlay: { fill: null, edge: '#ff7ad9', dash: true },
-  layer: { fill: 'rgba(120, 180, 255, 0.10)', edge: '#7fd3ff', dash: true },
-  piece: { fill: 'rgba(201, 162, 39, 0.35)', edge: '#ffd36a', dash: false },
-  texture: { fill: 'rgba(110, 139, 78, 0.45)', edge: '#a5d46a', dash: false },
+  layer: { fill: null, edge: '#7fd3ff', dash: true },
+  piece: { fill: 'rgba(255, 211, 106, 0.10)', edge: '#ffd36a', dash: false },
+  texture: { fill: 'rgba(110, 139, 78, 0.35)', edge: 'rgba(165, 212, 106, 0.35)', dash: false },
 };
 
-/** Draws a key's size box on a canvas of its logical size. */
-export function paintSizeBox(ctx: CanvasRenderingContext2D, key: string, spec: Pick<ArtSpec, 'w' | 'h' | 'kind'>, published: ReadonlyMap<string, string>): void {
+/** Draws a key's size box on a canvas of its logical size: a thin outline, no words (the scene labels one box per piece). */
+export function paintSizeBox(ctx: CanvasRenderingContext2D, key: string, spec: Pick<ArtSpec, 'w' | 'h' | 'kind'>): void {
   const { w, h } = spec;
-  const role = boxRole(key, spec);
-  const look = LOOK[role];
+  const look = BOX_LOOK[boxRole(key, spec)];
   ctx.clearRect(0, 0, w, h);
   if (look.fill) {
     ctx.fillStyle = look.fill;
     ctx.fillRect(0, 0, w, h);
   }
-  const line = Math.max(2, Math.min(8, Math.round(Math.min(w, h) / 60)));
-  // The corners joined, faintly: where the box's middle is.
-  ctx.globalAlpha = 0.35;
+  const line = 2;
   ctx.strokeStyle = look.edge;
-  ctx.lineWidth = Math.max(1, line / 2);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(w, h);
-  ctx.moveTo(w, 0);
-  ctx.lineTo(0, h);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
   ctx.lineWidth = line;
-  ctx.setLineDash(look.dash ? [line * 4, line * 3] : []);
+  ctx.setLineDash(look.dash ? [10, 8] : []);
   ctx.strokeRect(line / 2, line / 2, w - line, h - line);
   ctx.setLineDash([]);
-  // The label, as large as fits a fifth of the box's height and nine tenths of its width.
-  const lines = sizeLabel(key, spec, published);
-  let size = Math.max(6, Math.min(44, Math.floor(h / (lines.length * 1.35 + 1))));
-  const font = (px: number) => `bold ${px}px system-ui, sans-serif`;
-  ctx.font = font(size);
-  const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  if (widest > w * 0.9) {
-    size = Math.max(6, Math.floor((size * w * 0.9) / widest));
-    ctx.font = font(size);
-  }
-  const step = size * 1.25;
-  const middle = h * labelAt(key, role);
-  const top = Math.min(h - step * lines.length, Math.max(0, middle - (step * lines.length) / 2));
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2, size / 5);
-  ctx.strokeStyle = '#07122a';
-  lines.forEach((l, i) => {
-    ctx.fillStyle = i === 0 ? look.edge : '#ffffff';
-    ctx.strokeText(l, w / 2, top + i * step);
-    ctx.fillText(l, w / 2, top + i * step);
-  });
+}
+
+/** A label's colour: the edge colour of its box, so a label is matched to its outline at a glance. */
+export function labelColour(key: string, spec: Pick<ArtSpec, 'kind'>): string {
+  const role = boxRole(key, spec);
+  return role === 'screen' ? '#c9d6ee' : role === 'texture' ? '#a5d46a' : BOX_LOOK[role].edge;
 }

@@ -3,7 +3,8 @@ import { KIT_ART, KIT_SLOT_SPECS, NEW_MAP, NEW_MAP_COMMONS, NEW_MAP_HALL } from 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ART, drawnAsSizeBox, loadArtKey, roomOpeningArt, sharpCopy, useSizeBoxes } from './art';
 import { drawnRoom } from './kitView';
-import { boxRole, boxable, deliverySize, labelAt, paintSizeBox, sizeBoxesWanted, sizeLabel } from './sizeBoxes';
+import { boxLabel, boxRole, boxable, deliverySize, paintSizeBox, sizeBoxesWanted, sizeLabel } from './sizeBoxes';
+import { placeLabels } from './sizeLabels';
 import { roomFor } from '../rooms';
 
 // art.ts only lists the art here; no Phaser runs.
@@ -35,7 +36,14 @@ describe('size boxes (?sizes=1)', () => {
     expect(sizeBoxesWanted(null, store)).toBe(true);
     expect(sizeBoxesWanted('0', store)).toBe(false);
     expect(sizeBoxesWanted(null, store)).toBe(false);
-    const refused = { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } };
+    const refused = {
+      getItem: () => {
+        throw new Error('no');
+      },
+      setItem: () => {
+        throw new Error('no');
+      },
+    };
     expect(sizeBoxesWanted('1', refused)).toBe(true);
     expect(sizeBoxesWanted(null, refused)).toBe(false);
   });
@@ -61,10 +69,18 @@ describe('size boxes (?sizes=1)', () => {
     }
   });
 
-  it('label a piece with its name, its size in the game, the size to deliver and whether it has art', () => {
-    const published = new Map([['hub.webp', 'a'], ['hub@2x.webp', 'b']]);
+  it("give the size list a piece's name, its size in the game, the size to deliver and whether it has art", () => {
+    const published = new Map([
+      ['hub.webp', 'a'],
+      ['hub@2x.webp', 'b'],
+    ]);
     expect(sizeLabel('hub', ART.hub!, published)).toEqual(['hub', '1600 × 900 in game', 'deliver 3200 × 1800', 'has art']);
-    expect(sizeLabel('kit-tex-bark', ART['kit-tex-bark']!, new Map())).toEqual(['kit-tex-bark', '512 × 512 in game', 'deliver at this size', 'no art yet']);
+    expect(sizeLabel('kit-tex-bark', ART['kit-tex-bark']!, new Map())).toEqual([
+      'kit-tex-bark',
+      '512 × 512 in game',
+      'deliver at this size',
+      'no art yet',
+    ]);
     const standIn = Object.keys(KIT_ART).find((k) => k.includes('--') && KIT_ART[k]!.standIn);
     expect(standIn).toBeDefined();
     const label = sizeLabel(standIn!, ART[standIn!]!, new Map([[`${KIT_ART[standIn!]!.standIn}.png`, 'c']]));
@@ -72,43 +88,51 @@ describe('size boxes (?sizes=1)', () => {
     expect(label[3]).toBe('stand-in art');
   });
 
-  it('draw a screen filled, an overlay and a layer see-through, each label on a line of its own', () => {
+  it('carry one short line in the game: the name and the size to make it at', () => {
+    expect(boxLabel('hub', ART.hub!)).toBe('hub  3200×1800');
+    expect(boxLabel('kit-tex-bark', ART['kit-tex-bark']!)).toBe('kit-tex-bark  512×512');
+    const standIn = Object.keys(KIT_ART).find((k) => k.includes('--') && KIT_ART[k]!.standIn)!;
+    expect(boxLabel(standIn, ART[standIn]!).startsWith(`${standIn.slice(0, standIn.indexOf('--'))}  `)).toBe(true);
+  });
+
+  it('draw a screen filled and everything over it as a thin outline, with no words on the box', () => {
     expect(boxRole('hub', ART.hub!)).toBe('screen');
     expect(boxRole('hub-fg', ART['hub-fg']!)).toBe('overlay');
     expect(boxRole('tree-l1-0-mid', ART['tree-l1-0-mid']!)).toBe('layer');
     expect(boxRole('kit-tex-bark', ART['kit-tex-bark']!)).toBe('texture');
     expect(boxRole('glass-idol', ART['glass-idol']!)).toBe('piece');
-    const spots = ['tree-l4-0-bg', 'tree-l4-0-mid', 'tree-l4-0-back', 'tree-l4-0-front', 'tree-l4-0-fg'].map((k) => labelAt(k, boxRole(k, ART[k]!)));
-    expect(new Set(spots).size).toBe(spots.length);
+    const calls: string[] = [];
+    const ctx = new Proxy(
+      {},
+      {
+        get: (_, p) => () => void calls.push(String(p)),
+        set: (_, p, v) => {
+          if (p === 'lineWidth') calls.push(`lineWidth=${v}`);
+          return true;
+        },
+      },
+    ) as unknown as CanvasRenderingContext2D;
+    paintSizeBox(ctx, 'kit-fence-post', ART['kit-fence-post']!);
+    expect(calls).not.toContain('fillText');
+    expect(calls).not.toContain('strokeText');
+    expect(calls).not.toContain('lineTo');
+    expect(calls).toContain('lineWidth=2');
   });
 
-  it('paint the label inside the box, the longest line fitting its width', () => {
-    const texts: Array<{ t: string; x: number; y: number }> = [];
-    let px = 0;
-    const ctx = {
-      set font(f: string) {
-        px = Number(/(\d+)px/.exec(f)?.[1]);
-      },
-      measureText: (t: string) => ({ width: t.length * px * 0.6 }),
-      fillText: (t: string, x: number, y: number) => void texts.push({ t, x, y }),
-      strokeText: () => undefined,
-      clearRect: () => undefined,
-      fillRect: () => undefined,
-      strokeRect: () => undefined,
-      beginPath: () => undefined,
-      moveTo: () => undefined,
-      lineTo: () => undefined,
-      stroke: () => undefined,
-      setLineDash: () => undefined,
-    } as unknown as CanvasRenderingContext2D;
-    const spec = ART['kit-fence-post']!; // 80 x 240: narrow
-    paintSizeBox(ctx, 'kit-fence-post', spec, new Map());
-    expect(texts.map((t) => t.t)).toEqual(sizeLabel('kit-fence-post', spec, new Map()));
-    for (const t of texts) {
-      expect(t.t.length * px * 0.6).toBeLessThanOrEqual(spec.w * 0.9 + 1);
-      expect(t.y).toBeGreaterThanOrEqual(0);
-      expect(t.y + px).toBeLessThanOrEqual(spec.h);
-    }
+  it('label each piece once in a room, on its biggest box, keeping labels apart where a corner is free', () => {
+    const boxes = [
+      { key: 'shelf', x: 0, y: 0, w: 240, h: 120 },
+      { key: 'shelf', x: 500, y: 0, w: 480, h: 240 },
+      { key: 'shelf', x: 1000, y: 0, w: 240, h: 120 },
+      { key: 'post', x: 500, y: 0, w: 100, h: 240 },
+    ];
+    const at = placeLabels(boxes, () => ({ w: 90, h: 20 }));
+    expect(at.map((p) => p.key).sort()).toEqual(['post', 'shelf']);
+    const shelf = at.find((p) => p.key === 'shelf')!;
+    expect(shelf.x).toBeGreaterThanOrEqual(500);
+    const post = at.find((p) => p.key === 'post')!;
+    const apart = Math.abs(shelf.x - post.x) >= 90 || Math.abs(shelf.y - post.y) >= 20;
+    expect(apart).toBe(true);
   });
 
   it('are drawn in place of the art, fetching nothing, and no sharper copy replaces them', async () => {

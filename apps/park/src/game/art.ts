@@ -1198,7 +1198,7 @@ export function drawnAsSizeBox(key: string): boolean {
 function makeSizeBox(scene: Phaser.Scene, key: string, spec: ArtSpec): boolean {
   const tex = scene.textures.createCanvas(key, spec.w, spec.h);
   if (!tex) return false;
-  paintSizeBox(tex.getContext(), key, spec, PUBLISHED_ART);
+  paintSizeBox(tex.getContext(), key, spec);
   tex.refresh();
   return true;
 }
