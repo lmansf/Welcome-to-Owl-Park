@@ -603,14 +603,15 @@ export const ROOMS: Record<string, RoomDef> = {
     // bark) and goes round the idol's plinth, which stands on it and is no floor itself. Past the
     // plinth it keeps to the pavement where the two screens join (repainted, OP-125): the pink
     // shopfront's stone base, into its lit doorway porch, along the next building's ledge, then the
-    // plaza's far edge.
+    // plaza's far edge. The plinth's two sides run aslant (OP-279), so an owl walking along the street
+    // from the arch, or back to it, slides round the front of the plinth instead of stopping dead at it.
     walkable: [
       [
         { x: 140, y: 690 },
-        { x: 1140, y: 690 },
+        { x: 1040, y: 690 },
         { x: 1140, y: 815 },
         { x: 1380, y: 815 },
-        { x: 1380, y: 758 },
+        { x: 1440, y: 758 },
         { x: 1600, y: 758 },
         { x: 1612, y: 732 },
         { x: 1745, y: 732 },
