@@ -233,6 +233,15 @@ export interface EntryPayload {
 /** How long an entry lets its owl back in: a long visit, with every room it walks into renewing it. */
 export const ENTRY_TTL_S = 3 * 60 * 60;
 
+/**
+ * A visitor's address as the line keeps it (OP-244): keyed with the signing secret, so the line can
+ * count numbers per address without ever holding the address, and nobody can work it back.
+ */
+export async function addressKey(secret: string, ip: string): Promise<string> {
+  const sig = await crypto.subtle.sign('HMAC', await key(secret), enc.encode(`line-address:${ip}`));
+  return b64url(sig).slice(0, 22);
+}
+
 export async function mintEntry(secret: string, who: string, exp = Math.floor(Date.now() / 1000) + ENTRY_TTL_S): Promise<string> {
   return sign(secret, { k: 'ent', who, exp } satisfies EntryPayload);
 }

@@ -9,7 +9,8 @@
  *   GET  /state           the settings, whether the line is in front of the park, its pace, the count
  *   POST /settings        {line?, ribbon?, copy?: {room, n, state}, realms?: {open?, portal?, night?}, setup?: {on?, words?}}: the keepers' changes
  *                         (`realms` is the stained-glass climb's switch, designs/the-stained-glass-climb.md)
- *   POST /line/join       {who}: a number in the line (its turn at once while a place is free), or go when there is no line
+ *   POST /line/join       {who, addr?}: a number in the line (its turn at once while a place is free), go when there is
+ *                         no line, or full when addr (the address's key) holds LINE_PER_ADDRESS numbers already (OP-244)
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
  *   GET  /notice          the ribbon's words, the realms switch and the setup switch now (for the room objects)
  *   GET  /masks/<room>    a tree room's ledge draft as a keeper last saved it (OP-156), or 404
@@ -25,6 +26,7 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   COPY_MAX,
   LINE_DEFAULTS,
+  LINE_PER_ADDRESS,
   RIBBON_DEFAULTS,
   lineRate,
   ribbonNow,
@@ -87,7 +89,7 @@ export interface OverflowState {
 }
 
 /** The overflow object's answer to a line request, before the Worker adds the entry. */
-export type LineAnswer = { state: 'go' } | { state: 'waiting'; n: number; place: number; waitMin: number | null } | { state: 'called'; n: number; holdUntil: number } | { state: 'expired' };
+export type LineAnswer = { state: 'go' } | { state: 'waiting'; n: number; place: number; waitMin: number | null } | { state: 'called'; n: number; holdUntil: number } | { state: 'expired' } | { state: 'full' };
 
 class Settings {
   constructor(private readonly sql: SqlStorage) {
@@ -388,7 +390,12 @@ export class Overflow extends DurableObject<Env> {
       if (!(await this.isActive(now))) return Response.json({ state: 'go' } satisfies LineAnswer);
       // A number taken just now, or the one this browser already held (a page loaded again).
       const again = this.line.held(who, now, this.holdMs()) !== null;
-      const n = this.line.join(who, now, this.holdMs());
+      const addr = typeof body['addr'] === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(body['addr']) ? body['addr'] : null;
+      const n = this.line.join(who, now, this.holdMs(), addr);
+      if (n === null) {
+        this.log.warn('room.queue', 'queue_refused', 'An address that holds its share of numbers in the line asked for another, and was told to ask later.', { who_hash: hashForLog(who), reason: 'address', limit: LINE_PER_ADDRESS });
+        return Response.json({ state: 'full' } satisfies LineAnswer);
+      }
       this.log.info('room.queue', 'queue_enter', 'An owl arrived while the line is in front of the park, and holds a number.', { n, who_hash: hashForLog(who), again, waiting: this.line.waiting() });
       // A place may be free already: the line moves before answering, and a newcomer called at once takes its turn now.
       await this.step(now);

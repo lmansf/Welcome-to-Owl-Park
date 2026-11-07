@@ -197,7 +197,20 @@ export type LineStatus =
   | { state: 'go'; entry?: string }
   | { state: 'waiting'; n: number; place: number; waitMin: number | null }
   | { state: 'called'; n: number; holdUntil: number; entry: string }
-  | { state: 'expired' };
+  | { state: 'expired' }
+  | { state: 'full' };
+
+/**
+ * Keeping a script from stuffing the line (OP-244). `full`: the visitor's address already holds
+ * LINE_PER_ADDRESS numbers (as many as a room takes sockets from one address), so it takes none and
+ * asks again a little later. While a number stands among the first LINE_CALL_ZONE waiting, where its
+ * page looks every few seconds, its page asks the line itself rather than the Worker's last read of
+ * it; a number that stood there LINE_STALE_MS without asking is passed over when its turn comes.
+ * LINE_STALE_MS leaves time for a phone that slowed the page's timers in the background to look again.
+ */
+export const LINE_PER_ADDRESS = 8;
+export const LINE_CALL_ZONE = 10;
+export const LINE_STALE_MS = 90_000;
 
 /** Owls called per minute over the last ten minutes, from the times they were called. */
 export function lineRate(calledAt: readonly number[], now: number): number {

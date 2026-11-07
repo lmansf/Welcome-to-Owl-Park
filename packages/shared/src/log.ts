@@ -62,6 +62,7 @@ export const LOG_EVENTS = [
   'ticket_ended',
   'reconnect_ok',
   'queue_enter',
+  'queue_refused',
   'queue_admit',
   'queue_depth',
   'tick_latency_p95',

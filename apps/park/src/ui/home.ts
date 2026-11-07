@@ -60,6 +60,8 @@ export const LINE_WORDS = {
   turn: "It's your turn!",
   passed: "Your turn came while you were away, so you're back in line.",
   offline: "We can't reach the park just now. Trying again…",
+  /** Many owls on one network already hold places in line (OP-244): this one asks again a little later. */
+  full: 'Lots of owls on your network are already in line. Trying again soon…',
 } as const;
 
 /**
@@ -99,7 +101,7 @@ export interface ClosedCard {
 }
 
 /** What the home screen shows of the line: the owl's place, or a short message. */
-export type LineView = { place: number; waitMin: number | null; ticket: boolean } | { message: 'turn' | 'passed' | 'offline' };
+export type LineView = { place: number; waitMin: number | null; ticket: boolean } | { message: 'turn' | 'passed' | 'offline' | 'full' };
 
 const shortDate = (ms: number) => new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
