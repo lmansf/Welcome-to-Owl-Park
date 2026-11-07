@@ -944,7 +944,9 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   const realm = room?.votesFor ?? roomId;
   if (realm === 'grove') keys.push('guardian');
   if (realm === 'market') keys.push('robot-owl');
-  if (realm === 'glass') keys.push('glass-idol');
+  if (realm === 'glass') keys.push('kit-glass-idol-owl');
+  // A realm start's set pieces (OP-276).
+  for (const p of room?.pieces ?? []) keys.push(p.key);
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));

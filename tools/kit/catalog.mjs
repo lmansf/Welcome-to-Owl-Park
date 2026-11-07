@@ -121,10 +121,12 @@ function slotEntries(kit, stand) {
       const own = { key, w: s.w, h: s.h, kind, ...box };
       const delivered = published(key);
       const ins = given[s.slot] ?? [];
-      for (const k of ins) if (!byKey.has(k)) throw new Error(`tools/kit/slots.json: ${realm} ${s.slot} names ${k}, which is not in the kit`);
-      const first = ins[0] && byKey.get(ins[0]);
-      out.push(delivered || !first ? { ...own, slot: s.slot } : take(key, first, s.slot, ins[0]));
-      for (const k of ins) out.push(delivered ? take(slotVariant(realm, s.slot, k), own, s.slot) : take(slotVariant(realm, s.slot, k), byKey.get(k), s.slot, k));
+      // A stand-in is a piece of the kit, or one of the park's own pictures outside it (a room's painting,
+      // a realm's idol, OP-276), which then fills the slot's box.
+      for (const k of ins) if (!byKey.has(k) && !published(k)) throw new Error(`tools/kit/slots.json: ${realm} ${s.slot} names ${k}, which is not in the kit or the park's art`);
+      const boxOf = (k) => byKey.get(k) ?? own;
+      out.push(delivered || !ins[0] ? { ...own, slot: s.slot } : take(key, boxOf(ins[0]), s.slot, ins[0]));
+      for (const k of ins) out.push(delivered ? take(slotVariant(realm, s.slot, k), own, s.slot) : take(slotVariant(realm, s.slot, k), boxOf(k), s.slot, k));
     }
   }
   return out;

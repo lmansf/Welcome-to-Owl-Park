@@ -18,7 +18,9 @@ export const KIT_SLOT_RENAMES: Readonly<Record<KitRealm, Readonly<Record<string,
     const at = key.indexOf('--');
     if (!e.slot || at < 0) continue;
     const realm = /^kit-([a-z]+)-/.exec(key)![1]!;
-    (out[realm] ??= {})[`kit-${key.slice(at + 2)}`] = key;
+    // A stand-in from outside the kit (a room's painting, a realm's idol, OP-276) is drawn by its slot's key alone, never renamed.
+    const piece = `kit-${key.slice(at + 2)}`;
+    if (Object.hasOwn(KIT_CATALOG, piece)) (out[realm] ??= {})[piece] = key;
   }
   return out as Record<KitRealm, Record<string, string>>;
 })();

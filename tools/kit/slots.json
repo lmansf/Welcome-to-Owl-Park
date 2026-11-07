@@ -59,7 +59,13 @@
     },
     "glass": {
       "rows": [],
-      "slots": {}
+      "slots": {
+        "start-screen": ["glass"],
+        "idol-owl": ["glass-idol"],
+        "trading-nest": ["kit-glass-kiosk"],
+        "quest-post": ["kit-notice-board"],
+        "decor": ["kit-glass-glass-planter", "kit-glass-glass-lantern"]
+      }
     }
   }
 }

@@ -12,6 +12,7 @@ import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
 import { HALL_ID, HALL_LEVELS, HALL_ROOM, hallSpawn, type HallLevel } from './hollowHall';
 import type { CourseDef } from '../src/course';
+import { realmStart, realmStartAnchors } from '../src/realmStart';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 export { NEW_MAP } from '../src/newMap';
@@ -584,77 +585,28 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
   },
   /**
-   * The stained-glass realm (designs/the-stained-glass-climb.md): two screens, the arch back to
-   * the hub and the idol on the west screen, the portal to the solo climb at the foot of a tall
-   * window on the east. Gated: closed until the keepers open it with the realms setting.
+   * The stained-glass realm's start (OP-276): one screen seen from above, laid out as every realm's
+   * start is (realmStart.ts, the realm kit's wireframe 1). Left to right it tells the visit: in from
+   * the tree at the knot-hole, a job from the quest owl at the post, a vote at the guardian, the realm's
+   * things at the trading nest, then on to the climb at the way out east. The floor, the two openings
+   * and the vote spot are the template's; the painting is the realm's start screen (kit slot S01),
+   * today's west screen of the street standing in until its artist's arrives. Gated: closed until the
+   * keepers open it with the realms setting.
    */
-  glass: {
-    id: 'glass',
-    gated: true,
-    size: { w: 2 * ROOM_W, h: ROOM_H },
-    background: 'glass',
-    backgrounds: [
-      { key: 'glass', x: 0, y: 0 },
-      { key: 'glass-east', x: ROOM_W, y: 0 },
-    ],
-    foregrounds: [],
+  glass: realmStart('glass', {
+    // The knot-hole back to the tree, and on the new map back to the glass commons (NEW_MAP_WAYS).
+    back: { to: { room: 'hub', spawn: 'from-glass' }, toTree: { room: 'l3', spawn: 'glass' } },
+    // The way on is the portal to the solo climb (the client's `interactions` table offers Climb there).
+    on: { id: 'portal' },
     mood: 'dusk',
-    // The floor as painted (OP-127): it starts at the arch back into the tree (the trunk left of it is
-    // bark) and goes round the idol's plinth, which stands on it and is no floor itself. Past the
-    // plinth it keeps to the pavement where the two screens join (repainted, OP-125): the pink
-    // shopfront's stone base, into its lit doorway porch, along the next building's ledge, then the
-    // plaza's far edge. The plinth's two sides run aslant (OP-279), so an owl walking along the street
-    // from the arch, or back to it, slides round the front of the plinth instead of stopping dead at it.
-    walkable: [
-      [
-        { x: 140, y: 690 },
-        { x: 1040, y: 690 },
-        { x: 1140, y: 815 },
-        { x: 1380, y: 815 },
-        { x: 1440, y: 758 },
-        { x: 1600, y: 758 },
-        { x: 1612, y: 732 },
-        { x: 1745, y: 732 },
-        { x: 1757, y: 748 },
-        { x: 1960, y: 748 },
-        { x: 1990, y: 705 },
-        { x: 2400, y: 705 },
-        { x: 2420, y: 690 },
-        { x: 3200, y: 690 },
-        { x: 3200, y: 888 },
-        { x: 280, y: 888 },
-        { x: 250, y: 830 },
-        { x: 170, y: 760 },
-        { x: 140, y: 760 },
-      ],
+    gated: true,
+    decor: [
+      // A planter of glass flowers by the quest post, and two lanterns lighting the way in and the way on.
+      { key: 'kit-glass-decor--glass-glass-planter' },
+      { key: 'kit-glass-decor--glass-glass-lantern' },
+      { key: 'kit-glass-decor--glass-glass-lantern' },
     ],
-    spawns: { 'default': { x: 330, y: 740 }, 'from-hub': { x: 330, y: 740 } },
-    doors: [
-      // The painted arch's threshold (x 150 to 290), not the trunk beside it; its glow at the arch's foot.
-      { id: 'to-hub', rect: { x: 150, y: 690, w: 140, h: 75 }, to: { room: 'hub', spawn: 'from-glass' }, toTree: { room: 'l3', spawn: 'glass' }, marker: { x: 220, y: 728 } },
-      // In front of the plinth: an owl votes standing on the floor before the idol, not on its plinth.
-      { id: 'idol', rect: { x: 1150, y: 816, w: 220, h: 64 }, marker: { x: 1260, y: 848 } },
-      // The portal: standing here offers the climb (the client's `interactions` table).
-      // The foot of the tall window in the east screen's painting.
-      { id: 'portal', rect: { x: 2785, y: 700, w: 200, h: 90 }, marker: { x: 2885, y: 640 } },
-    ],
-    spots: [
-      { x: 330, y: 860 },
-      { x: 480, y: 720 },
-      { x: 600, y: 850 },
-      { x: 760, y: 760 },
-      { x: 900, y: 860 },
-      { x: 1050, y: 730 },
-      { x: 1450, y: 860 },
-      { x: 1700, y: 800 },
-      { x: 1900, y: 860 },
-      { x: 2100, y: 790 },
-      { x: 2300, y: 860 },
-      { x: 2450, y: 740 },
-      { x: 2900, y: 860 },
-      { x: 3050, y: 780 },
-    ],
-  },
+  }),
   arcade: {
     id: 'arcade',
     size: { w: 3 * ROOM_W, h: ROOM_H },
@@ -1781,7 +1733,7 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   hub: { 'tree-base': { x: 2400, y: 628 } },
   grove: { guardian: { x: 2400, y: 430 }, gathering: { x: 2400, y: 612 } },
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
-  glass: { idol: { x: 1260, y: 705 }, portal: { x: 2885, y: 560 } },
+  glass: realmStartAnchors(),
   // The idols in the hollow hall's Commons, each just behind its Realm Vote spot (the `idol` door).
   'commons-glass': { idol: { x: 2240, y: 735 } },
   'commons-grove': { guardian: { x: 2240, y: 735 }, gathering: { x: 2240, y: 780 } },

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROOM_W, WAY_OUT_DOOR, mapOf, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, kitFilesOf, mapOf, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
 import { footOrigin, hitArea } from './fit';
@@ -47,11 +47,24 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
  */
 function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
   const spec = ART[key];
-  const foot = footOrigin(key);
+  const foot = footOf(key);
   const img = scene.add.image(x, y, key).setOrigin(foot.x, foot.y);
   if (spec) img.setDisplaySize(spec.w, spec.h);
   return img;
 }
+
+/**
+ * Where a piece stands in its frame: its own art's foot (the sprite manifest), else that of the art
+ * standing in for a realm kit slot (OP-276), else a kit piece's measured box, else its frame's bottom middle.
+ */
+function footOf(key: string): { x: number; y: number } {
+  const kit = KIT_ART[key];
+  const box = kit?.foot !== undefined && kit.left !== undefined && kit.right !== undefined ? { x: (kit.left + kit.right) / 2 / kit.w, y: kit.foot / kit.h } : { x: 0.5, y: 1 };
+  return footOrigin(key, footOrigin(kitFilesOf(key), box));
+}
+
+/** The realm's idol (OP-276): the glass realm's is its kit slot, drawn from today's idol until its artist's comes. */
+export const GLASS_IDOL = 'kit-glass-idol-owl';
 
 /**
  * A tap area round the piece itself, not its frame (OP-127): an idol's glow fills most of its picture
@@ -60,7 +73,7 @@ function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.G
  */
 function hugging(img: Phaser.GameObjects.Image, key: string): Phaser.Types.Input.InputConfiguration {
   const res = img.frame.width / (ART[key]?.w ?? img.frame.width);
-  const area = hitArea(key, Math.abs(img.scaleX) * res);
+  const area = hitArea(key, Math.abs(img.scaleX) * res) ?? hitArea(kitFilesOf(key), Math.abs(img.scaleX) * res);
   if (!area) return { useHandCursor: true };
   return { hitArea: new Phaser.Geom.Rectangle(area.x * res, area.y * res, area.w * res, area.h * res), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true };
 }
@@ -169,12 +182,12 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
-  if (realm === 'glass' && anchors['idol'] && scene.textures.exists('glass-idol')) {
+  if (realm === 'glass' && anchors['idol'] && scene.textures.exists(GLASS_IDOL)) {
     // The stained-glass owl on its plinth: lit from within, it brightens when a visitor pledges.
     const a = anchors['idol'];
     const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const idol = piece(scene, a.x, a.y, 'glass-idol').setDepth(a.y);
-    const ki = fitBelowTop('glass-idol', a.y);
+    const idol = piece(scene, a.x, a.y, GLASS_IDOL).setDepth(a.y);
+    const ki = fitBelowTop(GLASS_IDOL, a.y);
     idol.setScale(idol.scaleX * ki, idol.scaleY * ki);
     tappable(idol);
     pieces.idol = {
@@ -201,6 +214,8 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
     };
     scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
+  // A realm start's pieces (OP-276): its quest post, trading nest and decor, each standing at its foot among the owls.
+  for (const p of room.pieces ?? []) if (scene.textures.exists(p.key)) piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
   for (const door of room.doors) {
     const m = door.marker;
     if (!m) continue;

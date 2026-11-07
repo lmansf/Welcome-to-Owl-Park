@@ -508,16 +508,17 @@ describe('the stained-glass realm (gated)', () => {
   const hub = ROOMS.hub!;
   const glass = ROOMS.glass!;
 
-  it('is the one gated room of today\'s park, two screens wide, with the arch back, the idol and the portal', () => {
+  it('is the one gated room of today\'s park, one screen laid out as every realm\'s start (OP-276), with the knot-hole back, the idol and the portal', () => {
     expect(GATED_ROOMS.filter((id) => mapOf(getRoom(id)) === 1)).toEqual(['glass']);
     expect(glass.gated).toBe(true);
-    expect(glass.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
+    expect(glass.size).toEqual({ w: ROOM_W, h: ROOM_H });
+    expect(glass.backgrounds).toEqual([{ key: 'kit-glass-start-screen', x: 0, y: 0 }]);
     expect(glass.doors.map((d) => d.id)).toEqual(['to-hub', 'idol', 'portal']);
     expect(glass.doors.find((d) => d.id === 'to-hub')?.to).toEqual({ room: 'hub', spawn: 'from-glass' });
     expect(ANCHORS.glass).toBeDefined();
   });
 
-  it('lets an owl holding right from the arch slide round the idol\'s plinth, and back again (OP-279)', () => {
+  it("lets an owl holding right from the knot-hole slide round the guardian's base, and back again (OP-279)", () => {
     const hold = (from: Vec2, dir: Vec2, until: (p: Vec2) => boolean) => {
       let p = from;
       for (let i = 0; i < 60 && !until(p); i++) {
@@ -532,8 +533,8 @@ describe('the stained-glass realm (gated)', () => {
     const west = hold({ x: 1500, y: 770 }, { x: -1, y: 0 }, (p) => p.x < 1000);
     expect(west.x).toBeLessThan(1000);
     // The plinth itself stays off the floor, and the idol's vote spot in front of it stays on it.
-    expect(isWalkable({ x: 1260, y: 760 }, glass.walkable)).toBe(false);
-    expect(isWalkable({ x: 1260, y: 848 }, glass.walkable)).toBe(true);
+    expect(isWalkable({ x: 830, y: 660 }, glass.walkable)).toBe(false);
+    expect(isWalkable({ x: 830, y: 732 }, glass.walkable)).toBe(true);
   });
 
   it("opens from the hub's east arch, which keeps its sign and blockade while the realm is closed; the west arch stays boarded", () => {

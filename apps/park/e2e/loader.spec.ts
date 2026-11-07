@@ -122,33 +122,33 @@ test.describe('the load screen (OP-129)', () => {
 
   test('on a dense screen a room opens on its 1x painting while the 2x is on its way, then sharpens in place once the owl stands still', async ({ page }, info) => {
     test.skip(info.project.name !== 'phone', 'only a dense screen asks for the 2x paintings');
-    // The stained-glass realm's 2x paintings held back until let go.
+    // The stained-glass realm's start screen (OP-276: its kit slot, today's painting standing in), its 2x held back until let go.
+    const SCREEN = 'kit-glass-start-screen';
     let letGo!: () => void;
     const held = new Promise<void>((r) => (letGo = r));
     const hold = async (route: Parameters<Parameters<Page['route']>[1]>[0]) => {
       await held;
       await route.continue().catch(() => undefined);
     };
-    await page.route(/\/art\/glass(-east)?%402x\.webp/, hold);
+    await page.route(/\/art\/glass%402x\.webp/, hold);
     await openPark(page, { room: 'glass' });
-    // The owl can move already, on the 1x paintings.
+    // The owl can move already, on the 1x painting.
     const s = await state(page);
     expect(s.connected).toBe(true);
-    expect(s.soft.sort()).toEqual(['glass', 'glass-east']);
-    expect(await page.evaluate(() => window.owlPark.textureSize('glass'))).toEqual({ w: 1600, h: 900 });
-    // The 2x copies come while the owl walks: the swap holds up a frame, so it waits.
+    expect(s.soft).toEqual([SCREEN]);
+    expect(await page.evaluate((k) => window.owlPark.textureSize(k), SCREEN)).toEqual({ w: 1600, h: 900 });
+    // The 2x copy comes while the owl walks: the swap holds up a frame, so it waits.
     await page.keyboard.down('ArrowRight');
-    const came = Promise.all([page.waitForResponse(/\/art\/glass%402x\.webp/), page.waitForResponse(/\/art\/glass-east%402x\.webp/)]);
+    const came = page.waitForResponse(/\/art\/glass%402x\.webp/);
     letGo();
     await came;
     await page.waitForTimeout(1000);
-    expect((await state(page)).soft.sort()).toEqual(['glass', 'glass-east']);
-    // It stands still: each painting swaps in place, the same size in the room.
+    expect((await state(page)).soft).toEqual([SCREEN]);
+    // It stands still: the painting swaps in place, the same size in the room.
     await page.keyboard.up('ArrowRight');
     await expect.poll(async () => (await state(page)).soft, { timeout: 15_000 }).toEqual([]);
-    expect(await page.evaluate(() => window.owlPark.textureSize('glass'))).toEqual({ w: 3200, h: 1800 });
-    expect(await page.evaluate(() => window.owlPark.textureSize('glass-east'))).toEqual({ w: 3200, h: 1800 });
-    await page.unroute(/\/art\/glass(-east)?%402x\.webp/, hold);
+    expect(await page.evaluate((k) => window.owlPark.textureSize(k), SCREEN)).toEqual({ w: 3200, h: 1800 });
+    await page.unroute(/\/art\/glass%402x\.webp/, hold);
   });
 
   test('a tapped walk past one realm’s arch on its way to another fetches only the room it goes into', async ({ page }) => {
