@@ -1163,12 +1163,15 @@ describe('the climb in the room object (the stained-glass realm)', () => {
   const EASY = NIGHTS['easy']!;
   /** Walk an owl from the glass room's knot-hole to the portal at the way on and let the walk finish. */
   async function toPortal(obj: Obj, ws: FakeSocket) {
-    // Along the front of the floor past the guardian (its base is no floor, OP-276), then up to the way on.
-    await send(obj, ws, { t: 'move', to: { x: 700, y: 820 }, seq: 1 });
+    // The room scatters an owl round the arrival, perhaps up by the knot-hole: first straight down onto
+    // the open floor, then along its front past the guardian (its base is no floor, OP-276), then up to the way on.
+    await send(obj, ws, { t: 'move', to: { x: ws.last('welcome')!.you.pos.x, y: 760 }, seq: 1 });
     clock += 10_000;
-    await send(obj, ws, { t: 'move', to: { x: 1200, y: 800 }, seq: 2 });
+    await send(obj, ws, { t: 'move', to: { x: 700, y: 820 }, seq: 2 });
     clock += 10_000;
-    await send(obj, ws, { t: 'move', to: { x: 1500, y: 600 }, seq: 3 });
+    await send(obj, ws, { t: 'move', to: { x: 1200, y: 800 }, seq: 3 });
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to: { x: 1500, y: 600 }, seq: 4 });
     clock += 10_000;
   }
   const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
@@ -1938,7 +1941,7 @@ describe('spectators in the room object (OP-191)', () => {
     const obj = roomObject();
     await obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: { open: ['glass'], portal: true, night: 'easy' } }) }));
     const ws = await spectator(obj, 'glass');
-    await walk(obj, ws, { x: 700, y: 820 }, { x: 1200, y: 800 }, { x: 1500, y: 600 });
+    await walk(obj, ws, { x: ws.last('welcome')!.you.pos.x, y: 760 }, { x: 700, y: 820 }, { x: 1200, y: 800 }, { x: 1500, y: 600 });
     await send(obj, ws, { t: 'act', a: 'climb', r: 1 });
     await settle();
     const started = act(ws, 1) as { seed: number; startedAt: number };
