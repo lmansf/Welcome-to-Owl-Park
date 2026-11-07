@@ -168,7 +168,7 @@ import { WindStreaks } from './windStreaks';
 import { BrushInk } from './brushInk';
 import { NeonSigns } from './neonSigns';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
-import { PUZZLE_ART_KEYS, artScale, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
+import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 import { admitTarget } from './gateAdmit';
@@ -1975,6 +1975,8 @@ export class RoomScene extends Phaser.Scene {
     mirror: { x: number; y: number; stage: PreviewFrame | null } | null;
     /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
     soft: string[];
+    /** The room's art drawn as size boxes (`?sizes=1`, sizeBoxes.ts): each key whose box is up. */
+    sizeBoxes: string[];
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
     /** The art tiles that scroll at rates of their own (OP-156): each one's key, scroll factor and where it is drawn. */
@@ -2039,6 +2041,7 @@ export class RoomScene extends Phaser.Scene {
         : null,
       mirror: this.mirror ? { ...NEST_MIRROR, stage: this.mirrorFrame } : null,
       soft: [...this.soft],
+      sizeBoxes: roomArtKeys(this.room.id, drawnRoom(this.room, this.cfg)).filter((k) => drawnAsSizeBox(k) && this.textures.exists(k)),
       travel: this.travelNow(),
       paint: this.painter?.debug() ?? null,
     };

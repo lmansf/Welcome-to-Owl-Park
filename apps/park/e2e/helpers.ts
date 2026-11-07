@@ -43,6 +43,8 @@ export interface ParkState {
   connected: boolean;
   /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
   soft: string[];
+  /** The room's art drawn as size boxes (`?sizes=1`). */
+  sizeBoxes: string[];
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** In a room of the tree (OP-173): how many fronts, shades, ledge edges and doorway marks it drew. */

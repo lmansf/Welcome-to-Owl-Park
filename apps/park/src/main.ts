@@ -6,6 +6,7 @@ import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
+import { useSizeBoxes } from './game/art';
 import { BootScene } from './game/BootScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
@@ -64,6 +65,8 @@ const checkoutBack = isCheckoutReturn(location.search)
   : null;
 
 const cfg = readConfig();
+// Size boxes (`?sizes=1`): the map's art as boxes of its sizes, set before anything loads.
+useSizeBoxes(cfg.sizes);
 const playerId = loadPlayerId(cfg);
 const look = loadLook(cfg, playerId);
 const parent = document.getElementById('game') as HTMLElement;

@@ -3,6 +3,7 @@
  * Query-string overrides exist for tests and demos (e.g. ?transport=local&room=grove).
  */
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
+import { sizeBoxesWanted } from './game/sizeBoxes';
 
 /**
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
@@ -94,6 +95,11 @@ export interface ParkConfig {
   newMap: boolean;
   /** `?newmap=0`: an owl the tree takes walks the tree as it was (map 2), not the new map. */
   oldMap: boolean;
+  /**
+   * Size boxes (`?sizes=1`, kept for the tab until `?sizes=0`): the map's art drawn as plain boxes
+   * labelled with each piece's name, its size in the game and the size to deliver (game/sizeBoxes.ts).
+   */
+  sizes: boolean;
 }
 
 export function readConfig(): ParkConfig {
@@ -135,5 +141,6 @@ export function readConfig(): ParkConfig {
     kit: q.get('kit') !== '0',
     newMap: q.get('newmap') === '1',
     oldMap: q.get('newmap') === '0',
+    sizes: sizeBoxesWanted(q.get('sizes')),
   };
 }
