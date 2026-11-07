@@ -1,0 +1,30 @@
+name: QA activities timing (temporary)
+on:
+  push:
+    branches: [qa-activities]
+permissions:
+  contents: read
+jobs:
+  run:
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [main, size-boxes-simpler]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/park
+      - run: pnpm exec playwright test activities --project=desktop --repeat-each=2 --retries=0 || true
+        working-directory: apps/park
