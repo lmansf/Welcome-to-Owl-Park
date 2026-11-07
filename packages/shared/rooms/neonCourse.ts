@@ -7,8 +7,8 @@
  * turns, and a sign is stood on only while it is lit. In the power cut the circuits stutter faster,
  * and live wires hang over the street, under the signs and above them, so the signs are the way across.
  *
- * For now it is the keepers' (`keeperOnly`): its trail gate is the middle arch of the neon Commons in
- * the hollow hall (hollowHall.ts), shut to any other owl. Every ledge is the plan's: `x` its west end,
+ * It is open to every owl (OP-285): its trail gate is the middle arch of the neon Commons in the
+ * hollow hall (hollowHall.ts). Every ledge is the plan's: `x` its west end,
  * `w` its width, `top` its height over the ground line. The ground line is the roofs' own deck; where
  * it stops, between two buildings, is the drop to the street, a fall.
  */
@@ -102,13 +102,13 @@ function cityAir(screens: number): KitBackdrop[] {
   ];
 }
 
-const KEEPERS = { map: 2 as const, owlScale: 1.25, mood: 'neon' as const, keeperOnly: true as const };
+const COURSE_ROOM = { map: 2 as const, owlScale: 1.25, mood: 'neon' as const };
 
 function circuitRoom(id: string, screens: number, kit: RoomKit, rest: Pick<RoomDef, 'spawns' | 'doors'> & { course: Omit<RoomCourse, 'id'>; signs: NeonSign[]; spawnTops?: Record<string, number> }): RoomDef {
   const w = screens * ROOM_W;
   return kitRoom({
     id,
-    ...KEEPERS,
+    ...COURSE_ROOM,
     size: { w, h: 900 },
     walkable: [floor(8, w - 8)],
     perches: [...kitPerches(kit), ...signPerches(rest.signs, G)],
@@ -267,7 +267,6 @@ export const CIRCUIT_COURSE: CourseDef = {
   emote: 'flip',
   gold: { ms: 100_000, item: 'sparkle~4' },
   floorMs: 35_000,
-  keeper: true,
   art: {
     bench: { key: 'kit-neon-checkpoint-bench', scale: 0.55 },
     feather: { key: 'kit-neon-feather-lost', scale: 0.6 },

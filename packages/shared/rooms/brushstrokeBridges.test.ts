@@ -53,12 +53,12 @@ describe('Brushstroke Bridges (OP-235)', () => {
     expect(ROOMS['brush-3b']!.course!.shrine).toBeDefined();
   });
 
-  it("is the keepers' for now, seen from the side on the tree's ground line, holding the dash in every room, with nothing wrong in its kit", () => {
+  it("is open to every owl (OP-285), seen from the side on the tree's ground line, holding the dash in every room, with nothing wrong in its kit", () => {
     expect(BRUSH_GROUND).toBe(TREE_GROUND);
-    expect(BRUSH_COURSE.keeper).toBe(true);
+    expect(BRUSH_COURSE.keeper).toBeUndefined();
     for (const id of ids) {
       const r = ROOMS[id]!;
-      expect(r.keeperOnly, id).toBe(true);
+      expect(r.keeperOnly, id).toBeUndefined();
       expect(mapOf(r), id).toBe(2);
       expect(holdsDash(r), id).toBe(true);
       expect(kitProblems(r), id).toEqual([]);
@@ -67,10 +67,10 @@ describe('Brushstroke Bridges (OP-235)', () => {
     }
   });
 
-  it("is reached through the paper Commons' middle arch, shut to any owl but a keeper's, and the summit's moon gate leads back there", () => {
+  it("is reached through the paper Commons' middle arch, open to every owl (OP-285), and the summit's moon gate leads back there", () => {
     const arch = ROOMS['commons-ink']!.doors.find((d) => d.id === 'to-course')!;
     expect(arch.to).toEqual({ room: 'brush-1', spawn: 'from-gate' });
-    expect(arch.closedSign).toBe('Not Yet Fledged');
+    expect(arch.closedSign).toBeUndefined();
     expect(ROOMS['commons-ink']!.spawns['from-course']).toBeDefined();
     expect(ROOMS['brush-3b']!.doors.find((d) => d.id === 'home')!.to).toEqual({ room: 'commons-ink', spawn: 'from-course' });
   });

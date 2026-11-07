@@ -7,8 +7,8 @@
  * (brush.ts): land on one and it paints a bridge or treads of ink the way its arrow points, and the ink
  * fades. In the rain it fades in half the time, unless the stone stands under a temple eave.
  *
- * For now it is the keepers' (`keeperOnly`): its trail gate is the middle arch of the paper Commons in
- * the hollow hall (hollowHall.ts), shut to any other owl. Not built yet, from the plan: the three
+ * It is open to every owl (OP-285): its trail gate is the middle arch of the paper Commons in the
+ * hollow hall (hollowHall.ts). Not built yet, from the plan: the three
  * shortcuts (the bamboo, the ferry raft and the crane), the painter's lines and the unfinished
  * painting's last stroke, and the misty stair past the pavilion.
  *
@@ -110,7 +110,7 @@ function inkAir(screens: number): KitBackdrop[] {
   ];
 }
 
-const KEEPERS = { map: 2 as const, owlScale: 1.25, mood: 'dusk' as const, keeperOnly: true as const };
+const COURSE_ROOM = { map: 2 as const, owlScale: 1.25, mood: 'dusk' as const };
 
 function brushRoom(
   id: string,
@@ -122,7 +122,7 @@ function brushRoom(
   const stones = rest.stones ?? [];
   return kitRoom({
     id,
-    ...KEEPERS,
+    ...COURSE_ROOM,
     size: { w, h: 900 },
     walkable: [floor(8, w - 8)],
     perches: [...kitPerches(kit), ...brushPerches(stones, G)],
@@ -357,7 +357,6 @@ export const BRUSH_COURSE: CourseDef = {
   emote: 'preen',
   gold: { ms: 115_000, item: 'sparkle~4' },
   floorMs: 45_000,
-  keeper: true,
   art: {
     bench: { key: 'kit-ink-checkpoint-bench', scale: 0.6 },
     part: { key: 'kit-ink-seal-red', lift: 20, scale: 0.5 },

@@ -1602,7 +1602,7 @@ ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
 // The side-view copy of the tree's arcade the cavern led to before OP-283; nothing leads in now.
 ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
 
-// ---- The hollow hall and its four Commons (keepers only, hollowHall.ts) ----
+// ---- The hollow hall and its four Commons (hollowHall.ts) ----
 //
 // The hall is one tall room inside the trunk, a landing a level; each landing's doorway opens on its
 // level's Commons, a round hall in the hollow with the realm's idol, out through its back arch to the
@@ -1635,8 +1635,8 @@ function commonsRoom(id: string, level: HallLevel): RoomDef {
       ? { id: 'to-realm', rect: arch('to-glass'), to: of.realm, marker: { x: 2665, y: 560 } }
       : { id: 'to-realm', rect: arch('to-glass'), closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
     closed('arch-west', arch('to-grove'), { x: 1765, y: 640 }),
-    // The course is the keepers' for now: a keeper's owl goes through, any other sees the arch shut.
-    of.course ? { id: 'to-course', rect: arch('closed-a'), to: of.course, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } } : closed('arch-middle', arch('closed-a'), { x: 2145, y: 668 }),
+    // The course's trail gate, open to every owl (OP-285).
+    of.course ? { id: 'to-course', rect: arch('closed-a'), to: of.course, marker: { x: 2145, y: 560 } } : closed('arch-middle', arch('closed-a'), { x: 2145, y: 668 }),
     closed('arch-east', arch('to-market'), { x: 3015, y: 650 }),
     // The idol's gathering spot, a little west of the hollow's middle (where the Commons' own painting has its plinth).
     ...(of.votesFor ? [{ id: 'idol', rect: { x: 2140, y: 740, w: 200, h: 80 }, marker: { x: 2240, y: 780 } }] : []),

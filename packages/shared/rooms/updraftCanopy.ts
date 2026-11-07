@@ -7,9 +7,9 @@
  * leaves that lifts a gliding owl. Thorns hang between the high ledges so a long glide cannot skip a
  * column, and bramble, thorn roots and the drop under the crown are its pits.
  *
- * For now it is the keepers' (`keeperOnly`): its trail gate stands in the test course's trailhead,
- * and the Treehouse Clearing's Commons in the hollow hall (hollowHall.ts) has a doorway in too, its
- * middle arch, where the first act's way back now leads. Not built yet, from the plan: the wind of act 3, the
+ * It is open to every owl (OP-285): its trail gate is the middle arch of the Treehouse Clearing's
+ * Commons in the hollow hall (hollowHall.ts), where the first act's way back and the hut's way out lead.
+ * The keepers' test trailhead keeps a doorway in too. Not built yet, from the plan: the wind of act 3, the
  * three shortcuts (the log, the vine and the bough), the sleeping owlet's lines and the telescope's view.
  *
  * Every ledge is the plan's: `x` its west end, `w` its width, `top` its height over the ground line.
@@ -109,7 +109,7 @@ function trunkInside(w: number): Pick<RoomKit, 'backdrops' | 'surfaces'> {
   };
 }
 
-const KEEPERS = { map: 2 as const, owlScale: 1.25, mood: 'dusk' as const, keeperOnly: true as const };
+const COURSE_ROOM = { map: 2 as const, owlScale: 1.25, mood: 'dusk' as const };
 
 function canopyRoom(
   id: string,
@@ -120,7 +120,7 @@ function canopyRoom(
   const w = screens * ROOM_W;
   return kitRoom({
     id,
-    ...KEEPERS,
+    ...COURSE_ROOM,
     size: { w, h: 900 },
     walkable: floor(8, w - 8),
     perches: kitPerches(kit),
@@ -358,7 +358,7 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = {
   }),
   'canopy-hut': canopyRoom('canopy-hut', 1, HUT, {
     spawns: { default: { x: 240, y: G }, 'from-deck': { x: 240, y: G } },
-    doors: [door('out', 80, { room: 'trail-head', spawn: 'from-canopy' }, { w: 60, way: 'down' })],
+    doors: [door('out', 80, { room: 'commons-grove', spawn: 'from-course' }, { w: 60, way: 'down' })],
     course: { act: 3, shrine: piece('shrine', 600) },
   }),
 };
@@ -368,14 +368,13 @@ export const CANOPY_COURSE: CourseDef = {
   objective: 'bells',
   acts: ['canopy-1', 'canopy-2a', 'canopy-3'],
   rooms: ['canopy-roots', 'canopy-2b', 'canopy-2c', 'canopy-hut'],
-  gate: { room: 'trail-head', door: 'canopy-gate', spawn: 'from-gate' },
+  gate: { room: 'commons-grove', door: 'to-course', spawn: 'from-gate' },
   exit: { room: 'canopy-hut', door: 'out' },
   // Stand-ins from the catalogue until the course has its own item; clearing every course pays the Golden Mouse (coursebook.ts).
   item: 'leaf-crown~0',
   emote: 'twirl',
   gold: { ms: 105_000, item: 'sparkle~9' },
   floorMs: 40_000,
-  keeper: true,
   art: {
     bench: { key: 'kit-clearing-checkpoint-bench', scale: 0.7 },
     part: { key: 'kit-landmark-bell-hanging', lift: 70, scale: 0.6 },

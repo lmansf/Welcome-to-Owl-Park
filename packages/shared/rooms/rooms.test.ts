@@ -1182,8 +1182,8 @@ describe('the new map (map 3): the park as one tree', () => {
 
   it('no visitor’s doorway leads into it: only the new map’s own ways (toNew) and its own rooms do', () => {
     for (const room of Object.values(ROOMS)) {
-      // The keepers' rooms (the courses) are no visitor's.
-      if (isNewMapRoom(room.id) || room.keeperOnly) continue;
+      // The keepers' rooms are no visitor's, and a course's rooms are reached only from the new map's Commons (OP-285).
+      if (isNewMapRoom(room.id) || room.keeperOnly || room.course) continue;
       for (const d of room.doors) {
         for (const to of [d.to, d.toTree]) expect(isNewMapRoom(to?.room), `${room.id}:${d.id}`).toBe(false);
       }

@@ -51,12 +51,12 @@ describe("the neon realm's course", () => {
     expect(ROOMS['circuit-3']!.course!.shrine).toBeDefined();
   });
 
-  it("is the keepers' for now, seen from the side on the tree's ground line, holding the dash in every room, with nothing wrong in its kit", () => {
+  it("is open to every owl (OP-285), seen from the side on the tree's ground line, holding the dash in every room, with nothing wrong in its kit", () => {
     expect(CIRCUIT_GROUND).toBe(TREE_GROUND);
-    expect(CIRCUIT_COURSE.keeper).toBe(true);
+    expect(CIRCUIT_COURSE.keeper).toBeUndefined();
     for (const id of ids) {
       const r = ROOMS[id]!;
-      expect(r.keeperOnly, id).toBe(true);
+      expect(r.keeperOnly, id).toBeUndefined();
       expect(mapOf(r), id).toBe(2);
       expect(holdsDash(r), id).toBe(true);
       expect(kitProblems(r), id).toEqual([]);
@@ -65,10 +65,10 @@ describe("the neon realm's course", () => {
     }
   });
 
-  it("is reached through the neon Commons' middle arch, shut to any owl but a keeper's, and the tallest roof's door leads back there", () => {
+  it("is reached through the neon Commons' middle arch, open to every owl (OP-285), and the tallest roof's door leads back there", () => {
     const arch = ROOMS['commons-market']!.doors.find((d) => d.id === 'to-course')!;
     expect(arch.to).toEqual({ room: 'circuit-1', spawn: 'from-gate' });
-    expect(arch.closedSign).toBe('Not Yet Fledged');
+    expect(arch.closedSign).toBeUndefined();
     expect(ROOMS['commons-market']!.spawns['from-course']).toBeDefined();
     expect(ROOMS['circuit-3']!.doors.find((d) => d.id === 'home')!.to).toEqual({ room: 'commons-market', spawn: 'from-course' });
   });
