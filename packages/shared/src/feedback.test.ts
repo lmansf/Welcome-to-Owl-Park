@@ -46,6 +46,34 @@ describe('feedback from visitors', () => {
       expect(redactFeedbackText('42 Elm St.')).toBe('[address]');
     });
 
+    it('replaces emails with spaces round the @, gamer tags, and handles named next to their app (OP-247)', () => {
+      expect(redactFeedbackText('email sam @ gmail.com')).toBe('email [email]');
+      expect(redactFeedbackText('its sam@ gmail . com ok')).toBe('its [email] ok');
+      expect(redactFeedbackText('add me owl_kid#1234 on discord')).toBe('add me [handle] on discord');
+      expect(redactFeedbackText('my roblox username is CoolTaco99')).toBe('my roblox username is [handle]');
+      expect(redactFeedbackText('discord: sammy.owl')).toBe('discord: [handle]');
+      expect(redactFeedbackText('Roblox = owlfan')).toBe('Roblox = [handle]');
+      expect(redactFeedbackText('my roblox is cooltaco')).toBe('my roblox is [handle]');
+      expect(redactFeedbackText('add sammy on roblox')).toBe('add [handle] on roblox');
+      expect(redactFeedbackText("I'm owlfan on tiktok")).toBe("I'm [handle] on tiktok");
+      expect(redactFeedbackText('sam_99 on minecraft is me')).toBe('[handle] on minecraft is me');
+      expect(redactFeedbackText('follow @owl_kid.99 on insta')).toBe('follow [handle] on insta');
+    });
+
+    it('keeps the app and ordinary talk about it (OP-247)', () => {
+      for (const note of [
+        'find me on roblox',
+        'I play on roblox and minecraft',
+        'this is like minecraft but owls',
+        'add me on discord',
+        'bug #1234 is back',
+        'roblox is fun but this is better',
+        'lvl 5 on xbox controller lagged',
+      ]) {
+        expect(redactFeedbackText(note)).toBe(note);
+      }
+    });
+
     it('keeps scores, levels, times, dates and ordinary words as they are', () => {
       for (const note of [
         'I scored 12345 in the hop game and 980 in flight',
@@ -68,7 +96,7 @@ describe('feedback from visitors', () => {
 
     it('takes a note of the most characters in little time (no pattern runs away)', () => {
       const started = performance.now();
-      for (const fill of ['a', '1', '1 ', 'a at ', '@', '.a', '12 a ']) redactFeedbackText(fill.repeat(Math.floor(FEEDBACK_MAX_CHARS / fill.length)));
+      for (const fill of ['a', '1', '1 ', 'a at ', '@', '.a', '12 a ', 'a @ ', 'a . ', 'a_1 ', 'roblox: ', 'my roblox is ', 'a on roblox ']) redactFeedbackText(fill.repeat(Math.floor(FEEDBACK_MAX_CHARS / fill.length)));
       expect(performance.now() - started).toBeLessThan(500);
     });
   });
