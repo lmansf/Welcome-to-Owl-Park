@@ -54,8 +54,9 @@ test.describe('a realm’s start (OP-276)', () => {
       await page.screenshot({ path: shot('landscape') });
     }
 
-    // The knot-hole leads back where it did: into the glass commons on the new map.
+    // The knot-hole leads back where it did: to the hub for an owl the tree has not taken, as this test's
+    // owl is (its ways on the tree and the new map are packages/shared's realmStart tests).
     await walkToDoor(page, 'to-hub');
-    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('commons-glass');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('hub');
   });
 });
