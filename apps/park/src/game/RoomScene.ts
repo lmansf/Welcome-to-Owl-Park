@@ -683,6 +683,13 @@ export class RoomScene extends Phaser.Scene {
     this.registry.set('loadedRoom', this.room.id);
     screen?.hide();
     this.build(spawn);
+    // Up on a perch from the first frame (the hollow hall's knothole landing, OP-277): the owl is drawn
+    // at that height too. The flight's step only tells the drawing of a change of mode, and a grounded
+    // owl's height alone is none, so without this it stood drawn on the floor far below the camera.
+    if (this.flier.air.z > 0) {
+      this.drawnAir = this.flier.air;
+      this.me.fly(this.flier.air, Date.now());
+    }
     void this.connect(joining);
     this.soft = soft;
     void this.sharpen(gen);

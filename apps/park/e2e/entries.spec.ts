@@ -92,6 +92,10 @@ test.describe('the entries setting (OP-156)', () => {
     expect(await door('gate')).toBe('m3-hall');
     await walkToDoor(page, 'gate');
     await expect.poll(async () => (await state(page)).room, { timeout: 30_000 }).toBe('m3-hall');
+    // In at the knothole and drawn there, where the camera looks, before any key is pressed (OP-277).
+    const arrived = await state(page);
+    expect(arrived.air.z).toBeGreaterThan(0);
+    expect(arrived.height).toBe(arrived.air.z);
     await online(page);
     await page.context().close();
   });
