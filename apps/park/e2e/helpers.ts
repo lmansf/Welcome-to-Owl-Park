@@ -6,6 +6,7 @@ export interface ParkState {
   spectator: boolean;
   /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
   dash: { holds: boolean; spent: boolean; dashes: number };
+  wind: { currents: number; rides: number };
   /** In a parkour course: the course as the room has it for this owl, and the falls and finishes this page had answered. */
   course: { course: string; act: number; run: { ms: number; parts: string[]; bench: string | null; practice?: true } | null; feathers: string[]; shortcuts: string[]; cleared: boolean; bestMs: number | null; falls: number; finishes: number } | null;
   pos: { x: number; y: number };
@@ -31,8 +32,8 @@ export interface ParkState {
   }>;
   /** How high this visitor's owl is drawn above the floor (OP-084), in room pixels; `pos` stays on the floor. */
   height: number;
-  /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1) or gliding (2), and flaps left. */
-  air: { z: number; vz: number; s: 0 | 1 | 2; f: 0 | 1 | 2 };
+  /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1), gliding (2) or held up by an updraft or a wind current (3), and flaps left. */
+  air: { z: number; vz: number; s: 0 | 1 | 2 | 3; f: 0 | 1 | 2 };
   /** Its take-offs as the flight steps them: how many on this page, and the last one's top (room px), whether it glided and how long it was up (ms, once down). */
   flown: { n: number; peak: number; glided: boolean; ms: number };
   /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */

@@ -20,6 +20,8 @@ import { RAIN_BRIDGE_MS, brushPerches, type BrushArrow, type BrushStone } from '
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type DoorDef, type KitBackdrop, type KitDecal, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
+import { inRealmKit } from '../src/kitSlots';
+import { withCourseAir } from './courseAir';
 
 export const BRUSH_COURSE_ID = 'brush';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
@@ -280,7 +282,7 @@ const PANEL_2: RoomKit = {
   decals: water(300, 2 * ROOM_W),
 };
 
-export const BRUSH_ROOMS: Record<string, RoomDef> = {
+export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourseAir('ink', {
   'brush-1': brushRoom('brush-1', 3, GARDEN, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-rain': { x: 4620, y: G } },
     spawnTops: { 'from-rain': 160 },
@@ -343,9 +345,9 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = {
       shrine: piece('shrine', 3050, 540),
     },
   }),
-};
+}));
 
-export const BRUSH_COURSE: CourseDef = {
+export const BRUSH_COURSE: CourseDef = inRealmKit('ink', {
   id: BRUSH_COURSE_ID,
   objective: 'seals',
   acts: ['brush-1', 'brush-2', 'brush-3a'],
@@ -363,4 +365,4 @@ export const BRUSH_COURSE: CourseDef = {
     feather: { key: 'kit-ink-feather-lost', scale: 0.6 },
     shrine: { key: 'kit-ink-finish-shrine', scale: 0.6 },
   },
-};
+});

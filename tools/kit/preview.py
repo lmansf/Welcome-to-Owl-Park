@@ -47,18 +47,23 @@ TARGETS = ROOT / 'tools' / 'art' / 'targets'
 # The approved target for a kit room (OP-249): its key and the screen it was painted for.
 ROOM_TARGETS = {'l4': ('target-l4', 0), 'plaza': ('target-plaza', 0)}
 _cache = {}
+# The art file each key draws from, as the plans give it (OP-275: a realm slot's key draws its stand-in's file until its own comes).
+FILES = {}
 
 
 def art(key):
     if key not in _cache:
-        f = ART / f'{key}.webp'
-        _cache[key] = Image.open(f).convert('RGBA') if f.exists() else None
+        name = FILES.get(key, key)
+        f = next((ART / f'{name}.{ext}' for ext in ('webp', 'png') if (ART / f'{name}.{ext}').exists()), None)
+        _cache[key] = Image.open(f).convert('RGBA') if f else None
     return _cache[key]
 
 
 def plan_of(room):
     out = subprocess.run(['node', str(ROOT / 'tools' / 'kit' / 'greybox.mjs'), room, '--plan', '-'], check=True, capture_output=True, text=True, cwd=ROOT).stdout
-    return json.loads(out)
+    plan = json.loads(out)
+    FILES.update(plan.get('files', {}))
+    return plan
 
 
 def faded(im, fade, w):

@@ -18,6 +18,8 @@ import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/co
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type KitBackdrop, type KitDecal, type KitLedge, type DoorDef, type RoomDef, type RoomKit } from '../src/room';
 import type { Updraft } from '../src/updraft';
+import { inRealmKit } from '../src/kitSlots';
+import { withCourseAir } from './courseAir';
 
 export const CANOPY_COURSE_ID = 'canopy';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
@@ -115,7 +117,7 @@ function canopyRoom(
   id: string,
   screens: number,
   kit: RoomKit,
-  rest: Pick<RoomDef, 'spawns' | 'doors'> & { course: Omit<RoomCourse, 'id'>; updrafts?: Updraft[] },
+  rest: Pick<RoomDef, 'spawns' | 'doors'> & Partial<Pick<RoomDef, 'spawnTops'>> & { course: Omit<RoomCourse, 'id'>; updrafts?: Updraft[] },
 ): RoomDef {
   const w = screens * ROOM_W;
   return kitRoom({
@@ -125,6 +127,7 @@ function canopyRoom(
     walkable: floor(8, w - 8),
     perches: kitPerches(kit),
     spawns: rest.spawns,
+    ...(rest.spawnTops ? { spawnTops: rest.spawnTops } : {}),
     doors: rest.doors,
     course: { id: CANOPY_COURSE_ID, ...rest.course },
     ...(rest.updrafts ? { updrafts: rest.updrafts } : {}),
@@ -288,7 +291,7 @@ const HUT: RoomKit = {
   scenes: [{ id: 'window-seat', story: 'On the window seat a brass telescope points out across the night, at a far-off glow of neon.', props: ['telescope'] }],
 };
 
-export const CANOPY_ROOMS: Record<string, RoomDef> = {
+export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', withCourseAir('clearing', {
   'canopy-1': canopyRoom('canopy-1', 3, CANOPY_1, {
     spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-roots': { x: 4480, y: G }, 'from-trunk': { x: 4660, y: G } },
     doors: [
@@ -344,7 +347,10 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = {
     },
   }),
   'canopy-3': canopyRoom('canopy-3', 4, CROWN, {
-    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-hut': { x: 400, y: G } },
+    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-hut': { x: 400, y: G }, 'on-c2': { x: 1040, y: G }, 'on-c12': { x: 5000, y: G } },
+    // On the twig c2, by the first column (U11), and on the low bough c12, by the crown's column and wind:
+    // where the browser test of the course's air starts each of its two flights (e2e/air.spec.ts).
+    spawnTops: { 'on-c2': 160, 'on-c12': 180 },
     doors: [door('down', 40, { room: 'canopy-2c', spawn: 'from-above' }, { w: 60, way: 'down' }), door('hut', 6200, { room: 'canopy-hut', spawn: 'from-deck' }, { top: 540, w: 100 })],
     updrafts: U_ACT3,
     course: {
@@ -361,9 +367,9 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = {
     doors: [door('out', 80, { room: 'commons-grove', spawn: 'from-course' }, { w: 60, way: 'down' })],
     course: { act: 3, shrine: piece('shrine', 600) },
   }),
-};
+}));
 
-export const CANOPY_COURSE: CourseDef = {
+export const CANOPY_COURSE: CourseDef = inRealmKit('clearing', {
   id: CANOPY_COURSE_ID,
   objective: 'bells',
   acts: ['canopy-1', 'canopy-2a', 'canopy-3'],
@@ -381,4 +387,4 @@ export const CANOPY_COURSE: CourseDef = {
     feather: { key: 'kit-clearing-feather-lost', scale: 0.6 },
     shrine: { key: 'kit-clearing-finish-shrine', scale: 0.9 },
   },
-};
+});

@@ -24,6 +24,8 @@ export interface Updraft {
   offMs?: number;
   /** Its place in its cycle at park time 0, from 0 to 1 (0: just switched on). */
   phase?: number;
+  /** The realm's `updraft` slot (OP-275): drawn up the column once its artist's art is published. */
+  art?: string;
 }
 
 /** How fast a column lifts an owl (px/s): about the walk's pace, well under a jump's start (880). */

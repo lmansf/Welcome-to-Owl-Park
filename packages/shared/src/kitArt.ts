@@ -11,7 +11,7 @@
  * and motifs, each motif again one period over wherever it crosses an edge, so the texture is one
  * period of an endless pattern and tiles with no seam (unit-tested).
  */
-import { KIT_CATALOG, type KitArtKind } from './kitCatalog';
+import { KIT_CATALOG, KIT_SLOTS, type KitArtKind, type KitRealm, type KitSlot } from './kitCatalog';
 import { fillEllipse, fillPoly, fillRect, strokeLine, type Raster } from './raster';
 
 /**
@@ -56,6 +56,10 @@ export interface KitArtSpec {
   right?: number;
   /** A rolling-ground piece (OP-238): its upper edge's row at its art's left end, middle and right end, where measured. */
   surface?: readonly [number, number, number];
+  /** A realm kit slot's key, or a stand-in for one (OP-275): which slot. */
+  slot?: KitSlot;
+  /** Until the slot's art is delivered: the key whose art and box it shows meanwhile. */
+  standIn?: string;
 }
 
 /**
@@ -70,10 +74,39 @@ export function kitTileOf(key: string, kind: KitArtKind): KitTile {
 }
 
 /** Every piece of the published kit (kitCatalog.ts, generated from the art tools' config). A key a room names must be here (kit.test.ts). */
-export const KIT_ART: Readonly<Record<string, KitArtSpec>> = Object.fromEntries(Object.entries(KIT_CATALOG).map(([key, e]): [string, KitArtSpec] => [key, { ...e, tile: kitTileOf(key, e.kind) }]));
+export const KIT_ART: Readonly<Record<string, KitArtSpec>> = Object.fromEntries(
+  Object.entries(KIT_CATALOG).map(([key, e]): [string, KitArtSpec] => [key, { ...e, tile: kitTileOf(e.standIn ?? kitSlotBase(key), e.kind) }]),
+);
 
-/** The pattern of a kit key: `kit-<group>` or `kit-<group>-<name>`, lower case (`kit-landing`, `kit-plank-mid`). */
-export const KIT_KEY = /^kit-([a-z]+)(?:-[a-z0-9]+)*$/;
+/**
+ * The pattern of a kit key: `kit-<group>` or `kit-<group>-<name>`, lower case (`kit-landing`, `kit-plank-mid`),
+ * and a realm slot's stand-in (OP-275) `kit-<realm>-<slot>--<name>`.
+ */
+export const KIT_KEY = /^kit-([a-z]+)(?:-[a-z0-9]+)*(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
+
+/** A key with its stand-in's name taken off (`kit-ink-plant--ink-lotus-pads` is drawn in `kit-ink-plant`). */
+export function kitSlotBase(key: string): string {
+  const at = key.indexOf('--');
+  return at < 0 ? key : key.slice(0, at);
+}
+
+/** A realm's key for a slot of its kit (OP-275): `kit-<realm>-<slot>`. */
+export function kitSlotKey(realm: KitRealm, slot: KitSlot): string {
+  return `kit-${realm}-${slot}`;
+}
+
+/** Whether a key is one of a realm's slots, or a stand-in in one. */
+export function isRealmSlotKey(realm: KitRealm, key: string): boolean {
+  const base = kitSlotBase(key);
+  return KIT_SLOTS.some((s) => base === kitSlotKey(realm, s)) && KIT_ART[key]?.slot !== undefined;
+}
+
+/** The key whose files a key's art loads from: its stand-in's until its slot is delivered, its own otherwise. */
+export function kitFilesOf(key: string): string {
+  const spec = KIT_ART[key];
+  if (!spec?.slot) return key;
+  return spec.standIn ?? kitSlotBase(key);
+}
 
 /** The group of a kit key (its first word: `tex`, `plank`, `high`, `landing`…), or null for a key that is not one. */
 export function kitGroup(key: string): string | null {

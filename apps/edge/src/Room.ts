@@ -23,6 +23,7 @@ import {
   topAt,
   SLOPE_STEEP,
   type Standing,
+  type Updraft,
   USE_COOLDOWN_MS,
   REACH_SLACK,
   SAY_EVERY_MS,
@@ -43,6 +44,7 @@ import {
   FRESH_DASH,
   dashRefusal,
   holdsDash,
+  liftColumns,
   liftHolds,
   LIFTED,
   landDash,
@@ -201,6 +203,8 @@ export class Room {
   /** The highest an owl can be here, the heights it can stand at, and where it can be at some height (OP-084, perches.ts). */
   private readonly airTop: number;
   private readonly standing: Standing[];
+  /** The air that holds an owl up here: the updrafts, and the wind currents at their heights (wind.ts). */
+  private readonly lifts: Updraft[];
   private readonly anyFooting: Polygon[];
 
   constructor(def: RoomDef, opts: RoomOptions) {
@@ -208,6 +212,7 @@ export class Room {
     this.opts = opts;
     this.airTop = highestTop(def) + LIMITS.maxRise;
     this.standing = standingRanges(def);
+    this.lifts = liftColumns(def);
     this.anyFooting = footing(def, Number.POSITIVE_INFINITY).walkable;
   }
 
@@ -713,8 +718,8 @@ export class Room {
     v.airTokens -= 1;
     const air = checkAir(a, this.airTop, this.standing);
     if (!air) return false;
-    // Lifted only inside a column of this room that is on, rising to its top (updraft.ts).
-    if (air.s === LIFTED && !liftHolds(this.def.updrafts, this.currentPos(v).x, air.h!, now, LIMITS.reachSlackPx)) {
+    // Lifted only inside a column of this room that is on, rising to its top (updraft.ts), or held in a wind current at its height (wind.ts).
+    if (air.s === LIFTED && !liftHolds(this.lifts, this.currentPos(v).x, air.h!, now, LIMITS.reachSlackPx)) {
       this.opts.rejected?.(id, 'lift');
       return false;
     }
