@@ -141,6 +141,8 @@ export interface Attachment {
    * and the quests and today's tasks are locked to it, until a ticket's pass admits it in place.
    */
   spec?: true;
+  /** When the ticket that let this owl in runs out, in ms (OP-237): the socket closes then, on a frame or the alarm. */
+  until?: number;
   /** This socket's hello carried a keeper's token that checked out (OP-156): it walks in while the park is closed for setup (OP-205). */
   keeper?: true;
   /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
@@ -163,6 +165,11 @@ type Earned = PlayResult & { practice?: true };
 function withoutPledge(look: OwlLook): OwlLook {
   const { pledge: _pledge, ...rest } = look;
   return rest;
+}
+
+/** Whether the ticket that let a socket's owl in has run out by now (OP-237). */
+export function ticketOver(att: Pick<Attachment, 'until'>, now: number): boolean {
+  return att.until !== undefined && now >= att.until;
 }
 
 /** Why an owl leaves its room, as the log tells it (OP-134); `afk` is told for a goodbye said asleep. */
@@ -808,6 +815,9 @@ export class RoomObject extends DurableObject<Env> {
     if (isTimeZone(tz)) att.tz = tz;
     // A spectator (OP-191), by the Worker's word: inside the park, a socket it did not call a visitor is one.
     if (spectatorSocket(roomId, request.headers.get('X-Visitor-Kind'))) att.spec = true;
+    // When its ticket runs out (OP-237): the Worker's word only.
+    const until = Number(request.headers.get('X-Ticket-Until'));
+    if (Number.isFinite(until) && until > 0) att.until = until;
     // Which copy of the room this is, and the entry for the welcome (OP-075): the Worker's word only.
     const copy = Number(request.headers.get('X-Room-Copy'));
     if (Number.isInteger(copy) && copy > 1) att.copy = copy;
@@ -828,6 +838,10 @@ export class RoomObject extends DurableObject<Env> {
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const at = ws.deserializeAttachment() as Attachment | null;
     const t0 = Date.now();
+    if (at && ticketOver(at, t0)) {
+      this.ticketEnded(ws, at);
+      return;
+    }
     try {
       await this.frame(ws, message, at);
     } catch (e) {
@@ -836,6 +850,13 @@ export class RoomObject extends DurableObject<Env> {
     } finally {
       if (at) this.sampleTick(at.room, Date.now() - t0);
     }
+  }
+
+  /** The ticket that let this socket's owl in has run out (OP-237): the socket closes, and the page goes home. */
+  private ticketEnded(ws: WebSocket, att: Attachment): void {
+    this.logOf(att).info('room.leave', 'ticket_ended', 'A socket was closed: the ticket that let its owl in ran out of time.', { room: att.room });
+    closeSocket(ws, CLOSE.TICKET_ENDED, 'ticket ended');
+    this.drop(ws, { reason: 'kick', detail: 'ticket-ended' });
   }
 
   /** The room server is closing this socket for what it sent: its owl's leave is a kick (OP-134). */
@@ -1911,6 +1932,10 @@ export class RoomObject extends DurableObject<Env> {
     for (const ws of sockets) {
       const att = ws.deserializeAttachment() as Attachment | null;
       if (!att) continue;
+      if (ticketOver(att, now)) {
+        this.ticketEnded(ws, att);
+        continue;
+      }
       const lastBeat = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? att.joinedAt;
       const idleFor = now - Math.max(lastBeat, att.joinedAt);
       const limit = att.state ? IDLE_CLOSE_MS : HELLO_TIMEOUT_MS;

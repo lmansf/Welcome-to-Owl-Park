@@ -59,6 +59,7 @@ export const LOG_EVENTS = [
   'room_join_ok',
   'room_join_refused',
   'room_leave',
+  'ticket_ended',
   'reconnect_ok',
   'queue_enter',
   'queue_admit',

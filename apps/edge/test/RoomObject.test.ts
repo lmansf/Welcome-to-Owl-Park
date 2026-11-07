@@ -1713,6 +1713,74 @@ describe('the park’s nightly restart (OP-181)', () => {
   });
 });
 
+describe('a ticket’s time running out mid-visit (OP-237)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+  });
+  afterEach(() => cap.restore());
+  /** An owl in a room whose ticket runs out at `until`, as the Worker tells the room. */
+  async function ticketed(obj: Obj, room: string, id: string, until: number) {
+    const ws = connect(room, id);
+    ws.serializeAttachment({ ...(ws.deserializeAttachment() as object), until });
+    await hello(obj, ws);
+    return ws;
+  }
+
+  it('closes the socket at the alarm once its ticket has run out, and its owl leaves', async () => {
+    const obj = roomObject();
+    const owl = await ticketed(obj, 'hub', 'v_a', clock + 60_000);
+    const untimed = await join(obj, 'hub', 'v_b');
+    clock += 59_999;
+    await obj.alarm();
+    expect(owl.closed).toBeNull();
+    clock += 1;
+    await obj.alarm();
+    expect(owl.closed).toEqual({ code: CLOSE.TICKET_ENDED, reason: 'ticket ended' });
+    expect(untimed.closed).toBeNull();
+    logged(cap.lines, 'ticket_ended', { component: 'room.leave', room: 'hub', session_id: hashForLog('v_a') });
+    logged(cap.lines, 'room_leave', { session_id: hashForLog('v_a'), reason: 'kick', detail: 'ticket-ended' });
+    expect(await (await obj.fetch(new Request('https://park/counts'))).json()).toMatchObject({ hub: 1 });
+  });
+
+  it('closes it on its next frame once the ticket has run out, before the frame is handled', async () => {
+    const obj = roomObject();
+    const owl = await ticketed(obj, 'hub', 'v_a', clock + 30_000);
+    const other = await join(obj, 'hub', 'v_b');
+    await send(obj, owl, { t: 'move', to: { x: 800, y: 760 }, seq: 1 });
+    expect(owl.closed).toBeNull();
+    clock += 30_000;
+    const before = other.frames.length;
+    await send(obj, owl, { t: 'move', to: { x: 900, y: 760 }, seq: 2 });
+    expect(owl.closed?.code).toBe(CLOSE.TICKET_ENDED);
+    expect(other.frames.slice(before).some((f) => f.t === 'move' && (f as { seq?: number }).seq === 2)).toBe(false);
+  });
+
+  it('takes the time only from the Worker’s header', async () => {
+    vi.stubGlobal(
+      'WebSocketPair',
+      class {
+        0 = new FakeSocket();
+        1 = new FakeSocket();
+      },
+    );
+    const obj = roomObject();
+    const open = async (until?: string) => {
+      const headers: Record<string, string> = { Upgrade: 'websocket', 'X-Room': 'hub', 'X-Visitor-Id': 'v_fetchAAAA', 'X-Visitor-Ip': `192.0.2.${state.sockets.length + 10}`, 'X-Visitor-Kind': 'visitor' };
+      if (until !== undefined) headers['X-Ticket-Until'] = until;
+      await obj.fetch(new Request('https://room/ws', { headers })).catch(() => undefined);
+      return (state.sockets.at(-1)!.ws.deserializeAttachment() as { until?: number }).until;
+    };
+    expect(await open(String(clock + 5_000))).toBe(clock + 5_000);
+    expect(await open()).toBeUndefined();
+    expect(await open('soon')).toBeUndefined();
+    expect(await open('-1')).toBeUndefined();
+    vi.unstubAllGlobals();
+    vi.stubGlobal('WebSocketRequestResponsePair', class {});
+    vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
+  });
+});
+
 describe('spectators in the room object (OP-191)', () => {
   let cap: ReturnType<typeof captureLogs>;
   /** A spectator's collector, and its owl: the fake collections object faults any award asked for it. */
