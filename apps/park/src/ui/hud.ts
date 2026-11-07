@@ -16,6 +16,7 @@ import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createFeedbackBug, feedbackIcon } from './feedbackBug';
 import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
+import { coveredBy, type CoveredEdges } from '../game/hudInset';
 import { createTreeMinimap } from './treeMinimap';
 import { createJoystick } from './joystick';
 import { eventTime } from './keyboard';
@@ -272,6 +273,8 @@ export interface Hud {
   /** The room picked a spot. */
   selectDecorateSpot(spot: NestSpotId): void;
   closeDecorate(): void;
+  /** How far the HUD's controls (the owl count, the feathers, Menu, Emotes and Say) reach in from the top and bottom of the screen, in CSS px (OP-278). */
+  coveredEdges(): CoveredEdges;
 }
 
 const CSS = `
@@ -1349,5 +1352,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     updateDecorate: (view) => decorate?.update(view),
     selectDecorateSpot: (spot) => decorate?.select(spot),
     closeDecorate: () => decorate?.close(),
+    coveredEdges: () =>
+      coveredBy(
+        [...root.querySelectorAll<HTMLElement>('.bar .pill, .bar .feathers, [data-menu-btn], [data-emotes-btn], [data-say-btn]')].map((el) => el.getBoundingClientRect()),
+        window.innerHeight,
+      ),
   };
 }

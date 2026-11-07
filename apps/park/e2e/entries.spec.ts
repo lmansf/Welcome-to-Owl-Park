@@ -1,6 +1,6 @@
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, state, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, settleCamera, state, toScreen, walkToDoor } from './helpers';
 
 /**
  * The entries setting (OP-156) through the room server: of every hundred new owls, how many start in
@@ -96,6 +96,21 @@ test.describe('the entries setting (OP-156)', () => {
     const arrived = await state(page);
     expect(arrived.air.z).toBeGreaterThan(0);
     expect(arrived.height).toBe(arrived.air.z);
+    // The knothole's doorway is at the hall's top edge: the camera stops with that edge below the owl
+    // count (and, on a touch screen, the Menu and Say up there), not under them (OP-278).
+    await settleCamera(page);
+    const roomTop = (await toScreen(page, 0, 0)).y;
+    const hudTop = await page.evaluate(() =>
+      Math.max(
+        0,
+        ...[...document.querySelectorAll('#hud .bar .pill, #hud [data-menu-btn], #hud [data-say-btn]')]
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.height > 0 && r.top + r.height / 2 < window.innerHeight / 2)
+          .map((r) => r.bottom),
+      ),
+    );
+    expect(hudTop).toBeGreaterThan(0);
+    expect(roomTop).toBeGreaterThanOrEqual(hudTop - 1);
     await online(page);
     await page.context().close();
   });
