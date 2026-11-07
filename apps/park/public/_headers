@@ -10,3 +10,5 @@
 /*
   X-Content-Type-Options: nosniff
   Strict-Transport-Security: max-age=31536000
+  # OP-246: the same Permissions-Policy as the Worker's answers (PERMISSIONS_POLICY in guard.ts).
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()

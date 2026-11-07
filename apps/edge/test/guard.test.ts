@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, hashForLog } from '@owl-park/shared';
 import type { Env } from '../src/env';
-import { HSTS, REPORT_EVERY_MS, forgetViolations, originAllowed, parkPolicy, withNonce } from '../src/guard';
+import { HSTS, PERMISSIONS_POLICY, REPORT_EVERY_MS, forgetViolations, originAllowed, parkPolicy, withNonce } from '../src/guard';
 import { forgetGate } from '../src/gateSwitch';
 import { API_LIMITS, Counter, forgetLimits, isPublicCall, isTicketCall } from '../src/limits';
 import { captureLogs } from '../src/logs';
@@ -90,6 +90,10 @@ describe('the park’s page and every answer (OP-140)', () => {
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain('report-uri /api/csp-report');
     expect(csp).not.toContain('unsafe-eval');
+    // OP-246: fonts, sound and the manifest only from itself, no workers or frames, http named as https.
+    for (const d of ["font-src 'self'", "media-src 'self'", "worker-src 'none'", "frame-src 'none'", "manifest-src 'self'", 'upgrade-insecure-requests']) expect(csp).toContain(d);
+    expect(r.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin-allow-popups');
+    expect(r.headers.get('Permissions-Policy')).toBe(PERMISSIONS_POLICY);
     expect(r.headers.get('X-Frame-Options')).toBe('DENY');
     expect(r.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(r.headers.get('Strict-Transport-Security')).toBe(HSTS);
@@ -107,9 +111,20 @@ describe('the park’s page and every answer (OP-140)', () => {
     expect(local.headers.get('Strict-Transport-Security')).toBeNull();
     // The browser tests' page talks to its own server's sockets, over ws.
     expect(local.headers.get('Content-Security-Policy')).toContain("connect-src 'self' ws://localhost:8787 https://in.heycatch.ai;");
+    // ...and its http stays http, with nothing to upgrade to.
+    expect(local.headers.get('Content-Security-Policy')).not.toContain('upgrade-insecure-requests');
     const api = await call('/api/notice');
     expect(api.headers.get('Strict-Transport-Security')).toBe(HSTS);
     expect(api.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(api.headers.get('Permissions-Policy')).toBe(PERMISSIONS_POLICY);
+  });
+
+  it('turns off the camera, microphone, location, payments, USB and ad topics on every answer, and the static files say the same (OP-246)', async () => {
+    expect(PERMISSIONS_POLICY).toBe('camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()');
+    for (const path of ['/', '/api/notice', '/api/nothing-here']) expect((await call(path)).headers.get('Permissions-Policy')).toBe(PERMISSIONS_POLICY);
+    // The static files' own headers (the park's public/_headers), as the asset server sends them.
+    const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (path: string, encoding: string) => string };
+    expect(readFileSync('../park/public/_headers', 'utf8')).toContain(`Permissions-Policy: ${PERMISSIONS_POLICY}`);
   });
 
   it('puts the nonce on a script tag however it is written, and on nothing that only starts like one', () => {
