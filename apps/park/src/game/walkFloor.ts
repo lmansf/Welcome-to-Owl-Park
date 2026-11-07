@@ -1,12 +1,14 @@
 /**
  * Where an owl can walk in a room seen from above, drawn plainly (the owner's ask, Nov 7: no clear line
- * between walkable and blocked ground in the top-down rooms). Everything off the floor is veiled darker,
- * the floor's edge is drawn as a soft bright line, and a solid perch (a stump, a planter: hop up, never
- * walk through) is veiled and edged in amber. It is drawn from the very shapes the owl's walk is held to
- * (the room's walkable floor and its perches), so what shows and what stops the owl never differ.
+ * between walkable and blocked ground in the top-down rooms). The floor's edge is drawn as a soft bright
+ * line, and a solid perch (a stump, a planter: hop up, never walk through) is edged in amber. It is drawn
+ * from the very shapes the owl's walk is held to (the room's walkable floor and its perches), so what
+ * shows and what stops the owl never differ.
  *
- * With size boxes on (`?sizes=1`) the floor is tinted too and the edges are stronger, since the boxes
- * show no painting of a floor to read.
+ * With the painting the edges are lines and nothing more (drawFloorEdges): a veil over the whole screen
+ * costs a slow device a frame's worth of drawing, and slowed the park's timed games in CI. With size
+ * boxes on (`?sizes=1`), a tool for laying out the map, everything off the floor is veiled darker, the
+ * floor is tinted and the edges are stronger, since the boxes show no painting of a floor to read.
  */
 import type Phaser from 'phaser';
 import type { Polygon, RoomDef } from '@owl-park/shared';
@@ -85,9 +87,32 @@ export function paintFloor(ctx: CanvasRenderingContext2D, room: Pick<RoomDef, 's
   }
 }
 
-/** Draws the floor plan over the room's painting, under its pieces and owls. Returns the image, or null where it cannot. */
-export function drawWalkFloor(scene: Phaser.Scene, room: RoomDef, boxes: boolean, depth: number): Phaser.GameObjects.Image | null {
+/** A colour as rgba() in floorLook, as Phaser takes it: the colour and its alpha. */
+export function rgba(css: string): { color: number; alpha: number } {
+  const [r = 0, g = 0, b = 0, a = 1] = (css.match(/[\d.]+/g) ?? []).map(Number);
+  return { color: (r << 16) | (g << 8) | b, alpha: a };
+}
+
+/** Draws the floor's edges as lines over the painting: the floor's in cream, a solid perch's in amber. */
+export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number): Phaser.GameObjects.Graphics {
+  const look = floorLook(false);
+  const g = scene.add.graphics().setDepth(depth);
+  const edge = rgba(look.edge);
+  g.lineStyle(look.edgePx, edge.color, edge.alpha);
+  for (const poly of room.walkable) g.strokePoints(poly, true, true);
+  const solid = rgba(look.solidEdge);
+  g.lineStyle(look.edgePx, solid.color, solid.alpha);
+  for (const p of (room.perches ?? []).filter((x) => x.solid)) g.strokePoints(p.area, true, true);
+  return g;
+}
+
+/**
+ * Draws the floor plan over the room, under its pieces and owls: its edges alone over the painting, the
+ * whole plan with size boxes on. Returns what it drew, or null where the room has no floor.
+ */
+export function drawWalkFloor(scene: Phaser.Scene, room: RoomDef, boxes: boolean, depth: number): Phaser.GameObjects.Image | Phaser.GameObjects.Graphics | null {
   if (!room.walkable.length) return null;
+  if (!boxes) return drawFloorEdges(scene, room, depth);
   const key = `walk-floor-${room.id}${boxes ? '-boxes' : ''}`;
   if (!scene.textures.exists(key)) {
     const tex = scene.textures.createCanvas(key, Math.ceil(room.size.w * SCALE), Math.ceil(room.size.h * SCALE));
