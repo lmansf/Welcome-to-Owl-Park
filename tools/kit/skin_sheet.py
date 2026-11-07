@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 """Cuts a realm's skin sheet into the realm kit's slot files: pnpm kit:skin <sheet> <out>.
 
-The realm asset kit (Nov 7) asks each artist for one skin sheet, A8: ten fixed cells on a 1760 x 880
+The realm asset kit (Nov 7) asks each artist for one skin sheet, A8: eleven fixed cells on a 1760 x 880
 template (delivered at 3520 x 1760), in place of a file per slot. The importer (art_import.py) still
 takes a file per slot, named as tools/kit/realm-kit.csv names it, so this cuts the sheet into those
 files at the size each slot is delivered at:
 
-  C1 ground        -> texture-ground.png   (the kit list's 1024 is cut to the importer's 512)
-  C2 wall          -> texture-wall.png
+  C1 ground        -> texture-ground.png   (drawn at 1024 on the delivered sheet, read at the game's 512)
+  C2 wall          -> texture-wall.png     (the same)
   C3 perch         -> perch-end.png (left 160) and perch-mid.png (right 320)
   C4 slope         -> slope.png
   C5 roost         -> roost.png
   C7 wind streaks  -> wind-current.png
-  C8 hazard look 1 -> hazard.png           (the bottom 120 of the cell: the thorns outline, H1)
+  C8 hazard look 1 -> hazard.png           (320 x 120, the game's hazard size)
+  C11 small perch  -> perch-small.png      (a whole short perch, both ends rounded)
 
 Three cells have no slot to go to: C6 (updraft bits) becomes updraft-bits.png, each bit apart in a
 square frame of its own (a strip of up to six, 160 px each), which the game reads only on a skin
-trial (`?skin=`); C9 and C10 become hazard-2.png and hazard-3.png, which nothing
-draws yet, since a course has one hazard look. One slot has no cell: perch-small, the small perch
-the courses hop between; `--derive-small` makes one from C3 (its end, a short middle and the end
-mirrored), marked as made here in the summary.
+trial (`?skin=`); C9 and C10, optional, become hazard-2.png and hazard-3.png, which nothing draws
+yet, since a course has one hazard look. A cell left empty keeps our default. For a sheet drawn
+before C11 was on the template, `--derive-small` makes the small perch from C3 (its end, a short
+middle and the end mirrored), marked as made here in the summary; a drawn C11 always wins.
 
   python3 tools/kit/skin_sheet.py <sheet.png> <out_dir> [--derive-small]
   python3 tools/kit/skin_sheet.py <sheet.png> <out_dir> --trial <name> --realm clearing [--pieces <dir>]
@@ -53,11 +54,13 @@ CELLS = {
     'C5': (1124, 400, 320, 160),
     'C6': (20, 600, 240, 240),
     'C7': (300, 600, 320, 120),
-    'C8': (660, 600, 320, 240),
+    'C8': (660, 600, 320, 120),
     'C9': (1020, 600, 320, 240),
     'C10': (1380, 600, 320, 240),
+    'C11': (300, 760, 240, 60),
 }
 # Extra files that are not slots of tools/kit/realm-kit.csv, at their delivered size.
+OPTIONAL = ('hazard-2', 'hazard-3')
 EXTRA = {'updraft-bits': (480, 480), 'hazard-2': (640, 480), 'hazard-3': (640, 480)}
 
 
@@ -164,7 +167,8 @@ def cut(sheet: Image.Image, derive_small: bool = False) -> tuple[dict[str, Image
         'slope': cell(sheet, 'C4'),
         'roost': cell(sheet, 'C5'),
         'wind-current': cell(sheet, 'C7'),
-        'hazard': cell(sheet, 'C8', y0=120),
+        'hazard': cell(sheet, 'C8'),
+        'perch-small': cell(sheet, 'C11'),
         'updraft-bits': cell(sheet, 'C6'),
         'hazard-2': cell(sheet, 'C9'),
         'hazard-3': cell(sheet, 'C10'),
@@ -172,7 +176,10 @@ def cut(sheet: Image.Image, derive_small: bool = False) -> tuple[dict[str, Image
     out: dict[str, Image.Image] = {}
     for name, img in plan.items():
         if is_empty(img):
-            notes.append(f'{name}: its cell is blank, so the realm keeps our default')
+            if name in OPTIONAL:
+                notes.append(f'{name}: its cell is empty (optional), so that hazard keeps its colour')
+            elif not (name == 'perch-small' and derive_small):
+                notes.append(f'{name}: its cell is blank, so the realm keeps our default')
             continue
         dw, dh = sizes[name][2:] if name in sizes else EXTRA[name]
         img = img.resize((dw, dh), Image.LANCZOS)
@@ -181,10 +188,10 @@ def cut(sheet: Image.Image, derive_small: bool = False) -> tuple[dict[str, Image
             notes.append(f'updraft-bits: {len(bits)} separate bit{"s" if len(bits) != 1 else ""} found (the kit asks for three to six)')
             img = bits_strip(bits)
         out[name] = img
-    if derive_small and 'perch-end' in out and 'perch-mid' in out:
+    if derive_small and 'perch-small' not in out and 'perch-end' in out and 'perch-mid' in out:
         _, _, dw, dh = sizes['perch-small']
         out['perch-small'] = small_perch(out['perch-end'], out['perch-mid'], dw, dh)
-        notes.append('perch-small: the template has no cell for it; made here from C3 (end, short middle, end mirrored)')
+        notes.append('perch-small: C11 is empty; made here from C3 (end, short middle, end mirrored)')
     return out, notes
 
 

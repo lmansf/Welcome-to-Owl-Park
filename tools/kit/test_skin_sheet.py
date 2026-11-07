@@ -42,12 +42,11 @@ class SkinSheetTest(unittest.TestCase):
     def test_cuts_each_cell_into_its_slot_at_the_delivered_size(self):
         files, _ = ss.cut(sheet())
         sizes = ss.slot_sizes()
-        want = {'texture-ground': 'C1', 'texture-wall': 'C2', 'perch-end': 'C3', 'perch-mid': 'C3', 'slope': 'C4', 'roost': 'C5', 'wind-current': 'C7', 'hazard': 'C8', 'hazard-2': 'C9', 'hazard-3': 'C10'}
+        want = {'texture-ground': 'C1', 'texture-wall': 'C2', 'perch-end': 'C3', 'perch-mid': 'C3', 'slope': 'C4', 'roost': 'C5', 'wind-current': 'C7', 'hazard': 'C8', 'perch-small': 'C11', 'hazard-2': 'C9', 'hazard-3': 'C10'}
         for slot, c in want.items():
             self.assertEqual(middle(files[slot]), COLOURS[c], slot)
             if slot in sizes:
                 self.assertEqual(files[slot].size, sizes[slot][2:], slot)
-        self.assertNotIn('perch-small', files)
 
     def test_a_game_size_sheet_is_cut_the_same(self):
         big, _ = ss.cut(sheet(2))
@@ -73,8 +72,19 @@ class SkinSheetTest(unittest.TestCase):
             self.assertEqual(strip.getpixel((i * ss.BIT_FRAME + ss.BIT_FRAME // 2, ss.BIT_FRAME // 2)), COLOURS['C6'])
         self.assertTrue(any('3 separate bits' in n for n in notes))
 
-    def test_a_small_perch_is_made_from_the_perch_only_when_asked(self):
+    def test_optional_hazard_cells_may_be_empty(self):
+        files, notes = ss.cut(sheet(skip=('C9', 'C10')))
+        self.assertNotIn('hazard-3', files)
+        self.assertTrue(any(n.startswith('hazard-3:') and 'optional' in n for n in notes))
+
+    def test_a_drawn_small_perch_wins_over_one_made_from_the_perch(self):
         files, notes = ss.cut(sheet(), derive_small=True)
+        self.assertEqual(middle(files['perch-small']), COLOURS['C11'])
+        self.assertFalse(any('made here' in n for n in notes))
+
+    def test_a_small_perch_is_made_from_the_perch_only_when_asked(self):
+        self.assertNotIn('perch-small', ss.cut(sheet(skip=('C11',)))[0])
+        files, notes = ss.cut(sheet(skip=('C11',)), derive_small=True)
         self.assertEqual(files['perch-small'].size, ss.slot_sizes()['perch-small'][2:])
         self.assertTrue(any(n.startswith('perch-small:') for n in notes))
 
