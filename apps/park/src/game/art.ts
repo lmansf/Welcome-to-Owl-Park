@@ -16,6 +16,7 @@ import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { drawKitOps } from './kitView';
 import { loadSvgTexture } from './svgLoader';
+import { boxable, paintSizeBox } from './sizeBoxes';
 
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
@@ -23,6 +24,13 @@ export const OWL_H = 240;
 /** The wing's canvas (OP-084): one right wing, its root at Owl.ts's WING.root, in owl canvas units. */
 export const WING_W = 200;
 export const WING_H = 120;
+
+let sizeBoxes = false;
+
+/** Size boxes for this page (`?sizes=1`, sizeBoxes.ts): the map's art is drawn as boxes of its sizes in place of its files. */
+export function useSizeBoxes(on: boolean): void {
+  sizeBoxes = on;
+}
 
 /**
  * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
@@ -994,7 +1002,8 @@ function fetchAhead(name: string): Promise<void> {
  * left out.
  */
 export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): void {
-  if (typeof fetch !== 'function') return;
+  // Size boxes are drawn, not fetched.
+  if (typeof fetch !== 'function' || sizeBoxes) return;
   const cap = roomArtCap(room, cfg);
   const could = new Set(softTiles(room, cfg));
   const rest: string[] = [];
@@ -1020,6 +1029,7 @@ export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<Pa
  * the room wants them at 2x, and the build ships both copies.
  */
 export function softTiles(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>, published: ReadonlyMap<string, string> = PUBLISHED_ART): string[] {
+  if (sizeBoxes) return [];
   const scale = artScale('room', cfg.pixelRatio, roomArtCap(room, cfg));
   if (scale <= DENSE_SCALE) return [];
   return [...backgroundTiles(room), ...foregroundTiles(room)]
@@ -1071,6 +1081,8 @@ function imagesShowing(list: Phaser.GameObjects.GameObject[], key: string, out: 
 
 /** A painting's 2x copy, for sharpenArt (OP-129): null when the build has none or it fails to load. */
 export function sharpCopy(key: string, scale: number): Promise<HTMLImageElement | null> {
+  // A size box stays a box: no sharper copy of the art replaces it.
+  if (drawnAsSizeBox(key)) return Promise.resolve(null);
   const name = rasterNames(kitFilesOf(key), scale, PUBLISHED_ART)[0];
   return name?.includes('@2x') ? loadImage(`${baseUrl()}${versioned(name)}`) : Promise.resolve(null);
 }
@@ -1156,11 +1168,27 @@ async function streamImage(url: string, onBytes: (n: number) => void): Promise<H
   }
 }
 
+/** Whether this page draws `key` as its size box. */
+export function drawnAsSizeBox(key: string): boolean {
+  const spec = ART[key];
+  return sizeBoxes && !!spec && boxable(spec.kind);
+}
+
+/** A key's size box (sizeBoxes.ts) as its texture, at its logical size: true when it was made. */
+function makeSizeBox(scene: Phaser.Scene, key: string, spec: ArtSpec): boolean {
+  const tex = scene.textures.createCanvas(key, spec.w, spec.h);
+  if (!tex) return false;
+  paintSizeBox(tex.getContext(), key, spec, PUBLISHED_ART);
+  tex.refresh();
+  return true;
+}
+
 /** Load one key. Returns true when a texture now exists for it (fresh or already present). With `onBytes`, its download is counted as it comes. */
 export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number, onBytes?: (n: number) => void): Promise<boolean> {
   if (scene.textures.exists(key)) return true;
   const spec = ART[key];
   if (!spec) return false;
+  if (drawnAsSizeBox(key)) return makeSizeBox(scene, key, spec);
   const url = baseUrl();
   if (PUBLISHED_ART.has(`${kitFilesOf(key)}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${kitFilesOf(key)}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
   for (const c of rasterCandidates(url, kitFilesOf(key), scale, PUBLISHED_ART)) {
@@ -1244,7 +1272,7 @@ function firstFile(key: string, scale: number): string | undefined {
 
 /** The bytes loading `key` at `scale` downloads: its first file's size (none when its texture is here already). */
 function artBytes(scene: Phaser.Scene, key: string, scale: number): number {
-  if (scene.textures.exists(key)) return 0;
+  if (scene.textures.exists(key) || drawnAsSizeBox(key)) return 0;
   const name = firstFile(key, scale);
   return name ? (ART_BYTES.get(name) ?? 0) : 0;
 }
