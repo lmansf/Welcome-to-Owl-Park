@@ -66,7 +66,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { RESTART_CLOSE_MS, RoomObject, sightingOf, spectatorSocket } = await import('../src/RoomObject');
+const { INPUT_MARK_EVERY_MS, NO_INPUT_CLOSE_MS, RESTART_CLOSE_MS, RoomObject, isInput, quietFor, sightingOf, spectatorSocket } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -2257,5 +2257,106 @@ describe('puzzle quests in the room object (OP-255)', () => {
     ]) await send(obj, a, bad);
     await settle();
     expect(collections.puzzleCalls).toEqual([]);
+  });
+});
+
+describe('a socket that only heartbeats (OP-245)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+    // Its heartbeats come in on time, every one: only what the owl does is in question here.
+    (state as unknown as { getWebSocketAutoResponseTimestamp: () => Date }).getWebSocketAutoResponseTimestamp = () => new Date(clock);
+  });
+  afterEach(() => cap.restore());
+  const minutes = (n: number) => n * 60_000;
+  const atOf = (ws: FakeSocket) => ws.deserializeAttachment() as { inputAt?: number; joinedAt: number };
+
+  it('is closed as idle a quarter of an hour after it came in, and its owl’s leave says why', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    clock += NO_INPUT_CLOSE_MS;
+    await obj.alarm();
+    expect(ws.closed).toBeNull(); // not at the quarter hour itself
+    clock += 1;
+    await obj.alarm();
+    expect(ws.closed).toEqual({ code: 1001, reason: 'idle' });
+    logged(cap.lines, 'room_leave', { session_id: hashForLog('v_a'), reason: 'kick', detail: 'no-input' });
+    expect(await (await obj.fetch(new Request('https://park/counts'))).json()).toMatchObject({ hub: 0 });
+  });
+
+  it('stays while its owl walks now and then, and is closed a quarter of an hour after the last walk', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    for (let i = 1; i <= 4; i++) {
+      clock += minutes(10);
+      await send(obj, ws, { t: 'move', to: { x: 700 + i * 40, y: 760 }, seq: i });
+      await obj.alarm();
+      expect(ws.closed).toBeNull();
+    }
+    const last = clock;
+    clock = last + NO_INPUT_CLOSE_MS;
+    await obj.alarm();
+    expect(ws.closed).toBeNull();
+    clock = last + NO_INPUT_CLOSE_MS + 1;
+    await obj.alarm();
+    expect(ws.closed?.code).toBe(1001);
+  });
+
+  it('counts waking up but not falling asleep, as the page puts an idle owl to sleep by itself', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    clock += minutes(10);
+    await send(obj, ws, { t: 'rest', asleep: true });
+    expect(atOf(ws).inputAt).toBeUndefined();
+    clock += minutes(5) + 1;
+    await obj.alarm();
+    expect(ws.closed?.code).toBe(1001);
+
+    const b = await join(obj, 'hub', 'v_b');
+    clock += minutes(10);
+    await send(obj, b, { t: 'rest', asleep: false });
+    expect(atOf(b).inputAt).toBe(clock);
+    clock += minutes(14);
+    await obj.alarm();
+    expect(b.closed).toBeNull();
+  });
+
+  it('writes the last input down at most once a minute', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    clock += INPUT_MARK_EVERY_MS - 1;
+    await send(obj, ws, { t: 'move', to: { x: 760, y: 760 }, seq: 1 });
+    expect(atOf(ws).inputAt).toBeUndefined(); // it came in less than a minute ago
+    clock += 1;
+    await send(obj, ws, { t: 'move', to: { x: 820, y: 760 }, seq: 2 });
+    const marked = clock;
+    expect(atOf(ws).inputAt).toBe(marked);
+    clock += INPUT_MARK_EVERY_MS - 1;
+    await send(obj, ws, { t: 'move', to: { x: 880, y: 760 }, seq: 3 });
+    expect(atOf(ws).inputAt).toBe(marked);
+    clock += 1;
+    await send(obj, ws, { t: 'move', to: { x: 760, y: 760 }, seq: 4 });
+    expect(atOf(ws).inputAt).toBe(clock);
+  });
+
+  it('closes a spectator’s quiet socket the same way', async () => {
+    const obj = roomObject();
+    const ws = connect('grove', 'v_spec', undefined, undefined, true);
+    await hello(obj, ws);
+    clock += NO_INPUT_CLOSE_MS + 1;
+    await obj.alarm();
+    expect(ws.closed).toEqual({ code: 1001, reason: 'idle' });
+  });
+
+  it('calls every frame input but a hello, a goodbye and falling asleep, and counts quiet from the last one or the arrival', () => {
+    expect(isInput({ t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK })).toBe(false);
+    expect(isInput({ t: 'bye' })).toBe(false);
+    expect(isInput({ t: 'rest', asleep: true })).toBe(false);
+    expect(isInput({ t: 'rest', asleep: false })).toBe(true);
+    expect(isInput({ t: 'move', to: { x: 1, y: 1 }, seq: 1 })).toBe(true);
+    expect(isInput({ t: 'say', n: 1 })).toBe(true);
+    expect(quietFor({ joinedAt: 100 }, 400)).toBe(300);
+    expect(quietFor({ joinedAt: 100, inputAt: 250 }, 400)).toBe(150);
+    expect(NO_INPUT_CLOSE_MS).toBe(15 * 60_000); // just past the page's own goodbye, about 12 minutes in
   });
 });
