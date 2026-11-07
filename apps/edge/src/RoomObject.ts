@@ -143,6 +143,11 @@ export interface Attachment {
   spec?: true;
   /** When the ticket that let this owl in runs out, in ms (OP-237): the socket closes then, on a frame or the alarm. */
   until?: number;
+  /**
+   * When its owl last did something (OP-245): any frame but a hello, a goodbye or falling asleep, marked
+   * at most once a minute. A socket that only heartbeats has none, and the alarm closes it.
+   */
+  inputAt?: number;
   /** This socket's hello carried a keeper's token that checked out (OP-156): it walks in while the park is closed for setup (OP-205). */
   keeper?: true;
   /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
@@ -201,6 +206,24 @@ interface OwnedEntry {
 const HELLO_TIMEOUT_MS = 5_000;
 const IDLE_CLOSE_MS = 90_000;
 const ALARM_EVERY_MS = 60_000;
+/**
+ * A socket whose owl does nothing this long is closed (OP-245), heartbeats or not: past the page's own
+ * goodbye to an idle visitor (asleep at 45 s, 'Still here?' 10 minutes later, gone a minute after).
+ */
+export const NO_INPUT_CLOSE_MS = 15 * 60_000;
+/** How often a socket's last input is written down (OP-245): the alarm looks once a minute. */
+export const INPUT_MARK_EVERY_MS = 60_000;
+
+/** Whether a frame is the owl doing something (OP-245): all but a hello, a goodbye and falling asleep. */
+export function isInput(frame: ClientFrame): boolean {
+  if (frame.t === 'hello' || frame.t === 'bye') return false;
+  return !(frame.t === 'rest' && frame.asleep);
+}
+
+/** How long a socket's owl has done nothing (OP-245): since its last input, or since it came in. */
+export function quietFor(att: Pick<Attachment, 'joinedAt' | 'inputAt'>, now: number): number {
+  return now - (att.inputAt ?? att.joinedAt);
+}
 /** Population counts go out at most this often (welcome frames always carry fresh counts). */
 const COUNTS_EVERY_MS = 10_000;
 /** Default sockets per address per object; a household or office shares one address. Override with MAX_SOCKETS_PER_IP. */
@@ -859,6 +882,14 @@ export class RoomObject extends DurableObject<Env> {
     this.drop(ws, { reason: 'kick', detail: 'ticket-ended' });
   }
 
+  /** Write down that this socket's owl did something now, unless that was written in the last minute (OP-245). */
+  private markInput(ws: WebSocket, att: Attachment): void {
+    const now = Date.now();
+    if (quietFor(att, now) < INPUT_MARK_EVERY_MS) return;
+    att.inputAt = now;
+    ws.serializeAttachment(att);
+  }
+
   /** The room server is closing this socket for what it sent: its owl's leave is a kick (OP-134). */
   private kick(ws: WebSocket, code: number, reason: string): void {
     kickedFor(ws, reason);
@@ -927,6 +958,8 @@ export class RoomObject extends DurableObject<Env> {
       return done;
     }
 
+    // What the owl does, a minute at a time (OP-245): one that only heartbeats is closed by the alarm.
+    if (isInput(frame)) this.markInput(ws, att);
     const room = this.room(att.room);
     switch (frame.t) {
       case 'hello':
@@ -1943,6 +1976,10 @@ export class RoomObject extends DurableObject<Env> {
         if (!att.state) this.logOf(att).info('room.join', 'room_join_refused', 'A socket said no hello in time and was closed.', { reason: 'no-hello' });
         closeSocket(ws, att.state ? 1001 : CLOSE.BAD_PROTOCOL, att.state ? 'idle' : 'no hello');
         this.drop(ws, { reason: 'timeout' });
+      } else if (att.state && quietFor(att, now) > NO_INPUT_CLOSE_MS) {
+        // Heartbeats and nothing else for a quarter of an hour (OP-245): a script holding a place, as the page says goodbye sooner.
+        closeSocket(ws, 1001, 'idle');
+        this.drop(ws, { reason: 'kick', detail: 'no-input' });
       }
     }
     this.emitCounts(true);
