@@ -39,6 +39,7 @@
     "art:generate": "node tools/art/generate.mjs",
     "art:geometry": "node --experimental-strip-types tools/art/generate.mjs geometry",
     "art:finish": "python3 -B tools/art/postprocess.py",
+    "art:import": "python3 -B tools/kit/art_import.py",
     "art:preview": "node tools/art/preview.mjs",
     "art:test": "node --test \"tools/art/**/*.test.mjs\" && python3 -B -m unittest discover -s tools/art -p \"test_*.py\""
   },
