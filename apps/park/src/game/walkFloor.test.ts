@@ -1,6 +1,6 @@
 import { roomFor } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { floorLook, paintFloor } from './walkFloor';
+import { floorLook, paintFloor, rgba } from './walkFloor';
 
 function recorder() {
   const calls: Array<{ op: string; args: unknown[] }> = [];
@@ -27,6 +27,11 @@ describe('the walkable floor, seen from above', () => {
     const moves = calls.filter((c) => c.op === 'moveTo').length;
     expect(moves).toBeGreaterThanOrEqual(2 * hub.walkable.length);
     expect(calls.some((c) => c.op === 'stroke')).toBe(true);
+  });
+
+  it("reads the look's colours as Phaser takes them", () => {
+    expect(rgba('rgba(255, 244, 214, 0.55)')).toEqual({ color: 0xfff4d6, alpha: 0.55 });
+    expect(rgba(floorLook(false).solidEdge).alpha).toBeGreaterThan(0);
   });
 
   it('tints the floor and edges it brighter with size boxes on', () => {
