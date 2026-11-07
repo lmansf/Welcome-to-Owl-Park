@@ -14,7 +14,8 @@ const cutOut = (file: string): boolean => {
 describe('the sprite manifest (OP-127)', () => {
   it('knows every published sprite, and nothing that is not published', () => {
     const files = readdirSync(ART)
-      .filter((f) => !f.includes('@2x') && (f.endsWith('.png') || (f.endsWith('.webp') && cutOut(f))))
+      // A skin trial's files (trial-*, skinTrial.ts) are drawn only on a page that names the trial, as the slots they fill.
+      .filter((f) => !f.includes('@2x') && !f.startsWith('trial-') && (f.endsWith('.png') || (f.endsWith('.webp') && cutOut(f))))
       .map((f) => f.replace(/\.(png|webp)$/, ''))
       .sort();
     // A sprite published without the manifest rewritten (`pnpm art:finish sprites`) shows here.

@@ -4,6 +4,7 @@
  */
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
 import { sizeBoxesWanted } from './game/sizeBoxes';
+import { skinTrialWanted } from './game/skinTrial';
 
 /**
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
@@ -100,6 +101,11 @@ export interface ParkConfig {
    * labelled with each piece's name, its size in the game and the size to deliver (game/sizeBoxes.ts).
    */
   sizes: boolean;
+  /**
+   * A skin trial (`?skin=<name>`, kept for the tab until `?skin=0`): a realm artist's skin sheet, cut
+   * by tools/kit/skin_sheet.py, drawn in place of the realm's kit slots (game/skinTrial.ts). Null for every visitor.
+   */
+  skin: string | null;
 }
 
 export function readConfig(): ParkConfig {
@@ -142,5 +148,6 @@ export function readConfig(): ParkConfig {
     newMap: q.get('newmap') === '1',
     oldMap: q.get('newmap') === '0',
     sizes: sizeBoxesWanted(q.get('sizes')),
+    skin: skinTrialWanted(q.get('skin')),
   };
 }
