@@ -8,6 +8,7 @@ export * from './validate';
 export * from './resolveTarget';
 export * from './wayAround';
 export * from './edge';
+export * from './headers';
 export * from './collectibles';
 export * from './book';
 export * from './species';

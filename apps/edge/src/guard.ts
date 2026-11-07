@@ -16,7 +16,8 @@
  *   load, and connects only to its own host (`parkPolicy`). A browser reports what the policy blocked
  *   to /api/csp-report, logged as csp_violation (a few lines a while, however many pages report).
  */
-import { PERMISSIONS_POLICY, type Logger } from '@owl-park/shared';
+import type { Logger } from '@owl-park/shared';
+import { PERMISSIONS_POLICY } from '@owl-park/shared/headers';
 
 /** A host on this machine: local development and the browser tests. */
 export function isLocalHost(hostname: string): boolean {
