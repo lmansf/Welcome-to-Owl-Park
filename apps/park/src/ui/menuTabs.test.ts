@@ -1,6 +1,6 @@
 import { TRAVEL_WORDS } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
-import { MAP_LIT_KEY, MAP_PLACES, mapLayout, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
+import { MAP_LIT_KEY, MAP_PLACES, mapLayout, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
 
 const walked = (places: string[], gate = false) => ({ places, gate });
 
@@ -79,5 +79,14 @@ describe('the map on the new map (OP-282)', () => {
   it('keeps travel off the hall, the Commons, the cavern and the Party Grove (travel to hub lands outside the turnstiles)', () => {
     const still = mapLayout(3).places.filter((p) => p.noTravel).map((p) => p.id).sort();
     expect(still).toEqual(['commons-glass', 'commons-grove', 'commons-ink', 'commons-market', 'hub', 'm3-hall', 'm3-under']);
+  });
+});
+
+describe('the map note on the way in', () => {
+  it('names the Treetop Commons on the new map and the front gate on today’s park', () => {
+    expect(mapNote(3)).toContain('through the Treetop Commons');
+    expect(mapNote(3)).not.toContain('front gate');
+    expect(mapNote(1)).toBe(TRAVEL_WORDS.map);
+    expect(mapNote(2)).toBe(TRAVEL_WORDS.map);
   });
 });
