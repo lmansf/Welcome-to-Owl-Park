@@ -114,4 +114,6 @@ export const TRAVEL_WORDS = {
   notYet: 'Walk there once, and you can travel there from the map.',
   busy: 'Finish what you are doing, then travel.',
   map: 'Places you have walked to light up: tap one to travel there. Into the park is always through the front gate.',
+  /** The same on the new map, whose way in is the Treetop Commons. */
+  newMap: 'Places you have walked to light up: tap one to travel there. Into the park is always through the Treetop Commons.',
 } as const;

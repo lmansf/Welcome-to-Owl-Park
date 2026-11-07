@@ -458,12 +458,17 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   panel.appendChild(map);
   panel.appendChild(cardBox);
   drawCard();
-  if (travel) panel.appendChild(note(TRAVEL_WORDS.map));
+  if (travel) panel.appendChild(note(mapNote(walking)));
   if (walking === 3) {
     panel.appendChild(note('Through the turnstiles and down the knothole: the hollow hall, a Commons off each landing with its realm beyond, the Party Grove at the tree’s foot, and the root stair down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
     return;
   }
   panel.appendChild(note('Inside the turnstiles: the great tree, with the treehouse clearing and the neon street on either side, and Neon Roost off the neon street. Outside the gate: the nests’ street and your nest. The boarded arches open as new realms arrive.'));
+}
+
+/** The map's line on travel: the new map's way in is the Treetop Commons, today's park's the front gate. */
+export function mapNote(walking: number): string {
+  return walking === 3 ? TRAVEL_WORDS.newMap : TRAVEL_WORDS.map;
 }
 
 // ---------- Settings ----------
