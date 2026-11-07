@@ -45,6 +45,8 @@ export interface ParkState {
   soft: string[];
   /** The room's art drawn as size boxes (`?sizes=1`). */
   sizeBoxes: string[];
+  sizeLabels: string[];
+  floorShown: boolean;
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** In a room of the tree (OP-173): how many fronts, shades, ledge edges and doorway marks it drew. */

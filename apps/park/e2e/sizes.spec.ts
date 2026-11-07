@@ -8,12 +8,17 @@ import { openPark, state } from './helpers';
  */
 
 const ROOMS = ['m3-hall', 'commons-glass', 'm3-ground', 'hub'];
+/** The rooms seen from above, whose walkable floor is drawn plainly. */
+const TOP_DOWN = new Set(['commons-glass', 'hub']);
 
 test.describe('size boxes in place of the map art', () => {
   for (const room of ROOMS) {
-    test(`${room} draws its art as size boxes and plays as it does with its art${room === 'm3-hall' ? ' @smoke' : ''}`, async ({ page }) => {
+    test(`${room} draws its art as size boxes and plays as it does with its art${room === 'm3-hall' || room === 'commons-glass' ? ' @smoke' : ''}`, async ({
+      page,
+    }) => {
       await openPark(page, { room, kit: '1' });
       const plain = await state(page);
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-${room}-art.png` });
       expect(plain.sizeBoxes).toEqual([]);
 
       await openPark(page, { room, kit: '1', sizes: '1' });
@@ -26,6 +31,15 @@ test.describe('size boxes in place of the map art', () => {
       expect(boxed.pos).toEqual(plain.pos);
       expect(boxed.doors).toEqual(plain.doors);
       expect(boxed.objects.map((o) => o.id)).toEqual(plain.objects.map((o) => o.id));
+      // One small label per piece, never a piece labelled twice, and only boxed pieces.
+      await expect.poll(async () => (await state(page)).sizeLabels.length).toBeGreaterThan(0);
+      const labels = (await state(page)).sizeLabels;
+      expect(new Set(labels).size).toBe(labels.length);
+      for (const k of labels) expect(boxed.sizeBoxes, k).toContain(k);
+      // Seen from above, the walkable floor is drawn plainly, with the boxes and without.
+      expect(boxed.floorShown).toBe(TOP_DOWN.has(room));
+      expect(plain.floorShown).toBe(TOP_DOWN.has(room));
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-${room}-sizes.png` });
     });
   }
 
