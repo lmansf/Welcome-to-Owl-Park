@@ -500,4 +500,34 @@ test.describe('two visitors on one device', () => {
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(0);
     await expect(b.locator('[data-count]')).toHaveText('1 owl here');
   });
+
+  for (const room of ['market', 'l0'] as const) {
+    test(`held to either end of the ${room} floor, the whole owl stays on screen (OP-296)`, async ({ page, isMobile }) => {
+      test.skip(isMobile, 'a phone walks by the thumbstick: the same floor, held by keys here');
+      await openPark(page, { room });
+      for (const key of ['KeyD', 'KeyA'] as const) {
+        await page.keyboard.down(key);
+        // Held until the owl stops at the floor's end.
+        let last = Number.NaN;
+        await expect
+          .poll(
+            async () => {
+              const x = (await state(page)).pos.x;
+              const still = Math.abs(x - last) < 0.5;
+              last = x;
+              return still;
+            },
+            { timeout: 30_000, intervals: [400] },
+          )
+          .toBe(true);
+        await page.keyboard.up(key);
+        await settleCamera(page);
+        const s = await state(page);
+        // Half an owl: the Owl's 200 px art at OWL_SCALE 0.5, at the room's owl scale.
+        const half = 50 * s.owlScale;
+        expect(s.pos.x - half, `${room} ${key}`).toBeGreaterThanOrEqual(s.view.x - 1);
+        expect(s.pos.x + half, `${room} ${key}`).toBeLessThanOrEqual(s.view.x + s.view.w + 1);
+      }
+    });
+  }
 });
