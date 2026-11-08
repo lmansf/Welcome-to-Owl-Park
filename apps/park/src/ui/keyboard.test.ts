@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIDEWAYS_MIN, alongTheFloor, attachKeyboard, heldDirection, holdsUp } from './keyboard';
+import { PARK_KEYS_ATTR, SIDEWAYS_MIN, alongTheFloor, attachKeyboard, heldDirection, holdsUp } from './keyboard';
 
 describe('heldDirection', () => {
   it('maps WASD and the arrow keys to the four ways', () => {
@@ -149,6 +149,20 @@ describe('attachKeyboard', () => {
     expect(key('keydown', 'Space', { target: { tagName: 'DIV', isContentEditable: false, getAttribute: () => 'button' } })).toBe(false);
     expect(key('keydown', 'Space', { target: { tagName: 'TEXTAREA', isContentEditable: false } })).toBe(false);
     expect(calls).toEqual([]);
+  });
+
+  it("jumps on the space bar from the play bar's buttons, which keep the focus after a click (OP-293)", () => {
+    const { key, calls } = setup();
+    // The Menu button, focused by a click or given the focus back as the menu closes: Space is still the jump, never the menu.
+    const menuBtn = { tagName: 'BUTTON', isContentEditable: false, getAttribute: () => null, closest: (sel: string) => (sel === `[${PARK_KEYS_ATTR}]` ? {} : null) };
+    expect(key('keydown', 'Space', { target: menuBtn })).toBe(true);
+    expect(key('keyup', 'Space', { target: menuBtn })).toBe(true);
+    expect(calls).toEqual(['jump', 'jump end']);
+    // A button anywhere else (a dialog's) still takes its own Space press.
+    const elsewhere = { tagName: 'BUTTON', isContentEditable: false, getAttribute: () => null, closest: () => null };
+    expect(key('keydown', 'Space', { target: elsewhere })).toBe(false);
+    expect(key('keyup', 'Space', { target: elsewhere })).toBe(false);
+    expect(calls).toEqual(['jump', 'jump end', 'jump end']);
   });
 
   it('leaves typing and browser shortcuts alone', () => {
