@@ -36,6 +36,10 @@
  * - `kind: "quest_catalogue"` (OP-266): every quest and every step of each (handing in included),
  *   into `game.dim_quest` and `game.dim_quest_step` by `game.set_quest_catalogue`; one no longer
  *   listed stays, marked out of the catalogue.
+ * - `kind: "play_event"` (OP-304): what an owl did in play that the stays and quest steps do not
+ *   show: a parkour run begun, a bench or part reached, a fall (where, to 10 px), a clear (its time),
+ *   a thing used (a leaf pile, a stall, the moonbeam). Into `game.play_event`, one already there (by
+ *   its event id) skipped.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * Every other row is anonymous by construction, and checked again here before anything is kept: the
@@ -194,6 +198,26 @@ export type QuestProgressRow =
     }
   | { event: 'end'; progress_id: string; at: string; session_id: string | null; realm: string | null; outcome: (typeof QUEST_OUTCOMES)[number] };
 
+/** What a play event is (OP-304). */
+export const PLAY_EVENTS = ['course_start', 'course_bench', 'course_part', 'course_fall', 'course_clear', 'interact'] as const;
+
+/** A play event, for `game.play_event` (OP-304). */
+export interface PlayEventRow {
+  event_id: string;
+  event: (typeof PLAY_EVENTS)[number];
+  collector_id: string;
+  session_id: string | null;
+  run_id: string | null;
+  occurred_at: string;
+  realm: string | null;
+  course_id: string | null;
+  thing: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
+  ms: number | null;
+  practice: boolean;
+}
+
 /** A quest, for `game.dim_quest` (OP-266). */
 export interface QuestRefRow {
   quest_id: string;
@@ -273,6 +297,8 @@ export interface Tables {
   addQuestProgress(rows: QuestProgressRow[]): Promise<number>;
   /** Makes the quest reference tables these lists (OP-266): each in them, and every other one marked out of the catalogue. */
   setQuestCatalogue(quests: QuestRefRow[], steps: QuestStepRefRow[]): Promise<void>;
+  /** Keeps the play events not there yet (OP-304); returns how many those were. */
+  addPlayEvents(rows: PlayEventRow[]): Promise<number>;
   /** Keeps the notes not there yet; returns how many those were. */
   addFeedback(rows: FeedbackRow[]): Promise<number>;
   /** Keeps the ticket events not there yet; returns how many those were. */
@@ -546,6 +572,67 @@ export function checkRoomStay(v: unknown): RoomStayRow | string {
   };
 }
 
+/** A course's id, a piece's, or a thing used as its kind and id (`leaf-pile:hub-leaves-1`). */
+const PLAY_THING = /^[a-z0-9][a-z0-9-]{0,47}(:[a-z0-9][a-z0-9-]{0,63})?$/;
+const COURSE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
+/** The largest place in a room the log takes (the widest rooms are under 10,000 px). */
+const MAX_POS = 100_000;
+/** The longest run time taken: a run is forgotten after an hour, so a day is plenty. */
+const MAX_MS = 86_400_000;
+
+const intOrNull = (v: unknown, lo: number, hi: number): number | null | undefined => {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined;
+};
+
+/** A play event as the table takes it (OP-304), or the reason it is left out. */
+export function checkPlayEvent(v: unknown): PlayEventRow | string {
+  const r = obj(v);
+  if (typeof r['event_id'] !== 'string' || !UUID.test(r['event_id'])) return 'event_id';
+  if (!PLAY_EVENTS.includes(r['event'] as (typeof PLAY_EVENTS)[number])) return 'event';
+  const event = r['event'] as (typeof PLAY_EVENTS)[number];
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  const session = r['session_id'] ?? null;
+  if (session !== null && (typeof session !== 'string' || !UUID.test(session))) return 'session_id';
+  const run = r['run_id'] ?? null;
+  if (run !== null && (typeof run !== 'string' || !UUID.test(run))) return 'run_id';
+  const at = iso(r['occurred_at']);
+  if (!at) return 'occurred_at';
+  const realm = stayRoomOrNull(r['realm']);
+  if (realm === undefined) return 'realm';
+  const course = r['course_id'] ?? null;
+  if (course !== null && (typeof course !== 'string' || !COURSE_ID.test(course))) return 'course_id';
+  if (event !== 'interact' && course === null) return 'course_id';
+  const thing = r['thing'] ?? null;
+  if (thing !== null && (typeof thing !== 'string' || !PLAY_THING.test(thing))) return 'thing';
+  if (event === 'interact' && thing === null) return 'thing';
+  const x = intOrNull(r['pos_x'], -MAX_POS, MAX_POS);
+  if (x === undefined) return 'pos_x';
+  const y = intOrNull(r['pos_y'], -MAX_POS, MAX_POS);
+  if (y === undefined) return 'pos_y';
+  // Where an owl stood is kept for a fall alone.
+  if (event !== 'course_fall' && (x !== null || y !== null)) return 'pos_x';
+  const ms = intOrNull(r['ms'], 0, MAX_MS);
+  if (ms === undefined) return 'ms';
+  const practice = r['practice'] ?? false;
+  if (typeof practice !== 'boolean') return 'practice';
+  return {
+    event_id: r['event_id'],
+    event,
+    collector_id: r['collector_id'],
+    session_id: session as string | null,
+    run_id: run as string | null,
+    occurred_at: at,
+    realm,
+    course_id: course as string | null,
+    thing: thing as string | null,
+    pos_x: x,
+    pos_y: y,
+    ms,
+    practice,
+  };
+}
+
 /** A quest's id, an NPC's, a template's or a puzzle's: lower-case words joined by hyphens (`story-welcome`, `leaves-bramble-easy`). */
 const QUEST_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** A quest's period: '' for a story quest, else its park day, week or month (`2026-11-04`, `W2026-11-02`, `M2026-11`). */
@@ -763,7 +850,7 @@ async function questCatalogue(body: Record<string, unknown>, tables: Tables): Pr
 }
 
 /** The kinds of request the park sends. */
-export const KINDS = ['collect', 'catalogue', 'player', 'session', 'realm_visit', 'feedback', 'purchase', 'contact', 'room_stay', 'quest_progress', 'quest_catalogue'] as const;
+export const KINDS = ['collect', 'catalogue', 'player', 'session', 'realm_visit', 'feedback', 'purchase', 'contact', 'room_stay', 'quest_progress', 'quest_catalogue', 'play_event'] as const;
 
 const isKind = (v: unknown): v is (typeof KINDS)[number] => KINDS.includes(v as (typeof KINDS)[number]);
 
@@ -813,6 +900,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkRoomStay, (rows) => tables.addRoomStays(rows));
       case 'quest_progress':
         return await keepRows(kind, body, checkQuestProgress, (rows) => tables.addQuestProgress(rows));
+      case 'play_event':
+        return await keepRows(kind, body, checkPlayEvent, (rows) => tables.addPlayEvents(rows));
       case 'catalogue':
         return await catalogue(body, tables);
       case 'quest_catalogue':
@@ -839,6 +928,7 @@ const PURCHASE_COLUMNS = 'event_id, event, order_key, collector_id, occurred_at,
 /** The owner's buyers (OP-192): a schema of their own, apart from the park's anonymous `game` tables. */
 export const CONTACTS_SCHEMA = 'contacts';
 const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, map_id, entered_at, exited_at, entry_source, collectibles_gained';
+const PLAY_EVENT_COLUMNS = 'event_id, event, collector_id, session_id, run_id, occurred_at, realm, course_id, thing, pos_x, pos_y, ms, practice';
 const FEEDBACK_COLUMNS = 'event_id, park_feedback_id, collector_id, session_id, kind, body, realm, realm_kind, device_class, submitted_at';
 
 /**
@@ -945,6 +1035,13 @@ export function gameTables(db: Db): Tables {
     async setQuestCatalogue(quests, steps) {
       // One call, so one transaction: every quest and step in, and any not among them marked out.
       await db.unsafe(`select ${SCHEMA}.set_quest_catalogue($1::text::jsonb, $2::text::jsonb)`, [JSON.stringify(quests), JSON.stringify(steps)]);
+    },
+    async addPlayEvents(rows) {
+      const kept = await db.unsafe(
+        `insert into ${SCHEMA}.play_event (${PLAY_EVENT_COLUMNS}) select ${PLAY_EVENT_COLUMNS} from jsonb_populate_recordset(null::${SCHEMA}.play_event, $1::text::jsonb) on conflict (event_id) do nothing returning event_id`,
+        [JSON.stringify(rows)],
+      );
+      return Array.isArray(kept) ? kept.length : 0;
     },
     async addFeedback(rows) {
       // The words go in the batch's one JSON parameter like every other field: never part of the query.

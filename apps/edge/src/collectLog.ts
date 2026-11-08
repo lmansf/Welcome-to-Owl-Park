@@ -26,6 +26,9 @@
  *
  * Quest progress (OP-266, questLog.ts) goes the same way: each step of each quest an owl takes, as it
  * begins and as it ends, and the catalogue of quests and their steps whenever a deploy changes it.
+ *
+ * Play events (OP-304) go the same way: a parkour run begun, its benches, parts, falls (where, to
+ * 10 px) and clear, and each thing an owl used, so the owner can see where owls quit, fail or get lost.
  */
 import {
   FURNITURE,
@@ -492,6 +495,79 @@ async function questProgressRow(salt: string, d: QuestProgressData): Promise<Que
   };
 }
 
+// ---------- play events: courses and things to use (OP-304) ----------
+
+/**
+ * What an owl did in play that the room stays and quest steps do not show (OP-304): a parkour run
+ * begun, a bench or a part reached in it, a fall (with where, so the owner can see the spots that
+ * catch owls), a clear (with its time), and a thing used (a leaf pile, a stall, the moonbeam). A run
+ * that is begun and never cleared is a quit: the owner's views tell it from these rows.
+ */
+export type PlayEventKind = 'course_start' | 'course_bench' | 'course_part' | 'course_fall' | 'course_clear' | 'interact';
+
+/**
+ * A play event as the outbox keeps it. `run` is when the course run began (its id in the course
+ * store), `thing` the piece's or the interactable's id, `x` and `y` where the owl stood (falls only,
+ * rounded), `ms` a clear's time; `practice` a spectator's (OP-191).
+ */
+export interface PlayEventData {
+  event: PlayEventKind;
+  cid: string;
+  at: number;
+  pass: string | null;
+  room: string | null;
+  course?: string;
+  run?: number;
+  thing?: string;
+  x?: number;
+  y?: number;
+  ms?: number;
+  practice?: boolean;
+}
+
+/** A play event as the log takes it: the owl, the visit and the run as salted hashes, the room by its neutral id. */
+export interface PlayEventRow {
+  event_id: string;
+  event: PlayEventKind;
+  collector_id: string;
+  session_id: string | null;
+  run_id: string | null;
+  occurred_at: string;
+  realm: string | null;
+  course_id: string | null;
+  thing: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
+  ms: number | null;
+  practice: boolean;
+}
+
+/** Where an owl stood, as the log keeps it: to 10 px, enough to find a pit and no finer. */
+export const PLAY_POS_STEP = 10;
+const roundPos = (v: number | undefined): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v / PLAY_POS_STEP) * PLAY_POS_STEP : null);
+
+async function playEventRow(salt: string, d: PlayEventData): Promise<PlayEventRow> {
+  const run = d.course !== undefined && d.run !== undefined ? `${d.cid}|${d.course}|${d.run}` : null;
+  return {
+    event_id: await saltedUuid(salt, 'play-event', `${d.cid}|${d.event}|${d.at}|${d.course ?? ''}|${d.thing ?? ''}`),
+    event: d.event,
+    collector_id: await saltedHash(salt, 'collector', d.cid),
+    session_id: d.pass ? await saltedUuid(salt, 'session', d.pass) : null,
+    run_id: run ? await saltedUuid(salt, 'course-run', run) : null,
+    occurred_at: iso(d.at),
+    realm: d.room,
+    course_id: d.course ?? null,
+    thing: d.thing ?? null,
+    pos_x: d.event === 'course_fall' ? roundPos(d.x) : null,
+    pos_y: d.event === 'course_fall' ? roundPos(d.y) : null,
+    ms: typeof d.ms === 'number' && Number.isFinite(d.ms) ? Math.max(0, Math.round(d.ms)) : null,
+    practice: d.practice === true,
+  };
+}
+
+/** The most play events one owl sends a minute: more (a page misbehaving) are not kept. */
+export const PLAY_EVENTS_PER_MINUTE = 60;
+
 /** A quest as the reference table `game.dim_quest` takes it (OP-266). */
 export interface QuestCatalogueQuest {
   quest_id: string;
@@ -744,6 +820,7 @@ const ROWS: Record<string, (salt: string, data: never) => Promise<unknown>> = {
   realm_visit: realmVisitRow,
   room_stay: roomStayRow,
   quest_progress: questProgressRow,
+  play_event: playEventRow,
   feedback: feedbackRow,
   purchase: purchaseRow,
 };
@@ -755,6 +832,8 @@ export class CollectLog {
   private catalogue: { version: string; items: CatalogueItem[] } | null = null;
   private questList: { version: string; quests: QuestCatalogueQuest[]; steps: QuestCatalogueStep[] } | null = null;
   private fullSince = 0;
+  /** Play events kept per owl in the current minute (OP-304), so one page cannot fill the outbox. */
+  private playBudget = new Map<string, { minute: number; n: number }>();
 
   constructor(
     private readonly sql: SqlStorage,
@@ -826,6 +905,21 @@ export class CollectLog {
   /** Keep a quest step's event to send (OP-266): a step begun, or ended and how. */
   questProgress(d: QuestProgressData): void {
     if (this.config) this.keep('quest_progress', d);
+  }
+
+  /**
+   * Keep a play event to send (OP-304): a course step or a thing used. At most
+   * PLAY_EVENTS_PER_MINUTE an owl; false when one is not kept.
+   */
+  playEvent(d: PlayEventData): boolean {
+    if (!this.config) return false;
+    const minute = Math.floor(d.at / 60_000);
+    const used = this.playBudget.get(d.cid);
+    const n = used && used.minute === minute ? used.n : 0;
+    if (n >= PLAY_EVENTS_PER_MINUTE) return false;
+    if (this.playBudget.size > 5_000) for (const [k, v] of this.playBudget) if (v.minute !== minute) this.playBudget.delete(k);
+    this.playBudget.set(d.cid, { minute, n: n + 1 });
+    return this.keep('play_event', d);
   }
 
   /** Keep a ticket event to send (OP-192): the order, the owl and the ticket hashed on their way out. */
