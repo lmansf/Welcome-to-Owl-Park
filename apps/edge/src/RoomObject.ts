@@ -1087,7 +1087,7 @@ export class RoomObject extends DurableObject<Env> {
           const slack = LIMITS.reachSlackPx;
           const thorny = !!pos && [-slack, 0, slack].some((dx) => [-slack, 0, slack].some((dz) => inThorns(def, pos.x + dx, room.heightOf(att.id) + dz)));
           if (!pit && !thorny) return no('far');
-          const res = await stub.courseFall(cid, att.room);
+          const res = await stub.courseFall(cid, att.room, { x: pos!.x, y: pos!.y });
           if (!res.ok) return no(res.reason);
           room.place(att.id, res.at, res.top);
           return this.send(ws, { t: 'course', r, a, ok: true, view: res.view, at: res.at, ...(res.top ? { top: res.top } : {}) });
@@ -1513,12 +1513,22 @@ export class RoomObject extends DurableObject<Env> {
   /**
    * A free guest's use of an interactable (OP-243): a leaf pile poofs for everyone as anyone's flop does,
    * a stall or the moonbeam answers as for anyone; but it turns up no feathers, moves no quest and counts
-   * for no task, and the collections object is never asked. `practice` tells the page so.
+   * for no task, and the collections object is told only for the play log (OP-304). `practice` tells the page so.
    */
   private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): void {
     if (shared) {
       if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
       this.saveObjects();
+    }
+    // The play log (OP-304) counts a guest's use too, so the owner sees what free owls play with: never waited on.
+    const it = getInteractable(id);
+    const cid = att.cid;
+    if (cid && it) {
+      this.ctx.waitUntil(
+        Promise.resolve()
+          .then(() => this.collections().practiceUsed(cid, it.kind, it.id, att.room))
+          .catch((e: unknown) => this.logOf(att).warn('collections.log', 'write_failed', 'A guest’s use was not kept in the play log: the owner’s counts miss it.', { error: e })),
+      );
     }
     this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: -1, updates: [], practice: true });
   }

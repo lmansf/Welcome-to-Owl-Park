@@ -6,6 +6,7 @@ import {
   checkItem,
   checkPurchase,
   checkPlayer,
+  checkPlayEvent,
   checkRealmVisit,
   checkQuestProgress,
   checkQuestRef,
@@ -21,6 +22,7 @@ import {
   type FeedbackRow,
   type LogRow,
   type PlayerRow,
+  type PlayEventRow,
   type PurchaseRow,
   type QuestProgressRow,
   type QuestRefRow,
@@ -63,6 +65,7 @@ function memoryTables(): Tables & {
   roomStays: Array<{ stay_id: string; session_id: string; realm: string; entered_at: string; left_at: string | null; exit_reason: string | null }>;
   questSteps: Array<{ progress_id: string; run_id: string; step_no: number; started_at: string; completed_at: string | null; outcome: string | null }>;
   quests: { quests: QuestRefRow[]; steps: QuestStepRefRow[] } | null;
+  played: PlayEventRow[];
 } {
   const rows: LogRow[] = [];
   const purchases: PurchaseRow[] = [];
@@ -75,7 +78,14 @@ function memoryTables(): Tables & {
   const roomStays: Array<{ stay_id: string; session_id: string; realm: string; entered_at: string; left_at: string | null; exit_reason: string | null }> = [];
   const questSteps: Array<{ progress_id: string; run_id: string; step_no: number; started_at: string; completed_at: string | null; outcome: string | null }> = [];
   const tables = { quests: null as { quests: QuestRefRow[]; steps: QuestStepRefRow[] } | null };
+  const played: PlayEventRow[] = [];
   return {
+    played,
+    async addPlayEvents(batch: PlayEventRow[]) {
+      let kept = 0;
+      for (const p of batch) if (!played.some((x) => x.event_id === p.event_id) && played.push(p)) kept++;
+      return kept;
+    },
     questSteps,
     get quests() {
       return tables.quests;
@@ -638,7 +648,66 @@ describe('quest progress (OP-266)', () => {
   });
 });
 
+describe('play events (OP-304)', () => {
+  const ev = (i: number, extra: Record<string, unknown> = {}) => ({
+    event_id: uuid(i),
+    event: 'course_fall',
+    collector_id: A,
+    session_id: uuid(900),
+    run_id: uuid(500),
+    occurred_at: '2026-11-08T02:00:00.000Z',
+    realm: 'trail-1',
+    course_id: 'trail',
+    thing: null,
+    pos_x: 1230,
+    pos_y: 720,
+    ms: null,
+    practice: false,
+    ...extra,
+  });
+  const post = (body: unknown) => new Request('https://log.example/owl-park-log', { method: 'POST', headers: { Authorization: `Bearer ${KEY}` }, body: JSON.stringify(body) });
+
+  it('keeps each event once by its event id, and leaves out a row that fails its check', async () => {
+    const tables = memoryTables();
+    const rows = [ev(1), ev(2, { event: 'course_start', pos_x: null, pos_y: null }), ev(3, { event: 'interact', course_id: null, run_id: null, thing: 'leaf-pile:hub-leaves-1', pos_x: null, pos_y: null }), ev(4, { event: 'teleport' })];
+    const res = await handle(post({ kind: 'play_event', rows }), { key: KEY, tables });
+    expect(await res.json()).toEqual({ ok: true, kept: 3, duplicates: 0, skipped: 1 });
+    const again = await handle(post({ kind: 'play_event', rows: rows.slice(0, 3) }), { key: KEY, tables });
+    expect(await again.json()).toEqual({ ok: true, kept: 0, duplicates: 3, skipped: 0 });
+  });
+
+  it('checks every field, keeps a position for a fall alone, and takes nothing it does not know', () => {
+    expect(checkPlayEvent(ev(1))).toEqual(ev(1));
+    expect(checkPlayEvent(ev(1, { event: 'course_clear', pos_x: null, pos_y: null, ms: 30_000 }))).toMatchObject({ ms: 30_000 });
+    expect(checkPlayEvent(ev(1, { event: 'course_start', pos_x: 10, pos_y: null }))).toBe('pos_x');
+    expect(checkPlayEvent(ev(1, { pos_x: 1.5 }))).toBe('pos_x');
+    expect(checkPlayEvent(ev(1, { pos_y: 1e9 }))).toBe('pos_y');
+    expect(checkPlayEvent(ev(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkPlayEvent(ev(1, { course_id: null }))).toBe('course_id');
+    expect(checkPlayEvent(ev(1, { course_id: 'Trail One' }))).toBe('course_id');
+    expect(checkPlayEvent(ev(1, { event: 'interact', course_id: null, thing: null, pos_x: null, pos_y: null }))).toBe('thing');
+    expect(checkPlayEvent(ev(1, { thing: '<b>' }))).toBe('thing');
+    expect(checkPlayEvent(ev(1, { realm: 'The Grove' }))).toBe('realm');
+    expect(checkPlayEvent(ev(1, { ms: -1 }))).toBe('ms');
+    expect(checkPlayEvent(ev(1, { practice: 'yes' }))).toBe('practice');
+    expect(checkPlayEvent(ev(1, { occurred_at: 'now' }))).toBe('occurred_at');
+    expect(checkPlayEvent(ev(1, { run_id: 'x' }))).toBe('run_id');
+    expect(Object.keys(checkPlayEvent({ ...ev(1), name: 'Hoot', ip: '1.2.3.4' }) as object)).toEqual(Object.keys(ev(1)));
+  });
+});
+
 describe("the game schema's tables", () => {
+  it('keeps play events (OP-304) once by event id, the rows only in the JSON parameter', async () => {
+    const calls: Array<{ query: string; params: unknown[] }> = [];
+    const db: Db = { unsafe: async (query, params) => (calls.push({ query, params }), [{ event_id: 'x' }]) };
+    const r = checkPlayEvent({ event_id: uuid(1), event: 'interact', collector_id: A, session_id: null, run_id: null, occurred_at: '2026-11-08T02:00:00Z', realm: 'hub', course_id: null, thing: 'leaf-pile:hub-leaves-1', pos_x: null, pos_y: null, ms: null, practice: false }) as PlayEventRow;
+    expect(await gameTables(db).addPlayEvents([r])).toBe(1);
+    expect(calls[0]!.query).toContain('insert into game.play_event');
+    expect(calls[0]!.query).toContain('on conflict (event_id) do nothing');
+    expect(calls[0]!.params).toEqual([JSON.stringify([r])]);
+    expect(calls[0]!.query).not.toContain(A);
+  });
+
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
     return { calls, unsafe: async (query, params) => (calls.push({ query, params }), answer) };
