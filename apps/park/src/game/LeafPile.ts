@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { InteractableDef, Vec2 } from '@owl-park/shared';
+import { hexOf, onCanvas, tintImage, tintedTexture } from './canvasTint';
 import { symbolTexture } from './symbols';
 
 /** Autumn leaf colours, darkest first (the bottom of the pile is in shade). */
@@ -19,6 +20,12 @@ function seeded(text: string): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** The leaf the poof throws up and the wind brings back: tinted on WebGL, one autumn colour baked in on Canvas (OP-300). */
+function flyingLeaf(scene: Phaser.Scene): string {
+  const fallen = symbolTexture(scene, 'fallen');
+  return onCanvas(scene) ? tintedTexture(scene, fallen, hexOf(LEAVES[3]!)) : fallen;
 }
 
 /**
@@ -41,7 +48,8 @@ export class LeafPile {
     const lift = def.top ?? 0;
     const rnd = seeded(def.id);
     // A soft shadow under the pile (the glow texture in black: no hard edge to read as a log).
-    const shade = scene.add.image(0, 4, 'fx-glow').setTint(0x000000).setScale(0.62, 0.13).setAlpha(0.5);
+    // Every colour here is baked into its texture on the Canvas renderer, which draws no tint (OP-300).
+    const shade = tintImage(scene, scene.add.image(0, 4, 'fx-glow'), 'fx-glow', 0x000000).setScale(0.62, 0.13).setAlpha(0.5);
     const spots: Array<{ x: number; y: number; depth: number }> = [];
     for (let i = 0; i < LEAF_COUNT; i++) {
       // A low dome: wider at the bottom, the top leaves near the middle.
@@ -54,9 +62,8 @@ export class LeafPile {
     for (const p of spots) {
       // Leaves on top catch the light; the ones underneath are darker.
       const tint = LEAVES[Math.min(LEAVES.length - 1, Math.floor(rnd() * 4 + p.depth * 3))]!;
-      const leaf = scene.add
-        .image(p.x, p.y, symbolTexture(scene, 'fallen'))
-        .setTint(tint)
+      const fallen = symbolTexture(scene, 'fallen');
+      const leaf = tintImage(scene, scene.add.image(p.x, p.y, fallen), fallen, tint)
         .setRotation(rnd() * Math.PI * 2)
         .setScale(0.85 + rnd() * 0.45, 0.6 + rnd() * 0.35);
       this.leaves.push(leaf);
@@ -99,7 +106,7 @@ export class LeafPile {
     const up = y - (this.def.top ?? 0);
     const scene = this.scene;
     const leaves = scene.add
-      .particles(x, up - 18, symbolTexture(scene, 'fallen'), {
+      .particles(x, up - 18, flyingLeaf(scene), {
         emitting: false,
         speed: { min: 140, max: 360 },
         angle: { min: 200, max: 340 },
@@ -141,7 +148,7 @@ export class LeafPile {
     this.root.setVisible(true).setAlpha(0).setScale(0.6, 0.2);
     this.scene.tweens.add({ targets: this.root, alpha: 1, scaleX: 1, scaleY: 1, duration: 650, ease: 'Back.easeOut' });
     const drift = this.scene.add
-      .particles(x, y - (this.def.top ?? 0) - 120, symbolTexture(this.scene, 'fallen'), {
+      .particles(x, y - (this.def.top ?? 0) - 120, flyingLeaf(this.scene), {
         emitting: false,
         speedY: { min: 60, max: 120 },
         speedX: { min: -40, max: 40 },

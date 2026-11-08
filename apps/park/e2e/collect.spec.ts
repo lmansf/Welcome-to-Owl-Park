@@ -104,6 +104,8 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
   });
 
   test('every owl gets the Bat pet as a Halloween present, and hears about it once', async ({ page }) => {
+    // Halloween week: the present's greeting is in season (it ends with Halloween, OP-297).
+    await page.clock.setFixedTime(new Date(Date.UTC(2026, 9, 25, 12)));
     // A collection from before the present.
     await seedFeathers(page, 'e2e-present', 0);
     await openPark(page, { collector: 'e2e-present', tz: 'UTC' });
@@ -120,6 +122,16 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await page.waitForTimeout(1500);
     await expect(page.getByText(/^Happy Halloween!/)).toHaveCount(0);
     expect(await owns(page, 'bat~0')).toBe(true);
+  });
+
+  test('after Halloween a new owl still gets the Bat pet, and hears no Halloween greeting (OP-297)', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(Date.UTC(2026, 10, 7, 20)));
+    await seedFeathers(page, 'e2e-present-late', 0);
+    await openPark(page, { collector: 'e2e-present-late', tz: 'UTC' });
+    await page.waitForFunction(() => window.owlPark?.collection() !== null, null, { timeout: 20_000 });
+    await expect.poll(() => owns(page, 'bat~0'), { timeout: 15_000 }).toBe(true);
+    await page.waitForTimeout(1500);
+    await expect(page.getByText(/^Happy Halloween!/)).toHaveCount(0);
   });
 
   test('walking up to a leaf pile on the far side of a doorway does not take the doorway', async ({ page }) => {

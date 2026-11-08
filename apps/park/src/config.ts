@@ -5,6 +5,7 @@
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
 import { sizeBoxesWanted } from './game/sizeBoxes';
 import { skinTrialWanted } from './game/skinTrial';
+import { artTrialWanted } from './game/artTrial';
 
 /**
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
@@ -106,6 +107,11 @@ export interface ParkConfig {
    * by tools/kit/skin_sheet.py, drawn in place of the realm's kit slots (game/skinTrial.ts). Null for every visitor.
    */
   skin: string | null;
+  /**
+   * An art trial (`?art=<name>`, this page only): a room drawn from layered art that is not in the
+   * build, generated for the owner to walk before anything is approved (game/artTrial.ts). Null for every visitor.
+   */
+  art: string | null;
 }
 
 export function readConfig(): ParkConfig {
@@ -149,5 +155,6 @@ export function readConfig(): ParkConfig {
     oldMap: q.get('newmap') === '0',
     sizes: sizeBoxesWanted(q.get('sizes')),
     skin: skinTrialWanted(q.get('skin')),
+    art: artTrialWanted(q.get('art')),
   };
 }

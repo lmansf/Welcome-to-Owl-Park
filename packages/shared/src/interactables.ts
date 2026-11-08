@@ -80,6 +80,18 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
   { id: 'hub-moonbeam', kind: 'moonbeam', room: 'hub', pos: { x: 2400, y: 690 } },
+  // The Treetop Commons (OP-306): leaves blown off the lantern trees settle against the fountain's rim,
+  // under the bench by the balustrade and at the foot of the ticket booth, so the walk from the lane to
+  // the turnstiles meets a pile every few seconds. A free guest's flop turns up nothing (OP-243).
+  { id: 'lobby-leaves-fountain', kind: 'leaf-pile', room: 'lobby', pos: { x: 860, y: 790 } },
+  { id: 'lobby-leaves-bench', kind: 'leaf-pile', room: 'lobby', pos: { x: 1100, y: 775 } },
+  { id: 'lobby-leaves-booth', kind: 'leaf-pile', room: 'lobby', pos: { x: 1650, y: 765 } },
+  // The arcade (OP-306): leaves blow in at the open street doorway and skid along the wet tiles until
+  // something stops them: the chrome pillar in the passage past Hoot & Hop, the wall under the
+  // scoreboard, and the second chrome pillar before Talon Toss.
+  { id: 'arcade-leaves-pillar', kind: 'leaf-pile', room: 'arcade', pos: { x: 1250, y: 780 } },
+  { id: 'arcade-leaves-scoreboard', kind: 'leaf-pile', room: 'arcade', pos: { x: 2550, y: 790 } },
+  { id: 'arcade-leaves-pillar-east', kind: 'leaf-pile', room: 'arcade', pos: { x: 3080, y: 770 } },
 ];
 
 const BY_ID: Readonly<Record<string, InteractableDef>> = Object.fromEntries(INTERACTABLES.map((i) => [i.id, i]));

@@ -1,0 +1,35 @@
+# The flag-hidden check (merge gate class 3): for a pull request labelled `flag-hidden`, checks that its
+# feature is off for every visitor and shows only with `?<param>=1` (apps/park/src/flags.ts), and that
+# it touches nothing payment, account, data, server or public-page related. tools/flags/flag-check.mjs
+# says what it checks and what it cannot. Main's copy of the check runs, never the branch's, so a pull
+# request cannot loosen the check it is held to. Without the label the job is skipped.
+name: Flag check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  flag-hidden:
+    name: Flag-hidden feature check
+    if: contains(github.event.pull_request.labels.*.name, 'flag-hidden')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Main's copy of the check
+        run: |
+          git fetch --quiet origin main
+          mkdir -p "$RUNNER_TEMP/flags"
+          git show origin/main:tools/flags/flag-check.mjs > "$RUNNER_TEMP/flags/flag-check.mjs"
+      - name: Off for every visitor, nothing protected touched
+        run: node "$RUNNER_TEMP/flags/flag-check.mjs" origin/main | tee -a "$GITHUB_STEP_SUMMARY"
