@@ -48,9 +48,11 @@ test.describe('activities (this device)', () => {
       await expect.poll(async () => (await state(page)).play?.lanterns.length ?? 0, { intervals: [50] }).toBe(i + 1);
     }
     await expect.poll(async () => (await state(page)).play?.glowing).toBe(true);
-    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-lanterns.png` });
+    // Check the short-lived messages before a screenshot: software rendering can spend their
+    // entire 3.2-second lifetime capturing the canvas on CI.
     await expect(page.getByText('The whole lantern beam is lit!')).toBeVisible();
     await expect(page.getByText(/^You helped light the whole beam! \+4 feathers/)).toBeVisible();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-lanterns.png` });
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-beam.png` });
     // The beam glows whole: no lantern to light until it goes dark again.
     expect((await state(page)).actions).not.toContain('act:light');
