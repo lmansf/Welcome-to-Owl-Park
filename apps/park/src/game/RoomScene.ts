@@ -118,7 +118,7 @@ import {
   type Air,
   type Flier,
   type FlightAbilities,
-  TRAVEL_LANDINGS,
+  travelLanding,
   TRAVEL_WORDS,
   canTravel,
   needsGate,
@@ -227,6 +227,9 @@ const RESTART_NOTICE_MS = 9_000;
 export const NEST_SPAWN = 'mirror';
 /** Travel from the map fades out slower than a doorway, so going home or across the park is not a jolt (OP-114, OP-130). */
 export const NEST_FADE_MS = 400;
+/** Travel from the map (OP-305): the wing beats the owl takes off with, and how far it rises as the room fades (room px). */
+const TRAVEL_BEAT = { ms: 200, beats: 2 } as const;
+const TRAVEL_RISE = 120;
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
 /** Air states this page sends the room (OP-084): a burst and a refill each a little under the room server's, so frames bunched by the network still fit. */
@@ -1601,19 +1604,31 @@ export class RoomScene extends Phaser.Scene {
     const climb = this.climb?.debug();
     if (this.passingGate || this.decorating || this.askedAt || this.goingAway || this.arcade?.debug() || (climb && !climb.over)) return 'busy';
     const known = this.travelNow();
-    if (!canTravel(place, known.places)) return 'not-yet';
-    if (needsGate(place) && !known.gate) return 'gate';
+    const walking = this.walking();
+    if (!canTravel(place, known.places, walking)) return 'not-yet';
+    if (needsGate(place, walking) && !known.gate) return 'gate';
     if (place === 'nest') {
       if (isNestRoom(this.room.id) && this.nestMine) return 'here';
+      this.flyAway(NEST_FADE_MS);
       void this.goHome(NEST_SPAWN, NEST_FADE_MS);
       return null;
     }
-    const to = TRAVEL_LANDINGS[place]!;
+    const to = travelLanding(place, walking)!;
     if (to.room === this.room.id) return 'here';
     this.hud.closeDialogue();
     this.talkingTo = null;
+    this.flyAway(NEST_FADE_MS);
     void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, NEST_FADE_MS, undefined, 'travel');
     return null;
+  }
+
+  /**
+   * Travel from the map (OP-305): the owl beats its wings and rises up out of the room as it fades, so
+   * the trip reads as a short flight and not a cut. In calm motion it only beats its wings.
+   */
+  private flyAway(ms: number): void {
+    this.me.holdAloft({ flapAt: Date.now(), beat: TRAVEL_BEAT });
+    if (!this.calm()) this.tweens.add({ targets: this.me.pose, y: this.me.pose.y - TRAVEL_RISE, duration: ms, ease: 'Sine.easeIn' });
   }
 
   /** The map's places and the gate as this page has them (OP-130): none walked into yet until it hears. */
