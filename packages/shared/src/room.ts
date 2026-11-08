@@ -114,6 +114,15 @@ export interface RoomDef {
    * and says a tree room's camera follows the owl as drawn, its height included.
    */
   map?: 2;
+  /**
+   * How the room is seen (OP-284): 'side', a 2D platformer (a floor strip, perches, doorways that open
+   * on up, both flaps, the camera climbing with the owl), or 'top', walked across from above (floor
+   * polygons, doorways walked into). Absent, it follows the park (viewOf): the tree's rooms side, today's
+   * park top. Set it where a room is seen otherwise than its park, as Logan's rule asks: communal rooms
+   * (the inside of the tree, the entrance, each realm's start, the arcade) top-down, the rest side.
+   * Which park a room belongs to (tree share, the walking map, the minimap, stats) stays `map`.
+   */
+  view?: RoomView;
   /** How big owls are drawn here against today's park (the tree's owl stands a sixth of the screen's height: 1.25). */
   owlScale?: number;
   /**
@@ -544,6 +553,19 @@ export function voteRealmAt(room: Pick<RoomDef, 'id' | 'votesFor' | 'idols'>, do
 /** The park a room belongs to: 1 for today's park, 2 for the tree (OP-128). */
 export function mapOf(room: Pick<RoomDef, 'map'>): 1 | 2 {
   return room.map ?? 1;
+}
+
+/** How a room is seen (OP-284): from the side, a platformer, or from above. */
+export type RoomView = 'side' | 'top';
+
+/** How a room is seen (OP-284): its own `view`, or its park's: the tree's rooms from the side, today's park from above. */
+export function viewOf(room: Pick<RoomDef, 'map' | 'view'>): RoomView {
+  return room.view ?? (mapOf(room) === 2 ? 'side' : 'top');
+}
+
+/** Whether a room is seen from the side (OP-284): a platformer, not walked across from above. */
+export function seenFromSide(room: Pick<RoomDef, 'map' | 'view'>): boolean {
+  return viewOf(room) === 'side';
 }
 
 /** How much bigger a tile that scrolls slower than the room is drawn, per unit of rate it lags by: its edge never shows. */

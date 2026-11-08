@@ -35,6 +35,9 @@ describe('route tiers (OP-084)', () => {
   it("gives the tree's hops both flaps (OP-239): higher and farther than today's park, and says when a hop takes the second", () => {
     expect(roomFlaps({})).toBe(1);
     expect(roomFlaps({ map: 2 })).toBe(2);
+    // Both flaps go with the side view, not the park (OP-284).
+    expect(roomFlaps({ map: 2, view: 'top' })).toBe(1);
+    expect(roomFlaps({ view: 'side' })).toBe(2);
     // Straight up: past a jump and a flap, the second flap still reaches; past both, nothing.
     expect(hopTier(264, 0)).toBeNull();
     expect(hopTier(264, 0, 2)).toBe(2);

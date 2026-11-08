@@ -34,7 +34,9 @@ import {
   TREE_STREET_ROOM,
   arrivalPoint,
   backgroundTiles,
+  isPaintable,
   mapOf,
+  seenFromSide,
   realmShut,
   speciesOf,
   tileFade,
@@ -439,7 +441,7 @@ export class RoomScene extends Phaser.Scene {
   private flier: Flier = newFlier();
   /** What the owl can do in the air: all of it until the lock-and-key game (OP-115) has them earned; both flaps in the tree (OP-239). */
   private get abilities(): Readonly<FlightAbilities> {
-    return flightFor(mapOf(this.room));
+    return flightFor(seenFromSide(this.room) ? 2 : 1);
   }
   /** When the flight last stepped (ms; 0 before the first step in this room). */
   private flightClock = 0;
@@ -748,7 +750,7 @@ export class RoomScene extends Phaser.Scene {
    * waits for that answer. Its code is fetched only then: no visitor's page loads it.
    */
   private openPainter(): void {
-    if (!this.cfg.paint || mapOf(this.room) !== 2) return;
+    if (!this.cfg.paint || !isPaintable(this.room)) return;
     const gen = this.gen;
     const live = () => gen === this.gen && !this.leaving && this.scene.isActive();
     void keeperToken(this.cfg.edgeUrl, this.cfg.keeper).then(async (token) => {
@@ -856,7 +858,7 @@ export class RoomScene extends Phaser.Scene {
    * side) the owl as drawn, its height included, so the camera climbs with it and the layers' rates show.
    */
   private followed(): { x: number; y: number } {
-    if (mapOf(this.room) !== 2) return this.me;
+    if (!seenFromSide(this.room)) return this.me;
     this.camAt.x = this.me.x;
     this.camAt.y = this.me.y - this.flier.air.z;
     return this.camAt;
@@ -887,7 +889,7 @@ export class RoomScene extends Phaser.Scene {
       }
     }
     // Seen from above, where an owl can walk reads at a glance: the floor edged, the rest veiled (walkFloor.ts).
-    this.floorShown = mapOf(room) !== 2 && !room.drawn && !!drawWalkFloor(this, room, this.cfg.sizes, -0.6);
+    this.floorShown = !seenFromSide(room) && !room.drawn && !!drawWalkFloor(this, room, this.cfg.sizes, -0.6);
     // On a skin trial (?skin=, skinTrial.ts), the backdrop sits back under a dark, flat veil, so what an owl plays on reads first.
     if (art.kit && trialBackdropVeiled() && drawsSkinTrial(art.id, art)) {
       this.add.rectangle(-2000, -2000, room.size.w + 4000, room.size.h + 4000, TRIAL_BACKDROP_VEIL.colour, TRIAL_BACKDROP_VEIL.alpha).setOrigin(0).setDepth(-0.98);
@@ -967,7 +969,7 @@ export class RoomScene extends Phaser.Scene {
     }
     // A room of the tree reads at a glance (OP-173): its ledges' edges and the shades over the playfield
     // under the owls, the shapes painted in front of the path over them, under the overlay.
-    if (mapOf(room) === 2) {
+    if (seenFromSide(room)) {
       this.treeDress = dressTreeRoom(this, art, playTiles, {
         ground: groundOf(room),
         // A kit room's ledges carry their own edge, the cap.
@@ -1027,7 +1029,7 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setActions([]);
     this.hud.setRoom(room.id);
     // Phones play the tree on their side (OP-155 (d)): held upright in a tree room, a card asks to turn them.
-    this.hud.setSideways(mapOf(room) === 2);
+    this.hud.setSideways(seenFromSide(room));
     this.showWaysOut();
     // The owl builder's kind and colours: today's pledge and the worn collectibles stay as they are.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
@@ -1657,7 +1659,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** How far back this room draws an owl standing on a ledge (OP-173): the tree's rooms only, so today's park draws as ever. */
   private raisedBand(): number {
-    return mapOf(this.room) === 2 ? TREE_RAISED_BAND : 0;
+    return seenFromSide(this.room) ? TREE_RAISED_BAND : 0;
   }
 
   /**
@@ -1807,7 +1809,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Whether the room is seen from the side (the tree, map 2): its doorways open on up, not on walking into them (OP-212). */
   private sideView(): boolean {
-    return mapOf(this.room) === 2;
+    return seenFromSide(this.room);
   }
 
   /**
@@ -3296,7 +3298,7 @@ export class RoomScene extends Phaser.Scene {
      * the way it came along the floor); the turnstiles take the next owl in a moment.
      */
     const stepBack = () => {
-      this.walkTo(mapOf(this.room) === 2 ? { x: door.rect.x - 140, y: this.me.pos.y } : { x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
+      this.walkTo(seenFromSide(this.room) ? { x: door.rect.x - 140, y: this.me.pos.y } : { x: this.me.pos.x, y: door.rect.y + door.rect.h + 70 });
       this.time.delayedCall(1500, () => {
         this.passingGate = false;
       });
