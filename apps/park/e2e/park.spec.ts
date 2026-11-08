@@ -175,6 +175,34 @@ test.describe('single visitor', () => {
     await page.keyboard.press('Escape');
   });
 
+  test('Space jumps and never opens the Menu, after the Menu was opened from its button or its key and closed (OP-293)', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a phone jumps on the pad');
+    await openPark(page);
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    // Clicked open and closed: the Menu button has the focus back, and the space bar is still the jump.
+    await page.locator('[data-menu-btn]').click();
+    await expect(menu).toBeVisible();
+    await menu.getByRole('button', { name: 'Close the menu' }).click();
+    await expect(menu).toBeHidden();
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press('Space');
+      await frames(page, 20);
+      await expect(menu).toBeHidden();
+    }
+    // Opened with M and closed with Escape, the same.
+    await page.keyboard.press('KeyM');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(page.locator('[data-menu-btn]')).toBeFocused();
+    await page.keyboard.press('Space');
+    await frames(page, 20);
+    await expect(menu).toBeHidden();
+    // The Menu still opens from its own button.
+    await page.locator('[data-menu-btn]').click();
+    await expect(menu).toBeVisible();
+  });
+
   test('the bottom bar is Menu, Emotes and Say; the Menu has five tabs, and its Settings lead to Feedback (Your owl is at the mirror: mirror.spec.ts)', async ({ page, isMobile }) => {
     test.slow(); // the emotes, Say, the Menu's five tabs and Feedback open and close in turn
     await openPark(page);
