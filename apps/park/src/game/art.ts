@@ -17,7 +17,7 @@ import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
 import { drawKitOps } from './kitView';
 import { loadSvgTexture } from './svgLoader';
 import { boxable, paintSizeBox } from './sizeBoxes';
-import { trialFilesOf, updraftBitsKey } from './skinTrial';
+import { fitTrialArt, setTrialBackdropVeil, trialFilesOf, updraftBitsKey } from './skinTrial';
 
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
@@ -38,6 +38,7 @@ let skin: string | null = null;
 /** A skin trial for this page (`?skin=<name>`, skinTrial.ts): the realm slots it has files for draw from them. */
 export function useSkinTrial(name: string | null): void {
   skin = name;
+  setTrialBackdropVeil(!!name);
 }
 
 /** The key whose files a key's art loads from: a skin trial's when this page draws one for it, else kitFilesOf's. */
@@ -1211,10 +1212,16 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   if (drawnAsSizeBox(key)) return makeSizeBox(scene, key, spec);
   const url = baseUrl();
   if (PUBLISHED_ART.has(`${filesOf(key)}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${filesOf(key)}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
+  // A skin trial's piece is redrawn to the outline of the stand-in it replaces (skinTrial.ts), so its top is the walk line.
+  const trial = !!trialFilesOf(key, skin, PUBLISHED_ART);
   for (const c of rasterCandidates(url, filesOf(key), scale, PUBLISHED_ART)) {
     const img = await (onBytes ? streamImage(c, onBytes) : loadImage(c));
     if (img) {
-      if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
+      if (!scene.textures.exists(key)) {
+        const fitted = trial ? fitTrialArt(img, key) : null;
+        if (fitted) scene.textures.addCanvas(key, fitted);
+        else scene.textures.addImage(key, img);
+      }
       return true;
     }
   }
@@ -1431,4 +1438,9 @@ function drawOwlPlaceholder(g: Phaser.GameObjects.Graphics, key: string): void {
       g.fillTriangle(92, 96, 108, 96, 100, 112);
       break;
   }
+}
+
+/** Whether this page draws a skin trial in this room: it has a trial on and the room draws a slot the trial has files for. */
+export function drawsSkinTrial(roomId: string, room?: RoomDef): boolean {
+  return !!skin && roomArtKeys(roomId, room).some((k) => trialFilesOf(k, skin, PUBLISHED_ART) !== null);
 }

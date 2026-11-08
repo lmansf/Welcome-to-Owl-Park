@@ -169,7 +169,8 @@ import { WindStreaks } from './windStreaks';
 import { BrushInk } from './brushInk';
 import { NeonSigns } from './neonSigns';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
-import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
+import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
+import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 import { admitTarget } from './gateAdmit';
@@ -887,6 +888,10 @@ export class RoomScene extends Phaser.Scene {
     }
     // Seen from above, where an owl can walk reads at a glance: the floor edged, the rest veiled (walkFloor.ts).
     this.floorShown = mapOf(room) !== 2 && !room.drawn && !!drawWalkFloor(this, room, this.cfg.sizes, -0.6);
+    // On a skin trial (?skin=, skinTrial.ts), the backdrop sits back under a dark, flat veil, so what an owl plays on reads first.
+    if (art.kit && trialBackdropVeiled() && drawsSkinTrial(art.id, art)) {
+      this.add.rectangle(-2000, -2000, room.size.w + 4000, room.size.h + 4000, TRIAL_BACKDROP_VEIL.colour, TRIAL_BACKDROP_VEIL.alpha).setOrigin(0).setDepth(-0.98);
+    }
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
     this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
