@@ -472,11 +472,9 @@ test.describe('single visitor', () => {
 
   test('tapping the idol from afar walks the owl up to it and pledges on arrival', async ({ page }) => {
     await openPark(page, { room: 'grove' });
-    // Stand near the gathering spot (outside it, on the trunk's floor beside it) so the guardian is on
-    // screen even on a phone: the clearing is taller than a screen now (a plaza, Nov 8), and the camera
-    // follows the owl down, so an owl standing lower sees less of the trunk above it.
-    await page.evaluate(() => window.owlPark.walkTo(2260, 640));
-    await waitForArrival(page, 2260, 640);
+    // Stand near the gathering spot (outside it) so the guardian is on screen even on a phone.
+    await page.evaluate(() => window.owlPark.walkTo(2500, 720));
+    await waitForArrival(page, 2500, 720);
     await settleCamera(page);
     await tapRoomPoint(page, 2400, 260); // the guardian's chest
     const s = await state(page);

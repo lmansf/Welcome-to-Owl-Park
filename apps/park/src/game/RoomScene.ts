@@ -194,7 +194,7 @@ import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
-import { cameraBounds } from './hudInset';
+import { cameraBounds, followLead } from './hudInset';
 import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
@@ -3863,6 +3863,7 @@ export class RoomScene extends Phaser.Scene {
       cam.setViewport(Math.round(f.x * k), Math.round(f.y * k), Math.max(1, Math.round(f.w * k)), Math.max(1, Math.round(f.h * k)));
       cam.setZoom(Math.max(0.1, Math.min((f.w * k) / 340, (f.h * k) / 280, 4)));
       cam.setBounds(0, 0, this.room.size.w, this.room.size.h);
+      cam.setFollowOffset(0, 0);
       const x = this.mirror ? (this.me.pos.x + NEST_MIRROR.x) / 2 : this.me.pos.x;
       cam.centerOn(x, this.me.pos.y - 90);
       return;
@@ -3878,6 +3879,8 @@ export class RoomScene extends Phaser.Scene {
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.hud.coveredEdges();
     const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
     cam.setBounds(b.x, b.y, b.w, b.h);
+    // A room taller than a screen, seen from above: the owl stands lower on screen, the back of the room in view (hudInset.ts).
+    cam.setFollowOffset(0, followLead(this.room.size.h, seenFromSide(this.room), h / cam.zoom, ROOM_H));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }
 
