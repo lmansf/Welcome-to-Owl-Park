@@ -91,3 +91,29 @@ class SkinSheetTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def block(w, h, rgb, top_rgb=None, top=12):
+    im = Image.new('RGBA', (w, h), rgb + (255,))
+    if top_rgb:
+        ImageDraw.Draw(im).rectangle([0, 0, w - 1, top - 1], fill=top_rgb + (255,))
+    return im
+
+
+class ReadabilityTest(unittest.TestCase):
+    def test_a_sheet_that_reads_passes(self):
+        files = {'perch-mid': block(640, 240, (150, 120, 80), (220, 200, 150)), 'hazard': block(640, 240, (190, 30, 60)), 'texture-ground': block(512, 512, (90, 140, 60))}
+        self.assertEqual(ss.readability(files, block(800, 450, (40, 60, 50))), [])
+
+    def test_safe_ground_that_melts_into_the_backdrop_is_named(self):
+        notes = ss.readability({'perch-mid': block(640, 240, (60, 70, 50), (90, 100, 80))}, block(800, 450, (60, 70, 50)))
+        self.assertTrue(any('perch-mid is not lighter than the backdrop' in n for n in notes))
+
+    def test_a_hazard_in_the_ground_s_colours_is_named(self):
+        notes = ss.readability({'perch-mid': block(640, 240, (150, 120, 80), (220, 200, 150)), 'hazard': block(640, 240, (140, 115, 80))})
+        self.assertTrue(any('hazard looks too like perch-mid' in n for n in notes))
+
+    def test_a_perch_with_no_lit_top_edge_is_named(self):
+        notes = ss.readability({'perch-small': block(480, 120, (150, 120, 80))})
+        self.assertTrue(any('perch-small has no lit top edge' in n for n in notes))
+

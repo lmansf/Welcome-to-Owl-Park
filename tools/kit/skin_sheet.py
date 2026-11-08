@@ -29,12 +29,17 @@ middle and the end mirrored), marked as made here in the summary; a drawn C11 al
 (game size) and @2x.webp (delivered size), which the park draws in place of the realm's slots only
 on a page opened with `?skin=<name>` (apps/park/src/game/skinTrial.ts); visitors see no change.
 --pieces adds slot-named files from a folder (knot-hole.png, plant.png ...) to the trial as they are.
+
+Every cut ends with the readability checks (READABILITY), which a sheet should pass before a course
+is built on it: what an owl stands on is lighter than the realm's backdrop and lit along its top
+edge, and the hazard looks nothing like what an owl stands on. They warn; they do not refuse.
 Needs Pillow.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 from pathlib import Path
 
@@ -195,6 +200,94 @@ def cut(sheet: Image.Image, derive_small: bool = False) -> tuple[dict[str, Image
     return out, notes
 
 
+# What a sheet must do so a course on it reads at a glance (the kit template's readability rules, A8).
+READABILITY = {
+    # What an owl stands on is this much lighter (CIELAB L*) than the realm's mid backdrop.
+    'stand_over_backdrop': 15,
+    # The hazard is at least this far (CIELAB delta E) from what an owl stands on and from the ground.
+    'hazard_apart': 30,
+    # The top edge (its first 6 game px down each column) is this much lighter than the piece's body.
+    'lit_edge': 8,
+}
+STANDABLE = ('perch-mid', 'perch-small', 'roost')
+
+
+def _lab(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
+    def lin(c: float) -> float:
+        c /= 255
+        return ((c + 0.055) / 1.055) ** 2.4 if c > 0.04045 else c / 12.92
+    r, g, b = (lin(v) for v in rgb)
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116  # noqa: E731
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+
+def _pixels(img: Image.Image) -> list[tuple[int, int, int, int]]:
+    small = img.convert('RGBA')
+    small.thumbnail((160, 160))
+    data = small.get_flattened_data() if hasattr(small, 'get_flattened_data') else small.getdata()
+    return list(data), small.size
+
+
+def mean_lab(img: Image.Image) -> tuple[float, float, float] | None:
+    """The mean colour (CIELAB) of an image's opaque pixels, or None for an empty one."""
+    px, _ = _pixels(img)
+    labs = [_lab(p[:3]) for p in px if p[3] > 128]
+    if not labs:
+        return None
+    return tuple(sum(c[i] for c in labs) / len(labs) for i in range(3))  # type: ignore[return-value]
+
+
+def top_edge_lift(img: Image.Image, game_px: int = 6) -> float | None:
+    """How much lighter (L*) a piece's top edge is than the rest of it: its first `game_px` game
+    pixels of art down each column (of a cut file, at the delivered size) against the rows below."""
+    px, (w, h) = _pixels(img)
+    band = max(1, round(game_px * 2 * h / img.height))  # cut files are at the delivered size, 2 px to a game px
+    edge, body = [], []
+    for x in range(w):
+        col = [px[y * w + x] for y in range(h)]
+        top = next((y for y, p in enumerate(col) if p[3] > 128), None)
+        if top is None:
+            continue
+        for y in range(top, h):
+            if col[y][3] <= 128:
+                continue
+            (edge if y < top + band else body).append(_lab(col[y][:3])[0])
+    if not edge or not body:
+        return None
+    return sum(edge) / len(edge) - sum(body) / len(body)
+
+
+def readability(files: dict[str, Image.Image], backdrop: Image.Image | None = None) -> list[str]:
+    """A line for each readability rule a cut sheet breaks (READABILITY); none when it reads."""
+    notes = []
+    lab = {k: mean_lab(v) for k, v in files.items()}
+    stands = [k for k in STANDABLE if lab.get(k)]
+    if backdrop is not None and (back := mean_lab(backdrop)):
+        for k in stands:
+            if lab[k][0] < back[0] + READABILITY['stand_over_backdrop']:
+                notes.append(f'readability: {k} is not lighter than the backdrop (L* {lab[k][0]:.0f} against {back[0]:.0f}; it needs {back[0] + READABILITY["stand_over_backdrop"]:.0f} or more), so it melts into it')
+    if lab.get('hazard'):
+        for k in [*stands, 'texture-ground']:
+            if lab.get(k) and math.dist(lab['hazard'], lab[k]) < READABILITY['hazard_apart']:
+                notes.append(f'readability: the hazard looks too like {k} (colour difference {math.dist(lab["hazard"], lab[k]):.0f}; it needs {READABILITY["hazard_apart"]} or more), so danger and safe ground read the same')
+    for k in stands:
+        lift = top_edge_lift(files[k])
+        if lift is not None and lift < READABILITY['lit_edge']:
+            notes.append(f'readability: {k} has no lit top edge (it is {lift:.0f} L* lighter than its body; it needs {READABILITY["lit_edge"]}), so where an owl lands is hard to see')
+    return notes
+
+
+def realm_backdrop(realm: str) -> Image.Image | None:
+    """The realm's mid backdrop as the park draws it today, to judge a sheet against."""
+    for p in sorted(ART.glob(f'kit-{realm}-mid-*.webp')) + sorted(ART.glob(f'kit-{realm}-mid-*.png')):
+        if '@2x' not in p.name:
+            return Image.open(p)
+    return None
+
+
 def publish_trial(files: dict[str, Image.Image], name: str, realm: str) -> list[str]:
     """Write the trial's files into public/art: 1x at game size and @2x at the delivered size."""
     sizes = slot_sizes()
@@ -232,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     for slot, img in files.items():
         img.save(a.out / f'{slot}.png')
     print(f'cut {len(files)} files into {a.out}')
-    for n in notes:
+    for n in notes + readability(files, realm_backdrop(a.realm)):
         print(f'  - {n}')
     if a.trial:
         trial = dict(files)
