@@ -515,6 +515,14 @@ export interface DoorDef {
   way?: 'up' | 'down';
   /** Public sign wording for closed realms (approved phrases only). */
   closedSign?: string;
+  /**
+   * Where an open doorway leads, in words a ten year old reads at a glance ("Out to the Party Grove"):
+   * written on a small sign at the doorway in a room seen from above, and on its chip at the screen's
+   * edge while it is off screen (Logan, Nov 8: he couldn't find the Party Grove in the Great Hollow).
+   */
+  label?: string;
+  /** Where the doorway's sign stands (room pixels, its top middle); the marker when not given. */
+  labelAt?: Vec2;
   /** Where to place a visual hint (sign, glow) for the door. */
   marker?: Vec2;
 }

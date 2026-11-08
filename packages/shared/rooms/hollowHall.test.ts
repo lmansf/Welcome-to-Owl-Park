@@ -72,6 +72,21 @@ describe('the Great Hollow (Nov 7)', () => {
     expect(Object.keys(ANCHORS[HALL_ID] ?? {}).sort()).toEqual(['gathering', 'guardian', 'idol', 'robot']);
   });
 
+  it('names every open way out on a sign at its doorway, the Party Grove among them, and leaves the shut ones unnamed', () => {
+    const named = hall.doors.filter((d) => d.label);
+    for (const d of hall.doors) expect(!!d.label, d.id).toBe(!!d.to && !d.closedSign);
+    expect(new Set(named.map((d) => d.label)).size).toBe(named.length);
+    expect(doorOf('to-party').label).toBe('Out to the Party Grove');
+    expect(doorOf('up').label).toBe('Up to the Treetop Commons');
+    expect(doorOf('down').label).toBe('Down to the arcade');
+    for (const d of named) {
+      // On the floor, by its own doorway, where an owl walking up to it reads it.
+      expect(onFloor(d.labelAt!), d.id).toBe(true);
+      expect(Math.abs(d.labelAt!.x - middle(d.id).x), d.id).toBeLessThan(5);
+      expect(Math.abs(d.labelAt!.y - middle(d.id).y), d.id).toBeLessThan(180);
+    }
+  });
+
   it('keeps the ways up, out and down together in the middle, and a leaf pile in each Commons', () => {
     expect(doorOf('up').to).toEqual({ room: 'lobby', spawn: 'from-hub' });
     expect(doorOf('to-party').to).toEqual({ room: 'hub', spawn: 'default' });
