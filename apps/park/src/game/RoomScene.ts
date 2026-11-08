@@ -2083,6 +2083,8 @@ export class RoomScene extends Phaser.Scene {
     sizeLabels: string[];
     /** The words on the signs at the room's doorways (DoorDef.label). */
     doorSigns: string[];
+    /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
+    trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
     floorShown: boolean;
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
@@ -2151,6 +2153,7 @@ export class RoomScene extends Phaser.Scene {
       sizeBoxes: roomArtKeys(this.room.id, drawnRoom(this.room, this.cfg)).filter((k) => drawnAsSizeBox(k) && this.textures.exists(k)),
       sizeLabels: this.sizeLabels?.keys() ?? [],
       doorSigns: this.doorSigns?.labels() ?? [],
+      trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
       floorShown: this.floorShown,
       travel: this.travelNow(),
       paint: this.painter?.debug() ?? null,

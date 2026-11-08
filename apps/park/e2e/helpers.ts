@@ -47,6 +47,7 @@ export interface ParkState {
   sizeBoxes: string[];
   sizeLabels: string[];
   doorSigns: string[];
+  trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
