@@ -1,175 +1,200 @@
 /**
- * The hollow hall (Nov 6, the owner's word: "travel up and down inside of the tree as a great hollow
- * hall that's vertical, with great common spaces at the different levels being hosted inside, and
- * realms and parkour being outside the tree on each level"). One room seen from the side, five screens
- * high, drawn from the clearing's kit: the inside of the trunk from the knothole under the Treetop
- * Commons down to the floor at the tree's foot.
+ * The Great Hollow (Nov 7, the owner's word: "this room is supposed to be top down with all the commons
+ * like one super server room", and his "Build the big room"): the inside of the tree as one room seen
+ * from above, the four Commons side by side in it, in place of the tall hall seen from the side with a
+ * Commons behind a door on each landing (his camera rule: inside the tree is seen from above).
  *
- * Up it, a zigzag of fungus shelves from landing to landing, and a column of rising air up the middle
- * that lifts a gliding owl all the way to the knothole. A landing a level, top to bottom: the
- * stained-glass realm's (west), the ink-wash realm's (east), the Treehouse Clearing's (west) and the
- * neon realm's (east), each with the doorway into its Commons (rooms/index.ts builds the four Commons
- * from the hub). On the floor, the hatch down the root stair to the cavern (west: down is left) and the
- * trunk's door out to the Party Grove (east).
+ * Four screens wide, a Commons a screen, west to east in the order the tree stacks them top to bottom:
+ * the stained-glass realm's, the ink-wash realm's, the Treehouse Clearing's and the neon realm's. Each
+ * has, along its back wall, the doorway out to its realm (left) and the gate to its parkour course
+ * (right), its realm's idol between them over the Realm Vote spot (the ink-wash realm has none yet), and
+ * a leaf pile at the front. In the middle of the hollow, between the ink-wash and the clearing's
+ * Commons, the knothole up to the Treetop Commons and the trunk's door out to the Party Grove stand on
+ * the back wall, and the hatch down the root stair to the cavern is in the floor at the front.
  *
- * Switched on for every owl the new map takes (Nov 6, the owner's "Switch it on"): the turnstiles lead
- * down the knothole into it, the root stair up into its floor, and the Party Grove's way in to its
- * trunk door. The old stairs (m3-stair-1 to m3-ground) are left over, still leading out.
+ * The floor is one strip along the room, as the hub's is, stepping forward round each idol's base: a
+ * ten year old walks it left and right, and every way out is a doorway on the back wall or the hatch at
+ * the front. It is built from the art kit's textures and pieces, each realm's own wall and floor, until
+ * the hollow is painted (a file swap: the size list has each piece's size).
  */
-import { kitPerches, kitRoom } from '../src/kit';
-import { ROOM_H, ROOM_W, type DoorDef, type KitLedge, type KitProp, type KitScene, type RoomDef, type RoomKit } from '../src/room';
-import type { Updraft } from '../src/updraft';
+import type { Polygon } from '../src/geometry';
+import type { Vec2 } from '../src/protocol';
+import { ROOM_H, ROOM_W, type DoorDef, type RoomDef, type RoomKit, type RoomPiece } from '../src/room';
 
 export const HALL_ID = 'm3-hall';
-/** The hall's height: five screens. */
-export const HALL_H = 5 * ROOM_H;
-/** Its ground line, as far above its foot as a screen's is (TREE_GROUND 770 on a screen 900 high). */
-export const HALL_GROUND = HALL_H - 130;
-const G = HALL_GROUND;
+/** The hollow's size: four screens wide, a Commons a screen, one high. */
+export const HALL_W = 4 * ROOM_W;
+export const HALL_H = ROOM_H;
+/** The floor's back edge, where the doorways and the idols stand, and its front edge. */
+export const HALL_BACK = 600;
+export const HALL_FRONT = 885;
+/** The middle of the hollow: the knothole, the trunk's door and the root stair's hatch. */
+export const HALL_MIDDLE = 2 * ROOM_W;
 
-/** The hall's levels, top to bottom: each landing's height, its side, its Commons and the doorway's look. */
-export const HALL_LEVELS = [
-  { level: 'glass', top: 3280, side: 'west', commons: 'commons-glass', piece: 'kit-glass-door-glass-open' },
-  { level: 'ink', top: 2460, side: 'east', commons: 'commons-ink', piece: 'kit-ink-door-paper-open' },
-  { level: 'grove', top: 1640, side: 'west', commons: 'commons-grove', piece: 'kit-clearing-vine-curtain' },
-  { level: 'market', top: 820, side: 'east', commons: 'commons-market', piece: 'kit-neon-rooftop-door-open' },
-] as const;
-export type HallLevel = (typeof HALL_LEVELS)[number]['level'];
-/** The knothole's landing at the top of the hall, under the Treetop Commons. */
-export const KNOT_TOP = 4100;
-/** How far apart the hall's shelves are: a jump and a flap up, each. */
-const STEP = 205;
+export type HallLevel = 'glass' | 'ink' | 'grove' | 'market';
 
-/** The shelves' spans: by the column of air and by the trunk's wall, on each side, and each side's landing. */
-const SPANS = {
-  west: { near: [440, 680], wall: [140, 400], landing: [40, 520] },
-  east: { near: [920, 1160], wall: [1200, 1460], landing: [1080, 1560] },
-} as const;
-const other = (side: 'west' | 'east') => (side === 'west' ? 'east' : 'west');
-
-const SHELF = { cap: 'kit-clearing-fungus-shelf' };
-const LANDING = { row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: 90 };
-
-function ledge(id: string, [x0, x1]: readonly [number, number], top: number, look: Omit<KitLedge, 'id' | 'x0' | 'x1' | 'top'>): KitLedge {
-  return { id, x0, x1, top, ...look };
+/** What a Commons opens on: its realm (closed while the realm has no room) and its parkour course. */
+export interface CommonsOf {
+  level: HallLevel;
+  /** Its realm's room and spawn, or none yet (a "Hatching Soon" blockade). */
+  realm?: { room: string; spawn: string };
+  /** Its course's first room and spawn, or none yet (a "Not Yet Fledged" blockade). */
+  course?: { room: string; spawn: string };
+  /** The realm its idol takes the Realm Vote for, where it has one. */
+  votesFor?: 'glass' | 'grove' | 'market';
+  /** The doorway's art (a kit piece) and the wall and floor textures of its realm. */
+  door: string;
+  wall: string;
+  floor: string;
 }
+
+/** The Commons, west to east. */
+export const HALL_COMMONS: readonly CommonsOf[] = [
+  { level: 'glass', realm: { room: 'glass', spawn: 'from-hub' }, votesFor: 'glass', door: 'kit-glass-door-glass-open', wall: 'kit-tex-glass-lead-lattice', floor: 'kit-tex-glass-pale-stone' },
+  // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
+  { level: 'ink', course: { room: 'brush-1', spawn: 'from-gate' }, door: 'kit-ink-door-paper-open', wall: 'kit-tex-ink-woven-reed', floor: 'kit-tex-ink-paper-grain' },
+  {
+    level: 'grove',
+    realm: { room: 'grove', spawn: 'default' },
+    course: { room: 'canopy-1', spawn: 'from-gate' },
+    votesFor: 'grove',
+    door: 'kit-clearing-vine-curtain',
+    wall: 'kit-tex-clearing-hollow-wood',
+    floor: 'kit-tex-clearing-fern-floor',
+  },
+  {
+    level: 'market',
+    realm: { room: 'market', spawn: 'default' },
+    course: { room: 'circuit-1', spawn: 'from-gate' },
+    votesFor: 'market',
+    door: 'kit-neon-rooftop-door-open',
+    wall: 'kit-tex-neon-neon-brick',
+    floor: 'kit-tex-neon-wet-pavement',
+  },
+];
+
+/** Where a Commons begins (its west edge). */
+export const commonsX = (level: HallLevel) => HALL_COMMONS.findIndex((c) => c.level === level) * ROOM_W;
+/** Its realm's doorway, its course's gate and its idol, along its back wall (room x). */
+export const realmDoorX = (level: HallLevel) => commonsX(level) + 330;
+export const courseDoorX = (level: HallLevel) => commonsX(level) + 1270;
+export const idolX = (level: HallLevel) => commonsX(level) + 800;
+/** The idol's base: the floor steps forward round it, IDOL_HALF either side of it, to IDOL_FRONT. */
+const IDOL_HALF = 150;
+export const IDOL_FRONT = 700;
+/** Where the idol's foot stands. */
+export const idolAt = (level: HallLevel): Vec2 => ({ x: idolX(level), y: IDOL_FRONT - 20 });
+
+/** The door ids: each Commons' way to its realm, its course's gate and its Realm Vote spot. */
+export const realmDoor = (level: HallLevel) => `to-${level}`;
+export const courseDoor = (level: HallLevel) => `course-${level}`;
+export const voteDoor = (level: HallLevel) => `idol-${level}`;
+/** The spawns: in front of a Commons' realm doorway, and in front of its course's gate. */
+export const fromRealm = (level: HallLevel) => `from-${level}`;
+export const fromCourse = (level: HallLevel) => `from-${level}-course`;
 
 /**
- * The climb from one landing to the next a level up (STEP four times): a shelf by the column on its own
- * side, across the column to the far side's, to the far side's by the wall, and onto the landing.
+ * The floor owls walk on: one strip from the hollow's west wall to its east, its back edge along the
+ * back wall but where it steps forward round each idol's base.
  */
-function climb(name: string, from: 'west' | 'east', base: number, landing: string, landingTop: number): KitLedge[] {
-  const to = other(from);
-  return [
-    ledge(`${name}-1`, SPANS[from].near, base + STEP, SHELF),
-    ledge(`${name}-2`, SPANS[to].near, base + 2 * STEP, SHELF),
-    ledge(`${name}-3`, SPANS[to].wall, base + 3 * STEP, SHELF),
-    ledge(landing, SPANS[to].landing, landingTop, LANDING),
-  ];
+function hollowFloor(): Polygon {
+  const back: Vec2[] = [{ x: 40, y: HALL_BACK }];
+  for (const c of HALL_COMMONS) {
+    if (!c.votesFor) continue;
+    const x = idolX(c.level);
+    back.push({ x: x - IDOL_HALF, y: HALL_BACK }, { x: x - IDOL_HALF + 20, y: IDOL_FRONT }, { x: x + IDOL_HALF - 20, y: IDOL_FRONT }, { x: x + IDOL_HALF, y: HALL_BACK });
+  }
+  back.push({ x: HALL_W - 40, y: HALL_BACK });
+  return [...back, { x: HALL_W - 40, y: HALL_FRONT }, { x: 40, y: HALL_FRONT }];
 }
 
-const LEDGES: KitLedge[] = [
-  // From the floor up to the neon landing (east), and on up a level at a time.
-  ...climb('up-market', 'west', 0, 'landing-market', 820),
-  ...climb('up-grove', 'east', 820, 'landing-grove', 1640),
-  ...climb('up-ink', 'west', 1640, 'landing-ink', 2460),
-  ...climb('up-glass', 'east', 2460, 'landing-glass', 3280),
-  ...climb('up-knot', 'west', 3280, 'landing-knot', KNOT_TOP),
-  // Two nooks off the climb, each a dead end with a leaf pile in it (interactables.ts).
-  ledge('nook-east', [1240, 1460], 1230, SHELF),
-  ledge('nook-west', [140, 400], 2050, SHELF),
-];
-
-/** The column of rising air up the middle: always on, it lifts a gliding owl to just over the knothole's landing. */
-export const HALL_LIFT: Updraft = { id: 'lift', x: 730, w: 140, top: KNOT_TOP + 60 };
-
-/** A doorway on the floor or on a landing `top` high, `w` wide, centred on `x`. */
-function door(id: string, x: number, top: number, to: NonNullable<DoorDef['to']>, opts: { w?: number; way?: DoorDef['way'] } = {}): DoorDef {
-  const w = opts.w ?? 100;
-  return { id, rect: { x: x - w / 2, y: G - 20, w, h: 40 }, to, top, ...(opts.way ? { way: opts.way } : {}), markAt: { x, y: G - top - 260 } };
+/** A doorway on the back wall, `w` wide, centred on `x`: its strip straddles the floor's back edge. */
+function wallDoor(id: string, x: number, to: DoorDef['to'], closedSign?: DoorDef['closedSign'], w = 200): DoorDef {
+  return {
+    id,
+    rect: { x: x - w / 2, y: HALL_BACK - 10, w, h: 50 },
+    ...(to ? { to } : {}),
+    ...(closedSign ? { closedSign } : {}),
+    marker: { x, y: HALL_BACK + 8 },
+  };
 }
 
-/** Each landing's doorway: by the trunk's wall, on its side. */
-const doorX = (side: 'west' | 'east') => (side === 'west' ? 140 : 1460);
-/** Where an owl that came out of a Commons stands: on its landing, clear of the doorway. */
-const spawnX = (side: 'west' | 'east') => (side === 'west' ? 330 : 1280);
-
-const PROPS: KitProp[] = [
-  { id: 'stair-lantern', piece: 'kit-under-lantern-post', x: 330, top: 0, scale: 0.8 },
-  { id: 'party-arrow', piece: 'kit-sign-arrow', x: 1300, top: 0, scale: 0.6 },
-  { id: 'neon-arrow', piece: 'kit-neon-neon-arrow-sign', x: 1250, top: 820, scale: 0.6 },
-  { id: 'hive-lantern', piece: 'kit-clearing-beehive-lantern', x: 320, top: 1640, scale: 0.8 },
-  { id: 'ink-lantern', piece: 'kit-ink-paper-lantern', x: 1330, top: 2460, scale: 0.8 },
-  { id: 'ink-bench', piece: 'kit-ink-ink-bench', x: 1190, top: 2460, scale: 0.6 },
-  { id: 'moth-lantern', piece: 'kit-glass-moth-lantern', x: 320, top: 3280, scale: 0.7 },
-  { id: 'knot-lantern', piece: 'kit-high-hook-lantern', x: 1290, top: KNOT_TOP, scale: 0.8 },
+const DOORS: DoorDef[] = [
+  ...HALL_COMMONS.flatMap((c): DoorDef[] => [
+    wallDoor(realmDoor(c.level), realmDoorX(c.level), c.realm, c.realm ? undefined : 'Hatching Soon'),
+    wallDoor(courseDoor(c.level), courseDoorX(c.level), c.course, c.course ? undefined : 'Not Yet Fledged'),
+    ...(c.votesFor ? [{ id: voteDoor(c.level), rect: { x: idolX(c.level) - 110, y: IDOL_FRONT + 5, w: 220, h: 70 }, marker: { x: idolX(c.level), y: IDOL_FRONT + 40 } }] : []),
+  ]),
+  // Up through the knothole: the Treetop Commons, before the turnstiles.
+  wallDoor('up', HALL_MIDDLE - 170, { room: 'lobby', spawn: 'from-hub' }, undefined, 180),
+  // Out through the trunk's door: the Party Grove at the tree's foot.
+  wallDoor('to-party', HALL_MIDDLE + 170, { room: 'hub', spawn: 'default' }, undefined, 200),
+  // Down the hatch in the floor at the front: the root stair to the cavern.
+  { id: 'down', rect: { x: HALL_MIDDLE - 90, y: HALL_FRONT - 45, w: 180, h: 45 }, to: { room: 'm3-under', spawn: 'from-l1' }, marker: { x: HALL_MIDDLE, y: HALL_FRONT - 20 } },
 ];
 
-const SCENES: KitScene[] = [
-  { id: 'root-stair', story: 'A lantern post lights the hatch in the floor, the root stair down to the cavern.', props: ['stair-lantern'], about: ['down'] },
-  { id: 'way-out', story: "An arrow by the trunk's door points out to the Party Grove at the tree's foot.", props: ['party-arrow'], about: ['to-party'] },
-  { id: 'neon-landing', story: 'A neon arrow on the lowest landing flickers toward the rooftop door of the neon realm.', props: ['neon-arrow'], about: ['to-market'] },
-  { id: 'grove-landing', story: 'A beehive lantern hums by the curtain of vines that opens on the Treehouse Clearing.', props: ['hive-lantern'], about: ['to-grove'] },
-  { id: 'ink-landing', story: 'A paper lantern and an ink bench wait by the paper door, for an owl resting on the way up.', props: ['ink-lantern', 'ink-bench'], about: ['to-ink'] },
-  { id: 'glass-landing', story: 'Moths circle a glass lantern by the stained-glass door, high in the hollow.', props: ['moth-lantern'], about: ['to-glass'] },
-  { id: 'knothole', story: 'A lantern hangs on its hook under the knothole, where the light of the Treetop Commons comes down.', props: ['knot-lantern'], about: ['up'] },
+const PIECES: RoomPiece[] = [
+  ...HALL_COMMONS.flatMap((c): RoomPiece[] => [
+    // An open way has its doorway's art; a closed one its blockade, which the scene draws.
+    ...(c.realm ? [{ id: `${c.level}-realm-door`, key: c.door, x: realmDoorX(c.level), y: HALL_BACK }] : []),
+    ...(c.course
+      ? [
+          { id: `${c.level}-course-door`, key: c.door, x: courseDoorX(c.level), y: HALL_BACK, flip: true as const },
+          { id: `${c.level}-course-sign`, key: 'kit-sign-arrow', x: courseDoorX(c.level) - 190, y: HALL_BACK + 30 },
+        ]
+      : []),
+  ]),
+  { id: 'knothole', key: 'kit-doorway-knothole', x: HALL_MIDDLE - 170, y: HALL_BACK },
+  { id: 'trunk-door', key: 'kit-clearing-trunk-entrance', x: HALL_MIDDLE + 170, y: HALL_BACK },
+  { id: 'root-hatch', key: 'kit-hatch-down', x: HALL_MIDDLE, y: HALL_FRONT + 15 },
 ];
 
+/** Each Commons' realm wall and floor. */
 const HALL_KIT: RoomKit = {
-  ground: G,
-  // The clearing's sky behind the hollow's wood, down every screen of the hall (seen through no gap).
-  backdrops: [{ key: 'kit-clearing-sky-a', rate: 1, screens: [0, 0], rows: [0, 4] }],
-  surfaces: [{ id: 'hollow', texture: 'kit-tex-clearing-hollow-wood', rect: { x: 0, y: 0, w: ROOM_W, h: G } }],
-  paths: [{ id: 'hall-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
-  ledges: LEDGES,
-  doors: [
-    { door: 'down', piece: 'kit-hatch-down' },
-    { door: 'to-party', piece: 'kit-clearing-trunk-entrance', scale: 0.8 },
-    ...HALL_LEVELS.map((l) => ({ door: `to-${l.level}`, piece: l.piece, scale: 0.8 })),
-    { door: 'up', piece: 'kit-doorway-knothole', scale: 0.8 },
-  ],
-  props: PROPS,
-  scenes: SCENES,
-  decals: [{ piece: 'kit-clearing-updraft-vent', x: HALL_LIFT.x + HALL_LIFT.w / 2, y: G - 40, scale: 0.6 }],
+  ground: HALL_FRONT,
+  surfaces: HALL_COMMONS.flatMap((c) => [
+    { id: `${c.level}-wall`, texture: c.wall, rect: { x: commonsX(c.level), y: 0, w: ROOM_W, h: HALL_BACK } },
+    { id: `${c.level}-floor`, texture: c.floor, rect: { x: commonsX(c.level), y: HALL_BACK, w: ROOM_W, h: HALL_H - HALL_BACK } },
+  ]),
 };
 
-/** Where each Commons' way out leads into the hall: the spawn on its landing. */
-export const hallSpawn = (level: HallLevel) => `from-${level}`;
-
-export const HALL_ROOM: RoomDef = kitRoom({
+export const HALL_ROOM: RoomDef = {
   id: HALL_ID,
-  map: 2,
-  owlScale: 1.25,
+  size: { w: HALL_W, h: HALL_H },
+  background: 'kit-tex-inner-wood',
+  backgrounds: [],
+  foregrounds: [],
   mood: 'hub',
-  size: { w: ROOM_W, h: HALL_H },
-  walkable: [
-    [
-      { x: 8, y: G - 4 },
-      { x: ROOM_W - 8, y: G - 4 },
-      { x: ROOM_W - 8, y: G + 4 },
-      { x: 8, y: G + 4 },
-    ],
-  ],
-  perches: kitPerches(HALL_KIT),
-  updrafts: [HALL_LIFT],
+  walkable: [hollowFloor()],
   spawns: {
-    default: { x: 1000, y: G },
-    'from-under': { x: 330, y: G },
-    'from-party': { x: 1250, y: G },
-    'from-lobby': { x: spawnX('east'), y: G },
-    ...Object.fromEntries(HALL_LEVELS.map((l) => [hallSpawn(l.level), { x: spawnX(l.side), y: G }])),
+    default: { x: HALL_MIDDLE, y: 760 },
+    'from-lobby': { x: HALL_MIDDLE - 170, y: HALL_BACK + 90 },
+    'from-party': { x: HALL_MIDDLE + 170, y: HALL_BACK + 90 },
+    'from-under': { x: HALL_MIDDLE, y: HALL_FRONT - 110 },
+    ...Object.fromEntries(
+      HALL_COMMONS.flatMap((c) => [
+        [fromRealm(c.level), { x: realmDoorX(c.level), y: HALL_BACK + 90 }],
+        [fromCourse(c.level), { x: courseDoorX(c.level), y: HALL_BACK + 90 }],
+      ]),
+    ),
   },
-  spawnTops: {
-    'from-lobby': KNOT_TOP,
-    ...Object.fromEntries(HALL_LEVELS.map((l) => [hallSpawn(l.level), l.top])),
-  },
-  doors: [
-    // Down the root stair to the cavern (level 0, as the new map's): down is left.
-    door('down', 160, 0, { room: 'm3-under', spawn: 'from-l1' }, { w: 160, way: 'down' }),
-    door('to-party', 1480, 0, { room: 'hub', spawn: 'default' }, { w: 120 }),
-    ...HALL_LEVELS.map((l) => door(`to-${l.level}`, doorX(l.side), l.top, { room: l.commons, spawn: 'from-hall' })),
-    // Up through the knothole: the Treetop Commons, before the turnstiles.
-    door('up', 1460, KNOT_TOP, { room: 'lobby', spawn: 'from-hub' }, { way: 'up' }),
-  ],
+  doors: DOORS,
+  pieces: PIECES,
+  // A Realm Vote idol in each Commons of a realm that has one, each over its own spot (RoomDef.idols).
+  idols: HALL_COMMONS.flatMap((c) => (c.votesFor ? [{ realm: c.votesFor, door: voteDoor(c.level) }] : [])),
+  spots: HALL_COMMONS.flatMap((c) => [
+    { x: commonsX(c.level) + 160, y: 840 },
+    { x: commonsX(c.level) + 560, y: 820 },
+    { x: commonsX(c.level) + 1050, y: 840 },
+    { x: commonsX(c.level) + 1450, y: 820 },
+  ]),
   kit: HALL_KIT,
-});
+};
+
+/** The idols' anchors (ANCHORS), under the names the scene draws each realm's idol at. */
+export const HALL_ANCHORS: Record<string, Vec2> = {
+  idol: idolAt('glass'),
+  guardian: idolAt('grove'),
+  gathering: { x: idolX('grove'), y: IDOL_FRONT + 40 },
+  robot: idolAt('market'),
+};

@@ -80,12 +80,12 @@ describe('Brushstroke Bridges (OP-235)', () => {
     }
   });
 
-  it("is reached through the paper Commons' middle arch, open to every owl (OP-285), and the summit's moon gate leads back there", () => {
-    const arch = ROOMS['commons-ink']!.doors.find((d) => d.id === 'to-course')!;
+  it("is reached through the paper Commons' course gate in the Great Hollow, open to every owl (OP-285), and the summit's moon gate leads back there", () => {
+    const arch = ROOMS['m3-hall']!.doors.find((d) => d.id === 'course-ink')!;
     expect(arch.to).toEqual({ room: 'brush-1', spawn: 'from-gate' });
     expect(arch.closedSign).toBeUndefined();
-    expect(ROOMS['commons-ink']!.spawns['from-course']).toBeDefined();
-    expect(ROOMS['brush-3b']!.doors.find((d) => d.id === 'home')!.to).toEqual({ room: 'commons-ink', spawn: 'from-course' });
+    expect(ROOMS['m3-hall']!.spawns['from-ink-course']).toBeDefined();
+    expect(ROOMS['brush-3b']!.doors.find((d) => d.id === 'home')!.to).toEqual({ room: 'm3-hall', spawn: 'from-ink-course' });
   });
 
   it('declares every stroke its stones paint as a perch of its room, so the room believes an owl standing on one', () => {

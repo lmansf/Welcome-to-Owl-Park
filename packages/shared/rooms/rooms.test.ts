@@ -16,7 +16,7 @@ import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 import { treeLevelOf, treeSpotsFor } from '../src/treeSpots';
-import { NEW_MAP, NEW_MAP_COMMONS, NEW_MAP_HALL, isNewMapRoom } from '../src/newMap';
+import { NEW_MAP, NEW_MAP_HALL, isNewMapRoom } from '../src/newMap';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -63,6 +63,13 @@ describe('room size and art tiles', () => {
       }
       const cells = new Set(tiles.map((t) => `${t.x / ROOM_W},${t.y / ROOM_H}`));
       expect(cells.size, 'no two background tiles overlap').toBe(tiles.length);
+      // A room seen from above that its kit's surfaces paint whole (the Great Hollow, until its screens
+      // are painted) needs no tiles of its own.
+      if (!tiles.length && mapOf(room) !== 2 && room.kit?.surfaces?.length) {
+        const area = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * s.rect.h, 0);
+        expect(area, 'its surfaces cover the room').toBe(room.size.w * room.size.h);
+        return;
+      }
       expect(cells.size * ROOM_W * ROOM_H, 'background tiles cover the room').toBe(room.size.w * room.size.h);
     });
   }
@@ -588,8 +595,8 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'brush-2:falls', 'brush-falls:out',
       // The new map's stairs between its levels (NEW_MAP), as the levels' own (the forest path's root stair now comes up into the hall).
       'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
-      // The hollow hall (hollowHall.ts): each landing's doorway into its Commons, and each Commons' way out back to it.
-      'm3-hall:down', 'm3-hall:to-glass', 'm3-hall:to-grove', 'm3-hall:to-ink', 'm3-hall:to-market', 'commons-glass:out', 'commons-grove:out', 'commons-ink:out', 'commons-market:out',
+      // The Great Hollow (hollowHall.ts): the hatch down the root stair.
+      'm3-hall:down',
     ].sort());
   });
 
@@ -1215,7 +1222,7 @@ describe('the new map (map 3): the park as one tree', () => {
     // The old stairs are left over since the hall was switched on: they still lead out, and nothing leads back in (the next test).
     // So is the cavern's side-view arcade since its door leads to the top-down arcade (OP-283).
     const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-cave']);
-    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'lobby', 'glass', 'grove', 'market', 'hub', 'arcade']);
+    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, 'lobby', 'glass', 'grove', 'market', 'hub', 'arcade']);
     for (const id of inMap) {
       for (const { door, to } of ways(ROOMS[id]!)) {
         if (!inMap.has(to.room)) continue;
@@ -1239,7 +1246,7 @@ describe('the new map (map 3): the park as one tree', () => {
       return seen;
     };
     const seen = reach('lobby');
-    for (const id of [...NEW_MAP_HALL, ...NEW_MAP_COMMONS, 'm3-under', 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    for (const id of [...NEW_MAP_HALL, 'm3-under', 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
     // The cavern's arcade is the top-down one (OP-283), and its street door leads back the way the owl came.
     expect(ways(ROOMS['m3-under']!).find((w) => w.door.id === 'to-arcade')?.to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
     const street = ROOMS['arcade']!.doors.find((d) => d.id === 'to-market')!;
@@ -1251,18 +1258,16 @@ describe('the new map (map 3): the park as one tree', () => {
     expect(doorTarget(ROOMS['lobby']!.doors.find((d) => d.id === 'gate')!, 3)).toEqual({ room: 'm3-hall', spawn: 'from-lobby' });
     expect(ways(ROOMS['m3-under']!).find((w) => w.door.way === 'up')?.to).toEqual({ room: 'm3-hall', spawn: 'from-under' });
     expect(ways(ROOMS['hub']!).find((w) => w.door.id === 'to-lobby')?.to).toEqual({ room: 'm3-hall', spawn: 'from-party' });
-    // Each open realm's Commons hangs off its landing, its Realm Vote idol inside, its realm out through the back arch and back.
+    // Each open realm's Commons is a corner of the Great Hollow: its Realm Vote idol there, its realm out through its doorway and back.
     for (const realm of ['glass', 'grove', 'market'] as const) {
-      const commons = `commons-${realm}`;
-      expect(ways(ROOMS['m3-hall']!).some((w) => w.to.room === commons), commons).toBe(true);
-      expect(ROOMS[commons]!.doors.some((d) => d.id === 'idol'), commons).toBe(true);
-      expect(ways(ROOMS[commons]!).find((w) => w.door.id === 'to-realm')?.to.room, commons).toBe(realm);
-      expect(ways(ROOMS[realm]!).find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe(commons);
+      expect(ROOMS['m3-hall']!.doors.some((d) => d.id === `idol-${realm}`), realm).toBe(true);
+      expect(ways(ROOMS['m3-hall']!).find((w) => w.door.id === `to-${realm}`)?.to.room, realm).toBe(realm);
+      expect(ways(ROOMS[realm]!).find((w) => w.door.id === 'to-hub')?.to, realm).toEqual({ room: 'm3-hall', spawn: `from-${realm}` });
       // In from the Party Grove's arch, back out to it.
       expect(ways(ROOMS[realm]!, 'hub').find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe('hub');
     }
-    // The ink-wash realm has no room yet: its Commons' arch is shut.
-    expect(ROOMS['commons-ink']!.doors.find((d) => d.id === 'to-realm')!.to).toBeUndefined();
+    // The ink-wash realm has no room yet: its doorway is shut.
+    expect(ROOMS['m3-hall']!.doors.find((d) => d.id === 'to-ink')!.to).toBeUndefined();
   });
 
   it('leaves the old stairs strand no one: nothing leads into them now, and every one of them still leads out to the hall\'s map', () => {

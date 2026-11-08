@@ -133,6 +133,7 @@ import {
   type PuzzleSymbol,
   type PuzzleView,
   type WalkMap,
+  voteRealmAt,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -176,7 +177,7 @@ import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, placeHints, touchBottom } from './hints';
+import { doorHintTarget, nearTargets, nearestOffSides, placeHints, touchBottom } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
 import { NestMirror } from './mirror';
@@ -344,6 +345,8 @@ export class RoomScene extends Phaser.Scene {
   private playerId!: string;
   private look!: OwlLook;
   private atIdol = false;
+  /** The Realm Vote spot the owl stands in: the realm it votes for (RoomDef.idols, or the room's one idol). */
+  private idolRealm: string | null = null;
   /** Going through the lobby's turnstiles (the welcome is playing, or the gate is checking the pass). */
   private passingGate = false;
   /** The ticket bought in checkout's own page that Play came in with (OP-190): through the turnstiles once the room is up. */
@@ -886,7 +889,7 @@ export class RoomScene extends Phaser.Scene {
     this.floorShown = mapOf(room) !== 2 && !room.drawn && !!drawWalkFloor(this, room, this.cfg.sizes, -0.6);
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
-    this.pieces = addSetPieces(this, room, (pointer, event) => this.onIdolTap(pointer, event));
+    this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
       scene: this,
@@ -1504,7 +1507,7 @@ export class RoomScene extends Phaser.Scene {
     const ground = this.sideView() ? groundOf(this.room) : null;
     const view = { x: v.x, y: v.y, w: v.width, h: v.height };
     const all = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => doorHintTarget(d, ground));
-    const targets = ground === null ? all : nearTargets(all, view, SIDE_HINT_REACH);
+    const targets = ground === null ? nearestOffSides(all, view, 2, new Set([own, toPark].filter((id): id is string => !!id))) : nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;
@@ -1894,16 +1897,16 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /** Tapping the realm's idol: pledge now if standing at it, otherwise walk up and pledge on arrival. */
-  private onIdolTap(pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData): void {
+  private onIdolTap(pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData, realm: string): void {
     if (this.leaving || !this.onCanvas(pointer) || pointer.getDistance() > TAP_SLOP * this.cfg.pixelRatio) return;
     event.stopPropagation();
     this.tapTakenAt = Date.now();
     this.errand = null;
-    if (this.atIdol) {
+    if (this.atIdol && this.idolRealm === realm) {
       void this.vote();
       return;
     }
-    const spot = this.room.doors.find((d) => d.id === 'idol');
+    const spot = this.room.doors.find((d) => voteRealmAt(this.room, d.id) === realm);
     if (!spot) return;
     this.pendingVote = true;
     this.walkTo({ x: spot.rect.x + spot.rect.w / 2, y: spot.rect.y + spot.rect.h / 2 });
@@ -2963,6 +2966,7 @@ export class RoomScene extends Phaser.Scene {
     if (this.upAt && !pressed) this.upAt = 0;
     const upNow = pressed || (side && !this.decorating && holdsUp(this.keys?.direction() ?? null));
     const spots: string[] = [];
+    let idolRealm: string | null = null;
     const errand = this.errand;
     if (errand && walkFinished) {
       // Arrived (or stopped short): do it if close enough, else give up quietly.
@@ -3009,7 +3013,12 @@ export class RoomScene extends Phaser.Scene {
         void this.goTo(to.room, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, cameIn));
         return;
       }
-      if (this.interactions[door.id]) spots.push(door.id);
+      // A Realm Vote spot, one of several or the room's one, offers the vote for its own realm.
+      const votes = voteRealmAt(this.room, door.id);
+      if (votes) {
+        if (!spots.includes('idol')) spots.push('idol');
+        idolRealm = votes;
+      } else if (this.interactions[door.id]) spots.push(door.id);
       if (door.closedSign && said) this.hud.toast(door.closedSign);
       if (walkFinished && cabinetAt(this.room.id, door.id)?.live === false) this.hud.toast(CABINET_OFF);
     }
@@ -3021,6 +3030,7 @@ export class RoomScene extends Phaser.Scene {
     this.actions = [...goIn, ...this.actionsHere(spots)];
     this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));
     this.atIdol = spots.includes('idol');
+    this.idolRealm = idolRealm;
     if (this.atIdol && walkFinished && this.pendingVote) {
       this.pendingVote = false;
       void this.vote();
@@ -3029,7 +3039,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** Remember today's pledge on the owl (visible to everyone) and tell the idol. */
   private pledged(realm: string): void {
-    this.pieces.idol?.react();
+    (this.pieces.idols?.[realm] ?? this.pieces.idol)?.react();
     if (this.look.pledge === realm) return;
     this.look = { ...this.look, pledge: realm };
     this.registry.set('look', this.look);
@@ -3049,7 +3059,7 @@ export class RoomScene extends Phaser.Scene {
     this.voting = true;
     try {
       // At a realm's idol, or at its idol in a Commons of the hollow hall (`votesFor`).
-      const realm = this.room.votesFor ?? this.room.id;
+      const realm = this.idolRealm ?? this.room.votesFor ?? this.room.id;
       const outcome = await castVote(this.transport, realm);
       switch (outcome.kind) {
         case 'voted':

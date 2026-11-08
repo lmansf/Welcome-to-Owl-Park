@@ -7,13 +7,13 @@ import { openPark, state } from './helpers';
  * comes in where it does with the art, the doors are the same, and it walks the same floor.
  */
 
-const ROOMS = ['m3-hall', 'commons-glass', 'm3-ground', 'hub'];
+const ROOMS = ['m3-hall', 'm3-ground', 'hub'];
 /** The rooms seen from above, whose walkable floor is drawn plainly. */
-const TOP_DOWN = new Set(['commons-glass', 'hub']);
+const TOP_DOWN = new Set(['m3-hall', 'hub']);
 
 test.describe('size boxes in place of the map art', () => {
   for (const room of ROOMS) {
-    test(`${room} draws its art as size boxes and plays as it does with its art${room === 'm3-hall' || room === 'commons-glass' ? ' @smoke' : ''}`, async ({
+    test(`${room} draws its art as size boxes and plays as it does with its art${room === 'm3-hall' || room === 'hub' ? ' @smoke' : ''}`, async ({
       page,
     }) => {
       await openPark(page, { room, kit: '1' });

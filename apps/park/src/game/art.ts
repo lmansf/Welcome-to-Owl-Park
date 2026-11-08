@@ -8,7 +8,7 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, KIT_ART, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { FURNITURE, KIT_ART, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
@@ -968,11 +968,11 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   if (room?.neonSigns?.length) keys.push('kit-neon-sign-platform');
   // The tree draws its barriers (OP-220): only today's park's closed arches load the blockade art.
   if (room && mapOf(room) !== 2) for (const door of room.doors) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
-  // A realm's idol, in the realm or in its Commons in the hollow hall (`votesFor`).
-  const realm = room?.votesFor ?? roomId;
-  if (realm === 'grove') keys.push('guardian');
-  if (realm === 'market') keys.push('robot-owl');
-  if (realm === 'glass') keys.push('kit-glass-idol-owl');
+  // A realm's idol, in the realm or in its Commons (`votesFor`), or each of several (the Great Hollow's, RoomDef.idols).
+  const realms = room ? idolRealms(room) : [roomId];
+  if (realms.includes('grove')) keys.push('guardian');
+  if (realms.includes('market')) keys.push('robot-owl');
+  if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
   // A realm start's set pieces (OP-276).
   for (const p of room?.pieces ?? []) keys.push(p.key);
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
