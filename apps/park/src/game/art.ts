@@ -18,6 +18,7 @@ import { drawKitOps } from './kitView';
 import { loadSvgTexture } from './svgLoader';
 import { boxable, paintSizeBox } from './sizeBoxes';
 import { fitTrialArt, setTrialBackdropVeil, trialFilesOf, updraftBitsKey } from './skinTrial';
+import { trialFiles } from './artTrial';
 
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
@@ -39,6 +40,15 @@ let skin: string | null = null;
 export function useSkinTrial(name: string | null): void {
   skin = name;
   setTrialBackdropVeil(!!name);
+}
+
+/** An art trial's files for this page (`?art=<name>`, artTrial.ts): texture key to the file it loads from. */
+let trialArt = new Map<string, string>();
+
+/** An art trial for this page (`?art=<name>`, artTrial.ts): its layers load from its own files, at a room tile's size. */
+export function useArtTrial(name: string | null): void {
+  trialArt = name ? trialFiles(name) : new Map();
+  for (const key of trialArt.keys()) ART[key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
 }
 
 /** The key whose files a key's art loads from: a skin trial's when this page draws one for it, else kitFilesOf's. */
@@ -1210,6 +1220,13 @@ export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number
   const spec = ART[key];
   if (!spec) return false;
   if (drawnAsSizeBox(key)) return makeSizeBox(scene, key, spec);
+  // An art trial's layer (artTrial.ts) comes from the trial's own file, not the build's.
+  const trialFile = trialArt.get(key);
+  if (trialFile) {
+    const img = await streamImage(trialFile, onBytes ?? (() => undefined));
+    if (img && !scene.textures.exists(key)) scene.textures.addImage(key, img);
+    return !!img || scene.textures.exists(key);
+  }
   const url = baseUrl();
   if (PUBLISHED_ART.has(`${filesOf(key)}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${filesOf(key)}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
   // A skin trial's piece is redrawn to the outline of the stand-in it replaces (skinTrial.ts), so its top is the walk line.
