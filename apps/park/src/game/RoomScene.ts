@@ -183,7 +183,7 @@ import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, nearestOffSides, placeHints, touchBottom } from './hints';
+import { doorHintTarget, nearTargets, placeHints, signFocus, touchBottom } from './hints';
 import { itemScale } from './items';
 import { LeafPile, featherFind } from './LeafPile';
 import { NestMirror } from './mirror';
@@ -409,6 +409,8 @@ export class RoomScene extends Phaser.Scene {
   private keyTurns = 0;
   /** The hint chips last sent to the HUD, so an unchanged frame touches no DOM. */
   private hintsShown = '';
+  /** The doorway whose sign shows, seen from above (OP-309). */
+  private signFocused: string | null = null;
   /** The view, screen and doors the hints were last placed for: unchanged, nothing is placed again (OP-204). */
   private hintsFor: { at: string; doors: unknown } = { at: '', doors: null };
   /** When to look again for doorways to fetch the next room's art through. */
@@ -615,6 +617,7 @@ export class RoomScene extends Phaser.Scene {
     this.upHintDoor = null;
     this.keyTurns = 0;
     this.hintsShown = '';
+    this.signFocused = null;
     this.hintsFor = { at: '', doors: null };
     this.voting = false;
     this.pendingVote = false;
@@ -1564,14 +1567,26 @@ export class RoomScene extends Phaser.Scene {
     const own = isStreetRoom(this.room.id) ? 'nest-door-0' : null;
     const toPark = parkwardDoor(this.room.id);
     const v = this.cameras.main.worldView;
-    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight}`;
+    // Where a tap walk is going (a walk on held keys or the stick goes nowhere in particular).
+    const goal = this.me.walk && !this.keyWalk ? (this.walkGoal ?? this.me.walk.to) : null;
+    const owlAt = `${Math.round(this.me.pos.x / 20)},${Math.round(this.me.pos.y / 20)},${goal ? `${Math.round(goal.x)},${Math.round(goal.y)}` : '-'}`;
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
     const ground = this.sideView() ? groundOf(this.room) : null;
     const view = { x: v.x, y: v.y, w: v.width, h: v.height };
     const all = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => doorHintTarget(d, ground));
-    const targets = ground === null ? nearestOffSides(all, view, 2, new Set([own, toPark].filter((id): id is string => !!id))) : nearTargets(all, view, SIDE_HINT_REACH);
+    // Seen from above, one doorway at a time has its sign and chip (OP-309): the one the owl is walking
+    // to or standing by. The owl's own nest door and the way to the park keep their chips (OP-105).
+    let targets: typeof all;
+    if (ground === null) {
+      const keep = new Set([own, toPark].filter((id): id is string => !!id));
+      const focus = signFocus(all, this.me.pos, goal, this.signFocused);
+      this.signFocused = focus;
+      this.doorSigns?.focus(focus);
+      targets = all.filter((t) => t.id === focus || keep.has(t.id));
+    } else targets = nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;
@@ -2112,6 +2127,8 @@ export class RoomScene extends Phaser.Scene {
     sizeLabels: string[];
     /** The words on the signs at the room's doorways (DoorDef.label). */
     doorSigns: string[];
+    /** Seen from above, the words on the one doorway sign showing now (OP-309). */
+    signShown: string | null;
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
     floorShown: boolean;
@@ -2183,6 +2200,7 @@ export class RoomScene extends Phaser.Scene {
       sizeBoxes: roomArtKeys(this.room.id, drawnRoom(this.room, this.cfg)).filter((k) => drawnAsSizeBox(k) && this.textures.exists(k)),
       sizeLabels: this.sizeLabels?.keys() ?? [],
       doorSigns: this.doorSigns?.labels() ?? [],
+      signShown: this.doorSigns?.shown() ?? null,
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
       floorShown: this.floorShown,
       edges: this.edgesDrawn,

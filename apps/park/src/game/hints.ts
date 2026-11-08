@@ -136,6 +136,32 @@ export function nearestOffSides(targets: HintTarget[], view: ViewRect, perSide =
   return targets.filter((t) => !dropped.has(t.id));
 }
 
+/** Seen from above, how near (room px) the owl comes to a doorway before its sign shows (OP-309). */
+export const SIGN_REACH = 300;
+/** How near (room px) a walk's end lies to a doorway for the walk to count as going there. */
+export const SIGN_GOAL_REACH = 160;
+/** How much nearer (room px) another doorway must be before the sign shown gives way to it, so two never flicker. */
+export const SIGN_HOLD = 60;
+
+/**
+ * Seen from above, the one doorway whose sign and chip show (OP-309; the owner, Nov 8: "We're back to
+ * clutter on screen from all the directions"): the doorway the owl is walking to, else the nearest
+ * within SIGN_REACH of the owl, else none. The sign shown now (`shown`) holds while the owl stays in
+ * reach and no other doorway is SIGN_HOLD nearer. Every other doorway keeps only its marker, and the
+ * Menu's map keeps the whole list.
+ */
+export function signFocus(targets: HintTarget[], owl: { x: number; y: number }, goal: { x: number; y: number } | null, shown: string | null = null): string | null {
+  const dist = (t: HintTarget, p: { x: number; y: number }) => Math.hypot(t.x - p.x, t.y - p.y);
+  if (goal) {
+    const to = targets.filter((t) => dist(t, goal) <= SIGN_GOAL_REACH).sort((a, b) => dist(a, goal) - dist(b, goal))[0];
+    if (to) return to.id;
+  }
+  const near = targets.filter((t) => dist(t, owl) <= SIGN_REACH).sort((a, b) => dist(a, owl) - dist(b, owl));
+  const held = near.find((t) => t.id === shown);
+  if (held && near[0] && dist(held, owl) - dist(near[0], owl) < SIGN_HOLD) return held.id;
+  return near[0]?.id ?? null;
+}
+
 /**
  * The bottom inset on a touch screen: clear of the thumbstick and the face buttons, but never more than
  * TOUCH_BOTTOM_SHARE of the screen's height, so on a phone held sideways a chip for a way down sits low

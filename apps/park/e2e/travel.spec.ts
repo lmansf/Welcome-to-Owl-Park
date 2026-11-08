@@ -116,7 +116,7 @@ test.describe('travel from the map (OP-130)', () => {
     await expect(card).toContainText('Enter the park through the gate first.');
   });
 
-  test('on the new map the Party Grove is a place like any other: signed back into the Great Hollow, its chips readable, and travel goes there', async ({ page }) => {
+  test('on the new map the Party Grove is a place like any other: signed back into the Great Hollow, one sign at a time, and travel goes there', async ({ page }) => {
     test.skip(isEdge(), 'on this device');
     await page.addInitScript(() => {
       try {
@@ -127,11 +127,10 @@ test.describe('travel from the map (OP-130)', () => {
     });
     await openPark(page, { room: 'hub', spawn: 'default', collector: `e2e-travel-grove-${test.info().project.name}` });
     await expect.poll(async () => (await state(page)).doorSigns, { timeout: 15_000 }).toContain('Back into the Great Hollow');
-    // The doorways off screen show their chips at the edges, and no two lie over one another (a phone is narrow;
-    // a computer sees every doorway of the Grove at once, so it may show none).
-    if (test.info().project.name === 'phone') await expect.poll(() => page.locator('#hud .hint').count(), { timeout: 10_000 }).toBeGreaterThan(0);
-    const boxes = await page.locator('#hud .hint').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ l: r.left, r: r.right, t: r.top, b: r.bottom })));
-    for (const [i, a] of boxes.entries()) for (const b of boxes.slice(i + 1)) expect(a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t, JSON.stringify([a, b])).toBe(false);
+    // One doorway at a time is named (OP-309): the way back, which the owl lands beside, and no chips for the
+    // rest at the screen's edges, on a phone or a computer.
+    await expect.poll(async () => (await state(page)).signShown, { timeout: 10_000 }).toBe('Back into the Great Hollow');
+    expect(await page.locator('#hud .hint').count()).toBeLessThanOrEqual(1);
     // Through the trunk's door into the Great Hollow, and travel back from the map, never walked to before.
     await walkToDoor(page, 'to-lobby');
     await inRoom(page, 'm3-hall');
