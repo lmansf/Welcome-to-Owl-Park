@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, doorHintTarget, nearTargets, nearestOffSides, placeHints, touchBottom, type ScreenBox, type ViewRect } from './hints';
+import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, touchBottom, type ScreenBox, type ViewRect } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -108,5 +108,39 @@ describe('hints seen from above (the Great Hollow, a long room of doorways)', ()
   it('always keeps a doorway it is told to keep, however far', () => {
     const near = nearestOffSides(doorways, phone, 2, new Set(['to-party']));
     expect(near.map((t) => t.id)).toContain('to-party');
+  });
+});
+
+describe('one doorway sign at a time, seen from above (OP-309)', () => {
+  // The owner on his phone in the Great Hollow, Nov 8: "We're back to clutter on screen from all the directions".
+  const HALL = ROOMS['m3-hall']!;
+  const doorways = HALL.doors.filter((d) => d.to).map((d) => doorHintTarget(d, null));
+
+  it('shows none where the owl lands in the middle of the Great Hollow, clear of every doorway', () => {
+    expect(signFocus(doorways, HALL.spawns['default']!, null)).toBeNull();
+  });
+
+  it('shows the doorway the owl stands by, and only that one', () => {
+    expect(signFocus(doorways, HALL.spawns['from-party']!, null)).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-lobby']!, null)).toBe('up');
+    expect(signFocus(doorways, HALL.spawns['from-under']!, null)).toBe('down');
+    expect(signFocus(doorways, { x: 3200, y: 1300 + SIGN_REACH + 200 }, null)).toBeNull();
+  });
+
+  it('shows the doorway a tap walk is going to, however far, over the one the owl passes', () => {
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 5300, y: 640 })).toBe('to-market');
+    // A walk to open floor names no doorway: the nearest by the owl shows.
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 4000, y: 1100 })).toBe('to-party');
+  });
+
+  it('keeps the sign showing between two near doorways until another is clearly nearer, so they never flicker', () => {
+    // Halfway between the stair up and the way to the Party Grove, a step either way.
+    const mid = { x: 3200, y: 700 };
+    const shown = signFocus(doorways, mid, null);
+    expect(['up', 'to-party']).toContain(shown);
+    const other = shown === 'up' ? 'to-party' : 'up';
+    const step = (shown === 'up' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
+    expect(signFocus(doorways, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
+    expect(signFocus(doorways, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
   });
 });

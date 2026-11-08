@@ -47,6 +47,8 @@ export interface ParkState {
   sizeBoxes: string[];
   sizeLabels: string[];
   doorSigns: string[];
+  /** Seen from above, the words on the one doorway sign showing now (OP-309). */
+  signShown: string | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */

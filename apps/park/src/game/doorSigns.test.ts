@@ -1,6 +1,6 @@
 import { ROOMS } from '@owl-park/shared/rooms';
 import { describe, expect, it } from 'vitest';
-import { signedDoors } from './hints';
+import { signY, signedDoors } from './hints';
 
 describe('door signs', () => {
   it('sign the Great Hollow’s open ways, the Party Grove’s among them', () => {
@@ -36,5 +36,17 @@ describe('door signs', () => {
     const side = Object.values(ROOMS).find((r) => r.map === 2)!;
     const named = { ...side, doors: side.doors.map((d) => ({ ...d, label: 'Somewhere' })) };
     expect(signedDoors(named)).toEqual([]);
+  });
+});
+
+describe('the one door sign showing (OP-309)', () => {
+  const at = { x: 1000, y: 700 };
+  it('stands at its spot while the owl is clear of it', () => {
+    expect(signY(at, 200, 30, { x: 1400, y: 700 })).toBe(700);
+    expect(signY(at, 200, 30, { x: 1000, y: 500 })).toBe(700);
+  });
+  it('slides just under the owl’s feet while the owl would cover its words', () => {
+    expect(signY(at, 200, 30, { x: 1020, y: 690 })).toBe(700);
+    expect(signY(at, 200, 30, { x: 1020, y: 760 })).toBe(770);
   });
 });
