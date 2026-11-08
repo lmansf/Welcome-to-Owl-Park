@@ -265,9 +265,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     # A shard runs a twelfth of the suite: about 4 minutes of tests on a quick runner, and up to 7 on the
-    # slowest seen (some runners are two thirds slower), so the run stays under ten minutes. A shard that
-    # hangs gives its runner back after 15 minutes, not 30.
-    timeout-minutes: 15
+    # slowest seen (some runners are two thirds slower). Whole shards, setup included, have taken up to 16
+    # minutes, so the limit stays at 30.
+    timeout-minutes: 30
     strategy:
       fail-fast: true
       matrix:
