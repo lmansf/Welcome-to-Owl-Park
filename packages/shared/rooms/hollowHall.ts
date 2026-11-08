@@ -226,11 +226,11 @@ const DOORS: DoorDef[] = [
   wallDoor('up', HALL_MIDDLE - 170, { room: 'lobby', spawn: 'from-hub' }, undefined, 180, 'Up to the Treetop Commons'),
   // Out through the trunk's door: the Party Grove at the tree's foot.
   wallDoor('to-party', HALL_MIDDLE + 170, { room: 'hub', spawn: 'default' }, undefined, 200, 'Out to the Party Grove'),
-  // Down the hatch in the floor at the front: the root stair to the cavern.
+  // Down the hatch in the floor at the front: straight into the arcade (OP-306, the root stair folded into it).
   {
     id: 'down',
     rect: { x: HALL_MIDDLE - 90, y: HALL_FRONT - 45, w: 180, h: 45 },
-    to: { room: 'm3-under', spawn: 'from-l1' },
+    to: { room: 'arcade', spawn: 'from-cavern' },
     marker: { x: HALL_MIDDLE, y: HALL_FRONT - 20 },
     label: 'Down to the arcade',
     // Over the hatch, not under it: the hatch's art stands over the floor's front edge.

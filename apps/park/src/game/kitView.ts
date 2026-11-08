@@ -2,7 +2,7 @@ import type Phaser from 'phaser';
 import { EDGE_ART, KIT_ART, kitCells, kitDrawPlan, kitFrames, seenFromSide, type EdgeStrip, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
-import { artTrialRoom } from './artTrial';
+import { artLookRoom } from './artLooks';
 
 /**
  * The level assembler's drawing (OP-234): a room built from the art kit, drawn at runtime from its
@@ -25,12 +25,12 @@ import { artTrialRoom } from './artTrial';
 
 /**
  * The room drawn for `room`: a kit room as it is; a painted one, unless the page asks for the paintings
- * (`?kit=0`), as the kit room that stands in for it. On an art trial's page (`?art=`, artTrial.ts) the
- * trial's room is drawn from the trial's layers.
+ * (`?kit=0`), as the kit room that stands in for it. A room with a layered look (artLooks.ts) is drawn
+ * from the look's layers, unless the page asks for the earlier paintings (`?art=old`).
  */
 export function drawnRoom(room: RoomDef, cfg: { kit: boolean; art?: string | null }): RoomDef {
-  const trial = artTrialRoom(room, cfg.art);
-  if (trial !== room) return trial;
+  const layered = artLookRoom(room, cfg.art);
+  if (layered !== room) return layered;
   if (room.kit || !cfg.kit) return room;
   return kitDemoFor(room.id) ?? room;
 }

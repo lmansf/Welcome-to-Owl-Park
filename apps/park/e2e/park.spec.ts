@@ -404,6 +404,18 @@ test.describe('single visitor', () => {
     expect(await roomWidths('market')).toContain((await page.evaluate(() => window.owlPark.textureSize('market')))?.w);
   });
 
+  test('the Party Grove is drawn from its four painted layers for visitors, and from its earlier paintings on ?art=old', async ({ page }) => {
+    await openPark(page, { art: '' });
+    // Every screen's backdrop, middle, playable layer and overlay, shipped with the build; the earlier paintings are not asked for.
+    for (const layer of ['back', 'mid', 'play', 'front']) {
+      await expect.poll(() => page.evaluate((k) => window.owlPark.textureSize(k), `partygrove-${layer}-1`), { timeout: 15_000 }).toEqual({ w: 1600, h: 900 });
+    }
+    expect(await page.evaluate(() => window.owlPark.textureSize('hub'))).toBeNull();
+    await openPark(page);
+    await expect.poll(() => page.evaluate(() => window.owlPark.textureSize('hub')), { timeout: 15_000 }).not.toBeNull();
+    expect(await page.evaluate(() => window.owlPark.textureSize('partygrove-play-1'))).toBeNull();
+  });
+
   test('tapping outside the walkable area snaps to its edge', async ({ page }) => {
     await openPark(page);
     await page.evaluate(() => window.owlPark.walkTo(2400, 50)); // far up in the sky

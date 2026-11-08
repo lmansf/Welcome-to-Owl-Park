@@ -2,10 +2,11 @@
  * Runtime configuration. Everything here is public: it ships in the browser bundle.
  * Query-string overrides exist for tests and demos (e.g. ?transport=local&room=grove).
  */
+import { roomForLink } from '@owl-park/shared';
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
 import { sizeBoxesWanted } from './game/sizeBoxes';
 import { skinTrialWanted } from './game/skinTrial';
-import { artTrialWanted } from './game/artTrial';
+import { artLookWanted } from './game/artLooks';
 
 /**
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
@@ -108,8 +109,8 @@ export interface ParkConfig {
    */
   skin: string | null;
   /**
-   * An art trial (`?art=<name>`, this page only): a room drawn from layered art that is not in the
-   * build, generated for the owner to walk before anything is approved (game/artTrial.ts). Null for every visitor.
+   * The layered room look this page draws (game/artLooks.ts): the Party Grove's four painted layers for
+   * every visitor; `?art=old` draws the rooms' earlier paintings instead (null).
    */
   art: string | null;
 }
@@ -124,6 +125,9 @@ export function readConfig(): ParkConfig {
   else if (requested === 'edge') transport = 'edge';
   else if (edgeUrl) transport = 'edge';
   else transport = 'local';
+  // A link to a room folded into another (OP-306) lands in that one, at its own way in.
+  const linked = q.get('room');
+  const room = linked === null ? 'lobby' : roomForLink(linked);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return {
     transport,
@@ -131,8 +135,8 @@ export function readConfig(): ParkConfig {
     shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
     ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),
     home: !q.has('room') && q.get('home') !== '0',
-    room: q.get('room') ?? 'lobby',
-    spawn: q.get('spawn') ?? undefined,
+    room,
+    spawn: room === linked || linked === null ? (q.get('spawn') ?? undefined) : undefined,
     id: q.get('id') ?? undefined,
     look: q.get('look') ?? undefined,
     collector: q.get('collector') ?? undefined,
@@ -155,6 +159,6 @@ export function readConfig(): ParkConfig {
     oldMap: q.get('newmap') === '0',
     sizes: sizeBoxesWanted(q.get('sizes')),
     skin: skinTrialWanted(q.get('skin')),
-    art: artTrialWanted(q.get('art')),
+    art: artLookWanted(q.get('art')),
   };
 }

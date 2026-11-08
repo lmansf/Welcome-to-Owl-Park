@@ -39,7 +39,7 @@ describe("the room's sides (OP-296)", () => {
 
   it('stops a walk to either end of every room of the new map with the whole owl inside the room', () => {
     const rooms = newMapRooms();
-    expect(rooms.map((r) => r.id)).toEqual(expect.arrayContaining(['market', 'arcade', 'm3-hall', 'm3-under', 'brush-1', 'circuit-3']));
+    expect(rooms.map((r) => r.id)).toEqual(expect.arrayContaining(['market', 'arcade', 'm3-hall', 'brush-1', 'circuit-3']));
     // And the tree's own levels, seen from the side (?newmap=0).
     rooms.push(...['l0', 'l1', 'l5-street'].map((id) => ROOMS[id]!));
     for (const room of rooms) {

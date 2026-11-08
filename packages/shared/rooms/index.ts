@@ -665,9 +665,10 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
     spawns: { 'default': { x: 300, y: 810 }, 'from-market': { x: 300, y: 810 }, 'from-cavern': { x: 300, y: 810 } },
     doors: [
-      // The open doorway, out onto the street past its threshold. On the new map an owl that came up
-      // from the cavern goes back down there (OP-283); one that came from the market goes back to it.
-      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, toNew: { room: 'm3-under', spawn: 'from-arcade' }, marker: { x: 100, y: 640 } },
+      // The open doorway, out onto the street past its threshold. On the new map it is the stair up
+      // the hatch into the Great Hollow (OP-306, the root stair folded into the arcade); in today's park
+      // it goes back to the market.
+      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, toNew: { room: 'm3-hall', spawn: 'from-under' }, marker: { x: 100, y: 640 } },
       // The three cabinets, each spot on the floor in front of its cabinet and each marker on its screen.
       { id: 'cabinet-crossing', rect: { x: 540, y: 812, w: 160, h: 60 }, marker: { x: 652, y: 482 } },
       { id: 'cabinet-flight', rect: { x: 1820, y: 790, w: 160, h: 60 }, marker: { x: 1862, y: 496 } },

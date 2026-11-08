@@ -92,7 +92,7 @@ describe('the Great Hollow (Nov 7)', () => {
   it('keeps the ways up, out and down together in the middle, and a leaf pile in each Commons', () => {
     expect(doorOf('up').to).toEqual({ room: 'lobby', spawn: 'from-hub' });
     expect(doorOf('to-party').to).toEqual({ room: 'hub', spawn: 'default' });
-    expect(doorOf('down').to).toEqual({ room: 'm3-under', spawn: 'from-l1' });
+    expect(doorOf('down').to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
     for (const id of ['up', 'to-party', 'down']) expect(Math.abs(middle(id).x - HALL_MIDDLE), id).toBeLessThan(250);
     expect(middle('down').y).toBeGreaterThan(HALL_FRONT - 60);
     expect(middle('up').y).toBeLessThan(HALL_BACK + 40);
