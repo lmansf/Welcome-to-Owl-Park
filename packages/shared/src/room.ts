@@ -244,6 +244,8 @@ export interface RoomPiece {
   x: number;
   y: number;
   flip?: true;
+  /** Drawn this much its art's size (1 when left out): a doorway in the near wall seen from almost straight above. */
+  scale?: number;
 }
 
 export interface RoomKit {

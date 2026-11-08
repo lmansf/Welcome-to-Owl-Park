@@ -128,19 +128,24 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
   });
 
   it('shows the doorway a tap walk is going to, however far, over the one the owl passes', () => {
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 5300, y: 640 })).toBe('to-market');
+    const market = doorways.find((d) => d.id === 'to-market')!;
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: market.x - 60, y: market.y })).toBe('to-market');
     // A walk to open floor names no doorway: the nearest by the owl shows.
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 4000, y: 1100 })).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 3200, y: 1480 })).toBe('to-party');
   });
 
   it('keeps the sign showing between two near doorways until another is clearly nearer, so they never flicker', () => {
-    // Halfway between the stair up and the way to the Party Grove, a step either way.
-    const mid = { x: 3200, y: 700 };
-    const shown = signFocus(doorways, mid, null);
-    expect(['up', 'to-party']).toContain(shown);
-    const other = shown === 'up' ? 'to-party' : 'up';
-    const step = (shown === 'up' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
-    expect(signFocus(doorways, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
-    expect(signFocus(doorways, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
+    // Two doorways 400 apart (the oval's ways stand far wider apart than this), the owl between them.
+    const pair = [
+      { id: 'west', x: 1000, y: 500 },
+      { id: 'east', x: 1400, y: 500 },
+    ];
+    const mid = { x: 1200, y: 500 };
+    const shown = signFocus(pair, mid, null);
+    expect(['west', 'east']).toContain(shown);
+    const other = shown === 'west' ? 'east' : 'west';
+    const step = (shown === 'west' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
+    expect(signFocus(pair, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
+    expect(signFocus(pair, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
   });
 });

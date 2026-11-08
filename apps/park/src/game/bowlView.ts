@@ -8,6 +8,8 @@
  * - the wall's top runs all the way round, and at the front only the near wall's top shows, wider;
  * - the floor darkens toward the rim (the wall's shade at its foot), deepest under the near wall, which
  *   casts its shadow in over the front of the floor, and a little toward the back, so it recedes;
+ * - the floor is the tree's heartwood: its growth rings bunch up toward the back and spread toward the
+ *   front, and cracks run out across them, so the floor recedes under the owl wherever it stands;
  * - each Commons' colour pools softly on the floor by its ways, and the light falls brightest at the heart.
  *
  * Everything past the rim is covered, so the floor's texture never shows outside the oval. It is all one
@@ -32,6 +34,9 @@ const C = {
   plank: 'rgba(12, 7, 3, 0.45)',
   plankLit: 'rgba(210, 170, 120, 0.18)',
   shade: [8, 5, 16] as const,
+  wood: 'rgba(122, 85, 50, 0.26)',
+  ring: 0x2a1708,
+  ringLit: 0xd8b07a,
 } as const;
 
 /** The rim at angle `t` (0 east, clockwise on screen), and its outward normal. */
@@ -179,10 +184,14 @@ export function paintBowl(ctx: CanvasRenderingContext2D, room: Pick<RoomDef, 'si
   trace(ctx, floor);
   ctx.clip();
 
-  // It recedes: a little darker toward the back, lighter toward the front.
+  // The floor is the tree's own heartwood under the leaf litter: a warm wash over it all.
+  ctx.fillStyle = C.wood;
+  ctx.fillRect(b.cx - b.rx, b.cy - b.ry, 2 * b.rx, 2 * b.ry);
+
+  // It recedes: darker toward the back, lighter toward the front.
   const depth = ctx.createLinearGradient(0, b.cy - b.ry, 0, b.cy + b.ry);
-  depth.addColorStop(0, shade(0.34));
-  depth.addColorStop(0.45, shade(0.08));
+  depth.addColorStop(0, shade(0.42));
+  depth.addColorStop(0.45, shade(0.1));
   depth.addColorStop(1, shade(0));
   ctx.fillStyle = depth;
   ctx.fillRect(b.cx - b.rx, b.cy - b.ry, 2 * b.rx, 2 * b.ry);
@@ -235,10 +244,59 @@ export function paintBowl(ctx: CanvasRenderingContext2D, room: Pick<RoomDef, 'si
 }
 
 /** How much deeper an owl's shadow is drawn in a bowl room (Owl.setShadowDepth). */
-export const BOWL_SHADOW = 1.6;
+export const BOWL_SHADOW = 2.4;
 
-/** Where each of the bowl's two layers is drawn: its canvas over the floor's texture, its lines over that. */
-export const BOWL_DEPTH = { paint: -0.92, lines: -0.91 } as const;
+/** Where each of the bowl's layers is drawn: its canvas over the floor's texture, the grain over that, its lines over all. */
+export const BOWL_DEPTH = { paint: -0.92, grain: -0.915, lines: -0.91 } as const;
+
+/** How many growth rings cross the floor from the heart to the rim. */
+export const RINGS = 14;
+/** How many cracks (checks) run out across the rings, the way old wood splits from its heart. */
+export const CHECKS = 30;
+/**
+ * How far the rings' middles rise toward the back as they shrink (a share of the oval's half height),
+ * the way rings seen tipped away bunch up at the far side and spread at the near: the floor recedes
+ * wherever an owl stands, not only by the walls.
+ */
+export const RING_RISE = 0.28;
+
+/** A point on the floor's ring `k` (0 the heart, 1 the rim) at angle `t`, seen tipped away. */
+export function ringPoint(b: RoomBowl, k: number, t: number): { x: number; y: number } {
+  return { x: b.cx + k * b.rx * Math.cos(t), y: b.cy - (1 - k) * RING_RISE * b.ry + k * b.ry * Math.sin(t) };
+}
+
+/** A small, steady wobble so the rings read as grown wood and not a target (the same every time). */
+function wobble(k: number, t: number): number {
+  return 1 + 0.012 * Math.sin(5 * t + k * 7) + 0.008 * Math.sin(11 * t + k * 3);
+}
+
+/** Steady pseudo-random numbers in [0, 1), so the cracks are the same on every device. */
+function steady(i: number): number {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** The heartwood's grain over the floor, crisp at full size: its growth rings and the cracks across them. */
+function drawGrain(g: Phaser.GameObjects.Graphics, b: RoomBowl): void {
+  const ts = angles(0, 2 * Math.PI, 240);
+  for (let i = 1; i <= RINGS; i++) {
+    const k = (i - 0.35) / RINGS;
+    const at = (dk: number) => ts.map((t) => ringPoint(b, k * wobble(k, t) + dk, t));
+    // A groove: a dark line, its lit edge just inside it.
+    g.lineStyle(7, C.ring, 0.2).strokePoints(at(0), true, true);
+    g.lineStyle(3, C.ringLit, 0.1).strokePoints(at(-0.004), true, true);
+  }
+  for (let j = 0; j < CHECKS; j++) {
+    const t = (j / CHECKS) * 2 * Math.PI + (steady(j) - 0.5) * 0.18;
+    const k0 = 0.12 + steady(j + 50) * 0.35;
+    const k1 = Math.min(0.94, k0 + 0.18 + steady(j + 90) * 0.4);
+    const pts = Array.from({ length: 13 }, (_, i) => {
+      const k = k0 + ((k1 - k0) * i) / 12;
+      return ringPoint(b, k, t + 0.012 * Math.sin(i * 1.7 + j));
+    });
+    g.lineStyle(5, C.ring, 0.24).strokePoints(pts, false, false);
+  }
+}
 
 /** Draws a bowl room's wall and shading (nothing for any other room); what it drew. */
 export function drawBowl(
@@ -255,6 +313,7 @@ export function drawBowl(
     tex.refresh();
   }
   const image = scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(BOWL_DEPTH.paint);
+  drawGrain(scene.add.graphics().setDepth(BOWL_DEPTH.grain), b);
   // The wall's edges, crisp at full size: the lit lip of its top, the dark line of its foot along the back.
   const ts = angles(0, 2 * Math.PI, 240);
   const lines = scene.add.graphics().setDepth(BOWL_DEPTH.lines);
