@@ -45,7 +45,8 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
  * A set piece drawn at its logical size whatever the texture's resolution, standing on its anchor by
  * what it draws rather than by its frame's padded bottom edge (OP-127).
  */
-function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
+/** A kit piece standing with its art's foot at (x, y), at its logical size (things to use out on a plaza draw themselves with it too, FloorThing.ts). */
+export function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
   const spec = ART[key];
   const foot = footOf(key);
   const img = scene.add.image(x, y, key).setOrigin(foot.x, foot.y);
