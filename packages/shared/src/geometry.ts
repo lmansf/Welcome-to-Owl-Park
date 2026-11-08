@@ -24,14 +24,10 @@ export function pointInPolygon(p: Vec2, poly: Polygon): boolean {
 }
 
 function onSegment(p: Vec2, a: Vec2, b: Vec2): boolean {
+  // The box first: most of a floor's edges are nowhere near the point, and this is asked of every edge on every step.
+  if (p.y < Math.min(a.y, b.y) - 1e-6 || p.y > Math.max(a.y, b.y) + 1e-6 || p.x < Math.min(a.x, b.x) - 1e-6 || p.x > Math.max(a.x, b.x) + 1e-6) return false;
   const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-  if (Math.abs(cross) > 1e-6) return false;
-  return (
-    p.x >= Math.min(a.x, b.x) - 1e-6 &&
-    p.x <= Math.max(a.x, b.x) + 1e-6 &&
-    p.y >= Math.min(a.y, b.y) - 1e-6 &&
-    p.y <= Math.max(a.y, b.y) + 1e-6
-  );
+  return Math.abs(cross) <= 1e-6;
 }
 
 export function closestPointOnSegment(p: Vec2, a: Vec2, b: Vec2): Vec2 {

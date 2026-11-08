@@ -134,7 +134,8 @@ describe('the way around a bend in the floor (OP-148)', () => {
     expect(legs.some((p) => p.y > 300 && p.y < 400)).toBe(true);
   });
 
-  it('in every room, a far tap a straight walk stops short of is walked round, each leg a straight walk', () => {
+  // Every room's floor is searched, the big top-down ones (each Commons a plaza for a crowd) for a while: a generous timeout.
+  it('in every room, a far tap a straight walk stops short of is walked round, each leg a straight walk', { timeout: 30_000 }, () => {
     for (const room of [...Object.values(ROOMS), NEST_ROOM]) {
       const floor = footing(room, 0);
       const xs = floor.walkable.flat().map((p) => p.x);

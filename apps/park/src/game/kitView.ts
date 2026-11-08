@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { KIT_ART, kitCells, kitDrawPlan, seenFromSide, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
+import { EDGE_ART, KIT_ART, kitCells, kitDrawPlan, kitFrames, seenFromSide, type EdgeStrip, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
 import { artTrialRoom } from './artTrial';
@@ -42,6 +42,8 @@ export type KitDepths = Record<KitLayer, number>;
 export interface KitDrawn {
   pieces: number;
   images: number;
+  /** Shade, creeper and root strips over platform bodies' sides and feet (kitFrames). */
+  frames: number;
 }
 
 /** Draws a kit room's pieces (not its backdrops). Nothing for a painted room. */
@@ -50,8 +52,27 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
   let images = 0;
   // In the tree, back scenery is drawn a step quieter than what an owl stands on (docs/TREE_STYLE.md), as its painted playfield is.
   const quiet = seenFromSide(room) ? TREE_PLAY_TINT : undefined;
-  for (const d of plan) images += drawPiece(scene, d, depths[d.layer], d.layer === 'back' ? quiet : undefined);
-  return { pieces: plan.length, images };
+  let frames = 0;
+  for (const d of plan) {
+    const tint = d.layer === 'back' ? quiet : undefined;
+    images += drawPiece(scene, d, depths[d.layer], tint);
+    // Drawn straight after the body they frame, at its depth, so the caps an owl lands on (drawn later) stay over them.
+    for (const s of kitFrames(d, room.size, plan)) frames += drawStrip(scene, s, depths[d.layer], tint);
+  }
+  return { pieces: plan.length, images, frames };
+}
+
+/** One frame strip, repeated down or along its box at its piece's own size; 1 if drawn. */
+function drawStrip(scene: Phaser.Scene, s: EdgeStrip, depth: number, tint: number | undefined): number {
+  if (!scene.textures.exists(s.key)) return 0;
+  const frame = scene.textures.getFrame(s.key);
+  const spec = EDGE_ART[s.key];
+  const sprite = scene.add.tileSprite(s.x, s.y, s.w, s.h, s.key).setOrigin(0).setDepth(depth);
+  // A sharper copy than the piece's own size repeats at the piece's size, as a placeholder does.
+  sprite.setTileScale((spec?.w ?? frame.width) / frame.width, (spec?.h ?? frame.height) / frame.height);
+  if (s.flip) sprite.setFlipX(true);
+  if (tint !== undefined) sprite.setTint(tint);
+  return 1;
 }
 
 /** One piece's images; how many. */

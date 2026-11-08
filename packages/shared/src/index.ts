@@ -58,6 +58,7 @@ export * from './log';
 export * from './whichOwl';
 export * from './kit';
 export * from './kitArt';
+export * from './edges';
 export * from './kitSlots';
 export * from './kitCatalog';
 export * from './raster';
