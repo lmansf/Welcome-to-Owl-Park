@@ -6,7 +6,7 @@ import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
-import { useArtTrial, useSizeBoxes, useSkinTrial } from './game/art';
+import { useSizeBoxes, useSkinTrial } from './game/art';
 import { BootScene } from './game/BootScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
@@ -69,7 +69,6 @@ const cfg = readConfig();
 useSizeBoxes(cfg.sizes);
 // A skin trial (`?skin=<name>`): a realm artist's cut skin sheet in place of the realm's slots.
 useSkinTrial(cfg.skin);
-useArtTrial(cfg.art);
 const playerId = loadPlayerId(cfg);
 const look = loadLook(cfg, playerId);
 const parent = document.getElementById('game') as HTMLElement;

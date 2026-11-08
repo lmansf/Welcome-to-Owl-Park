@@ -210,7 +210,8 @@ export async function walkToDoor(page: Page, doorId: string): Promise<void> {
 export async function openPark(page: Page, params: Record<string, string> = {}): Promise<void> {
   // The tree's painted rooms (`kit: '0'`) unless a test asks for the art kit's, which visitors see:
   // the painted rooms' layers, fronts and shades are what most tests hold, and the kit rooms have kitRooms.spec.ts.
-  const q = new URLSearchParams({ transport: 'local', room: 'hub', kit: '0', ...params });
+  // Likewise the Party Grove's earlier paintings (`art: 'old'`); its layered look, which visitors see, has its own test in park.spec.ts.
+  const q = new URLSearchParams({ transport: 'local', room: 'hub', kit: '0', art: 'old', ...params });
   await page.goto(`/?${q.toString()}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
   if (q.get('transport') === 'edge') {

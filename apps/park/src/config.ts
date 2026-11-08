@@ -5,7 +5,7 @@
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
 import { sizeBoxesWanted } from './game/sizeBoxes';
 import { skinTrialWanted } from './game/skinTrial';
-import { artTrialWanted } from './game/artTrial';
+import { artLookWanted } from './game/artLooks';
 
 /**
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
@@ -108,8 +108,8 @@ export interface ParkConfig {
    */
   skin: string | null;
   /**
-   * An art trial (`?art=<name>`, this page only): a room drawn from layered art that is not in the
-   * build, generated for the owner to walk before anything is approved (game/artTrial.ts). Null for every visitor.
+   * The layered room look this page draws (game/artLooks.ts): the Party Grove's four painted layers for
+   * every visitor; `?art=old` draws the rooms' earlier paintings instead (null).
    */
   art: string | null;
 }
@@ -155,6 +155,6 @@ export function readConfig(): ParkConfig {
     oldMap: q.get('newmap') === '0',
     sizes: sizeBoxesWanted(q.get('sizes')),
     skin: skinTrialWanted(q.get('skin')),
-    art: artTrialWanted(q.get('art')),
+    art: artLookWanted(q.get('art')),
   };
 }
