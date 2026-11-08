@@ -48,8 +48,10 @@ for (const [project, recs] of browser) {
       for (const c of r.covered) browserNotes.push(`${project}, ${r.room}: doorway ${c.door} sits under ${c.by}`);
     } else if (r.to && !r.shut) {
       if (r.wentTo === null) {
-        const at = r.stoppedAt ? `, the owl stopped at x ${r.stoppedAt.x}` : '';
-        note(`walk:${r.room}:${r.door}`, `${r.room}: a walk to doorway ${r.door} from ${r.spawn} didn't go through${at}`).projects.push(project);
+        const at = r.stoppedAt ? `, the owl stopped at (${r.stoppedAt.x}, ${r.stoppedAt.y})` : '';
+        const said = r.said ? ` and the page said "${r.said.slice(0, 120)}"` : '';
+        if (r.fromMain?.wentTo) browserNotes.push(`${project}, ${r.room}: doorway ${r.door} didn't take the owl walking from ${r.spawn}${at}${said}; from ${r.fromMain.spawn} it did`);
+        else note(`walk:${r.room}:${r.door}`, `${r.room}: a walk to doorway ${r.door} from ${r.spawn}${r.fromMain ? ` or ${r.fromMain.spawn}` : ''} didn't go through${at}${said}`).projects.push(project);
       } else if (r.wentTo !== r.to) browserNotes.push(`${project}, ${r.room}: doorway ${r.door} led to ${r.wentTo}, not ${r.to}`);
       if (r.offFloor.length > 0) browserNotes.push(`${project}, ${r.room}: on the walk to ${r.door} the owl stood on no floor at ${r.offFloor.map((p) => `(${p.x}, ${p.y})`).join(' ')}`);
     }

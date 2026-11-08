@@ -70,6 +70,10 @@ export interface DoorResult {
   offFloor: Pt[];
   /** Where the owl stopped, when it stopped short of the doorway. */
   stoppedAt: Pt | null;
+  /** The page's words over the room when the owl stopped (a toast, a question at the turnstiles). */
+  said: string | null;
+  /** When the walk from `spawn` didn't go through: the same walk from the room's main way in. */
+  fromMain: { spawn: string; wentTo: string | null } | null;
 }
 
 function inPoly(p: Pt, poly: readonly Pt[]): boolean {
@@ -134,6 +138,58 @@ function nearestSpawn(room: PlanRoom, x: number, y: number): string {
   return best;
 }
 
+/** What the page says over the room (a toast, a question such as the turnstiles'), short. */
+async function hudSays(page: Page): Promise<string | null> {
+  const t = await page
+    .evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('#hud .toast, [role="dialog"], [aria-modal="true"]')]
+        .filter((e) => e.getClientRects().length > 0)
+        .map((e) => e.innerText)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .catch(() => '');
+  return t ? t.slice(0, 200) : null;
+}
+
+/** Walk the owl to the doorway `live` and wait for the room to change; where it stopped if it didn't. */
+async function walkThrough(page: Page, room: PlanRoom, live: { x: number; y: number }): Promise<Pick<DoorResult, 'wentTo' | 'offFloor' | 'stoppedAt' | 'said'>> {
+  const r: Pick<DoorResult, 'wentTo' | 'offFloor' | 'stoppedAt' | 'said'> = { wentTo: null, offFloor: [], stoppedAt: null, said: null };
+  const t0 = Date.now();
+  const go = () => page.evaluate(({ x, y }) => (window as unknown as { owlPark: Hook }).owlPark.walkTo(x, y), { x: live.x, y: live.y });
+  await go();
+  let last: Pt | null = null;
+  let still = 0;
+  while (Date.now() - t0 < DOOR_MS) {
+    await page.waitForTimeout(200);
+    const s = await now(page);
+    if (!s) continue; // the next room loading
+    if (s.room !== room.id) {
+      r.wentTo = s.room;
+      return r;
+    }
+    if (!standsOn(room, s.pos) && r.offFloor.length < 10) r.offFloor.push({ x: Math.round(s.pos.x), y: Math.round(s.pos.y) });
+    // A walk that has stopped short of the doorway is asked for again once, then given up on.
+    if (last && Math.hypot(s.pos.x - last.x, s.pos.y - last.y) < STILL && !s.walking) {
+      still += 1;
+      if (still === 5) {
+        r.said = await hudSays(page);
+        await go();
+      }
+      if (still >= 25) break;
+    } else still = 0;
+    last = s.pos;
+  }
+  const s = await now(page);
+  if (s && s.room !== room.id) r.wentTo = s.room;
+  else if (s) {
+    r.stoppedAt = { x: Math.round(s.pos.x), y: Math.round(s.pos.y) };
+    r.said ??= await hudSays(page);
+  }
+  return r;
+}
+
 for (const room of PLAN) {
   test.describe(room.id, () => {
     for (const spawn of Object.keys(room.spawns)) {
@@ -189,10 +245,11 @@ for (const room of PLAN) {
       const cx = door.x + door.w / 2;
       const cy = door.y + door.h / 2;
       const spawn = nearestSpawn(room, cx, cy);
+      const main = Object.keys(room.spawns)[0]!;
       test(`walks through ${door.id}`, async ({ page }, info) => {
-        test.setTimeout(DOOR_MS + 60_000);
+        test.setTimeout(2 * DOOR_MS + 90_000);
         const errors = watchErrors(page);
-        const r: DoorResult = { kind: 'door', project: info.project.name, room: room.id, door: door.id, spawn, to: null, shut: false, wentTo: null, ms: 0, errors, offFloor: [], stoppedAt: null };
+        const r: DoorResult = { kind: 'door', project: info.project.name, room: room.id, door: door.id, spawn, to: null, shut: false, wentTo: null, ms: 0, errors, offFloor: [], stoppedAt: null, said: null, fromMain: null };
         if (!(await open(page, room.id, spawn))) {
           save(`${room.id}--door--${door.id}`, r);
           return;
@@ -206,39 +263,19 @@ for (const room of PLAN) {
           return;
         }
         const t0 = Date.now();
-        await page.evaluate(({ x, y }) => (window as unknown as { owlPark: Hook }).owlPark.walkTo(x, y), { x: live.x, y: live.y });
-        let last: Pt | null = null;
-        let still = 0;
-        while (Date.now() - t0 < DOOR_MS) {
-          await page.waitForTimeout(200);
-          const s = await now(page);
-          if (!s) continue; // the next room loading
-          if (s.room !== room.id) {
-            r.wentTo = s.room;
-            break;
-          }
-          if (!standsOn(room, s.pos) && r.offFloor.length < 10) r.offFloor.push({ x: Math.round(s.pos.x), y: Math.round(s.pos.y) });
-          // A walk that has stopped short of the doorway is asked for again once, then given up on.
-          if (last && Math.hypot(s.pos.x - last.x, s.pos.y - last.y) < STILL && !s.walking) {
-            still += 1;
-            if (still === 5) await page.evaluate(({ x, y }) => (window as unknown as { owlPark: Hook }).owlPark.walkTo(x, y), { x: live.x, y: live.y });
-            if (still >= 25) {
-              r.stoppedAt = { x: Math.round(s.pos.x), y: Math.round(s.pos.y) };
-              break;
-            }
-          } else still = 0;
-          last = s.pos;
-        }
-        if (r.wentTo === null && r.stoppedAt === null) {
-          const s = await now(page);
-          if (s && s.room !== room.id) r.wentTo = s.room;
-          else if (s) r.stoppedAt = { x: Math.round(s.pos.x), y: Math.round(s.pos.y) };
-        }
+        const first = await walkThrough(page, room, live);
         r.ms = Date.now() - t0;
+        Object.assign(r, first);
         if (r.wentTo === null) {
           const shot = join(OUT, 'shots', info.project.name, `${room.id}--${door.id}--stuck.png`);
           mkdirSync(dirname(shot), { recursive: true });
           await page.screenshot({ path: shot }).catch(() => undefined);
+          // Once more from the room's main way in, so a doorway that takes the owl from there but not from
+          // the spawn nearest it shows as that rather than as a doorway that never works.
+          if (main !== spawn && (await open(page, room.id, main))) {
+            const again = (await now(page))?.doors.find((d) => d.id === door.id);
+            if (again?.to && !again.shut) r.fromMain = { spawn: main, wentTo: (await walkThrough(page, room, again)).wentTo };
+          }
         }
         save(`${room.id}--door--${door.id}`, r);
       });
