@@ -1,6 +1,5 @@
 import type Phaser from 'phaser';
 import { ROOM_H, ROOM_W, backgroundTiles, type RoomDef } from '@owl-park/shared';
-import { onCanvas } from './canvasTint';
 
 /** Drawn over the kit's back layer (-0.97), under the edge pieces (-0.9). */
 export const SKIRT_DEPTH = -0.965;
@@ -35,26 +34,45 @@ export function skirtStrips(room: Pick<RoomDef, 'backgrounds' | 'background' | '
   return out;
 }
 
-/** Draws the skirts; how many strips. None on the Canvas renderer, which can't fade an image across it. */
+/**
+ * The faded, mirrored copy of a painting's foot, made once as a texture of its own: the same on WebGL
+ * and on the Canvas renderer (which can fade an image only this way), and untouched when the painting
+ * is later swapped for its sharper copy (the strip fades out, so the softer source never shows).
+ */
+export function skirtTexture(scene: Phaser.Scene, key: string, h: number): string | null {
+  const out = `${key}:skirt-${h}`;
+  if (scene.textures.exists(out)) return out;
+  if (!scene.textures.exists(key)) return null;
+  const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+  // The painting's file may be a sharper copy than its screen: the strip is in its own pixels.
+  const fh = Math.max(1, Math.round((h / ROOM_H) * src.height));
+  const canvas = scene.textures.createCanvas(out, src.width, fh);
+  if (!canvas) return null;
+  const ctx = canvas.context;
+  ctx.save();
+  ctx.translate(0, fh);
+  ctx.scale(1, -1);
+  ctx.drawImage(src, 0, src.height - fh, src.width, fh, 0, 0, src.width, fh);
+  ctx.restore();
+  // Whole at the painting's foot (the strip's top), gone at its bottom.
+  const fade = ctx.createLinearGradient(0, 0, 0, fh);
+  fade.addColorStop(0, 'rgba(0,0,0,1)');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, src.width, fh);
+  ctx.globalCompositeOperation = 'source-over';
+  canvas.refresh();
+  return out;
+}
+
+/** Draws the skirts; how many strips. */
 export function drawSkirts(scene: Phaser.Scene, room: RoomDef): number {
-  if (onCanvas(scene)) return 0;
   let n = 0;
   for (const s of skirtStrips(room)) {
-    if (!scene.textures.exists(s.key)) continue;
-    const tex = scene.textures.get(s.key);
-    const src = tex.getSourceImage() as { width: number; height: number };
-    // The painting's file may be a sharper copy than its screen: the strip's frame is in its own pixels.
-    const fh = Math.round((s.h / ROOM_H) * src.height);
-    const name = `skirt-${fh}`;
-    if (!tex.has(name)) tex.add(name, 0, 0, src.height - fh, src.width, fh);
-    scene.add
-      .image(s.x, s.y, s.key, name)
-      .setOrigin(0)
-      .setDisplaySize(ROOM_W + 1, s.h)
-      .setFlipY(true)
-      // Whole at the painting's foot (the quad's top), gone at its bottom.
-      .setAlpha(1, 1, 0, 0)
-      .setDepth(SKIRT_DEPTH);
+    const key = skirtTexture(scene, s.key, s.h);
+    if (!key) continue;
+    scene.add.image(s.x, s.y, key).setOrigin(0).setDisplaySize(ROOM_W + 1, s.h).setDepth(SKIRT_DEPTH);
     n++;
   }
   return n;
