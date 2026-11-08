@@ -92,10 +92,11 @@ export function growToPlaza(room: RoomDef, spec: PlazaSpec): RoomDef {
     edges: [...(room.edges ?? []), ...edges],
     kit: {
       ...(room.kit ?? { ground: h - 15 }),
-      // Under the painting's foot, so its floor's last pixels are the painting's and the rest the plaza's.
+      // From the painting's foot down: not under it, where its texture's edge would show as a line along
+      // the join (a painted screen is drawn a pixel taller than its tile, so no gap shows either).
       surfaces: [
         ...(room.kit?.surfaces ?? []),
-        { id: 'plaza-floor', texture: spec.texture, rect: { x: 0, y: ROOM_H - 4, w: room.size.w, h: h - ROOM_H + 4 }, ...(spec.tint !== undefined ? { tint: spec.tint } : {}), skirt: PLAZA_SKIRT },
+        { id: 'plaza-floor', texture: spec.texture, rect: { x: 0, y: ROOM_H, w: room.size.w, h: h - ROOM_H }, ...(spec.tint !== undefined ? { tint: spec.tint } : {}), skirt: PLAZA_SKIRT },
       ],
     },
   };

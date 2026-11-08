@@ -54,9 +54,12 @@ export function skirtTexture(scene: Phaser.Scene, key: string, h: number): strin
   ctx.scale(1, -1);
   ctx.drawImage(src, 0, src.height - fh, src.width, fh, 0, 0, src.width, fh);
   ctx.restore();
-  // Whole at the painting's foot (the strip's top), gone at its bottom.
+  // Whole at the painting's foot (the strip's top), gone at its bottom, easing out so the plaza's own
+  // texture comes up gently rather than showing through just under the join.
   const fade = ctx.createLinearGradient(0, 0, 0, fh);
   fade.addColorStop(0, 'rgba(0,0,0,1)');
+  fade.addColorStop(0.25, 'rgba(0,0,0,0.92)');
+  fade.addColorStop(0.6, 'rgba(0,0,0,0.45)');
   fade.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.globalCompositeOperation = 'destination-in';
   ctx.fillStyle = fade;
