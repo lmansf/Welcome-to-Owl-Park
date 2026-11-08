@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, touchBottom, type ScreenBox, type ViewRect } from './hints';
+import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signX, touchBottom, type ScreenBox, type ViewRect } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -147,5 +147,19 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
     const step = (shown === 'west' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
     expect(signFocus(pair, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
     expect(signFocus(pair, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
+  });
+});
+
+describe('a sign by a doorway at the screen’s edge slides in so all its words show', () => {
+  const view = { x: 1000, w: 400 };
+  it('stays over its own spot when it fits', () => {
+    expect(signX(1200, 200, view, 10)).toBe(1200);
+  });
+  it('slides in from either edge, never past it', () => {
+    expect(signX(1000, 200, view, 10)).toBe(1110);
+    expect(signX(1400, 200, view, 10)).toBe(1290);
+  });
+  it('stands in the middle when it is wider than the screen', () => {
+    expect(signX(900, 600, view, 10)).toBe(1200);
   });
 });
