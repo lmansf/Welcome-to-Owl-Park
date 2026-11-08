@@ -737,8 +737,9 @@ export function kitProblems(room: RoomDef): string[] {
       const xs = poly.map((p) => p.x);
       const ys = poly.map((p) => p.y);
       const bare = (x: number, y: number) => pointInPolygon({ x, y }, poly) && !painted(x, y) && !(kit.surfaces ?? []).some((s) => pointInRect({ x, y }, s.rect));
-      search: for (let x = Math.min(...xs); x <= Math.max(...xs); x += 16)
-        for (let y = Math.min(...ys); y <= Math.max(...ys); y += 16)
+      // Inside the room: a floor may run to its very edge, where nothing is drawn past it.
+      search: for (let x = Math.min(...xs); x <= Math.min(Math.max(...xs), room.size.w - 1); x += 16)
+        for (let y = Math.min(...ys); y <= Math.min(Math.max(...ys), room.size.h - 1); y += 16)
           if (bare(x, y)) {
             out.push(`the floor at ${Math.round(x)}, ${Math.round(y)} is walked but not drawn`);
             break search;

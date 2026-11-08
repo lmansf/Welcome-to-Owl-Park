@@ -1568,6 +1568,12 @@ ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under',
 /** Where the plazas' floors end, their gathering spots' middles (each a moonbeam in a worn ring). */
 export const LOBBY_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 3600, y: 1110 }] } as const;
+export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as const;
+export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 2400, y: 1110 }] } as const;
+export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
+
+/** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
+const footMound = (id: string, outline: Vec2[]): Perch => ({ id, area: outline, top: 36, solid: true });
 
 ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
   ...LOBBY_PLAZA,
@@ -1593,6 +1599,56 @@ ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
   ring: 'edge-arcade-ring',
   corner: 'edge-arcade-corner-front',
   frontBumps: ['edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a'],
+});
+// The lane under the nests: its west bank, the mound where its two screens join and its east bank,
+// which closed the lane's front, are mossy mounds in the plaza now, hopped up on.
+ROOMS['homes'] = growToPlaza(ROOMS['homes']!, {
+  ...HOMES_PLAZA,
+  rings: [...HOMES_PLAZA.rings],
+  oldFront: 750,
+  west: 0,
+  east: 2 * ROOM_W,
+  texture: 'kit-tex-ground-forest-floor',
+  tint: 0xf8abc5,
+  ring: 'edge-lane-ring',
+  corner: 'edge-lane-corner-front',
+  frontBumps: ['edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a'],
+  perches: [
+    footMound('homes-bank-west', [{ x: 0, y: 750 }, { x: 312, y: 724 }, { x: 318, y: 770 }, { x: 345, y: 780 }, { x: 436, y: 782 }, { x: 444, y: 832 }, { x: 462, y: 880 }, { x: 470, y: 900 }, { x: 0, y: 900 }]),
+    footMound('homes-mound', [{ x: 1372, y: 900 }, { x: 1372, y: 880 }, { x: 1400, y: 834 }, { x: 1445, y: 794 }, { x: 1490, y: 774 }, { x: 1566, y: 768 }, { x: 1576, y: 756 }, { x: 1610, y: 756 }, { x: 1648, y: 760 }, { x: 1676, y: 780 }, { x: 1700, y: 806 }, { x: 1760, y: 830 }, { x: 1860, y: 880 }, { x: 1870, y: 900 }]),
+    footMound('homes-bank-east', [{ x: 2930, y: 900 }, { x: 2944, y: 880 }, { x: 3000, y: 832 }, { x: 3100, y: 772 }, { x: 3200, y: 750 }, { x: 3200, y: 900 }]),
+  ],
+});
+// The night market's street runs on past its stalls, wet and lit, a ring of puddles under each string of lights.
+ROOMS['market'] = growToPlaza(ROOMS['market']!, {
+  ...MARKET_PLAZA,
+  rings: [...MARKET_PLAZA.rings],
+  oldFront: 888,
+  west: 0,
+  east: 2 * ROOM_W,
+  texture: 'kit-tex-neon-wet-pavement',
+  tint: 0xe0feff,
+  ring: 'edge-market-ring',
+  corner: 'edge-market-corner-front',
+  frontBumps: ['edge-market-clutter-a', 'edge-market-clutter-b', 'edge-market-clutter-a', 'edge-market-clutter-b', 'edge-market-clutter-a'],
+});
+// The glass street runs on toward the viewer, deeper than it is wide; the two lanterns at its old front
+// stand in the street now, their bases hopped up on.
+ROOMS['glass'] = growToPlaza(ROOMS['glass']!, {
+  ...GLASS_PLAZA,
+  rings: [...GLASS_PLAZA.rings],
+  oldFront: 840,
+  west: 60,
+  east: 1560,
+  texture: 'kit-tex-ground-cobble-path',
+  tint: 0x73abff,
+  ring: 'edge-glass-ring',
+  corner: 'edge-glass-corner-front',
+  frontBumps: ['edge-glass-planters-a', 'edge-glass-planters-b'],
+  perches: [
+    footMound('glass-lantern-west', [{ x: 130, y: 840 }, { x: 270, y: 840 }, { x: 270, y: 880 }, { x: 130, y: 880 }]),
+    footMound('glass-lantern-east', [{ x: 1390, y: 840 }, { x: 1530, y: 840 }, { x: 1530, y: 880 }, { x: 1390, y: 880 }]),
+  ],
 });
 
 // ---- The Great Hollow (hollowHall.ts) ----

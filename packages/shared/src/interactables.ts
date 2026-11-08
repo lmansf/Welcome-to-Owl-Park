@@ -105,6 +105,23 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   // The arcade hall's floor (Nov 8): a moonbeam through a skylight over each of its two gathering rings, leaves blown in from the street.
   { id: 'arcade-moonbeam-west', kind: 'moonbeam', room: 'arcade', pos: { x: 1200, y: 1110 } },
   { id: 'arcade-moonbeam-east', kind: 'moonbeam', room: 'arcade', pos: { x: 3600, y: 1110 } },
+  // The lane under the nests, grown into a plaza (Nov 8): a moonbeam in its ring, leaves blown under the banks and along its front.
+  { id: 'homes-moonbeam', kind: 'moonbeam', room: 'homes', pos: { x: 2300, y: 1110 } },
+  { id: 'homes-leaves-bank', kind: 'leaf-pile', room: 'homes', pos: { x: 560, y: 1080 } },
+  { id: 'homes-leaves-mound', kind: 'leaf-pile', room: 'homes', pos: { x: 1250, y: 1240 } },
+  { id: 'homes-leaves-front', kind: 'leaf-pile', room: 'homes', pos: { x: 2950, y: 1220 } },
+  // The night market's street (Nov 8): a moonbeam through the lights over each puddle ring, leaves washed to its kerbs.
+  { id: 'market-moonbeam-west', kind: 'moonbeam', room: 'market', pos: { x: 900, y: 1110 } },
+  { id: 'market-moonbeam-east', kind: 'moonbeam', room: 'market', pos: { x: 2400, y: 1110 } },
+  { id: 'market-leaves-west', kind: 'leaf-pile', room: 'market', pos: { x: 260, y: 1230 } },
+  { id: 'market-leaves-middle', kind: 'leaf-pile', room: 'market', pos: { x: 1650, y: 1240 } },
+  { id: 'market-leaves-east', kind: 'leaf-pile', room: 'market', pos: { x: 3000, y: 1230 } },
+  // The glass street (Nov 8): a moonbeam on its ring of glass tiles, leaves by the lanterns and at its front corners.
+  { id: 'glass-moonbeam', kind: 'moonbeam', room: 'glass', pos: { x: 800, y: 1260 } },
+  { id: 'glass-leaves-lantern-west', kind: 'leaf-pile', room: 'glass', pos: { x: 230, y: 1010 } },
+  { id: 'glass-leaves-lantern-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1380, y: 1010 } },
+  { id: 'glass-leaves-front-west', kind: 'leaf-pile', room: 'glass', pos: { x: 330, y: 1560 } },
+  { id: 'glass-leaves-front-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1270, y: 1560 } },
   { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
   { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
   { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
