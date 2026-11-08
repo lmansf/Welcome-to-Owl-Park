@@ -12,6 +12,14 @@
     {
       "key": "bar:canopy:canopy-2c:v2>v3",
       "reason": "17% on the first playtest run, the hardest hop in the park. The drop from v2 has to pass under the hanging thorn and meet the timed updraft U10 just as it switches on (leave about half a second to a second before, drop for about 0.6 s). A course change for the owner to decide on."
+    },
+    {
+      "key": "walk:lobby:gate",
+      "reason": "The walk reaches the lobby's turnstiles (it stands in them) but the park doesn't take it through, from either spawn, on desktop and phone, offline. The repo's own browser tests take the same gate (entries.spec.ts, lobby.spec.ts), so this is likely the walk's offline setup rather than the gate; to look into in the walk."
+    },
+    {
+      "key": "walk:l5-street:gate",
+      "reason": "The walk reaches the tree's front gate on the nests' street (it stands in it) but the park doesn't take it through, from either spawn, on desktop and phone, offline. Like the lobby's turnstiles, likely the walk's offline setup; to look into in the walk."
     }
   ]
 }
