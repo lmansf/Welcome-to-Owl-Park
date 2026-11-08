@@ -1,48 +1,31 @@
 import { distance, type DoorDef, type Vec2 } from '@owl-park/shared';
 import Phaser from 'phaser';
 import { doorSpot, trailPoints } from './featherTrail';
-import { type SymbolName, symbolCanvas } from './symbols';
+import { tintImage } from './canvasTint';
+import { type SymbolName, symbolTexture } from './symbols';
 
 /** A feather this near the owl has done its work and fades (room px). */
 export const TRAIL_PASSED_PX = 70;
 /** Gold, like the doorway chips at the screen's edge: it reads on a pale floor and a dark one alike. */
-const FEATHER_TINT = '#ffd36a';
+const FEATHER_TINT = 0xffd36a;
 const FEATHER_ALPHA = 0.85;
 /** A feather about as long as an owl's foot to its knee: big enough to spot on a phone (the symbol is 32 px). */
 const FEATHER_SCALE = 1.5;
 /** A dark edge under each feather and glint, so gold still reads on a pale floor (a flat bright shape vanishes there). */
-const EDGE_TINT = '#2b1d08';
+const EDGE_TINT = 0x2b1d08;
 const EDGE_ALPHA = 0.55;
 /** The glint: a four-pointed sparkle over the doorway, gold like the feathers (the symbol is 32 px). */
-const GLINT_TINT = '#ffe08a';
+const GLINT_TINT = 0xffe08a;
 const GLINT_SCALE = 1.4;
 
 type Shape = Phaser.GameObjects.Container;
 
-/**
- * A symbol drawn in one colour, as its own texture: a tint is lost where the browser falls back to
- * drawing without WebGL (older phones, some tablets), and the trail has to read there too.
- */
-function coloured(scene: Phaser.Scene, name: SymbolName, hex: string): string {
-  const key = `trail-${name}-${hex.slice(1)}`;
-  if (scene.textures.exists(key)) return key;
-  const src = symbolCanvas(name);
-  const tex = scene.textures.createCanvas(key, src.width, src.height);
-  if (!tex) return key;
-  const ctx = tex.context;
-  ctx.drawImage(src, 0, 0);
-  ctx.globalCompositeOperation = 'source-in';
-  ctx.fillStyle = hex;
-  ctx.fillRect(0, 0, src.width, src.height);
-  ctx.globalCompositeOperation = 'source-over';
-  tex.refresh();
-  return key;
-}
-
 /** A gold symbol with its dark edge beneath it, as one thing to place, fade and float. */
-function edged(scene: Phaser.Scene, x: number, y: number, name: SymbolName, hex: string, scale: number): Shape {
-  const edge = scene.add.image(0, 0, coloured(scene, name, EDGE_TINT)).setAlpha(EDGE_ALPHA).setScale(scale * 1.25);
-  const top = scene.add.image(0, 0, coloured(scene, name, hex)).setScale(scale);
+function edged(scene: Phaser.Scene, x: number, y: number, name: SymbolName, color: number, scale: number): Shape {
+  // Tinted on WebGL, the colour baked into the texture on Canvas, which draws no tint (as the leaf piles do, OP-300).
+  const key = symbolTexture(scene, name);
+  const edge = tintImage(scene, scene.add.image(0, 0, key), key, EDGE_TINT).setAlpha(EDGE_ALPHA).setScale(scale * 1.25);
+  const top = tintImage(scene, scene.add.image(0, 0, key), key, color).setScale(scale);
   return scene.add.container(x, y, [edge, top]);
 }
 
