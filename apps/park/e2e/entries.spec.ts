@@ -96,6 +96,8 @@ test.describe('the entries setting (OP-156)', () => {
     // owl count (and, on a touch screen, the Menu and Say), not under them (OP-278).
     const arrived = await state(page);
     expect(Math.abs(arrived.pos.x - 3030)).toBeLessThan(120);
+    // Every way out of the hollow is named on a sign at its doorway: the Party Grove's is beside the knothole (Nov 8).
+    expect(arrived.doorSigns).toEqual(expect.arrayContaining(['Out to the Party Grove', 'Up to the Treetop Commons', 'Down to the arcade']));
     await settleCamera(page);
     const owlOnScreen = await toScreen(page, arrived.pos.x, arrived.pos.y);
     const hudTop = await page.evaluate(() =>

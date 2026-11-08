@@ -3,6 +3,16 @@
  * the room the camera cannot see (an open doorway, an interactive spot). Pure, so it is unit-tested;
  * the HUD draws the chips.
  */
+import { mapOf, type DoorDef, type RoomDef } from '@owl-park/shared';
+
+/**
+ * The doorways that carry a sign naming where they lead (DoorDef.label, doorSigns.ts): open, named,
+ * and in a room seen from above. Their chips at the screen's edge say the same words.
+ */
+export function signedDoors(room: RoomDef): DoorDef[] {
+  if (mapOf(room) === 2) return [];
+  return room.doors.filter((d) => d.to && d.label && !d.closedSign && (d.labelAt ?? d.marker));
+}
 
 /** Something worth pointing at, in room pixels. */
 export interface HintTarget {

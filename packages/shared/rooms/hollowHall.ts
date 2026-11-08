@@ -8,8 +8,9 @@
  * the stained-glass realm's, the ink-wash realm's, the Treehouse Clearing's and the neon realm's. Each
  * has, along its back wall, the doorway out to its realm (left) and the gate to its parkour course
  * (right), its realm's idol between them over the Realm Vote spot (the ink-wash realm has none yet), and
- * a leaf pile at the front. In the middle of the hollow, between the ink-wash and the clearing's
- * Commons, the knothole up to the Treetop Commons and the trunk's door out to the Party Grove stand on
+ * a leaf pile at the front. Every open doorway has a sign on the floor in front of it naming where it
+ * leads, so a ten year old finds the Party Grove without a map. In the middle of the hollow, between
+ * the ink-wash and the clearing's Commons, the knothole up to the Treetop Commons and the trunk's door out to the Party Grove stand on
  * the back wall, and the hatch down the root stair to the cavern is in the floor at the front.
  *
  * The floor is one strip along the room, as the hub's is, stepping forward round each idol's base: a
@@ -42,6 +43,9 @@ export interface CommonsOf {
   course?: { room: string; spawn: string };
   /** The realm its idol takes the Realm Vote for, where it has one. */
   votesFor?: 'glass' | 'grove' | 'market';
+  /** What the signs at its two open doorways say: its realm's public name, and its course's name. */
+  realmName?: string;
+  courseName?: string;
   /** The doorway's art (a kit piece) and the wall and floor textures of its realm. */
   door: string;
   wall: string;
@@ -50,14 +54,16 @@ export interface CommonsOf {
 
 /** The Commons, west to east. */
 export const HALL_COMMONS: readonly CommonsOf[] = [
-  { level: 'glass', realm: { room: 'glass', spawn: 'from-hub' }, votesFor: 'glass', door: 'kit-glass-door-glass-open', wall: 'kit-tex-glass-lead-lattice', floor: 'kit-tex-glass-pale-stone' },
+  { level: 'glass', realm: { room: 'glass', spawn: 'from-hub' }, votesFor: 'glass', realmName: 'The glass realm', door: 'kit-glass-door-glass-open', wall: 'kit-tex-glass-lead-lattice', floor: 'kit-tex-glass-pale-stone' },
   // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
-  { level: 'ink', course: { room: 'brush-1', spawn: 'from-gate' }, door: 'kit-ink-door-paper-open', wall: 'kit-tex-ink-woven-reed', floor: 'kit-tex-ink-paper-grain' },
+  { level: 'ink', course: { room: 'brush-1', spawn: 'from-gate' }, courseName: 'Brushstroke Bridges', door: 'kit-ink-door-paper-open', wall: 'kit-tex-ink-woven-reed', floor: 'kit-tex-ink-paper-grain' },
   {
     level: 'grove',
     realm: { room: 'grove', spawn: 'default' },
     course: { room: 'canopy-1', spawn: 'from-gate' },
     votesFor: 'grove',
+    realmName: 'The treehouse clearing',
+    courseName: 'Updraft Canopy',
     door: 'kit-clearing-vine-curtain',
     wall: 'kit-tex-clearing-hollow-wood',
     floor: 'kit-tex-clearing-fern-floor',
@@ -67,6 +73,8 @@ export const HALL_COMMONS: readonly CommonsOf[] = [
     realm: { room: 'market', spawn: 'default' },
     course: { room: 'circuit-1', spawn: 'from-gate' },
     votesFor: 'market',
+    realmName: 'The neon street',
+    courseName: 'Blackout Circuit',
     door: 'kit-neon-rooftop-door-open',
     wall: 'kit-tex-neon-neon-brick',
     floor: 'kit-tex-neon-wet-pavement',
@@ -108,29 +116,43 @@ function hollowFloor(): Polygon {
   return [...back, { x: HALL_W - 40, y: HALL_FRONT }, { x: 40, y: HALL_FRONT }];
 }
 
-/** A doorway on the back wall, `w` wide, centred on `x`: its strip straddles the floor's back edge. */
-function wallDoor(id: string, x: number, to: DoorDef['to'], closedSign?: DoorDef['closedSign'], w = 200): DoorDef {
+/** Where a back-wall doorway's sign stands: on the floor just in front of it, where an owl walks up to it. */
+const SIGN_Y = HALL_BACK + 36;
+
+/**
+ * A doorway on the back wall, `w` wide, centred on `x`: its strip straddles the floor's back edge. An
+ * open one has a sign naming where it leads.
+ */
+function wallDoor(id: string, x: number, to: DoorDef['to'], closedSign?: DoorDef['closedSign'], w = 200, label?: string): DoorDef {
   return {
     id,
     rect: { x: x - w / 2, y: HALL_BACK - 10, w, h: 50 },
     ...(to ? { to } : {}),
     ...(closedSign ? { closedSign } : {}),
     marker: { x, y: HALL_BACK + 8 },
+    ...(to && label ? { label, labelAt: { x, y: SIGN_Y } } : {}),
   };
 }
 
 const DOORS: DoorDef[] = [
   ...HALL_COMMONS.flatMap((c): DoorDef[] => [
-    wallDoor(realmDoor(c.level), realmDoorX(c.level), c.realm, c.realm ? undefined : 'Hatching Soon'),
-    wallDoor(courseDoor(c.level), courseDoorX(c.level), c.course, c.course ? undefined : 'Not Yet Fledged'),
+    wallDoor(realmDoor(c.level), realmDoorX(c.level), c.realm, c.realm ? undefined : 'Hatching Soon', 200, c.realmName),
+    wallDoor(courseDoor(c.level), courseDoorX(c.level), c.course, c.course ? undefined : 'Not Yet Fledged', 200, c.courseName),
     ...(c.votesFor ? [{ id: voteDoor(c.level), rect: { x: idolX(c.level) - 110, y: IDOL_FRONT + 5, w: 220, h: 70 }, marker: { x: idolX(c.level), y: IDOL_FRONT + 40 } }] : []),
   ]),
   // Up through the knothole: the Treetop Commons, before the turnstiles.
-  wallDoor('up', HALL_MIDDLE - 170, { room: 'lobby', spawn: 'from-hub' }, undefined, 180),
+  wallDoor('up', HALL_MIDDLE - 170, { room: 'lobby', spawn: 'from-hub' }, undefined, 180, 'Up to the Treetop Commons'),
   // Out through the trunk's door: the Party Grove at the tree's foot.
-  wallDoor('to-party', HALL_MIDDLE + 170, { room: 'hub', spawn: 'default' }, undefined, 200),
+  wallDoor('to-party', HALL_MIDDLE + 170, { room: 'hub', spawn: 'default' }, undefined, 200, 'Out to the Party Grove'),
   // Down the hatch in the floor at the front: the root stair to the cavern.
-  { id: 'down', rect: { x: HALL_MIDDLE - 90, y: HALL_FRONT - 45, w: 180, h: 45 }, to: { room: 'm3-under', spawn: 'from-l1' }, marker: { x: HALL_MIDDLE, y: HALL_FRONT - 20 } },
+  {
+    id: 'down',
+    rect: { x: HALL_MIDDLE - 90, y: HALL_FRONT - 45, w: 180, h: 45 },
+    to: { room: 'm3-under', spawn: 'from-l1' },
+    marker: { x: HALL_MIDDLE, y: HALL_FRONT - 20 },
+    label: 'Down to the arcade',
+    labelAt: { x: HALL_MIDDLE, y: HALL_FRONT - 92 },
+  },
 ];
 
 const PIECES: RoomPiece[] = [
