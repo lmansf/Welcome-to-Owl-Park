@@ -32,7 +32,14 @@ async function trialRequests(page: Page, run: () => Promise<void>): Promise<stri
   return asked;
 }
 
-const shot = (page: Page, name: string) => page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-skin-${name}.png` });
+const shot = async (page: Page, name: string) => {
+  await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-skin-${name}.png` });
+  // TEMPORARY (reverted before merge): the shots into the log, where they can be read without the artifacts.
+  if (/^(none|forest)-canopy-(1-default|3-on-c2)$/.test(name)) {
+    const b = await page.screenshot({ type: 'jpeg', quality: 55 });
+    process.stdout.write(`SKINSHOT ${test.info().project.name}-${name} ${b.toString('base64')}\n`);
+  }
+};
 
 test.describe('skin trials in Updraft Canopy', () => {
   test('a visitor’s page draws the course as it is and asks for no trial file', async ({ page, isMobile }) => {
