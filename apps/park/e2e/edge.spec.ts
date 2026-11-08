@@ -449,6 +449,24 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
+  test('an owl in its own nest is in Your nest on the map, even when the park cannot connect (OP-303)', async ({ browser }) => {
+    const a = await visitor(browser);
+    await travelTo(a, 'nest');
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+    const home = (await state(a)).room;
+    // From here on the room server's socket is refused: the page wanders alone, as when the park cannot connect,
+    // so the room server never says whose nest it is; the owl's home nest still does.
+    await a.routeWebSocket(/\/ws\//, (ws) => ws.close());
+    await a.goto(`/?${new URLSearchParams({ transport: 'edge', room: home, kit: '0' })}`);
+    await expect.poll(() => a.evaluate(() => window.owlPark?.state()?.room ?? null), { timeout: 20_000 }).toBe(home);
+    await a.locator('[data-menu-btn]').click();
+    const menu = a.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="map"]').click();
+    await expect(menu.locator('[data-place="nest"]')).toContainText('You are here', { timeout: 10_000 });
+    await expect(menu.locator('[data-place].here')).toHaveCount(1);
+    await a.context().close();
+  });
+
   for (const [name, device] of [
     ['a computer', { viewport: { width: 1280, height: 800 } }],
     ['a phone', { ...devices['Pixel 7'] }],

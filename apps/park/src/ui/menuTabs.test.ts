@@ -1,6 +1,7 @@
-import { TRAVEL_WORDS } from '@owl-park/shared';
+import { TRAVEL_WORDS, doorTarget } from '@owl-park/shared';
+import { ROOMS } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { MAP_LIT_KEY, MAP_PLACES, mapLayout, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
+import { MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, mapLayout, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
 
 const walked = (places: string[], gate = false) => ({ places, gate });
 
@@ -60,6 +61,37 @@ describe('the map on the new map (OP-282)', () => {
     expect(mapPlaceOf('nest-abc', false, [], 3)).toBe('homes');
   });
 
+  it('has a place for every room an owl can walk into on the new map, from the Treetop Commons on (OP-303)', () => {
+    const seen = new Set(['lobby']);
+    const todo = ['lobby'];
+    while (todo.length > 0) {
+      const room = ROOMS[todo.shift()!]!;
+      for (const door of room.doors) {
+        const to = doorTarget(door, 3)?.room;
+        if (to && ROOMS[to] && !seen.has(to)) {
+          seen.add(to);
+          todo.push(to);
+        }
+      }
+    }
+    // The walk reaches the Great Hollow and each course beyond its Commons, so a new room can't go unmarked.
+    expect(seen.has('m3-hall')).toBe(true);
+    expect(seen.has('brush-1')).toBe(true);
+    for (const room of seen) expect(mapPlaceOf(room, true, [], 3), room).not.toBeNull();
+  });
+
+  it("puts the ink-wash realm's course on the map, and each course's rooms at its realm (OP-303)", () => {
+    const ink = mapLayout(3).places.find((p) => p.id === 'ink');
+    expect(ink).toMatchObject({ name: 'Brushstroke Bridges', noTravel: true });
+    expect(mapLayout(3).paths).toContainEqual(['m3-hall', 'ink']);
+    for (const room of ['brush-1', 'brush-2', 'brush-falls', 'brush-3a', 'brush-3b']) expect(mapPlaceOf(room, true, [], 3), room).toBe('ink');
+    expect(mapPlaceOf('canopy-hut', true, [], 3)).toBe('grove');
+    expect(mapPlaceOf('circuit-3', true, [], 3)).toBe('market');
+    for (const place of Object.values(NEW_MAP_COURSE_PLACES)) expect(mapLayout(3).places.some((p) => p.id === place), place).toBe(true);
+    // The old map keeps its places: a course room there is no place.
+    expect(mapPlaceOf('brush-1', true, [], 1)).toBeNull();
+  });
+
   it('leaves the old map as it was (?newmap=0): the Great Hollow is not on it', () => {
     expect(mapPlaceOf('m3-hall', true, [], 1)).toBeNull();
     expect(mapPlaceOf('m3-hall', true, [], 2)).toBeNull();
@@ -73,11 +105,12 @@ describe('the map on the new map (OP-282)', () => {
     expect(new Set(cells).size).toBe(places.length);
     for (const p of places) expect(p.col < cols && p.row < rows, p.id).toBe(true);
     for (const [a, b] of paths) expect(places.some((p) => p.id === a) && places.some((p) => p.id === b), `${a}-${b}`).toBe(true);
-    for (const p of places) expect(placeCard(p.id, null, walked([], true), 3).button, p.id).not.toBeNull();
+    for (const p of places.filter((p) => !p.noTravel)) expect(placeCard(p.id, null, walked([], true), 3).button, p.id).not.toBeNull();
   });
 
   it('travels to every place of the new map from the start, not only the places walked into (OP-305)', () => {
-    expect(mapLayout(3).places.filter((p) => p.noTravel)).toEqual([]);
+    // The ink course is the one place without a landing: its realm has no room yet, the course is walked into from its Commons (OP-303).
+    expect(mapLayout(3).places.filter((p) => p.noTravel).map((p) => p.id)).toEqual(['ink']);
     for (const room of NEW_ROOMS) expect(placeCard(room, 'nest', walked([], true), 3), room).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: room } });
   });
 
