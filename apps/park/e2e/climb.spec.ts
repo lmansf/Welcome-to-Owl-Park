@@ -126,7 +126,7 @@ test.describe('the stained-glass climb', () => {
 });
 
 test.describe('the stained-glass climb through the room server', () => {
-  // As deployed before and after: the realm closed, the portal off, the moon's night.
+  // As deployed before and after: the portal off, the moon's night. (The realm itself is open to every owl since Nov 8.)
   const asDeployed = async ({ request }: { request: APIRequestContext }) => {
     if (isEdge()) await realms(request, { open: [], portal: false, night: null });
   };
@@ -134,7 +134,7 @@ test.describe('the stained-glass climb through the room server', () => {
 
   test('a storey pays, the climb survives a dropped socket, and a portal switched off shows its phrase', async ({ page, request }) => {
     test.skip(!isEdge(), 'the room server only');
-    await realms(request, { open: ['glass'], portal: true, night: 'easy' });
+    await realms(request, { open: [], portal: true, night: 'easy' });
     const before = await atThePortal(page, 'edge');
     await openClimb(page);
     await expect(page.locator('.climb [data-start-line]')).toHaveText('A gentle night');
@@ -174,7 +174,7 @@ test.describe('the stained-glass climb through the room server', () => {
     await expect(page.locator('.climb-layer')).toBeHidden();
     // The portal switched off: Climb shows the approved phrase and opens nothing. (The room server may
     // have placed the owl afresh when the socket came back, so it walks to the portal again first.)
-    await realms(request, { open: ['glass'], portal: false, night: 'easy' });
+    await realms(request, { open: [], portal: false, night: 'easy' });
     await toPortal(page);
     await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain('portal');
     // The room server's word that the portal is off has reached the page.
@@ -186,17 +186,16 @@ test.describe('the stained-glass climb through the room server', () => {
     await expect(page.locator('.climb-layer')).toBeHidden();
   });
 
-  test("while the realm is closed, an owl stops at the arch's blockade instead of walking in behind it (OP-127)", async ({ page }) => {
+  test('the east arch walks straight into the glass realm, open to every owl with the switch untouched (the whole map open, Nov 8)', async ({ page }) => {
     test.skip(!isEdge(), 'the room server only');
     await openPark(page, { transport: 'edge' });
     const settled = () => expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
-    // In front of the east arch (the hub's to-glass doorway), then straight on into it: the blockade's
-    // foot is at y 668 and the arch's floor runs back to y 604.
+    // In front of the east arch (the hub's to-glass doorway), then straight on into it, where a
+    // blockade once stood at y 668 while the realm was shut (OP-127).
     await page.evaluate(() => window.owlPark.walkTo(2665, 690));
     await settled();
     await page.evaluate(() => window.owlPark.walkTo(2665, 610));
-    await settled();
-    expect((await state(page)).pos.y).toBeGreaterThan(668);
-    await expect(page.locator('[data-toasts]')).toContainText('Hatching Soon');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('glass');
+    await expect(page.locator('[data-toasts]')).not.toContainText('Hatching Soon');
   });
 });

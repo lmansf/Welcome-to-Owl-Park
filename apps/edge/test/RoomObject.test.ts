@@ -886,44 +886,45 @@ describe('an owl back from a dropped connection (OP-138)', () => {
 describe('the realms switch (the stained-glass climb)', () => {
   const tell = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));
 
+  // Today's park and the new map have no gated room now (the whole map open, Nov 8): a level of the tree is the switch's.
   it('turns an owl away from a gated realm until the keepers open it, with the arch’s phrase, and lets everyone know the switch', async () => {
     const obj = roomObject();
     const hub = await join(obj, 'hub', 'v_hub');
     expect(hub.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null });
-    const shut = await join(obj, 'glass', 'v_shut');
-    expect(shut.last('closed')).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    const shut = await join(obj, 'l3', 'v_shut');
+    expect(shut.last('closed')).toEqual({ t: 'closed', room: 'l3', why: 'realm', sign: 'Pardon Our Feathers' });
     expect(shut.closed?.code).toBe(CLOSE.REALM_CLOSED);
     expect(shut.last('welcome')).toBeUndefined();
-    // An ungated room never consults the switch.
-    expect((await join(obj, 'grove', 'v_grove')).last('welcome')).toBeDefined();
-    await tell(obj, { open: ['glass'], portal: true, night: null });
-    expect(hub.last('realms')).toEqual({ t: 'realms', realms: { open: ['glass'], portal: true, night: null } });
-    const inside = await join(obj, 'glass', 'v_in');
-    expect(inside.last('welcome')?.realms?.open).toEqual(['glass']);
+    // An ungated room never consults the switch: the realms, the glass one among them, and the new map's root stair.
+    for (const room of ['grove', 'glass', 'm3-under']) expect((await join(obj, room, `v_${room}`)).last('welcome'), room).toBeDefined();
+    await tell(obj, { open: ['l3'], portal: true, night: null });
+    expect(hub.last('realms')).toEqual({ t: 'realms', realms: { open: ['l3'], portal: true, night: null } });
+    const inside = await join(obj, 'l3', 'v_in');
+    expect(inside.last('welcome')?.realms?.open).toEqual(['l3']);
     expect(inside.closed).toBeNull();
   });
 
   it('sends the owls out of a realm that closes, and keeps the switch in storage across a wake', async () => {
     state = new KeepingState();
     const obj = roomObject();
-    await tell(obj, { open: ['glass'], portal: true, night: 'easy' });
-    const a = await join(obj, 'glass', 'v_a');
-    const b = await join(obj, 'glass', 'v_b');
+    await tell(obj, { open: ['l3'], portal: true, night: 'easy' });
+    const a = await join(obj, 'l3', 'v_a');
+    const b = await join(obj, 'l3', 'v_b');
     expect(a.closed).toBeNull();
     // Woken from hibernation on the same storage, the object still has the realm open.
     const woken = roomObject();
     await settle(); // the constructor reads its storage
-    const c = await join(woken, 'glass', 'v_c');
-    expect(c.last('welcome')?.realms).toEqual({ open: ['glass'], portal: true, night: 'easy' });
+    const c = await join(woken, 'l3', 'v_c');
+    expect(c.last('welcome')?.realms).toEqual({ open: ['l3'], portal: true, night: 'easy' });
     await tell(woken, { open: [], portal: true, night: 'easy' });
-    expect(c.last('closed')).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    expect(c.last('closed')).toEqual({ t: 'closed', room: 'l3', why: 'realm', sign: 'Pardon Our Feathers' });
     expect(c.closed?.code).toBe(CLOSE.REALM_CLOSED);
     // The first object, told the same, sends its owls out too; a malformed switch is read as closed.
     await tell(obj, { open: [], portal: true, night: 'easy' });
     expect(a.closed?.code).toBe(CLOSE.REALM_CLOSED);
     expect(b.closed?.code).toBe(CLOSE.REALM_CLOSED);
     await tell(obj, 'nonsense');
-    expect((await join(obj, 'glass', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+    expect((await join(obj, 'l3', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
   });
 });
 
@@ -976,8 +977,8 @@ describe('the tree (map 2), dark until it opens (OP-156)', () => {
     const owl = await join(obj, 'l1', 'v_owl');
     expect(owl.closed).toBeNull();
     expect(owl.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null, tree: 30 });
-    // Today's gated realm keeps to its own checkbox.
-    expect((await join(obj, 'glass', 'v_glass')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+    // The new map's copies of the tree's levels are open to every owl whatever the tree does (Nov 8).
+    expect((await join(obj, 'm3-under', 'v_under')).closed).toBeNull();
     // Back to 0: the tree goes dark, and the owl in it is told so and sent out.
     await realms({ open: [], portal: false, night: null });
     expect(owl.last('closed')).toMatchObject({ t: 'closed', room: 'l1', why: 'realm' });
@@ -1494,8 +1495,8 @@ describe('the room server’s log (OP-134)', () => {
     await join(full, 'hub', 'v_b');
     logged(cap.lines, 'room_join_refused', { room: 'hub', ...owl('v_b'), reason: 'cap', cap: 1 });
     const obj = roomObject();
-    await join(obj, 'glass', 'v_c');
-    logged(cap.lines, 'room_join_refused', { room: 'glass', ...owl('v_c'), reason: 'realm' });
+    await join(obj, 'l3', 'v_c');
+    logged(cap.lines, 'room_join_refused', { room: 'l3', ...owl('v_c'), reason: 'realm' });
     const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
     collections.nests.setOpen(OWNER, false, clock);
     await join(obj, `nest-${nestId}`, 'v_d', GUEST);

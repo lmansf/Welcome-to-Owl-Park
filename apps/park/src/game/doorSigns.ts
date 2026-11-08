@@ -5,7 +5,7 @@
  * can't even find the grove"). A room seen from the side marks its doorways its own way (treeView).
  */
 import Phaser from 'phaser';
-import type { RoomDef } from '@owl-park/shared';
+import type { RoomDef, WalkMap } from '@owl-park/shared';
 import { signedDoors } from './hints';
 
 /** Room pixels per screen pixel now: what keeps a sign the same size on any screen. */
@@ -22,11 +22,13 @@ export class DoorSigns {
     scene: Phaser.Scene,
     room: RoomDef,
     private readonly scale: Scale,
+    map: WalkMap = 1,
+    shut: (roomId: string) => boolean = () => false,
   ) {
-    for (const d of signedDoors(room)) {
+    for (const d of signedDoors(room, map, shut)) {
       const at = (d.labelAt ?? d.marker)!;
       const text = scene.add
-        .text(at.x, at.y, d.label!, {
+        .text(at.x, at.y, d.label, {
           fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
           fontSize: `${FONT_PX * 2}px`,
           fontStyle: 'bold',

@@ -213,15 +213,17 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
     spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
     doors: [
-      { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 } },
-      { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 } },
+      // On the new map this is the Party Grove (out of the Great Hollow's trunk door): its doorways carry signs there (labelNew).
+      { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 }, labelNew: 'To the treehouse clearing' },
+      { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 }, labelNew: 'To the neon street' },
       // The marker is the foot of each arch's blockade; the rect is the strip in front of it.
       { id: 'closed-a', rect: { x: 2040, y: 660, w: 210, h: 30 }, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } },
-      // The east arch leads to the stained-glass realm (gated: the realms setting opens it); its sign and blockade stay until then.
-      { id: 'to-glass', rect: { x: 2560, y: 610, w: 210, h: 90 }, to: { room: 'glass', spawn: 'from-hub' }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
+      // The east arch leads to the stained-glass realm, open to every owl since Nov 8; its sign shows only should a realm be shut again.
+      { id: 'to-glass', rect: { x: 2560, y: 610, w: 210, h: 90 }, to: { room: 'glass', spawn: 'from-hub' }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 }, labelNew: 'To the glass realm', labelAt: { x: 2665, y: 560 } },
       // The way out (C43): the floor's bottom edge below where owls arrive from the turnstiles, back
       // to the lobby outside the gate. A soft ring on the floor marks it.
-      { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 } },
+      // On the new map it is the way back into the Great Hollow (NEW_MAP_WAYS), its sign just below where an owl arrives from there.
+      { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 }, labelNew: 'Back into the Great Hollow', labelAt: { x: 2400, y: 790 } },
     ],
     spots: [
       { x: 300, y: 840 },
@@ -599,7 +601,7 @@ export const ROOMS: Record<string, RoomDef> = {
     // The way on is the portal to the solo climb (the client's `interactions` table offers Climb there).
     on: { id: 'portal' },
     mood: 'dusk',
-    gated: true,
+    // Open to every owl (the owner's "whole map unlocked all the time", Nov 8): no longer behind the realms switch.
     decor: [
       // A planter of glass flowers by the quest post, and two lanterns lighting the way in and the way on.
       { key: 'kit-glass-decor--glass-glass-planter' },
@@ -1484,7 +1486,9 @@ export const NEW_MAP_ARRIVAL = { room: 'lobby', spawn: 'default' } as const;
 
 /** A copy of the tree's level `from` as the new map's room `id`, its doorways led on by `ways` (door id to target). */
 function newMapLevel(id: string, from: string, ways: Readonly<Record<string, { room: string; spawn: string }>>, more: Partial<RoomDef> = {}): RoomDef {
-  const src = ROOMS[from]!;
+  // The tree's level it is built on is gated (dark unless the tree takes a share of the arrivals, OP-156);
+  // the new map's copy is open to every owl (the owner's "whole map unlocked all the time", Nov 8).
+  const { gated: _gated, ...src } = ROOMS[from]!;
   const doors = src.doors.map((d) => {
     const to = ways[d.id];
     if (!to) return d;

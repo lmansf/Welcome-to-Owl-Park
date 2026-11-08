@@ -3,8 +3,9 @@ import { expect, test } from './fixtures';
 import { mapCard, openPark, state, travelTo, walkToDoor } from './helpers';
 
 /**
- * Travel from the Menu's map (OP-130). A place lights up once the owl has walked into it, and its
- * card's button, held, travels there; the owl's own nest is always there. Into the park only through
+ * Travel from the Menu's map (OP-130). Every place is lit from the start (the owner's "whole map
+ * unlocked", Nov 8), one walked into sparkles the first time the map shows it, and a card's button,
+ * held, travels there; the owl's own nest is always there. Into the park only through
  * the front gate: a place inside the park offers the gate instead until the owl has walked through
  * the turnstiles, and going home puts it outside again. On this device (the local mode), and through
  * the room server, which keeps the map with the owl and turns a travel in away without the gate.
@@ -37,16 +38,16 @@ async function walkedBefore(page: Page, collector: string, places: string[]): Pr
 test.describe.configure({ timeout: 120_000 });
 
 test.describe('travel from the map (OP-130)', () => {
-  test('a place lights up once walked into, with a sparkle; its card, held, travels there; the nest is always there', async ({ page }) => {
+  test('every place is lit from the start, one walked into sparkles once; its card, held, travels there; the nest is always there', async ({ page }) => {
     test.skip(isEdge(), 'on this device; through the room server below');
     await openPark(page, { room: 'homes', collector: `e2e-travel-lit-${test.info().project.name}` });
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    // The street is walked into; the gate not yet: its card says how it lights up, and offers nothing.
+    // Only the street is walked into, and still the gate is lit and its card travels there.
     let card = await mapCard(page, 'lobby');
-    await expect(card).toContainText('Walk there once, and you can travel there from the map.');
-    await expect(card.locator('[data-travel]')).toHaveCount(0);
+    await expect(card.locator('[data-travel]')).toHaveText('Travel to the gate');
     await expect(menu.locator('button.pin[data-place="homes"]')).toHaveAttribute('data-lit', '');
-    await expect(menu.locator('button.pin[data-place="lobby"]')).toHaveClass(/unlit/);
+    await expect(menu.locator('button.pin[data-place="lobby"]')).toHaveAttribute('data-lit', '');
+    await expect(menu.locator('button.pin.unlit')).toHaveCount(0);
     await expect(menu.locator('button.pin[data-place="nest"]')).toHaveAttribute('data-lit', '');
     // Closed arches are no place to tap.
     await expect(menu.locator('button.pin[data-place="closed-a"]')).toHaveCount(0);

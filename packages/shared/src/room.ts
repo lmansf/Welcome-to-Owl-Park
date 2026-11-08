@@ -521,6 +521,11 @@ export interface DoorDef {
    * edge while it is off screen (Logan, Nov 8: he couldn't find the Party Grove in the Great Hollow).
    */
   label?: string;
+  /**
+   * The sign's words on the new map (3), in place of `label`: for a room of today's park the new map
+   * walks too, whose doorway leads elsewhere there (the Party Grove's way back into the Great Hollow).
+   */
+  labelNew?: string;
   /** Where the doorway's sign stands (room pixels, its top middle); the marker when not given. */
   labelAt?: Vec2;
   /** Where to place a visual hint (sign, glow) for the door. */

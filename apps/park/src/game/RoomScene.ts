@@ -118,16 +118,17 @@ import {
   type Air,
   type Flier,
   type FlightAbilities,
-  TRAVEL_LANDINGS,
   TRAVEL_WORDS,
   canTravel,
   needsGate,
   travelAfter,
+  travelLanding,
   type TravelRefusal,
   type TravelState,
   WAY_SHORT_PX,
   wayAround,
   PERCH_SLACK,
+  doorLabel,
   doorTarget,
   SETUP_WORDS,
   type LockView,
@@ -947,7 +948,7 @@ export class RoomScene extends Phaser.Scene {
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
     this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     if (this.cfg.sizes) this.sizeLabels = new SizeLabels(this, room.size.h + 140, () => this.cfg.pixelRatio / this.cameras.main.zoom);
-    this.doorSigns = new DoorSigns(this, room, () => this.cfg.pixelRatio / this.cameras.main.zoom);
+    this.doorSigns = new DoorSigns(this, room, () => this.cfg.pixelRatio / this.cameras.main.zoom, this.walking(), (id) => this.realmClosed(id));
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -1527,14 +1528,15 @@ export class RoomScene extends Phaser.Scene {
       places.map((p) => {
         const door = this.room.doors.find((d) => d.id === p.id)!;
         const spot = this.interactions[p.id];
+        const named = door.to ? doorLabel(door, this.walking()) : undefined;
         return {
           ...p,
           tint: door.to ? (DOOR_TINTS[this.doorTo(door)?.room ?? door.to.room] ?? '#C9A227') : '#FFD36A',
-          ...(door.id === toPark ? { text: NEST_WORDS.toPark } : door.label && door.to ? { text: door.label } : {}),
+          ...(door.id === toPark ? { text: NEST_WORDS.toPark } : named ? { text: named } : {}),
           label: spot
             ? `${spot.label}, off screen: walk there`
-            : door.label && door.to && door.id !== toPark
-              ? `${door.label}, off screen: walk there`
+            : named && door.id !== toPark
+              ? `${named}, off screen: walk there`
               : door.id === toPark
               ? `${NEST_WORDS.toPark}, off screen: walk there`
               : door.id === own
@@ -1591,8 +1593,8 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * Travel from the Menu's map, its button held (OP-130): to a place the owl has walked into (its own
-   * nest always), landing where walking in would have, after the slower fade going home has. Into the
+   * Travel from the Menu's map, its button held (OP-130): to any place of the map, walked into or not
+   * (the owner's "whole map unlocked", Nov 8), landing where walking in would have, after the slower fade going home has. Into the
    * park only once the owl has walked through the front gate since it was last outside; the room server
    * turns any other travel in away (notThroughGate). Not in the middle of a climb, a game or the
    * turnstiles, nor while "Still here?" is asked. Null when the owl is on its way, otherwise why not.
@@ -1607,14 +1609,15 @@ export class RoomScene extends Phaser.Scene {
     const climb = this.climb?.debug();
     if (this.passingGate || this.decorating || this.askedAt || this.goingAway || this.arcade?.debug() || (climb && !climb.over)) return 'busy';
     const known = this.travelNow();
-    if (!canTravel(place, known.places)) return 'not-yet';
-    if (needsGate(place) && !known.gate) return 'gate';
+    const walking = this.walking();
+    if (!canTravel(place)) return 'not-yet';
+    if (needsGate(place, walking) && !known.gate) return 'gate';
     if (place === 'nest') {
       if (isNestRoom(this.room.id) && this.nestMine) return 'here';
       void this.goHome(NEST_SPAWN, NEST_FADE_MS);
       return null;
     }
-    const to = TRAVEL_LANDINGS[place]!;
+    const to = travelLanding(place, walking)!;
     if (to.room === this.room.id) return 'here';
     this.hud.closeDialogue();
     this.talkingTo = null;

@@ -258,8 +258,8 @@ describe('the overflow object (OP-075)', () => {
       logged(cap.lines, 'queue_depth', { waiting: 0, held: 1 });
       await look(1, 'c_aaaaaaaa');
       logged(cap.lines, 'queue_admit', { n: 1, who_hash: hashForLog('c_aaaaaaaa'), waited_ms: 12_000 });
-      await post('/settings', { realms: { open: ['glass'], portal: true, night: 'hard' } });
-      logged(cap.lines, 'realms_set', { component: 'overflow', open: ['glass'], portal: true, night: 'hard' });
+      await post('/settings', { realms: { open: ['l3'], portal: true, night: 'hard' } });
+      logged(cap.lines, 'realms_set', { component: 'overflow', open: ['l3'], portal: true, night: 'hard' });
       expect(JSON.stringify(cap.lines)).not.toContain('c_aaaaaaaa');
     } finally {
       cap.restore();
@@ -393,11 +393,13 @@ describe('the overflow object (OP-075)', () => {
 
   it('keeps the realms switch (the stained-glass climb), refuses a room that is not gated or a night it does not know, and tells the rooms', async () => {
     expect((await post('/settings', { realms: { open: ['hub'] } })).status).toBe(400);
+    // The glass realm is open to every owl now (the whole map open, Nov 8): the switch no longer has it.
+    expect((await post('/settings', { realms: { open: ['glass'] } })).status).toBe(400);
     expect((await post('/settings', { realms: { night: 'never' } })).status).toBe(400);
     expect((await post('/settings', { realms: { portal: 'yes' } })).status).toBe(400);
-    const r = await post<OverflowState>('/settings', { realms: { open: ['glass'], portal: true, night: 'hard' } });
+    const r = await post<OverflowState>('/settings', { realms: { open: ['l3'], portal: true, night: 'hard' } });
     expect(r.status).toBe(200);
-    const realms = { open: ['glass'], portal: true, night: 'hard' };
+    const realms = { open: ['l3'], portal: true, night: 'hard' };
     expect(r.body.realms).toEqual(realms);
     expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms, setup: SETUP_DEFAULTS });
     // Closing it again reaches the rooms through the same notice.

@@ -85,6 +85,11 @@ export function doorTarget(door: DoorDef, map: WalkMap, cameFrom?: string): Door
   return map === 2 && door.toTree ? door.toTree : door.to;
 }
 
+/** The words on a doorway's sign for an owl walking map `map` (DoorDef.label, labelNew), or undefined for none. */
+export function doorLabel(door: DoorDef, map: WalkMap): string | undefined {
+  return map === 3 ? (door.labelNew ?? door.label) : door.label;
+}
+
 export function inExit(room: RoomDef, p: Vec2): boolean {
   return room.doors.some((d) => (d.to !== undefined || nestDoorIndex(d.id) !== null) && pointInRect(p, d.rect));
 }

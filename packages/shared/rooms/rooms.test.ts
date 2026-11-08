@@ -511,13 +511,14 @@ describe('hiding spots', () => {
   }
 });
 
-describe('the stained-glass realm (gated)', () => {
+describe('the stained-glass realm', () => {
   const hub = ROOMS.hub!;
   const glass = ROOMS.glass!;
 
-  it('is the one gated room of today\'s park, one screen laid out as every realm\'s start (OP-276), with the knot-hole back, the idol and the portal', () => {
-    expect(GATED_ROOMS.filter((id) => mapOf(getRoom(id)) === 1)).toEqual(['glass']);
-    expect(glass.gated).toBe(true);
+  it('is open to every owl, one screen laid out as every realm\'s start (OP-276), with the knot-hole back, the idol and the portal', () => {
+    // The whole map open all the time (the owner's word, Nov 8): no room of today's park waits on the realms switch.
+    expect(GATED_ROOMS.filter((id) => mapOf(getRoom(id)) === 1)).toEqual([]);
+    expect(glass.gated).toBeUndefined();
     expect(glass.size).toEqual({ w: ROOM_W, h: ROOM_H });
     expect(glass.backgrounds).toEqual([{ key: 'kit-glass-start-screen', x: 0, y: 0 }]);
     expect(glass.doors.map((d) => d.id)).toEqual(['to-hub', 'idol', 'portal']);
@@ -1180,7 +1181,9 @@ describe('the new map (map 3): the park as one tree', () => {
     for (const r of newRooms) {
       const from = ROOMS[NEW_MAP[r.id]!]!;
       expect(r.keeperOnly, r.id).toBeUndefined();
-      expect(r.gated, r.id).toBe(from.gated);
+      // The tree's level is gated (OP-156); its copy on the new map is open to every owl (Nov 8).
+      expect(from.gated, r.id).toBe(true);
+      expect(r.gated, r.id).toBeUndefined();
       expect(mapOf(r), r.id).toBe(2);
       expect(r.size, r.id).toEqual(from.size);
       expect(r.walkable, r.id).toEqual(from.walkable);
