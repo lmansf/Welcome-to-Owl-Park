@@ -162,6 +162,20 @@ export function signFocus(targets: HintTarget[], owl: { x: number; y: number }, 
   return near[0]?.id ?? null;
 }
 
+/** How tall an owl stands over its feet (room px), and the gap kept under them, so a sign never sits behind it. */
+const OWL_TALL = 95;
+const UNDER_FEET = 10;
+
+/**
+ * Where a sign's top stands (room px): at its own spot, or just under the owl's feet while the owl
+ * stands where it would cover the words (an owl coming out of a doorway lands on its sign).
+ */
+export function signY(at: { x: number; y: number }, w: number, h: number, owl: { x: number; y: number }): number {
+  const across = Math.abs(owl.x - at.x) < w / 2 + 30;
+  const behind = at.y < owl.y + UNDER_FEET && at.y + h > owl.y - OWL_TALL;
+  return across && behind ? owl.y + UNDER_FEET : at.y;
+}
+
 /**
  * The bottom inset on a touch screen: clear of the thumbstick and the face buttons, but never more than
  * TOUCH_BOTTOM_SHARE of the screen's height, so on a phone held sideways a chip for a way down sits low

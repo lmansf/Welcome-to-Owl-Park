@@ -988,7 +988,7 @@ export class RoomScene extends Phaser.Scene {
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
     this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     if (this.cfg.sizes) this.sizeLabels = new SizeLabels(this, room.size.h + 140, () => this.cfg.pixelRatio / this.cameras.main.zoom);
-    this.doorSigns = new DoorSigns(this, room, () => this.cfg.pixelRatio / this.cameras.main.zoom, this.walking(), (id) => this.realmClosed(id));
+    this.doorSigns = new DoorSigns(this, room, () => this.cfg.pixelRatio / this.cameras.main.zoom, this.walking(), (id) => this.realmClosed(id), () => this.me.pos);
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);

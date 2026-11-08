@@ -8,7 +8,7 @@
  */
 import Phaser from 'phaser';
 import type { RoomDef, WalkMap } from '@owl-park/shared';
-import { signedDoors } from './hints';
+import { signY, signedDoors } from './hints';
 
 /** Room pixels per screen pixel now: what keeps a sign the same size on any screen. */
 type Scale = () => number;
@@ -23,7 +23,7 @@ const FADE_MS = 220;
 const SIGN_DEPTH = -0.5;
 
 export class DoorSigns {
-  private readonly signs: Array<{ text: Phaser.GameObjects.Text; label: string; id: string }> = [];
+  private readonly signs: Array<{ text: Phaser.GameObjects.Text; label: string; id: string; at: { x: number; y: number } }> = [];
   private scaleNow = 0;
   private focused: string | null = null;
 
@@ -33,6 +33,8 @@ export class DoorSigns {
     private readonly scale: Scale,
     map: WalkMap = 1,
     shut: (roomId: string) => boolean = () => false,
+    /** Where the owl's feet are, so the sign showing slides out from under it. */
+    private readonly owl: () => { x: number; y: number } = () => ({ x: -1e6, y: -1e6 }),
   ) {
     for (const d of signedDoors(room, map, shut)) {
       const at = (d.labelAt ?? d.marker)!;
@@ -50,7 +52,7 @@ export class DoorSigns {
         // On the floor: an owl walking up to the doorway stands over it, from either side.
         .setDepth(SIGN_DEPTH)
         .setAlpha(0);
-      this.signs.push({ text, label: d.label!, id: d.id });
+      this.signs.push({ text, label: d.label!, id: d.id, at });
     }
     scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.update, this);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.events.off(Phaser.Scenes.Events.POST_UPDATE, this.update, this));
@@ -78,9 +80,13 @@ export class DoorSigns {
 
   private update(): void {
     const s = this.scale();
-    if (s === this.scaleNow) return;
-    this.scaleNow = s;
-    // Drawn at twice the size and scaled down by half, so the words stay sharp when the camera zooms in.
-    for (const { text } of this.signs) text.setScale(s / 2);
+    if (s !== this.scaleNow) {
+      this.scaleNow = s;
+      // Drawn at twice the size and scaled down by half, so the words stay sharp when the camera zooms in.
+      for (const { text } of this.signs) text.setScale(s / 2);
+    }
+    const shown = this.signs.find((x) => x.id === this.focused);
+    if (shown) shown.text.y = signY(shown.at, shown.text.displayWidth, shown.text.displayHeight, this.owl());
   }
 }
+
