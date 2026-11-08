@@ -24,7 +24,7 @@ export function skirtStrips(room: Pick<RoomDef, 'backgrounds' | 'background' | '
   for (const s of room.kit?.surfaces ?? []) {
     if (!s.skirt) continue;
     for (const t of backgroundTiles(room as RoomDef)) {
-      if ((t.rate ?? 1) !== 1 || t.plain) continue;
+      if ((t.rate ?? 1) !== 1) continue;
       const foot = t.y + ROOM_H;
       if (foot < s.rect.y || foot > s.rect.y + s.rect.h) continue;
       if (t.x + ROOM_W <= s.rect.x || t.x >= s.rect.x + s.rect.w) continue;

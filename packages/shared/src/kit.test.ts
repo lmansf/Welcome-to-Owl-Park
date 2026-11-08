@@ -273,7 +273,7 @@ describe('the kit draw plan (OP-234)', () => {
 
   it('is empty for a painted room', () => {
     expect(kitDrawPlan(ROOMS['l4']!)).toEqual([]);
-    expect(kitArtKeys(ROOMS['hub']!)).toEqual([]);
+    expect(kitArtKeys(ROOMS['l4']!)).toEqual([]);
   });
 
   it('keeps each kit room light enough for a phone: few images, few textures', () => {

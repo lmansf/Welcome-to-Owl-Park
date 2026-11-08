@@ -116,6 +116,7 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   ...plazaPieces('market', 'clutter'),
   ...plazaPieces('glass', 'planters'),
   ...plazaPieces('clearing', 'ferns'),
+  ...plazaPieces('party', 'mushrooms'),
   // Seen from the side, on every platform drawn from the kit: down its sides (repeats down; the right side is the left mirrored) and under it (repeats across).
   'edge-ledge-side': { w: 40, h: 240, kind: 'side' },
   'edge-ledge-under': { w: 240, h: 44, kind: 'under' },

@@ -4,7 +4,7 @@ import { pointInPolygon } from '../src/geometry';
 import { interactablesIn } from '../src/interactables';
 import { ROOM_H } from '../src/room';
 import { OWL_ROOM_PX2 } from './hollowHall';
-import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from './index';
+import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, HUB_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from './index';
 import { keptRun } from './plaza';
 
 /** Owls a room's floor holds standing gathered (OWL_ROOM_PX2 each), counted on a 20 px grid. */
@@ -23,6 +23,7 @@ describe('the painted common rooms grown into plazas (Nov 8: somewhere 80 owls c
     { id: 'market', plaza: MARKET_PLAZA },
     { id: 'glass', plaza: GLASS_PLAZA },
     { id: 'grove', plaza: GROVE_PLAZA },
+    { id: 'hub', plaza: HUB_PLAZA },
   ];
 
   it.each(plazas)('$id holds 80 owls gathered, with room to spare', ({ id }) => {
@@ -54,6 +55,16 @@ describe('the painted common rooms grown into plazas (Nov 8: somewhere 80 owls c
       expect(d.y + d.h <= room.size.h + 40, d.id).toBe(true);
       expect(edgeArt(d.key).w).toBe(d.w);
     }
+  });
+});
+
+describe("the Party Grove's plaza", () => {
+  it('keeps the way back into the Great Hollow on the ring painted in its floor, clear of the moonbeams', () => {
+    const hub = getRoom('hub')!;
+    const back = hub.doors.find((d) => d.id === 'to-lobby')!;
+    expect(back.rect).toEqual({ x: 2310, y: 862, w: 180, h: 38 });
+    const ring = edgeArt('edge-party-ring');
+    for (const r of HUB_PLAZA.rings) expect(Math.abs(r.x - (back.rect.x + back.rect.w / 2)), `ring at ${r.x}`).toBeGreaterThan(ring.w / 2 + back.rect.w / 2);
   });
 });
 

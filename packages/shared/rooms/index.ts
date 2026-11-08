@@ -1572,6 +1572,7 @@ export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as con
 export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 2400, y: 1110 }] } as const;
 export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
 export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
+export const HUB_PLAZA = { front: 1235, rings: [{ x: 1150, y: 1060 }, { x: 3650, y: 1060 }] } as const;
 
 /** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
 const footMound = (id: string, outline: Vec2[]): Perch => ({ id, area: outline, top: 36, solid: true });
@@ -1676,6 +1677,22 @@ ROOMS['grove'] = growToPlaza(ROOMS['grove']!, {
     footMound('grove-mushrooms', pts([3070, 900], [3070, 870], [3140, 850], [3140, 745], [3340, 745], [3340, 900])),
     footMound('grove-bank-east', pts([4340, 900], [4380, 860], [4450, 770], [4580, 720], [4800, 700], [4800, 900])),
   ],
+});
+
+// The Party Grove runs on toward the viewer, its pale floor laid on below the painted one. The glowing
+// ring painted in the floor's middle is still the way back into the Great Hollow, out in the open now,
+// and the plaza's two moonbeams stand either side of it, clear of the path down from the trunk door.
+ROOMS['hub'] = growToPlaza(ROOMS['hub']!, {
+  ...HUB_PLAZA,
+  rings: [...HUB_PLAZA.rings],
+  oldFront: 900,
+  west: 140,
+  east: 4720,
+  texture: 'kit-tex-entrance-plaza-stone',
+  tint: 0xe3dbc8,
+  ring: 'edge-party-ring',
+  corner: 'edge-party-corner-front',
+  frontBumps: ['edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b'],
 });
 
 // ---- The Great Hollow (hollowHall.ts) ----

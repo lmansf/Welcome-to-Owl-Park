@@ -130,6 +130,13 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'grove-leaves-mound', kind: 'leaf-pile', room: 'grove', pos: { x: 1700, y: 1080 } },
   { id: 'grove-leaves-mushrooms', kind: 'leaf-pile', room: 'grove', pos: { x: 3250, y: 1080 } },
   { id: 'grove-leaves-bank-east', kind: 'leaf-pile', room: 'grove', pos: { x: 4480, y: 1060 } },
+  // The Party Grove's plaza (Nov 8): a moonbeam over each of its two rings, either side of the way back into the trunk, leaves blown into its corners and along its front.
+  { id: 'hub-moonbeam-west', kind: 'moonbeam', room: 'hub', pos: { x: 1150, y: 1060 } },
+  { id: 'hub-moonbeam-east', kind: 'moonbeam', room: 'hub', pos: { x: 3650, y: 1060 } },
+  { id: 'hub-leaves-plaza-west', kind: 'leaf-pile', room: 'hub', pos: { x: 380, y: 1140 } },
+  { id: 'hub-leaves-plaza-front-west', kind: 'leaf-pile', room: 'hub', pos: { x: 1800, y: 1150 } },
+  { id: 'hub-leaves-plaza-front-east', kind: 'leaf-pile', room: 'hub', pos: { x: 3000, y: 1150 } },
+  { id: 'hub-leaves-plaza-east', kind: 'leaf-pile', room: 'hub', pos: { x: 4480, y: 1140 } },
   { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
   { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
   { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
