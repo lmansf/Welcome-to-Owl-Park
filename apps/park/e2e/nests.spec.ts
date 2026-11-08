@@ -137,10 +137,12 @@ test.describe('the nests (this device)', () => {
     const at = await walkAndStop(page, 1431, 805);
     await settleCamera(page);
     // A point on the lane past the mounds: from here the straight line to it leaves the floor at once.
+    // Clear of the mound's own top, which stands up out of the plaza now (Nov 8): a tap on that asks
+    // for the top, and the owl already stands at its face.
     const past = await openGround(page, [
-      { x: 1650, y: 730 },
-      { x: 1620, y: 720 },
-      { x: 1700, y: 740 },
+      { x: 1650, y: 700 },
+      { x: 1620, y: 700 },
+      { x: 1700, y: 710 },
     ]);
     await tapRoomPoint(page, past.x, past.y);
     await waitForArrival(page, past.x, past.y, 8);
