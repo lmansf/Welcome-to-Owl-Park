@@ -47,6 +47,8 @@ export interface ParkState {
   sizeBoxes: string[];
   sizeLabels: string[];
   floorShown: boolean;
+  /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */
+  edges: number;
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** In a room of the tree (OP-173): how many fronts, shades, ledge edges and doorway marks it drew. */

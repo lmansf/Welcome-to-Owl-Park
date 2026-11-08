@@ -17,7 +17,7 @@ import type { ArtKind, ArtSpec } from './art';
 import { rasterNames } from './artNames';
 
 /** The kinds of art a size box stands in for. */
-const BOXED: ReadonlySet<ArtKind> = new Set<ArtKind>(['room', 'piece', 'kit', 'texture', 'layer']);
+const BOXED: ReadonlySet<ArtKind> = new Set<ArtKind>(['room', 'piece', 'kit', 'texture', 'layer', 'edge']);
 
 export function boxable(kind: ArtKind): boolean {
   return BOXED.has(kind);

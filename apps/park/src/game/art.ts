@@ -8,7 +8,7 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, KIT_ART, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, isNestRoom, kitArtKeys, kitPlaceholder, mapOf, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
@@ -52,8 +52,10 @@ function filesOf(key: string, published: ReadonlyMap<string, string> = PUBLISHED
  * `climb`: the stained-glass climb's tower pieces, the same way; the climb draws glass of its own until they come.
  * `kit`: the art kit's textures, shape pieces and backdrops (OP-234, kitArt.ts), each standing in as its
  * placeholder in the tree's palette until its art ships.
+ * `edge`: the pieces that shape a room's edges seen from above (edges.ts): roots, ferns, pillars, leaf
+ * litter and the rim, each standing in as plain shapes until its art ships.
  */
-export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb' | 'texture' | 'layer' | 'kit';
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb' | 'texture' | 'layer' | 'kit' | 'edge';
 
 export interface ArtSpec {
   w: number;
@@ -924,6 +926,8 @@ export function publishedArtUrl(key: string): string | null {
 
 // The art kit's pieces (OP-234), at their logical sizes.
 for (const [key, { w, h }] of Object.entries(KIT_ART)) ART[key] ??= { w, h, kind: 'kit' };
+// The pieces that shape a room's edges seen from above (edges.ts), at their logical sizes.
+for (const [key, { w, h }] of Object.entries(EDGE_ART)) ART[key] ??= { w, h, kind: 'edge' };
 
 // The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
 // A room the page draws in plain shapes (`drawn`: the test course, OP-224) has no art files.
@@ -951,6 +955,11 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
   // A room built from the art kit (OP-234) loads its pieces too.
   if (room?.kit) keys.push(...kitArtKeys(room));
+  // And the strips that frame its platforms' sides and feet (kitFrames in edges.ts), where it has any.
+  if (room?.kit) {
+    const plan = kitDrawPlan(room);
+    for (const d of plan) for (const s of kitFrames(d, room.size, plan)) keys.push(s.key);
+  }
   // A course's pieces drawn from the kit (its benches, bells, lost feathers and shrine).
   const course = room?.course && Object.hasOwn(COURSES, room.course.id) ? COURSES[room.course.id] : undefined;
   for (const a of Object.values(course?.art ?? {})) if (a) keys.push(a.key);
@@ -976,6 +985,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
   // A realm start's set pieces (OP-276).
   for (const p of room?.pieces ?? []) keys.push(p.key);
+  // The pieces that shape its edges, seen from above (edges.ts).
+  for (const e of room?.edges ?? []) keys.push(e.key);
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
@@ -1375,6 +1386,9 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
     }
     case 'kit':
       drawKitOps(g, kitPlaceholder(key) ?? []);
+      break;
+    case 'edge':
+      drawKitOps(g, edgePlaceholder(key) ?? []);
       break;
     case 'piece':
       g.fillStyle(0xc9a227, 0.18);

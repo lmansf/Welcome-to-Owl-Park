@@ -192,6 +192,8 @@ import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds } from './hudInset';
 import { SizeLabels } from './sizeLabels';
 import { drawWalkFloor } from './walkFloor';
+import { drawEdges } from './edgeView';
+import { setVignette } from './vignette';
 
 export interface RoomStart {
   room: string;
@@ -516,6 +518,8 @@ export class RoomScene extends Phaser.Scene {
   private sizeLabels: SizeLabels | null = null;
   /** Whether this room draws its walkable floor plainly: every room seen from above. */
   private floorShown = false;
+  /** How many pieces shape this room's edges (edges.ts), drawn. */
+  private edgesDrawn = 0;
   /** The ledge painter (OP-156, `?paint=1` with a keeper's token), over a room of the tree. */
   private painter: LedgePainter | null = null;
   /** The room as the park has it: `room` is this with the painter's draft's ledges while the painter tries them (OP-156). */
@@ -894,6 +898,11 @@ export class RoomScene extends Phaser.Scene {
     }
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
+    // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.
+    this.edgesDrawn = drawEdges(this, room);
+    // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
+    setVignette(true);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
     this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
@@ -1996,6 +2005,7 @@ export class RoomScene extends Phaser.Scene {
     sizeBoxes: string[];
     sizeLabels: string[];
     floorShown: boolean;
+    edges: number;
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
     /** The art tiles that scroll at rates of their own (OP-156): each one's key, scroll factor and where it is drawn. */
@@ -2063,6 +2073,7 @@ export class RoomScene extends Phaser.Scene {
       sizeBoxes: roomArtKeys(this.room.id, drawnRoom(this.room, this.cfg)).filter((k) => drawnAsSizeBox(k) && this.textures.exists(k)),
       sizeLabels: this.sizeLabels?.keys() ?? [],
       floorShown: this.floorShown,
+      edges: this.edgesDrawn,
       travel: this.travelNow(),
       paint: this.painter?.debug() ?? null,
     };
@@ -3725,7 +3736,9 @@ export class RoomScene extends Phaser.Scene {
     }
     const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
     cam.setViewport(0, 0, width, h);
-    cam.setZoom(Math.max(width / this.room.size.w, h / this.room.size.h));
+    // Cover the room across, and a screen of it down: a room taller than a screen (the Great Hollow's
+    // plazas) scrolls down under the camera as it does along, following the owl, its owls no smaller.
+    cam.setZoom(Math.max(width / this.room.size.w, h / Math.min(this.room.size.h, ROOM_H)));
     // Doorways, landings, hatches and leaf piles at the room's edges can scroll out from under the HUD,
     // seen from the side (OP-278) or from above (OP-292); the
     // Decorate sheet's own view stops above it already.
