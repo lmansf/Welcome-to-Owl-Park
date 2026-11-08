@@ -4,7 +4,7 @@ import { pointInPolygon } from '../src/geometry';
 import { interactablesIn } from '../src/interactables';
 import { ROOM_H } from '../src/room';
 import { OWL_ROOM_PX2 } from './hollowHall';
-import { ARCADE_PLAZA, GLASS_PLAZA, HOMES_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from './index';
+import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from './index';
 import { keptRun } from './plaza';
 
 /** Owls a room's floor holds standing gathered (OWL_ROOM_PX2 each), counted on a 20 px grid. */
@@ -22,6 +22,7 @@ describe('the painted common rooms grown into plazas (Nov 8: somewhere 80 owls c
     { id: 'homes', plaza: HOMES_PLAZA },
     { id: 'market', plaza: MARKET_PLAZA },
     { id: 'glass', plaza: GLASS_PLAZA },
+    { id: 'grove', plaza: GROVE_PLAZA },
   ];
 
   it.each(plazas)('$id holds 80 owls gathered, with room to spare', ({ id }) => {

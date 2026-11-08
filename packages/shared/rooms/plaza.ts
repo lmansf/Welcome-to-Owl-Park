@@ -41,6 +41,11 @@ export interface PlazaSpec {
   frontBumps: string[];
   /** Things in the painting's foot that the opened floor now reaches (a mossy mound): solid, hopped up on. */
   perches?: Perch[];
+  /**
+   * For a room whose floors overlap, so no one run round each can be joined (the grove): the back of
+   * the grown floor traced by hand, west to east, and the floors that stay as they are.
+   */
+  back?: { run: Vec2[]; others: Polygon[] };
 }
 
 /** A floor's corners above `oldFront`, as one run west to east; null when none of it reaches `oldFront`. */
@@ -66,8 +71,8 @@ export function keptRun(poly: Polygon, oldFront: number): Vec2[] | null {
 export function growToPlaza(room: RoomDef, spec: PlazaSpec): RoomDef {
   const h = spec.front + 15;
   const edges = plazaEdges(room.id, spec);
-  const opened = room.walkable.map((poly) => ({ poly, run: keptRun(poly, spec.oldFront) }));
-  const runs = opened.flatMap((o) => (o.run ? [o.run] : [])).sort((a, b) => a[0]!.x - b[0]!.x);
+  const opened = spec.back ? spec.back.others.map((poly) => ({ poly, run: null })) : room.walkable.map((poly) => ({ poly, run: keptRun(poly, spec.oldFront) }));
+  const runs = spec.back ? [spec.back.run] : opened.flatMap((o) => (o.run ? [o.run] : [])).sort((a, b) => a[0]!.x - b[0]!.x);
   if (!runs.length) throw new Error(`growToPlaza(${room.id}): no floor reaches y ${spec.oldFront}`);
   // Each floor's back, west to east, joined at the opening: down from one's east end, along, up into the next.
   const back: Vec2[] = [{ x: spec.west, y: spec.oldFront }];

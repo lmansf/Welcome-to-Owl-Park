@@ -1570,6 +1570,7 @@ export const LOBBY_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as con
 export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 3600, y: 1110 }] } as const;
 export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as const;
 export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 2400, y: 1110 }] } as const;
+export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
 export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
 
 /** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
@@ -1648,6 +1649,32 @@ ROOMS['glass'] = growToPlaza(ROOMS['glass']!, {
   perches: [
     footMound('glass-lantern-west', [{ x: 130, y: 840 }, { x: 270, y: 840 }, { x: 270, y: 880 }, { x: 130, y: 880 }]),
     footMound('glass-lantern-east', [{ x: 1390, y: 840 }, { x: 1530, y: 840 }, { x: 1530, y: 880 }, { x: 1390, y: 880 }]),
+  ],
+});
+// The grove's clearing runs on toward the viewer. Its floors overlap where the meadow meets the trunk
+// and the east path, so the back of the grown floor is traced round them by hand (each corner one of
+// theirs); the dock stays as it is. What closed the meadow's front (its west bank, the ferny mound
+// under the lantern, the mushrooms and the east bank) are mounds in the open floor now, hopped up on.
+ROOMS['grove'] = growToPlaza(ROOMS['grove']!, {
+  ...GROVE_PLAZA,
+  rings: [...GROVE_PLAZA.rings],
+  oldFront: 900,
+  west: 0,
+  east: 3 * ROOM_W,
+  texture: 'kit-tex-ground-forest-floor',
+  tint: 0x9b91bc,
+  ring: 'edge-clearing-ring',
+  corner: 'edge-clearing-corner-front',
+  frontBumps: ['edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a'],
+  back: {
+    run: pts([0, 700], [390, 668], [560, 664], [722, 672], [1080, 668], [1200, 672], [1420, 664], [1520, 676], [1600, 690], [1680, 650], [1850, 600], [1862, 540], [1930, 510], [2550, 510], [2525, 610], [2505, 705], [3050, 705], [3100, 700], [3340, 688], [3420, 705], [3560, 700], [3640, 672], [3800, 640], [3950, 650], [4000, 700], [4250, 722], [4300, 690], [4420, 645], [4560, 650], [4800, 700]),
+    others: [ROOMS['grove']!.walkable[1]!],
+  },
+  perches: [
+    footMound('grove-bank-west', pts([0, 700], [390, 668], [440, 760], [520, 860], [700, 880], [710, 900], [0, 900])),
+    footMound('grove-lantern-mound', pts([1100, 900], [1100, 860], [1300, 800], [1560, 790], [1660, 765], [1900, 765], [1890, 790], [1960, 880], [1965, 900])),
+    footMound('grove-mushrooms', pts([3070, 900], [3070, 870], [3140, 850], [3140, 745], [3340, 745], [3340, 900])),
+    footMound('grove-bank-east', pts([4340, 900], [4380, 860], [4450, 770], [4580, 720], [4800, 700], [4800, 900])),
   ],
 });
 

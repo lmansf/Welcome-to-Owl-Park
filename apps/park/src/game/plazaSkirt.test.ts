@@ -4,7 +4,7 @@ import { ROOMS } from '../rooms';
 import { skirtStrips } from './plazaSkirt';
 
 describe("a plaza's skirt (the painting's foot run on over its floor)", () => {
-  it.each(['lobby', 'arcade', 'homes', 'market', 'glass'])('%s: every painted screen along its foot gets one, at the foot', (id) => {
+  it.each(['lobby', 'arcade', 'homes', 'market', 'glass', 'grove'])('%s: every painted screen along its foot gets one, at the foot', (id) => {
     const room = ROOMS[id]!;
     const strips = skirtStrips(room);
     const screens = (room.backgrounds ?? []).filter((t) => (t.rate ?? 1) === 1 && !t.plain && t.y === 0);

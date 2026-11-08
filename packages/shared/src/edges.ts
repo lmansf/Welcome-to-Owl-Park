@@ -111,10 +111,11 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   'edge-arcade-corner-front': { w: 140, h: 92, kind: 'bump', side: 'front', base: 64, depth: 60, ease: 'left', square: 2, wobble: 0.06 },
   // The other painted rooms grown into plazas the same way (Nov 8), each with its own four pieces:
   // the lane under the nests (mossy ring, ferns along its front), the night market's street (a puddle
-  // ring under the lights, crates and cables), and the glass street (a ring of glass tiles, glass planters).
+  // ring under the lights, crates and cables), and the glass street (a ring of glass tiles, glass planters), and the grove's clearing (a ring of moss and stones, ferns).
   ...plazaPieces('lane', 'ferns'),
   ...plazaPieces('market', 'clutter'),
   ...plazaPieces('glass', 'planters'),
+  ...plazaPieces('clearing', 'ferns'),
   // Seen from the side, on every platform drawn from the kit: down its sides (repeats down; the right side is the left mirrored) and under it (repeats across).
   'edge-ledge-side': { w: 40, h: 240, kind: 'side' },
   'edge-ledge-under': { w: 240, h: 44, kind: 'under' },
