@@ -5,6 +5,7 @@ import { interactablesIn } from '../src/interactables';
 import { ROOM_H } from '../src/room';
 import { OWL_ROOM_PX2 } from './hollowHall';
 import { ARCADE_PLAZA, LOBBY_PLAZA, getRoom } from './index';
+import { keptRun } from './plaza';
 
 /** Owls a room's floor holds standing gathered (OWL_ROOM_PX2 each), counted on a 20 px grid. */
 function owlsFit(id: string): number {
@@ -49,5 +50,19 @@ describe('the painted common rooms grown into plazas (Nov 8: somewhere 80 owls c
       expect(d.y + d.h <= room.size.h + 40, d.id).toBe(true);
       expect(edgeArt(d.key).w).toBe(d.w);
     }
+  });
+});
+
+describe('opening a floor onto a plaza (keptRun)', () => {
+  it('keeps the back and sides of a floor as one run, west to east', () => {
+    const box = [{ x: 0, y: 700 }, { x: 100, y: 700 }, { x: 100, y: 880 }, { x: 0, y: 880 }];
+    expect(keptRun(box, 870)).toEqual([{ x: 0, y: 700 }, { x: 100, y: 700 }]);
+    expect(keptRun([...box].reverse(), 870)).toEqual([{ x: 0, y: 700 }, { x: 100, y: 700 }]);
+  });
+
+  it('leaves a floor that never reaches the opening, and refuses one whose back comes in pieces', () => {
+    expect(keptRun([{ x: 0, y: 600 }, { x: 50, y: 600 }, { x: 50, y: 650 }], 870)).toBeNull();
+    const notched = [{ x: 0, y: 700 }, { x: 300, y: 700 }, { x: 300, y: 880 }, { x: 200, y: 880 }, { x: 150, y: 800 }, { x: 100, y: 880 }, { x: 0, y: 880 }];
+    expect(() => keptRun(notched, 870)).toThrow(/runs/);
   });
 });

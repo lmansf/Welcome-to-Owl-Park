@@ -1575,10 +1575,9 @@ ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
   oldFront: 888,
   west: 0,
   east: 2 * ROOM_W - 40,
-  // The painting's own cobbles, run on down, in its lamplit dusk.
+  // The painting's own cobbles, run on down, tinted to the painting's foot (its mean colour there).
   texture: 'kit-tex-ground-cobble-path',
-  tint: 0x9a8a80,
-  join: 'edge-commons-join',
+  tint: 0x8384b8,
   ring: 'edge-commons-ring',
   corner: 'edge-commons-corner-front',
   frontBumps: ['edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a'],
@@ -1590,7 +1589,7 @@ ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
   west: 0,
   east: 3 * ROOM_W - 10,
   texture: 'kit-tex-neon-wet-pavement',
-  join: 'edge-arcade-join',
+  tint: 0x88b9ff,
   ring: 'edge-arcade-ring',
   corner: 'edge-arcade-corner-front',
   frontBumps: ['edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a'],

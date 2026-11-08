@@ -3,6 +3,7 @@ import { EDGE_ART, KIT_ART, kitCells, kitDrawPlan, kitFrames, seenFromSide, type
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
 import { artLookRoom } from './artLooks';
+import { hexOf, onCanvas, tintedTexture } from './canvasTint';
 
 /**
  * The level assembler's drawing (OP-234): a room built from the art kit, drawn at runtime from its
@@ -78,7 +79,9 @@ function drawStrip(scene: Phaser.Scene, s: EdgeStrip, depth: number, tint: numbe
 /** One piece's images; how many. */
 function drawPiece(scene: Phaser.Scene, d: KitDraw, depth: number, tint: number | undefined): number {
   if (!scene.textures.exists(d.key)) return 0;
-  const frame = scene.textures.getFrame(d.key);
+  // A tint of the piece's own (a plaza's floor in its painting's light) is baked on the Canvas renderer, which draws no tint.
+  const key = d.tint !== undefined && onCanvas(scene) ? tintedTexture(scene, d.key, hexOf(d.tint)) : d.key;
+  const frame = scene.textures.getFrame(key);
   // Crops are in the piece's own pixels; its texture may be a sharper copy, bigger than the piece is drawn.
   const spec = KIT_ART[d.key];
   const sx = frame.width / (spec?.w ?? frame.width);
@@ -88,7 +91,7 @@ function drawPiece(scene: Phaser.Scene, d: KitDraw, depth: number, tint: number 
   const cells = kitCells(d);
   for (const c of cells) {
     const img = scene.add
-      .image(c.x, c.y, d.key)
+      .image(c.x, c.y, key)
       .setOrigin(0)
       .setDisplaySize(c.w + (across ? 1 : 0), c.h + (down ? 1 : 0))
       .setDepth(depth);

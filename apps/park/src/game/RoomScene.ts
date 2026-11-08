@@ -200,6 +200,7 @@ import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { drawEdges } from './edgeView';
+import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
 
 export interface RoomStart {
@@ -932,6 +933,8 @@ export class RoomScene extends Phaser.Scene {
     }
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
+    // A plaza's floor: the painting's foot runs on over it, mirrored and fading, so the two meet with no seam (plazaSkirt.ts).
+    if (!room.drawn) drawSkirts(this, art);
     // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.
     this.edgesDrawn = drawEdges(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.

@@ -90,14 +90,12 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   // The Treetop Commons' plaza (the lobby, grown to hold a crowd, Nov 8): flagstones over the join where
   // the painting's floor meets the new plaza, a worn ring round its moonbeam, planters along its front
   // and its rounded front corners (the east one mirrored).
-  'edge-commons-join': { w: 400, h: 120, kind: 'litter' },
   'edge-commons-ring': { w: 760, h: 380, kind: 'ring' },
   'edge-commons-planters-a': { w: 420, h: 60, kind: 'bump', side: 'front', base: 32, depth: 28, ease: 'both', square: 2, wobble: 0.16 },
   'edge-commons-planters-b': { w: 520, h: 60, kind: 'bump', side: 'front', base: 32, depth: 22, ease: 'both', square: 2, wobble: 0.2 },
   'edge-commons-corner-front': { w: 140, h: 92, kind: 'bump', side: 'front', base: 64, depth: 60, ease: 'left', square: 2, wobble: 0.06 },
   // The arcade hall's floor, grown the same way: a trim over the join, a worn ring under each skylight,
   // crates and cables along its front and its rounded front corners.
-  'edge-arcade-join': { w: 400, h: 120, kind: 'litter' },
   'edge-arcade-ring': { w: 760, h: 380, kind: 'ring' },
   'edge-arcade-clutter-a': { w: 420, h: 60, kind: 'bump', side: 'front', base: 32, depth: 28, ease: 'both', square: 2, wobble: 0.16 },
   'edge-arcade-clutter-b': { w: 520, h: 60, kind: 'bump', side: 'front', base: 32, depth: 22, ease: 'both', square: 2, wobble: 0.2 },
