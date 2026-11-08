@@ -46,3 +46,17 @@ export function coveredBy(rects: ReadonlyArray<{ top: number; bottom: number; wi
   const cap = height / 4;
   return { top: Math.min(Math.max(0, top), cap), bottom: Math.min(Math.max(0, bottom), cap) };
 }
+
+/**
+ * How far above the owl the camera centres, in room units, in a room seen from above that is taller
+ * than a screen (a plaza, Nov 8): the owl stands lower on the screen, so what is painted along the
+ * back of the room (a realm's guardian, its idol, its doorways) stays in view while the owl stands on
+ * the painted floor below it. One screen tall, or seen from the side, the camera centres on the owl.
+ */
+export function followLead(roomH: number, sideView: boolean, viewH: number, screenH: number): number {
+  if (sideView || roomH <= screenH || !(viewH > 0)) return 0;
+  return Math.round(viewH * FOLLOW_LEAD);
+}
+
+/** The share of the view the camera centres above the owl in a tall room seen from above. */
+export const FOLLOW_LEAD = 0.2;

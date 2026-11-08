@@ -6,7 +6,7 @@ import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, seenFromSide, tileFade, tilePlacement, type DoorDef, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
-import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, ARCADE_PLAZA, GLASS_PLAZA, HOMES_PLAZA, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget, steerTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -68,6 +68,14 @@ describe('room size and art tiles', () => {
       if (!tiles.length && mapOf(room) !== 2 && room.kit?.surfaces?.length) {
         const area = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * s.rect.h, 0);
         expect(area, 'its surfaces cover the room').toBe(room.size.w * room.size.h);
+        return;
+      }
+      // A painted room grown into a plaza (plaza.ts): its painting's screens on top, its kit's floor under them.
+      if (tiles.length && mapOf(room) !== 2 && room.kit?.surfaces?.length) {
+        const surfaces = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * s.rect.h, 0);
+        // Where a surface tucks under the painting's foot, it covers nothing the painting doesn't.
+        const overlap = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * Math.max(0, Math.min(s.rect.y + s.rect.h, ROOM_H) - s.rect.y), 0);
+        expect(cells.size * ROOM_W * ROOM_H + surfaces - overlap, 'its painting and its floor below cover the room').toBe(room.size.w * room.size.h);
         return;
       }
       expect(cells.size * ROOM_W * ROOM_H, 'background tiles cover the room').toBe(room.size.w * room.size.h);
@@ -297,7 +305,7 @@ describe('the street and the nests', () => {
 
   it('the street is two screens, painted as homes-west and homes', () => {
     expect(street.id).toBe(STREET_ROOM);
-    expect(street.size).toEqual({ w: 2 * ROOM_W, h: ROOM_H });
+    expect(street.size).toEqual({ w: 2 * ROOM_W, h: HOMES_PLAZA.front + 15 });
     expect(backgroundTiles(street).map((t) => [t.key, t.x])).toEqual([
       ['homes-west', 0],
       ['homes', ROOM_W],
@@ -359,8 +367,8 @@ describe('the arcade', () => {
   const arcade = ROOMS['arcade']!;
   const spot = (id: string) => arcade.doors.find((d) => d.id === id)!;
 
-  it('is a hall three screens long, painted as arcade, arcade-mid and arcade-end', () => {
-    expect(arcade.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+  it('is a hall three screens long, painted as arcade, arcade-mid and arcade-end, its floor run on below into a plaza', () => {
+    expect(arcade.size).toEqual({ w: 3 * ROOM_W, h: ARCADE_PLAZA.front + 15 });
     expect(backgroundTiles(arcade).map((t) => [t.key, t.x, t.y])).toEqual([
       ['arcade', 0, 0],
       ['arcade-mid', ROOM_W, 0],
@@ -515,11 +523,11 @@ describe('the stained-glass realm', () => {
   const hub = ROOMS.hub!;
   const glass = ROOMS.glass!;
 
-  it('is open to every owl, one screen laid out as every realm\'s start (OP-276), with the knot-hole back, the idol and the portal', () => {
+  it('is open to every owl, laid out as every realm\'s start (OP-276) and grown into a plaza, with the knot-hole back, the idol and the portal', () => {
     // The whole map open all the time (the owner's word, Nov 8): no room of today's park waits on the realms switch.
     expect(GATED_ROOMS.filter((id) => mapOf(getRoom(id)) === 1)).toEqual([]);
     expect(glass.gated).toBeUndefined();
-    expect(glass.size).toEqual({ w: ROOM_W, h: ROOM_H });
+    expect(glass.size).toEqual({ w: ROOM_W, h: GLASS_PLAZA.front + 15 });
     expect(glass.backgrounds).toEqual([{ key: 'kit-glass-start-screen', x: 0, y: 0 }]);
     expect(glass.doors.map((d) => d.id)).toEqual(['to-hub', 'idol', 'portal']);
     expect(glass.doors.find((d) => d.id === 'to-hub')?.to).toEqual({ room: 'hub', spawn: 'from-glass' });
