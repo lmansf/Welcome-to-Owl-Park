@@ -77,6 +77,8 @@ jobs:
       - run: shellcheck tools/security/security-test.sh
       # The preview marker's own tests (.github/workflows/preview.yml): noindex, own-address-only, no live sitemap.
       - run: node --test tools/preview/mark.test.mjs
+      # The merge rules' own tests: the flag-hidden check (merge gate class 3) and auto-merge's decisions.
+      - run: node --test tools/flags/flag-check.test.mjs tools/merge/automerge.test.mjs
       # The ledge painter's pull script (OP-156): it reads the rooms and the draft's check from
       # packages/shared, so a change there that it cannot load, or prints wrong, fails here.
       - run: pnpm masks:test
