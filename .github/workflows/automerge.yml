@@ -1,0 +1,62 @@
+# Auto-merge. The owner's rule, Nov 7 2026: "Auto-merge is approved for all things Owl Park related
+# unless told otherwise." A pull request labelled `automerge` (its opener ticked the merge gate) or
+# `flag-hidden` (merge gate class 3) merges itself, squashed, once every workflow run and check on its
+# head commit is green, the full browser suite included. One that touches payments, the store,
+# accounts, data deletion, the workflows or these rules waits for the owner's yes and gets one comment
+# saying why. tools/merge/automerge.mjs and tools/merge/owner-yes.mjs hold the rules and their tests.
+#
+# It runs main's copy of those files, never a branch's: workflow_run, pull_request_target and schedule
+# all run from main and nothing here checks a branch out. A merge made with this workflow's token
+# starts no push workflows, so it starts the Cloudflare deploy and main's CI itself afterwards.
+#
+# Off switch: the repository variable AUTOMERGE=off (Settings -> Secrets and variables -> Actions ->
+# Variables). Nothing else needs setting up.
+name: Auto-merge
+
+on:
+  workflow_run:
+    workflows: [CI, Preview, Flag check]
+    types: [completed]
+  pull_request_target:
+    types: [labeled, ready_for_review]
+  # A sweep in case the last check to finish was from a workflow not listed above.
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: Auto-merge
+    if: >-
+      vars.AUTOMERGE != 'off' && (
+        github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      checks: read
+      contents: write
+      pull-requests: write
+      statuses: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: tools/merge
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Merge what is green and needs nobody's yes
+        run: node tools/merge/automerge.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PRS: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}

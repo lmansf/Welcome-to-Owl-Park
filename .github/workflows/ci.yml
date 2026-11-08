@@ -75,6 +75,8 @@ jobs:
       # (OP-151); shellcheck reads the script itself.
       - run: pnpm security:test
       - run: shellcheck tools/security/security-test.sh
+      # The merge rules' own tests: the flag-hidden check (merge gate class 3) and auto-merge's decisions.
+      - run: node --test tools/flags/flag-check.test.mjs tools/merge/automerge.test.mjs
       # The ledge painter's pull script (OP-156): it reads the rooms and the draft's check from
       # packages/shared, so a change there that it cannot load, or prints wrong, fails here.
       - run: pnpm masks:test
