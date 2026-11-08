@@ -11,19 +11,23 @@ describe('the map’s travel cards (OP-130)', () => {
     expect(placeCard('nest', 'nest', walked([]))).toEqual({ line: TRAVEL_WORDS.youAreHere, button: null });
   });
 
-  it('offers no travel to a place not walked into yet, and says how it lights up', () => {
-    for (const place of ['grove', 'market', 'arcade', 'homes', 'lobby', 'hub']) expect(placeCard(place, 'nest', walked([])), place).toEqual({ line: TRAVEL_WORDS.notYet, button: null });
+  it('offers travel to every place before the owl has walked anywhere (the whole map open, Nov 8)', () => {
+    const fresh = walked([], true);
+    for (const place of ['grove', 'market', 'arcade', 'glass', 'homes']) expect(placeCard(place, 'nest', fresh), place).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: place } });
+    expect(placeCard('lobby', 'nest', fresh)).toEqual({ line: null, button: { label: TRAVEL_WORDS.gate, to: 'lobby' } });
+    // Only a place travel has no landing for says so.
+    expect(placeCard('closed-a', 'nest', fresh)).toEqual({ line: TRAVEL_WORDS.notYet, button: null });
   });
 
   it('takes the great tree’s card to the gate, outside the turnstiles, and only says the way in when the owl is at the gate', () => {
-    expect(placeCard('hub', 'homes', walked(['homes', 'lobby', 'hub']))).toEqual({ line: TRAVEL_WORDS.throughGate, button: { label: TRAVEL_WORDS.gate, to: 'hub' } });
-    expect(placeCard('hub', 'lobby', walked(['homes', 'lobby', 'hub']))).toEqual({ line: TRAVEL_WORDS.atGate, button: null });
-    expect(placeCard('lobby', 'homes', walked(['homes', 'lobby']))).toEqual({ line: null, button: { label: TRAVEL_WORDS.gate, to: 'lobby' } });
+    expect(placeCard('hub', 'homes', walked([]))).toEqual({ line: TRAVEL_WORDS.throughGate, button: { label: TRAVEL_WORDS.gate, to: 'lobby' } });
+    expect(placeCard('hub', 'lobby', walked([]))).toEqual({ line: TRAVEL_WORDS.atGate, button: null });
+    expect(placeCard('lobby', 'homes', walked([]))).toEqual({ line: null, button: { label: TRAVEL_WORDS.gate, to: 'lobby' } });
   });
 
   it('offers the gate instead of a place inside the park until the owl has walked through it', () => {
     const before = walked(['homes', 'lobby', 'hub', 'grove', 'market']);
-    expect(placeCard('grove', 'nest', before)).toEqual({ line: TRAVEL_WORDS.gateFirst, button: { label: TRAVEL_WORDS.gate, to: 'hub' } });
+    expect(placeCard('grove', 'nest', before)).toEqual({ line: TRAVEL_WORDS.gateFirst, button: { label: TRAVEL_WORDS.gate, to: 'lobby' } });
     // At the gate already: the card says why, and the turnstiles are the way.
     expect(placeCard('grove', 'lobby', before)).toEqual({ line: TRAVEL_WORDS.gateFirst, button: null });
     // Through it: realm to realm, and back out.

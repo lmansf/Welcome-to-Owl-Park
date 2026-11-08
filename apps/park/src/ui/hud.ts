@@ -1315,6 +1315,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         b.remove();
         hintEls.delete(id);
       }
+      unstackHints([...hintEls.values()]);
     },
     onHint(cb) {
       hintCb = cb;
@@ -1359,4 +1360,31 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         window.innerHeight,
       ),
   };
+}
+
+/**
+ * Chips that would lie over one another, a doorway's words reaching from one edge across a narrow
+ * screen to a chip on the other (a phone in the Party Grove): each one lower down moved below the
+ * ones it would cover, so every chip's words read whole.
+ */
+function unstackHints(chips: HTMLElement[]): void {
+  const GAP = 6;
+  const laid = chips.map((el) => ({ el, r: el.getBoundingClientRect() })).sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
+  const kept: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+  for (const { el, r } of laid) {
+    let top = r.top;
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const k of kept) {
+        if (r.left < k.right && r.right > k.left && top < k.bottom + GAP && top + r.height > k.top - GAP) {
+          top = k.bottom + GAP;
+          moved = true;
+        }
+      }
+    }
+    // No room below on the screen: it stays where it was put.
+    if (top + r.height > window.innerHeight - 4) top = r.top;
+    if (top !== r.top) el.style.top = `${(parseFloat(el.style.top) + top - r.top).toFixed(1)}px`;
+    kept.push({ left: r.left, right: r.right, top, bottom: top + r.height });
+  }
 }

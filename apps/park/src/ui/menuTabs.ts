@@ -328,19 +328,18 @@ export const REFUSAL_WORDS: Readonly<Record<TravelRefusal, string>> = {
 };
 
 /**
- * A place's card on the map (OP-130), from where the owl is (`here`) and what it has walked into.
- * The nest always travels home and any other place once walked into. Into the park is only through
- * the front gate: the great tree's card travels to the gate, outside the turnstiles, and a place
- * inside the park offers the gate instead until the owl has walked through it.
+ * A place's card on the map (OP-130), from where the owl is (`here`). The nest always travels home and
+ * every other place from the start (the whole map open, Nov 8). Into the park is only through the front
+ * gate: the great tree's card travels to the gate, outside the turnstiles, and a place inside the park
+ * offers the gate instead until the owl has walked through it.
  */
 export function placeCard(place: string, here: string | null, travel: { places: readonly string[]; gate: boolean }, walking = 1): PlaceCard {
   if (place === here) return { line: TRAVEL_WORDS.youAreHere, button: null };
   if (place === 'nest') return { line: null, button: { label: TRAVEL_WORDS.home, to: 'nest' } };
   if (walking === 3) return newMapCard(place, here, travel);
-  if (!canTravel(place, travel.places)) return { line: TRAVEL_WORDS.notYet, button: null };
-  // Both land outside the turnstiles; whichever the owl has walked into.
-  const gateWay = here === 'lobby' ? undefined : (['hub', 'lobby'] as const).find((p) => canTravel(p, travel.places));
-  const toGate = gateWay ? { label: TRAVEL_WORDS.gate, to: gateWay } : null;
+  if (!canTravel(place)) return { line: TRAVEL_WORDS.notYet, button: null };
+  // Outside the turnstiles, where both the gate and today's great tree land.
+  const toGate = here === 'lobby' ? null : { label: TRAVEL_WORDS.gate, to: 'lobby' };
   if (place === 'hub') return here === 'lobby' ? { line: TRAVEL_WORDS.atGate, button: null } : { line: TRAVEL_WORDS.throughGate, button: toGate };
   if (place === 'lobby') return { line: null, button: toGate };
   if (needsGate(place) && !travel.gate) return { line: TRAVEL_WORDS.gateFirst, button: toGate };
@@ -353,7 +352,7 @@ export function placeCard(place: string, here: string | null, travel: { places: 
  * has walked through them since it was last outside.
  */
 function newMapCard(place: string, here: string | null, travel: { places: readonly string[]; gate: boolean }): PlaceCard {
-  if (!canTravel(place, travel.places, 3)) return { line: TRAVEL_WORDS.notYet, button: null };
+  if (!canTravel(place, 3)) return { line: TRAVEL_WORDS.notYet, button: null };
   const toGate = here === 'lobby' ? null : { label: TRAVEL_WORDS.newGate, to: 'lobby' };
   if (place === 'lobby') return { line: null, button: { label: TRAVEL_WORDS.here, to: 'lobby' } };
   if (needsGate(place, 3) && !travel.gate) return { line: TRAVEL_WORDS.newGateFirst, button: toGate };
@@ -438,7 +437,7 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   };
   for (const p of at.values()) {
     const tappable = travel !== null && !p.closed && !p.noTravel;
-    const lit = tappable && (p.id === 'nest' || canTravel(p.id, travel.places, walking));
+    const lit = tappable && (p.id === 'nest' || canTravel(p.id, walking));
     const pin = el(tappable ? 'button' : 'div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}${tappable && !lit ? ' unlit' : ''}`);
     pin.dataset['place'] = p.id;
     pin.style.gridColumn = String(p.col + 1);

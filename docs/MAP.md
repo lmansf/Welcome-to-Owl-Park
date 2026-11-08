@@ -420,5 +420,13 @@ space at each level inside it and the realms and their parkour outside the tree 
   turnstiles down the knothole into the hall (`NEW_MAP_WAYS`), each realm's way out leads back into its
   Commons, the Party Grove's way in leads to the trunk's door, and the root stair comes up into the
   hall's floor. The old stairs (`m3-stair-1` to `m3-ground`) are left over: nothing leads into them, and
-  an owl still on one walks out of it into the map as it is. The Updraft Canopy stays the keepers': the
-  Clearing's middle arch reads as shut (Not Yet Fledged) to any owl without a keeper's token.
+  an owl still on one walks out of it into the map as it is.
+- **The whole map open** (the owner's "lets have the whole map unlocked all the time for players",
+  2026-11-08). No room of the new map waits on the realms switch: the glass realm and the new map's
+  copies of the tree's levels (the root stair among them) carry no `gated`; the switch keeps only the
+  old tree's levels and the climb's portal. The Menu map travels to every place from the start. The
+  Party Grove (`hub`, today's great tree) is joined to the hall both ways: the hall's `to-party` lands
+  at its default spawn, just above its `to-lobby` doorway, which leads back to the hall's `from-party`.
+  Its doorways carry signs on the new map (`labelNew`): back into the Great Hollow, and its arches to
+  the treehouse clearing, the neon street and the glass realm (each realm's way out takes an owl that
+  came from the Grove back to it, `doorTarget`).

@@ -164,12 +164,15 @@ closes it. It is five tabs, each with its word always shown: **Quests**, **Colle
 There is no Your owl tab: the owl is changed at the mirror in a nest (`docs/NESTS.md`, The mirror),
 or by the first run's quiz and builder.
 
-**Travel from the map** (OP-130, `packages/shared/src/travel.ts`): a place on the Menu's map lights
-up once the owl has walked into it; the owl's own nest is always lit. A tap opens the place's card;
+**Travel from the map** (OP-130, `packages/shared/src/travel.ts`): every place on the Menu's map is
+lit from the start (the owner's "whole map unlocked all the time", 2026-11-08), and one walked into
+sparkles the first time the map shows it. On the new map the Great Hollow, the root stair and the
+Party Grove travel too. A tap opens the place's card;
 its button is held to travel (`HOLD_MS`, 350 ms, a fill running across it), and a quicker tap says
 "Hold to travel." A key's press on the button travels at once. Travel lands the owl where walking
-in would have. Into the park is only through the front gate: the great tree's card travels to the
-gate, outside the turnstiles, and a place inside the park offers **Travel to the gate** until the
+in would have. Into the park is only through the front gate (on the new map the turnstiles down
+the knothole into the Great Hollow count the same): today's great tree's card travels to the gate,
+outside the turnstiles, and a place inside the park offers **Travel to the gate** until the
 owl has walked through the turnstiles since it was last outside. Going home, walking out and every
 new visit put it outside again. The room server keeps this and turns any other travel in away. No
 travel mid-climb, mid-game, at the turnstiles, while decorating or while "Still here?" asks

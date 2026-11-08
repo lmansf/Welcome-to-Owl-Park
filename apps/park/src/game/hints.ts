@@ -3,15 +3,25 @@
  * the room the camera cannot see (an open doorway, an interactive spot). Pure, so it is unit-tested;
  * the HUD draws the chips.
  */
-import { mapOf, type DoorDef, type RoomDef } from '@owl-park/shared';
+import { doorLabel, doorTarget, mapOf, type DoorDef, type RoomDef, type WalkMap } from '@owl-park/shared';
 
 /**
  * The doorways that carry a sign naming where they lead (DoorDef.label, doorSigns.ts): open, named,
  * and in a room seen from above. Their chips at the screen's edge say the same words.
  */
-export function signedDoors(room: RoomDef): DoorDef[] {
+export function signedDoors(
+  room: RoomDef,
+  map: WalkMap = 1,
+  shut: (roomId: string) => boolean = () => false,
+): Array<DoorDef & { label: string }> {
   if (mapOf(room) === 2) return [];
-  return room.doors.filter((d) => d.to && d.label && !d.closedSign && (d.labelAt ?? d.marker));
+  return room.doors.flatMap((d) => {
+    const to = doorTarget(d, map);
+    const label = doorLabel(d, map);
+    // A shut realm's arch (its closed sign) carries no sign; it opens with the realm.
+    if (!to || !label || (d.closedSign && shut(to.room)) || !(d.labelAt ?? d.marker)) return [];
+    return [{ ...d, label }];
+  });
 }
 
 /** Something worth pointing at, in room pixels. */

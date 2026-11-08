@@ -35,12 +35,10 @@ describe('travel from the map (OP-130)', () => {
     for (const place of ['grove', 'market', 'arcade', 'glass']) expect(TRAVEL_LANDINGS[place], place).toEqual(doorInto(place));
   });
 
-  it('travels to the owl’s own nest always, and anywhere else once walked into', () => {
-    expect(canTravel('nest', [])).toBe(true);
-    expect(canTravel('grove', [])).toBe(false);
-    expect(canTravel('grove', ['grove'])).toBe(true);
-    expect(canTravel('grove', new Set(['grove']))).toBe(true);
-    expect(canTravel('closed-a', ['closed-a'])).toBe(false);
+  it('travels to the owl’s own nest and every place of the map from the start, and nowhere else', () => {
+    expect(canTravel('nest')).toBe(true);
+    for (const place of Object.keys(TRAVEL_LANDINGS)) expect(canTravel(place), place).toBe(true);
+    expect(canTravel('closed-a')).toBe(false);
     expect(visitedPlace('grove')).toBe('grove');
     expect(visitedPlace('nest-k3x9q2ab')).toBeNull();
     expect(visitedPlace('no-such-room')).toBeNull();
@@ -99,9 +97,8 @@ describe('travel on the new map (OP-305)', () => {
   });
 
   it('travels to every place from the start, and into the park only once through the turnstiles', () => {
-    for (const place of Object.keys(NEW_MAP_LANDINGS)) expect(canTravel(place, [], 3), place).toBe(true);
-    expect(canTravel('no-such-place', [], 3)).toBe(false);
-    expect(canTravel('grove', [])).toBe(false);
+    for (const place of Object.keys(NEW_MAP_LANDINGS)) expect(canTravel(place, 3), place).toBe(true);
+    expect(canTravel('no-such-place', 3)).toBe(false);
     for (const place of ['m3-hall', 'glass', 'grove', 'market', 'hub', 'm3-under', 'arcade']) expect(needsGate(place, 3), place).toBe(true);
     for (const place of ['lobby', 'homes', 'nest']) expect(needsGate(place, 3), place).toBe(false);
   });

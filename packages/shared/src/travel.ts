@@ -1,6 +1,6 @@
 /**
- * Fast travel from the Menu's map (OP-130). A place on the map can be travelled to once the owl has
- * walked into it (its own nest always), and travel lands the owl where walking in would have.
+ * Fast travel from the Menu's map (OP-130). Every place on the map can be travelled to from the start
+ * (Logan, 2026-11-08: the whole map open, no unlocking), and travel lands the owl where walking in would have.
  *
  * Every way into the park proper is through the front gate (Logan, 2026-10-27): the great tree's
  * place travels to the gate, outside the turnstiles, and a place inside the park can be travelled to
@@ -88,16 +88,12 @@ export function visitedPlace(room: string): string | null {
 }
 
 /**
- * Whether a place can be travelled to, given the places walked into: the owl's own nest always, any other
- * once visited. On the new map (OP-305, the whole map open) every place on it from the start: the map is
- * there to find the way, so nothing waits on having found it first. Into the park is still only through
- * the gate (needsGate).
+ * Whether a place can be travelled to: the owl's own nest and every place of the map the owl walks, from
+ * the start (Logan, 2026-11-08, the whole map open). The map is there to find the way, so nothing waits
+ * on having found it first. Into the park is still only through the gate (needsGate).
  */
-export function canTravel(place: string, visited: ReadonlySet<string> | readonly string[], walking: number = 1): boolean {
-  if (place === 'nest') return true;
-  if (walking === 3) return place in NEW_MAP_LANDINGS;
-  if (!(place in TRAVEL_LANDINGS)) return false;
-  return Array.isArray(visited) ? visited.includes(place) : (visited as ReadonlySet<string>).has(place);
+export function canTravel(place: string, walking: number = 1): boolean {
+  return place === 'nest' || place in landingsFor(walking);
 }
 
 /** Whether travel to a place needs the owl to have walked through the gate since it was last outside. */
@@ -134,7 +130,7 @@ export function parseTravelState(v: unknown): TravelState | null {
   return { places: places.filter((p): p is string => typeof p === 'string' && (p in TRAVEL_LANDINGS || p in NEW_MAP_LANDINGS)), gate };
 }
 
-/** Why the owl cannot travel to a place just now: already there, not walked into yet, not through the gate, or busy (a climb, a game, the turnstiles). */
+/** Why the owl cannot travel to a place just now: already there, not a place travel goes to, not through the gate, or busy (a climb, a game, the turnstiles). */
 export type TravelRefusal = 'here' | 'not-yet' | 'gate' | 'busy';
 
 /** What a visitor reads about travel (OP-130). */
@@ -147,9 +143,9 @@ export const TRAVEL_WORDS = {
   atGate: 'You are at the gate: walk through the turnstiles to go in.',
   throughGate: 'Into the park is always through the front gate.',
   gateFirst: 'Enter the park through the gate first.',
-  notYet: 'Walk there once, and you can travel there from the map.',
+  notYet: 'Travel does not go there yet.',
   busy: 'Finish what you are doing, then travel.',
-  map: 'Places you have walked to light up: tap one to travel there. Into the park is always through the front gate.',
+  map: 'Tap a place to travel there. Into the park is always through the front gate.',
   /** The same on the new map, whose way in is the Treetop Commons and whose every place travels (OP-305). */
   newMap: 'Tap a place to travel there. Into the park is always through the Treetop Commons.',
   /** On the new map, the Treetop Commons' card while the owl has not walked through its turnstiles. */
