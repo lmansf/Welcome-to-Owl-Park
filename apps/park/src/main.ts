@@ -19,6 +19,7 @@ import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from '.
 import { closeFeedbackCard, feedbackRewards, sendFeedbackNote } from './net/feedback';
 import { storedKeeper } from './net/keeper';
 import { readAccountLink, withoutAccountLink } from './net/accountLinks';
+import { flagOn } from './flags';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
 import { createHud } from './ui/hud';
@@ -742,6 +743,8 @@ const accountScreens = accounts
       },
     })
   : null;
+// Bring a friend (OP-056): the Menu's card, with the park's REFERRALS on (a preview shows it only with ?friends=1).
+if (transport.referrals) hud.attachReferrals(transport.referrals, flagOn('friends'));
 if (accounts && accountScreens) {
   accounts.onMoved(() => accountScreens.showMoved());
   void accounts.account().then((a) => home.setAccounts(a !== null));
