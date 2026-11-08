@@ -1583,7 +1583,8 @@ export class RoomScene extends Phaser.Scene {
     // Where a tap walk is going (a walk on held keys or the stick goes nowhere in particular).
     const goal = this.me.walk && !this.keyWalk ? (this.walkGoal ?? this.me.walk.to) : null;
     const owlAt = `${Math.round(this.me.pos.x / 20)},${Math.round(this.me.pos.y / 20)},${goal ? `${Math.round(goal.x)},${Math.round(goal.y)}` : '-'}`;
-    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt}`;
+    const signSeen = this.signFocused && this.doorSigns?.onScreen(this.signFocused) ? 1 : 0;
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
@@ -1598,7 +1599,8 @@ export class RoomScene extends Phaser.Scene {
       const focus = signFocus(all, this.me.pos, goal, this.signFocused);
       this.signFocused = focus;
       this.doorSigns?.focus(focus);
-      targets = all.filter((t) => t.id === focus || keep.has(t.id));
+      // Its sign on the floor names it once it is on screen: then no chip repeats it at the screen's edge.
+      targets = all.filter((t) => (t.id === focus && !this.doorSigns?.onScreen(t.id)) || keep.has(t.id));
     } else targets = nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
