@@ -90,19 +90,19 @@ describe('hints seen from the side (an Updraft Canopy room, as an owl stands by 
   });
 });
 
-describe('hints seen from above (the Great Hollow, a long room of doorways)', () => {
+describe('hints seen from above (the Great Hollow, a huge oval of doorways)', () => {
   const HALL = ROOMS['m3-hall']!;
   const doorways = HALL.doors.filter((d) => d.to).map((d) => doorHintTarget(d, null));
-  // A phone held upright at the glass Commons' realm doorway: about 500 room px across.
-  const phone: ViewRect = { x: 80, y: 200, w: 500, h: 700 };
+  // A phone held upright at the glass realm's doorway, at the back of the oval: about 500 room px across.
+  const phone: ViewRect = { x: 1730, y: 100, w: 500, h: 700 };
 
-  it('points at the nearest two doorways off each side, not at every doorway down the room', () => {
+  it('points at the nearest two doorways off each side, not at every doorway round the room', () => {
     expect(doorways.filter((t) => t.x > phone.x + phone.w).length).toBeGreaterThan(4);
     const near = nearestOffSides(doorways, phone);
-    const right = near.filter((t) => t.x > phone.x + phone.w);
-    // The glass course's gate and the ink-wash realm's doorway are shut, so they have no chip.
-    expect(right.map((t) => t.id)).toEqual(['course-ink', 'up']);
-    expect(near.filter((t) => t.x < phone.x)).toEqual([]);
+    // East of it, the hatch down and the knothole up; west, the ink-wash course's gate (the glass
+    // course's gate and the ink-wash realm's doorway are shut, so they have no chip).
+    expect(near.filter((t) => t.x > phone.x + phone.w).map((t) => t.id)).toEqual(['up', 'down']);
+    expect(near.filter((t) => t.x < phone.x).map((t) => t.id)).toEqual(['course-ink']);
   });
 
   it('always keeps a doorway it is told to keep, however far', () => {

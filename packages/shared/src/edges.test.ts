@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { HALL_BACK, HALL_FRONT, HALL_MIDDLE, HALL_ROOM, HALL_W } from '../rooms/hollowHall';
+import { HALL_ROOM, HALL_W } from '../rooms/hollowHall';
 import { ROOMS } from '../rooms/index';
-import { EDGE_ART, STRIP_OUT, bumpEdge, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
+import { EDGE_ART, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
 import { pointInPolygon } from './geometry';
 import { INTERACTABLES } from './interactables';
 import { kitDrawPlan } from './kit';
@@ -52,52 +52,31 @@ describe('edge pieces (the map should not read as big rectangles, Nov 8)', () =>
 
 describe("the Great Hollow's edges", () => {
   const edges = HALL_ROOM.edges ?? [];
-  const hallBumps = edges.filter((e) => edgeArt(e.key).kind === 'bump');
 
-  it("cuts its floor along every bump's own edge, so where an owl can walk is where the art says", () => {
-    expect(hallBumps.length).toBeGreaterThan(20);
-    const vertices = new Set(hallFloor.map((p) => `${p.x},${p.y}`));
-    for (const b of hallBumps) for (const p of bumpEdge(b)) expect(vertices.has(`${p.x},${p.y}`), b.id).toBe(true);
-    // Each bump sits on its own edge's line.
-    for (const b of hallBumps) expect(b.y, b.id).toBe(edgeArt(b.key).side === 'front' ? HALL_FRONT : HALL_BACK);
+  it('lays a worn ring round each moonbeam, walked across, and cuts nothing out of the oval floor', () => {
+    expect(edges.length).toBeGreaterThanOrEqual(5);
+    for (const e of edges) expect(edgeArt(e.key).kind, e.id).toBe('ring');
+    for (const m of INTERACTABLES.filter((i) => i.room === HALL_ROOM.id && i.kind === 'moonbeam')) {
+      expect(
+        edges.some((e) => Math.abs(e.x + 380 - m.pos.x) < 2 && Math.abs(e.y + 190 - m.pos.y) < 2),
+        m.id,
+      ).toBe(true);
+    }
   });
 
-  it('keeps every piece in the room and every key a known piece', () => {
+  it('keeps every piece in the room and on the floor, and every key a known piece', () => {
     for (const d of edgeDraws(edges)) {
       expect(d.x >= 0 && d.x + d.w <= HALL_W, d.id).toBe(true);
-      expect(d.y + d.h <= HALL_ROOM.size.h + 40, d.id).toBe(true);
+      expect(d.y + d.h <= HALL_ROOM.size.h, d.id).toBe(true);
+      expect(onFloor({ x: d.x + d.w / 2, y: d.y + d.h / 2 }), d.id).toBe(true);
     }
     expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length);
   });
 
-  it('leaves every doorway, spot, spawn and leaf pile on open floor, and the hatch to the root stair clear', () => {
-    for (const d of HALL_ROOM.doors) {
-      const m = d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 };
-      // Nothing eats into the floor in front of a doorway, so its way in stays where it was.
-      for (const b of hallBumps) {
-        const e = bumpEdge(b);
-        const crosses = e[0]!.x < m.x && e[e.length - 1]!.x > m.x;
-        if (crosses && edgeArt(b.key).side === 'back' && m.y < HALL_BACK + 120) expect(onFloor({ x: m.x, y: HALL_BACK + 40 }), `${d.id} under ${b.id}`).toBe(true);
-      }
-    }
+  it('leaves every spot, spawn and leaf pile on open floor', () => {
     for (const s of HALL_ROOM.spots ?? []) expect(onFloor(s), `spot ${s.x}`).toBe(true);
     for (const [name, at] of Object.entries(HALL_ROOM.spawns)) expect(onFloor(at), name).toBe(true);
     for (const t of INTERACTABLES.filter((i) => i.room === HALL_ROOM.id)) expect(onFloor(t.pos), t.id).toBe(true);
-    const fronts = hallBumps.filter((b) => edgeArt(b.key).side === 'front');
-    for (const b of fronts) {
-      const e = bumpEdge(b);
-      expect(e[e.length - 1]!.x <= HALL_MIDDLE - 120 || e[0]!.x >= HALL_MIDDLE + 120, b.id).toBe(true);
-    }
-  });
-
-  it('keeps the floor deep enough everywhere for an owl to walk end to end', () => {
-    for (let x = 60; x < HALL_W - 60; x += 20) {
-      let open = 0;
-      for (let y = HALL_BACK; y <= HALL_FRONT; y += 5) if (onFloor({ x, y })) open += 5;
-      // The rounded corners narrow it toward the walls; everywhere else it keeps most of its depth.
-      const corner = x < 240 || x > HALL_W - 240;
-      expect(open, `x ${x}`).toBeGreaterThanOrEqual(corner ? 90 : 150);
-    }
   });
 });
 

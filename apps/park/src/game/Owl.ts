@@ -79,6 +79,11 @@ type WearImageSlot = 'head' | 'face' | 'neck';
  * animate; the layers, the worn items and the effect rigs (`back`, `front`) live in `pose`.
  * A pet trots alongside in the room itself.
  */
+/** The shadow at an owl's feet: its size and how dark it is. */
+const SHADOW_W = 54;
+const SHADOW_H = 18;
+const SHADOW_ALPHA = 0.28;
+
 export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHost {
   readonly id: string;
   look: OwlLook;
@@ -186,7 +191,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.anchors = owlAnchors(scene);
     this.drawnFacing = artFacing(this.anchors);
 
-    this.shadow = scene.add.ellipse(0, 0, 54, 18, 0x000000, 0.28);
+    this.shadow = scene.add.ellipse(0, 0, SHADOW_W, SHADOW_H, 0x000000, SHADOW_ALPHA);
     // The pledge mark: a small gold glow at the feet, shown for the day after a Realm Vote.
     this.pledgeMark = scene.add.image(0, 2, 'fx-glow').setTint(0xffd36a).setScale(0.5, 0.2).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
     // Textures may be rasterized at any resolution; every layer is drawn at the logical canvas size.
@@ -222,6 +227,16 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.roomScale = k;
       this.applyLook(this.look);
     }
+    return this;
+  }
+
+  /**
+   * How dark and wide its shadow is drawn (1: as everywhere). A room seen from almost straight above
+   * (RoomDef.bowl) draws it deeper, so an owl stands on the floor and not on a painting of it.
+   */
+  setShadowDepth(k: number): this {
+    this.shadow.setFillStyle(0x000000, Math.min(0.9, SHADOW_ALPHA * k)).setSize(SHADOW_W * Math.sqrt(k), SHADOW_H * Math.sqrt(k));
+    this.shadow.setOrigin(0.5);
     return this;
   }
 

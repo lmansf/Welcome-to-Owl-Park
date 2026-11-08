@@ -15,6 +15,23 @@ import type { EdgePlacement } from './edges';
  * Room ids are neutral words so that nothing in this public repository leaks
  * unreleased realm names. Visitors see no names in the park (per canon).
  */
+/** An oval floor seen from almost straight above, tipped a little toward the viewer (RoomDef.bowl). */
+export interface RoomBowl {
+  /** The oval's middle and half widths: the rim is the wall's foot. */
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  /** How tall the far wall's face shows at the very back (none at the two ends). */
+  face: number;
+  /** How much deeper than elsewhere the near wall's top shows at the very front. */
+  lip: number;
+  /** Soft pools of a realm's colour on the floor, by its ways out. */
+  pools?: ReadonlyArray<{ x: number; y: number; r: number; color: number }>;
+  /** Openings in the near wall where a way goes out at the front: a point on the rim and how wide. */
+  gaps?: ReadonlyArray<{ x: number; y: number; w: number }>;
+}
+
 export interface RoomDef {
   id: string;
   /**
@@ -103,6 +120,12 @@ export interface RoomDef {
    * the top. Drawn under the owls and under the floor's edge line.
    */
   edges?: EdgePlacement[];
+  /**
+   * Seen from above, a floor shaped as an oval bowl (the Great Hollow, Nov 8): the scene draws its wall
+   * round the oval with height, the far wall's face and the near wall's top, the floor shaded deeper
+   * toward the rim and the back, so the room reads as a space and not a flat painting (RoomBowl).
+   */
+  bowl?: RoomBowl;
   /** Ambient mood used by the scene for lighting and particles (`arcade`: neon indoors, no rain). */
   mood: 'hub' | 'dusk' | 'neon' | 'arcade';
   /**

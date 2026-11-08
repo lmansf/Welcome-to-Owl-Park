@@ -150,7 +150,7 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor, roomOnMap } from '../rooms';
 import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
@@ -199,6 +199,7 @@ import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
+import { BOWL_SHADOW, drawBowl } from './bowlView';
 import { drawEdges } from './edgeView';
 import { setVignette } from './vignette';
 
@@ -582,7 +583,8 @@ export class RoomScene extends Phaser.Scene {
   }
 
   init(data: RoomStart): void {
-    this.room = getRoom(data.room);
+    // On the new map a realm whose idol now stands in the Great Hollow has none of its own (roomOnMap).
+    this.room = roomOnMap(getRoom(data.room), walkingMap());
     this.ownRoom = this.room;
     this.painter = null;
     enteredRoom(this.room);
@@ -934,6 +936,8 @@ export class RoomScene extends Phaser.Scene {
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
     // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.
     this.edgesDrawn = drawEdges(this, room);
+    // An oval floor seen from almost straight above (the Great Hollow): its wall with height round it, the floor shaded so it recedes.
+    drawBowl(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
@@ -1029,7 +1033,10 @@ export class RoomScene extends Phaser.Scene {
       });
     }
 
-    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1).setRaisedBand(this.raisedBand());
+    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio))
+      .setRoomScale(room.owlScale ?? 1)
+      .setRaisedBand(this.raisedBand())
+      .setShadowDepth(room.bowl ? BOWL_SHADOW : 1);
     this.me.groundUnder = this.groundUnder;
     this.me.slopeUnder = this.slopeBelow;
     this.me.calm = () => this.calm();
@@ -1405,7 +1412,10 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     let owl = this.peers.get(s.id);
     if (!owl) {
-      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1).setRaisedBand(this.raisedBand());
+      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio))
+        .setRoomScale(this.room.owlScale ?? 1)
+        .setRaisedBand(this.raisedBand())
+        .setShadowDepth(this.room.bowl ? BOWL_SHADOW : 1);
       owl.groundUnder = this.groundUnder;
       owl.slopeUnder = this.slopeBelow;
       owl.calm = () => this.calm();
