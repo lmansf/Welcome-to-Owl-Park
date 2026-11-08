@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, mapOf, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
 import { footOrigin, hitArea } from './fit';
@@ -235,7 +235,7 @@ export function addSetPieces(
     if (!m) continue;
     if (door.closedSign) {
       // A room seen from the side (the tree) draws its own barriers (treeView, OP-220), never this art.
-      if (mapOf(room) === 2) continue;
+      if (seenFromSide(room)) continue;
       // A construction blockade stands in the closed arch, its phrase on its board. An arch into a
       // gated realm also has a doorway's glow, shown instead of the blockade once the realm opens.
       const key = blockadeKey(door.closedSign);

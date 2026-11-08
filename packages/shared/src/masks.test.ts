@@ -159,6 +159,9 @@ describe('the rooms the painter works over (OP-156)', () => {
     expect(isPaintable(ROOMS['l1'])).toBe(true);
     expect(isPaintable(ROOMS['hub'])).toBe(false);
     expect(isPaintable(undefined)).toBe(false);
+    // Seen from the side, not by its park (OP-284): a tree room seen from above has no ledges to paint.
+    expect(isPaintable({ ...ROOMS['l1']!, view: 'top' })).toBe(false);
+    expect(isPaintable({ ...ROOMS['hub']!, view: 'side' })).toBe(true);
     const strip = (x0: number, x1: number) => [
       { x: x0, y: 766 },
       { x: x1, y: 766 },

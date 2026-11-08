@@ -16,7 +16,7 @@ import { FLAP_RISE, GLIDE_SINK, JUMP_RISE, flapsOf, flightFor } from './flight';
 import { closestPointOnPolygon, distance, pointInPolygon, type Polygon } from './geometry';
 import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_IMPULSE } from './jump';
 import type { Vec2 } from './protocol';
-import { mapOf, type RoomDef } from './room';
+import { seenFromSide, type RoomDef } from './room';
 import type { Updraft } from './updraft';
 import { WALK_SPEED } from './walk';
 import { WIND_CATCH_BELOW, type WindCurrent } from './wind';
@@ -73,9 +73,9 @@ export function hopFlaps(rise: number, gap: number, flaps: RouteFlaps = 2): Rout
   return flapsReach(rise, gap, 1) ? 1 : 2;
 }
 
-/** The flaps an owl has on a hop in a room: the room's park's (flightFor). */
-export function roomFlaps(room: Pick<RoomDef, 'map'>): RouteFlaps {
-  return flapsOf(flightFor(mapOf(room))) === 2 ? 2 : 1;
+/** The flaps an owl has on a hop in a room: both where it is seen from the side, one from above (flightFor, OP-284). */
+export function roomFlaps(room: Pick<RoomDef, 'map' | 'view'>): RouteFlaps {
+  return flapsOf(flightFor(seenFromSide(room) ? 2 : 1)) === 2 ? 2 : 1;
 }
 
 /** Whether two segments cross. */

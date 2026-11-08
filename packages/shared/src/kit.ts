@@ -21,7 +21,7 @@
 import { pointInPolygon, pointInRect } from './geometry';
 import { KIT_ART, kitGroup, type KitArtSpec, type KitTile } from './kitArt';
 import { SLOPE_GENTLE, SLOPE_STEEP, profileProblems, type Perch, type ProfilePoint } from './perches';
-import { ROOM_H, ROOM_W, mapOf, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
+import { ROOM_H, ROOM_W, seenFromSide, type KitBackdrop, type KitColumn, type KitHill, type KitHillStep, type KitRun, type RoomDef, type RoomKit, type RoomTile } from './room';
 import { perchTiers } from './routes';
 
 /** How deep a ledge's mid is drawn when the ledge does not say (room px). */
@@ -728,7 +728,7 @@ export function kitProblems(room: RoomDef): string[] {
 
   // A room seen from above (the Great Hollow) is walked across its floor polygons, not along a ground
   // line, and has no paths: every bit of its floor is drawn by a surface of the kit.
-  if (mapOf(room) !== 2 && !kit.paths?.length) {
+  if (!seenFromSide(room) && !kit.paths?.length) {
     for (const poly of room.walkable) {
       const xs = poly.map((p) => p.x);
       const ys = poly.map((p) => p.y);

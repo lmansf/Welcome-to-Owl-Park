@@ -4,7 +4,7 @@ import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, tileFade, tilePlacement, type DoorDef, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, seenFromSide, tileFade, tilePlacement, type DoorDef, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
 import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
@@ -1305,5 +1305,11 @@ describe('the new map (map 3): the park as one tree', () => {
         expect(door.top, `${room.id}:${door.id}`).toBe(0);
       }
     }
+  });
+});
+
+describe('how each room is seen (OP-284)', () => {
+  it('is seen as its park is until a room says otherwise: the tree from the side, the first park from above', () => {
+    for (const room of Object.values(ROOMS)) expect([room.id, seenFromSide(room)]).toEqual([room.id, mapOf(room) === 2]);
   });
 });

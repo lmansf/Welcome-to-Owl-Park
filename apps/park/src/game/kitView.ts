@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { KIT_ART, kitCells, kitDrawPlan, mapOf, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, kitCells, kitDrawPlan, seenFromSide, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
 
@@ -42,7 +42,7 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
   const plan = kitDrawPlan(room);
   let images = 0;
   // In the tree, back scenery is drawn a step quieter than what an owl stands on (docs/TREE_STYLE.md), as its painted playfield is.
-  const quiet = mapOf(room) === 2 ? TREE_PLAY_TINT : undefined;
+  const quiet = seenFromSide(room) ? TREE_PLAY_TINT : undefined;
   for (const d of plan) images += drawPiece(scene, d, depths[d.layer], d.layer === 'back' ? quiet : undefined);
   return { pieces: plan.length, images };
 }

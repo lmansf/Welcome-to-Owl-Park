@@ -25,7 +25,7 @@
  */
 import { MAX_PERCH_TOP } from './perches';
 import type { Vec2 } from './protocol';
-import { mapOf, type RoomDef } from './room';
+import { seenFromSide, type RoomDef } from './room';
 
 /** A ledge: a perch over the ground line from x0 to x1, `top` above it (room px). */
 export interface LedgeMark {
@@ -121,9 +121,9 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const exactly = (v: Record<string, unknown>, keys: readonly string[]): boolean => Object.keys(v).length === keys.length && keys.every((k) => Object.hasOwn(v, k));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** Whether the painter works over this room: one of the tree's (map 2). */
-export function isPaintable(room: Pick<RoomDef, 'map'> | null | undefined): boolean {
-  return !!room && mapOf(room) === 2;
+/** Whether the painter works over this room: one seen from the side (seenFromSide, OP-284), as the tree's are. */
+export function isPaintable(room: Pick<RoomDef, 'map' | 'view'> | null | undefined): boolean {
+  return !!room && seenFromSide(room);
 }
 
 /** An empty draft. */
