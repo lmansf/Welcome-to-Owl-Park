@@ -1,0 +1,25 @@
+{
+  "about": "Findings the check knows about and doesn't fail on, each with why it is still open. The summary lists them under Known, and under Fixed once the bots stop finding them, so the line can come out. See README.md, Turning a miss into a lasting check.",
+  "known": [
+    {
+      "key": "bar:canopy:canopy-1:l5>l7",
+      "reason": "33% on the first playtest run. The hop drops off l5 under the thorn wall into the timed updraft U3, so a kid has to leave late enough to clear the thorns and early enough to meet the column. A course change for the owner to decide on."
+    },
+    {
+      "key": "bar:canopy:canopy-2a:t2>b3",
+      "reason": "48% on the first playtest run, just under the bar: a long glide from t2 that falls short of b3 unless the kid flaps at the right moment. A course change for the owner to decide on."
+    },
+    {
+      "key": "bar:canopy:canopy-2c:v2>v3",
+      "reason": "17% on the first playtest run, the hardest hop in the park. The drop from v2 has to pass under the hanging thorn and meet the timed updraft U10 just as it switches on (leave about half a second to a second before, drop for about 0.6 s). A course change for the owner to decide on."
+    },
+    {
+      "key": "walk:lobby:gate",
+      "reason": "The walk reaches the lobby's turnstiles (it stands in them) but the park doesn't take it through, from either spawn, on desktop and phone, offline. The repo's own browser tests take the same gate (entries.spec.ts, lobby.spec.ts), so this is likely the walk's offline setup rather than the gate; to look into in the walk."
+    },
+    {
+      "key": "walk:l5-street:gate",
+      "reason": "The walk reaches the tree's front gate on the nests' street (it stands in it) but the park doesn't take it through, from either spawn, on desktop and phone, offline. Like the lobby's turnstiles, likely the walk's offline setup; to look into in the walk."
+    }
+  ]
+}

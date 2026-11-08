@@ -1,0 +1,25 @@
+{
+  "name": "@owl-park/bots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Playtest bots: scripted owls that walk every room and run every course (bots/README.md). Never part of the game's bundle.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --dir sim",
+    "playtest": "vitest run --config vitest.playtest.config.ts && PLAYTEST=verdict vitest run --config vitest.playtest.config.ts",
+    "playtest:verdict": "PLAYTEST=verdict vitest run --config vitest.playtest.config.ts",
+    "plan": "PLAYTEST=plan vitest run --config vitest.playtest.config.ts",
+    "walk": "pnpm plan && playwright test -c browser/playwright.config.ts",
+    "report": "node report.mjs"
+  },
+  "dependencies": {
+    "@owl-park/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}
