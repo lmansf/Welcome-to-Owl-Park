@@ -347,7 +347,7 @@ test.describe('single visitor', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-settings.png` });
     await page.reload();
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true, sound: true });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true, sound: true, trail: true });
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
